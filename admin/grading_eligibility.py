@@ -1,20 +1,29 @@
 from flask import render_template, request, flash, redirect, url_for, jsonify
+from flask_login import current_user
 from sqlalchemy import select
 from models import User, Disease, LabUnit, UserDiseaseUnitRole
 from db_transaction_manager import transaction_scope, get_db_session
 from auth.roles import roles_required
 
-@roles_required('admin')
+@roles_required('admin', 'local_admin')
 def manage_eligibility_users():
     """List all users to manage their grading eligibility."""
     with get_db_session() as db:
-        users = db.execute(
-            select(User).order_by(User.username.asc())
-        ).scalars().all()
+        query = select(User).order_by(User.username.asc())
+
+        # Local admins can only manage users in their hospital
+        if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+            if not getattr(current_user, "hospital_id", None):
+                users = []
+            else:
+                query = query.where(User.hospital_id == current_user.hospital_id)
+                users = db.execute(query).scalars().all()
+        else:
+            users = db.execute(query).scalars().all()
         
         return render_template("admin/grading_eligibility_users.html", users=users)
 
-@roles_required('admin')
+@roles_required('admin', 'local_admin')
 def edit_eligibility(user_id):
     """Display and manage grading eligibility for a single user."""
     # Handle GET request (display the form)
@@ -23,10 +32,23 @@ def edit_eligibility(user_id):
         if not user:
             flash("User not found.", "danger")
             return redirect(url_for("admin.manage_eligibility_users"))
+
+        # Local admins can only manage users in their hospital
+        if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+            if not getattr(current_user, "hospital_id", None) or user.hospital_id != current_user.hospital_id:
+                flash("You do not have permission to manage grading eligibility for this user.", "danger")
+                return redirect(url_for("admin.manage_eligibility_users"))
         
         if request.method == 'GET':
             diseases = db.execute(select(Disease).order_by(Disease.name.asc())).scalars().all()
-            lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
+            if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+                lab_units = db.execute(
+                    select(LabUnit)
+                    .where(LabUnit.hospital_id == current_user.hospital_id)
+                    .order_by(LabUnit.hospital_id.asc())
+                ).scalars().all()
+            else:
+                lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
             
             # Render template within the same session to avoid detached instance errors
             return render_template(
@@ -40,6 +62,17 @@ def edit_eligibility(user_id):
     if request.method == 'POST':
         with transaction_scope() as db:
             try:
+                user = db.get(User, user_id)
+                if not user:
+                    flash("User not found.", "danger")
+                    return redirect(url_for("admin.manage_eligibility_users"))
+
+                # Local admins can only manage users in their hospital
+                if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+                    if not getattr(current_user, "hospital_id", None) or user.hospital_id != current_user.hospital_id:
+                        flash("You do not have permission to manage grading eligibility for this user.", "danger")
+                        return redirect(url_for("admin.manage_eligibility_users"))
+
                 # Get the items from form data
                 items_data = request.form.get('items')
                 if not items_data:
@@ -91,9 +124,16 @@ def edit_eligibility(user_id):
                     
                     
                     # Validate FKs
-                    if not db.get(Disease, disease_id) or not db.get(LabUnit, lab_unit_id):
+                    lab_unit = db.get(LabUnit, lab_unit_id)
+                    if not db.get(Disease, disease_id) or not lab_unit:
                         flash(f"Invalid disease or lab unit for item {item}.", "danger")
                         return redirect(url_for("admin.edit_eligibility", user_id=user_id))
+
+                    # Local admins can only assign lab units in their hospital
+                    if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+                        if not getattr(current_user, "hospital_id", None) or lab_unit.hospital_id != current_user.hospital_id:
+                            flash("You can only assign grading eligibility within your hospital.", "danger")
+                            return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                     
                     # Check if record exists
                     if key in existing_map:

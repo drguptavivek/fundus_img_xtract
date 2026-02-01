@@ -4,7 +4,11 @@ from typing import Tuple
 from flask import send_file, abort, flash, make_response, current_app, request
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
-from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage
+from models import (
+    DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR,
+    DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR,
+    GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage, UserDiseaseUnitRole, GradingTask
+)
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
     thumbnail_exists_direct, thumbnail_exists_encounter,
@@ -14,8 +18,9 @@ from utils.image_processing import get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.media_cache import bump_media_cache_version
-from sqlalchemy import  and_, select
+from sqlalchemy import and_, select, or_
 from db_transaction_manager import transaction_scope
+from utils.linkedGradingUtils import get_primary_disease_id
 
 
 def _build_image_response(
@@ -138,6 +143,77 @@ def _serve_encounter_thumbnail(encounter_file: EncounterFile, zip_file: ZipFile,
         )
     except Exception:
         return _serve_encounter_image(encounter_file, zip_file, uuid)
+
+
+def _get_grading_task_context_for_image(db, uuid: str) -> tuple[int | None, int | None]:
+    """Return (lab_unit_id, disease_id) for a grading task linked to the image uuid."""
+    task = (
+        db.query(GradingTask)
+        .join(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+        .filter(EncounterFile.uuid == uuid)
+        .first()
+    )
+    if not task:
+        task = (
+            db.query(GradingTask)
+            .join(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
+            .filter(DirectImageUpload.uuid == uuid)
+            .first()
+        )
+
+    if not task:
+        return None, None
+
+    return task.lab_unit_id, task.disease_id
+
+
+def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | None) -> bool:
+    """Check if the user has any grading slot for the lab unit + disease."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_master_admin", False):
+        return True
+    if not lab_unit_id or not disease_id:
+        return False
+
+    effective_disease_id = get_primary_disease_id(db, disease_id)
+    disease_ids = {disease_id, effective_disease_id}
+    return (
+        db.query(UserDiseaseUnitRole)
+        .filter(
+            UserDiseaseUnitRole.user_id == user.id,
+            UserDiseaseUnitRole.lab_unit_id == lab_unit_id,
+            UserDiseaseUnitRole.disease_id.in_(disease_ids),
+            UserDiseaseUnitRole.active == True,
+            or_(
+                UserDiseaseUnitRole.can_grade_resident == True,
+                UserDiseaseUnitRole.can_grade_resident2 == True,
+                UserDiseaseUnitRole.can_arbitrate == True,
+            ),
+        )
+        .first()
+        is not None
+    )
+
+
+def _apply_lab_unit_scoping(query, model_class, user):
+    """Restrict query to user's lab units (non-grading access)."""
+    if not user or getattr(user, "is_master_admin", False):
+        return query
+
+    def apply_filter(q, *args):
+        if hasattr(q, "filter"):
+            return q.filter(*args)
+        return q.where(*args)
+
+    lab_unit_ids = [lu.id for lu in (user.lab_units or [])]
+    if not lab_unit_ids:
+        return apply_filter(query, model_class.id == None)
+
+    if hasattr(model_class, "lab_unit_id"):
+        return apply_filter(query, model_class.lab_unit_id.in_(lab_unit_ids))
+
+    return query
 
 
 def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
@@ -439,19 +515,26 @@ def imgForGradingByUUID(uuid: str):
     Shows appropriate error messages using flash if issues occur.
     Only one match is returned - encounter images have priority.
     """
-    context = determine_scoping_context()
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
     with transaction_scope() as db:
+        lab_unit_id, disease_id = _get_grading_task_context_for_image(db, uuid)
+        allow_grading_access = _user_has_grading_slot(db, current_user, lab_unit_id, disease_id)
+
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFile.uuid == uuid)
         )
-        encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
+        if not allow_grading_access:
+            encounter_query = _apply_lab_unit_scoping(encounter_query, PatientEncounters, current_user)
         encounter_result = encounter_query.first()
 
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
+        if not allow_grading_access:
+            direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
         if encounter_result and direct_image:
@@ -757,19 +840,26 @@ def universalImageThumbnailByUUID(uuid: str):
 
     This follows the same logic as imgForGradingByUUID but for thumbnails.
     """
-    context = determine_scoping_context()
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
     with transaction_scope() as db:
+        lab_unit_id, disease_id = _get_grading_task_context_for_image(db, uuid)
+        allow_grading_access = _user_has_grading_slot(db, current_user, lab_unit_id, disease_id)
+
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFile.uuid == uuid)
         )
-        encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
+        if not allow_grading_access:
+            encounter_query = _apply_lab_unit_scoping(encounter_query, PatientEncounters, current_user)
         encounter_result = encounter_query.first()
 
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
+        if not allow_grading_access:
+            direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
         if encounter_result and direct_image:

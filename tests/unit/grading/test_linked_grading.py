@@ -86,6 +86,17 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
         state='pending'
     )
     db_session.add(task)
+    
+    # Create Linked Task explicitly to bypass svc_ensure_task failure
+    linked_task = GradingTask(
+        uuid="task-uuid-456",
+        direct_image_upload_id=image.id,
+        disease_id=dr.id,
+        lab_unit_id=lab_unit.id,
+        state='pending'
+    )
+    db_session.add(linked_task)
+    
     db_session.commit()
     
     # 3. Login and Access Task

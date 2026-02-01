@@ -25,6 +25,53 @@ class SaveEditRequestSchema(Schema):
     """Validate save_edit request data"""
     crop = fields.Nested(CropCoordinatesSchema, required=False)
 
+
+# =========================================================================
+# UTILITY FUNCTIONS (P1.3: S3 Hospital Scoping)
+# =========================================================================
+
+def validate_s3_config_access(image, current_user, db):
+    """
+    Validate that user has access to image's S3 config (if used).
+
+    P1.3: Prevents cross-hospital S3 access
+
+    Args:
+        image: EncounterSetImage model instance
+        current_user: Current user
+        db: Database session
+
+    Returns:
+        (is_valid, error_message) tuple
+    """
+    if not image.s3_config_id:
+        # Image uses local storage, not S3
+        return True, None
+
+    from models import S3Config
+
+    s3_config = db.query(S3Config).filter_by(id=image.s3_config_id).first()
+    if not s3_config:
+        # S3 config not found (data inconsistency)
+        return False, "S3 configuration not found"
+
+    # Verify S3 config belongs to user's hospital
+    if s3_config.hospital_id != current_user.hospital_id:
+        import logging
+        logger = logging.getLogger("verify_encounter_set")
+        logger.warning(
+            "Cross-hospital S3 access attempt blocked",
+            extra={
+                'user_id': current_user.id,
+                'user_hospital': current_user.hospital_id,
+                'image_uuid': image.uuid,
+                's3_hospital': s3_config.hospital_id
+            }
+        )
+        return False, "Access denied to S3 storage"
+
+    return True, None
+
 @bp.route("/")
 @login_required
 @roles_required("admin", "optometrist", "data_manager")
@@ -197,6 +244,12 @@ def edit_image(uuid):
             # Encounter not found or user doesn't have access
             abort(404)
 
+        # P1.3: Validate S3 config access (defense-in-depth)
+        if img.s3_config_id:
+            is_valid, error_msg = validate_s3_config_access(img, current_user, db)
+            if not is_valid:
+                abort(403)
+
         # Check if grading tasks exist - block editing if they do
         task_states = db.execute(
             select(GradingTask.state).where(GradingTask.patient_encounter_id == encounter.id)
@@ -257,18 +310,14 @@ def save_edit(uuid):
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        # Generate edited filename
-        original_name = img.original_filename.rsplit('.', 1)[0]
-        ext = img.original_filename.rsplit('.', 1)[-1] if '.' in img.original_filename else 'jpg'
-        edited_filename = f"{original_name}_edited.{ext}"
-
-        # For now, mark as having an edited version and mark as reviewed
-        # Actual image processing would be done here with PIL based on crop coordinates
-        img.edited_filename = edited_filename
-        img.is_reviewed = True
-        img.is_anonymized = True  # Assume editing implies PII masking
-
-        return jsonify({"success": True, "edited_filename": edited_filename})
+        # P1.1: Image editing feature not yet implemented
+        # Return 501 Not Implemented with clear message to user
+        return jsonify({
+            "success": False,
+            "message": "Image editing feature is not yet implemented",
+            "details": "Image cropping and masking will be available in a future release. "
+                       "Please mark the image as anonymized if PII needs to be masked."
+        }), 501
 
 
 @bp.route("/mark_anonymized/<uuid>", methods=["POST"])
@@ -276,21 +325,26 @@ def save_edit(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def mark_anonymized(uuid):
     """Mark an image as anonymized (PII masked)."""
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
     with transaction_scope() as db:
         img = db.query(EncounterSetImage).filter_by(uuid=uuid).first()
         if not img:
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        encounter = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id).first()
-        if not encounter:
-            return jsonify({"success": False, "message": "Encounter not found"}), 404
+        # Query encounter and apply hospital scoping
+        query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
+        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        encounter = query.first()
 
-        # Check access
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"success": False, "message": "Permission denied"}), 403
+        if not encounter:
+            # Encounter not found or user doesn't have access
+            return jsonify({"success": False, "message": "Image not found"}), 404
+
+        # P1.3: Validate S3 config access (defense-in-depth)
+        if img.s3_config_id:
+            is_valid, error_msg = validate_s3_config_access(img, current_user, db)
+            if not is_valid:
+                return jsonify({"success": False, "message": "Permission denied"}), 403
 
         img.is_anonymized = True
         img.is_reviewed = True

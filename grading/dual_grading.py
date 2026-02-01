@@ -481,6 +481,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             try:
                                 linked_task = svc_ensure_task(image_uuid, linked_disease_id, db)
                             except Exception as ensure_error:
+                                print(f"DEBUG: svc_ensure_task FAILED: {ensure_error}")
                                 grades_logger.exception(
                                     "Failed to ensure linked task for disease %s: %s",
                                     linked_disease_id,
@@ -510,9 +511,12 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             flash(panel_conflict_message or "You already graded this task in the paired slot.", "warning")
                             return redirect(url_for("grading.index"))
 
-                        if not get_user_eligibility_for_task(db, current_user.id, panel_task_id, slot_type):
-                            flash("You are not eligible to grade this task as the selected role.", "danger")
-                            return redirect(url_for("grading.index"))
+                        is_eligible = get_user_eligibility_for_task(db, current_user.id, panel_task_id, slot_type)
+                        eligibility_error = None
+
+                        if not is_eligible:
+                            eligibility_error = "You are not eligible to grade this linked task."
+                            # Continue to load panel but mark it
 
                         if slot_type == 'resident':
                             allowed_states = ['pending']

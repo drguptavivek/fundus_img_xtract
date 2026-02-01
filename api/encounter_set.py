@@ -8,6 +8,7 @@ from functools import wraps
 from io import BytesIO
 from PIL import Image
 from werkzeug.utils import secure_filename
+from flask_wtf.csrf import csrf_protect
 
 from . import api_bp
 from db_transaction_manager import transaction_scope
@@ -278,12 +279,35 @@ def get_encounter_set_details(uuid):
 
 @api_bp.route('/v1/encounter-set/image/<uuid>/position', methods=['POST'])
 @login_required
+@csrf_protect  # ← CSRF protection for session-authenticated route
 @roles_required("admin", "local_admin", "optometrist")
 def update_image_position(uuid):
     """Update the spatial position of an image."""
+    # =========================================================================
+    # P0.4: FIX TYPE CONFUSION - Validate null first, then type, then range
+    # =========================================================================
+
     pos_raw = request.json.get("spatial_position")
-    if pos_raw is None or not (1 <= int(pos_raw) <= 9):
-        return jsonify({"error": "Invalid spatial_position"}), 400
+
+    # Step 1: Null check
+    if pos_raw is None:
+        return jsonify({"error": "Missing spatial_position"}), 400
+
+    # Step 2: Type validation (before using int())
+    try:
+        spatial_position = int(pos_raw)
+    except (ValueError, TypeError):
+        return jsonify({
+            "error": "Invalid spatial_position",
+            "message": "Must be an integer between 1 and 9"
+        }), 400
+
+    # Step 3: Range validation
+    if not (1 <= spatial_position <= 9):
+        return jsonify({
+            "error": "Invalid spatial_position",
+            "message": "Must be between 1 and 9"
+        }), 400
         
     with transaction_scope() as db:
         # Check permission via encounter scoping
@@ -291,30 +315,42 @@ def update_image_position(uuid):
             selectinload(EncounterSetImage.patient_encounter)
         )
         img = db.execute(query).scalar_one_or_none()
-        
+
         if not img:
             return jsonify({"error": "Image not found"}), 404
-            
-        # Scope check
+
+        # Scope check - verify user has access to this encounter
         enc_query = select(PatientEncounters).where(PatientEncounters.id == img.patient_encounter_id)
         enc_query = apply_scoping(enc_query, PatientEncounters, current_user, "edit")
         if not db.execute(enc_query).scalar_one_or_none():
             return jsonify({"error": "Access denied"}), 403
-            
-        # Check for collision
+
+        # Check for collision - verify target position is not occupied
         collision = db.query(EncounterSetImage).filter(
             and_(
                 EncounterSetImage.patient_encounter_id == img.patient_encounter_id,
-                EncounterSetImage.spatial_position == int(pos_raw),
+                EncounterSetImage.spatial_position == spatial_position,  # ← Use validated variable
                 EncounterSetImage.id != img.id
             )
         ).first()
-        
+
         if collision:
             return jsonify({"error": "Position already occupied"}), 409
-            
-        img.spatial_position = int(pos_raw)
+
+        # Update position
+        img.spatial_position = spatial_position  # ← Use validated variable
         db.commit()
+
+        logger.info(
+            "Image position updated",
+            extra={
+                'image_uuid': uuid,
+                'old_position': img.spatial_position,
+                'new_position': spatial_position,
+                'user_id': current_user.id
+            }
+        )
+
         return jsonify({"message": "Position updated"})
 
 def generate_mobile_token(hospital_id, lab_unit_id, allowed_diseases):

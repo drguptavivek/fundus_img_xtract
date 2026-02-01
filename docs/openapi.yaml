@@ -2,26 +2,37 @@ openapi: 3.0.3
 info:
   title: Fundus Image Manager API
   description: |
-    RESTful API for the Fundus Image Manager application.
+    RESTful API for the Fundus Image Manager - Medical imaging platform for fundus photograph grading,
+    verification, and dataset curation.
 
     ## Authentication
 
-    All API endpoints require authentication via Flask session cookies. Users must be logged in to access the API.
-    When accessing the API through a web browser that's already logged into the application, 
-    authentication is handled automatically.
+    All API endpoints require authentication:
+    - **Session Cookie**: For web interface access (automatic when logged in)
+    - **JWT Token**: For mobile/API access (Bearer token in Authorization header)
 
-    For programmatic access, you must first log in through the web interface or obtain a valid session cookie
-    through the authentication process.
+    JWT tokens are issued per-hospital and per-device for secure mobile uploads.
 
     ## Authorization
 
     Different endpoints require different user roles:
     - `admin`: Full access to all endpoints
-    - `data_manager`: Access to most data management endpoints
-    - `ophthalmologist`: Access to disease-related and grading endpoints
-    - `resident`: Limited access to specific endpoints
-    - `fileUploader`: Access to upload-related endpoints
-  version: 1.0.0
+    - `local_admin`: Hospital administration
+    - `data_manager`: Data management operations
+    - `ophthalmologist`: Disease-related and grading endpoints
+    - `resident`: Limited grading access
+    - `optometrist`: Verification and image tagging
+    - `fileUploader`: File upload operations
+
+    ## Rate Limiting
+
+    Upload endpoints are rate-limited (typically 60 requests per minute).
+
+    ## Version
+
+    Current API version: `v1` (prefix for newer endpoints)
+
+  version: 2.0.0
   contact:
     name: API Support
     email: support@example.com
@@ -29,40 +40,77 @@ info:
 servers:
   - url: /api
     description: Current server (relative paths)
-  - url: http://localhost:5000/api
+  - url: http://localhost:5001/api
     description: Development server
   - url: https://your-domain.com/api
     description: Production server
 
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: Diseases
+    description: Disease and grading operations
+  - name: Hospitals
+    description: Hospital management
+  - name: Lab Units
+    description: Lab unit operations
+  - name: Users
+    description: User management
+  - name: Direct Uploads
+    description: Direct image upload operations
+  - name: Jobs
+    description: Upload job status
+  - name: OCR & PII
+    description: OCR text extraction and PII detection
+  - name: Image Metadata
+    description: Image metadata operations
+  - name: Encounter Sets
+    description: Multi-image set operations (Strabismus, etc.)
+  - name: Viewer Settings
+    description: Image viewer configuration
+  - name: Upload Stats
+    description: Upload statistics and metrics
+  - name: Admin Users
+    description: User administration
+  - name: AI Models
+    description: AI model management
+  - name: Grading Eligibility
+    description: Grading task eligibility
+  - name: Scoping
+    description: Access control and scoping
+  - name: KPIs
+    description: Key performance indicators and analytics
+
 paths:
-  /diseases:
+  # ========================================================================
+  # DISEASES
+  # ========================================================================
+  /diseases-with-gradings:
     get:
-      summary: Get all diseases
-      description: Returns a list of all diseases in the system
-      tags:
-        - Diseases
+      summary: Get all diseases with gradings
+      description: Returns list of diseases with their active grading options
+      tags: [Diseases]
       security:
         - cookieAuth: []
       responses:
         '200':
-          description: A list of diseases
+          description: List of diseases with gradings
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Disease'
+                  $ref: '#/components/schemas/DiseaseWithGradings'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
 
-  /diseases/{disease_id}:
+  /disease-grades/{disease_id}:
     get:
-      summary: Get disease by ID
-      description: Returns details of a specific disease
-      tags:
-        - Diseases
+      summary: Get disease grades
+      description: Returns all active grading options for a specific disease
+      tags: [Diseases]
       security:
         - cookieAuth: []
       parameters:
@@ -71,39 +119,9 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
-          description: Disease details
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Disease'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /diseases/{disease_id}/gradings:
-    get:
-      summary: Get disease gradings
-      description: Returns all active gradings for a specific disease
-      tags:
-        - Diseases
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: disease_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: A list of disease gradings
+          description: List of disease grades
           content:
             application/json:
               schema:
@@ -112,17 +130,14 @@ paths:
                   $ref: '#/components/schemas/DiseaseGrading'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /diseases/{disease_id}/specialists:
+  /diseases-gradings-features/{disease_id}:
     get:
-      summary: Get disease specialists
-      description: Returns all users specialized in a specific disease
-      tags:
-        - Diseases
+      summary: Get disease grades with features
+      description: Returns grading options with their feature definitions for UI rendering
+      tags: [Diseases]
       security:
         - cookieAuth: []
       parameters:
@@ -131,34 +146,31 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
-          description: A list of specialists
+          description: List of disease grades with features
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/UserWithAssociations'
+                  $ref: '#/components/schemas/DiseaseGradingWithFeatures'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
+  # ========================================================================
+  # HOSPITALS
+  # ========================================================================
   /hospitals:
     get:
       summary: Get all hospitals
-      description: Returns a list of all hospitals
-      tags:
-        - Hospitals
+      description: Returns list of hospitals (scoped to user's access)
+      tags: [Hospitals]
       security:
         - cookieAuth: []
       responses:
         '200':
-          description: A list of hospitals
+          description: List of hospitals
           content:
             application/json:
               schema:
@@ -167,15 +179,12 @@ paths:
                   $ref: '#/components/schemas/Hospital'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
 
   /hospitals/{hospital_id}:
     get:
       summary: Get hospital by ID
       description: Returns details of a specific hospital
-      tags:
-        - Hospitals
+      tags: [Hospitals]
       security:
         - cookieAuth: []
       parameters:
@@ -184,7 +193,6 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
           description: Hospital details
@@ -201,10 +209,9 @@ paths:
 
   /hospitals/{hospital_id}/lab-units:
     get:
-      summary: Get lab units for hospital
-      description: Returns all lab units for a specific hospital
-      tags:
-        - Hospitals
+      summary: Get hospital lab units
+      description: Returns all lab units for a hospital
+      tags: [Lab Units]
       security:
         - cookieAuth: []
       parameters:
@@ -213,10 +220,9 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
-          description: A list of lab units
+          description: List of lab units
           content:
             application/json:
               schema:
@@ -225,54 +231,36 @@ paths:
                   $ref: '#/components/schemas/LabUnit'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /hospitals/{hospital_id}/specializations/{disease_id}/users:
+  # ========================================================================
+  # LAB UNITS
+  # ========================================================================
+  /labunits:
     get:
-      summary: Get specialists for disease at hospital
-      description: Returns all users specialized in a specific disease at a specific hospital
-      tags:
-        - Hospitals
+      summary: Get all lab units
+      description: Returns list of lab units (scoped to user's access)
+      tags: [Lab Units]
       security:
         - cookieAuth: []
-      parameters:
-        - name: hospital_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: disease_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
       responses:
         '200':
-          description: A list of specialists
+          description: List of lab units
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/User'
+                  $ref: '#/components/schemas/LabUnit'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
-  /lab-units/{lab_unit_id}:
+  /labunits/{lab_unit_id}:
     get:
       summary: Get lab unit by ID
       description: Returns details of a specific lab unit
-      tags:
-        - Lab Units
+      tags: [Lab Units]
       security:
         - cookieAuth: []
       parameters:
@@ -281,427 +269,13 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
           description: Lab unit details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LabUnitWithHospital'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/users:
-    get:
-      summary: Get users in lab unit
-      description: Returns all users assigned to a specific lab unit
-      tags:
-        - Lab Units
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: A list of users
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/UserWithAssociations'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/upload-count:
-    get:
-      summary: Get upload count for lab unit
-      description: Returns the count of uploads for a specific lab unit
-      tags:
-        - Lab Units
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Upload count
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadCount'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /users/{user_id}/lab-units:
-    get:
-      summary: Get lab units for user
-      description: Returns all lab units for a specific user
-      tags:
-        - Users
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: A list of lab units
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LabUnitWithHospital'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /users/{user_id}/hospitals:
-    get:
-      summary: Get hospitals for user
-      description: Returns all hospitals for a specific user (through their lab units)
-      tags:
-        - Users
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: A list of hospitals
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/HospitalWithLabUnits'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /users/{user_id}/comprehensive:
-    get:
-      summary: Get comprehensive user information
-      description: Returns comprehensive information for a specific user including hospitals, lab units, and specializations
-      tags:
-        - Users
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Comprehensive user information
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ComprehensiveUser'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/diseases/{disease_id}/ophthalmologists:
-    get:
-      summary: Get ophthalmologist IDs for disease at lab unit
-      description: Returns a simple array of user IDs for ophthalmologists specialized in a specific disease at a specific lab unit
-      tags:
-        - Lab Unit Disease Specialists
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: disease_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Array of ophthalmologist user IDs
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: integer
-                  format: int64
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/diseases/{disease_id}/residents:
-    get:
-      summary: Get resident IDs for disease at lab unit
-      description: Returns a simple array of user IDs for residents specialized in a specific disease at a specific lab unit
-      tags:
-        - Lab Unit Disease Specialists
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: disease_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Array of resident user IDs
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: integer
-                  format: int64
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/diseases/{disease_id}/specialists:
-    get:
-      summary: Get specialists for disease at lab unit
-      description: Returns all specialists (ophthalmologists and residents) for a specific disease at a specific lab unit
-      tags:
-        - Lab Unit Disease Specialists
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: disease_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Specialists information
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LabUnitDiseaseSpecialists'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /lab-units/{lab_unit_id}/specialists-summary:
-    get:
-      summary: Get specialists summary for all diseases at lab unit
-      description: Returns a summary of all specialists for each disease at a specific lab unit
-      tags:
-        - Lab Unit Disease Specialists
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: lab_unit_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Specialists summary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LabUnitSpecialistsSummary'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /disease-gradings/{grading_id}:
-    get:
-      summary: Get disease grading by ID
-      description: Get a single disease grading as JSON
-      tags:
-        - Disease Gradings
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: grading_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Disease grading details
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DiseaseGrading'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /users/{user_id}/disease-specializations:
-    get:
-      summary: Get user disease specializations
-      description: Get disease specializations for a user
-      tags:
-        - Disease Specializations
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: User disease specializations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserDiseaseSpecializations'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      summary: Set user disease specializations
-      description: Set disease specializations for a user
-      tags:
-        - Disease Specializations
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DiseaseSpecializationRequest'
-      responses:
-        '200':
-          description: Success response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /direct-uploads/users/{user_id}/lab-units:
-    get:
-      summary: Get lab units for user (Direct Uploads)
-      description: Get lab units for a user
-      tags:
-        - Direct Uploads
-      security:
-        - cookieAuth: []
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: A list of lab units
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LabUnit'
+                $ref: '#/components/schemas/LabUnit'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -711,10 +285,9 @@ paths:
 
   /lab-units/{lab_unit_id}/hospital:
     get:
-      summary: Get hospital for lab unit
-      description: Get hospital for a lab unit
-      tags:
-        - Direct Uploads
+      summary: Get lab unit's hospital
+      description: Returns hospital information for a lab unit
+      tags: [Lab Units]
       security:
         - cookieAuth: []
       parameters:
@@ -723,7 +296,6 @@ paths:
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
           description: Hospital details
@@ -733,46 +305,80 @@ paths:
                 $ref: '#/components/schemas/Hospital'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
-  /upload-jobs/{job_id}/status:
+  # ========================================================================
+  # USERS
+  # ========================================================================
+  /users/{user_id}/lab-units:
     get:
-      summary: Get upload job status
-      description: Get status of a direct upload job
-      tags:
-        - Direct Uploads
+      summary: Get user's lab units
+      description: Returns lab units assigned to a user
+      tags: [Users]
       security:
         - cookieAuth: []
       parameters:
-        - name: job_id
+        - name: user_id
           in: path
           required: true
           schema:
             type: integer
-            format: int64
       responses:
         '200':
-          description: Upload job status
+          description: List of lab units
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadJobStatus'
+                type: array
+                items:
+                  $ref: '#/components/schemas/LabUnit'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
-  /jobs/{job_token}:
+  # ========================================================================
+  # ELIGIBLE LAB UNIT
+  # ========================================================================
+  /eligibleLabUnit:
     get:
-      summary: Get upload job status by token
-      description: Get job status as JSON
-      tags:
-        - Jobs
+      summary: Get eligible lab unit
+      description: Returns the user's eligible lab unit for operations
+      tags: [Lab Units]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Eligible lab unit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabUnit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /eligibleLabUnitCurrentUser:
+    get:
+      summary: Get current user's eligible lab unit
+      description: Returns the current user's eligible lab unit
+      tags: [Users]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Eligible lab unit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabUnit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ========================================================================
+  # DIRECT UPLOADS
+  # ========================================================================
+  /upload-jobs/{job_token}/status:
+    get:
+      summary: Get upload job status
+      description: Returns the status of an async upload job
+      tags: [Jobs]
       security:
         - cookieAuth: []
       parameters:
@@ -783,11 +389,264 @@ paths:
             type: string
       responses:
         '200':
-          description: Upload job status
+          description: Job status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadJobStatusByToken'
+                $ref: '#/components/schemas/UploadJobStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # OCR & PII DETECTION
+  # ========================================================================
+  /ocr/pii/{image_uuid}:
+    get:
+      summary: Get PII detection results
+      description: Returns OCR text and detected PII for an image
+      tags: [OCR & PII]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: image_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: PII detection results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PIIDetectionResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /ocr/pii/boxes/{image_uuid}:
+    get:
+      summary: Get PII bounding boxes
+      description: Returns bounding boxes for detected PII in an image
+      tags: [OCR & PII]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: image_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: PII bounding boxes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PIIBoundingBoxes'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ocr/pii/batch:
+    post:
+      summary: Batch PII detection
+      description: Trigger PII detection for multiple images
+      tags: [OCR & PII]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image_uuids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+              required:
+                - image_uuids
+      responses:
+        '200':
+          description: Batch processing started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  status:
+                    type: string
+                  queued_count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ocr/pii/override:
+    post:
+      summary: Override PII detection
+      description: Manually override PII detection results for an image
+      tags: [OCR & PII]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image_uuid:
+                  type: string
+                  format: uuid
+                has_pii:
+                  type: boolean
+                notes:
+                  type: string
+              required:
+                - image_uuid
+                - has_pii
+      responses:
+        '200':
+          description: Override successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ========================================================================
+  # IMAGE METADATA
+  # ========================================================================
+  /image-metadata/{image_uuid}:
+    get:
+      summary: Get image metadata
+      description: Returns metadata for an image (tags, laterality, centering, etc.)
+      tags: [Image Metadata]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: image_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Image metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Update image metadata
+      description: Updates image tags and metadata
+      tags: [Image Metadata]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: image_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                eye_side:
+                  type: string
+                  enum: [left, right, cannot_tell, null]
+                centering:
+                  type: string
+                  enum: [macula, disk, cannot_tell, null]
+              required: []
+      responses:
+        '200':
+          description: Metadata updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # ENCOUNTER SETS (Multi-Image Sets for Strabismus, etc.)
+  # ========================================================================
+  /v1/encounter-set/unverified:
+    get:
+      summary: List unverified encounter sets
+      description: Returns list of set-based encounters pending verification
+      tags: [Encounter Sets]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of unverified encounter sets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EncounterSetSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/encounter-set/{uuid}/details:
+    get:
+      summary: Get encounter set details
+      description: Returns detailed information including images for an encounter set
+      tags: [Encounter Sets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Encounter set details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterSetDetails'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -795,29 +654,768 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /v1/encounter-set/image/{uuid}/position:
+    post:
+      summary: Update image spatial position
+      description: Updates the grid position (1-9) of an image in an encounter set
+      tags: [Encounter Sets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          description: Image UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                spatial_position:
+                  type: integer
+                  minimum: 1
+                  maximum: 9
+              required:
+                - spatial_position
+      responses:
+        '200':
+          description: Position updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Position already occupied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/Conflict'
+
+  /v1/encounter-set/upload:
+    post:
+      summary: Upload image to encounter set
+      description: Mobile API endpoint for uploading images to multi-image sets
+      tags: [Encounter Sets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: encounter_uuid
+          in: formData
+          description: Optional UUID for existing encounter
+          schema:
+            type: string
+            format: uuid
+        - name: patient_id
+          in: formData
+          description: Patient ID (required for new encounters)
+          schema:
+            type: string
+        - name: patient_name
+          in: formData
+          description: Patient name (required for new encounters)
+          schema:
+            type: string
+        - name: capture_date
+          in: formData
+          description: Capture date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: spatial_position
+          in: formData
+          description: Grid position (1-9)
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9
+        - name: file
+          in: formData
+          description: Image file
+          required: true
+          schema:
+            type: string
+            format: binary
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                spatial_position:
+                  type: integer
+                  minimum: 1
+                  maximum: 9
+              required:
+                - file
+                - spatial_position
+      responses:
+        '201':
+          description: Image uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterSetUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ========================================================================
+  # VIEWER SETTINGS
+  # ========================================================================
+  /viewer/settings:
+    get:
+      summary: Get viewer settings
+      description: Returns current image viewer configuration
+      tags: [Viewer Settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Viewer settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViewerSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Save viewer settings
+      description: Updates image viewer configuration
+      tags: [Viewer Settings]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViewerSettings'
+      responses:
+        '200':
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /viewer/presets:
+    get:
+      summary: Get viewer presets
+      description: Returns all saved viewer presets for current user
+      tags: [Viewer Settings]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Viewer presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ViewerPreset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /viewer/presets/{slot_number}:
+    post:
+      summary: Save viewer preset
+      description: Saves a viewer configuration to a preset slot
+      tags: [Viewer Settings]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: slot_number
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 50
+                settings:
+                  $ref: '#/components/schemas/ViewerSettings'
+              required:
+                - settings
+      responses:
+        '200':
+          description: Preset saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Delete viewer preset
+      description: Removes a viewer preset from a slot
+      tags: [Viewer Settings]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: slot_number
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+      responses:
+        '200':
+          description: Preset deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # UPLOAD STATS
+  # ========================================================================
+  /upload-stats/today:
+    get:
+      summary: Get today's upload statistics
+      description: Returns upload metrics for the current day
+      tags: [Upload Stats]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Upload statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /upload-stats/last-7-days:
+    get:
+      summary: Get last 7 days upload statistics
+      description: Returns upload metrics for the past week
+      tags: [Upload Stats]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Upload statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  daily_stats:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        count:
+                          type: integer
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ========================================================================
+  # GRADING ELIGIBILITY
+  # ========================================================================
+  /grading-eligibility/users/{user_id}:
+    get:
+      summary: Get user grading eligibility
+      description: Returns information about which diseases/tasks a user is eligible to grade
+      tags: [Grading Eligibility]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User eligibility information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradingEligibility'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /grading-eligibility/users/{user_id}/details:
+    get:
+      summary: Get user grading eligibility details
+      description: Returns detailed eligibility information including available tasks
+      tags: [Grading Eligibility]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detailed eligibility information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradingEligibilityDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # SCOPING
+  # ========================================================================
+  /user/hospital-context:
+    get:
+      summary: Get user hospital context
+      description: Returns hospital and lab unit context for the current user
+      tags: [Scoping]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: User context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserHospitalContext'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /scoping/operation/{operation_name}:
+    get:
+      summary: Check operation scope
+      description: Checks if current user has permission to perform an operation
+      tags: [Scoping]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: operation_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation scope check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  operation:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ========================================================================
+  # ADMIN USERS
+  # ========================================================================
+  /admin/users:
+    get:
+      summary: List users (admin)
+      description: Returns list of users with filtering options
+      tags: [Admin Users]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: lab_unit_id
+          in: query
+          schema:
+            type: integer
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  page:
+                    type: integer
+                  per_page:
+                    type: integer
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ========================================================================
+  # AI MODELS
+  # ========================================================================
+  /ai-models:
+    get:
+      summary: Get AI models
+      description: Returns list of available AI models
+      tags: [AI Models]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: List of AI models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AIModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ========================================================================
+  # KPIs - Key Performance Indicators
+  # ========================================================================
+  /kpis/direct-files/filtered-dataframe:
+    get:
+      summary: Get direct files filtered dataframe
+      description: Returns filtered direct upload records as dataframe for analysis
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: filters
+          in: query
+          description: JSON-encoded filter criteria
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Filtered dataframe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataFrameResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /kpis/direct-files/filtered-dataframe-excel:
+    get:
+      summary: Export direct files to Excel
+      description: Returns filtered direct upload records as Excel file
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: filters
+          in: query
+          description: JSON-encoded filter criteria
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /kpis/direct-files/upload-metrics:
+    get:
+      summary: Get direct file upload metrics
+      description: Returns aggregated upload statistics for direct uploads
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Upload metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/filtered-dataframe:
+    get:
+      summary: Get encounter files filtered dataframe
+      description: Returns filtered encounter file records as dataframe
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: filters
+          in: query
+          description: JSON-encoded filter criteria
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Filtered dataframe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataFrameResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/year-month-wise-uploads:
+    get:
+      summary: Get encounter files year-month uploads
+      description: Returns encounter file uploads grouped by year and month
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Year-month upload counts
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/dr-reports-count:
+    get:
+      summary: Get DR reports count
+      description: Returns count of encounters with DR reports
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: DR reports count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/glaucoma-reports-count:
+    get:
+      summary: Get Glaucoma reports count
+      description: Returns count of encounters with Glaucoma reports
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Glaucoma reports count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/images-count:
+    get:
+      summary: Get images count
+      description: Returns count of encounter images
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Images count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/dr-results-distribution:
+    get:
+      summary: Get DR results distribution
+      description: Returns distribution of DR grading results
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: DR results distribution
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/glaucoma-results-distribution:
+    get:
+      summary: Get Glaucoma results distribution
+      description: Returns distribution of Glaucoma grading results
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Glaucoma results distribution
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /kpis/encounter-files/vcdr-distribution:
+    get:
+      summary: Get VCDR distribution
+      description: Returns distribution of VCDR (Vertical Cup-Disc Ratio) values
+      tags: [KPIs]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: VCDR distribution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ranges:
+                    type: object
+                  distribution:
+                    type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   securitySchemes:
     cookieAuth:
       type: apiKey
       in: cookie
       name: session
-      description: |
-        Authentication is handled via Flask session cookies. 
-        Users must be logged in to access the API endpoints.
-        The session cookie is automatically included in requests when browsing through the web interface.
+      description: Flask session cookie authentication (used by web interface)
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication (used by mobile/API clients)
 
   schemas:
+    # ========================================================================
+    # COMMON SCHEMAS
+    # ========================================================================
     Disease:
       type: object
       properties:
         id:
           type: integer
-          format: int64
         name:
           type: string
-        created_at:
+        grading_scope:
           type: string
-          format: date-time
+          enum: [image, encounter]
+        short_name:
+          type: string
+        description:
+          type: string
       required:
         - id
         - name
@@ -827,34 +1425,98 @@ components:
       properties:
         id:
           type: integer
-          format: int64
         disease_id:
           type: integer
-          format: int64
-        impression:
+        label:
+          type: string
+        code:
           type: string
         display_order:
           type: integer
         is_active:
           type: boolean
+        features:
+          type: object
+          additionalProperties: true
       required:
         - id
         - disease_id
-        - impression
-        - display_order
-        - is_active
+        - label
 
+    DiseaseWithGradings:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        short_name:
+          type: string
+        grading_scope:
+          type: string
+        gradings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiseaseGrading'
+
+    DiseaseGradingWithFeatures:
+      type: object
+      properties:
+        id:
+          type: integer
+        disease_id:
+          type: integer
+        label:
+          type: string
+        code:
+          type: string
+        features:
+          type: object
+          properties:
+            label:
+              type: string
+              description:
+                type: string
+              type:
+                type: string
+              enum: [text, select, multiselect, radio, checkbox]
+              options:
+                type: array
+                items:
+                  type: string
+              default:
+                type: string
+            required:
+              type: boolean
+
+    # ========================================================================
+    # HOSPITAL & LAB UNIT
+    # ========================================================================
     Hospital:
       type: object
       properties:
         id:
           type: integer
-          format: int64
         name:
           type: string
-        created_at:
+        short_name:
           type: string
-          format: date-time
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        pincode:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        is_active:
+          type: boolean
       required:
         - id
         - name
@@ -864,338 +1526,272 @@ components:
       properties:
         id:
           type: integer
-          format: int64
         name:
           type: string
         hospital_id:
           type: integer
-          format: int64
-        created_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - name
-        - hospital_id
-
-    LabUnitWithHospital:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        name:
-          type: string
-        hospital_id:
-          type: integer
-          format: int64
-        hospital_name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - name
-        - hospital_id
-
-    HospitalWithLabUnits:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        lab_unit_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        lab_unit_names:
-          type: array
-          items:
-            type: string
+        hospital:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+        is_active:
+          type: boolean
       required:
         - id
         - name
 
+    # ========================================================================
+    # USERS
+    # ========================================================================
     User:
       type: object
       properties:
         id:
           type: integer
-          format: int64
         username:
-          type: string
-        full_name:
           type: string
         email:
           type: string
-      required:
-        - id
-        - username
-
-    UserWithAssociations:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        username:
-          type: string
         full_name:
           type: string
-        email:
-          type: string
-        is_active:
-          type: boolean
-        hospital_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        lab_unit_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        lab_unit_names:
-          type: array
-          items:
-            type: string
-      required:
-        - id
-        - username
-
-    UploadCount:
-      type: object
-      properties:
-        lab_unit_id:
-          type: integer
-          format: int64
-        upload_count:
-          type: integer
-      required:
-        - lab_unit_id
-        - upload_count
-
-    ComprehensiveUser:
-      type: object
-      properties:
-        user:
-          $ref: '#/components/schemas/UserWithRoles'
-        hospitals:
-          type: array
-          items:
-            $ref: '#/components/schemas/Hospital'
-        lab_units:
-          type: array
-          items:
-            $ref: '#/components/schemas/LabUnitWithHospital'
-        specializations:
-          type: array
-          items:
-            $ref: '#/components/schemas/Disease'
-        hospital_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        lab_unit_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        lab_unit_names:
-          type: array
-          items:
-            type: string
-        specialization_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        specialization_names:
-          type: array
-          items:
-            type: string
-      required:
-        - user
-        - hospitals
-        - lab_units
-        - specializations
-        - hospital_ids
-        - lab_unit_ids
-        - lab_unit_names
-        - specialization_ids
-        - specialization_names
-
-    UserWithRoles:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        username:
-          type: string
-        full_name:
-          type: string
-        email:
-          type: string
-        is_active:
-          type: boolean
         roles:
           type: array
           items:
             type: string
+        lab_units:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabUnit'
+        is_active:
+          type: boolean
       required:
         - id
         - username
-        - roles
 
-    LabUnitDiseaseSpecialists:
+    # ========================================================================
+    # ENCOUNTER SETS (Multi-Image)
+    # ========================================================================
+    EncounterSetSummary:
       type: object
       properties:
-        lab_unit:
-          $ref: '#/components/schemas/LabUnitReference'
-        disease:
-          $ref: '#/components/schemas/DiseaseReference'
-        ophthalmologists:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        residents:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        total_specialists:
-          type: integer
-      required:
-        - lab_unit
-        - disease
-        - ophthalmologists
-        - residents
-        - total_specialists
-
-    LabUnitReference:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        name:
+        uuid:
           type: string
-        hospital_id:
-          type: integer
-          format: int64
-      required:
-        - id
-        - name
-        - hospital_id
-
-    DiseaseReference:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        name:
+          format: uuid
+        patient_id:
           type: string
-      required:
-        - id
-        - name
-
-    LabUnitSpecialistsSummary:
-      type: object
-      properties:
-        lab_unit:
-          $ref: '#/components/schemas/LabUnitReference'
-        diseases:
-          type: array
-          items:
-            $ref: '#/components/schemas/DiseaseSpecialistSummary'
-      required:
-        - lab_unit
-        - diseases
-
-    DiseaseSpecialistSummary:
-      type: object
-      properties:
-        disease:
-          $ref: '#/components/schemas/DiseaseReference'
-        ophthalmologists:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        ophthalmologist_count:
-          type: integer
-        residents:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        resident_count:
-          type: integer
-        total_specialists:
+        patient_name:
+          type: string
+        capture_date:
+          type: string
+          format: date
+        image_count:
           type: integer
       required:
-        - disease
-        - ophthalmologists
-        - ophthalmologist_count
-        - residents
-        - resident_count
-        - total_specialists
+        - uuid
+        - patient_id
 
-    UserDiseaseSpecializations:
+    EncounterSetDetails:
       type: object
       properties:
-        success:
+        uuid:
+          type: string
+          format: uuid
+        patient_id:
+          type: string
+        patient_name:
+          type: string
+        capture_date:
+          type: string
+          format: date
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              uuid:
+                type: string
+                format: uuid
+              spatial_position:
+                type: integer
+                minimum: 1
+                maximum: 9
+              url:
+                type: string
+              thumbnail_url:
+                type: string
+                nullable: true
+      required:
+        - uuid
+        - patient_id
+        - images
+
+    EncounterSetUploadResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        encounter_id:
+          type: integer
+        encounter_uuid:
+          type: string
+          format: uuid
+        image_uuid:
+          type: string
+          format: uuid
+        spatial_position:
+          type: integer
+          minimum: 1
+          maximum: 9
+      required:
+        - message
+        - encounter_id
+
+    # ========================================================================
+    # IMAGE METADATA
+    # ========================================================================
+    ImageMetadata:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        eye_side:
+          type: string
+          enum: [left, right, cannot_tell]
+          nullable: true
+        centering:
+          type: string
+          enum: [macula, disk, cannot_tell]
+          nullable: true
+        file_type:
+          type: string
+        filename:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - uuid
+
+    # ========================================================================
+    # OCR & PII
+    # ========================================================================
+    PIIDetectionResult:
+      type: object
+      properties:
+        image_uuid:
+          type: string
+          format: uuid
+        ocr_text:
+          type: string
+        has_pii:
           type: boolean
-        diseases:
+        confidence:
+          type: number
+          nullable: true
+        detected_pii:
           type: array
           items:
-            $ref: '#/components/schemas/Disease'
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [patient_name, patient_id, barcode, other]
+              text:
+                type: string
+              confidence:
+                type: number
+              bbox:
+                type: object
+                properties:
+                  x:
+                    type: number
+                  y:
+                    type: number
+                  width:
+                    type: number
+                  height:
+                    type: number
+        processed_at:
+          type: string
+          format: date-time
       required:
-        - success
+        - image_uuid
+        - has_pii
 
-    DiseaseSpecializationRequest:
+    PIIBoundingBoxes:
       type: object
       properties:
-        disease_ids:
+        image_uuid:
+          type: string
+          format: uuid
+        boxes:
           type: array
           items:
-            type: integer
-            format: int64
+            type: object
+            properties:
+              x:
+                type: number
+              y:
+                type: number
+              width:
+                type: number
+              height:
+                type: number
+              label:
+                type: string
+              confidence:
+                type: number
       required:
-        - disease_ids
+        - image_uuid
+        - boxes
 
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-      required:
-        - success
-
+    # ========================================================================
+    # UPLOAD JOBS
+    # ========================================================================
     UploadJobStatus:
       type: object
       properties:
         job_id:
           type: integer
-          format: int64
-        job_status:
+        job_token:
           type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        total:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer
         items:
           type: array
           items:
-            $ref: '#/components/schemas/JobItem'
+            type: object
+            properties:
+              filename:
+                type: string
+              state:
+                type: string
+              detail:
+                type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
       required:
         - job_id
-        - job_status
-        - items
+        - status
 
     JobItem:
       type: object
@@ -1204,29 +1800,234 @@ components:
           type: string
         state:
           type: string
+          enum: [pending, processing, completed, failed]
         detail:
           type: string
-      required:
-        - filename
-        - state
+          nullable: true
 
-    UploadJobStatusByToken:
+    # ========================================================================
+    # VIEWER SETTINGS
+    # ========================================================================
+    ViewerSettings:
       type: object
       properties:
-        job_id:
+        zoom:
+          type: number
+          minimum: 0.1
+          maximum: 5
+        pan:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        brightness:
+          type: number
+          minimum: -100
+          maximum: 100
+        contrast:
+          type: number
+          minimum: -100
+          maximum: 100
+        invert:
+          type: boolean
+        grayscale:
+          type: boolean
+        rotate:
+          type: number
+          enum: [0, 90, 180, 270]
+        flip_horizontal:
+          type: boolean
+        flip_vertical:
+          type: boolean
+
+    ViewerPreset:
+      type: object
+      properties:
+        slot_number:
           type: integer
-          format: int64
-        status:
+          minimum: 1
+          maximum: 5
+        name:
           type: string
-        items:
+        settings:
+          $ref: '#/components/schemas/ViewerSettings'
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - slot_number
+
+    # ========================================================================
+    # GRADING ELIGIBILITY
+    # ========================================================================
+    GradingEligibility:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        eligible_diseases:
           type: array
           items:
-            $ref: '#/components/schemas/JobItem'
-      required:
-        - job_id
-        - status
-        - items
+            type: object
+            properties:
+              disease_id:
+                type: integer
+              disease_name:
+                type: string
+              eligible:
+                type: boolean
+              reason:
+                type: string
+                nullable: true
+        available_tasks:
+          type: object
+          additionalProperties:
+            type: integer
 
+    GradingEligibilityDetails:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        user:
+          $ref: '#/components/schemas/User'
+        eligible_diseases:
+          type: array
+          items:
+            $ref: '#/components/schemas/Disease'
+        task_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        restrictions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              description:
+                type: string
+
+    # ========================================================================
+    # USER CONTEXT
+    # ========================================================================
+    UserHospitalContext:
+      type: object
+      properties:
+        hospital_id:
+          type: integer
+          nullable: true
+        hospital_name:
+          type: string
+          nullable: true
+        lab_unit_id:
+          type: integer
+          nullable: true
+        lab_unit_name:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+
+    # ========================================================================
+    # AI MODELS
+    # ========================================================================
+    AIModel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        version:
+          type: string
+        type:
+          type: string
+          enum: [detection, grading, segmentation, classification]
+        disease_id:
+          type: integer
+          nullable: true
+        is_active:
+          type: boolean
+        accuracy:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ========================================================================
+    # KPIs
+    # ========================================================================
+    DataFrameResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        columns:
+          type: array
+          items:
+            type: string
+        total_count:
+          type: integer
+        filtered_count:
+          type: integer
+
+    UploadMetrics:
+      type: object
+      properties:
+        total_uploads:
+          type: integer
+        unique_uploads:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        by_file_type:
+          type: object
+          additionalProperties:
+            type: integer
+        date_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+
+    UploadStats:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        total:
+          type: integer
+        successful:
+          type: integer
+        failed:
+          type: integer
+        pending:
+          type: integer
+        by_lab_unit:
+          type: object
+          additionalProperties:
+            type: integer
+
+  # ========================================================================
+  # RESPONSES
+  # ========================================================================
   responses:
     Unauthorized:
       description: Unauthorized access
@@ -1237,10 +2038,14 @@ components:
             properties:
               error:
                 type: string
-            required:
-              - error
+              message:
+                type: string
+          example:
+            error: Unauthorized
+            message: Authentication required
+
     Forbidden:
-      description: Forbidden access
+      description: Access forbidden
       content:
         application/json:
           schema:
@@ -1248,8 +2053,12 @@ components:
             properties:
               error:
                 type: string
-            required:
-              - error
+              message:
+                type: string
+          example:
+            error: Forbidden
+            message: You don't have permission to access this resource
+
     NotFound:
       description: Resource not found
       content:
@@ -1259,25 +2068,62 @@ components:
             properties:
               error:
                 type: string
-            required:
-              - error
+              message:
+                type: string
+          example:
+            error: Not Found
+            message: The requested resource was not found
 
-tags:
-  - name: Diseases
-    description: Disease-related operations
-  - name: Hospitals
-    description: Hospital-related operations
-  - name: Lab Units
-    description: Lab unit-related operations
-  - name: Users
-    description: User-related operations
-  - name: Lab Unit Disease Specialists
-    description: Operations for managing specialists by lab unit and disease
-  - name: Disease Gradings
-    description: Disease grading operations
-  - name: Disease Specializations
-    description: User disease specialization operations
-  - name: Direct Uploads
-    description: Direct upload operations
-  - name: Jobs
-    description: Job status operations
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              validation_errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+          example:
+            error: Bad Request
+            message: Invalid input data
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+          example:
+            error: Conflict
+            message: The requested position is already occupied
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              retry_after:
+                type: integer
+          example:
+            error: Too Many Requests
+            message: Rate limit exceeded. Please try again later.
+            retry_after: 60

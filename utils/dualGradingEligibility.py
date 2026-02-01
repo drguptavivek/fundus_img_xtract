@@ -210,6 +210,7 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
         
     if eligibility_filter is not None:
         effective_disease_id = get_primary_disease_id(db, task.disease_id)
+        print(f"DEBUG: Checking eligibility for user {user_id}, task {task_id}, disease {task.disease_id} -> effective {effective_disease_id}")
         eligibility = db.query(UserDiseaseUnitRole).filter(
             UserDiseaseUnitRole.user_id == user_id,
             UserDiseaseUnitRole.disease_id == effective_disease_id,
@@ -219,6 +220,7 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
         ).first()
         
         if not eligibility:
+            print(f"DEBUG: Eligibility denied for task {task_id}")
             return False
         
     return True

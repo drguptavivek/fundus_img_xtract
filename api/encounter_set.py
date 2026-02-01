@@ -60,10 +60,11 @@ MAX_IMAGE_DIMENSION = 10000  # Max width/height in pixels
 def validate_image_file(file_obj):
     """
     Comprehensive image file validation:
-    1. File extension whitelist
-    2. Magic byte verification
-    3. MIME type validation
-    4. Actual image content verification
+    1. File size limits
+    2. File extension whitelist
+    3. Magic byte verification
+    4. MIME type validation
+    5. Actual image content verification
 
     Args:
         file_obj: werkzeug FileStorage object
@@ -71,6 +72,24 @@ def validate_image_file(file_obj):
     Returns:
         Tuple of (is_valid, error_message)
     """
+    # =========================================================================
+    # STEP 0: FILE SIZE VALIDATION (P1.2)
+    # =========================================================================
+
+    # Check file size before processing (prevent DoS/disk exhaustion)
+    if hasattr(file_obj, 'content_length') and file_obj.content_length:
+        if file_obj.content_length > MAX_FILE_SIZE_BYTES:
+            logger.warning(
+                "File size exceeds limit",
+                extra={
+                    'filename': sanitize_log_value(file_obj.filename),
+                    'size_bytes': file_obj.content_length,
+                    'limit_bytes': MAX_FILE_SIZE_BYTES
+                }
+            )
+            max_mb = MAX_FILE_SIZE_BYTES / (1024 * 1024)
+            return False, f"File size exceeds maximum limit of {max_mb:.0f}MB"
+
     # =========================================================================
     # STEP 1: FILENAME VALIDATION
     # =========================================================================
@@ -396,10 +415,13 @@ def upload_encounter_set_image():
         return jsonify({"error": "No selected file"}), 400
 
     # =========================================================================
-    # VALIDATE FILE (extension, magic bytes, MIME type, content)
+    # VALIDATE FILE (size, extension, magic bytes, MIME type, content)
     # =========================================================================
     is_valid, error_msg = validate_image_file(file)
     if not is_valid:
+        # P1.2: Return 413 Payload Too Large for file size errors
+        if "exceeds maximum limit" in error_msg or "size" in error_msg.lower():
+            return jsonify({"error": "File too large", "message": error_msg}), 413
         return jsonify({"error": "Invalid image file", "message": error_msg}), 400
 
     encounter_uuid = request.form.get("encounter_uuid")

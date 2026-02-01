@@ -92,8 +92,15 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
     with client.session_transaction() as sess:
         sess['_user_id'] = str(user.id)
         sess['_fresh'] = True
+    
+    # Mock get_primary_disease_id to return the disease_id itself (disabling inheritance)
+    # This forces the system to check permissions for DR specifically, which the user lacks.
+    from unittest.mock import patch
+    with patch('utils.dualGradingEligibility.get_primary_disease_id', side_effect=lambda db, d_id: d_id):
+        with client.application.test_request_context():
+            url = url_for('grading.dual_grading_task', task_uuid=task.uuid, slot_type='resident')
         
-    response = client.get(url_for('grading.dual_grading_task', task_uuid=task.uuid, slot_type='resident'))
+        response = client.get(url)
     
     # 4. Assert Failure (Current Behavior)
     # Expectation: Redirected to index with error message

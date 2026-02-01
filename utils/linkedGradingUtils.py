@@ -88,3 +88,40 @@ def expand_primary_disease_ids(db, disease_ids: Iterable[int]) -> List[int]:
             if linked_id not in expanded:
                 expanded.append(linked_id)
     return expanded
+
+
+def validate_acyclic(edges: List[tuple[int, int]]) -> bool:
+    """
+    Check if a list of edges (parent_id, child_id) contains a cycle.
+    Returns True if acyclic, False if cycle detected.
+    """
+    graph = {}
+    nodes = set()
+    for p, c in edges:
+        if p not in graph:
+            graph[p] = []
+        graph[p].append(c)
+        nodes.add(p)
+        nodes.add(c)
+
+    visited = set()
+    stack = set()
+
+    def dfs(node):
+        visited.add(node)
+        stack.add(node)
+        for neighbor in graph.get(node, []):
+            if neighbor not in visited:
+                if not dfs(neighbor):
+                    return False
+            elif neighbor in stack:
+                return False  # Cycle
+        stack.remove(node)
+        return True
+
+    for node in nodes:
+        if node not in visited:
+            if not dfs(node):
+                return False
+
+    return True

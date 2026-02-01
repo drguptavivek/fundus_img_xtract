@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Linked Disease Grading (Drag & Drop){% endblock %}
+
+{% block styles %}
+<style>
+    .drag-over {
+        border: 2px dashed #0d6efd !important;
+        background-color: #f8f9fa;
+    }
+    .disease-item {
+        cursor: grab;
+    }
+    .nested-container {
+        min-height: 20px; /* Drop target size */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Linked Disease Grading Management</h2>
+        <button id="save-hierarchy-btn" class="btn btn-primary">Save Changes</button>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Drag diseases from the "Available" list to the "Linked Hierarchy" list to create links. Nest items to create parent-child relationships.
+    </div>
+
+    <div class="row" id="drag-drop-area">
+        <!-- Available Pool -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <strong>Available Diseases</strong>
+                </div>
+                <div class="card-body p-0">
+                    <div id="pool-list" class="list-group list-group-flush h-100 min-vh-50 p-2 drop-zone" data-type="pool">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hierarchy Tree -->
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <strong>Linked Hierarchy</strong>
+                </div>
+                <div class="card-body p-0">
+                    <div id="hierarchy-root" class="p-2 h-100 min-vh-50 drop-zone" data-type="root">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Template for list item -->
+<template id="disease-item-template">
+    <div class="disease-item card mb-2 shadow-sm" draggable="true">
+        <div class="card-body p-2 d-flex justify-content-between align-items-center">
+            <span class="disease-name fw-bold"></span>
+            <span class="badge bg-secondary ms-2" title="Disease ID">ID: <span class="disease-id"></span></span>
+        </div>
+        <!-- Nested container for children -->
+        <div class="nested-container ms-4 border-start ps-2" style="min-height: 10px;"></div>
+    </div>
+</template>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/linked-grading-drag.js') }}"></script>
+{% endblock %}

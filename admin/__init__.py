@@ -13,6 +13,8 @@ from .linked_grading import (
     linked_disease_gradings_list,
     edit_linked_disease_grading,
     delete_linked_disease_grading,
+    get_linked_disease_hierarchy,
+    update_linked_disease_hierarchy,
 )
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
@@ -226,6 +228,18 @@ admin_bp.add_url_rule(
     view_func=delete_linked_disease_grading,
     methods=["POST"],
     endpoint="delete_linked_disease_grading",
+)
+admin_bp.add_url_rule(
+    "/api/linked-disease-gradings/hierarchy",
+    view_func=get_linked_disease_hierarchy,
+    methods=["GET"],
+    endpoint="get_linked_disease_hierarchy",
+)
+admin_bp.add_url_rule(
+    "/api/linked-disease-gradings/hierarchy",
+    view_func=update_linked_disease_hierarchy,
+    methods=["POST"],
+    endpoint="update_linked_disease_hierarchy",
 )
 
 

@@ -15,147 +15,143 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("admin.audit")
 
 
+from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask.typing import ResponseReturnValue
+from flask_login import current_user
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+
+from auth.roles import roles_required
+from db_transaction_manager import transaction_scope, get_db_session
+from models import Disease, DiseaseGrading, LinkedDiseaseGrading
+from utils.log_sanitize import sanitize_log_value
+from utils.linkedGradingUtils import validate_acyclic
+
+logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("admin.audit")
+
+
 @roles_required("admin")
 def linked_disease_gradings_list() -> ResponseReturnValue:
-    if request.method == "POST":
-        primary_id_raw = request.form.get("primary_disease_id", "").strip()
-        linked_id_raw = request.form.get("linked_disease_id", "").strip()
-        display_order_raw = request.form.get("display_order", "0").strip()
-        is_active = request.form.get("is_active") == "1"
+    """Render the Drag-and-Drop UI for Linked Disease Grading."""
+    return render_template("admin/linked_disease_gradings_drag.html")
 
-        error = None
-        if not primary_id_raw or not linked_id_raw:
-            error = "Primary and linked disease are required."
 
-        try:
-            primary_id = int(primary_id_raw)
-            linked_id = int(linked_id_raw)
-        except ValueError:
-            error = "Disease selection is invalid."
-            primary_id = None
-            linked_id = None
-
-        try:
-            display_order = int(display_order_raw)
-        except ValueError:
-            display_order = 0
-            if not error:
-                error = "Display order must be a number."
-
-        if not error and primary_id == linked_id:
-            error = "Primary and linked disease must be different."
-
-        if error:
-            flash(error, "danger")
-            return redirect(url_for("admin.linked_disease_gradings_list"))
-
-        with transaction_scope() as db:
-            primary = db.get(Disease, primary_id)
-            linked = db.get(Disease, linked_id)
-
-            if not primary or not linked:
-                flash("Selected disease not found.", "danger")
-                return redirect(url_for("admin.linked_disease_gradings_list"))
-
-            if not _is_disease_active(db, primary_id):
-                flash("Primary disease is inactive. Activate at least one grading before linking.", "danger")
-                return redirect(url_for("admin.linked_disease_gradings_list"))
-
-            if not _is_disease_active(db, linked_id):
-                flash("Linked disease is inactive. Activate at least one grading before linking.", "danger")
-                return redirect(url_for("admin.linked_disease_gradings_list"))
-
-            existing_pair = db.execute(
-                select(LinkedDiseaseGrading)
-                .where(LinkedDiseaseGrading.primary_disease_id == primary_id)
-                .where(LinkedDiseaseGrading.linked_disease_id == linked_id)
-            ).scalar_one_or_none()
-            if existing_pair:
-                flash("This link already exists.", "warning")
-                return redirect(url_for("admin.linked_disease_gradings_list"))
-
-            existing_linked = db.execute(
-                select(LinkedDiseaseGrading)
-                .options(selectinload(LinkedDiseaseGrading.primary_disease))
-                .where(LinkedDiseaseGrading.linked_disease_id == linked_id)
-            ).scalar_one_or_none()
-            if existing_linked:
-                primary_name = (
-                    existing_linked.primary_disease.name
-                    if existing_linked.primary_disease
-                    else "Unknown"
-                )
-                flash(
-                    f"'{linked.name}' is already linked to '{primary_name}'. Delink first before relinking.",
-                    "danger",
-                )
-                return redirect(url_for("admin.linked_disease_gradings_list"))
-
-            link = LinkedDiseaseGrading(
-                primary_disease_id=primary_id,
-                linked_disease_id=linked_id,
-                display_order=display_order,
-                is_active=is_active,
-            )
-            db.add(link)
-
-            try:
-                audit_logger.info(
-                    "Linked grading created by '%s': primary='%s' linked='%s' order='%s' active='%s'",
-                    sanitize_log_value(getattr(current_user, "username", "unknown")),
-                    sanitize_log_value(primary.name),
-                    sanitize_log_value(linked.name),
-                    sanitize_log_value(display_order),
-                    sanitize_log_value(is_active),
-                )
-            except Exception as exc:
-                logger.warning("Failed to audit linked grading create: %s", sanitize_log_value(exc))
-
-            flash("Linked grading created successfully.", "success")
-
-        return redirect(url_for("admin.linked_disease_gradings_list"))
-
+@roles_required("admin")
+def get_linked_disease_hierarchy() -> ResponseReturnValue:
+    """API to fetch the current disease hierarchy."""
     with get_db_session() as db:
+        diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
         links = db.execute(
             select(LinkedDiseaseGrading)
-            .options(
-                selectinload(LinkedDiseaseGrading.primary_disease),
-                selectinload(LinkedDiseaseGrading.linked_disease),
-            )
-            .order_by(
-                LinkedDiseaseGrading.primary_disease_id,
-                LinkedDiseaseGrading.display_order,
-                LinkedDiseaseGrading.id,
-            )
+            .where(LinkedDiseaseGrading.is_active == True)
+            .order_by(LinkedDiseaseGrading.display_order)
         ).scalars().all()
 
-        diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
-        active_diseases = db.execute(
-            select(Disease)
-            .join(DiseaseGrading)
-            .where(DiseaseGrading.is_active.is_(True))
-            .distinct()
-            .order_by(Disease.name)
-        ).scalars().all()
+        # Build adjacency list
+        children_map = {}
+        for link in links:
+            if link.primary_disease_id not in children_map:
+                children_map[link.primary_disease_id] = []
+            children_map[link.primary_disease_id].append(link.linked_disease_id)
 
-        return render_template(
-            "admin/linked_disease_gradings.html",
-            links=links,
-            diseases=diseases,
-            active_diseases=active_diseases,
+        # Identify roots: Diseases that are not children of any other disease
+        linked_children = {link.linked_disease_id for link in links}
+        
+        # Also need to know which diseases are part of a tree vs "pool"
+        # A disease is in the pool if it has no parent AND no children.
+        # A disease is a Root if it has no parent but HAS children.
+        
+        # Actually, simpler:
+        # 1. Pool: All diseases not in `linked_children` AND not in `children_map` keys?
+        #    No, a root has children.
+        #    Pool = {d for d in diseases if d.id not in linked_children and d.id not in children_map}
+        
+        # Let's just return all diseases and the links. The frontend can build the tree.
+        # This is easier for the frontend library to handle "Available" vs "Linked".
+        
+        disease_list = [{"id": d.id, "name": d.name} for d in diseases]
+        link_list = [{"parent_id": l.primary_disease_id, "child_id": l.linked_disease_id} for l in links]
+        
+        return jsonify({"diseases": disease_list, "links": link_list})
+
+
+@roles_required("admin")
+def update_linked_disease_hierarchy() -> ResponseReturnValue:
+    """API to update the hierarchy (full sync)."""
+    data = request.get_json()
+    if not data or "links" not in data:
+        return jsonify({"error": "Invalid data format"}), 400
+
+    new_links = data["links"]  # List of {parent_id, child_id}
+    
+    # Validate format
+    edges = []
+    for link in new_links:
+        try:
+            pid = int(link["parent_id"])
+            cid = int(link["child_id"])
+            if pid == cid:
+                return jsonify({"error": f"Self-link detected for disease ID {pid}"}), 400
+            edges.append((pid, cid))
+        except (ValueError, KeyError):
+            return jsonify({"error": "Invalid link data"}), 400
+
+    # Validate cycles
+    if not validate_acyclic(edges):
+        return jsonify({"error": "Cycle detected in hierarchy"}), 400
+
+    with transaction_scope() as db:
+        # 1. Clear existing active links? 
+        # Or mark inactive? The requirement implied full sync.
+        # Let's delete all active links and recreate. 
+        # Hard delete is fine for configuration if we don't need history of "what was linked 5 mins ago".
+        # But `LinkedDiseaseGrading` has no history tracking other than audit logs.
+        
+        # Fetch existing
+        existing = db.execute(select(LinkedDiseaseGrading)).scalars().all()
+        existing_map = {(l.primary_disease_id, l.linked_disease_id): l for l in existing}
+        
+        seen_pairs = set()
+        
+        # Process new links
+        for idx, (pid, cid) in enumerate(edges):
+            pair = (pid, cid)
+            if pair in seen_pairs:
+                continue # Duplicate in input
+            seen_pairs.add(pair)
+            
+            if pair in existing_map:
+                # Update existing
+                link = existing_map[pair]
+                link.is_active = True
+                link.display_order = idx # Simple ordering based on list position
+                # Remove from map so we know what's left
+                del existing_map[pair]
+            else:
+                # Create new
+                new_link = LinkedDiseaseGrading(
+                    primary_disease_id=pid,
+                    linked_disease_id=cid,
+                    display_order=idx,
+                    is_active=True
+                )
+                db.add(new_link)
+        
+        # Deactivate/Delete remaining
+        for link in existing_map.values():
+            # We can either delete or set inactive. 
+            # If we set inactive, they might clutter the DB. 
+            # Given the previous code allowed delete, let's delete to keep it clean.
+            db.delete(link)
+            
+        audit_logger.info(
+            "Linked grading hierarchy updated by '%s' with %d links",
+            sanitize_log_value(getattr(current_user, "username", "unknown")),
+            len(edges)
         )
-
-
-def _is_disease_active(db, disease_id: int) -> bool:
-    return (
-        db.execute(
-            select(DiseaseGrading.id)
-            .where(DiseaseGrading.disease_id == disease_id)
-            .where(DiseaseGrading.is_active.is_(True))
-            .limit(1)
-        ).scalar_one_or_none()
-        is not None
-    )
+        
+    return jsonify({"success": True})
 
 
 @roles_required("admin")

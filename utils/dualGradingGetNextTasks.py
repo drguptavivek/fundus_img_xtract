@@ -4,7 +4,7 @@ Utility functions for getting the next eligible dual grading tasks.
 
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, exists, or_, func
-from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
+from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade, TaskTracker
 from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
@@ -102,11 +102,23 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     # Filter by disease
     query = query.filter(GradingTask.disease_id == disease_id)
         
-    # Filter by role-specific states
+    # Filter by role-specific states and TaskTracker
     if role_slot == "arbitrator":
         linked_ids = get_linked_disease_ids(db, disease_id)
         if linked_ids:
              LinkedTask = aliased(GradingTask)
+             
+             # Tracker checks
+             primary_tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == GradingTask.id,
+                 TaskTracker.role_slot == role_slot
+             ).exists()
+             
+             linked_tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == LinkedTask.id,
+                 TaskTracker.role_slot == role_slot
+             ).exists()
+
              query = query.outerjoin(
                  LinkedTask,
                  and_(
@@ -118,18 +130,28 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
                  )
              ).filter(
                  or_(
-                     GradingTask.state == "arbitration",
-                     LinkedTask.state == "arbitration"
+                     and_(GradingTask.state == "arbitration", ~primary_tracker_exists),
+                     and_(LinkedTask.state == "arbitration", ~linked_tracker_exists)
                  )
              )
         else:
-             query = query.filter(GradingTask.state == "arbitration")
+             tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == GradingTask.id,
+                 TaskTracker.role_slot == role_slot
+             ).exists()
+             query = query.filter(GradingTask.state == "arbitration", ~tracker_exists)
     elif role_slot == "resident":
-        # Residents see pending tasks
-        query = query.filter(GradingTask.state == "pending")
+        tracker_exists = db.query(TaskTracker.id).filter(
+             TaskTracker.task_id == GradingTask.id,
+             TaskTracker.role_slot == role_slot
+        ).exists()
+        query = query.filter(GradingTask.state == "pending", ~tracker_exists)
     elif role_slot == "resident2":
-        # Resident2 graders see tasks where resident has completed grading
-        query = query.filter(GradingTask.state == "resident_done")
+        tracker_exists = db.query(TaskTracker.id).filter(
+             TaskTracker.task_id == GradingTask.id,
+             TaskTracker.role_slot == role_slot
+        ).exists()
+        query = query.filter(GradingTask.state == "resident_done", ~tracker_exists)
     
     # Get all matching tasks
     tasks = query.all()
@@ -168,6 +190,12 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
     )
     resident_missing = ~exists().where(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident"))
 
+    # Also check TaskTracker for inconsistent tasks
+    tracker_exists = db.query(TaskTracker.id).filter(
+         TaskTracker.task_id == GradingTask.id,
+         TaskTracker.role_slot == "resident"
+    ).exists()
+
     tasks = (
         db.query(GradingTask)
         .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
@@ -175,6 +203,7 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
         .filter(GradingTask.state == "resident2_done")
         .filter(resident_missing)
         .filter(resident2_exists.exists())
+        .filter(~tracker_exists)
         .all()
     )
 
@@ -401,11 +430,23 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
         GradingTask.disease_id == disease_id
     )
     
-    # Filter by role-specific states
+    # Filter by role-specific states and TaskTracker
     if role_slot == "arbitrator":
         linked_ids = get_linked_disease_ids(db, disease_id)
         if linked_ids:
              LinkedTask = aliased(GradingTask)
+             
+             # Tracker checks
+             primary_tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == GradingTask.id,
+                 TaskTracker.role_slot == role_slot
+             ).exists()
+             
+             linked_tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == LinkedTask.id,
+                 TaskTracker.role_slot == role_slot
+             ).exists()
+
              query = query.outerjoin(
                  LinkedTask,
                  and_(
@@ -417,16 +458,28 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
                  )
              ).filter(
                  or_(
-                     GradingTask.state == "arbitration",
-                     LinkedTask.state == "arbitration"
+                     and_(GradingTask.state == "arbitration", ~primary_tracker_exists),
+                     and_(LinkedTask.state == "arbitration", ~linked_tracker_exists)
                  )
              )
         else:
-            query = query.filter(GradingTask.state == "arbitration")
+            tracker_exists = db.query(TaskTracker.id).filter(
+                 TaskTracker.task_id == GradingTask.id,
+                 TaskTracker.role_slot == role_slot
+            ).exists()
+            query = query.filter(GradingTask.state == "arbitration", ~tracker_exists)
     elif role_slot == "resident":
-        query = query.filter(GradingTask.state == "pending")
+        tracker_exists = db.query(TaskTracker.id).filter(
+             TaskTracker.task_id == GradingTask.id,
+             TaskTracker.role_slot == role_slot
+        ).exists()
+        query = query.filter(GradingTask.state == "pending", ~tracker_exists)
     elif role_slot == "resident2":
-        query = query.filter(GradingTask.state == "resident_done")
+        tracker_exists = db.query(TaskTracker.id).filter(
+             TaskTracker.task_id == GradingTask.id,
+             TaskTracker.role_slot == role_slot
+        ).exists()
+        query = query.filter(GradingTask.state == "resident_done", ~tracker_exists)
     
     conflicting_slots: List[str] = []
     if role_slot == "resident":
@@ -477,6 +530,12 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         )
     )
 
+    # Tracker check
+    tracker_exists = db.query(TaskTracker.id).filter(
+         TaskTracker.task_id == GradingTask.id,
+         TaskTracker.role_slot == "resident"
+    ).exists()
+
     task = (
         db.query(GradingTask)
         .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
@@ -485,6 +544,7 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         .filter(resident_missing)
         .filter(resident2_exists.exists())
         .filter(~conflict_exists.exists())
+        .filter(~tracker_exists)
         .with_for_update()
         .order_by(func.random())
         .first()

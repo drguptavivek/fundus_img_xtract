@@ -18,17 +18,49 @@
 
 ## Overview
 
-The Upload API provides endpoints for uploading medical fundus images to the platform. The API supports:
+This documentation covers upload mechanisms for the fundus imaging platform.
 
-- **Direct uploads**: Single images with metadata (JPG/PNG)
-- **ZIP uploads**: Batch uploads with automated OCR/PDF processing
-- **EncounterSet uploads**: Multi-image sets for diseases requiring multiple gaze positions
-- **Pre-graded imports**: Direct upload with pre-assigned grades
-- **Admin uploads**: Database restore operations (admin only)
+**⚠️ IMPORTANT: Upload Type Classification**
+
+| Type | Format | Protocol | Use Case |
+|---|---|---|---|
+| **Direct Uploads** | Form data | HTML form (web browser) | Web UI for single/batch uploads |
+| **ZIP Uploads** | Form data | HTML form (web browser) | Web UI for batch Remedio exports |
+| **EncounterSet Uploads** | Multipart form | JSON API (mobile/programmatic) | Mobile apps, automated workflows |
+| **Pre-graded Uploads** | Form data | HTML form (web browser) | Web UI for dataset curation |
+| **Status Checks** | JSON | REST API | Programmatic job monitoring |
 
 **Base URL**: `/` (relative) or `http://localhost:5001/` (development)
 
-**API Version**: v1 (newer endpoints use `/v1/` prefix)
+**API Version**: v1 (only EncounterSet endpoints use `/v1/` prefix)
+
+---
+
+## Critical Clarification: API vs Form Endpoints
+
+**❌ NO REST API for Direct/ZIP Uploads**
+
+The direct image and ZIP upload endpoints are **FORM-BASED WEB ENDPOINTS ONLY**:
+- `POST /direct/upload` - HTML form submission (web browser)
+- `POST /direct/pregraded` - HTML form submission (web browser)
+- `POST /upload` - HTML form submission (web browser)
+
+These endpoints:
+- ✅ Accept multipart form data
+- ✅ Return HTML redirects (303/302)
+- ✅ Set flash messages in session
+- ❌ DO NOT return JSON
+- ❌ NOT suitable for programmatic/API access
+- ❌ Require CSRF tokens and session cookies
+
+**✅ REST API Available: EncounterSet Upload Only**
+
+Only the EncounterSet endpoint has a proper REST API:
+- `POST /v1/encounter-set/upload` - JSON API (mobile/programmatic)
+- Returns JSON responses with status 201/400/401/403/404
+- Suitable for mobile apps and automated workflows
+
+**For Direct/ZIP Uploads**: Use web form submission from a browser, not HTTP REST clients.
 
 ---
 
@@ -146,15 +178,17 @@ X-RateLimit-Reset: 1704067260
 
 ## Direct Upload Endpoints
 
-### POST /direct/upload
+### 🌐 POST /direct/upload (HTML Form - Web Browser Only)
 
-Upload single or multiple fundus images with metadata.
+Upload single or multiple fundus images with metadata via web form.
+
+**⚠️ NOTE**: This is a **web form endpoint**, not a REST API. Use from browser forms only. Returns HTML redirect (303), not JSON.
 
 **Authentication**: Session cookie + Role-based (`fileUploader`, `admin`, `local_admin`, `optometrist`, `data_manager`)
 
 **Rate Limit**: 60 per minute
 
-**Request Format**: `multipart/form-data`
+**Request Format**: `multipart/form-data` (HTML form submission)
 
 #### Request Parameters
 
@@ -205,15 +239,17 @@ curl -b "session=<token>" \
 
 ---
 
-### POST /direct/pregraded
+### 🌐 POST /direct/pregraded (HTML Form - Web Browser Only)
 
 Upload single or multiple images with pre-assigned grades (admin/data_manager only).
+
+**⚠️ NOTE**: This is a **web form endpoint**, not a REST API. Returns HTML redirect (303), not JSON.
 
 **Authentication**: Session cookie + Role-based (`pregarded_uploader`, `admin`, `local_admin`)
 
 **Rate Limit**: 60 per minute
 
-**Request Format**: `multipart/form-data`
+**Request Format**: `multipart/form-data` (HTML form submission)
 
 #### Request Parameters
 
@@ -313,15 +349,17 @@ curl -b "session=<token>" \
 
 ## ZIP Upload Endpoints
 
-### POST /upload
+### 🌐 POST /upload (HTML Form - Web Browser Only)
 
 Upload ZIP file(s) containing Remedio FOP exports or custom image sets.
+
+**⚠️ NOTE**: This is a **web form endpoint**, not a REST API. Use from browser forms only. Returns HTML redirect (302), not JSON.
 
 **Authentication**: Session cookie + Role-based (`fileUploader`, `admin`, `local_admin`, `ophthalmologist`, `data_manager`, `resident`, `optometrist`)
 
 **Rate Limit**: 60 per minute
 
-**Request Format**: `multipart/form-data`
+**Request Format**: `multipart/form-data` (HTML form submission)
 
 #### Request Parameters
 
@@ -369,17 +407,19 @@ curl -b "session=<token>" \
 
 ---
 
-## EncounterSet Upload Endpoints
+## EncounterSet Upload Endpoints (JSON APIs)
 
-### POST /v1/encounter-set/upload
+### 🔌 POST /v1/encounter-set/upload (REST JSON API - Mobile/Programmatic)
 
-Upload single image to multi-image encounter set (mobile API).
+Upload single image to multi-image encounter set (mobile devices, automated workflows).
+
+**✅ This IS a proper REST API** - Returns JSON (201), supports programmatic access.
 
 **Authentication**: JWT Bearer token (from `generate_mobile_token()`)
 
 **Rate Limit**: 60 per minute
 
-**Request Format**: `multipart/form-data`
+**Request Format**: `multipart/form-data` (but returns JSON, not HTML redirect)
 
 #### Request Parameters
 

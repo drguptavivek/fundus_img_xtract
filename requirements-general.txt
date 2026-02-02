@@ -61,6 +61,8 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
+marshmallow==4.2.1
+    # via fundus-img-xtract
 numpy==2.4.1
     # via
     #   fundus-img-xtract
@@ -79,6 +81,8 @@ psycopg2-binary==2.9.11
     # via fundus-img-xtract
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
+pyjwt==2.11.0
+    # via fundus-img-xtract
 pynacl==1.6.2
     # via fundus-img-xtract
 python-dateutil==2.9.0.post0

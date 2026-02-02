@@ -6,9 +6,11 @@ Notes:
 
 Adding a new Python package:
 1) Add it to `pyproject.toml`.
+
 2) Genherate the appropriate venv requirements file:
-     ./scripts/export_requirements.sh 
+    ` ./scripts/export_requirements.sh `
    This uses uv inside web container.
+
 3) Rebuild and rerun the matching venv builder:
    - `docker compose build <service>-venv-builder`
    - `docker compose up <service>-venv-builder -d`
@@ -23,47 +25,62 @@ Adding a new Python package:
 cp deploy.secrets.env.example deploy.secrets.env
 nano deploy.secrets.env
 
-
 ln -sf deploy.secrets.env .env
 
+
+## BACKUP
+python3 scripts/backup_db.py
 
 # Bring down any existing conatiners
 docker compose down
 
-# PostGres and Redis
-docker compose up -d db cache
-docker compose logs db cache
+# FIRST STEP PostGres and Redis
+docker compose up -d db cache 
+docker compose logs db cache -f --tail=200
 
-# VENV Builders FIRST
-docker compose down
-docker volume rm fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_img_xtract_beat_venv fundus_img_xtract_general_venv
-# If Pckages changed
-docker compose build --no-cache web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder  
-# If App code only chjanged
-docker compose build web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder
+# SECOND STEP VENV Builders FIRST
+docker volume rm   fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_img_xtract_beat_venv fundus_img_xtract_general_venv
 
+## If packages changed 
+   ### generate Reuirements.txts for each container
+   ./scripts/export_requirements.sh
+   ### Create venv buiders
+   docker compose build --no-cache web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder  
+
+## If No packages changed 
+   ### Create venv buiders
+   docker compose build  web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder  
+
+## Bring up VNEV Builders
 docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
 
-# Main Containers SERVICES SECOND
-docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
+# THIRD STEP Main Containers SERVICES SECOND
+docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
+docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
+
+## ROUTINE HOSUEKPING 
 docker compose down
 docker compose up
 docker compose up -d
 
-docker system df -v | grep -E "(fundus.*venv|Local Volumes)" 
-
-# Sytop Start
-docker compose   stop web
-docker compose   start web
-
-docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
-
 # Logs
 docker compose logs --tail=100 -f
+docker compose logs web  --tail=100 -f
+docker compose logs web db --tail=100 -f
+docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
+
 
 #sizes
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Size}}" | grep -E "NAME|fundus"
+
+docker system df -v | grep -E "(fundus.*venv|Local Volumes)" 
+
+# Stop Start
+docker compose   stop web
+docker compose   start web
+docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
+
 
 # Database backup (timestamped)
 mkdir -p backups
@@ -134,7 +151,8 @@ sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 
 
 ```bash
-cp develop.config.env.example develop.config.env
+# Add overrides as needed for Coookie HTTPS, Secure etc
+nano develop.config.env
 cp docker-compose.override.yml.example docker-compose.override.yml 
 
 docker compose   build  web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder web celery-ocr-worker celery-general-worker celery-beat

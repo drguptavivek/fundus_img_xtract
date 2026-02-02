@@ -42,6 +42,8 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
+marshmallow==4.2.1
+    # via fundus-img-xtract
 packaging==26.0
     # via kombu
 prompt-toolkit==3.0.52

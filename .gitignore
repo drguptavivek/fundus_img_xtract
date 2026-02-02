@@ -90,7 +90,9 @@ process_log.txt
 deploy.env
 deploy.config.env
 deploy.secrets.env
-develop.config.env
+
+# Added a minimal empty develop.config..env
+# develop.config.env
 docker-compose.override.yml
 
 

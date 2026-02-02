@@ -198,6 +198,8 @@ markupsafe==3.0.3
     #   mako
     #   werkzeug
     #   wtforms
+marshmallow==4.2.1
+    # via fundus-img-xtract
 matplotlib==3.10.8
     # via fundus-img-xtract
 mdurl==0.1.2
@@ -286,6 +288,8 @@ pygments==2.19.2
     #   fundus-img-xtract
     #   pytest
     #   rich
+pyjwt==2.11.0
+    # via fundus-img-xtract
 pymemcache==4.0.0
     # via fundus-img-xtract
 pymupdf==1.26.7

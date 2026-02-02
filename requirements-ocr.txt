@@ -52,6 +52,8 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
+marshmallow==4.2.1
+    # via fundus-img-xtract
 matplotlib==3.10.8
     # via fundus-img-xtract
 numpy==2.4.1

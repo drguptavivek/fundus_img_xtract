@@ -247,7 +247,7 @@ pillow==12.1.0
     #   captcha
     #   fundus-img-xtract
     #   matplotlib
-pip==25.3
+pip==26.0
     # via pip-api
 pip-api==0.0.34
     # via

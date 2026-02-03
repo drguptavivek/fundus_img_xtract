@@ -172,7 +172,7 @@ services:
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${CELERY_OCR_CONCURRENCY:-1}
-      -Q zip_ocr,pii_detection,pdf_processing
+      -Q zip_ocr,pii_detection,pdf_processing,metadata
     restart: on-failure:5
 
   celery-general-worker:
@@ -207,7 +207,7 @@ services:
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${CELERY_GENERAL_CONCURRENCY:-2}
-      -Q thumbnails,metadata,exports,maintenance,s3_sync,default
+      -Q thumbnails,exports,maintenance,s3_sync,default
     restart: on-failure:5
 
   celery-beat:

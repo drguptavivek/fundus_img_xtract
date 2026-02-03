@@ -19,13 +19,13 @@ from models import (
     ImageMetadataBackfillJob,
     ImageMetadata,
     ImagePiiVerification,
+    LabUnit,
     PatientEncounters,
     ZipFile,
 )
 from utils.fileUtils import abs_from_parts
-from utils.image_metadata import extract_image_metadata, upsert_image_metadata
 from utils.log_sanitize import sanitize_log_value
-from utils.pii_detection_queue import enqueue_pii_detection_job, run_pii_detection_queue
+from utils.upload_processing import process_file_data_pipeline
 
 _LOGGER = logging.getLogger("image_metadata_backfill")
 _METADATA_LOGGER = logging.getLogger("image_metadata")
@@ -36,6 +36,66 @@ _STOP_KEY = "image_metadata_backfill_stop:global"
 
 def _stop_requested() -> bool:
     return bool(cache.get(_STOP_KEY))
+
+
+def enqueue_system_image_metadata_backfill(
+    *,
+    requested_limit: int,
+    run_metadata: bool,
+    run_pii: bool,
+) -> bool:
+    if requested_limit <= 0:
+        _LOGGER.warning(
+            "Skipping system backfill; invalid requested_limit=%s",
+            sanitize_log_value(requested_limit),
+        )
+        return False
+    if not run_metadata and not run_pii:
+        _LOGGER.warning("Skipping system backfill; no backfill mode selected.")
+        return False
+
+    with get_db_session() as db:
+        active_job = (
+            db.query(ImageMetadataBackfillJob)
+            .filter(ImageMetadataBackfillJob.status.in_(["queued", "running"]))
+            .first()
+        )
+        if active_job:
+            _LOGGER.info(
+                "Skipping system backfill; active job %s already running.",
+                sanitize_log_value(active_job.id),
+            )
+            return False
+
+        lab_unit_ids = [row[0] for row in db.query(LabUnit.id).order_by(LabUnit.id.asc()).all()]
+        if not lab_unit_ids:
+            _LOGGER.warning("Skipping system backfill; no lab units found.")
+            return False
+
+        job = ImageMetadataBackfillJob(
+            status="queued",
+            requested_limit=requested_limit,
+            run_metadata=run_metadata,
+            run_pii=run_pii,
+            created_by_id=None,
+            created_by_username="system",
+            hospital_id=None,
+            allowed_lab_unit_ids=json.dumps(lab_unit_ids),
+        )
+        db.add(job)
+        db.commit()
+        job_id = job.id
+
+    from utils.celery_helpers import enqueue_task, celery_enabled
+    if celery_enabled():
+        enqueue_task(
+            "celery_tasks.tasks.metadata_tasks.run_image_metadata_backfill_job_task",
+            job_id,
+        )
+        return True
+
+    run_image_metadata_backfill_job(job_id)
+    return True
 
 
 @dataclass(frozen=True)
@@ -481,74 +541,28 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
 
                 metadata_needed = job.run_metadata and _needs_metadata(db, item.image_uuid, item.image_variant)
                 pii_needed = job.run_pii and _needs_pii(db, item.image_uuid, item.image_variant)
-                if not metadata_needed:
-                    _METADATA_LOGGER.info(
-                        "Metadata already present for %s (%s)",
-                        sanitize_log_value(item.image_uuid),
-                        sanitize_log_value(item.image_variant),
-                    )
-                if not pii_needed and job.run_pii:
-                    _LOGGER.info(
-                        "PII already present for %s (%s)",
-                        sanitize_log_value(item.image_uuid),
-                        sanitize_log_value(item.image_variant),
-                    )
                 if not metadata_needed and not pii_needed:
                     continue
 
                 try:
-                    if metadata_needed:
-                        _METADATA_LOGGER.info(
-                            "Metadata extract queued for %s (%s)",
-                            sanitize_log_value(item.image_uuid),
-                            sanitize_log_value(item.image_variant),
-                        )
-                        meta_result = extract_image_metadata(image_path=item.path)
-                        upsert_image_metadata(
-                            db,
-                            image_uuid=item.image_uuid,
-                            image_variant=item.image_variant,
-                            encounter_file_id=item.encounter_file_id,
-                            direct_image_upload_id=item.direct_image_upload_id,
-                            metadata=meta_result,
-                        )
+                    file_type = "encounter_file" if item.encounter_file_id else "direct_upload"
+                    file_id = item.encounter_file_id or item.direct_image_upload_id
+                    result = process_file_data_pipeline(
+                        file_id=file_id,
+                        file_type=file_type,
+                        file_path=str(item.path),
+                        db_session=db,
+                        run_metadata=metadata_needed,
+                        run_pii=pii_needed,
+                        run_strip=False,
+                        image_variant=item.image_variant,
+                        commit=False,
+                    )
+                    if metadata_needed and result.get("metadata_ok"):
                         job.metadata_created_count += 1
-                        _METADATA_LOGGER.info(
-                            "Metadata extract stored for %s (%s)",
-                            sanitize_log_value(item.image_uuid),
-                            sanitize_log_value(item.image_variant),
-                        )
-
+                    if pii_needed and result.get("pii_ok"):
+                        job.pii_created_count += 1
                     if pii_needed:
-                        enqueue_pii_detection_job(
-                            db,
-                            image_uuid=item.image_uuid,
-                            image_variant=item.image_variant,
-                            image_path=str(item.path),
-                            source="auto",
-                        )
-                        _LOGGER.info(
-                            "PII detection enqueued for %s (%s)",
-                            sanitize_log_value(item.image_uuid),
-                            sanitize_log_value(item.image_variant),
-                        )
-                        run_pii_detection_queue(max_jobs=1)
-                        db.expire_all()
-                        record = (
-                            db.query(ImagePiiVerification.id)
-                            .filter(
-                                ImagePiiVerification.image_uuid == item.image_uuid,
-                                ImagePiiVerification.image_variant == item.image_variant,
-                            )
-                            .first()
-                        )
-                        if record is not None:
-                            job.pii_created_count += 1
-                            _LOGGER.info(
-                                "PII detection stored for %s (%s)",
-                                sanitize_log_value(item.image_uuid),
-                                sanitize_log_value(item.image_variant),
-                            )
                         time.sleep(_PII_SLEEP_SECONDS)
                 except Exception as exc:  # noqa: BLE001
                     job.error_count += 1

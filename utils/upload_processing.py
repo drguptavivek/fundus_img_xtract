@@ -85,7 +85,10 @@ def process_file_data_pipeline(
     db_session: Session,
     run_metadata: bool = True,
     run_pii: bool = True,
-    run_strip: bool = True
+    run_strip: bool = True,
+    *,
+    image_variant: str = "orig",
+    commit: bool = True,
 ) -> dict:
     """
     Flexible Data Pipeline:
@@ -117,6 +120,8 @@ def process_file_data_pipeline(
         with open(path, "rb") as f:
             content = f.read()
 
+    result = {"status": "ok", "metadata_ok": False, "pii_ok": False, "strip_ok": False}
+
     # 1. Metadata Stage
     if run_metadata and content:
         try:
@@ -124,12 +129,13 @@ def process_file_data_pipeline(
             upsert_image_metadata(
                 db_session,
                 image_uuid=image_uuid,
-                image_variant="orig",
+                image_variant=image_variant,
                 encounter_file_id=encounter_file_id,
                 direct_image_upload_id=direct_upload_id,
                 metadata=metadata_result
             )
             metadata_logger.info(f"Metadata extracted and saved for {path}")
+            result["metadata_ok"] = True
         except Exception as e:
             metadata_logger.error(f"Metadata extraction failed for {path}: {sanitize_log_value(e)}")
 
@@ -147,11 +153,12 @@ def process_file_data_pipeline(
                 upsert_pii_verification(
                     db_session,
                     image_uuid=image_uuid,
-                    image_variant="orig",
+                    image_variant=image_variant,
                     ocr_result=ocr_result
                 )
                 is_pii = ocr_result.get("is_pii", False)
                 pii_logger.info(f"PII detection complete for {path}. Result: PII={is_pii}")
+                result["pii_ok"] = True
             else:
                 pii_logger.warning(f"Failed to decode image for PII: {path}")
         except Exception as e:
@@ -165,8 +172,10 @@ def process_file_data_pipeline(
                 with open(path, "wb") as f:
                     f.write(clean_content)
                 logger.info(f"Stripped EXIF from {path} ({len(content)} -> {len(clean_content)} bytes)")
+            result["strip_ok"] = True
         except Exception as e:
             logger.error(f"Failed to strip EXIF from {path}: {sanitize_log_value(e)}")
 
-    db_session.commit()
-    return {"status": "ok"}
+    if commit:
+        db_session.commit()
+    return result

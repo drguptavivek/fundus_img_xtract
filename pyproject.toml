@@ -115,6 +115,7 @@ beat = [
     "pytz==2025.2",
     "pyyaml>=6.0.3",
     "flask-login==0.6.3",
+    "flask-caching>=2.3.1",
     # pandas, openpyxl, pillow, numpy removed - only needed by export tasks (which beat doesn't import)
     # pynacl and cryptography removed - lazy-imported in tasks
 ]

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 from celery import Celery
-from celery.schedules import crontab
+from celery.schedules import crontab, schedule as celery_schedule
 
 from utils.env_loader import load_environment
 
@@ -22,6 +23,16 @@ if str(_ROOT) not in sys.path:
 
 def _env_bool(key: str, default: str = "false") -> bool:
     return str(os.getenv(key, default)).lower() in ("1", "true", "yes")
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def _parse_times(value: str) -> list[str]:
@@ -60,6 +71,9 @@ def make_celery_app() -> Celery:
         task_track_started=_env_bool("CELERY_TASK_TRACK_STARTED", "true"),
         task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600")),
         task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "3300")),
+        broker_heartbeat=_env_int("CELERY_BROKER_HEARTBEAT", 60),
+        broker_heartbeat_checkrate=_env_int("CELERY_BROKER_HEARTBEAT_CHECKRATE", 2),
+        worker_heartbeat_interval=_env_int("CELERY_WORKER_HEARTBEAT_INTERVAL", 30),
         task_serializer="json",
         result_serializer="json",
         accept_content=["json"],

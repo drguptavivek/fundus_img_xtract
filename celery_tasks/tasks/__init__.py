@@ -35,6 +35,7 @@ def _import_maintenance():
     from . import package_update_tasks  # noqa: F401
 
 def _import_ocr():
+    from . import metadata_tasks  # noqa: F401
     from . import pii_tasks  # noqa: F401
     from . import zip_tasks  # noqa: F401
     from . import zip_upload_tasks  # noqa: F401

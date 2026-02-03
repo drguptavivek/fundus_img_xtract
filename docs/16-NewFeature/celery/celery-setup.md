@@ -12,8 +12,8 @@ This document describes how to run Celery workers and Celery Beat in this projec
 ## Services
 
 Docker Compose services:
-- `celery-ocr-worker`: CPU-heavy queues (`zip_ocr`, `pii_detection`, `pdf_processing`)
-- `celery-general-worker`: general queues (`thumbnails`, `metadata`, `exports`, `maintenance`, `s3_sync`)
+- `celery-ocr-worker`: CPU-heavy queues (`zip_ocr`, `pii_detection`, `pdf_processing`, `metadata`)
+- `celery-general-worker`: general queues (`thumbnails`, `exports`, `maintenance`, `s3_sync`, `default`)
 - `celery-beat`: schedule runner (DB-backed)
 
 ## Configuration
@@ -59,6 +59,31 @@ Notes:
 - Every schedule carries `user_id` and `hospital_id` in kwargs.
 - Changes are picked up without restarting Beat (refresh window default 60s).
 
+### Metadata Backfill (DB-only)
+
+`metadata-backfill-continuous` is scheduled in the database (not in code).
+
+Default parameters:
+- interval: 300 seconds
+- limit: 5 (task default)
+- queue: `metadata`
+
+To verify from DB:
+
+```
+select name, task_name, queue, schedule_type, interval_seconds, enabled
+from celery_beat_schedules
+where name = 'metadata-backfill-continuous';
+```
+
+### Stuck Job Cleanup
+
+Stuck job cleanup runs from the DB schedule:
+- name: `cleanup-stuck-jobs`
+- interval: 1800 seconds
+- queue: `maintenance`
+- default max age: 20 minutes
+
 ## Development Auto-Reload
 
 Celery does not support `--autoreload`. For development, use `watchmedo`:
@@ -81,7 +106,7 @@ Queue mapping (configured in `celery_app.py`):
 - `pii_detection`: PII detection jobs
 - `pdf_processing`: PDF OCR
 - `thumbnails`: thumbnail generation
-- `metadata`: metadata extraction/backfill
+- `metadata`: metadata extraction/backfill (runs on OCR worker)
 - `exports`: report/export jobs
 - `maintenance`: cleanup, maintenance tasks
 - `s3_sync`: local -> S3 migrations

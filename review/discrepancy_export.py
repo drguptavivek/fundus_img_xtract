@@ -129,7 +129,10 @@ def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_con
         export_dir = EXPORT_DIR / job_token
         export_dir.mkdir(parents=True, exist_ok=True)
 
-        graded_rows = _build_task_payload(rows)
+        graded_rows = _build_task_payload(
+            rows,
+            include_original_filenames=bool(filters.get("include_original_filename")),
+        )
         excel_path = _write_excel(graded_rows, filters, export_dir)
         _write_grading_scheme(filters.get("disease_id"), export_dir)
         zip_paths, warnings = _write_zips(graded_rows, export_dir)
@@ -474,7 +477,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         return results
 
 
-def _resolve_disease_key(db: Session, disease_id: int) -> str:
+def _resolve_disease_key(db: Session, disease_id: Optional[int]) -> str:
     if not disease_id:
         return "dr"
     disease = db.get(Disease, disease_id)
@@ -486,6 +489,37 @@ def _resolve_disease_key(db: Session, disease_id: int) -> str:
     if "amd" in name or "macular" in name:
         return "amd"
     return "dr"
+
+
+def _extract_ai_probability(comment: Optional[str], provided: Optional[Any] = None) -> Optional[str]:
+    if provided is not None:
+        try:
+            return str(provided)
+        except Exception:
+            return None
+    if not comment:
+        return None
+    match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def _load_ai_model_meta(task_ids: Sequence[int]) -> Dict[int, Dict[str, Optional[str]]]:
+    if not task_ids:
+        return {}
+    with get_db_session() as db:
+        rows = (
+            db.query(Grade.task_id, Grade.ai_model_name, Grade.ai_model_version)
+            .filter(Grade.role_slot == "ai", Grade.task_id.in_(task_ids))
+            .all()
+        )
+    meta: Dict[int, Dict[str, Optional[str]]] = {}
+    for task_id, model_name, model_version in rows:
+        entry = meta.setdefault(task_id, {"ai_model_name": None, "ai_model_version": None})
+        if model_name and not entry["ai_model_name"]:
+            entry["ai_model_name"] = model_name
+        if model_version and not entry["ai_model_version"]:
+            entry["ai_model_version"] = model_version
+    return meta
 
 
 def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
@@ -507,7 +541,10 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
             "selected_features": item.get("selected_features"),
             "ai_model_name": item.get("ai_model_name"),
             "ai_model_version": item.get("ai_model_version"),
-            "ai_probability": item.get("ai_probability"),
+            "ai_probability": _extract_ai_probability(
+                item.get("comment"),
+                item.get("ai_probability"),
+            ),
         }
     return result
 
@@ -535,17 +572,30 @@ def _serialize_features_json(features: Any) -> Optional[str]:
         return None
 
 
-def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
+def _build_task_payload(
+    rows: Sequence[ExportTaskRow],
+    *,
+    include_original_filenames: bool = False,
+) -> List[Dict[str, Any]]:
+    task_ids = [r.task_id for r in rows]
     encounter_ids = [r.encounter_file_id for r in rows if r.encounter_file_id]
     direct_ids = [r.direct_image_upload_id for r in rows if r.direct_image_upload_id]
 
     encounter_paths = _load_encounter_paths(encounter_ids) if encounter_ids else {}
     direct_paths = _load_direct_paths(direct_ids) if direct_ids else {}
+    ai_model_meta = _load_ai_model_meta(task_ids) if task_ids else {}
 
     data: List[Dict[str, Any]] = []
     for row in rows:
         grades = _extract_grades_by_role(row.grading_details_json)
         ai_grade = grades.get("ai", {})
+        if ai_grade.get("ai_model_version") is None or ai_grade.get("ai_model_name") is None:
+            meta = ai_model_meta.get(row.task_id)
+            if meta:
+                if not ai_grade.get("ai_model_name"):
+                    ai_grade["ai_model_name"] = meta.get("ai_model_name")
+                if not ai_grade.get("ai_model_version"):
+                    ai_grade["ai_model_version"] = meta.get("ai_model_version")
         ai_grade["ai_review_comments"] = row.ai_review_comments
         ai_grade["ai_review_statuses"] = row.ai_review_statuses
         grades["ai"] = ai_grade
@@ -564,8 +614,7 @@ def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
             file_path = fp
             renamed_filename = f"{image_uuid}{ext}"
 
-        data.append(
-            {
+        payload = {
                 "task_id": row.task_id,
                 "task_uuid": row.task_uuid,
                 "disease": row.disease,
@@ -606,7 +655,9 @@ def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
                 "image_filename": renamed_filename,
                 "image_path": file_path,
             }
-        )
+        if include_original_filenames:
+            payload["original_upload_filename"] = row.encounter_filename or row.direct_filename
+        data.append(payload)
     return data
 
 

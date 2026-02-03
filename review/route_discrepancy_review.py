@@ -421,6 +421,10 @@ def discrepancy_export():
         ]
         # ... (rest of filtering logic) ...
 
+        include_original_filename = request.form.get("include_original_filename") == "1"
+        if include_original_filename and not current_user.has_role("admin"):
+            include_original_filename = False
+
         filters = {
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
@@ -436,6 +440,7 @@ def discrepancy_export():
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": ai_review_statuses,
             "allowed_lab_units": list(allowed_lab_unit_ids),
+            "include_original_filename": include_original_filename,
         }
 
         xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
@@ -510,8 +515,10 @@ def _extract_ai_probability(comment: Optional[str], provided: Optional[Any] = No
     return match.group(1) if match else None
 
 
-def _resolve_disease_key(db: Session, disease_id: int) -> str:
+def _resolve_disease_key(db: Session, disease_id: Optional[int]) -> str:
     """Map disease to mvw_image_listing_all column prefix."""
+    if not disease_id:
+        return "dr"
     disease = db.get(Disease, disease_id)
     if not disease:
         return "dr"

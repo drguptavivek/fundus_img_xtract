@@ -39,13 +39,18 @@ docker compose up -d db cache
 docker compose logs db cache -f --tail=200
 
 # SECOND STEP VENV Builders FIRST
+
 docker volume rm   fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_img_xtract_beat_venv fundus_img_xtract_general_venv
 
 ## If packages changed 
    ### generate Reuirements.txts for each container
    ./scripts/export_requirements.sh
+
+
    ### Create venv buiders
-   docker compose build --no-cache web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder  
+   docker compose build --no-cache web-venv-builder  
+   docker compose build --no-cache ocr-venv-builder beat-venv-builder general-venv-builder  
+
 
 ## If No packages changed 
    ### Create venv buiders
@@ -58,6 +63,13 @@ docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-ve
 # THIRD STEP Main Containers SERVICES SECOND
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
+
+
+
+docker compose build --no-cache beat-venv-builder 
+docker compose restart celery-beat
+### Celery conatiners restart
+docker compose restart celery-ocr-worker celery-general-worker celery-beat
 
 ## ROUTINE HOSUEKPING 
 docker compose down

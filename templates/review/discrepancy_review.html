@@ -401,6 +401,12 @@
             %}>
             Export ZIP
           </button>
+          {% if current_user_has('admin') %}
+          <button type="submit" name="include_original_filename" value="1" class="btn btn-outline-secondary btn-sm"
+            {% if not filters.disease_id %}disabled{% endif %}>
+            Export with FN
+          </button>
+          {% endif %}
         </form>
         <!-- Pagination -->
         {% if total_pages > 1 %}

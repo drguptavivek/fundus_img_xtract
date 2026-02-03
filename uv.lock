@@ -658,6 +658,7 @@ dependencies = [
 
 [package.optional-dependencies]
 beat = [
+    { name = "flask-caching" },
     { name = "flask-login" },
     { name = "pytz" },
     { name = "pyyaml" },
@@ -787,6 +788,7 @@ requires-dist = [
     { name = "faker", marker = "extra == 'web'", specifier = ">=39.0.0" },
     { name = "fernet", marker = "extra == 'web'", specifier = ">=1.0.1" },
     { name = "flask", specifier = "==3.1.2" },
+    { name = "flask-caching", marker = "extra == 'beat'", specifier = ">=2.3.1" },
     { name = "flask-caching", marker = "extra == 'general'", specifier = ">=2.3.1" },
     { name = "flask-caching", marker = "extra == 'ocr'", specifier = ">=2.3.1" },
     { name = "flask-caching", marker = "extra == 'web'", specifier = ">=2.3.1" },

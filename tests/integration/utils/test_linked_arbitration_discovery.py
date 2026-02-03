@@ -219,6 +219,10 @@ def test_linked_arbitration_discovery(db_session, core_test_data, linked_grading
     #   But for now, I'll focus on get_next_task.
     
     # assert kpi_data[glaucoma.name]['arbitration_pending'] == 4 # Expected if KPI not updated
+    assert kpi_data[glaucoma.name]['arbitration_breakdown'] == {
+        glaucoma.name: 2,
+        dr.name: 2,
+    }
 
     # --- Verify Next Task Fetching ---
     # Should get either A or B (Primary Task Object)

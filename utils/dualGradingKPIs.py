@@ -7,7 +7,7 @@ This design allows for better transaction management and session reuse.
 """
 
 from sqlalchemy.orm import selectinload, aliased
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
@@ -182,6 +182,41 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     eligible_arbitration_tasks.append(task)
             
             counts['arbitration_pending'] = len(eligible_arbitration_tasks)
+            counts['arbitration_breakdown'] = {}
+
+            # Calculate breakdown of which diseases are actually in arbitration
+            if eligible_arbitration_tasks:
+                # 1. Primary Disease Counts
+                primary_count = sum(1 for t in eligible_arbitration_tasks if t.state == 'arbitration')
+                if primary_count > 0:
+                    counts['arbitration_breakdown'][disease_name] = primary_count
+                
+                # 2. Linked Disease Counts
+                if linked_ids:
+                    # Collect file/upload IDs from eligible tasks to scope the query
+                    file_ids = [t.encounter_file_id for t in eligible_arbitration_tasks if t.encounter_file_id]
+                    upload_ids = [t.direct_image_upload_id for t in eligible_arbitration_tasks if t.direct_image_upload_id]
+                    
+                    filters = []
+                    if file_ids:
+                        filters.append(GradingTask.encounter_file_id.in_(file_ids))
+                    if upload_ids:
+                        filters.append(GradingTask.direct_image_upload_id.in_(upload_ids))
+                    
+                    if filters:
+                        linked_counts = db.query(
+                            GradingTask.disease_id, 
+                            func.count(GradingTask.id)
+                        ).filter(
+                            GradingTask.disease_id.in_(linked_ids),
+                            GradingTask.state == 'arbitration',
+                            or_(*filters)
+                        ).group_by(GradingTask.disease_id).all()
+                        
+                        for did, count in linked_counts:
+                            dname = disease_names.get(did)
+                            if dname:
+                                counts['arbitration_breakdown'][dname] = count
         
         kpi_data[disease_name] = counts
     

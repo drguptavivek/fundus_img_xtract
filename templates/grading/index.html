@@ -70,10 +70,22 @@
           {% endif %}
 
           {% if is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
-          <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='arbitrator') }}" 
-             class="btn btn-warning w-100">
-            Start Arbitration ({{ kpi_arbitration_by_disease[disease.name] }} pending)
-          </a>
+          <div class="d-flex flex-column">
+            <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='arbitrator') }}" 
+               class="btn btn-warning w-100">
+              Start Arbitration ({{ kpi_arbitration_by_disease[disease.name] }} pending)
+            </a>
+            {% set breakdown = kpi_arbitration_breakdown_by_disease.get(disease.name, {}) %}
+            {% if breakdown %}
+            <div class="mt-2 small text-muted">
+              <ul class="list-unstyled mb-0 ps-1">
+              {% for d_name, d_count in breakdown.items()|sort %}
+                <li>&bull; {{ d_name }}: <strong>{{ d_count }}</strong></li>
+              {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+          </div>
           {% endif %}
         </div>
       </div>

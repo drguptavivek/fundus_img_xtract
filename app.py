@@ -104,7 +104,7 @@ def _configure_base_settings(app: Flask) -> None:
     )
     app.config["THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES"] = os.getenv(
         "THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES",
-        "02:30,07:00,13:30,19:00,01:30",
+        "00:00,08:00,16:00",
     ).split(",")
     app.config["THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT"] = int(
         os.getenv("THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT", "1000")

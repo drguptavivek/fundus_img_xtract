@@ -201,6 +201,8 @@ def index():
         # Calculate pending KPIs using the utility function
         kpi_pending_data = get_user_kpi_pending_task_count_data(db, current_user.id)
         
+        kpi_arbitration_breakdown_by_disease = {}
+
         # Process pending KPI data from the utility function
         for disease in all_diseases:
             disease_name = disease.name
@@ -209,6 +211,7 @@ def index():
             kpi_resident_by_disease[disease_name] = 0
             kpi_resident2_by_disease[disease_name] = 0
             kpi_arbitration_by_disease[disease_name] = 0
+            kpi_arbitration_breakdown_by_disease[disease_name] = {}
             
             # Get data for this disease if available
             if disease_name in kpi_pending_data:
@@ -216,6 +219,7 @@ def index():
                 kpi_resident_by_disease[disease_name] = disease_kpi.get('resident_pending', 0)
                 kpi_resident2_by_disease[disease_name] = disease_kpi.get('resident2_pending', 0)
                 kpi_arbitration_by_disease[disease_name] = disease_kpi.get('arbitration_pending', 0)
+                kpi_arbitration_breakdown_by_disease[disease_name] = disease_kpi.get('arbitration_breakdown', {})
                 
                 # Add to totals
                 kpi_resident_pending += disease_kpi.get('resident_pending', 0)
@@ -268,6 +272,7 @@ def index():
         kpi_resident_by_disease=kpi_resident_by_disease,
         kpi_resident2_by_disease=kpi_resident2_by_disease,
         kpi_arbitration_by_disease=kpi_arbitration_by_disease,
+        kpi_arbitration_breakdown_by_disease=kpi_arbitration_breakdown_by_disease,
         kpi_resident_completed=kpi_resident_completed,
         kpi_resident2_completed=kpi_resident2_completed,
         kpi_arbitration_completed=kpi_arbitration_completed,

@@ -500,16 +500,16 @@ def schedule_direct_upload_thumbnails(direct_upload_id: int, app, user_context: 
             user_context = user_context or {}
             image_references = []
 
-            # Schedule original image thumbnail
-            if direct_upload.filename:
+            # Schedule original image thumbnail if missing
+            if direct_upload.filename and not direct_upload.thumbnail_filename:
                 image_references.append({
                     'image_id': direct_upload.id,
                     'folder_rel': direct_upload.folder_rel,
                     'filename': direct_upload.filename
                 })
 
-            # Schedule edited image thumbnail if it exists
-            if direct_upload.edited_filename:
+            # Schedule edited image thumbnail if missing
+            if direct_upload.edited_filename and not direct_upload.edited_thumbnail_filename:
                 image_references.append({
                     'image_id': direct_upload.id,
                     'folder_rel': direct_upload.folder_rel,
@@ -569,7 +569,8 @@ def schedule_encounter_thumbnails(encounter_file_ids: List[int], app, user_conte
 
         with transaction_scope() as db:
             encounter_files = db.query(EncounterFile).filter(
-                EncounterFile.id.in_(encounter_file_ids)
+                EncounterFile.id.in_(encounter_file_ids),
+                EncounterFile.thumbnail_filename.is_(None),
             ).all()
 
             image_references = []

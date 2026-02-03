@@ -79,8 +79,13 @@ docker system df -v | grep -E "(fundus.*venv|Local Volumes)"
 # Stop Start
 docker compose   stop web
 docker compose   start web
+
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
+docker compose stop    web celery-ocr-worker celery-general-worker celery-beat
+docker compose start   web celery-ocr-worker celery-general-worker celery-beat
+docker compose restart web celery-ocr-worker celery-general-worker celery-beat
+docker compose logs --tail = 200 -f  web celery-ocr-worker celery-general-worker celery-beat
 
 # Database backup (timestamped)
 mkdir -p backups

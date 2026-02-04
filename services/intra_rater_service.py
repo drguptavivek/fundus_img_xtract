@@ -189,6 +189,8 @@ class IntraRaterService:
                 selectinload(IntraRaterTask.lab_unit),
                 selectinload(IntraRaterTask.grades),
                 selectinload(IntraRaterTask.source_task),
+                selectinload(IntraRaterTask.encounter_file),
+                selectinload(IntraRaterTask.direct_image_upload),
                 selectinload(IntraRaterTask.grader),  # Load grader info
             )
         )

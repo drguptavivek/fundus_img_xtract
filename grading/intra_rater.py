@@ -290,26 +290,42 @@ def intra_rater_submit():
     flash("Grade submitted successfully.", "success")
 
     if action == "save_next" and resume_slot in {"resident", "resident2", "arbitrator"} and actual_resume_disease_id:
-        next_task = None
+        next_task_uuid = None
         try:
-            if resume_slot == "resident":
-                next_task = get_next_eligible_resident_task_atomic(current_user.id, actual_resume_disease_id)
-            elif resume_slot == "resident2":
-                next_task = get_next_eligible_resident2_task_atomic(current_user.id, actual_resume_disease_id)
-            elif resume_slot == "arbitrator":
-                next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, actual_resume_disease_id)
-        except Exception as exc:  # pragma: no cover - defensive logging via flash
+            with transaction_scope() as db:
+                if resume_slot == "resident":
+                    next_task = get_next_eligible_resident_task_atomic(
+                        current_user.id,
+                        actual_resume_disease_id,
+                        db=db,
+                    )
+                elif resume_slot == "resident2":
+                    next_task = get_next_eligible_resident2_task_atomic(
+                        current_user.id,
+                        actual_resume_disease_id,
+                        db=db,
+                    )
+                else:
+                    next_task = get_next_eligible_arbitrator_task_atomic(
+                        current_user.id,
+                        actual_resume_disease_id,
+                        db=db,
+                    )
+
+                if isinstance(next_task, str):
+                    flash(next_task, "info")
+                    return redirect(url_for("grading.index"))
+
+                if next_task is not None:
+                    next_task_uuid = next_task.uuid
+        except Exception:  # pragma: no cover - defensive logging via flash
             flash("Next task could not be loaded after intra-rater submission.", "warning")
             return redirect(url_for("grading.index"))
 
-        if next_task is None:
+        if not next_task_uuid:
             flash("No more tasks available in the current grading queue.", "info")
             return redirect(url_for("grading.index"))
 
-        if isinstance(next_task, str):
-            flash(next_task, "info")
-            return redirect(url_for("grading.index"))
-
-        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task.uuid, slot_type=resume_slot))
+        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task_uuid, slot_type=resume_slot))
 
     return redirect(url_for("grading.index"))

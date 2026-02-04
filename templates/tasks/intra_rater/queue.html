@@ -3,6 +3,30 @@
 
 {% block title %}Intra-Rater Tasks{% endblock %}
 
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .intra-task-row .intra-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+  .intra-task-row .intra-meta-line span {
+    white-space: nowrap;
+  }
+  .intra-task-row .intra-grade-cols {
+    min-width: 280px;
+  }
+  .intra-task-row.active {
+    background-color: var(--bs-tertiary-bg);
+    color: inherit;
+  }
+  .intra-task-row.active .text-muted {
+    color: var(--bs-secondary-color) !important;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="py-4" id="intra-page-root"
      data-tasks-endpoint="{{ url_for('tasks.list_my_intra_rater_tasks') }}"
@@ -39,38 +63,55 @@
     </div>
   </div>
 
-  <div class="card mt-4 d-none" id="intra-pending-card">
-    <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
-      <span class="fw-semibold">Pending reassessments</span>
-      <span class="badge text-bg-info">Intra-rater</span>
+  <div class="row g-3 mt-4">
+    <div class="col-12 col-lg-5">
+      <div class="card d-none" id="intra-pending-card">
+        <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
+          <span class="fw-semibold">Pending reassessments</span>
+          <span class="badge text-bg-info">Intra-rater</span>
+        </div>
+        <div class="card-body p-0">
+          <div id="intra-pending-list" class="list-group list-group-flush">
+            <div class="p-4 text-center text-muted">
+              Loading intra-rater tasks...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3" id="intra-completed-card">
+        <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
+          <span class="fw-semibold">Completed reassessments</span>
+          <span class="badge text-bg-success">Intra-rater</span>
+        </div>
+        <div class="card-body p-0">
+          <div id="intra-completed-list" class="list-group list-group-flush"></div>
+          <div id="intra-completed-empty" class="p-4 text-center text-muted d-none">No completed intra-rater tasks yet.</div>
+        </div>
+      </div>
+
+      <!-- Pagination container -->
+      <div id="intra-pagination" class="mt-3"></div>
     </div>
-    <div class="card-body p-0">
-      <div id="intra-pending-list" class="list-group list-group-flush">
-        <div class="p-4 text-center text-muted">
-          Loading intra-rater tasks...
+
+    <div class="col-12 col-lg-7 intra-rater-viewer">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
+          <span class="fw-semibold">Image Viewer</span>
+          <span class="badge text-bg-secondary">Preview</span>
+        </div>
+        <div id="intraViewerWrapper" style="max-height: 90vh; overflow: auto;">
+          <div class="alert alert-info m-3">Select a task to view the image.</div>
         </div>
       </div>
     </div>
   </div>
-
-  <div class="card mt-4" id="intra-completed-card">
-    <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
-      <span class="fw-semibold">Completed reassessments</span>
-      <span class="badge text-bg-success">Intra-rater</span>
-    </div>
-    <div class="card-body p-0">
-      <div id="intra-completed-list" class="list-group list-group-flush"></div>
-      <div id="intra-completed-empty" class="p-4 text-center text-muted d-none">No completed intra-rater tasks yet.</div>
-    </div>
-  </div>
-
-  <!-- Pagination container -->
-  <div id="intra-pagination" class="mt-3"></div>
 </div>
 {% endblock %}
 
 {% block page_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/intra_rater_tasks.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 {% endblock %}

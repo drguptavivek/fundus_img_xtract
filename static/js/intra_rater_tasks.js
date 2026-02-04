@@ -635,11 +635,36 @@
 
     // Make sure to enhance forms after all content is rendered
     enhanceForms();
+
+    if (window.htmx && typeof window.htmx.process === 'function') {
+      window.htmx.process(pendingContainer);
+      if (completedList) {
+        window.htmx.process(completedList);
+      }
+    }
+
+    wireRowHighlights();
+  }
+
+  function wireRowHighlights() {
+    document.querySelectorAll('.intra-task-row').forEach(function (row) {
+      if (row.dataset.rowBound === '1') return;
+      row.dataset.rowBound = '1';
+      row.addEventListener('click', function (e) {
+        if (e.target && e.target.closest('.js-intra-grade-form')) {
+          return;
+        }
+        document.querySelectorAll('.intra-task-row.active').forEach(function (el) {
+          el.classList.remove('active');
+        });
+        row.classList.add('active');
+      });
+    });
   }
 
   function renderPendingRow(item) {
     var container = document.createElement('div');
-    container.className = 'list-group-item py-3';
+    container.className = 'list-group-item py-3 intra-task-row';
     
     // Validate UUID before using it
     if (!item.uuid || !isValidUuid(item.uuid)) {
@@ -659,18 +684,33 @@
       return '<option value="' + g.id + '">' + g.impression + '</option>';
     }).join('');
 
+    var thumbHtml = '';
+    if (item.thumbnail_url && item.viewer_url) {
+      thumbHtml =
+        '<a class="intra-thumb-link d-inline-block" href="#" ' +
+        'hx-get="' + item.viewer_url + '" hx-target="#intraViewerWrapper" hx-swap="innerHTML">' +
+        '<img class="rounded border" src="' + item.thumbnail_url + '" alt="Thumbnail" ' +
+        'style="width:72px;height:72px;object-fit:cover;" loading="lazy">' +
+        '</a>';
+    }
+
     container.innerHTML =
-      '<div class="d-flex flex-column flex-lg-row justify-content-between gap-2">' +
+      '<div class="d-flex flex-column flex-xl-row justify-content-between gap-3">' +
+      '<div class="d-flex gap-3 flex-grow-1">' +
+      '<div class="flex-shrink-0">' + (thumbHtml || '') + '</div>' +
       '<div>' +
-      '<div class="d-flex align-items-center gap-2">' +
+      '<div class="d-flex align-items-center gap-2 flex-wrap">' +
       '<span class="badge text-bg-info">Task #' + item.uuid + '</span>' +
       '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
       '</div>' +
-      '<dl class="row small mt-2 mb-0">' +
-      '<dt class="col-sm-3">Batch</dt><dd class="col-sm-9">#' + item.batch_id + '</dd>' +
-      '<dt class="col-sm-3">Image Source</dt><dd class="col-sm-9">' + source + '</dd>' +
-      '<dt class="col-sm-3">Lab Unit</dt><dd class="col-sm-9">' + (item.lab_unit_name || 'Unassigned') + '</dd>' +
-      '</dl>' +
+      '<p class="small text-muted mt-2 mb-1 intra-meta-line">' +
+      '<span>Batch #' + item.batch_id + '</span>' +
+      '<span>Image: ' + source + '</span>' +
+      '<span>Lab: ' + (item.lab_unit_name || 'Unassigned') + '</span>' +
+      '</p>' +
+      (item.viewer_url ? '<button type="button" class="btn btn-sm btn-outline-primary mt-2" ' +
+        'hx-get="' + item.viewer_url + '" hx-target="#intraViewerWrapper" hx-swap="innerHTML">View</button>' : '') +
+      '</div>' +
       '</div>' +
       '<div class="flex-grow-1">' +
       '<form class="js-intra-grade-form border rounded-3 p-3 bg-body-secondary" method="post" ' +
@@ -703,7 +743,7 @@
 
   function renderCompletedRow(item) {
     var container = document.createElement('div');
-    container.className = 'list-group-item py-3 d-flex flex-column flex-lg-row justify-content-between gap-2';
+    container.className = 'list-group-item py-3 d-flex flex-column flex-xl-row justify-content-between gap-3 intra-task-row';
     
     // Validate UUID before using it
     if (!item.uuid || !isValidUuid(item.uuid)) {
@@ -717,19 +757,31 @@
     var originalGradedAt = item.original_graded_at ? new Date(item.original_graded_at).toLocaleString() : 'unknown';
     
     try {
+      var thumbHtml = '';
+      if (item.thumbnail_url && item.viewer_url) {
+        thumbHtml =
+          '<a class="intra-thumb-link d-inline-block" href="#" ' +
+          'hx-get="' + item.viewer_url + '" hx-target="#intraViewerWrapper" hx-swap="innerHTML">' +
+          '<img class="rounded border" src="' + item.thumbnail_url + '" alt="Thumbnail" ' +
+          'style="width:72px;height:72px;object-fit:cover;" loading="lazy">' +
+          '</a>';
+      }
+
       container.innerHTML =
+        '<div class="d-flex gap-3 flex-grow-1">' +
+        '<div class="flex-shrink-0">' + (thumbHtml || '') + '</div>' +
         '<div>' +
-        '<div class="d-flex align-items-center gap-2">' +
+        '<div class="d-flex align-items-center gap-2 flex-wrap">' +
         '<span class="badge text-bg-secondary">Task #' + item.uuid + '</span>' +
         '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
         '</div>' +
         '<div class="small text-muted mt-1">Completed at ' + gradedAt + '</div>' +
-        '</div>' +
-        '<div class="row">' +
+        (item.viewer_url ? '<button type="button" class="btn btn-sm btn-outline-primary mt-2" ' +
+          'hx-get="' + item.viewer_url + '" hx-target="#intraViewerWrapper" hx-swap="innerHTML">View</button>' : '') +
+        '<div class="row intra-grade-cols mt-2">' +
         '<div class="col-md-6">' +
         '<h6 class="text-success">Intra-rater Grade</h6>' +
         '<div class="small">' +
-        (item.grader_name ? ('<strong>Grader:</strong> ' + item.grader_name + ' (ID: ' + item.grader_user_id + ')<br>') : '') +
         (item.grade_name ? ('<strong>Grade:</strong> ' + item.grade_name) : '') +
         (item.comment ? ('<br><strong>Comment:</strong> ' + item.comment) : '') +
         '</div>' +
@@ -737,13 +789,15 @@
         '<div class="col-md-6">' +
         '<h6 class="text-primary">Original Grade</h6>' +
         '<div class="small">' +
-        (item.original_grader_name ? ('<strong>Grader:</strong> ' + item.original_grader_name + ' (ID: ' + item.grader_user_id + ')<br>') : '') +
         (item.original_grade_name ? ('<strong>Grade:</strong> ' + item.original_grade_name) : '') +
         (item.original_comment ? ('<br><strong>Comment:</strong> ' + item.original_comment) : '') +
         '<br><span class="text-muted">Graded at ' + originalGradedAt + '</span>' +
         '</div>' +
         '</div>' +
-        '</div>';
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        '';
       // console.log('Successfully rendered completed task:', item.uuid);
     } catch (error) {
       console.error('Error rendering completed task:', item, error);

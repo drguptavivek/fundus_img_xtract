@@ -9,13 +9,14 @@ from typing import Iterable, Sequence
 from flask import Response, jsonify, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import (
     Disease,
     DiseaseGrading,
+    GradingTask,
     Grade,
     Hospital,
     IntraRaterBatch,
@@ -32,6 +33,7 @@ from services.intra_rater_service import (
 from services.intra_rater_service import get_default_cooldown_days
 from flask_wtf.csrf import generate_csrf
 from utils.intraraterKPIs import get_disease_summary, generate_cross_tabulation
+from utils.hospital_scoping import apply_scoping
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
@@ -150,6 +152,30 @@ def list_my_intra_rater_tasks() -> Response:
                 "pages": result['pages']
             }
         })
+
+
+@bp.route("/intra-rater/viewer/<string:image_uuid>")
+@roles_required("ophthalmologist", "admin", "data_manager")
+def intra_rater_viewer(image_uuid: str):
+    """Serve the grading viewer card for an intra-rater image UUID."""
+    with get_db_session() as db:
+        query = (
+            db.query(GradingTask)
+            .filter(
+                or_(
+                    GradingTask.encounter_file.has(uuid=image_uuid),
+                    GradingTask.direct_image.has(uuid=image_uuid),
+                ),
+            )
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+        )
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
+        if not task:
+            return ("Not found", 404)
+
+        image_obj = task.encounter_file or task.direct_image
+        return render_template("grading/_viewer_card.html", image=image_obj, image_uuid=image_uuid)
 
 
 @bp.route("/intra-rater/tasks/<int:task_id>/submit", methods=["POST"])
@@ -340,6 +366,12 @@ def _task_to_payload(
     if task.grades and len(task.grades) > 0:
         repeated_grade_id = task.grades[0].disease_grading_id
     
+    image_uuid = None
+    if task.encounter_file:
+        image_uuid = task.encounter_file.uuid
+    elif task.direct_image_upload:
+        image_uuid = task.direct_image_upload.uuid
+
     return {
         "id": task.id,
         "uuid": task.uuid,
@@ -354,6 +386,13 @@ def _task_to_payload(
         "encounter_file_id": task.encounter_file_id,
         "direct_image_upload_id": task.direct_image_upload_id,
         "source_task_id": task.source_task_id,
+        "image_uuid": image_uuid,
+        "thumbnail_url": (
+            url_for("media._universalImageThumbnailByUUID", uuid_str=image_uuid) if image_uuid else None
+        ),
+        "viewer_url": (
+            url_for("tasks.intra_rater_viewer", image_uuid=image_uuid) if image_uuid else None
+        ),
         "state": task.state,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,

@@ -60,20 +60,6 @@
           {% if start_time_iso %}
           <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
           {% endif %}
-          {% if existing_grade.comment %}
-          <div class="text-muted fst-italic">"{{ existing_grade.comment|mask_text_emails }}"</div>
-          {% endif %}
-          {% if existing_selected_features %}
-          <div class="mb-2">
-            <label class="form-label">Previously Selected Features</label>
-            <div class="d-flex flex-wrap gap-1">
-              {% for feature in existing_selected_features %}
-              <span class="badge bg-secondary">{{ feature.name }}</span>
-              {% endfor %}
-            </div>
-          </div>
-          {% endif %}
-
           <div class="mb-2">
             <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name
                 }}</strong></label>

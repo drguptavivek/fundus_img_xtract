@@ -81,50 +81,10 @@
 
   <div class="card">
     <div class="card-body">
-      <h6 class="mb-3">Run Backfill</h6>
-      <form method="POST" action="{{ url_for('admin.image_metadata_backfill') }}" class="d-flex flex-wrap gap-2 align-items-end">
-        {% from "_forms.html" import csrf_field %}
-        {{ csrf_field() }}
-        <div>
-          <label class="form-label">Limit (optional)</label>
-          <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 100">
-        </div>
-        <button type="submit" class="btn btn-primary" name="mode" value="metadata">Backfill Metadata</button>
-        <button type="submit" class="btn btn-outline-primary" name="mode" value="pii">Backfill PII</button>
-        <button type="submit" class="btn btn-outline-secondary" name="mode" value="both">Backfill Both</button>
-      </form>
-      <form method="POST" action="{{ url_for('admin.image_metadata_stop_all') }}" class="mt-2">
-        {{ csrf_field() }}
-        <button type="submit" class="btn btn-outline-danger">Stop All Backfill</button>
-      </form>
-      <form method="POST" action="{{ url_for('admin.image_metadata_clear_queued') }}" class="mt-2">
-        {{ csrf_field() }}
-        <button type="submit" class="btn btn-outline-secondary">Clear Queued Jobs</button>
-      </form>
-      <form method="POST" action="{{ url_for('admin.image_metadata_clear_running') }}" class="mt-2">
-        {{ csrf_field() }}
-        <button type="submit" class="btn btn-outline-secondary">Clear Running Jobs</button>
-      </form>
-      <div class="small text-muted mt-2">
-        Runs one image at a time with a 3s delay and low CPU priority. PII runs are serialized via the queue.
+      <h6 class="mb-3">Backfill Automation</h6>
+      <div class="alert alert-info py-2 mb-3">
+        Backfill and PII detection run automatically on schedule. Manual controls are disabled.
       </div>
-    </div>
-  </div>
-
-  <div class="card mt-4">
-    <div class="card-body">
-      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-        <h6 class="mb-0">PII Detection Queue</h6>
-      </div>
-      <form method="POST" action="{{ url_for('admin.image_metadata_run_pii_queue') }}" class="d-flex flex-wrap gap-2 align-items-end">
-        {% from "_forms.html" import csrf_field %}
-        {{ csrf_field() }}
-        <div>
-          <label class="form-label">Process Count (optional)</label>
-          <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 10">
-        </div>
-        <button type="submit" class="btn btn-primary">Run PII Queue</button>
-      </form>
       <div class="row g-3 mt-3">
         <div class="col-md-3">
           <div class="small text-muted">Processed (Last 60 Minutes)</div>
@@ -145,13 +105,50 @@
       </div>
     </div>
   </div>
+
+  <div class="row g-3 mt-4">
+    <div class="col-12 col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+            <h6 class="mb-0">Processed (Last 7 Days)</h6>
+          </div>
+          <canvas id="processedDailyChart" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+            <h6 class="mb-0">Metadata Status</h6>
+          </div>
+          <canvas id="metadataStatusChart" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+            <h6 class="mb-0">PII Status</h6>
+          </div>
+          <canvas id="piiStatusChart" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% block page_scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 <script>
 if (!window.__imageMetadataPageInit) {
   window.__imageMetadataPageInit = true;
+  let processedChart = null;
+  let metadataStatusChart = null;
+  let piiStatusChart = null;
   function updateCounters(data) {
     if (!data) return;
     const meta = data.metadata_missing || {};
@@ -187,6 +184,105 @@ if (!window.__imageMetadataPageInit) {
     const processed = data.pii_processed || {};
     setText('pii-processed-hour', processed.last_60_min ?? 0);
     setText('pii-processed-day', processed.today ?? 0);
+
+    const metaMissingTotal = (meta.encounter ?? 0) + (meta.direct ?? 0) + (meta.direct_edited ?? 0);
+    const metaPresentTotal = (metaPresent.encounter ?? 0) + (metaPresent.direct ?? 0) + (metaPresent.direct_edited ?? 0);
+    const piiMissingTotal = (pii.encounter ?? 0) + (pii.direct ?? 0) + (pii.direct_edited ?? 0);
+    const piiPresentTotal = (piiPresent.encounter ?? 0) + (piiPresent.direct ?? 0) + (piiPresent.direct_edited ?? 0);
+
+    const metaChartEl = document.getElementById('metadataStatusChart');
+    if (metaChartEl && window.Chart) {
+      if (!metadataStatusChart) {
+        metadataStatusChart = new Chart(metaChartEl, {
+          type: 'pie',
+          data: {
+            labels: ['Processed', 'Pending'],
+            datasets: [{
+              data: [metaPresentTotal, metaMissingTotal],
+              backgroundColor: ['rgba(54, 162, 235, 0.6)', 'rgba(255, 159, 64, 0.6)'],
+              borderColor: ['rgba(54, 162, 235, 1)', 'rgba(255, 159, 64, 1)'],
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+          },
+        });
+      } else {
+        metadataStatusChart.data.datasets[0].data = [metaPresentTotal, metaMissingTotal];
+        metadataStatusChart.update();
+      }
+    }
+
+    const piiChartEl = document.getElementById('piiStatusChart');
+    if (piiChartEl && window.Chart) {
+      if (!piiStatusChart) {
+        piiStatusChart = new Chart(piiChartEl, {
+          type: 'pie',
+          data: {
+            labels: ['Processed', 'Pending'],
+            datasets: [{
+              data: [piiPresentTotal, piiMissingTotal],
+              backgroundColor: ['rgba(75, 192, 192, 0.6)', 'rgba(201, 203, 207, 0.6)'],
+              borderColor: ['rgba(75, 192, 192, 1)', 'rgba(201, 203, 207, 1)'],
+            }],
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+          },
+        });
+      } else {
+        piiStatusChart.data.datasets[0].data = [piiPresentTotal, piiMissingTotal];
+        piiStatusChart.update();
+      }
+    }
+
+    const daily = data.processed_daily || {};
+    const dates = daily.dates || [];
+    const metaSeries = (daily.metadata || []).map((row) => row.count || 0);
+    const piiSeries = (daily.pii || []).map((row) => row.count || 0);
+    const chartEl = document.getElementById('processedDailyChart');
+    if (chartEl && window.Chart) {
+      if (!processedChart) {
+        processedChart = new Chart(chartEl, {
+          type: 'line',
+          data: {
+            labels: dates,
+            datasets: [
+              {
+                label: 'Metadata',
+                data: metaSeries,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                tension: 0.3,
+              },
+              {
+                label: 'PII',
+                data: piiSeries,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.3,
+              }
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'top' },
+            },
+            scales: {
+              y: { beginAtZero: true },
+            },
+          },
+        });
+      } else {
+        processedChart.data.labels = dates;
+        processedChart.data.datasets[0].data = metaSeries;
+        processedChart.data.datasets[1].data = piiSeries;
+        processedChart.update();
+      }
+    }
 
     const banner = document.getElementById('activeJobBanner');
     const active = data.active_job;

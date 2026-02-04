@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
@@ -7,7 +7,15 @@ from auth.roles import roles_required
 from auth.utils import utcnow
 from app_cache import cache
 from db_transaction_manager import get_db_session
-from models import ImageMetadataBackfillJob, PiiDetectionJob
+from sqlalchemy import func
+
+from models import (
+    DirectImageUpload,
+    EncounterFile,
+    ImageMetadata,
+    ImageMetadataBackfillJob,
+    ImagePiiVerification,
+)
 from utils.hospital_scoping import get_user_lab_units_in_hospital
 from utils.image_metadata_backfill import (
     enqueue_image_metadata_backfill,
@@ -120,6 +128,7 @@ def image_metadata_status():
         )
         allowed_lab_unit_ids_tuple = tuple(sorted(allowed_lab_unit_ids))
         totals, pii_totals, total_images, pii_assessed = _get_status_counts_cached(allowed_lab_unit_ids_tuple)
+        processed_daily = _get_processed_daily_counts(allowed_lab_unit_ids_tuple)
         active_job = (
             db.query(ImageMetadataBackfillJob)
             .filter(ImageMetadataBackfillJob.status.in_(["queued", "running"]))
@@ -156,6 +165,7 @@ def image_metadata_status():
         },
         "pii_assessed": pii_assessed,
         "pii_processed": _get_pii_processed_counts(),
+        "processed_daily": processed_daily,
         "active_job": active_payload,
     }
     cache.set(cache_key, payload, timeout=60)
@@ -182,24 +192,69 @@ def _get_pii_processed_counts():
     day_cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
     with get_db_session() as db:
         processed_hour = (
-            db.query(PiiDetectionJob.id)
-            .filter(
-                PiiDetectionJob.status == "completed",
-                PiiDetectionJob.finished_at.isnot(None),
-                PiiDetectionJob.finished_at >= hour_cutoff,
-            )
+            db.query(ImagePiiVerification.id)
+            .filter(ImagePiiVerification.checked_at >= hour_cutoff)
             .count()
         )
         processed_day = (
-            db.query(PiiDetectionJob.id)
-            .filter(
-                PiiDetectionJob.status == "completed",
-                PiiDetectionJob.finished_at.isnot(None),
-                PiiDetectionJob.finished_at >= day_cutoff,
-            )
+            db.query(ImagePiiVerification.id)
+            .filter(ImagePiiVerification.checked_at >= day_cutoff)
             .count()
         )
     return {"last_60_min": processed_hour, "today": processed_day}
+
+
+def _get_processed_daily_counts(allowed_lab_unit_ids: tuple[int, ...], days: int = 7) -> dict[str, list[dict[str, object]]]:
+    now = utcnow()
+    end_day = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    start_day = end_day - timedelta(days=days)
+    allowed_set = set(allowed_lab_unit_ids)
+
+    def _count_by_day(model, date_col):
+        with get_db_session() as db:
+            encounter_rows = (
+                db.query(func.date(date_col).label("day"), func.count(model.id))
+                .join(EncounterFile, model.image_uuid == EncounterFile.uuid)
+                .filter(
+                    EncounterFile.lab_unit_id.in_(allowed_set),
+                    date_col >= start_day,
+                    date_col < end_day,
+                )
+                .group_by("day")
+                .all()
+            )
+            direct_rows = (
+                db.query(func.date(date_col).label("day"), func.count(model.id))
+                .join(DirectImageUpload, model.image_uuid == DirectImageUpload.uuid)
+                .filter(
+                    DirectImageUpload.lab_unit_id.in_(allowed_set),
+                    date_col >= start_day,
+                    date_col < end_day,
+                )
+                .group_by("day")
+                .all()
+            )
+        counts: dict[str, int] = {}
+        for day, total in encounter_rows + direct_rows:
+            if day is None:
+                continue
+            key = day.isoformat()
+            counts[key] = counts.get(key, 0) + int(total or 0)
+        return counts
+
+    metadata_counts = _count_by_day(ImageMetadata, ImageMetadata.created_at)
+    pii_counts = _count_by_day(ImagePiiVerification, ImagePiiVerification.checked_at)
+
+    daily = []
+    for i in range(days):
+        day = (end_day - timedelta(days=days - i)).date().isoformat()
+        daily.append(day)
+
+    return {
+        "dates": daily,
+        "metadata": [{"date": day, "count": metadata_counts.get(day, 0)} for day in daily],
+        "pii": [{"date": day, "count": pii_counts.get(day, 0)} for day in daily],
+    }
 
 
 @login_required

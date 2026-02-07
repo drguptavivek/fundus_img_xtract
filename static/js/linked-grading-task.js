@@ -18,6 +18,82 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const form = document.querySelector('form[data-grading-form="true"]');
     if (form) {
+        const submitButtons = form.querySelectorAll('button[type="submit"]');
+        const primaryTaskInput = form.querySelector('input[name="task_uuid"]');
+        const primaryToast = document.getElementById('linked-primary-toast');
+        const primaryTaskUuid = primaryTaskInput ? primaryTaskInput.value : null;
+        let toastTimer = null;
+
+        const updateDotState = () => {
+            panels.forEach(panel => {
+                const taskUuid = panel.dataset.taskUuid;
+                if (!taskUuid) {
+                    return;
+                }
+                const dot = document.querySelector(`[data-panel-dot="${taskUuid}"]`);
+                if (!dot) {
+                    return;
+                }
+                const checked = panel.querySelector(`input[type="radio"][name="label_id_${taskUuid}"]:checked`);
+                const hasGrade = dot.dataset.hasGrade === 'true';
+                const isComplete = Boolean(checked) || hasGrade;
+
+                dot.classList.remove('bg-success', 'bg-danger');
+                dot.classList.add(isComplete ? 'bg-success' : 'bg-danger');
+            });
+        };
+
+        const showPrimaryToast = () => {
+            if (!primaryToast) {
+                return;
+            }
+            primaryToast.classList.remove(LINKED_CLASSES.HIDDEN);
+            if (toastTimer) {
+                window.clearTimeout(toastTimer);
+            }
+            toastTimer = window.setTimeout(() => {
+                primaryToast.classList.add(LINKED_CLASSES.HIDDEN);
+            }, 2200);
+        };
+
+        const updatePrimaryFeedback = (panel) => {
+            if (!primaryTaskUuid || !primaryToast) {
+                return;
+            }
+            if (!panel || panel.dataset.taskUuid !== primaryTaskUuid) {
+                return;
+            }
+            const checked = panel.querySelector(`input[type="radio"][name="label_id_${primaryTaskUuid}"]:checked`);
+            if (checked) {
+                showPrimaryToast();
+            } else {
+                primaryToast.classList.add(LINKED_CLASSES.HIDDEN);
+            }
+        };
+
+        const updateSubmitState = () => {
+            const editablePanels = document.querySelectorAll('.linked-grading-panel[data-read-only="false"]');
+            let allComplete = editablePanels.length > 0;
+
+            editablePanels.forEach(panel => {
+                const taskUuid = panel.dataset.taskUuid;
+                if (!taskUuid) {
+                    return;
+                }
+                const checked = panel.querySelector(`input[type="radio"][name="label_id_${taskUuid}"]:checked`);
+                if (!checked) {
+                    allComplete = false;
+                }
+            });
+
+            submitButtons.forEach(button => {
+                button.disabled = !allComplete;
+            });
+        };
+
+        updateSubmitState();
+        updateDotState();
+
         form.addEventListener('submit', (event) => {
             const error = document.getElementById('linked-validation-error');
             if (error) {
@@ -52,6 +128,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     error.textContent = 'Please grade all required panels before submitting.';
                     error.classList.remove(LINKED_CLASSES.HIDDEN);
                 }
+            }
+        });
+
+        document.addEventListener('change', (event) => {
+            if (event.target && event.target.matches('input[type="radio"]')) {
+                updateDotState();
+                const panel = event.target.closest('.linked-grading-panel');
+                updatePrimaryFeedback(panel);
+                updateSubmitState();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (event.target && event.target.matches('[data-clear-selection]')) {
+                updateDotState();
+                const panel = event.target.closest('.linked-grading-panel');
+                updatePrimaryFeedback(panel);
+                updateSubmitState();
             }
         });
     }

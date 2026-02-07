@@ -1371,3 +1371,28 @@ audio {
 [data-bs-theme="dark"] audio.form-control {
   filter: none;
 }
+
+.linked-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.linked-dot {
+  line-height: 0;
+}
+
+.linked-primary-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13, 110, 253, 0.95);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  z-index: 1050;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}

@@ -17,16 +17,9 @@
         <div class="d-flex flex-wrap gap-3 small">
           <div class="d-flex align-items-center">
             <span class="text-muted me-1">Primary Disease:</span>
-            <strong class="mb-0">{{ task.disease.name }}</strong>
-            <span class="text-muted mx-2">Task ID:</span>
-            <code class="mb-0">{{ task.id }}</code>
-            <span class="text-muted mx-2">Status:</span>
-            <strong class="text-capitalize mb-0">{{ task.state }}</strong>
-          </div>
-
-          <div class="d-flex align-items-center">
-            <span class="text-muted me-1">Status:</span>
-            <strong class="text-capitalize mb-0">{{ task.state }}</strong>
+            <strong class="mb-0">
+              {{ task.disease.name }} ({{ task.id }}: {{ task.state }})
+            </strong>
           </div>
           <div class="d-flex align-items-center">
             <span class="text-muted me-1">Lab/Unit:</span>
@@ -37,7 +30,9 @@
             <span class="text-muted me-1">Linked Task Status:</span>
             <strong class="mb-0">
               {% for panel in linked_panels %}
+                {% if panel.task.id != task.id %}
                 {{ panel.task.disease.name }} ({{ panel.task.id }}: {{ panel.task.state }}){% if not loop.last %}, {% endif %}
+                {% endif %}
               {% endfor %}
             </strong>
           </div>
@@ -160,6 +155,25 @@
             <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-target="#linked-grading-carousel"
               data-bs-slide="next"> &gt; </button>
           </div>
+          <div class="d-flex justify-content-center gap-2 mb-3">
+            {% for panel in linked_panels %}
+            {% set panel_uuid = panel.task.uuid %}
+            {% set is_done = panel.existing_grade is not none %}
+            <button
+              type="button"
+              class="linked-dot btn btn-sm p-0 border-0 bg-transparent"
+              data-bs-target="#linked-grading-carousel"
+              data-bs-slide-to="{{ loop.index0 }}"
+              aria-label="Go to {{ panel.task.disease.name }}"
+            >
+              <span
+                class="linked-status-dot {{ 'bg-success' if is_done else 'bg-danger' }}"
+                data-panel-dot="{{ panel_uuid }}"
+                data-has-grade="{{ 'true' if is_done else 'false' }}"
+              ></span>
+            </button>
+            {% endfor %}
+          </div>
           <div id="linked-grading-carousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">
             <div class="carousel-inner">
               {% for panel in linked_panels %}
@@ -168,20 +182,20 @@
               <div class="carousel-item {% if loop.first %}active{% endif %}">
                 <div class="linked-grading-panel" data-task-uuid="{{ panel_uuid }}" data-read-only="{{ 'true' if panel_readonly else 'false' }}">
                   <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0">Grade {{ panel.task.disease.name }}</h6>
+                    <h6 class="mb-0">{{ panel.task.disease.name }}</h6>
                     {% if panel.existing_grade %}
                     <span class="badge bg-light text-dark">Existing: {{ panel.existing_grade.label.impression }}</span>
                     {% endif %}
                   </div>
 
                   <div class="mb-2">
-                    <label class="form-label">Select a Grade</label>
+                    <label class="form-label">Select a Grade and its Features</label>
                     <div class="d-flex flex-column gap-2 linked-impression-group" role="group" aria-label="Impression">
                       {% for opt in panel.disease_gradings %}
                       {% set oid = 'imp-' ~ panel_uuid ~ '-' ~ opt.id %}
                       {% set btn_class = 'btn-outline-primary' %}
                       <input type="radio" class="btn-check" name="label_id_{{ panel_uuid }}" id="{{ oid }}"
-                        value="{{ opt.id }}" autocomplete="off" required {% if panel.existing_grade and
+                        value="{{ opt.id }}" autocomplete="off" {% if panel.existing_grade and
                         panel.existing_grade.disease_grading_id==opt.id %}checked{% endif %} {% if panel_readonly
                         %}disabled{% endif %}>
                       <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center"
@@ -348,6 +362,12 @@
     </div>
   </div>
 </div>
+
+{% if linked_mode %}
+<div id="linked-primary-toast" class="linked-primary-toast d-none" role="status" aria-live="polite">
+  Mark features, Grade next Disease.
+</div>
+{% endif %}
 
 {% endblock %}
 {% block page_scripts %}

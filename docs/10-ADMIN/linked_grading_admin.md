@@ -35,3 +35,18 @@ This report flags cases where linked tasks exist for the same image but are out 
 - Primary `resident2_done`/`final` + linked `resident_done`
 
 The report is read-only and intended for monitoring and follow-up workflow usage.
+
+## Backfill Linked Tasks for DR
+
+If DR tasks existed before linked diseases were configured, use the one-off script:
+
+```bash
+uv run python scripts/backfill_linked_tasks_dr.py --limit 100
+uv run python scripts/backfill_linked_tasks_dr.py --apply
+```
+
+Notes:
+- Only DR primary tasks are scanned (encounter + direct).
+- Only DR primary tasks in `pending` state are eligible.
+- Linked tasks are created only when the image is currently verified.
+- The script is dry-run by default; use `--apply` to write changes.

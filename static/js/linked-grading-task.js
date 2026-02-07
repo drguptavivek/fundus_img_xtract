@@ -15,6 +15,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const panels = document.querySelectorAll('.linked-grading-panel');
     panels.forEach(panel => initPanel(panel));
+
+    const form = document.querySelector('form[data-grading-form="true"]');
+    if (form) {
+        form.addEventListener('submit', (event) => {
+            const error = document.getElementById('linked-validation-error');
+            if (error) {
+                error.classList.add(LINKED_CLASSES.HIDDEN);
+            }
+
+            const editablePanels = document.querySelectorAll('.linked-grading-panel[data-read-only="false"]');
+            if (editablePanels.length === 0) {
+                event.preventDefault();
+                if (error) {
+                    error.textContent = 'No editable linked panels are available for submission.';
+                    error.classList.remove(LINKED_CLASSES.HIDDEN);
+                }
+                return;
+            }
+
+            let missing = false;
+            editablePanels.forEach(panel => {
+                const taskUuid = panel.dataset.taskUuid;
+                if (!taskUuid) {
+                    return;
+                }
+                const checked = panel.querySelector(`input[type="radio"][name="label_id_${taskUuid}"]:checked`);
+                if (!checked) {
+                    missing = true;
+                }
+            });
+
+            if (missing) {
+                event.preventDefault();
+                if (error) {
+                    error.textContent = 'Please grade all required panels before submitting.';
+                    error.classList.remove(LINKED_CLASSES.HIDDEN);
+                }
+            }
+        });
+    }
 });
 
 function initPanel(panel) {
@@ -89,7 +129,13 @@ function initPanel(panel) {
     }
 
     radios.forEach(radio => {
-        radio.addEventListener('change', syncIcons);
+        radio.addEventListener('change', () => {
+            const error = document.getElementById('linked-validation-error');
+            if (error) {
+                error.classList.add(LINKED_CLASSES.HIDDEN);
+            }
+            syncIcons();
+        });
     });
 
     syncIcons();

@@ -10,6 +10,7 @@ from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
+from utils.dualGradingKPIs import get_user_kpi_linked_followup_counts
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
@@ -228,6 +229,8 @@ def index():
         
         # Calculate completed KPIs using the utility function
         kpi_completed_data = get_user_kpi_completed_task_count_data(db, current_user.id)
+
+        linked_followup_counts_by_disease = get_user_kpi_linked_followup_counts(db, current_user.id)
         
         # Process completed KPI data from the utility function
         for disease in all_diseases:
@@ -280,5 +283,6 @@ def index():
         kpi_resident2_completed_by_disease=kpi_resident2_completed_by_disease,
         kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
         user_eligibility=user_eligibility,
-        diseases=diseases_data
+        diseases=diseases_data,
+        linked_followup_counts_by_disease=linked_followup_counts_by_disease,
     )

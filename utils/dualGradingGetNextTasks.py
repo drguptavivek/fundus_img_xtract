@@ -4,7 +4,7 @@ Utility functions for getting the next eligible dual grading tasks.
 
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, exists, or_, func
-from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade, TaskTracker
+from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade, TaskTracker, LinkedDiseaseGrading
 from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
@@ -77,6 +77,54 @@ def _has_user_graded_task_6hr(db, user_id: int, task_id: int) -> bool:
             return True
     
     return False
+
+
+def _exclude_linked_state_mismatches(db, query, disease_id: int):
+    linked_ids = get_linked_disease_ids(db, disease_id)
+    if not linked_ids:
+        return query
+
+    LinkedTask = aliased(GradingTask)
+
+    image_match = or_(
+        and_(
+            GradingTask.encounter_file_id.isnot(None),
+            GradingTask.encounter_file_id == LinkedTask.encounter_file_id,
+        ),
+        and_(
+            GradingTask.direct_image_upload_id.isnot(None),
+            GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id,
+        ),
+        and_(
+            GradingTask.patient_encounter_id.isnot(None),
+            GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+        ),
+    )
+
+    mismatch_filter = or_(
+        and_(GradingTask.state == "resident_done", LinkedTask.state == "pending"),
+        and_(
+            GradingTask.state.in_(["resident2_done", "final"]),
+            LinkedTask.state == "resident_done",
+        ),
+    )
+
+    mismatch_exists = (
+        exists()
+        .select_from(LinkedTask)
+        .where(image_match)
+        .where(LinkedTask.disease_id.in_(linked_ids))
+        .where(
+            and_(
+                LinkedDiseaseGrading.primary_disease_id == GradingTask.disease_id,
+                LinkedDiseaseGrading.linked_disease_id == LinkedTask.disease_id,
+                LinkedDiseaseGrading.is_active.is_(True),
+            )
+        )
+        .where(mismatch_filter)
+    )
+
+    return query.filter(~mismatch_exists)
 
 
 def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list) -> list:
@@ -152,6 +200,9 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
              TaskTracker.role_slot == role_slot
         ).exists()
         query = query.filter(GradingTask.state == "resident_done", ~tracker_exists)
+
+    if role_slot in {"resident", "resident2"}:
+        query = _exclude_linked_state_mismatches(db, query, disease_id)
     
     # Get all matching tasks
     tasks = query.all()
@@ -480,6 +531,9 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
              TaskTracker.role_slot == role_slot
         ).exists()
         query = query.filter(GradingTask.state == "resident_done", ~tracker_exists)
+
+    if role_slot in {"resident", "resident2"}:
+        query = _exclude_linked_state_mismatches(db, query, disease_id)
     
     conflicting_slots: List[str] = []
     if role_slot == "resident":
@@ -508,6 +562,139 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
         return task
 
     return None
+
+
+def get_next_linked_followup_task_atomic(
+    user_id: int,
+    primary_disease_id: int,
+    linked_disease_id: int,
+    db=None,
+):
+    """
+    Get the next eligible linked-followup task for a user, preferring resident2 when available.
+    Returns (task, slot) or (None, None).
+    """
+    if db is not None:
+        return _get_next_linked_followup_task_atomic_with_session(
+            user_id, primary_disease_id, linked_disease_id, db
+        )
+
+    with transaction_scope() as db:
+        return _get_next_linked_followup_task_atomic_with_session(
+            user_id, primary_disease_id, linked_disease_id, db
+        )
+
+
+def _get_next_linked_followup_task_atomic_with_session(
+    user_id: int,
+    primary_disease_id: int,
+    linked_disease_id: int,
+    db,
+):
+    user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
+    if not user:
+        return None, None
+
+    slot_order = ["resident"]
+    if user.has_role("ophthalmologist"):
+        slot_order = ["resident2", "resident"]
+
+    for slot in slot_order:
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, primary_disease_id, slot)
+        if not eligible_lab_unit_ids:
+            continue
+
+        task = _atomically_get_and_lock_linked_followup_task(
+            db,
+            user_id,
+            primary_disease_id,
+            linked_disease_id,
+            slot,
+            eligible_lab_unit_ids,
+        )
+        if task is not None:
+            return task, slot
+
+    return None, None
+
+
+def _atomically_get_and_lock_linked_followup_task(
+    db,
+    user_id: int,
+    primary_disease_id: int,
+    linked_disease_id: int,
+    slot: str,
+    eligible_lab_unit_ids: list,
+):
+    PrimaryTask = aliased(GradingTask)
+    LinkedTask = aliased(GradingTask)
+
+    image_match = or_(
+        and_(
+            PrimaryTask.encounter_file_id.isnot(None),
+            PrimaryTask.encounter_file_id == LinkedTask.encounter_file_id,
+        ),
+        and_(
+            PrimaryTask.direct_image_upload_id.isnot(None),
+            PrimaryTask.direct_image_upload_id == LinkedTask.direct_image_upload_id,
+        ),
+        and_(
+            PrimaryTask.patient_encounter_id.isnot(None),
+            PrimaryTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+        ),
+    )
+
+    if slot == "resident2":
+        mismatch_filter = and_(
+            PrimaryTask.state.in_(["resident2_done", "final"]),
+            LinkedTask.state == "resident_done",
+        )
+    else:
+        mismatch_filter = and_(
+            PrimaryTask.state == "resident_done",
+            LinkedTask.state == "pending",
+        )
+
+    linked_tracker_exists = db.query(TaskTracker.id).filter(
+        TaskTracker.task_id == LinkedTask.id,
+        TaskTracker.role_slot == slot,
+    ).exists()
+
+    conflicting_slots = ["resident2"] if slot == "resident" else ["resident"]
+    conflict_exists = (
+        db.query(Grade.id)
+        .filter(
+            Grade.task_id == LinkedTask.id,
+            Grade.grader_user_id == user_id,
+            Grade.role_slot.in_(conflicting_slots),
+        )
+    )
+
+    query = (
+        db.query(PrimaryTask)
+        .join(LinkedTask, image_match)
+        .join(
+            LinkedDiseaseGrading,
+            and_(
+                LinkedDiseaseGrading.primary_disease_id == PrimaryTask.disease_id,
+                LinkedDiseaseGrading.linked_disease_id == LinkedTask.disease_id,
+                LinkedDiseaseGrading.is_active.is_(True),
+            ),
+        )
+        .filter(PrimaryTask.disease_id == primary_disease_id)
+        .filter(LinkedTask.disease_id == linked_disease_id)
+        .filter(PrimaryTask.lab_unit_id.in_(eligible_lab_unit_ids))
+        .filter(mismatch_filter)
+        .filter(~linked_tracker_exists)
+        .filter(~conflict_exists.exists())
+    )
+
+    task = query.with_for_update().order_by(func.random()).first()
+    if task is None:
+        return None
+
+    _ensure_task_uuid(db, task)
+    return task
 
 
 def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible_lab_unit_ids: list):

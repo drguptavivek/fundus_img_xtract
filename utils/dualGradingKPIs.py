@@ -7,11 +7,55 @@ This design allows for better transaction management and session reuse.
 """
 
 from sqlalchemy.orm import selectinload, aliased
-from sqlalchemy import and_, or_, func
-from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading
+from sqlalchemy import and_, or_, func, exists
+from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from typing import Dict, Optional, List, Tuple
+
+
+def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
+    linked_ids = get_linked_disease_ids(db, disease_id)
+    if not linked_ids:
+        return query
+
+    LinkedTask = aliased(GradingTask)
+    image_match = or_(
+        and_(
+            GradingTask.encounter_file_id.isnot(None),
+            GradingTask.encounter_file_id == LinkedTask.encounter_file_id,
+        ),
+        and_(
+            GradingTask.direct_image_upload_id.isnot(None),
+            GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id,
+        ),
+        and_(
+            GradingTask.patient_encounter_id.isnot(None),
+            GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+        ),
+    )
+    mismatch_filter = or_(
+        and_(GradingTask.state == "resident_done", LinkedTask.state == "pending"),
+        and_(
+            GradingTask.state.in_(["resident2_done", "final"]),
+            LinkedTask.state == "resident_done",
+        ),
+    )
+    mismatch_exists = (
+        exists()
+        .select_from(LinkedTask)
+        .where(image_match)
+        .where(LinkedTask.disease_id.in_(linked_ids))
+        .where(
+            and_(
+                LinkedDiseaseGrading.primary_disease_id == GradingTask.disease_id,
+                LinkedDiseaseGrading.linked_disease_id == LinkedTask.disease_id,
+                LinkedDiseaseGrading.is_active.is_(True),
+            )
+        )
+        .where(mismatch_filter)
+    )
+    return query.filter(~mismatch_exists)
 
 
 def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str, int]]:
@@ -115,6 +159,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     )
                 )
             )
+            q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             q = apply_scoping(q, GradingTask, user, 'grading')
             counts['resident_pending'] = q.count()
         
@@ -132,6 +177,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     )
                 )
             )
+            q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             q = apply_scoping(q, GradingTask, user, 'grading')
             counts['resident2_pending'] = q.count()
         
@@ -319,3 +365,119 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         kpi_data[disease_name] = counts
     
     return kpi_data
+
+
+def get_user_kpi_linked_followup_counts(db, user_id: int) -> Dict[str, List[Dict[str, int | str]]]:
+    """
+    Get counts of linked-task state mismatches by primary disease and linked disease.
+    Combines resident and resident2 follow-up conditions.
+    """
+    user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
+    if not user:
+        return {}
+
+    has_resident_role = user.has_role('resident')
+    has_resident2_role = user.has_role('ophthalmologist')
+    if not (has_resident_role or has_resident2_role):
+        return {}
+
+    diseases = db.query(Disease).all()
+    disease_names = {disease.id: disease.name for disease in diseases}
+
+    eligible_roles = db.query(UserDiseaseUnitRole).filter(
+        UserDiseaseUnitRole.user_id == user_id,
+        UserDiseaseUnitRole.active == True
+    ).all()
+    if not eligible_roles:
+        return {}
+
+    disease_lab_units = {}
+    for role in eligible_roles:
+        primary_id = role.disease_id
+        linked_ids = get_linked_disease_ids(db, primary_id)
+        all_ids = [primary_id] + linked_ids
+        for disease_id in all_ids:
+            is_currently_primary = (disease_id == primary_id)
+            if disease_id not in disease_lab_units:
+                disease_lab_units[disease_id] = {
+                    'lab_units': set(),
+                    'can_grade_resident': False,
+                    'can_grade_resident2': False,
+                    'is_linked_only': not is_currently_primary,
+                }
+            else:
+                if is_currently_primary:
+                    disease_lab_units[disease_id]['is_linked_only'] = False
+
+            disease_lab_units[disease_id]['lab_units'].add(role.lab_unit_id)
+            disease_lab_units[disease_id]['can_grade_resident'] |= role.can_grade_resident
+            disease_lab_units[disease_id]['can_grade_resident2'] |= role.can_grade_resident2
+
+    results: Dict[str, List[Dict[str, int | str]]] = {}
+
+    for disease_id, info in disease_lab_units.items():
+        if info.get('is_linked_only'):
+            continue
+
+        if not (info['can_grade_resident'] or info['can_grade_resident2']):
+            continue
+
+        disease_name = disease_names.get(disease_id, f"Unknown Disease {disease_id}")
+        lab_unit_ids = list(info['lab_units'])
+        if not lab_unit_ids:
+            continue
+
+        PrimaryTask = aliased(GradingTask)
+        LinkedTask = aliased(GradingTask)
+        LinkedDisease = aliased(Disease)
+
+        image_match = or_(
+            and_(
+                PrimaryTask.encounter_file_id.isnot(None),
+                PrimaryTask.encounter_file_id == LinkedTask.encounter_file_id,
+            ),
+            and_(
+                PrimaryTask.direct_image_upload_id.isnot(None),
+                PrimaryTask.direct_image_upload_id == LinkedTask.direct_image_upload_id,
+            ),
+            and_(
+                PrimaryTask.patient_encounter_id.isnot(None),
+                PrimaryTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+            ),
+        )
+        mismatch_filter = or_(
+            and_(PrimaryTask.state == "resident_done", LinkedTask.state == "pending"),
+            and_(
+                PrimaryTask.state.in_(["resident2_done", "final"]),
+                LinkedTask.state == "resident_done",
+            ),
+        )
+
+        q = (
+            db.query(LinkedDisease.id, LinkedDisease.name, func.count(func.distinct(PrimaryTask.id)))
+            .select_from(PrimaryTask)
+            .join(LinkedTask, image_match)
+            .join(
+                LinkedDiseaseGrading,
+                and_(
+                    LinkedDiseaseGrading.primary_disease_id == PrimaryTask.disease_id,
+                    LinkedDiseaseGrading.linked_disease_id == LinkedTask.disease_id,
+                    LinkedDiseaseGrading.is_active.is_(True),
+                ),
+            )
+            .join(LinkedDisease, LinkedDisease.id == LinkedTask.disease_id)
+            .filter(PrimaryTask.disease_id == disease_id)
+            .filter(PrimaryTask.lab_unit_id.in_(lab_unit_ids))
+            .filter(mismatch_filter)
+            .group_by(LinkedDisease.id, LinkedDisease.name)
+        )
+
+        q = apply_scoping(q, PrimaryTask, user, 'grading')
+        rows = q.all()
+        if rows:
+            results[disease_name] = [
+                {"id": row[0], "name": row[1], "count": row[2]}
+                for row in rows
+            ]
+
+    return results

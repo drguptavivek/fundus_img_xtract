@@ -21,6 +21,11 @@ Verification is centralized at the primary disease level:
 - **Lab Unit Stability**: Once a task is created for a lab unit, its `lab_unit_id` is never mutated, preserving the ownership of the grading task even in linked workflows.
 - **State Independence**: While tasks are created together, they maintain independent states (`pending`, `resident_done`, etc.) and require individual grading, though they are usually submitted together in the UI.
 
+## On-Demand Creation Policy
+- The grading UI does not create linked tasks on-demand.
+- Only the task creation service creates linked tasks at primary task creation time.
+- Legacy primaries created before a link existed remain unlinked unless backfilled.
+
 ## Dashboard Visibility Rules
 
 ### Task Filtering by Role and State
@@ -28,6 +33,11 @@ Verification is centralized at the primary disease level:
 **For Resident & Resident2 Graders:**
 - Show task if primary disease is in 'pending' or 'resident2_done' state (resident) / 'resident_done' state (resident2)
 - Show all primary tasks regardless of linked disease state (both need to grade everything)
+
+**Linked mismatch exclusion (resident/resident2):**
+- Primary tasks are excluded when linked tasks exist for the same image and a mismatch state is detected:
+  - Primary `resident_done` + linked `pending`
+  - Primary `resident2_done`/`final` + linked `resident_done`
 
 **For Arbitrators:**
 - Show task ONLY if any disease (primary OR linked) is in 'arbitration' state
@@ -46,3 +56,7 @@ Tasks move through states independently:
 - **Resident/Resident2**: Submit grades for all diseases in linked group (bulk submission)
 - **Arbitrator**: Submit decisions for editable diseases only (based on state), read-only diseases shown for context
 - Each disease's consensus is resolved based on its own grades (resident, resident2, arbitrator)
+
+### Linked Follow-up Submissions
+- Follow-up UI submits only editable linked panels (read-only panels are excluded).
+- Client and server enforce that all editable linked panels are graded before submission.

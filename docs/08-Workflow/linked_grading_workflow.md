@@ -54,3 +54,48 @@ When the user clicks "Save & Close" or "Save & Next", the form submits data for 
 
 ### Navigation (Save & Next)
 The "Save & Next" button intelligently finds the next eligible task for the user, prioritizing the primary disease type they were just working on, ensuring a smooth transition between different patient images.
+
+## Linked Task Creation Policy
+
+- Linked tasks are created only at primary task creation time (task service).
+- The grading UI does not create missing linked tasks on-demand.
+- If a linked relationship was added after primary tasks existed, those older primaries will not have linked tasks unless backfilled.
+
+## Inconsistency Guardrails
+
+- Primary tasks are excluded from normal resident/resident2 allocation when linked tasks exist for the same image and a state mismatch is detected:
+  - Primary `resident_done` + linked `pending`
+  - Primary `resident2_done`/`final` + linked `resident_done`
+- This prevents the main queue from accumulating inconsistent primary tasks.
+
+## Linked Follow-up Queue
+
+When mismatches exist (and linked tasks already exist), a follow-up entrypoint appears under the primary disease card:
+- **Label**: `Pending <LinkedDiseaseName>`
+- **Count**: Combined resident + resident2 mismatches
+- **Slot preference**: If the user can grade resident2, follow-up assigns resident2 first; otherwise resident.
+
+### Follow-up Task View
+- Primary panel is always read-only.
+- Only linked panels in the mismatch state are editable.
+- Submission is restricted to editable linked panels only.
+
+## Validation Rules for Linked Panels
+
+- Client-side: all editable linked panels must have a selection before submit.
+- Server-side: only editable panels are included in `linked_task_uuids`; read-only panels do not block submission.
+
+## Follow-up Flow Diagram
+
+```mermaid
+flowchart TD
+    A[Primary task created] --> B[Linked tasks created]
+    B --> C[Normal allocation]
+    C -->|Mismatch detected| D[Exclude primary from main queue]
+    D --> E[Show Pending <LinkedDisease> button]
+    E --> F[Linked follow-up route]
+    F --> G[Primary panel read-only]
+    F --> H[Editable linked panels only]
+    H --> I[Submit linked grades]
+    I --> J[Resolve mismatch]
+```

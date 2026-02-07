@@ -274,43 +274,47 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 flash("Invalid slot type.", "danger")
                 return redirect(url_for("grading.index"))
             
-            # Check task state validity for the requested slot at assignment time
-            state_validity = True
-            if slot_type == 'resident':
-                # Resident normally sees 'pending' tasks; allow resident2_done when Resident2 grade exists but Resident grade is missing
-                allowed_states = ['pending']
-                if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
-                    allowed_states.append('resident2_done')
+            linked_followup = request.args.get("linked_followup", "").lower() == "true"
+            linked_followup_disease_id = request.args.get("linked_disease_id", type=int)
 
-                if task.state not in allowed_states:
-                    flash(f"Task is no longer available for resident grading (current state: {task.state}).", "danger")
-                    state_validity = False
-            elif slot_type == 'resident2':
-                # Resident2 should only be assigned to 'resident_done' tasks
-                if task.state not in ['resident_done']:
-                    flash(f"Task is no longer available for resident2 grading (current state: {task.state}).", "danger")
-                    state_validity = False
-            elif slot_type == 'arbitrator':
-                # Arbitrator should only be assigned to 'arbitration' tasks, or 'final' for recent revisions
-                if task.state not in ['arbitration', 'final']:
-                    flash(f"Task is no longer available for arbitration (current state: {task.state}).", "danger")
-                    state_validity = False
-            
-            if not state_validity:
-                return redirect(url_for("grading.index"))
+            if not linked_followup:
+                # Check task state validity for the requested slot at assignment time
+                state_validity = True
+                if slot_type == 'resident':
+                    # Resident normally sees 'pending' tasks; allow resident2_done when Resident2 grade exists but Resident grade is missing
+                    allowed_states = ['pending']
+                    if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
+                        allowed_states.append('resident2_done')
 
-            conflicting_slots = []
-            conflict_message = None
-            if slot_type == 'resident':
-                conflicting_slots = ['resident2']
-                conflict_message = "You already graded this task in the resident2 slot."
-            elif slot_type == 'resident2':
-                conflicting_slots = ['resident']
-                conflict_message = "You already graded this task in the resident slot."
+                    if task.state not in allowed_states:
+                        flash(f"Task is no longer available for resident grading (current state: {task.state}).", "danger")
+                        state_validity = False
+                elif slot_type == 'resident2':
+                    # Resident2 should only be assigned to 'resident_done' tasks
+                    if task.state not in ['resident_done']:
+                        flash(f"Task is no longer available for resident2 grading (current state: {task.state}).", "danger")
+                        state_validity = False
+                elif slot_type == 'arbitrator':
+                    # Arbitrator should only be assigned to 'arbitration' tasks, or 'final' for recent revisions
+                    if task.state not in ['arbitration', 'final']:
+                        flash(f"Task is no longer available for arbitration (current state: {task.state}).", "danger")
+                        state_validity = False
+                
+                if not state_validity:
+                    return redirect(url_for("grading.index"))
 
-            if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
-                flash(conflict_message or "You already graded this task in the paired slot.", "warning")
-                return redirect(url_for("grading.index"))
+                conflicting_slots = []
+                conflict_message = None
+                if slot_type == 'resident':
+                    conflicting_slots = ['resident2']
+                    conflict_message = "You already graded this task in the resident2 slot."
+                elif slot_type == 'resident2':
+                    conflicting_slots = ['resident']
+                    conflict_message = "You already graded this task in the resident slot."
+
+                if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
+                    flash(conflict_message or "You already graded this task in the paired slot.", "warning")
+                    return redirect(url_for("grading.index"))
             
             # Check if user is eligible for the specified slot
             if not get_user_eligibility_for_task(db, current_user.id, task_id, slot_type):
@@ -461,6 +465,11 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         )
 
                 linked_disease_ids = get_linked_disease_ids(db, task.disease_id)
+                if linked_followup and linked_followup_disease_id:
+                    if linked_followup_disease_id not in linked_disease_ids:
+                        flash("Linked follow-up disease is not associated with this task.", "warning")
+                        return redirect(url_for("grading.index"))
+                    linked_disease_ids = [linked_followup_disease_id]
                 if linked_disease_ids:
                     linked_task_list = [task]
                     for linked_disease_id in linked_disease_ids:
@@ -499,8 +508,9 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         if panel_conflicting_slots and has_user_graded_task(
                             db, current_user.id, panel_task_id, panel_conflicting_slots
                         ):
-                            flash(panel_conflict_message or "You already graded this task in the paired slot.", "warning")
-                            return redirect(url_for("grading.index"))
+                            if not linked_followup or panel_task_id != task.id:
+                                flash(panel_conflict_message or "You already graded this task in the paired slot.", "warning")
+                                return redirect(url_for("grading.index"))
 
                         is_eligible = get_user_eligibility_for_task(db, current_user.id, panel_task_id, slot_type)
                         eligibility_error = None
@@ -509,7 +519,9 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             eligibility_error = "You are not eligible to grade this linked task."
                             # Continue to load panel but mark it
 
-                        if slot_type == 'resident':
+                        if linked_followup and panel_task_id == task.id:
+                            pass
+                        elif slot_type == 'resident':
                             allowed_states = ['pending']
                             panel_has_resident_grade = any(
                                 grade.role_slot == "resident" for grade in panel_task.grades
@@ -538,6 +550,17 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             # or 'arbitration' state (for active adjudication).
                             pass
 
+                        if linked_followup and panel_task_id != task.id:
+                            if slot_type == "resident":
+                                if not (task.state == "resident_done" and panel_task.state == "pending"):
+                                    continue
+                            elif slot_type == "resident2":
+                                if not (
+                                    task.state in ["resident2_done", "final"]
+                                    and panel_task.state == "resident_done"
+                                ):
+                                    continue
+
                         panel_grading_data = _build_grading_data(panel_task)
                         if panel_grading_data is None:
                             return redirect(url_for("grading.index"))
@@ -554,6 +577,8 @@ def dual_grading_task(task_uuid: str, slot_type: str):
 
                         # Determine read_only status for this panel
                         panel_read_only = eligibility_error is not None
+                        if linked_followup and panel_task_id == task.id:
+                            panel_read_only = True
                         if slot_type == 'arbitrator':
                             # Arbitrator can grade 'arbitration' tasks
                             # For 'final' tasks, check if eligible for revision
@@ -587,11 +612,17 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             "guidelines": panel_grading_data["grading_guidelines"],
                             "features": panel_grading_data["grading_features"],
                             "existingSelectedFeatures": panel_existing_features,
-                            "readOnly": panel_task.state == "final",
+                            "readOnly": panel_read_only,
                             "taskUuid": panel_task.uuid,
                         }
 
                     linked_mode = len(linked_panels) > 1
+
+                    if linked_followup:
+                        editable_panels = [panel for panel in linked_panels if not panel.get("read_only")]
+                        if not editable_panels:
+                            flash("No linked follow-up panels are available for this task.", "info")
+                            return redirect(url_for("grading.index"))
             
             # If this is an arbitration task, fetch resident and resident2 grades to show to the arbitrator
             resident_grade = None
@@ -667,6 +698,7 @@ def dual_grading_submit():
     task_uuid = (request.form.get("task_uuid") or "").strip()
     linked_task_uuids_raw = (request.form.get("linked_task_uuids") or "").strip()
     primary_task_uuid = (request.form.get("primary_task_uuid") or "").strip()
+    linked_mode_flag = (request.form.get("linked_mode") or "").strip() == "1"
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
@@ -697,6 +729,12 @@ def dual_grading_submit():
     selected_features_json: str | None = None
     
     # Validate inputs
+    if linked_mode_flag and not linked_task_uuids_raw:
+        flash("No editable linked panels are available for submission.", "warning")
+        if task_uuid:
+            return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
+        return redirect(url_for("grading.index"))
+
     if not task_uuid and not linked_task_uuids_raw:
         flash("Invalid task reference.", "danger")
         return redirect(url_for("grading.index"))

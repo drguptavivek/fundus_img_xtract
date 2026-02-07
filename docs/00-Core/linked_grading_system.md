@@ -52,3 +52,23 @@ Four scenarios for arbitrator:
 - Each disease tracks grades and consensus separately
 - Arbitrator decision on DR doesn't affect DME consensus logic
 - Both can be submitted together but resolved independently
+
+## Task Creation Policy
+
+- Linked tasks are created when a primary task is created (task creation service).
+- The grading UI does not create linked tasks on-demand.
+- Legacy primaries created before a link existed remain unlinked unless backfilled.
+
+## Allocation Guardrails
+
+Primary tasks are excluded from standard resident/resident2 queues when linked tasks exist and are in mismatch states:
+- Primary `resident_done` + linked `pending`
+- Primary `resident2_done`/`final` + linked `resident_done`
+
+This prevents growing inconsistencies in the main grading queue.
+
+## Linked Follow-up Flow
+
+- Follow-up entrypoints appear per primary disease as `Pending <LinkedDiseaseName>`.
+- Follow-up grading loads the primary task for context (read-only) and opens only the mismatched linked panels for editing.
+- Resident2 is preferred when the user has eligibility; otherwise resident.

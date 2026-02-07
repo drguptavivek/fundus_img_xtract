@@ -24,3 +24,14 @@ All administrative actions are tracked in the `admin.audit` logger:
 - **Deleted**: Logs the removal of the relationship.
 
 All logs include the username of the administrator who performed the action.
+
+## Linked Task Inconsistency Report
+
+Admins can view linked task state mismatches at:
+- **UI**: `/admin/linked-task-inconsistencies`
+
+This report flags cases where linked tasks exist for the same image but are out of sync with the primary task:
+- Primary `resident_done` + linked `pending`
+- Primary `resident2_done`/`final` + linked `resident_done`
+
+The report is read-only and intended for monitoring and follow-up workflow usage.

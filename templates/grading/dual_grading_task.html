@@ -105,7 +105,9 @@
           {{ csrf_field() }}
           <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
           {% if linked_mode %}
-          <input type="hidden" name="linked_task_uuids" value="{{ linked_panels | map(attribute='task.uuid') | join(',') }}">
+          {% set editable_linked_panels = linked_panels | rejectattr('read_only') | list %}
+          <input type="hidden" name="linked_mode" value="1">
+          <input type="hidden" name="linked_task_uuids" value="{{ editable_linked_panels | map(attribute='task.uuid') | join(',') }}">
           <input type="hidden" name="primary_task_uuid" value="{{ primary_task_uuid }}">
           {% endif %}
 
@@ -123,13 +125,16 @@
           {% endif %}
 
           {% if linked_mode %}
+          <div id="linked-validation-error" class="alert alert-danger d-none">
+            Please grade all required panels before submitting.
+          </div>
           <div id="linked-grading-carousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">
             <div class="carousel-inner">
               {% for panel in linked_panels %}
               {% set panel_uuid = panel.task.uuid %}
               {% set panel_readonly = panel.read_only and not is_arbitrator_revising_recent %}
               <div class="carousel-item {% if loop.first %}active{% endif %}">
-                <div class="linked-grading-panel" data-task-uuid="{{ panel_uuid }}">
+                <div class="linked-grading-panel" data-task-uuid="{{ panel_uuid }}" data-read-only="{{ 'true' if panel_readonly else 'false' }}">
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="mb-0">Grade {{ panel.task.disease.name }}</h6>
                     {% if panel.existing_grade %}

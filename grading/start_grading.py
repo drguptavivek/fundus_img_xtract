@@ -6,6 +6,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident_task_atomic,
     get_next_eligible_resident2_task_atomic,
     get_next_eligible_arbitrator_task_atomic,
+    get_next_linked_followup_task_atomic,
 )
 from utils.linkedGradingUtils import get_primary_disease_id
 from db_transaction_manager import transaction_scope
@@ -14,6 +15,11 @@ from db_transaction_manager import transaction_scope
 def register_routes(bp):
     """Register start grading routes with the blueprint."""
     bp.add_url_rule("/grade/<int:disease_id>/<string:role_slot>", view_func=start_grading, methods=["GET"])
+    bp.add_url_rule(
+        "/linked-followup/<int:primary_disease_id>/<int:linked_disease_id>",
+        view_func=linked_followup,
+        methods=["GET"],
+    )
 
 
 @roles_required("resident", "ophthalmologist")
@@ -121,3 +127,34 @@ def start_grading(disease_id: int, role_slot: str):
 
             # Call dual_grading_task directly with slot_type as a parameter
             return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=effective_slot))
+
+
+@roles_required("resident", "ophthalmologist")
+def linked_followup(primary_disease_id: int, linked_disease_id: int):
+    with transaction_scope() as db:
+        primary_disease = db.query(Disease).filter(Disease.id == primary_disease_id).first()
+        linked_disease = db.query(Disease).filter(Disease.id == linked_disease_id).first()
+        if not primary_disease or not linked_disease:
+            flash("Disease not found.", "danger")
+            return redirect(url_for("grading.index"))
+
+        task, slot = get_next_linked_followup_task_atomic(
+            current_user.id,
+            primary_disease_id,
+            linked_disease_id,
+            db=db,
+        )
+
+        if task is None:
+            flash("No linked follow-up tasks available.", "info")
+            return redirect(url_for("grading.index"))
+
+        return redirect(
+            url_for(
+                "grading.dual_grading_task",
+                task_uuid=task.uuid,
+                slot_type=slot,
+                linked_followup="true",
+                linked_disease_id=linked_disease_id,
+            )
+        )

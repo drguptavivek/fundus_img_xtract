@@ -48,10 +48,14 @@
   {% for disease in diseases %}
     {% set has_pending_tasks = false %}
     {% set show_resident_button = false %}
+    {% set linked_followup = linked_followup_counts_by_disease.get(disease.name, []) %}
+    {% set linked_followup_total = linked_followup | map(attribute='count') | sum %}
     {% if (is_resident or is_resident2) and (kpi_resident_by_disease[disease.name] > 0 or kpi_resident2_by_disease[disease.name] > 0) %}
       {% set has_pending_tasks = true %}
       {% set show_resident_button = true %}
     {% elif is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
+      {% set has_pending_tasks = true %}
+    {% elif linked_followup_total > 0 %}
       {% set has_pending_tasks = true %}
     {% endif %}
     
@@ -67,6 +71,17 @@
              class="btn btn-primary w-100 mb-2">
             Start Grading ({{ combined_pending }} pending)
           </a>
+          {% endif %}
+
+          {% if linked_followup_total > 0 %}
+          <div class="d-flex flex-column gap-2">
+            {% for item in linked_followup | sort(attribute='name') %}
+            <a href="{{ url_for('grading.linked_followup', primary_disease_id=disease.id, linked_disease_id=item.id) }}"
+               class="btn btn-outline-primary w-100">
+              Pending {{ item.name }} ({{ item.count }})
+            </a>
+            {% endfor %}
+          </div>
           {% endif %}
 
           {% if is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}

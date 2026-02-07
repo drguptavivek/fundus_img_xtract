@@ -1119,7 +1119,7 @@ class Grade(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "role_slot IN ('resident','resident2','arbitrator','ai','review','regrade_adjudicator')",
+            "role_slot IN ('resident','resident2','arbitrator','ai','review','regrade_adj')",
             name='ck_grade_role_slot_valid',
         ),
         CheckConstraint(

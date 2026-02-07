@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Regrade Task{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Regrade Task</h3>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.regrade_tasks') }}">Regrade Queue</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-3 small">
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Regrade ID:</span>
+            <strong class="mb-0">{{ regrade_task.id }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Status:</span>
+            <strong class="mb-0">{{ regrade_task.status }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Disease:</span>
+            <strong class="mb-0">{{ regrade_task.disease.name if regrade_task.disease else '-' }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Lab/Unit:</span>
+            <strong class="mb-0">{{ regrade_task.lab_unit.name if regrade_task.lab_unit else '-' }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Source Task:</span>
+            <strong class="mb-0">{{ regrade_task.source_task_id }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Assigned To:</span>
+            <strong class="mb-0">{{ regrade_task.assigned_to.username if regrade_task.assigned_to else '-' }}</strong>
+          </div>
+          {% if regrade_task.notes %}
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Notes:</span>
+            <strong class="mb-0">{{ regrade_task.notes }}</strong>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-9" id="image-card">
+    {% if image_uuid %}
+    {% include 'grading/_viewer_card.html' %}
+    {% else %}
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <p class="text-muted">Image not available</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-12 col-lg-3" id="image-grading-controls">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        {% if regrade_task.status == "regrade_done" %}
+        <div class="mb-3 small text-muted">
+          <strong class="text-warning">This regrade was already completed. Saving will update it.</strong>
+        </div>
+        {% endif %}
+        {% if existing_grade and not allow_revision %}
+        <div class="mb-3 small text-muted">
+          <strong class="text-danger">Revision window has closed (24 hours).</strong>
+        </div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('grading.regrade_task_submit', regrade_task_id=regrade_task.id) }}"
+          data-grading-form="true">
+          {{ csrf_field() }}
+
+          <div class="mb-2">
+            <label class="form-label mt-2">Select a Grade for <strong class="mb-0">{{ regrade_task.disease.name if regrade_task.disease else '-' }}</strong></label>
+            <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
+              {% for opt in disease_gradings %}
+              {% set oid = 'imp-' ~ opt.id %}
+              <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}"
+                autocomplete="off" required {% if existing_grade and existing_grade.disease_grading_id==opt.id %}checked{% endif %}>
+              <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center"
+                for="{{ oid }}">
+                <span>{{ opt.impression }}</span>
+                <span class="sel-icon d-none">✓</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-2" id="features-section" style="display: none;">
+            <label class="form-label">Relevant Features</label>
+            <div id="features-container" class="d-flex flex-column gap-2"></div>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Remarks (optional)</label>
+            <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2">{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
+          </div>
+
+          <div class="d-flex justify-content-between gap-2">
+            <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" {% if existing_grade and not allow_revision %}disabled{% endif %}>
+                Submit & Close
+              </button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" {% if existing_grade and not allow_revision %}disabled{% endif %}>
+                Submit & Next Random
+              </button>
+            </div>
+          </div>
+
+          <div id="grading-instructions" class="mt-3 p-3 border rounded" style="display: none;">
+            <h6 class="border-bottom pb-1 mb-2">Grading Instructions</h6>
+            <div id="instructions-content"></div>
+          </div>
+        </form>
+
+        {% if existing_grade %}
+        <div class="mt-3">
+          <h6 class="border-bottom pb-1">Your Previous Regrade</h6>
+          <div class="small mb-2 p-2 rounded">
+            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - Grader ID: {{ existing_grade.grader.id }}</div>
+            <div>{{ existing_grade.label.impression }}</div>
+            {% if existing_grade.comment %}
+            <div class="text-muted fst-italic">"{{ existing_grade.comment|mask_text_emails }}"</div>
+            {% endif %}
+            {% if existing_selected_features %}
+            <div class="mt-1">
+              <div class="small text-uppercase text-muted">Features Noted</div>
+              <ul class="list-unstyled mb-0 small">
+                {% for feature in existing_selected_features %}
+                {% if feature is mapping %}
+                <li>{{ feature.label or ('Feature #' ~ feature.id) }}</li>
+                {% else %}
+                <li>{{ feature }}</li>
+                {% endif %}
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            <div class="text-muted">{{ existing_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  window.gradingGuidelines = {{ grading_guidelines | tojson }};
+  window.taskId = "{{ regrade_task.uuid }}";
+  window.imageUuid = "{{ image_uuid }}";
+  window.currentUserId = {{ current_user_id or 'null' }};
+  window.currentSlot = "{{ current_slot or '' }}";
+  window.featuresReadOnly = false;
+  window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
+  {% if existing_selected_features %}
+  window.existingSelectedFeatures = {{ existing_selected_features | tojson }};
+  {% else %}
+  window.existingSelectedFeatures = null;
+  {% endif %}
+</script>
+<script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Regrade Tasks{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h3>Regrade Tasks</h3>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filters</h5>
+    </div>
+    <div class="card-body">
+      <form method="GET" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label" for="diseaseSelect">Disease</label>
+          <select class="form-select" id="diseaseSelect" name="disease_id">
+            <option value="">All Diseases</option>
+            {% for disease in diseases %}
+            <option value="{{ disease.id }}" {% if filters.disease_id==disease.id %}selected{% endif %}>
+              {{ disease.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="labUnitSelect">Lab Unit</label>
+          <select class="form-select" id="labUnitSelect" name="lab_unit_id">
+            <option value="">All Lab Units</option>
+            {% for lab_unit in lab_units %}
+            <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id==lab_unit.id %}selected{% endif %}>
+              {{ lab_unit.hospital.name }} - {{ lab_unit.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="statusSelect">Status</label>
+          <select class="form-select" id="statusSelect" name="status">
+            <option value="">All Statuses</option>
+            <option value="regrade_pending" {% if filters.status=='regrade_pending' %}selected{% endif %}>
+              Regrade Pending
+            </option>
+            <option value="regrade_done" {% if filters.status=='regrade_done' %}selected{% endif %}>
+              Regrade Done
+            </option>
+          </select>
+        </div>
+        {% if is_admin %}
+        <div class="col-md-3">
+          <label class="form-label" for="assignedSelect">Assigned To</label>
+          <select class="form-select" id="assignedSelect" name="assigned_to_user_id">
+            <option value="">All Adjudicators</option>
+            {% for user in regrade_adjudicators %}
+            <option value="{{ user.id }}" {% if filters.assigned_to_user_id==user.id %}selected{% endif %}>
+              {{ user.username }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="col-12 d-flex gap-2">
+          <button type="submit" class="btn btn-primary">Apply Filters</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('grading.regrade_tasks') }}">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Regrade Queue</h5>
+    </div>
+    <div class="card-body">
+      {% if tasks %}
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Disease</th>
+              <th>Lab Unit</th>
+              <th>Source Task</th>
+              <th>Image UUID</th>
+              <th>Assigned To</th>
+              <th>Notes</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for task in tasks %}
+            {% set source = task.source_task %}
+            {% set image_uuid = (
+              source.encounter_file.uuid if source and source.encounter_file else
+              source.direct_image.uuid if source and source.direct_image else
+              source.patient_encounter.uuid if source and source.patient_encounter else
+              None
+            ) %}
+            <tr>
+              <td>{{ task.id }}</td>
+              <td>
+                <span class="badge {% if task.status == 'regrade_done' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                  {{ task.status }}
+                </span>
+              </td>
+              <td>{{ task.disease.name if task.disease else '-' }}</td>
+              <td>{{ task.lab_unit.name if task.lab_unit else '-' }}</td>
+              <td>{{ task.source_task_id }}</td>
+              <td><code>{{ image_uuid or '-' }}</code></td>
+              <td>{{ task.assigned_to.username if task.assigned_to else '-' }}</td>
+              <td class="text-muted">{{ task.notes }}</td>
+              <td>{{ task.created_at | user_datetime }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-muted">No regrade tasks found for the selected filters.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

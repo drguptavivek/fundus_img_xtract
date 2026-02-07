@@ -215,8 +215,9 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         final_grades = filters.get("final_grade", [])
         has_ai_grade = filters.get("has_ai_grade")
         has_review = filters.get("has_review")
+        has_arbitrator = filters.get("has_arbitrator")
         review_grades = filters.get("review_grade", [])
-        has_consensus = filters.get("has_consensus", "has_consensus")
+        has_consensus = filters.get("has_consensus")
         consensus_method = filters.get("consensus_method")
         resident_compare = filters.get("resident_compare")
         ai_model_ids = filters.get("ai_model_id", [])
@@ -287,6 +288,15 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         elif has_review == "no":
             where_clauses.append(
                 f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
+            )
+
+        if has_arbitrator == "yes":
+            where_clauses.append(
+                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
+            )
+        elif has_arbitrator == "no":
+            where_clauses.append(
+                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
             )
 
         if has_ai_grade == "yes":

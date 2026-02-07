@@ -113,9 +113,10 @@ def discrepancy_review():
         # Get review grade filter
         has_review = request.args.get("has_review", type=str)
         review_grades = request.args.getlist("review_grade")
+        has_arbitrator = request.args.get("has_arbitrator", type=str)
         
         # Get consensus filter
-        has_consensus = request.args.get("has_consensus", default="has_consensus", type=str)
+        has_consensus = request.args.get("has_consensus", type=str)
         consensus_method = request.args.get("consensus_method", type=str)
 
         # Resident comparison filter
@@ -211,6 +212,16 @@ def discrepancy_review():
         elif has_review == "no":
             where_clauses.append(
                 f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
+            )
+
+        # Arbitrator filter (exists in MV JSON)
+        if has_arbitrator == "yes":
+            where_clauses.append(
+                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
+            )
+        elif has_arbitrator == "no":
+            where_clauses.append(
+                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
             )
 
         # Has AI grade filter
@@ -435,6 +446,7 @@ def discrepancy_review():
                 "final_grade": final_grades,
                 "has_ai_grade": has_ai_grade,
                 "has_review": has_review,
+                "has_arbitrator": has_arbitrator,
                 "review_grade": review_grades,
                 "has_consensus": has_consensus,
                 "consensus_method": consensus_method,
@@ -492,8 +504,9 @@ def discrepancy_export():
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
             "has_review": request.form.get("has_review", type=str),
+            "has_arbitrator": request.form.get("has_arbitrator", type=str),
             "review_grade": request.form.getlist("review_grade"),
-            "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
+            "has_consensus": request.form.get("has_consensus", type=str),
             "consensus_method": request.form.get("consensus_method", type=str),
             "resident_compare": request.form.get("resident_compare", type=str),
             "ai_model_id": request.form.getlist("ai_model_id"),

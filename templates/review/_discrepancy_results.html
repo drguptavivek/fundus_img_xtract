@@ -27,6 +27,7 @@
         {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{%
         endif %}
         {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
+        {% if filters.has_arbitrator %}<input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator }}">{% endif %}
         {% if filters.has_consensus %}<input type="hidden" name="has_consensus" value="{{ filters.has_consensus }}">{%
         endif %}
         {% if filters.consensus_method %}<input type="hidden" name="consensus_method"
@@ -64,6 +65,7 @@
                 final_grade=filters.final_grade or [],
                 has_ai_grade=filters.has_ai_grade,
                 has_review=filters.has_review,
+                has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                 consensus_method=filters.consensus_method,
                 resident_compare=filters.resident_compare,
@@ -80,6 +82,7 @@
                 final_grade=filters.final_grade or [],
                 has_ai_grade=filters.has_ai_grade,
                 has_review=filters.has_review,
+                has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                 consensus_method=filters.consensus_method,
                 resident_compare=filters.resident_compare,
@@ -105,7 +108,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -121,7 +125,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -150,7 +155,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -166,7 +172,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -195,7 +202,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -211,7 +219,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -239,7 +248,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -255,7 +265,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -278,7 +289,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -294,7 +306,8 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
-                    has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                     consensus_method=filters.consensus_method,
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
@@ -380,7 +393,10 @@
               <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
               <small class="text-muted d-block">{{ method_label or '' }}</small>
               {% else %}
-              <span class="text-muted">No consensus</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                data-bs-toggle="tooltip" title="Cannot review till final grade assigned">
+                Review
+              </button>
               {% endif %}
             </td>
             <td>
@@ -418,6 +434,7 @@
             <td>
               {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None)
               %}
+              {% if task.consensus %}
               <a href="{{ url_for('review.review_task_details',
                   task_id=task.id,
                   ai_model_id=ai_param,
@@ -428,6 +445,7 @@
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   has_review=filters.has_review,
+                  has_arbitrator=filters.has_arbitrator,
                   has_ai_grade=filters.has_ai_grade,
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
@@ -436,6 +454,9 @@
                   final_grade=filters.final_grade or [],
                   ai_grade=filters.ai_grade or []
                 ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+              {% else %}
+              <span class="text-muted">No consensus</span>
+              {% endif %}
               <div class="mt-1">&nbsp;</div>
               {% if task.encounter_file_uuid or task.direct_image_uuid %}
               {% set image_uuid = task.encounter_file_uuid or task.direct_image_uuid %}
@@ -470,7 +491,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -486,7 +508,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -512,7 +535,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -528,7 +552,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -550,7 +575,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
@@ -566,7 +592,8 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
+                has_arbitrator=filters.has_arbitrator,
+                has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],

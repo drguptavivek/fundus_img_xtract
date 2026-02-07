@@ -102,26 +102,6 @@
             </select>
           </div>
 
-          <div class="col-md-3 disease-dependent" {% if not filters.disease_id %}style="display: none;"{% endif %}>
-            <label for="hasConsensusSelect" class="form-label">Consensus</label>
-            <select class="form-select" id="hasConsensusSelect" name="has_consensus">
-              <option value="has_consensus" {% if filters.has_consensus=='has_consensus' %}selected{% endif %}>Has
-                Consensus</option>
-              <option value="">All Tasks</option>
-              <option value="no" {% if filters.has_consensus=='no' %}selected{% endif %}>No Consensus yet</option>
-            </select>
-          </div>
-
-
-          <div class="col-md-3 disease-dependent" {% if not filters.disease_id %}style="display: none;"{% endif %}>
-            <label for="hasReviewSelect" class="form-label">Has Review</label>
-            <select class="form-select" id="hasReviewSelect" name="has_review">
-              <option value="">All Tasks</option>
-              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Review</option>
-              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Review</option>
-            </select>
-          </div>
-
         </div>
 
         <!-- Grade Filters Row - Initially hidden until disease is selected -->
@@ -179,6 +159,24 @@
           </div>
 
           <div class="col-md-3">
+            <label for="residentCompareSelect" class="form-label">Resident vs Resident2</label>
+            <select class="form-select" id="residentCompareSelect" name="resident_compare">
+              <option value="">All Tasks</option>
+              <option value="match" {% if filters.resident_compare=='match' %}selected{% endif %}>Match</option>
+              <option value="mismatch" {% if filters.resident_compare=='mismatch' %}selected{% endif %}>Mismatch</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label for="hasArbitratorSelect" class="form-label">Has Arbitrator Grade</label>
+            <select class="form-select" id="hasArbitratorSelect" name="has_arbitrator">
+              <option value="">All Tasks</option>
+              <option value="yes" {% if filters.has_arbitrator=='yes' %}selected{% endif %}>Has Arbitrator</option>
+              <option value="no" {% if filters.has_arbitrator=='no' %}selected{% endif %}>No Arbitrator</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
             <label class="form-label">Arbitrator Grade</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
@@ -205,9 +203,18 @@
           </div>
 
           <div class="col-md-3">
+            <label for="hasReviewSelect" class="form-label">Has Review</label>
+            <select class="form-select" id="hasReviewSelect" name="has_review">
+              <option value="">All Tasks</option>
+              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Review</option>
+              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Review</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
             <label class="form-label d-flex align-items-center gap-2">
               Review Grade
-              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip"
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
                 title="Review grades are submitted by a reviewer (role_slot=review)."
                 aria-label="Review grades are submitted by a reviewer">
                 i
@@ -236,10 +243,44 @@
             </div>
           </div>
 
+        </div>
+
+        <div class="row g-3 mt-2 disease-dependent" {% if not filters.disease_id %}style="display: none;"{% endif %}>
+          <div class="col-md-3">
+            <label for="hasConsensusSelect" class="form-label d-flex align-items-center gap-2">
+              Consensus
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
+                title="Consensus indicates a finalized grade exists (match, adjudication, or review override)."
+                aria-label="Consensus indicates a finalized grade exists">
+                i
+              </button>
+            </label>
+            <select class="form-select" id="hasConsensusSelect" name="has_consensus">
+              <option value="has_consensus" {% if filters.has_consensus=='has_consensus' %}selected{% endif %}>Has
+                Consensus</option>
+              <option value="" {% if not filters.has_consensus %}selected{% endif %}>All Tasks</option>
+              <option value="no" {% if filters.has_consensus=='no' %}selected{% endif %}>No Consensus yet</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label for="consensusMethodSelect" class="form-label">Consensus Type</label>
+            <select class="form-select" id="consensusMethodSelect" name="consensus_method">
+              <option value="">All Types</option>
+              <option value="match" {% if filters.consensus_method=='match' %}selected{% endif %}>Match</option>
+              <option value="adjudication" {% if filters.consensus_method=='adjudication' %}selected{% endif %}>
+                Adjudication
+              </option>
+              <option value="task_review" {% if filters.consensus_method=='task_review' %}selected{% endif %}>
+                Review override
+              </option>
+            </select>
+          </div>
+
           <div class="col-md-3">
             <label class="form-label d-flex align-items-center gap-2">
               Final Grade
-              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip"
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
                 title="Final grade comes from consensus (match, adjudication, or review override)."
                 aria-label="Final grade comes from consensus">
                 i
@@ -266,31 +307,6 @@
                 {% endfor %}
               </ul>
             </div>
-          </div>
-        </div>
-
-        <div class="row g-3 mt-2 disease-dependent" {% if not filters.disease_id %}style="display: none;"{% endif %}>
-          <div class="col-md-3">
-            <label for="residentCompareSelect" class="form-label">Resident vs Resident2</label>
-            <select class="form-select" id="residentCompareSelect" name="resident_compare">
-              <option value="">All Tasks</option>
-              <option value="match" {% if filters.resident_compare=='match' %}selected{% endif %}>Match</option>
-              <option value="mismatch" {% if filters.resident_compare=='mismatch' %}selected{% endif %}>Mismatch</option>
-            </select>
-          </div>
-
-          <div class="col-md-3">
-            <label for="consensusMethodSelect" class="form-label">Consensus Type</label>
-            <select class="form-select" id="consensusMethodSelect" name="consensus_method">
-              <option value="">All Types</option>
-              <option value="match" {% if filters.consensus_method=='match' %}selected{% endif %}>Match</option>
-              <option value="adjudication" {% if filters.consensus_method=='adjudication' %}selected{% endif %}>
-                Adjudication
-              </option>
-              <option value="task_review" {% if filters.consensus_method=='task_review' %}selected{% endif %}>
-                Review override
-              </option>
-            </select>
           </div>
         </div>
 

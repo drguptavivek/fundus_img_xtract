@@ -18,7 +18,7 @@ class QueryLogger:
         slow_logger: logging.Logger,
         slow_threshold_ms: int,
         flush_interval_seconds: int,
-        max_sql_length: int = 500,
+        max_sql_length: Optional[int] = 500,
     ) -> None:
         self._logger = logger
         self._slow_logger = slow_logger
@@ -39,7 +39,7 @@ class QueryLogger:
 
     def record(self, statement: str, duration_ms: float) -> None:
         normalized = " ".join(statement.split())
-        if len(normalized) > self._max_sql_length:
+        if self._max_sql_length and len(normalized) > self._max_sql_length:
             normalized = normalized[: self._max_sql_length] + "..."
 
         route = "-"
@@ -96,6 +96,7 @@ def init_db_query_logger(
     *,
     slow_threshold_ms: int = 200,
     flush_interval_seconds: int = 60,
+    max_sql_length: Optional[int] = None,
 ) -> Optional[QueryLogger]:
     enabled = bool(app.debug or app.config.get("DB_QUERY_LOGGING", False))
     if not enabled:
@@ -103,11 +104,14 @@ def init_db_query_logger(
 
     logger = logging.getLogger("db_query")
     slow_logger = logging.getLogger("db_query_slow")
+    if max_sql_length is None:
+        max_sql_length = app.config.get("DB_QUERY_LOG_MAX_LEN")
     query_logger = QueryLogger(
         logger=logger,
         slow_logger=slow_logger,
         slow_threshold_ms=slow_threshold_ms,
         flush_interval_seconds=flush_interval_seconds,
+        max_sql_length=max_sql_length,
     )
     query_logger.start()
 

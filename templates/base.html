@@ -35,7 +35,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fa_7.0.1.all.min.css') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
   <!-- Print CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}?v={{ v }}" media="print">
@@ -567,7 +567,7 @@
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+                <form method="post" action="{{ url_for('auth.logout') }}" class="m-0" id="logout-form">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="dropdown-item w-100 text-start">Sign out</button>
                 </form>
@@ -752,6 +752,59 @@
       // Removed palette switching; single Healthcare theme remains
     })();
   </script>
+  {% if csp_script_nonce %}
+  <script nonce="{{ csp_script_nonce() }}">
+      {% else %}
+      <script>
+        {% endif %}
+        (function () {
+          function clearLocalStorageExcept(keepKeys) {
+            try {
+              if (!window.localStorage) return;
+              var keep = new Set(keepKeys || []);
+              for (var i = window.localStorage.length - 1; i >= 0; i -= 1) {
+                var key = window.localStorage.key(i);
+                if (key && !keep.has(key)) {
+                  window.localStorage.removeItem(key);
+                }
+              }
+            } catch (e) {
+              // ignore storage errors
+            }
+          }
+
+          var logoutForm = document.getElementById('logout-form');
+          if (logoutForm) {
+            logoutForm.addEventListener('submit', function () {
+              clearLocalStorageExcept(['theme', 'lastActivityTs', 'imggrLoupePrefs', 'imggrViewerSettings']);
+            });
+          }
+        })();
+  </script>
+  {% if current_user.is_authenticated %}
+  {% if csp_script_nonce %}
+  <script nonce="{{ csp_script_nonce() }}">
+      {% else %}
+      <script>
+        {% endif %}
+        (function () {
+          try {
+            if (!window.sessionStorage || !window.localStorage) return;
+            if (window.sessionStorage.getItem('loginCleanupDone') === '1') return;
+            var keep = new Set(['theme', 'lastActivityTs', 'imggrLoupePrefs', 'imggrViewerSettings']);
+            for (var i = window.localStorage.length - 1; i >= 0; i -= 1) {
+              var key = window.localStorage.key(i);
+              if (key && !keep.has(key)) {
+                window.localStorage.removeItem(key);
+              }
+            }
+            window.sessionStorage.setItem('loginCleanupDone', '1');
+          } catch (e) {
+            // ignore storage errors
+          }
+        })();
+  </script>
+  {% endif %}
 
 
 

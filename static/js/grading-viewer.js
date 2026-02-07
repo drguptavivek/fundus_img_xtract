@@ -186,17 +186,24 @@
       const rawKey = e.key || '';
       const k = rawKey.toLowerCase();
       if (!k) return;
+      const card = activeRoot.closest('.card');
+      const state = viewerStates.get(activeRoot);
+
+      if (k === 'l' && state?.getCurrentLoupeEnabled?.()) {
+        e.preventDefault();
+        state?.toggleLoupe?.();
+        return;
+      }
+
       const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
       if (['input','textarea','select'].includes(tag)) return;
 
       const main = activeRoot.querySelector('.imggr-main');
       if (!main) return;
 
-      const card = activeRoot.closest('.card');
       const bright = card ? card.querySelector('.imggr-bright') : null;
       const contr = card ? card.querySelector('.imggr-contrast') : null;
       const resetBtn = card ? card.querySelector('.imggr-reset') : null;
-      const state = viewerStates.get(activeRoot);
 
       if (k === 'l') { e.preventDefault(); state?.toggleLoupe?.(); return; }
       if (rawKey === '[' || rawKey === '{') { e.preventDefault(); state?.adjustLoupeSize?.(-1); return; }
@@ -316,10 +323,10 @@
       imgPanY = clamp(savedSettings.panY, IMG_PAN_MIN, IMG_PAN_MAX);
     }
     if (savedSettings.brightness !== undefined && bright) {
-      bright.value = clamp(savedSettings.brightness, 0.5, 1.5);
+      bright.value = clamp(savedSettings.brightness, 0.5, 5);
     }
     if (savedSettings.contrast !== undefined && contr) {
-      contr.value = clamp(savedSettings.contrast, 0.5, 1.5);
+      contr.value = clamp(savedSettings.contrast, 0.5, 5);
     }
     if (savedSettings.filter) {
       const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
@@ -377,10 +384,10 @@
       
       // Apply brightness and contrast
       if (preset.brightness && bright) {
-        bright.value = clamp(preset.brightness, 0.5, 1.5);
+        bright.value = clamp(preset.brightness, 0.5, 5);
       }
       if (preset.contrast && contr) {
-        contr.value = clamp(preset.contrast, 0.5, 1.5);
+        contr.value = clamp(preset.contrast, 0.5, 5);
       }
       
       // Apply zoom and pan
@@ -605,7 +612,59 @@
       saveViewerSettingsToStorage();
     }
     rad && rad.forEach && rad.forEach(r => r.addEventListener('change', applyFilter));
-    bright && bright.addEventListener('input', applyFilter);
+    const brightTip = card ? card.querySelector('.imggr-bright-tip') : null;
+    const contrastTip = card ? card.querySelector('.imggr-contrast-tip') : null;
+
+    function showRangeTip(inputEl, tipEl, value){
+      if (!inputEl || !tipEl) return;
+      tipEl.classList.remove('d-none');
+      const min = parseFloat(inputEl.min || '0');
+      const max = parseFloat(inputEl.max || '1');
+      const raw = Number(value);
+      const pct = max > min ? (raw - min) / (max - min) : 0;
+      const trackWidth = inputEl.clientWidth;
+      const thumbOffset = 8;
+      const tipWidth = tipEl.offsetWidth || 0;
+      const leftPx = Math.min(
+        Math.max(trackWidth * pct - thumbOffset, 0),
+        Math.max(trackWidth - tipWidth, 0)
+      );
+
+      const numeric = Number(value);
+      tipEl.textContent = Number.isFinite(numeric) ? numeric.toFixed(2) : `${value}`;
+      tipEl.style.left = `${leftPx}px`;
+      tipEl.style.top = '-1.6rem';
+      if (tipEl._hideTimer) {
+        clearTimeout(tipEl._hideTimer);
+      }
+      tipEl._hideTimer = setTimeout(() => {
+        tipEl.classList.add('d-none');
+      }, 1200);
+    }
+
+    function attachRangeBlur(inputEl){
+      if (!inputEl) return;
+      const blurIfFocused = () => {
+        if (document.activeElement === inputEl) {
+          inputEl.blur();
+        }
+      };
+      inputEl.addEventListener('change', blurIfFocused);
+      inputEl.addEventListener('pointerup', blurIfFocused);
+      inputEl.addEventListener('touchend', blurIfFocused);
+      inputEl.addEventListener('mouseup', blurIfFocused);
+    }
+
+    bright && bright.addEventListener('input', () => {
+      applyFilter();
+      showRangeTip(bright, brightTip, bright.value);
+    });
+    attachRangeBlur(bright);
+    contr && contr.addEventListener('input', () => {
+      applyFilter();
+      showRangeTip(contr, contrastTip, contr.value);
+    });
+    attachRangeBlur(contr);
     contr && contr.addEventListener('input', applyFilter);
     resetBtn && resetBtn.addEventListener('click', () => {
       if (bright) bright.value = '1';
@@ -644,10 +703,10 @@
       
       // Apply saved brightness and contrast
       if (savedSettings.brightness && bright) {
-        bright.value = clamp(savedSettings.brightness, 0.5, 1.5);
+        bright.value = clamp(savedSettings.brightness, 0.5, 5);
       }
       if (savedSettings.contrast && contr) {
-        contr.value = clamp(savedSettings.contrast, 0.5, 1.5);
+        contr.value = clamp(savedSettings.contrast, 0.5, 5);
       }
       
       // Apply the filter with the saved values
@@ -804,7 +863,6 @@
       if (!loupe) return;
       const next = clamp(loupeSize + (stepDir * LOUPE_SIZE_STEP), LOUPE_SIZE_MIN, LOUPE_SIZE_MAX);
       if (Math.abs(next - loupeSize) < 1) {
-        if (!loupeEnabled) setLoupeEnabled(true);
         return;
       }
       loupeSize = next;
@@ -812,8 +870,6 @@
       if (loupeEnabled) {
         updateLoupeAssets();
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
-      } else {
-        setLoupeEnabled(true);
       }
       writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
@@ -822,15 +878,12 @@
       if (!loupe) return;
       const next = clamp(parseFloat((loupeZoom + (stepDir * LOUPE_ZOOM_STEP)).toFixed(2)), LOUPE_ZOOM_MIN, LOUPE_ZOOM_MAX);
       if (Math.abs(next - loupeZoom) < 0.01) {
-        if (!loupeEnabled) setLoupeEnabled(true);
         return;
       }
       loupeZoom = next;
       if (loupeEnabled) {
         updateLoupeAssets();
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
-      } else {
-        setLoupeEnabled(true);
       }
       writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }

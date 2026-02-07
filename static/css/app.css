@@ -1299,6 +1299,23 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   transform: translate(-50%, -50%) scale(1);
 }
 
+.imggr-range-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.imggr-range-tip {
+  position: absolute;
+  top: -1.6rem;
+  left: 0;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
 /* ================================
    Audio Player Cross-Browser Fix
    ================================ */

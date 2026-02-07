@@ -139,5 +139,25 @@
 {% endblock %}
 
 {% block page_scripts %}
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+(function () {
+  try {
+    if (!window.localStorage) return;
+    var keep = new Set(['theme', 'lastActivityTs', 'imggrLoupePrefs', 'imggrViewerSettings']);
+    for (var i = window.localStorage.length - 1; i >= 0; i -= 1) {
+      var key = window.localStorage.key(i);
+      if (key && !keep.has(key)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (e) {
+    // ignore storage errors
+  }
+})();
+</script>
 <script src="{{ url_for('static', filename='js/auth-captcha.js') }}?v={{ config['VERSION'] | default('1.0.0') }}"></script>
 {% endblock %}

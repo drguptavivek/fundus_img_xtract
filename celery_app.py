@@ -137,6 +137,18 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute=0, hour="3"),
         }
 
+        # Image listing v2 MVs - ensure creation daily at 2 AM UTC
+        beat_schedule["mvw-image-listing-v2-ensure-daily"] = {
+            "task": "celery_tasks.tasks.mv_tasks.ensure_image_listing_v2_task",
+            "schedule": crontab(minute=0, hour="2"),
+        }
+
+        # Image listing v2 MVs - refresh every 30 minutes
+        beat_schedule["mvw-image-listing-v2-refresh-30min"] = {
+            "task": "celery_tasks.tasks.mv_tasks.refresh_image_listing_v2_task",
+            "schedule": crontab(minute="0,30", hour="*"),
+        }
+
         # Cleanup old package scans - daily at 4 AM UTC
         beat_schedule["package-update-cleanup-daily"] = {
             "task": "celery_tasks.tasks.package_update_tasks.cleanup_old_package_scans_task",

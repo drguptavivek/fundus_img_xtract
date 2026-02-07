@@ -52,6 +52,7 @@ from .email_settings import (
     api_test_current_email_config, send_sample_email
 )
 from .grading_state_inconsistencies import grading_state_inconsistencies
+from .linked_task_inconsistencies import linked_task_inconsistencies
 from .audit_routes import sensitive_operations_audit, sensitive_operation_details
 from .cve_scanner import (
     cve_security_report,
@@ -143,6 +144,12 @@ admin_bp.add_url_rule(
     view_func=grading_state_inconsistencies,
     methods=["GET", "POST"],
     endpoint="grading_state_inconsistencies",
+)
+admin_bp.add_url_rule(
+    "/linked-task-inconsistencies",
+    view_func=linked_task_inconsistencies,
+    methods=["GET"],
+    endpoint="linked_task_inconsistencies",
 )
 admin_bp.add_url_rule(
     "/task_review_inconsistency",

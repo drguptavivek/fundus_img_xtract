@@ -476,20 +476,11 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                 GradingTask.disease_id == linked_disease_id,
                             ).first()
 
-                        if linked_task is None and image_uuid:
-                            try:
-                                linked_task = svc_ensure_task(image_uuid, linked_disease_id, db)
-                            except Exception as ensure_error:
-                                grades_logger.exception(
-                                    "Failed to ensure linked task for disease %s: %s",
-                                    linked_disease_id,
-                                    ensure_error,
-                                )
-                                flash(
-                                    f"Failed to initialize linked grading task for disease ID {linked_disease_id}. Please contact support.",
-                                    "danger",
-                                )
-                                return redirect(url_for("grading.index"))
+                        if linked_task is None:
+                            grades_logger.info(
+                                "Linked task missing for disease %s; skipping on-demand creation.",
+                                linked_disease_id,
+                            )
 
                         if linked_task is not None:
                             linked_task_list.append(linked_task)

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Linked Task Inconsistencies{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h3 class="mb-0">Linked Task Inconsistencies</h3>
+      <p class="text-muted mb-1">
+        Primary/linked task state mismatches when linked disease tasks exist for the same image.
+      </p>
+      <p class="text-muted small mb-0">
+        Flags: primary <code>resident_done</code> + linked <code>pending</code>,
+        or primary <code>resident2_done/final</code> + linked <code>resident_done</code>.
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.admin_status') }}">Back to Admin</a>
+  </div>
+
+  {% if total == 0 %}
+    <div class="alert alert-success">No inconsistencies detected 🎉</div>
+  {% else %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header">
+        <strong>Summary</strong>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Primary Disease</th>
+                <th>Linked Disease</th>
+                <th>Primary Final / Linked Resident Done</th>
+                <th>Primary Resident2 Done / Linked Resident Done</th>
+                <th>Primary Resident Done / Linked Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for key, counts in summary.items() %}
+                <tr>
+                  <td>{{ key[0] }}</td>
+                  <td>{{ key[1] }}</td>
+                  <td>{{ counts.primary_final_linked_resident_done }}</td>
+                  <td>{{ counts.primary_resident2_done_linked_resident_done }}</td>
+                  <td>{{ counts.primary_resident_done_linked_pending }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>{{ total }}</strong> mismatch(es)
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Primary Task</th>
+                <th>Primary Disease</th>
+                <th>Primary State</th>
+                <th>Linked Task</th>
+                <th>Linked Disease</th>
+                <th>Linked State</th>
+                <th>Lab Unit</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for primary_disease, items in grouped.items() %}
+                <tr class="table-secondary">
+                  <td colspan="8" class="fw-semibold">{{ primary_disease }}</td>
+                </tr>
+                {% for item in items %}
+                <tr>
+                  <td><code>{{ item.primary_task_id }}</code></td>
+                  <td>{{ primary_disease }}</td>
+                  <td><span class="badge bg-warning text-dark">{{ item.primary_state }}</span></td>
+                  <td><code>{{ item.linked_task_id }}</code></td>
+                  <td>{{ item.linked_disease_name }}</td>
+                  <td><span class="badge bg-warning text-dark">{{ item.linked_state }}</span></td>
+                  <td>{{ item.lab_unit_name }} (ID {{ item.lab_unit_id }})</td>
+                  <td>
+                    {% if item.primary_encounter_file_id %}
+                      Encounter File ID {{ item.primary_encounter_file_id }}
+                    {% elif item.primary_direct_image_upload_id %}
+                      Direct Upload ID {{ item.primary_direct_image_upload_id }}
+                    {% elif item.primary_patient_encounter_id %}
+                      Encounter ID {{ item.primary_patient_encounter_id }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

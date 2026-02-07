@@ -22,7 +22,7 @@ from admin.thumbnail_management import (
 )
 from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
-from models import Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit
+from models import Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit, LinkedDiseaseGrading
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
 
@@ -113,6 +113,53 @@ def admin_status():
         )
         review_consensus_mismatch_count = 0
 
+    # Linked task state inconsistencies (primary vs linked mismatch)
+    try:
+        with transaction_scope() as db:
+            PrimaryTask = sa.orm.aliased(GradingTask)
+            LinkedTask = sa.orm.aliased(GradingTask)
+            image_match = sa.or_(
+                sa.and_(
+                    PrimaryTask.encounter_file_id.isnot(None),
+                    PrimaryTask.encounter_file_id == LinkedTask.encounter_file_id,
+                ),
+                sa.and_(
+                    PrimaryTask.direct_image_upload_id.isnot(None),
+                    PrimaryTask.direct_image_upload_id == LinkedTask.direct_image_upload_id,
+                ),
+                sa.and_(
+                    PrimaryTask.patient_encounter_id.isnot(None),
+                    PrimaryTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+                ),
+            )
+            mismatch_filter = sa.or_(
+                sa.and_(PrimaryTask.state == "resident_done", LinkedTask.state == "pending"),
+                sa.and_(
+                    PrimaryTask.state.in_(["resident2_done", "final"]),
+                    LinkedTask.state == "resident_done",
+                ),
+            )
+            linked_task_inconsistency_count = (
+                db.query(PrimaryTask.id)
+                .join(LinkedTask, image_match)
+                .join(
+                    LinkedDiseaseGrading,
+                    sa.and_(
+                        LinkedDiseaseGrading.primary_disease_id == PrimaryTask.disease_id,
+                        LinkedDiseaseGrading.linked_disease_id == LinkedTask.disease_id,
+                        LinkedDiseaseGrading.is_active.is_(True),
+                    ),
+                )
+                .filter(mismatch_filter)
+                .count()
+            )
+    except Exception as e:
+        current_app.logger.error(
+            "Error computing linked task inconsistencies: %s",
+            sanitize_log_value(e),
+        )
+        linked_task_inconsistency_count = 0
+
     # Get recent activity data
     recent_activity = get_recent_activity()
 
@@ -152,6 +199,7 @@ def admin_status():
         sequence_report=sequence_report,
         scoped_users=scoped_users,
         grading_inconsistency_count=grading_inconsistency_count,
+        linked_task_inconsistency_count=linked_task_inconsistency_count,
         review_consensus_mismatch_count=review_consensus_mismatch_count,
         current_time=datetime.now(pytz.UTC)
     )

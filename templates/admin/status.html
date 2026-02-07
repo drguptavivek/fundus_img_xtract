@@ -459,6 +459,27 @@
             </div>
         </div>
 
+        <!-- Linked Task Inconsistencies -->
+        <div class="status-card {% if linked_task_inconsistency_count > 0 %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if linked_task_inconsistency_count > 0 %}warning{% else %}healthy{% endif %}">
+                    <i class="fas fa-link"></i>
+                </span>
+                Linked Tasks
+            </h5>
+            <div class="status-value">
+                {{ linked_task_inconsistency_count }}
+            </div>
+            <p class="status-details">
+                Primary/linked state mismatches
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.linked_task_inconsistencies') }}" class="btn-management btn-sm">
+                    <i class="fas fa-exclamation-circle"></i> View
+                </a>
+            </div>
+        </div>
+
         <!-- System Storage -->
         <div class="status-card health-info">
             <h5>

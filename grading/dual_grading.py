@@ -33,6 +33,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident2_task,
     get_next_eligible_arbitrator_task,
     _has_user_graded_task_2weeks,
+    get_next_linked_followup_task_atomic,
 )
 from utils.dualGradingEligibility import (
     check_arbitration_eligibility,
@@ -471,7 +472,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         return redirect(url_for("grading.index"))
                     linked_disease_ids = [linked_followup_disease_id]
                 if linked_disease_ids:
-                    linked_task_list = [task]
+                    linked_task_list = [] if linked_followup else [task]
                     for linked_disease_id in linked_disease_ids:
                         linked_task = None
                         if task.encounter_file_id:
@@ -619,6 +620,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                     linked_mode = len(linked_panels) > 1
 
                     if linked_followup:
+                        linked_mode = len(linked_panels) > 0
                         editable_panels = [panel for panel in linked_panels if not panel.get("read_only")]
                         if not editable_panels:
                             flash("No linked follow-up panels are available for this task.", "info")
@@ -683,6 +685,8 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 linked_grading_data=linked_grading_data,
                 show_save_next=show_save_next,
                 primary_task_uuid=primary_task_uuid,
+                linked_followup=linked_followup,
+                linked_followup_disease_id=linked_followup_disease_id,
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)
@@ -699,6 +703,8 @@ def dual_grading_submit():
     linked_task_uuids_raw = (request.form.get("linked_task_uuids") or "").strip()
     primary_task_uuid = (request.form.get("primary_task_uuid") or "").strip()
     linked_mode_flag = (request.form.get("linked_mode") or "").strip() == "1"
+    linked_followup_flag = (request.form.get("linked_followup") or "").strip() == "1"
+    linked_followup_disease_id = request.form.get("linked_disease_id", type=int)
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
@@ -1026,6 +1032,16 @@ def dual_grading_submit():
                     cleanup_task_tracker(task_id, current_user.id, slot, db)
 
             disease_id = primary_task.disease_id if primary_task else None
+            followup_primary_disease_id = None
+            if linked_followup_flag:
+                if primary_task_uuid:
+                    primary_task_for_followup = fetch_task_with_related_data_by_uuid(
+                        db, primary_task_uuid, user=current_user
+                    )
+                    if primary_task_for_followup:
+                        followup_primary_disease_id = primary_task_for_followup.disease_id
+                if followup_primary_disease_id is None and disease_id is not None:
+                    followup_primary_disease_id = get_primary_disease_id(db, disease_id)
             if disease_id is None and task_uuids:
                 fallback_task = fetch_task_with_related_data_by_uuid(db, task_uuids[0], user=current_user)
                 disease_id = fallback_task.disease_id if fallback_task else None
@@ -1036,6 +1052,35 @@ def dual_grading_submit():
                 # Since we're closing the current session to get the next task,
                 # we need to commit our changes first
                 db.commit()
+                if linked_followup_flag and linked_followup_disease_id and followup_primary_disease_id:
+                    with transaction_scope() as new_db:
+                        next_task, next_slot_type = get_next_linked_followup_task_atomic(
+                            current_user.id,
+                            followup_primary_disease_id,
+                            linked_followup_disease_id,
+                            db=new_db,
+                        )
+
+                        if next_task is not None:
+                            next_task_uuid = next_task.uuid
+                        else:
+                            next_task_uuid = None
+
+                    if next_task is None:
+                        flash("Grade submitted successfully.", "success")
+                        flash("No more linked follow-up tasks available.", "info")
+                        return redirect(url_for("grading.index"))
+
+                    flash("Grade submitted successfully.", "success")
+                    return redirect(
+                        url_for(
+                            "grading.dual_grading_task",
+                            task_uuid=next_task_uuid,
+                            slot_type=next_slot_type,
+                            linked_followup="true",
+                            linked_disease_id=linked_followup_disease_id,
+                        )
+                    )
                 try:
                     grades_logger.info(
                         "Looking for intra-rater task for user %s, disease %s",

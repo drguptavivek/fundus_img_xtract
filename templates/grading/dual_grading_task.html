@@ -16,8 +16,12 @@
       <div class="card-body py-2">
         <div class="d-flex flex-wrap gap-3 small">
           <div class="d-flex align-items-center">
-            <span class="text-muted me-1">Task ID:</span>
+            <span class="text-muted me-1">Primary Disease:</span>
+            <strong class="mb-0">{{ task.disease.name }}</strong>
+            <span class="text-muted mx-2">Task ID:</span>
             <code class="mb-0">{{ task.id }}</code>
+            <span class="text-muted mx-2">Status:</span>
+            <strong class="text-capitalize mb-0">{{ task.state }}</strong>
           </div>
 
           <div class="d-flex align-items-center">
@@ -28,6 +32,16 @@
             <span class="text-muted me-1">Lab/Unit:</span>
             <strong class="mb-0">{{ task.lab_unit.name }}</strong>
           </div>
+          {% if linked_mode %}
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Linked Task Status:</span>
+            <strong class="mb-0">
+              {% for panel in linked_panels %}
+                {{ panel.task.disease.name }} ({{ panel.task.id }}: {{ panel.task.state }}){% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </strong>
+          </div>
+          {% endif %}
           {% if existing_grade %}
           <div class="d-flex align-items-center">
             <span class="text-muted me-1">Existing Grade:</span>
@@ -109,6 +123,12 @@
           <input type="hidden" name="linked_mode" value="1">
           <input type="hidden" name="linked_task_uuids" value="{{ editable_linked_panels | map(attribute='task.uuid') | join(',') }}">
           <input type="hidden" name="primary_task_uuid" value="{{ primary_task_uuid }}">
+          {% if linked_followup %}
+          <input type="hidden" name="linked_followup" value="1">
+          {% if linked_followup_disease_id %}
+          <input type="hidden" name="linked_disease_id" value="{{ linked_followup_disease_id }}">
+          {% endif %}
+          {% endif %}
           {% endif %}
 
           <input type="hidden" name="slot" value="{{ current_slot }}">
@@ -127,6 +147,18 @@
           {% if linked_mode %}
           <div id="linked-validation-error" class="alert alert-danger d-none">
             Please grade all required panels before submitting.
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-target="#linked-grading-carousel"
+              data-bs-slide="prev"> &lt; </button>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
+              {% if show_save_next %}
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+              {% endif %}
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-target="#linked-grading-carousel"
+              data-bs-slide="next"> &gt; </button>
           </div>
           <div id="linked-grading-carousel" class="carousel slide" data-bs-ride="false" data-bs-touch="false">
             <div class="carousel-inner">
@@ -186,19 +218,6 @@
                 </div>
               </div>
               {% endfor %}
-            </div>
-
-            <div class="d-flex justify-content-between align-items-center mt-3">
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-target="#linked-grading-carousel"
-                data-bs-slide="prev">Previous</button>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
-                {% if show_save_next %}
-                <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
-                {% endif %}
-              </div>
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-target="#linked-grading-carousel"
-                data-bs-slide="next">Next</button>
             </div>
           </div>
           {% else %}

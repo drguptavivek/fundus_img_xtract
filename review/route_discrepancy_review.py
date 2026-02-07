@@ -28,7 +28,8 @@ from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
-from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR, _build_discrepancy_filter_query
+from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
+from utils.discrepancy_filters import build_discrepancy_filter_query
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
 
@@ -501,7 +502,7 @@ def create_regrade_tasks():
             "allowed_lab_units": list(allowed_lab_unit_ids),
         }
 
-        mv_name, where_sql, params, _selected_ai_model_id = _build_discrepancy_filter_query(db, filters)
+        mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
         if not mv_name:
             flash("No tasks matched the filters for regrade queue creation.", "warning")
             return redirect(request.referrer or url_for("review.discrepancy_review", disease_id=disease_id))

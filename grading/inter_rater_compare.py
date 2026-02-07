@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from app_cache import cache
-from models import Consensus, Disease, DiseaseGrading, Grade, GradingTask, LabUnit
+from models import Consensus, Disease, DiseaseGrading, Grade, GradingTask, LabUnit, ImageMetadata
 from utils.hospital_scoping import apply_scoping
 
 
@@ -326,4 +326,17 @@ def inter_rater_viewer(image_uuid: str):
             return ("Not found", 404)
 
         image_obj = task.encounter_file or task.direct_image
-        return render_template("grading/_viewer_card.html", image=image_obj, image_uuid=image_uuid)
+        image_metadata = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == "orig",
+            )
+            .first()
+        )
+        return render_template(
+            "grading/_viewer_card.html",
+            image=image_obj,
+            image_uuid=image_uuid,
+            image_metadata=image_metadata,
+        )

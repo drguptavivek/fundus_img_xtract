@@ -154,6 +154,21 @@
           Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
         </small>
       </div>
+      <div class="d-flex flex-wrap gap-2 small text-muted">
+        {% if image_metadata %}
+          {% if image_metadata.mode %}
+            <span class="me-2">Color: {{ image_metadata.mode }}</span>
+          {% endif %}
+          {% if image_metadata.avg_luminance is not none %}
+            <span class="me-2">Luminance: {{ '%.1f'|format(image_metadata.avg_luminance) }}</span>
+          {% endif %}
+          {% if image_metadata.width and image_metadata.height %}
+            <span class="me-2">Dimensions: {{ image_metadata.width }}x{{ image_metadata.height }}</span>
+          {% endif %}
+        {% else %}
+          <span>Metadata pending</span>
+        {% endif %}
+      </div>
 
     </div>
   </div>

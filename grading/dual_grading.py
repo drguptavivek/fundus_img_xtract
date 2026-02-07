@@ -23,6 +23,7 @@ from models import (
     UserDiseaseUnitRole,
     User,
     Role,
+    ImageMetadata,
 )
 from services.taskCreationServices import ensure_task as svc_ensure_task
 from utils.dualGradingGetNextTasks import (
@@ -61,6 +62,19 @@ from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
 grades_logger = logging.getLogger("grades")
+
+
+def _fetch_image_metadata(db, image_uuid: str | None) -> ImageMetadata | None:
+    if not image_uuid:
+        return None
+    return (
+        db.query(ImageMetadata)
+        .filter(
+            ImageMetadata.image_uuid == image_uuid,
+            ImageMetadata.image_variant == "orig",
+        )
+        .first()
+    )
 
 
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
@@ -211,6 +225,7 @@ def revise_grading(grade_id: int):
             # Use the existing grade as the existing_grade parameter
             existing_grade = grade
             existing_selected_features = _parse_selected_features(existing_grade.selected_features_json)
+            image_metadata = _fetch_image_metadata(db, image_uuid)
 
             response = make_response(render_template(
                 "grading/dual_grading_task.html",
@@ -222,6 +237,7 @@ def revise_grading(grade_id: int):
                 existing_grade=existing_grade,
                 existing_selected_features=existing_selected_features,
                 image_uuid=image_uuid,
+                image_metadata=image_metadata,
                 grades=task.grades,
                 existing_grade_in_header=True,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
@@ -434,6 +450,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             existing_selected_features = _parse_selected_features(
                 existing_grade.selected_features_json if existing_grade else None
             )
+            image_metadata = _fetch_image_metadata(db, image_uuid)
 
             linked_mode = False
             linked_panels = []
@@ -687,6 +704,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 primary_task_uuid=primary_task_uuid,
                 linked_followup=linked_followup,
                 linked_followup_disease_id=linked_followup_disease_id,
+                image_metadata=image_metadata,
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)

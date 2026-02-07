@@ -22,7 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
-from models import IntraRaterTask, GradingsFeatures
+from models import IntraRaterTask, GradingsFeatures, ImageMetadata
 from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task_atomic,
@@ -123,6 +123,16 @@ def intra_rater_task(task_uuid: str):
             image_uuid = task.encounter_file.uuid
         elif task.direct_image_upload:
             image_uuid = task.direct_image_upload.uuid
+        image_metadata = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == "orig",
+            )
+            .first()
+            if image_uuid
+            else None
+        )
 
         start_time_iso = datetime.now(timezone.utc).isoformat()
         start_time_key = f"intra_grading_start_time_{task_uuid}"
@@ -137,6 +147,7 @@ def intra_rater_task(task_uuid: str):
             grading_guidelines=grading_guidelines,
             grading_features=grading_features,
             image_uuid=image_uuid,
+            image_metadata=image_metadata,
             resume_slot=resume_slot,
             resume_disease_id=effective_resume_disease_id,
             start_time_iso=start_time_iso,

@@ -177,7 +177,6 @@ class TestExportPIILeakage:
         Verify that _build_task_payload replaces original PII filenames with UUIDs.
         """
         from review.discrepancy_export import _build_task_payload, ExportTaskRow
-        from unittest.mock import MagicMock, patch
 
         # Create a mock row with a PII filename
         pii_filename = "JohnDoe_12345_Screening.jpg"
@@ -194,34 +193,29 @@ class TestExportPIILeakage:
             grading_details_json="[]",
             ai_review_comments=[],
             ai_review_statuses=[],
+            image_uuid="img-uuid-10",
             encounter_file_id=10,
             encounter_file_uuid="img-uuid-10",
             encounter_filename=pii_filename, # <--- PII here
-            encounter_upload_date=None,
+            encounter_upload_date=datetime(2024, 1, 1, tzinfo=timezone.utc),
             direct_image_upload_id=None,
             direct_image_uuid=None,
             direct_filename=None,
+            direct_edited_filename=None,
             direct_folder_rel=None
         )
 
-        # Mock _load_encounter_paths to return a path (so specific logic triggers)
-        with patch('review.discrepancy_export._load_encounter_paths') as mock_load:
-            # key: id -> (Path, suffix)
-            mock_load.return_value = {10: (MagicMock(), ".jpg")}
-            
-            payload = _build_task_payload([row])
-            
-            assert len(payload) == 1
-            data = payload[0]
-            
-            # 1. Verify PII filename is NOT in the output
-            assert pii_filename not in data.values(), "PII filename leaked in export data values!"
-            
-            # 2. Verify 'image_filename' uses the UUID
-            assert data['image_filename'] == "img-uuid-10.jpg"
-            
-            # 3. Verify 'task_id', 'disease' are present
-            assert data['task_id'] == 1
-            assert data['disease'] == "DR"
-
-
+        payload = _build_task_payload([row])
+        
+        assert len(payload) == 1
+        data = payload[0]
+        
+        # 1. Verify PII filename is NOT in the output
+        assert pii_filename not in data.values(), "PII filename leaked in export data values!"
+        
+        # 2. Verify 'image_filename' uses the UUID
+        assert data['image_filename'] == "img-uuid-10.jpg"
+        
+        # 3. Verify 'task_id', 'disease' are present
+        assert data['task_id'] == 1
+        assert data['disease'] == "DR"

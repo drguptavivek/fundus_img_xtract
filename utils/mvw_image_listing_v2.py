@@ -34,6 +34,14 @@ def _mv_name(name: str, disease_id: int) -> str:
     return mv_name
 
 
+def get_mv_name_for_disease(db, disease_id: int) -> str:
+    """Return the per-disease MV v2 name for a disease id."""
+    disease = db.get(Disease, disease_id)
+    if not disease:
+        raise ValueError(f"Unknown disease id: {disease_id}")
+    return _mv_name(str(disease.name), int(disease.id))
+
+
 def _index_name(mv_name: str, suffix: str) -> str:
     suffix = suffix.strip("_")
     max_base_len = _MAX_IDENT_LEN - len(suffix) - 1
@@ -70,6 +78,13 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             lu.name AS lab_unit_name,
             cam.name AS camera_name,
             a.name AS area_name,
+            diu.filename AS direct_filename,
+            diu.edited_filename AS direct_edited_filename,
+            diu.folder_rel AS direct_folder_rel,
+            NULL::text AS encounter_filename,
+            NULL::date AS encounter_upload_date,
+            COALESCE(diu.edited_filename, diu.filename) AS image_filename,
+            diu.folder_rel AS image_folder_rel,
             FALSE AS is_set_based,
             NULL::date AS capture_date,
             diu.created_at AS upload_date_utc
@@ -89,10 +104,17 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             ef.id AS encounter_file_id,
             ef.patient_encounter_id AS patient_encounter_id,
             'ZIP' AS upload_type,
-            NULL::text AS hospital_name,
+            h.name AS hospital_name,
             lu.name AS lab_unit_name,
             NULL::text AS camera_name,
             NULL::text AS area_name,
+            NULL::text AS direct_filename,
+            NULL::text AS direct_edited_filename,
+            NULL::text AS direct_folder_rel,
+            ef.filename AS encounter_filename,
+            zf.upload_date AS encounter_upload_date,
+            ef.filename AS image_filename,
+            NULL::text AS image_folder_rel,
             COALESCE(pe.is_set_based, FALSE) AS is_set_based,
             pe.capture_date_dt AS capture_date,
             zf.upload_date AS upload_date_utc
@@ -100,6 +122,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         LEFT JOIN patient_encounters pe ON ef.patient_encounter_id = pe.id
         LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
         LEFT JOIN lab_units lu ON ef.lab_unit_id = lu.id
+        LEFT JOIN hospitals h ON lu.hospital_id = h.id
 
         UNION ALL
 
@@ -111,16 +134,24 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             NULL::integer AS encounter_file_id,
             pe.id AS patient_encounter_id,
             'SET' AS upload_type,
-            NULL::text AS hospital_name,
+            h.name AS hospital_name,
             lu.name AS lab_unit_name,
             NULL::text AS camera_name,
             NULL::text AS area_name,
+            NULL::text AS direct_filename,
+            NULL::text AS direct_edited_filename,
+            NULL::text AS direct_folder_rel,
+            NULL::text AS encounter_filename,
+            zf.upload_date AS encounter_upload_date,
+            NULL::text AS image_filename,
+            NULL::text AS image_folder_rel,
             COALESCE(pe.is_set_based, FALSE) AS is_set_based,
             pe.capture_date_dt AS capture_date,
             zf.upload_date AS upload_date_utc
         FROM patient_encounters pe
         LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
         LEFT JOIN lab_units lu ON pe.lab_unit_id = lu.id
+        LEFT JOIN hospitals h ON lu.hospital_id = h.id
         WHERE pe.is_set_based = TRUE
     ),
     disease_tasks AS (
@@ -138,8 +169,15 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
     latest_role_grades AS (
         SELECT DISTINCT ON (g.task_id, g.role_slot)
             g.task_id,
+            g.id AS grade_id,
             g.role_slot,
             g.grade_name,
+            g.grade_description,
+            g.comment,
+            g.selected_features_json,
+            g.ai_model_id,
+            g.ai_model_name,
+            g.ai_model_version,
             g.created_at
         FROM grades g
         JOIN disease_tasks t ON t.task_id = g.task_id
@@ -152,6 +190,14 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             MAX(grade_name) FILTER (WHERE role_slot = 'resident2') AS resident2_grade_name,
             MAX(grade_name) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_grade_name,
             MAX(grade_name) FILTER (WHERE role_slot = 'review') AS review_grade_name,
+            MAX(comment) FILTER (WHERE role_slot = 'resident') AS resident_comment,
+            MAX(comment) FILTER (WHERE role_slot = 'resident2') AS resident2_comment,
+            MAX(comment) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_comment,
+            MAX(comment) FILTER (WHERE role_slot = 'review') AS review_comment,
+            MAX(selected_features_json) FILTER (WHERE role_slot = 'resident') AS resident_selected_features_json,
+            MAX(selected_features_json) FILTER (WHERE role_slot = 'resident2') AS resident2_selected_features_json,
+            MAX(selected_features_json) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_selected_features_json,
+            MAX(selected_features_json) FILTER (WHERE role_slot = 'review') AS review_selected_features_json,
             MAX(CASE WHEN role_slot = 'resident' THEN 1 ELSE 0 END) AS has_resident,
             MAX(CASE WHEN role_slot = 'resident2' THEN 1 ELSE 0 END) AS has_resident2,
             MAX(CASE WHEN role_slot = 'arbitrator' THEN 1 ELSE 0 END) AS has_arbitrator,
@@ -166,6 +212,8 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             g.id AS ai_grade_id,
             g.grade_name AS ai_grade_name,
             g.created_at AS ai_grade_created_at,
+            g.comment AS ai_comment,
+            g.selected_features_json AS ai_selected_features_json,
             g.ai_review_status,
             g.ai_review_comment,
             g.ai_reviewed_by_user_id,
@@ -189,6 +237,8 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
                     'ai_grade_id', a.ai_grade_id,
                     'ai_grade_name', a.ai_grade_name,
                     'ai_grade_created_at', a.ai_grade_created_at,
+                    'ai_comment', a.ai_comment,
+                    'ai_selected_features', a.ai_selected_features_json,
                     'ai_review_status', a.ai_review_status,
                     'ai_review_comment', a.ai_review_comment,
                     'ai_reviewed_by_user_id', a.ai_reviewed_by_user_id,
@@ -212,6 +262,13 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         b.lab_unit_name,
         b.camera_name,
         b.area_name,
+        b.direct_filename,
+        b.direct_edited_filename,
+        b.direct_folder_rel,
+        b.encounter_filename,
+        b.encounter_upload_date,
+        b.image_filename,
+        b.image_folder_rel,
         b.is_set_based,
         b.capture_date,
         b.upload_date_utc,
@@ -228,6 +285,14 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         rg.resident2_grade_name,
         rg.arbitrator_grade_name,
         rg.review_grade_name,
+        rg.resident_comment,
+        rg.resident2_comment,
+        rg.arbitrator_comment,
+        rg.review_comment,
+        rg.resident_selected_features_json,
+        rg.resident2_selected_features_json,
+        rg.arbitrator_selected_features_json,
+        rg.review_selected_features_json,
         COALESCE(rg.has_resident, 0) > 0 AS has_resident,
         COALESCE(rg.has_resident2, 0) > 0 AS has_resident2,
         COALESCE(rg.has_arbitrator, 0) > 0 AS has_arbitrator,

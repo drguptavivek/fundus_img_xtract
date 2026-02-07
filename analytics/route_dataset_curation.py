@@ -182,7 +182,7 @@ def _build_screen_rows(
         row = row_by_id.get(task_id)
         if not row:
             continue
-        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid or row.image_uuid
         if not image_uuid:
             continue
         image_kind = "encounter" if row.encounter_file_uuid else "direct"
@@ -226,7 +226,7 @@ def _build_screen_page_rows(
 
     image_keys: list[tuple[str, str]] = []
     for row in rows:
-        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid or row.image_uuid
         if not image_uuid:
             continue
         if row.encounter_file_uuid:
@@ -250,7 +250,7 @@ def _build_screen_page_rows(
         row = row_by_id.get(task_id)
         if not row:
             continue
-        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid or row.image_uuid
         if not image_uuid:
             continue
         image_kind = "encounter" if row.encounter_file_uuid else "direct"

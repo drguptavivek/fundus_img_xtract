@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
-from sqlalchemy import and_, or_, text
+from sqlalchemy import text
 
 from job_store import db_set_item_state, db_set_job_status
 from models import (
@@ -20,7 +20,6 @@ from models import (
     Disease,
     DiseaseGrading,
     Grade,
-    LabUnit,
     GradingTask,
     EncounterFile,
     PatientEncounters,
@@ -29,6 +28,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
+from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 EXPORT_DIR = BASE_DIR / "files" / "exports"
 MAX_ROWS_PER_ZIP = 200
@@ -50,6 +50,7 @@ class ExportTaskRow:
     grading_details_json: str
     ai_review_comments: List[str]
     ai_review_statuses: List[str]
+    image_uuid: Optional[str]
     encounter_file_id: Optional[int]
     encounter_file_uuid: Optional[str]
     encounter_filename: Optional[str]
@@ -57,6 +58,7 @@ class ExportTaskRow:
     direct_image_upload_id: Optional[int]
     direct_image_uuid: Optional[str]
     direct_filename: Optional[str]
+    direct_edited_filename: Optional[str]
     direct_folder_rel: Optional[str]
 
 
@@ -220,6 +222,14 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         has_consensus = filters.get("has_consensus")
         consensus_method = filters.get("consensus_method")
         resident_compare = filters.get("resident_compare")
+        if has_consensus == "no":
+            consensus_method = None
+            final_grades = []
+            has_arbitrator = None
+            arbitrator_grades = []
+            has_review = None
+            review_grades = []
+
         ai_model_ids = filters.get("ai_model_id", [])
         ai_grades = filters.get("ai_grade", [])
         ai_review_statuses = filters.get("ai_review_status", [])
@@ -246,118 +256,68 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
             review_grades = [g for g in review_grades if g in valid_grade_impressions]
             ai_grades = [g for g in ai_grades if g in valid_grade_impressions]
 
-        disease_key = _resolve_disease_key(db, disease_id)
-        mv_detail_col = f"{disease_key}_grading_details_json"
-        mv_ai_count_col = f"{disease_key}_ai_grading_count"
-        mv_consensus_col = f"{disease_key}_consensus_status"
+        mv_name = get_mv_name_for_disease(db, disease_id)
 
         where_clauses = [
-            "gt.disease_id = :disease_id",
-            "gt.lab_unit_id = ANY(:allowed_lab_units)",
+            "v.disease_id = :disease_id",
+            "v.task_lab_unit_id = ANY(:allowed_lab_units)",
         ]
         params: Dict[str, Any] = {"disease_id": disease_id, "allowed_lab_units": allowed_lab_units}
 
         if lab_unit_id and lab_unit_id in allowed_lab_units:
-            where_clauses.append("gt.lab_unit_id = :lab_unit_id")
+            where_clauses.append("v.task_lab_unit_id = :lab_unit_id")
             params["lab_unit_id"] = lab_unit_id
 
         require_final_grade = bool(filters.get("require_final_grade"))
         if has_consensus == "has_consensus":
-            where_clauses.append("c.id IS NOT NULL")
+            where_clauses.append("v.has_consensus = TRUE")
             if require_final_grade:
-                # Ensure a final grade is present (not just a consensus shell).
-                where_clauses.append("c.final_disease_grading_id IS NOT NULL")
+                where_clauses.append("v.final_grade_name IS NOT NULL")
         elif has_consensus == "no":
-            where_clauses.append("c.id IS NULL")
+            where_clauses.append("v.has_consensus = FALSE")
 
         if consensus_method in {"match", "adjudication", "task_review"}:
-            where_clauses.append("c.method = :consensus_method")
+            where_clauses.append("v.consensus_type = :consensus_method")
             params["consensus_method"] = consensus_method
 
         if has_review == "yes":
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
-            )
+            where_clauses.append("v.has_review = TRUE")
             valid_review_grades = [g for g in review_grades if g]
             if valid_review_grades:
-                where_clauses.append(
-                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                    "WHERE elem->>'role_slot' = 'review' AND elem->>'grade_name' = ANY(:review_grades))"
-                )
+                where_clauses.append("v.review_grade_name = ANY(:review_grades)")
                 params["review_grades"] = valid_review_grades
         elif has_review == "no":
-            where_clauses.append(
-                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
-            )
+            where_clauses.append("v.has_review = FALSE")
 
         if has_arbitrator == "yes":
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
-            )
+            where_clauses.append("v.has_arbitrator = TRUE")
         elif has_arbitrator == "no":
-            where_clauses.append(
-                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
-            )
+            where_clauses.append("v.has_arbitrator = FALSE")
 
         if has_ai_grade == "yes":
-            where_clauses.append(f"{mv_ai_count_col} > 0")
+            where_clauses.append("v.has_ai = TRUE")
         elif has_ai_grade == "no":
-            where_clauses.append(f"{mv_ai_count_col} = 0")
+            where_clauses.append("v.has_ai = FALSE")
         else:
             ai_model_ids = []
             ai_grades = []
             ai_review_statuses = []
 
         role_grade_filters = [
-            ("resident", resident_grades),
-            ("resident2", resident2_grades),
-            ("arbitrator", arbitrator_grades),
+            ("resident", resident_grades, "resident_grade_name"),
+            ("resident2", resident2_grades, "resident2_grade_name"),
+            ("arbitrator", arbitrator_grades, "arbitrator_grade_name"),
         ]
-        for role, impressions in role_grade_filters:
+        for role, impressions, column in role_grade_filters:
             if impressions:
                 valid = [g for g in impressions if g]
                 if valid:
-                    where_clauses.append(
-                        f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                        "WHERE elem->>'role_slot' = :role_slot_"
-                        + role
-                        + " AND elem->>'grade_name' = ANY(:grade_names_"
-                        + role
-                        + "))"
-                    )
-                    params[f"role_slot_{role}"] = role
+                    where_clauses.append(f"v.{column} = ANY(:grade_names_{role})")
                     params[f"grade_names_{role}"] = valid
 
-        resident_compare_join = ""
         if resident_compare in {"match", "mismatch"}:
-            resident_compare_join = """
-            LEFT JOIN LATERAL (
-                SELECT g.grade_name
-                FROM grades g
-                WHERE g.task_id = gt.id AND g.role_slot = 'resident'
-                ORDER BY g.created_at DESC
-                LIMIT 1
-            ) resident_grade ON TRUE
-            LEFT JOIN LATERAL (
-                SELECT g.grade_name
-                FROM grades g
-                WHERE g.task_id = gt.id AND g.role_slot = 'resident2'
-                ORDER BY g.created_at DESC
-                LIMIT 1
-            ) resident2_grade ON TRUE
-            """
-            if resident_compare == "match":
-                where_clauses.append(
-                    "resident_grade.grade_name IS NOT NULL "
-                    "AND resident2_grade.grade_name IS NOT NULL "
-                    "AND resident_grade.grade_name = resident2_grade.grade_name"
-                )
-            else:
-                where_clauses.append(
-                    "resident_grade.grade_name IS NOT NULL "
-                    "AND resident2_grade.grade_name IS NOT NULL "
-                    "AND resident_grade.grade_name <> resident2_grade.grade_name"
-                )
+            where_clauses.append("v.resident_vs_resident2 = :resident_compare")
+            params["resident_compare"] = resident_compare
 
         selected_ai_model_id: Optional[int] = None
         if ai_model_ids:
@@ -369,34 +329,41 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 ai_model_ids = []
 
         if selected_ai_model_id is not None:
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                "WHERE elem->>'role_slot' = 'ai' AND (elem->>'ai_model_id')::int = :ai_model_id)"
-            )
-            params["ai_model_id"] = selected_ai_model_id
+            where_clauses.append("v.ai_models_json ? :ai_model_key")
+            params["ai_model_key"] = str(selected_ai_model_id)
 
         if ai_grades:
             valid_ai_grades = [g for g in ai_grades if g]
             if valid_ai_grades:
-                where_clauses.append(
-                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                    "WHERE elem->>'role_slot' = 'ai' AND elem->>'grade_name' = ANY(:ai_grade_names))"
-                )
+                if selected_ai_model_id is not None:
+                    where_clauses.append(
+                        "(v.ai_models_json -> :ai_model_key) ->> 'ai_grade_name' = ANY(:ai_grade_names)"
+                    )
+                else:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                        "WHERE kv.value->>'ai_grade_name' = ANY(:ai_grade_names))"
+                    )
                 params["ai_grade_names"] = valid_ai_grades
 
         if ai_review_statuses:
             valid_statuses = [s for s in ai_review_statuses if s]
             if valid_statuses:
-                where_clauses.append(
-                    "EXISTS (SELECT 1 FROM grades g WHERE g.task_id = gt.id AND g.role_slot = 'ai' "
-                    "AND g.ai_review_status = ANY(:ai_review_statuses))"
-                )
+                if selected_ai_model_id is not None:
+                    where_clauses.append(
+                        "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status' = ANY(:ai_review_statuses)"
+                    )
+                else:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                        "WHERE kv.value->>'ai_review_status' = ANY(:ai_review_statuses))"
+                    )
                 params["ai_review_statuses"] = valid_statuses
 
         if final_grades:
             valid_final_grades = [g for g in final_grades if g]
             if valid_final_grades:
-                where_clauses.append("dg.impression = ANY(:final_grades)")
+                where_clauses.append("v.final_grade_name = ANY(:final_grades)")
                 params["final_grades"] = valid_final_grades
 
         # Dataset exclusivity: exclude tasks from selected existing datasets
@@ -405,7 +372,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
             where_clauses.append(
                 "NOT EXISTS ("
                 "SELECT 1 FROM curated_dataset_items cdi "
-                "WHERE cdi.task_id = gt.id "
+                "WHERE cdi.task_id = v.task_id "
                 "AND cdi.dataset_id = ANY(:excluded_dataset_ids) "
                 "AND cdi.include_in_export = true"
                 ")"
@@ -427,90 +394,75 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 order_clause = "ORDER BY RANDOM()"
         else:
             # Default: sequential by task_id descending
-            order_clause = "ORDER BY gt.id DESC"
+            order_clause = "ORDER BY v.task_id DESC"
 
         where_sql = " AND ".join(where_clauses)
 
         base_query = f"""
-            FROM mvw_image_listing_all v
-            JOIN grading_tasks gt ON (
-                (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
-                (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
-            )
-            {resident_compare_join}
-            LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
-            LEFT JOIN hospitals h ON lu.hospital_id = h.id
-            LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id
-            LEFT JOIN patient_encounters pe ON ef.patient_encounter_id = pe.id
-            LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
-            LEFT JOIN direct_image_uploads diu ON gt.direct_image_upload_id = diu.id
-            LEFT JOIN consensus c ON gt.id = c.task_id
-            LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
+            FROM {mv_name} v
             WHERE {where_sql}
         """
 
         data_sql = f"""
             SELECT
-                gt.id AS task_id,
-                gt.uuid AS task_uuid,
-                gt.state AS task_state,
-                lu.name AS lab_unit_name,
-                h.name AS hospital_name,
-                {mv_detail_col} AS grading_details_json,
-                {mv_consensus_col} AS consensus_status,
-                {mv_ai_count_col} AS ai_grading_count,
-                c.id AS consensus_id,
-                dg.impression AS final_impression,
-                c.method AS consensus_method,
-                gt.encounter_file_id,
-                ef.uuid AS encounter_file_uuid,
-                ef.filename AS encounter_filename,
-                zf.upload_date AS encounter_upload_date,
-                gt.direct_image_upload_id,
-                diu.uuid AS direct_image_uuid,
-                diu.filename AS direct_filename,
-                diu.folder_rel AS direct_folder_rel
+                v.task_id,
+                v.task_uuid,
+                v.task_state,
+                v.lab_unit_name,
+                v.hospital_name,
+                v.has_consensus,
+                v.consensus_type,
+                v.final_grade_name,
+                v.resident_grade_name,
+                v.resident_comment,
+                v.resident_selected_features_json,
+                v.resident2_grade_name,
+                v.resident2_comment,
+                v.resident2_selected_features_json,
+                v.arbitrator_grade_name,
+                v.arbitrator_comment,
+                v.arbitrator_selected_features_json,
+                v.review_grade_name,
+                v.review_comment,
+                v.review_selected_features_json,
+                v.ai_models_json,
+                v.image_uuid,
+                v.encounter_file_id,
+                v.encounter_file_uuid,
+                v.encounter_filename,
+                v.encounter_upload_date,
+                v.direct_image_upload_id,
+                v.direct_image_uuid,
+                v.direct_filename,
+                v.direct_edited_filename,
+                v.direct_folder_rel,
+                v.disease_name
             {base_query}
             {order_clause}
         """
 
         rows = db.execute(text(data_sql), params).fetchall()
-        task_ids = [row.task_id for row in rows]
-
-        ai_review_comments: Dict[int, List[str]] = {}
-        ai_review_statuses: Dict[int, List[str]] = {}
-        if task_ids:
-            ai_review_rows = (
-                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
-                .filter(Grade.role_slot == "ai", Grade.task_id.in_(task_ids))
-                .filter(or_(Grade.ai_review_comment.isnot(None), Grade.ai_review_status.isnot(None)))
-                .all()
-            )
-            for task_id, comment, status in ai_review_rows:
-                if comment:
-                    ai_review_comments.setdefault(task_id, []).append(comment)
-                if status:
-                    ai_review_statuses.setdefault(task_id, []).append(status)
 
         results: List[ExportTaskRow] = []
-        disease_map = {d.id: d.name for d in db.query(Disease).all()}
-        disease_name = disease_map.get(disease_id, "")
-
         for row in rows:
+            ai_models = _parse_ai_models(row.ai_models_json)
+            ai_review_comments, ai_review_statuses = _collect_ai_review_lists(ai_models)
+            grading_details_json = _build_grading_details_json(row, ai_models)
             results.append(
                 ExportTaskRow(
                     task_id=row.task_id,
                     task_uuid=str(row.task_uuid),
-                    disease=disease_name,
+                    disease=row.disease_name,
                     lab_unit=row.lab_unit_name,
                     hospital=row.hospital_name,
                     state=row.task_state,
-                    consensus_status=row.consensus_status,
-                    consensus_method=row.consensus_method,
-                    final_impression=row.final_impression,
-                    grading_details_json=row.grading_details_json or "[]",
-                    ai_review_comments=ai_review_comments.get(row.task_id, []),
-                    ai_review_statuses=ai_review_statuses.get(row.task_id, []),
+                    consensus_status=row.has_consensus,
+                    consensus_method=row.consensus_type,
+                    final_impression=row.final_grade_name,
+                    grading_details_json=grading_details_json,
+                    ai_review_comments=ai_review_comments,
+                    ai_review_statuses=ai_review_statuses,
+                    image_uuid=row.image_uuid,
                     encounter_file_id=row.encounter_file_id,
                     encounter_file_uuid=row.encounter_file_uuid,
                     encounter_filename=row.encounter_filename,
@@ -518,6 +470,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                     direct_image_upload_id=row.direct_image_upload_id,
                     direct_image_uuid=row.direct_image_uuid,
                     direct_filename=row.direct_filename,
+                    direct_edited_filename=row.direct_edited_filename,
                     direct_folder_rel=row.direct_folder_rel,
                 )
             )
@@ -525,18 +478,77 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         return results
 
 
-def _resolve_disease_key(db: Session, disease_id: Optional[int]) -> str:
-    if not disease_id:
-        return "dr"
-    disease = db.get(Disease, disease_id)
-    if not disease:
-        return "dr"
-    name = (disease.name or "").lower()
-    if "glaucoma" in name:
-        return "glaucoma"
-    if "amd" in name or "macular" in name:
-        return "amd"
-    return "dr"
+def _parse_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    return value
+
+
+def _parse_ai_models(value: Any) -> Dict[str, Dict[str, Any]]:
+    parsed = _parse_json_value(value)
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
+def _collect_ai_review_lists(ai_models: Dict[str, Dict[str, Any]]) -> tuple[List[str], List[str]]:
+    comments: List[str] = []
+    statuses: List[str] = []
+    for model in ai_models.values():
+        comment = model.get("ai_review_comment")
+        status = model.get("ai_review_status")
+        if comment:
+            comments.append(comment)
+        if status:
+            statuses.append(status)
+    return comments, statuses
+
+
+def _build_grading_details_json(row: Any, ai_models: Dict[str, Dict[str, Any]]) -> str:
+    details: List[Dict[str, Any]] = []
+
+    def _add_role(role: str, grade_name: Any, comment: Any, features: Any) -> None:
+        if grade_name is None and comment is None and features is None:
+            return
+        details.append(
+            {
+                "role_slot": role,
+                "grade_name": grade_name,
+                "comment": comment,
+                "selected_features": _parse_json_value(features),
+            }
+        )
+
+    _add_role("resident", row.resident_grade_name, row.resident_comment, row.resident_selected_features_json)
+    _add_role("resident2", row.resident2_grade_name, row.resident2_comment, row.resident2_selected_features_json)
+    _add_role("arbitrator", row.arbitrator_grade_name, row.arbitrator_comment, row.arbitrator_selected_features_json)
+    _add_role("review", row.review_grade_name, row.review_comment, row.review_selected_features_json)
+
+    for key in sorted(ai_models.keys(), key=lambda k: int(k) if str(k).isdigit() else k):
+        model = ai_models[key]
+        details.append(
+            {
+                "role_slot": "ai",
+                "grade_name": model.get("ai_grade_name"),
+                "comment": model.get("ai_comment"),
+                "selected_features": _parse_json_value(model.get("ai_selected_features")),
+                "ai_model_id": model.get("ai_model_id") or (int(key) if str(key).isdigit() else None),
+                "ai_model_name": model.get("ai_model_name"),
+                "ai_model_version": model.get("ai_model_version"),
+                "ai_probability": model.get("ai_probability"),
+                "ai_review_status": model.get("ai_review_status"),
+                "ai_review_comment": model.get("ai_review_comment"),
+            }
+        )
+
+    return json.dumps(details, ensure_ascii=True)
 
 
 def _extract_ai_probability(comment: Optional[str], provided: Optional[Any] = None) -> Optional[str]:
@@ -626,11 +638,6 @@ def _build_task_payload(
     include_original_filenames: bool = False,
 ) -> List[Dict[str, Any]]:
     task_ids = [r.task_id for r in rows]
-    encounter_ids = [r.encounter_file_id for r in rows if r.encounter_file_id]
-    direct_ids = [r.direct_image_upload_id for r in rows if r.direct_image_upload_id]
-
-    encounter_paths = _load_encounter_paths(encounter_ids) if encounter_ids else {}
-    direct_paths = _load_direct_paths(direct_ids) if direct_ids else {}
     ai_model_meta = _load_ai_model_meta(task_ids) if task_ids else {}
 
     data: List[Dict[str, Any]] = []
@@ -649,18 +656,24 @@ def _build_task_payload(
         grades["ai"] = ai_grade
 
         has_review = "review" in grades
-        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid or row.image_uuid
 
         file_path: Optional[Path] = None
         renamed_filename: Optional[str] = None
-        if row.encounter_file_id and row.encounter_file_id in encounter_paths:
-            fp, ext = encounter_paths[row.encounter_file_id]
-            file_path = fp
+        if row.encounter_file_id and row.encounter_filename and row.encounter_upload_date:
+            date_str = row.encounter_upload_date.strftime("%Y_%m_%d")
+            file_path = (IMAGE_DIR / date_str / row.encounter_filename).resolve()
+            ext = Path(row.encounter_filename).suffix.lower() or ".jpg"
             renamed_filename = f"{image_uuid}{ext}"
-        elif row.direct_image_upload_id and row.direct_image_upload_id in direct_paths:
-            fp, ext = direct_paths[row.direct_image_upload_id]
-            file_path = fp
-            renamed_filename = f"{image_uuid}{ext}"
+        elif row.direct_image_upload_id and row.direct_folder_rel:
+            filename = row.direct_edited_filename or row.direct_filename
+            if filename:
+                if row.direct_edited_filename:
+                    file_path = (DIRECT_UPLOAD_DIR / row.direct_folder_rel / "edited" / filename).resolve()
+                else:
+                    file_path = (DIRECT_UPLOAD_DIR / row.direct_folder_rel / filename).resolve()
+                ext = Path(filename).suffix.lower() or ".jpg"
+                renamed_filename = f"{image_uuid}{ext}"
 
         payload = {
                 "task_id": row.task_id,
@@ -721,91 +734,74 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                 db.query(GradingTask.disease_id).filter(GradingTask.id.in_(task_ids)).limit(1).scalar()
             )
 
-        disease_key = _resolve_disease_key(db, disease_id)
-        mv_detail_col = f"{disease_key}_grading_details_json"
-        mv_ai_count_col = f"{disease_key}_ai_grading_count"
-        mv_consensus_col = f"{disease_key}_consensus_status"
+        mv_name = get_mv_name_for_disease(db, disease_id)
 
         params: Dict[str, Any] = {"task_ids": list(task_ids)}
 
         base_query = f"""
-            FROM mvw_image_listing_all v
-            JOIN grading_tasks gt ON (
-                (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
-                (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
-            )
-            LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
-            LEFT JOIN hospitals h ON lu.hospital_id = h.id
-            LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id
-            LEFT JOIN patient_encounters pe ON ef.patient_encounter_id = pe.id
-            LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
-            LEFT JOIN direct_image_uploads diu ON gt.direct_image_upload_id = diu.id
-            LEFT JOIN consensus c ON gt.id = c.task_id
-            LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
-            WHERE gt.id = ANY(:task_ids)
+            FROM {mv_name} v
+            WHERE v.task_id = ANY(:task_ids)
         """
 
         data_sql = f"""
             SELECT
-                gt.id AS task_id,
-                gt.uuid AS task_uuid,
-                gt.state AS task_state,
-                lu.name AS lab_unit_name,
-                h.name AS hospital_name,
-                {mv_detail_col} AS grading_details_json,
-                {mv_consensus_col} AS consensus_status,
-                {mv_ai_count_col} AS ai_grading_count,
-                c.id AS consensus_id,
-                dg.impression AS final_impression,
-                c.method AS consensus_method,
-                gt.encounter_file_id,
-                ef.uuid AS encounter_file_uuid,
-                ef.filename AS encounter_filename,
-                zf.upload_date AS encounter_upload_date,
-                gt.direct_image_upload_id,
-                diu.uuid AS direct_image_uuid,
-                diu.filename AS direct_filename,
-                diu.folder_rel AS direct_folder_rel
+                v.task_id,
+                v.task_uuid,
+                v.task_state,
+                v.lab_unit_name,
+                v.hospital_name,
+                v.has_consensus,
+                v.consensus_type,
+                v.final_grade_name,
+                v.resident_grade_name,
+                v.resident_comment,
+                v.resident_selected_features_json,
+                v.resident2_grade_name,
+                v.resident2_comment,
+                v.resident2_selected_features_json,
+                v.arbitrator_grade_name,
+                v.arbitrator_comment,
+                v.arbitrator_selected_features_json,
+                v.review_grade_name,
+                v.review_comment,
+                v.review_selected_features_json,
+                v.ai_models_json,
+                v.image_uuid,
+                v.encounter_file_id,
+                v.encounter_file_uuid,
+                v.encounter_filename,
+                v.encounter_upload_date,
+                v.direct_image_upload_id,
+                v.direct_image_uuid,
+                v.direct_filename,
+                v.direct_edited_filename,
+                v.direct_folder_rel,
+                v.disease_name
             {base_query}
         """
 
         rows = db.execute(text(data_sql), params).fetchall()
-        task_ids_result = [row.task_id for row in rows]
-
-        ai_review_comments: Dict[int, List[str]] = {}
-        ai_review_statuses: Dict[int, List[str]] = {}
-        if task_ids_result:
-            ai_review_rows = (
-                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
-                .filter(Grade.role_slot == "ai", Grade.task_id.in_(task_ids_result))
-                .filter(or_(Grade.ai_review_comment.isnot(None), Grade.ai_review_status.isnot(None)))
-                .all()
-            )
-            for task_id, comment, status in ai_review_rows:
-                if comment:
-                    ai_review_comments.setdefault(task_id, []).append(comment)
-                if status:
-                    ai_review_statuses.setdefault(task_id, []).append(status)
-
-        disease_map = {d.id: d.name for d in db.query(Disease).all()}
-        disease_name = disease_map.get(disease_id, "")
 
         results: List[ExportTaskRow] = []
         for row in rows:
+            ai_models = _parse_ai_models(row.ai_models_json)
+            ai_review_comments, ai_review_statuses = _collect_ai_review_lists(ai_models)
+            grading_details_json = _build_grading_details_json(row, ai_models)
             results.append(
                 ExportTaskRow(
                     task_id=row.task_id,
                     task_uuid=str(row.task_uuid),
-                    disease=disease_name,
+                    disease=row.disease_name,
                     lab_unit=row.lab_unit_name,
                     hospital=row.hospital_name,
                     state=row.task_state,
-                    consensus_status=row.consensus_status,
-                    consensus_method=row.consensus_method,
-                    final_impression=row.final_impression,
-                    grading_details_json=row.grading_details_json or "[]",
-                    ai_review_comments=ai_review_comments.get(row.task_id, []),
-                    ai_review_statuses=ai_review_statuses.get(row.task_id, []),
+                    consensus_status=row.has_consensus,
+                    consensus_method=row.consensus_type,
+                    final_impression=row.final_grade_name,
+                    grading_details_json=grading_details_json,
+                    ai_review_comments=ai_review_comments,
+                    ai_review_statuses=ai_review_statuses,
+                    image_uuid=row.image_uuid,
                     encounter_file_id=row.encounter_file_id,
                     encounter_file_uuid=row.encounter_file_uuid,
                     encounter_filename=row.encounter_filename,
@@ -813,6 +809,7 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                     direct_image_upload_id=row.direct_image_upload_id,
                     direct_image_uuid=row.direct_image_uuid,
                     direct_filename=row.direct_filename,
+                    direct_edited_filename=row.direct_edited_filename,
                     direct_folder_rel=row.direct_folder_rel,
                 )
             )

@@ -1,36 +1,29 @@
 from __future__ import annotations
 
 import json
-import re
-from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
 import sqlalchemy as sa
-from sqlalchemy import and_, or_, text
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import text
 
 from app_cache import cache
 from auth.roles import roles_required
 from job_store import db_create_job
 from models import (
     AIModel,
-    Consensus,
     Disease,
     DiseaseGrading,
-    Grade,
-    GradingTask,
     Job,
-    Hospital,
     LabUnit,
     Session,
-    User,
 )
 from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
+from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
@@ -73,9 +66,6 @@ def discrepancy_review():
         # Get AI models for the AI model filter
         ai_models = db.query(AIModel).order_by(AIModel.name, AIModel.version).all()
         
-        # Apply filters
-        query = db.query(GradingTask).filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
-        
         # Apply disease filter (mandatory)
         from flask import flash, redirect, url_for, request, session
         disease_id = request.args.get("disease_id", type=int)
@@ -93,13 +83,26 @@ def discrepancy_review():
         # Clear the error flag if disease is selected
         if disease_id and session.get('_disease_error_shown'):
             session.pop('_disease_error_shown', None)
-        
-        query = query.filter(GradingTask.disease_id == disease_id)
+
+        if not disease_id:
+            return render_template(
+                "review/discrepancy_review.html",
+                diseases=diseases,
+                lab_units=lab_units,
+                grade_options=grade_options,
+                ai_models=ai_models,
+                tasks=[],
+                total_count=0,
+                page=1,
+                total_pages=0,
+                has_prev=False,
+                has_next=False,
+                ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+                filters={},
+            )
         
         # Apply lab unit filter
         lab_unit_id = request.args.get("lab_unit_id", type=int)
-        if lab_unit_id:
-            query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
         
         # Get grade filter values (as lists to support multi-select)
         resident_grades = request.args.getlist("resident_grade")
@@ -114,10 +117,18 @@ def discrepancy_review():
         has_review = request.args.get("has_review", type=str)
         review_grades = request.args.getlist("review_grade")
         has_arbitrator = request.args.get("has_arbitrator", type=str)
-        
+
         # Get consensus filter
         has_consensus = request.args.get("has_consensus", type=str)
         consensus_method = request.args.get("consensus_method", type=str)
+
+        if has_consensus == "no":
+            consensus_method = None
+            final_grades = []
+            has_arbitrator = None
+            arbitrator_grades = []
+            has_review = None
+            review_grades = []
 
         # Resident comparison filter
         resident_compare = request.args.get("resident_compare", type=str)
@@ -139,11 +150,7 @@ def discrepancy_review():
             ai_grades = []
             ai_review_statuses = []
 
-        # Figure out which MV columns to use based on disease
-        disease_key = _resolve_disease_key(db, disease_id)
-        mv_detail_col = f"{disease_key}_grading_details_json"
-        mv_ai_count_col = f"{disease_key}_ai_grading_count"
-        mv_consensus_col = f"{disease_key}_consensus_status"
+        mv_name = get_mv_name_for_disease(db, disease_id)
 
         # Restrict to lab units the user can access (via GradingTask.lab_unit_id)
         allowed_lab_units = list(user_lab_unit_ids)
@@ -175,8 +182,8 @@ def discrepancy_review():
 
         # Build dynamic WHERE clauses
         where_clauses: List[str] = [
-            "gt.disease_id = :disease_id",
-            "gt.lab_unit_id = ANY(:allowed_lab_units)",
+            "v.disease_id = :disease_id",
+            "v.task_lab_unit_id = ANY(:allowed_lab_units)",
         ]
         params: Dict[str, Any] = {
             "disease_id": disease_id,
@@ -184,152 +191,102 @@ def discrepancy_review():
         }
 
         if lab_unit_id and lab_unit_id in user_lab_unit_ids:
-            where_clauses.append("gt.lab_unit_id = :lab_unit_id")
+            where_clauses.append("v.task_lab_unit_id = :lab_unit_id")
             params["lab_unit_id"] = lab_unit_id
 
         # Consensus filter
         if has_consensus == "has_consensus":
-            where_clauses.append("c.id IS NOT NULL")
+            where_clauses.append("v.has_consensus = TRUE")
         elif has_consensus == "no":
-            where_clauses.append("c.id IS NULL")
+            where_clauses.append("v.has_consensus = FALSE")
 
         if consensus_method in {"match", "adjudication", "task_review"}:
-            where_clauses.append("c.method = :consensus_method")
+            where_clauses.append("v.consensus_type = :consensus_method")
             params["consensus_method"] = consensus_method
 
-        # Review filter (exists in MV JSON)
+        # Review filter
         if has_review == "yes":
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
-            )
+            where_clauses.append("v.has_review = TRUE")
             valid_review_grades = [g for g in review_grades if g]
             if valid_review_grades:
-                where_clauses.append(
-                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                    "WHERE elem->>'role_slot' = 'review' AND elem->>'grade_name' = ANY(:review_grades))"
-                )
+                where_clauses.append("v.review_grade_name = ANY(:review_grades)")
                 params["review_grades"] = valid_review_grades
         elif has_review == "no":
-            where_clauses.append(
-                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
-            )
+            where_clauses.append("v.has_review = FALSE")
 
-        # Arbitrator filter (exists in MV JSON)
+        # Arbitrator filter
         if has_arbitrator == "yes":
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
-            )
+            where_clauses.append("v.has_arbitrator = TRUE")
         elif has_arbitrator == "no":
-            where_clauses.append(
-                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'arbitrator')"
-            )
+            where_clauses.append("v.has_arbitrator = FALSE")
 
         # Has AI grade filter
         if has_ai_grade == "yes":
-            where_clauses.append(f"{mv_ai_count_col} > 0")
+            where_clauses.append("v.has_ai = TRUE")
         elif has_ai_grade == "no":
-            where_clauses.append(f"{mv_ai_count_col} = 0")
+            where_clauses.append("v.has_ai = FALSE")
 
-        # Role-specific grade filters (resident, resident2, arbitrator) via MV JSON
+        # Role-specific grade filters (resident, resident2, arbitrator)
         role_grade_filters = [
-            ("resident", resident_grades),
-            ("resident2", resident2_grades),
-            ("arbitrator", arbitrator_grades),
+            ("resident", resident_grades, "resident_grade_name"),
+            ("resident2", resident2_grades, "resident2_grade_name"),
+            ("arbitrator", arbitrator_grades, "arbitrator_grade_name"),
         ]
-        for role, impressions in role_grade_filters:
+        for role, impressions, column in role_grade_filters:
             if impressions:
                 valid_impressions = [g for g in impressions if g]
                 if valid_impressions:
-                    where_clauses.append(
-                        f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                        "WHERE elem->>'role_slot' = :role_slot_"
-                        + role
-                        + " AND elem->>'grade_name' = ANY(:grade_names_"
-                        + role
-                        + "))"
-                    )
-                    params[f"role_slot_{role}"] = role
+                    where_clauses.append(f"v.{column} = ANY(:grade_names_{role})")
                     params[f"grade_names_{role}"] = valid_impressions
 
-        resident_compare_join = ""
         if resident_compare in {"match", "mismatch"}:
-            resident_compare_join = """
-            LEFT JOIN LATERAL (
-                SELECT g.grade_name
-                FROM grades g
-                WHERE g.task_id = gt.id AND g.role_slot = 'resident'
-                ORDER BY g.created_at DESC
-                LIMIT 1
-            ) resident_grade ON TRUE
-            LEFT JOIN LATERAL (
-                SELECT g.grade_name
-                FROM grades g
-                WHERE g.task_id = gt.id AND g.role_slot = 'resident2'
-                ORDER BY g.created_at DESC
-                LIMIT 1
-            ) resident2_grade ON TRUE
-            """
-            if resident_compare == "match":
-                where_clauses.append(
-                    "resident_grade.grade_name IS NOT NULL "
-                    "AND resident2_grade.grade_name IS NOT NULL "
-                    "AND resident_grade.grade_name = resident2_grade.grade_name"
-                )
-            else:
-                where_clauses.append(
-                    "resident_grade.grade_name IS NOT NULL "
-                    "AND resident2_grade.grade_name IS NOT NULL "
-                    "AND resident_grade.grade_name <> resident2_grade.grade_name"
-                )
+            where_clauses.append("v.resident_vs_resident2 = :resident_compare")
+            params["resident_compare"] = resident_compare
 
         # AI model filter (single model enforced)
         if selected_ai_model_id is not None:
-            where_clauses.append(
-                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                "WHERE elem->>'role_slot' = 'ai' AND (elem->>'ai_model_id')::int = :ai_model_id)"
-            )
-            params["ai_model_id"] = selected_ai_model_id
+            where_clauses.append("v.ai_models_json ? :ai_model_key")
+            params["ai_model_key"] = str(selected_ai_model_id)
 
         # AI grade filter (multiple values)
         if ai_grades:
             valid_ai_grades = [g for g in ai_grades if g]
             if valid_ai_grades:
-                where_clauses.append(
-                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
-                    "WHERE elem->>'role_slot' = 'ai' AND elem->>'grade_name' = ANY(:ai_grade_names))"
-                )
+                if selected_ai_model_id is not None:
+                    where_clauses.append(
+                        "(v.ai_models_json -> :ai_model_key) ->> 'ai_grade_name' = ANY(:ai_grade_names)"
+                    )
+                else:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                        "WHERE kv.value->>'ai_grade_name' = ANY(:ai_grade_names))"
+                    )
                 params["ai_grade_names"] = valid_ai_grades
 
-        # AI review status filter (based on Grade.ai_review_status)
+        # AI review status filter
         if ai_review_statuses:
-            where_clauses.append(
-                "EXISTS (SELECT 1 FROM grades g WHERE g.task_id = gt.id AND g.role_slot = 'ai' "
-                "AND g.ai_review_status = ANY(:ai_review_statuses))"
-            )
+            if selected_ai_model_id is not None:
+                where_clauses.append(
+                    "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status' = ANY(:ai_review_statuses)"
+                )
+            else:
+                where_clauses.append(
+                    "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                    "WHERE kv.value->>'ai_review_status' = ANY(:ai_review_statuses))"
+                )
             params["ai_review_statuses"] = ai_review_statuses
 
-        # Final grade filter via consensus
+        # Final grade filter
         if final_grades:
             valid_final_grades = [g for g in final_grades if g]
             if valid_final_grades:
-                where_clauses.append("dg.impression = ANY(:final_grades)")
+                where_clauses.append("v.final_grade_name = ANY(:final_grades)")
                 params["final_grades"] = valid_final_grades
 
         where_sql = " AND ".join(where_clauses)
 
         base_query = f"""
-            FROM mvw_image_listing_all v
-            JOIN grading_tasks gt ON (
-                (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
-                (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
-            )
-            {resident_compare_join}
-            LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
-            LEFT JOIN hospitals h ON lu.hospital_id = h.id
-            LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id
-            LEFT JOIN direct_image_uploads diu ON gt.direct_image_upload_id = diu.id
-            LEFT JOIN consensus c ON gt.id = c.task_id
-            LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
+            FROM {mv_name} v
             WHERE {where_sql}
         """
 
@@ -344,23 +301,33 @@ def discrepancy_review():
 
         data_sql = f"""
             SELECT
-                gt.id AS task_id,
-                gt.state,
-                gt.lab_unit_id,
-                lu.name AS lab_unit_name,
-                h.name AS hospital_name,
-                gt.encounter_file_id,
-                ef.uuid AS encounter_file_uuid,
-                gt.direct_image_upload_id,
-                diu.uuid AS direct_image_uuid,
-                {mv_detail_col} AS grading_details_json,
-                {mv_consensus_col} AS consensus_status,
-                {mv_ai_count_col} AS ai_grading_count,
-                c.id AS consensus_id,
-                dg.impression AS final_impression,
-                c.method AS consensus_method
+                v.task_id,
+                v.task_state,
+                v.task_lab_unit_id,
+                v.lab_unit_name,
+                v.hospital_name,
+                v.encounter_file_uuid,
+                v.direct_image_uuid,
+                v.image_uuid,
+                v.disease_name,
+                v.has_consensus,
+                v.consensus_type,
+                v.final_grade_name,
+                v.resident_grade_name,
+                v.resident_comment,
+                v.resident_selected_features_json,
+                v.resident2_grade_name,
+                v.resident2_comment,
+                v.resident2_selected_features_json,
+                v.arbitrator_grade_name,
+                v.arbitrator_comment,
+                v.arbitrator_selected_features_json,
+                v.review_grade_name,
+                v.review_comment,
+                v.review_selected_features_json,
+                v.ai_models_json
             {base_query}
-            ORDER BY gt.id DESC
+            ORDER BY v.task_id DESC
             LIMIT :limit OFFSET :offset
         """
         params.update({"limit": per_page, "offset": offset})
@@ -369,49 +336,30 @@ def discrepancy_review():
 
         processed_tasks = []
         queue_ids = [row.task_id for row in rows]
-        ai_review_comments: Dict[int, List[str]] = defaultdict(list)
-        ai_review_statuses: Dict[int, List[str]] = defaultdict(list)
-        if queue_ids:
-            ai_review_rows = (
-                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
-                .filter(Grade.role_slot == "ai", Grade.task_id.in_(queue_ids))
-                .filter(or_(Grade.ai_review_comment.isnot(None), Grade.ai_review_status.isnot(None)))
-                .all()
-            )
-            for task_id, comment, status in ai_review_rows:
-                if comment:
-                    ai_review_comments[task_id].append(comment)
-                if status:
-                    ai_review_statuses[task_id].append(status)
 
         queue_len = len(queue_ids)
         for idx, row in enumerate(rows):
-            grades_by_role = _extract_grades_by_role(row.grading_details_json or "[]")
-            if "ai" in grades_by_role:
-                if ai_review_comments.get(row.task_id):
-                    grades_by_role["ai"]["ai_review_comments"] = ai_review_comments[row.task_id]
-                if ai_review_statuses.get(row.task_id):
-                    grades_by_role["ai"]["ai_review_statuses"] = ai_review_statuses[row.task_id]
+            grades_by_role = _build_grades_from_row(row, selected_ai_model_id)
             next_task_id = queue_ids[idx + 1] if idx + 1 < queue_len else None
             next_after_task_id = queue_ids[idx + 2] if idx + 2 < queue_len else None
             task_data = {
                 "id": row.task_id,
-                "state": row.state,
-                "disease_name": next((d.name for d in diseases if d.id == disease_id), None),
+                "state": row.task_state,
+                "disease_name": row.disease_name,
                 "lab_unit_name": row.lab_unit_name,
                 "hospital_name": row.hospital_name,
                 "encounter_file_uuid": row.encounter_file_uuid,
-                "direct_image_uuid": row.direct_image_uuid,
+                "direct_image_uuid": row.direct_image_uuid or row.image_uuid,
                 "grades": grades_by_role,
                 "consensus": None,
                 "next_task_id": next_task_id,
                 "next_after_task_id": next_after_task_id,
             }
-            if row.consensus_id:
+            if row.has_consensus:
                 task_data["consensus"] = {
-                    "id": row.consensus_id,
-                    "impression": row.final_impression,
-                    "method": row.consensus_method,
+                    "id": None,
+                    "impression": row.final_grade_name,
+                    "method": row.consensus_type,
                 }
             processed_tasks.append(task_data)
 
@@ -575,57 +523,94 @@ def get_disease_grading_id_by_impression(db: Session, impression: str) -> int | 
     return grading.id if grading else None
 
 
-def _extract_ai_probability(comment: Optional[str], provided: Optional[Any] = None) -> Optional[str]:
-    """Return AI probability from provided value or parsed comment."""
-    if provided is not None:
-        try:
-            return str(provided)
-        except Exception:
-            return None
-    if not comment:
+def _parse_json_value(value: Any) -> Any:
+    if value is None:
         return None
-    match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
-    return match.group(1) if match else None
-
-
-def _resolve_disease_key(db: Session, disease_id: Optional[int]) -> str:
-    """Map disease to mvw_image_listing_all column prefix."""
-    if not disease_id:
-        return "dr"
-    disease = db.get(Disease, disease_id)
-    if not disease:
-        return "dr"
-    name = (disease.name or "").lower()
-    if "glaucoma" in name:
-        return "glaucoma"
-    if "amd" in name or "macular" in name:
-        return "amd"
-    return "dr"
-
-
-def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
-    """Parse MV JSON details into role-keyed dict for templates."""
-    if isinstance(details_json, str):
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
         try:
-            grades = json.loads(details_json)
+            return json.loads(value)
         except Exception:
-            return {}
-    else:
-        grades = details_json or []
-    result: Dict[str, Dict[str, Any]] = {}
-    for item in grades or []:
-        role = item.get("role_slot")
-        if not role:
-            continue
-        result[role] = {
-            "id": item.get("grade_id"),
-            "impression": item.get("grade_name"),
-            "comment": item.get("comment"),
+            return value
+    return value
+
+
+def _parse_ai_models(value: Any) -> Dict[str, Dict[str, Any]]:
+    parsed = _parse_json_value(value)
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
+def _pick_ai_model(ai_models: Dict[str, Dict[str, Any]], selected_ai_model_id: Optional[int]) -> Optional[Dict[str, Any]]:
+    if not ai_models:
+        return None
+    if selected_ai_model_id is not None:
+        return ai_models.get(str(selected_ai_model_id))
+    sorted_keys = sorted(ai_models.keys(), key=lambda k: int(k) if str(k).isdigit() else k)
+    return ai_models.get(sorted_keys[0]) if sorted_keys else None
+
+
+def _build_grades_from_row(row: Any, selected_ai_model_id: Optional[int]) -> Dict[str, Dict[str, Any]]:
+    grades: Dict[str, Dict[str, Any]] = {}
+
+    def _add_role(role: str, grade_name: Any, comment: Any, features: Any) -> None:
+        if grade_name is None and comment is None and features is None:
+            return
+        grades[role] = {
+            "impression": grade_name,
+            "comment": comment,
+            "selected_features": _parse_json_value(features),
         }
-        if role == "ai":
-            result[role]["ai_model_name"] = item.get("ai_model_name")
-            result[role]["ai_model_version"] = item.get("ai_model_version")
-            result[role]["ai_probability"] = _extract_ai_probability(
-                item.get("comment"), item.get("ai_probability")
-            )
-    return result
+
+    _add_role("resident", row.resident_grade_name, row.resident_comment, row.resident_selected_features_json)
+    _add_role("resident2", row.resident2_grade_name, row.resident2_comment, row.resident2_selected_features_json)
+    _add_role("arbitrator", row.arbitrator_grade_name, row.arbitrator_comment, row.arbitrator_selected_features_json)
+    _add_role("review", row.review_grade_name, row.review_comment, row.review_selected_features_json)
+
+    ai_models = _parse_ai_models(row.ai_models_json)
+    if ai_models:
+        selected = _pick_ai_model(ai_models, selected_ai_model_id)
+        all_statuses = [
+            model.get("ai_review_status")
+            for model in ai_models.values()
+            if model.get("ai_review_status")
+        ]
+        all_comments = [
+            model.get("ai_review_comment")
+            for model in ai_models.values()
+            if model.get("ai_review_comment")
+        ]
+        if selected:
+            grades["ai"] = {
+                "impression": selected.get("ai_grade_name"),
+                "comment": selected.get("ai_comment"),
+                "selected_features": _parse_json_value(selected.get("ai_selected_features")),
+                "ai_model_name": selected.get("ai_model_name"),
+                "ai_model_version": selected.get("ai_model_version"),
+                "ai_probability": selected.get("ai_probability"),
+            }
+            if selected_ai_model_id is not None:
+                if selected.get("ai_review_status"):
+                    grades["ai"]["ai_review_statuses"] = [selected.get("ai_review_status")]
+                if selected.get("ai_review_comment"):
+                    grades["ai"]["ai_review_comments"] = [selected.get("ai_review_comment")]
+            else:
+                if all_statuses:
+                    grades["ai"]["ai_review_statuses"] = all_statuses
+                if all_comments:
+                    grades["ai"]["ai_review_comments"] = all_comments
+        else:
+            if all_statuses or all_comments:
+                grades["ai"] = {
+                    "impression": None,
+                    "comment": None,
+                    "selected_features": None,
+                    "ai_model_name": None,
+                    "ai_model_version": None,
+                    "ai_probability": None,
+                    "ai_review_statuses": all_statuses,
+                    "ai_review_comments": all_comments,
+                }
+    return grades

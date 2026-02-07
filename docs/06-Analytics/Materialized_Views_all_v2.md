@@ -24,6 +24,9 @@ Slug rules:
 - `direct_image_upload_id`, `encounter_file_id`, `patient_encounter_id`
 - `upload_type` (`Direct`, `Pregraded`, `ZIP`, `SET`)
 - `hospital_name`, `lab_unit_name`, `camera_name`, `area_name`
+- `direct_filename`, `direct_edited_filename`, `direct_folder_rel`
+- `encounter_filename`, `encounter_upload_date`
+- `image_filename`, `image_folder_rel`
 - `is_set_based`
 - `capture_date`, `upload_date_utc`
 - `disease_id`, `disease_name`
@@ -39,6 +42,10 @@ Slug rules:
 - `resident2_grade_name`
 - `arbitrator_grade_name`
 - `review_grade_name`
+- `resident_comment`, `resident_selected_features_json`
+- `resident2_comment`, `resident2_selected_features_json`
+- `arbitrator_comment`, `arbitrator_selected_features_json`
+- `review_comment`, `review_selected_features_json`
 
 ## Role Presence Flags
 - `has_resident`
@@ -56,6 +63,7 @@ Slug rules:
 Each entry:
 - `ai_model_id`, `ai_model_name`, `ai_model_version`
 - `ai_grade_id`, `ai_grade_name`, `ai_grade_created_at`
+- `ai_comment`, `ai_selected_features`
 - `ai_review_status`, `ai_review_comment`, `ai_reviewed_by_user_id`, `ai_reviewed_at`
 - `ai_probability` parsed from comment (`AI probability: <value>`)
 

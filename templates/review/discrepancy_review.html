@@ -261,6 +261,9 @@
               <option value="" {% if not filters.has_consensus %}selected{% endif %}>All Tasks</option>
               <option value="no" {% if filters.has_consensus=='no' %}selected{% endif %}>No Consensus yet</option>
             </select>
+            <small id="consensusNoNote" class="text-danger d-none">
+              Consensus is required for arbitrator/review and final grade filters, so those are cleared.
+            </small>
           </div>
 
           <div class="col-md-3">
@@ -753,6 +756,88 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
     updateDropdownText(reviewGradeList, 'All Review Grades');
 }
 
+    let lastConsensusValue = null;
+
+    function toggleConsensusControls() {
+  const consensusSelect = document.getElementById('hasConsensusSelect');
+    if (!consensusSelect) {
+      return;
+    }
+    const currentValue = consensusSelect.value || '';
+    const hasConsensus = currentValue !== 'no';
+    const consensusMethodSelect = document.getElementById('consensusMethodSelect');
+    const finalGradeDropdown = document.getElementById('finalGradeDropdown');
+    const finalGradeList = document.getElementById('finalGradeList');
+
+    if (consensusMethodSelect) {
+      consensusMethodSelect.disabled = !hasConsensus;
+      if (!hasConsensus) {
+        consensusMethodSelect.value = '';
+      }
+    }
+
+    if (finalGradeDropdown && finalGradeList) {
+      finalGradeDropdown.disabled = !hasConsensus;
+      finalGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+        cb.disabled = !hasConsensus;
+        if (!hasConsensus) {
+          cb.checked = false;
+        }
+      });
+      updateDropdownText(finalGradeList, 'All Grades');
+    }
+
+    if (!hasConsensus) {
+      const hasArbitratorSelect = document.getElementById('hasArbitratorSelect');
+      if (hasArbitratorSelect) {
+        hasArbitratorSelect.value = '';
+        if (hasArbitratorSelect.selectedIndex < 0) {
+          hasArbitratorSelect.selectedIndex = 0;
+        }
+      }
+      const arbitratorGradeDropdown = document.getElementById('arbitratorGradeDropdown');
+      const arbitratorGradeList = document.getElementById('arbitratorGradeList');
+      if (arbitratorGradeDropdown && arbitratorGradeList) {
+        arbitratorGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+          cb.checked = false;
+        });
+        updateDropdownText(arbitratorGradeList, 'All Grades');
+      }
+
+      const hasReviewSelect = document.getElementById('hasReviewSelect');
+      if (hasReviewSelect) {
+        hasReviewSelect.value = '';
+        if (hasReviewSelect.selectedIndex < 0) {
+          hasReviewSelect.selectedIndex = 0;
+        }
+        hasReviewSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const reviewGradeDropdown = document.getElementById('reviewGradeDropdown');
+      const reviewGradeList = document.getElementById('reviewGradeList');
+      if (reviewGradeDropdown && reviewGradeList) {
+        reviewGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+          cb.checked = false;
+        });
+        updateDropdownText(reviewGradeList, 'All Review Grades');
+      }
+      toggleReviewGradeControls();
+    }
+
+    const consensusNote = document.getElementById('consensusNoNote');
+    if (consensusNote) {
+      consensusNote.classList.toggle('d-none', hasConsensus);
+    }
+
+    if (currentValue === 'no' && lastConsensusValue !== 'no') {
+      const message = 'Consensus is required for arbitrator/review and final grade filters, so those were cleared.';
+      if (typeof window.showFlashToast === 'function') {
+        window.showFlashToast(message, 'danger');
+      }
+    }
+
+    lastConsensusValue = currentValue;
+}
+
     // Disable AI controls unless "Has AI Grade" is Yes
     function toggleAiControls() {
   const hasAi = document.getElementById('hasAiGradeSelect').value === 'yes';
@@ -785,9 +870,11 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
 
     document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
     document.getElementById('hasReviewSelect').addEventListener('change', toggleReviewGradeControls);
+    document.getElementById('hasConsensusSelect').addEventListener('change', toggleConsensusControls);
     // Initialize on load
     toggleAiControls();
     toggleReviewGradeControls();
+    toggleConsensusControls();
     document.addEventListener('DOMContentLoaded', updateAiReviewStatusDropdown);
 
 </script>

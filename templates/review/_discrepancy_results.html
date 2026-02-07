@@ -50,7 +50,8 @@
         </button>
         {% endif %}
       </form>
-      {% if current_user_has('admin') or current_user_has('local_admin') %}
+      <!-- Pagination -->
+      {% if request.endpoint == 'review.regrade_task_creator' %}
       <form method="POST" action="{{ url_for('review.create_regrade_tasks') }}"
         class="d-flex flex-wrap gap-2 align-items-end">
         {{ csrf_field() }}
@@ -102,7 +103,6 @@
         </button>
       </form>
       {% endif %}
-      <!-- Pagination -->
       {% if total_pages > 1 %}
       <nav aria-label="Tasks pagination">
         <ul class="pagination pagination-sm mb-0">

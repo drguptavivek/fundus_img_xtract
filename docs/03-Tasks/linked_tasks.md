@@ -44,6 +44,13 @@ Verification is centralized at the primary disease level:
 - Hide task if all diseases (primary AND linked) are in 'final' state
 - This prevents arbitrators from seeing fully-matched/consensused tasks
 
+### Linked Follow-up Queue Selection
+
+Linked follow-up tasks are selected atomically to prevent double assignment:
+- Utility: `get_next_linked_followup_task_atomic`
+- Uses `TaskTracker` to avoid assigning a task already in progress
+- Prefers `resident2` when the user has eligibility; otherwise `resident`
+
 ### Task State Transitions
 
 Tasks move through states independently:
@@ -60,3 +67,9 @@ Tasks move through states independently:
 ### Linked Follow-up Submissions
 - Follow-up UI submits only editable linked panels (read-only panels are excluded).
 - Client and server enforce that all editable linked panels are graded before submission.
+
+## Entry Routes
+
+- Primary grading: `GET /grading/grade/<disease_id>/<role_slot>`
+- Linked follow-up: `GET /grading/linked-followup/<primary_disease_id>/<linked_disease_id>`
+- Task view: `GET /grading/task/<task_uuid>/<slot_type>`

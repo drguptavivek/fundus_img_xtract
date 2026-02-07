@@ -101,7 +101,11 @@ sequenceDiagram
 
 1.  **Quota Management**: Checks both user-specific and system-wide upload quotas (`DIRECT_UPLOAD_LIFETIME_QUOTA`) before processing.
 2.  **Synchronous Processing**: Unlike Zip uploads, direct uploads are processed synchronously within the request.
-    -   **Metadata Extraction**: Performed immediately after EXIF stripping using `extract_image_metadata`. Results are stored in the `ImageMetadata` table for the "orig" variant.
+    -   **Metadata Extraction**: Performed immediately after EXIF stripping using `extract_image_metadata`. Stored in `ImageMetadata` ("orig" variant) and includes:
+        -   Dimensions (width/height), format, mode, bit depth
+        -   Grayscale/alpha flags, file size, DPI (x/y)
+        -   Luminance stats (avg/max/std), RGB mean/median, luminance histogram
+        -   Raw + parsed EXIF/IPTC tags
     -   **PII Detection**: Enqueued as an asynchronous job using `enqueue_pii_detection`.
 3.  **Security**:
     -   **Validation**: Strict filename validation (sanitization) and MIME type checking (magic bytes).

@@ -28,6 +28,8 @@ The core of the system is the `LinkedDiseaseGrading` model, which establishes a 
 - `get_primary_disease_id(db, disease_id)`: Finds the primary ID for any given disease ID (returns itself if it's already primary or unlinked).
 - `expand_primary_disease_ids(db, ids)`: Flattens a list of primary IDs to include all their linked counterparts.
 
+Linked chains are resolved recursively so A → B → C returns `[B, C]` for primary A.
+
 ## Arbitrator Linked Grading
 
 ### Arbitrator Context
@@ -72,3 +74,9 @@ This prevents growing inconsistencies in the main grading queue.
 - Follow-up entrypoints appear per primary disease as `Pending <LinkedDiseaseName>`.
 - Follow-up grading loads the primary task for context (read-only) and opens only the mismatched linked panels for editing.
 - Resident2 is preferred when the user has eligibility; otherwise resident.
+
+## Dashboard and KPI Behavior
+
+- Linked-only diseases are not shown as standalone grading cards.
+- Pending counts for primary diseases exclude certain linked mismatch states to avoid inconsistent queues.
+- Linked follow-up counts are derived from primary/link mismatch states and shown under the primary disease card.

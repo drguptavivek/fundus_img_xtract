@@ -67,9 +67,9 @@ Executes sequentially for each image, but multiple images run in parallel across
 **Step B: Data & Anonymization** (`process_file_metadata_strip_task`)
 -   **Input**: Result from Step A.
 -   **Metadata Extraction**:
-    -   Reads technical metadata (Dimensions, Format, Bit Depth).
-    -   Calculates image statistics (Mean RGB, Luminance, Histogram).
-    -   Extracts raw EXIF/IPTC tags (Camera Model, Software, GPS).
+    -   Reads dimensions, format, mode, bit depth, grayscale/alpha flags, file size, DPI.
+    -   Calculates image statistics (luminance avg/max/std, RGB mean/median, luminance histogram).
+    -   Extracts raw + parsed EXIF/IPTC tags (if present).
     -   **Storage**: Upserts to `ImageMetadata` table (linked to `EncounterFile`).
 -   **Privacy Stripping**:
     -   Re-reads the image pixels.

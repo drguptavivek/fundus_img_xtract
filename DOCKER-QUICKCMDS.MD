@@ -1,4 +1,4 @@
-# Rapid Docker commands for setting up the app 
+# Docker commands for setting up the app 
 
 Notes:
 - Docker Compose auto-loads `.env` in the repo root. No `--env-file` flags needed.

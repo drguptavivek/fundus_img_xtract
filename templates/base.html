@@ -316,10 +316,6 @@
                   href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.regrade_tasks' else '' }}"
-                  href="{{ url_for('grading.regrade_tasks') }}">Regrade Tasks</a>
-              </li>
-              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'review.regrade_task_creator' else '' }}"
                   href="{{ url_for('review.regrade_task_creator') }}">Regrade Task Creator</a>
               </li>

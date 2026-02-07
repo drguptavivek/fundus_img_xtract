@@ -85,6 +85,11 @@ When mismatches exist (and linked tasks already exist), a follow-up entrypoint a
 - Client-side: all editable linked panels must have a selection before submit.
 - Server-side: only editable panels are included in `linked_task_uuids`; read-only panels do not block submission.
 
+## Follow-up Entry Routes
+
+- Follow-up link: `GET /grading/linked-followup/<primary_disease_id>/<linked_disease_id>`
+- Task view (linked mode): `GET /grading/task/<task_uuid>/<slot_type>?linked_followup=true&linked_disease_id=<id>`
+
 ## Follow-up Flow Diagram
 
 ```mermaid

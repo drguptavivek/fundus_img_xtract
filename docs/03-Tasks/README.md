@@ -22,6 +22,12 @@ Comprehensive documentation for the Review System including:
 - Discrepancy review and task detail interfaces
 - Usage patterns and best practices
 
+### [linked_tasks.md](linked_tasks.md)
+Details how linked tasks are created, allocated, and routed through linked follow-up flows.
+
+### [regrade_tasks.md](regrade_tasks.md)
+Details the regrade task queue, assignment rules, and submission flow for regrade adjudicators.
+
 ## Overview
 
 The task management system handles the complete lifecycle of grading tasks, from creation through the dual grading workflow to final review. Key components include:

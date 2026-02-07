@@ -17,7 +17,10 @@ from models import (
     DiseaseGrading,
     Job,
     LabUnit,
+    Role,
     Session,
+    User,
+    user_lab_units,
 )
 from db_transaction_manager import get_db_session
 from sqlalchemy import select
@@ -29,19 +32,7 @@ from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
 
 
-@bp.route("/discrepancy-review", methods=["GET"])
-@roles_required("admin",  "discrepancy_reviewer", "data_exporter")
-@cache.cached(
-    timeout=600,
-    key_prefix=lambda: (
-        "discrepancy-review:v2:"
-        f"{current_user.id}:"
-        f"{request.query_string.decode('utf-8')}:"
-        f"hx={request.headers.get('HX-Request', 'false')}"
-    ),
-    unless=lambda: request.args.get("disease_id", type=int) is None,
-)
-def discrepancy_review():
+def render_discrepancy_review(page_title: str | None = None):
     """Main page for discrepancy review process.
 
     Note: Even though this route requires admin or data_manager roles,
@@ -72,7 +63,7 @@ def discrepancy_review():
                 select(User)
                 .join(User.roles)
                 .join(user_lab_units, user_lab_units.c.user_id == User.id)
-                .where(Role.name == ROLE_REGRADE_ADJUDICATOR)
+                .where(Role.name == "regrade_adjudicator")
                 .where(user_lab_units.c.lab_unit_id.in_(user_lab_unit_ids))
                 .order_by(User.username)
                 .distinct()
@@ -113,6 +104,7 @@ def discrepancy_review():
                 has_next=False,
                 ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
                 filters={},
+                page_title=page_title,
             )
         
         # Apply lab unit filter
@@ -183,6 +175,7 @@ def discrepancy_review():
                 has_prev=False,
                 has_next=False,
                 filters={},
+                page_title=page_title,
             )
 
         # Allow only one AI model selection at a time (pick the first if multiple)
@@ -419,7 +412,24 @@ def discrepancy_review():
                 "ai_grade": ai_grades,
                 "ai_review_status": ai_review_statuses,
             },
+            page_title=page_title,
         )
+
+
+@bp.route("/discrepancy-review", methods=["GET"])
+@roles_required("admin",  "discrepancy_reviewer", "data_exporter")
+@cache.cached(
+    timeout=600,
+    key_prefix=lambda: (
+        "discrepancy-review:v2:"
+        f"{current_user.id}:"
+        f"{request.query_string.decode('utf-8')}:"
+        f"hx={request.headers.get('HX-Request', 'false')}"
+    ),
+    unless=lambda: request.args.get("disease_id", type=int) is None,
+)
+def discrepancy_review():
+    return render_discrepancy_review()
 
 
 @bp.route("/discrepancy-export", methods=["POST"])

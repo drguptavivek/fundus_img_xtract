@@ -282,7 +282,7 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('local_admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'tasks' else '' }}" href="#"
               id="tasksMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -308,6 +308,10 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}"
                   href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'review.regrade_task_creator' else '' }}"
+                  href="{{ url_for('review.regrade_task_creator') }}">Regrade Task Creator</a>
               </li>
 
               <li>

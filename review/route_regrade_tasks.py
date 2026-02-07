@@ -7,12 +7,13 @@ from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy import select, text
 
-from auth.roles import ROLE_REGRADE_ADJUDICATOR, roles_required
+from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import LabUnit, RegradeTask, Role, User, user_lab_units
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.hospital_scoping import apply_scoping
 from . import bp
+from .route_discrepancy_review import render_discrepancy_review
 from .task_review import AI_REVIEW_STATUS_LABELS
 
 
@@ -46,7 +47,7 @@ def create_regrade_tasks():
         assigned_user = (
             db.query(User)
             .join(User.roles)
-            .filter(User.id == assigned_to_user_id, Role.name == ROLE_REGRADE_ADJUDICATOR)
+            .filter(User.id == assigned_to_user_id, Role.name == "regrade_adjudicator")
             .first()
         )
         if not assigned_user:
@@ -143,3 +144,9 @@ def create_regrade_tasks():
             "success" if created else "warning",
         )
         return redirect(request.referrer or url_for("review.discrepancy_review", disease_id=disease_id))
+
+
+@bp.route("/regrade-task-creator", methods=["GET"])
+@roles_required("admin", "local_admin")
+def regrade_task_creator():
+    return render_discrepancy_review(page_title="Regrade Task Creator")

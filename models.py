@@ -1118,7 +1118,10 @@ class Grade(Base):
     ai_reviewed_by: Mapped['User | None'] = relationship('User', foreign_keys=[ai_reviewed_by_user_id])
 
     __table_args__ = (
-        CheckConstraint("role_slot IN ('resident','resident2','arbitrator','ai','review')", name='ck_grade_role_slot_valid'),
+        CheckConstraint(
+            "role_slot IN ('resident','resident2','arbitrator','ai','review','regrade_adjudicator')",
+            name='ck_grade_role_slot_valid',
+        ),
         CheckConstraint(
             "ai_review_status IS NULL OR ai_review_status IN ('ok','minor_miss','major_miss')",
             name='ck_grade_ai_review_status_valid',
@@ -1149,7 +1152,54 @@ class Consensus(Base):
     decided_by: Mapped['User | None'] = relationship('User')
 
     __table_args__ = (
-        CheckConstraint("method IN ('match','adjudication','task_review')", name='ck_consensus_method_valid'),
+        CheckConstraint("method IN ('match','adjudication','task_review','regrade')", name='ck_consensus_method_valid'),
+    )
+
+
+class RegradeTask(Base):
+    __tablename__ = "regrade_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid4()),
+    )
+    source_task_id: Mapped[int] = mapped_column(
+        ForeignKey("grading_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id"), nullable=False, index=True)
+    assigned_to_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(24), default="regrade_pending", nullable=False, index=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    source_task: Mapped["GradingTask"] = relationship("GradingTask")
+    disease: Mapped["Disease"] = relationship("Disease")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+    assigned_to: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_to_user_id])
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('regrade_pending','regrade_done')",
+            name="ck_regrade_task_status_valid",
+        ),
     )
 
 

@@ -50,6 +50,58 @@
         </button>
         {% endif %}
       </form>
+      {% if current_user_has('admin') or current_user_has('local_admin') %}
+      <form method="POST" action="{{ url_for('review.create_regrade_tasks') }}"
+        class="d-flex flex-wrap gap-2 align-items-end">
+        {{ csrf_field() }}
+        <input type="hidden" name="disease_id" value="{{ filters.disease_id }}">
+        {% if filters.lab_unit_id %}<input type="hidden" name="lab_unit_id" value="{{ filters.lab_unit_id }}">{% endif
+        %}
+        {% for g in filters.resident_grade or [] %}<input type="hidden" name="resident_grade" value="{{ g }}">{%
+        endfor %}
+        {% for g in filters.resident2_grade or [] %}<input type="hidden" name="resident2_grade" value="{{ g }}">{%
+        endfor %}
+        {% for g in filters.arbitrator_grade or [] %}<input type="hidden" name="arbitrator_grade" value="{{ g }}">{%
+        endfor %}
+        {% for g in filters.review_grade or [] %}<input type="hidden" name="review_grade" value="{{ g }}">{% endfor %}
+        {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
+        {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{%
+        endif %}
+        {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
+        {% if filters.has_arbitrator %}<input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator }}">{%
+        endif %}
+        {% if filters.has_consensus %}<input type="hidden" name="has_consensus" value="{{ filters.has_consensus }}">{%
+        endif %}
+        {% if filters.consensus_method %}<input type="hidden" name="consensus_method"
+          value="{{ filters.consensus_method }}">{% endif %}
+        {% if filters.resident_compare %}<input type="hidden" name="resident_compare"
+          value="{{ filters.resident_compare }}">{% endif %}
+        {% for mid in filters.ai_model_id or [] %}<input type="hidden" name="ai_model_id" value="{{ mid }}">{% endfor
+        %}
+        {% for g in filters.ai_grade or [] %}<input type="hidden" name="ai_grade" value="{{ g }}">{% endfor %}
+        {% for status in filters.ai_review_status or [] %}<input type="hidden" name="ai_review_status"
+          value="{{ status }}">{% endfor %}
+        <div class="d-flex flex-column">
+          <label class="form-label small mb-1">Regrade Adjudicator</label>
+          <select name="assigned_to_user_id" class="form-select form-select-sm" required
+            {% if not filters.disease_id %}disabled{% endif %}>
+            <option value="">Select</option>
+            {% for user in regrade_adjudicators or [] %}
+            <option value="{{ user.id }}">{{ user.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="d-flex flex-column">
+          <label class="form-label small mb-1">Regrade Notes</label>
+          <input type="text" name="regrade_notes" class="form-control form-control-sm" required
+            {% if not filters.disease_id %}disabled{% endif %}>
+        </div>
+        <button type="submit" class="btn btn-outline-danger btn-sm" {% if not filters.disease_id %}disabled{% endif
+          %}>
+          Create Regrade Queue
+        </button>
+      </form>
+      {% endif %}
       <!-- Pagination -->
       {% if total_pages > 1 %}
       <nav aria-label="Tasks pagination">
@@ -388,7 +440,8 @@
               {% set method_label = {
               'match': 'Match',
               'adjudication': 'Adjudication',
-              'task_review': 'Review override'
+              'task_review': 'Review override',
+              'regrade': 'Regrade'
               }.get(task.consensus.method, task.consensus.method) %}
               <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
               <small class="text-muted d-block">{{ method_label or '' }}</small>

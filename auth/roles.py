@@ -18,6 +18,7 @@ ROLE_DATA_MANAGER = "data_manager"
 ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"
+ROLE_REGRADE_ADJUDICATOR = "regrade_adjudicator"
 
 DEFAULT_ROLES = [
     "admin",
@@ -30,6 +31,7 @@ DEFAULT_ROLES = [
     "discrepancy_reviewer",
     "data_exporter",
     "pregarded_uploader",
+    "regrade_adjudicator",
     ROLE_DATASET_CREATOR,
     ROLE_ANALYTICS_VIEWER,
 ]

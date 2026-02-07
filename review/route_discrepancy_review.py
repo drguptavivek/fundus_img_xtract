@@ -11,6 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import joinedload, selectinload
 
+from app_cache import cache
 from auth.roles import roles_required
 from job_store import db_create_job
 from models import (
@@ -37,6 +38,16 @@ from .task_review import AI_REVIEW_STATUS_LABELS
 
 @bp.route("/discrepancy-review", methods=["GET"])
 @roles_required("admin",  "discrepancy_reviewer", "data_exporter")
+@cache.cached(
+    timeout=600,
+    key_prefix=lambda: (
+        "discrepancy-review:v2:"
+        f"{current_user.id}:"
+        f"{request.query_string.decode('utf-8')}:"
+        f"hx={request.headers.get('HX-Request', 'false')}"
+    ),
+    unless=lambda: request.args.get("disease_id", type=int) is None,
+)
 def discrepancy_review():
     """Main page for discrepancy review process.
 
@@ -105,6 +116,10 @@ def discrepancy_review():
         
         # Get consensus filter
         has_consensus = request.args.get("has_consensus", default="has_consensus", type=str)
+        consensus_method = request.args.get("consensus_method", type=str)
+
+        # Resident comparison filter
+        resident_compare = request.args.get("resident_compare", type=str)
         
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
@@ -177,6 +192,10 @@ def discrepancy_review():
         elif has_consensus == "no":
             where_clauses.append("c.id IS NULL")
 
+        if consensus_method in {"match", "adjudication", "task_review"}:
+            where_clauses.append("c.method = :consensus_method")
+            params["consensus_method"] = consensus_method
+
         # Review filter (exists in MV JSON)
         if has_review == "yes":
             where_clauses.append(
@@ -221,6 +240,37 @@ def discrepancy_review():
                     params[f"role_slot_{role}"] = role
                     params[f"grade_names_{role}"] = valid_impressions
 
+        resident_compare_join = ""
+        if resident_compare in {"match", "mismatch"}:
+            resident_compare_join = """
+            LEFT JOIN LATERAL (
+                SELECT g.grade_name
+                FROM grades g
+                WHERE g.task_id = gt.id AND g.role_slot = 'resident'
+                ORDER BY g.created_at DESC
+                LIMIT 1
+            ) resident_grade ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT g.grade_name
+                FROM grades g
+                WHERE g.task_id = gt.id AND g.role_slot = 'resident2'
+                ORDER BY g.created_at DESC
+                LIMIT 1
+            ) resident2_grade ON TRUE
+            """
+            if resident_compare == "match":
+                where_clauses.append(
+                    "resident_grade.grade_name IS NOT NULL "
+                    "AND resident2_grade.grade_name IS NOT NULL "
+                    "AND resident_grade.grade_name = resident2_grade.grade_name"
+                )
+            else:
+                where_clauses.append(
+                    "resident_grade.grade_name IS NOT NULL "
+                    "AND resident2_grade.grade_name IS NOT NULL "
+                    "AND resident_grade.grade_name <> resident2_grade.grade_name"
+                )
+
         # AI model filter (single model enforced)
         if selected_ai_model_id is not None:
             where_clauses.append(
@@ -262,6 +312,7 @@ def discrepancy_review():
                 (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
                 (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
             )
+            {resident_compare_join}
             LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
             LEFT JOIN hospitals h ON lu.hospital_id = h.id
             LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id
@@ -357,8 +408,13 @@ def discrepancy_review():
         has_prev = page > 1
         has_next = page < total_pages
 
+        template_name = (
+            "review/_discrepancy_results.html"
+            if request.headers.get("HX-Request") == "true"
+            else "review/discrepancy_review.html"
+        )
         return render_template(
-            "review/discrepancy_review.html",
+            template_name,
             diseases=diseases,
             lab_units=lab_units,
             grade_options=grade_options,
@@ -381,6 +437,8 @@ def discrepancy_review():
                 "has_review": has_review,
                 "review_grade": review_grades,
                 "has_consensus": has_consensus,
+                "consensus_method": consensus_method,
+                "resident_compare": resident_compare,
                 "ai_model_id": ai_model_ids,
                 "ai_grade": ai_grades,
                 "ai_review_status": ai_review_statuses,
@@ -436,6 +494,8 @@ def discrepancy_export():
             "has_review": request.form.get("has_review", type=str),
             "review_grade": request.form.getlist("review_grade"),
             "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
+            "consensus_method": request.form.get("consensus_method", type=str),
+            "resident_compare": request.form.get("resident_compare", type=str),
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": ai_review_statuses,

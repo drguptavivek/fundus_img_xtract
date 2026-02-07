@@ -589,46 +589,14 @@
   </div>
 
 
-  <div class="container">
-    {% from "_forms.html" import csrf_field %}
-    {% block content %}
+  <main class="flex-grow-1">
+    <div class="container">
+      {% from "_forms.html" import csrf_field %}
+      {% block content %}
 
-    {% endblock %}
-  </div>
-  <br />
-
-  <br />
-
-  <br />
-
-  <br />
-
-  <br />
-
-  <footer class="site-footer mt-auto" style="margin-top: 2rem;">
-    <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
-      <!-- GitHub icon (left) -->
-      <a class="link-body-emphasis d-inline-flex align-items-center text-decoration-none" aria-label="GitHub repository"
-        href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}"
-        target="_blank" rel="noopener">
-        <span class="d-inline-block" aria-hidden="true">
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z" />
-          </svg>
-        </span>
-      </a>
-
-      <div class="small text-center text-sm-start text-body-secondary">
-        &copy; Software is CC BY-NC-SA — Dr Vivek Gupta, RP Centre, AIIMS, New Delhi. All data is Protected.
-        <div class="mt-1">All logos and trademarks are the property of their respective owners.</div>
-      </div>
-      <div class="d-flex align-items-center gap-2"></div>
+      {% endblock %}
     </div>
-  </footer>
-
-
-
+  </main>
 
   <!-- Global SVG color filters (hidden) For Images-->
   <svg width="0" height="0" style="position:absolute;left:-9999px;visibility:hidden" aria-hidden="true"
@@ -682,6 +650,30 @@
     </defs>
   </svg>
 
+  <footer class="site-footer mt-auto pt-4">
+    <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
+      <!-- GitHub icon (left) -->
+      <a class="link-body-emphasis d-inline-flex align-items-center text-decoration-none" aria-label="GitHub repository"
+        href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}"
+        target="_blank" rel="noopener">
+        <span class="d-inline-block" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z" />
+          </svg>
+        </span>
+      </a>
+
+      <div class="small text-center text-sm-start text-body-secondary">
+        &copy; Software is CC BY-NC-SA — Dr Vivek Gupta, RP Centre, AIIMS, New Delhi. All data is Protected.
+        <div class="mt-1">All logos and trademarks are the property of their respective owners.</div>
+      </div>
+      <div class="d-flex align-items-center gap-2"></div>
+    </div>
+  </footer>
+
+
+
 
   <!--  {# --- Core/vendor scripts first (e.g., bootstrap bundle, photoswipe, etc.) --- #} -->
   <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
@@ -705,51 +697,6 @@
 
   <!-- {# Page-specific scripts go here #} -->
   {% block page_scripts %}
-  {% if current_user.is_authenticated and (current_user.is_admin or current_user.is_local_admin) %}
-  <script nonce="{{ csp_script_nonce() }}">
-  {% else %}
-  <script>
-  {% endif %}
-    // Update CVE badge in admin menu
-    (function() {
-      const badge = document.getElementById('cveCountBadge');
-      if (!badge) return;
-
-      fetch('{{ url_for('admin.api_cve_summary') }}')
-        .then(r => r.json())
-        .then(data => {
-          badge.textContent = data.total;
-          badge.className = 'badge ms-auto ' + (data.has_critical_or_high ? 'bg-danger' : 'bg-warning');
-          if (data.total > 0) {
-            badge.setAttribute('title', data.total + ' vulnerabilities detected');
-          }
-        })
-        .catch(err => {
-          console.error('Failed to load CVE count:', err);
-          badge.textContent = '?';
-        });
-    })();
-
-    // Update Package Updates badge in admin menu
-    (function() {
-      const badge = document.getElementById('packageUpdateCountBadge');
-      if (!badge) return;
-
-      fetch('{{ url_for('admin.api_package_updates_summary') }}')
-        .then(r => r.json())
-        .then(data => {
-          badge.textContent = data.updates_available;
-          badge.className = 'badge ms-auto ' + (data.has_updates ? 'bg-warning' : 'bg-success');
-          if (data.updates_available > 0) {
-            badge.setAttribute('title', data.updates_available + ' packages have updates');
-          }
-        })
-        .catch(err => {
-          console.error('Failed to load package update count:', err);
-          badge.textContent = '?';
-        });
-    })();
-  </script>
   {% endblock %}
 
   <!-- Floating theme toggle (fixed on right edge) -->

@@ -217,6 +217,8 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         has_review = filters.get("has_review")
         review_grades = filters.get("review_grade", [])
         has_consensus = filters.get("has_consensus", "has_consensus")
+        consensus_method = filters.get("consensus_method")
+        resident_compare = filters.get("resident_compare")
         ai_model_ids = filters.get("ai_model_id", [])
         ai_grades = filters.get("ai_grade", [])
         ai_review_statuses = filters.get("ai_review_status", [])
@@ -267,6 +269,10 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         elif has_consensus == "no":
             where_clauses.append("c.id IS NULL")
 
+        if consensus_method in {"match", "adjudication", "task_review"}:
+            where_clauses.append("c.method = :consensus_method")
+            params["consensus_method"] = consensus_method
+
         if has_review == "yes":
             where_clauses.append(
                 f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
@@ -311,6 +317,37 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                     )
                     params[f"role_slot_{role}"] = role
                     params[f"grade_names_{role}"] = valid
+
+        resident_compare_join = ""
+        if resident_compare in {"match", "mismatch"}:
+            resident_compare_join = """
+            LEFT JOIN LATERAL (
+                SELECT g.grade_name
+                FROM grades g
+                WHERE g.task_id = gt.id AND g.role_slot = 'resident'
+                ORDER BY g.created_at DESC
+                LIMIT 1
+            ) resident_grade ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT g.grade_name
+                FROM grades g
+                WHERE g.task_id = gt.id AND g.role_slot = 'resident2'
+                ORDER BY g.created_at DESC
+                LIMIT 1
+            ) resident2_grade ON TRUE
+            """
+            if resident_compare == "match":
+                where_clauses.append(
+                    "resident_grade.grade_name IS NOT NULL "
+                    "AND resident2_grade.grade_name IS NOT NULL "
+                    "AND resident_grade.grade_name = resident2_grade.grade_name"
+                )
+            else:
+                where_clauses.append(
+                    "resident_grade.grade_name IS NOT NULL "
+                    "AND resident2_grade.grade_name IS NOT NULL "
+                    "AND resident_grade.grade_name <> resident2_grade.grade_name"
+                )
 
         selected_ai_model_id: Optional[int] = None
         if ai_model_ids:
@@ -390,6 +427,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
                 (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
             )
+            {resident_compare_join}
             LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
             LEFT JOIN hospitals h ON lu.hospital_id = h.id
             LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id

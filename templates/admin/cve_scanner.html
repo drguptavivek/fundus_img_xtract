@@ -217,6 +217,31 @@
     {% endif %}
 </div>
 
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  (function() {
+    const badge = document.getElementById('cveCountBadge');
+    if (!badge) return;
+
+    fetch('{{ url_for('admin.api_cve_summary') }}')
+      .then(r => r.json())
+      .then(data => {
+        badge.textContent = data.total;
+        badge.className = 'badge ms-auto ' + (data.has_critical_or_high ? 'bg-danger' : 'bg-warning');
+        if (data.total > 0) {
+          badge.setAttribute('title', data.total + ' vulnerabilities detected');
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load CVE count:', err);
+        badge.textContent = '?';
+      });
+  })();
+</script>
+
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
 <script src="{{ url_for('static', filename='js/cve-scanner.js') }}?v={{ v }}" defer></script>
 {% endblock %}

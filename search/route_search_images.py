@@ -11,7 +11,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 
 from . import bp
-from models import Disease, LabUnit, DiseaseGrading, AIModel, Grade, GradingTask
+from models import Disease, LabUnit, DiseaseGrading, AIModel, Grade, GradingTask, ImageMetadata
 from sqlalchemy.orm import joinedload
 from utils.hospital_scoping import apply_scoping
 from db_transaction_manager import get_db_session
@@ -342,6 +342,16 @@ def search_image_detail(task_id: int) -> str:
             abort(404, description="Task not found or access denied")
 
         image_object = task.encounter_file if task.encounter_file else task.direct_image
+        image_metadata = None
+        if image_object:
+            image_metadata = (
+                db.query(ImageMetadata)
+                .filter(
+                    ImageMetadata.image_uuid == image_object.uuid,
+                    ImageMetadata.image_variant == "orig",
+                )
+                .first()
+            )
         grade_by_role = {grade.role_slot: grade for grade in task.grades or []}
 
         return render_template(
@@ -349,6 +359,7 @@ def search_image_detail(task_id: int) -> str:
             task=task_details,
             original_task=task,
             image_object=image_object,
+            image_metadata=image_metadata,
             grade_by_role=grade_by_role,
             return_to=request.args.get("return_to"),
         )

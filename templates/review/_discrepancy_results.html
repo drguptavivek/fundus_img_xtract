@@ -504,7 +504,8 @@
             <td>
               {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None)
               %}
-              {% if task.consensus %}
+              {% set allowed_methods = ['match', 'adjudication', 'regrade', 'task_review'] %}
+              {% if task.consensus and task.consensus.method in allowed_methods %}
               <a href="{{ url_for('review.review_task_details',
                   task_id=task.id,
                   ai_model_id=ai_param,
@@ -526,6 +527,8 @@
                   final_grade=filters.final_grade or [],
                   ai_grade=filters.ai_grade or []
                 ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+              {% elif task.consensus %}
+              <span class="text-muted">Consensus not eligible</span>
               {% else %}
               <span class="text-muted">No consensus</span>
               {% endif %}

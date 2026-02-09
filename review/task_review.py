@@ -10,7 +10,7 @@ import threading
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus
+from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus, ImageMetadata
 
 from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_detail
@@ -98,7 +98,7 @@ def _kick_off_mv_refresh(app) -> None:
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "data_manager", "optometrist")
+@roles_required("discrepancy_reviewer")
 def review_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
@@ -128,10 +128,11 @@ def review_task_details(task_id: int):
             from flask import abort
             abort(404, description="Task not found")
         
-        # Check if user can review this task (has Resident2 or Arbitrator permissions)
-        can_review = (
-            get_user_eligibility_for_task(db, current_user.id, task_id, 'resident2') or
-            get_user_eligibility_for_task(db, current_user.id, task_id, 'arbitrator')
+        allowed_methods = {"match", "adjudication", "regrade", "task_review"}
+        existing_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
+        # Allow review only for discrepancy reviewers and eligible consensus methods
+        can_review = current_user.has_role("discrepancy_reviewer") and (
+            existing_consensus is not None and existing_consensus.method in allowed_methods
         )
         
         # Get allowed lab units for navigation
@@ -140,14 +141,12 @@ def review_task_details(task_id: int):
         user_lab_unit_ids = [lu.id for lu in lu_query.all()]
         
         # Get latest existing review grade if any (any reviewer)
-        existing_review_grade = None
-        if can_review:
-            existing_review_grade = (
-                db.query(Grade)
-                .filter(Grade.task_id == task_id, Grade.role_slot == "review")
-                .order_by(Grade.updated_at.desc().nullslast(), Grade.id.desc())
-                .first()
-            )
+        existing_review_grade = (
+            db.query(Grade)
+            .filter(Grade.task_id == task_id, Grade.role_slot == "review")
+            .order_by(Grade.updated_at.desc().nullslast(), Grade.id.desc())
+            .first()
+        )
 
         existing_selected_features = _parse_selected_features(
             existing_review_grade.selected_features_json if existing_review_grade else None
@@ -560,10 +559,18 @@ def review_task_details(task_id: int):
                 grade_for_role.selected_features_json if grade_for_role else None
             )
 
-        existing_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
-
         # Determine which image object to use for the viewer
         image_object = task.encounter_file if task.encounter_file else task.direct_image
+        image_metadata = None
+        if image_object:
+            image_metadata = (
+                db.query(ImageMetadata)
+                .filter(
+                    ImageMetadata.image_uuid == image_object.uuid,
+                    ImageMetadata.image_variant == "orig",
+                )
+                .first()
+            )
 
         # Render template within the same session to avoid detached instance errors
         return render_template(
@@ -571,6 +578,7 @@ def review_task_details(task_id: int):
             task=task_details,
             original_task=task,  # For additional properties not in summary
             image_object=image_object,
+            image_metadata=image_metadata,
             can_review=can_review,
             existing_review_grade=existing_review_grade,
             available_grades=available_grades,

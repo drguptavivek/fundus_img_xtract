@@ -28,6 +28,7 @@ from models import (
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
 from utils.discrepancy_filters import build_discrepancy_filter_query
+from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 EXPORT_DIR = BASE_DIR / "files" / "exports"
 MAX_ROWS_PER_ZIP = 200

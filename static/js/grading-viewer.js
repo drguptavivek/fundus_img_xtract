@@ -1110,7 +1110,7 @@
         resizeCdrOverlay();
         drawCdrOverlay();
         setCdrOverlayVisible(true);
-      }, 2000);
+      }, 1500);
     }
 
     function scheduleCdrDraw(){
@@ -1387,6 +1387,12 @@
         const target = selectCommentTarget();
         if (!target) {
           updateCdrStatus('No comment field found');
+          cdrActive = false;
+          if (cdrToggle) {
+            cdrToggle.setAttribute('aria-pressed', 'false');
+            cdrToggle.classList.remove('active');
+          }
+          setViewerControlsLocked(false);
           return;
         }
         const nextValue = upsertCdrTag(target.value || '', tag);

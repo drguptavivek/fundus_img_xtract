@@ -1,6 +1,7 @@
 (function(){
   // Active root for global key handling (Safari-friendly)
   let activeRoot = null;
+  let defaultRoot = null;
 
   function selectFilter(root, value){
     try {
@@ -200,10 +201,15 @@
     window.__imggrKeysBound = true;
     window.addEventListener('keydown', (e) => {
       if (!activeRoot) {
-        activeRoot = document.querySelector('.imggr-viewer-root');
+        activeRoot = defaultRoot || document.querySelector('.imggr-viewer-root');
         if (!activeRoot) return;
       }
-    const state = viewerStates.get(activeRoot);
+    let state = viewerStates.get(activeRoot);
+    if (!state && defaultRoot) {
+      activeRoot = defaultRoot;
+      state = viewerStates.get(activeRoot);
+    }
+    if (!state) return;
     if (state && typeof state.isCdrActive === 'function' && state.isCdrActive()) return;
       const rawKey = e.key || '';
       const k = rawKey.toLowerCase();
@@ -220,7 +226,16 @@
       const contr = card ? card.querySelector('.imggr-contrast') : null;
       const resetBtn = card ? card.querySelector('.imggr-reset') : null;
 
-      if (k === 'l') { e.preventDefault(); state?.toggleLoupe?.(); return; }
+      if (k === 'l') {
+        e.preventDefault();
+        const next = !(state?.getCurrentLoupeEnabled?.() ?? false);
+        if (state?.setLoupeEnabled) {
+          state.setLoupeEnabled(next);
+        } else {
+          state?.toggleLoupe?.();
+        }
+        return;
+      }
       if (rawKey === '[' || rawKey === '{') { e.preventDefault(); state?.adjustLoupeSize?.(-1); return; }
       if (rawKey === ']' || rawKey === '}') { e.preventDefault(); state?.adjustLoupeSize?.(+1); return; }
       if (rawKey === '-' || rawKey === '_') { e.preventDefault(); state?.adjustLoupeZoom?.(-1); return; }
@@ -282,6 +297,8 @@
     const mainImg = root.querySelector('.imggr-main-img');
     const fullBtn = root.querySelector('.imggr-full');
     if (!main || !mainImg) return;
+    if (!defaultRoot) defaultRoot = root;
+    if (!activeRoot) activeRoot = root;
     
     // Get UUID from root element's data-enc-id attribute
     const uuid = root.dataset.encId;
@@ -1422,6 +1439,7 @@
     }
 
     loupeToggle?.addEventListener('click', () => {
+      activeRoot = root;
       const newState = !loupeEnabled;
       setLoupeEnabled(newState);
       // Save loupe state to localStorage for rapid loading

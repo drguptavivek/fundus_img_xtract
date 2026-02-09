@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Regrade Task Reassignment{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Regrade Task Reassignment</h3>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.regrade_tasks') }}">Regrade Tasks</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="border-bottom pb-1">Assignees</h6>
+        <div class="list-group list-group-flush">
+          <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_assignee_id == '' %}active{% endif %}"
+            href="{{ url_for('grading.regrade_tasks_reassign') }}">
+            <span>All Pending</span>
+            <span class="badge bg-secondary">{{ total_pending }}</span>
+          </a>
+          <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_assignee_id == 'unassigned' %}active{% endif %}"
+            href="{{ url_for('grading.regrade_tasks_reassign', assignee_id='unassigned') }}">
+            <span>Unassigned</span>
+            <span class="badge bg-secondary">{{ unassigned_count }}</span>
+          </a>
+          {% for row in assignee_counts %}
+            {% set assignee_id = row[0] %}
+            {% set count = row[1] %}
+            {% if assignee_id is not none %}
+            {% set user = users_by_id.get(assignee_id) %}
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_assignee_id == assignee_id|string %}active{% endif %}"
+              href="{{ url_for('grading.regrade_tasks_reassign', assignee_id=assignee_id) }}">
+              <span>{{ user.username if user else ('User #' ~ assignee_id) }}</span>
+              <span class="badge bg-secondary">{{ count }}</span>
+            </a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-9">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post" action="{{ url_for('grading.regrade_tasks_reassign', assignee_id=selected_assignee_id) }}">
+          {{ csrf_field() }}
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Target Regrade Adjudicator</label>
+              <select class="form-select form-select-sm" name="target_user_id" required>
+                <option value="">Select user</option>
+                {% for user in target_users %}
+                <option value="{{ user.id }}">{{ user.username }}</option>
+                {% endfor %}
+              </select>
+              {% if not target_users %}
+              <div class="form-text text-muted">No eligible adjudicator covers all listed task lab units.</div>
+              {% endif %}
+            </div>
+            <div class="col-12 col-md-6 text-md-end">
+              <button type="submit" class="btn btn-primary btn-sm" {% if not tasks %}disabled{% endif %}>
+                Reassign Selected Tasks
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="select-all">
+                  </th>
+                  <th>ID</th>
+                  <th>Disease</th>
+                  <th>Lab Unit</th>
+                  <th>Source Task</th>
+                  <th>Assigned To</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for task in tasks %}
+                <tr>
+                  <td>
+                    <input type="checkbox" name="task_ids" value="{{ task.id }}" class="task-checkbox">
+                  </td>
+                  <td>{{ task.id }}</td>
+                  <td>{{ task.disease.name if task.disease else '-' }}</td>
+                  <td>{{ task.lab_unit.name if task.lab_unit else '-' }}</td>
+                  <td>{{ task.source_task_id }}</td>
+                  <td>{{ task.assigned_to.username if task.assigned_to else 'Unassigned' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not tasks %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No pending regrade tasks found.</td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/regrade-reassign.js') }}"></script>
+{% endblock %}

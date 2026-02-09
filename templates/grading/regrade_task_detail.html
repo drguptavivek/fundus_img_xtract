@@ -66,6 +66,28 @@
   <div class="col-12 col-lg-3" id="image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
+        {% if is_admin %}
+        <div class="mb-3">
+          <h6 class="border-bottom pb-1">Reassign</h6>
+          <form method="post" action="{{ url_for('grading.regrade_task_reassign', regrade_task_id=regrade_task.id) }}">
+            {{ csrf_field() }}
+            <div class="mb-2">
+              <label class="form-label">Regrade Adjudicator</label>
+              <select class="form-select form-select-sm" name="assigned_to_user_id" required>
+                <option value="">Select user</option>
+                {% for user in regrade_adjudicators %}
+                <option value="{{ user.id }}" {% if regrade_task.assigned_to_user_id == user.id %}selected{% endif %}>
+                  {{ user.username }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if regrade_task.status != "regrade_pending" %}disabled{% endif %}>
+              Reassign Task
+            </button>
+          </form>
+        </div>
+        {% endif %}
         {% if regrade_task.status == "regrade_done" %}
         <div class="mb-3 small text-muted">
           <strong class="text-warning">This regrade was already completed. Saving will update it.</strong>

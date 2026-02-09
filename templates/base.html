@@ -283,6 +283,12 @@
                   href="{{ url_for('grading.regrade_tasks') }}">Regrade Tasks</a>
               </li>
               {% endif %}
+              {% if current_user.has_role('admin', 'local_admin') %}
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.regrade_tasks_reassign' else '' }}"
+                  href="{{ url_for('grading.regrade_tasks_reassign') }}">Regrade Reassign</a>
+              </li>
+              {% endif %}
 
             </ul>
           </li>

@@ -1,0 +1,362 @@
+{# Reusable grading image viewer card
+   Expects: image (EncounterFile or DirectImageUpload with .uuid)
+            image_uuid (optional, for dual grading tasks)
+#}
+{% set uuid = image_uuid or image.uuid %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="card shadow-sm h-100">
+<div class="card-header">
+  <div class="d-flex align-items-center justify-content-start flex-wrap gap-2">
+    <!-- Filter buttons -->
+    <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-none-{{ uuid }}" value="none" checked>
+      <label class="btn btn-outline-secondary" for="imggr-none-{{ uuid }}">None</label>
+
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-r-{{ uuid }}" value="redfree">
+      <label class="btn btn-outline-secondary" for="imggr-r-{{ uuid }}">R</label>
+
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-g-{{ uuid }}" value="greenboost">
+      <label class="btn btn-outline-secondary" for="imggr-g-{{ uuid }}">G</label>
+
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-b-{{ uuid }}" value="bluemono">
+      <label class="btn btn-outline-secondary" for="imggr-b-{{ uuid }}">B</label>
+
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-y-{{ uuid }}" value="gray">
+      <label class="btn btn-outline-secondary" for="imggr-y-{{ uuid }}">Y</label>
+
+      <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-h-{{ uuid }}" value="contrast">
+      <label class="btn btn-outline-secondary" for="imggr-h-{{ uuid }}">H</label>
+    </div>
+
+    <!-- Brightness / Contrast Controls -->
+    <div class="d-flex flex-sm-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls flex-grow-1">
+      <!-- Brightness -->
+      <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
+        <label class="small mb-0" for="imggr-bright-{{ uuid }}">Brightness</label>
+        <div class="imggr-range-wrap position-relative flex-grow-1">
+          <input id="imggr-bright-{{ uuid }}" class="form-range imggr-bright form-range-light"
+                 type="range" min="0.5" max="5" step="0.05" value="1">
+          <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-bright-tip d-none">1.00</span>
+        </div>
+      </div>
+
+      <!-- Contrast -->
+      <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
+        <label class="small mb-0" for="imggr-contrast-{{ uuid }}">Contrast</label>
+        <div class="imggr-range-wrap position-relative flex-grow-1">
+          <input id="imggr-contrast-{{ uuid }}" class="form-range imggr-contrast form-range-light"
+                 type="range" min="0.5" max="5" step="0.05" value="1">
+          <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-contrast-tip d-none">1.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reset loupe Help tooltips-->
+    <div class="d-flex gap-2 flex-grow-1 align-items-sm-end justify-content-end">
+      <!-- Reset -->
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
+
+      <!-- Presets -->
+      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets" id = "imggr-presets-section">
+        
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="1">1</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="2">2</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="3">3</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="4">4</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="5">5</button>
+      </div>
+      
+      <!-- Save Preset -->
+
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" 
+        data-bs-toggle="modal" 
+        data-bs-target="#imggr-preset-modal-{{ uuid }}" 
+        id="imggr-preset-save-button">
+        Save
+        {{csrf_field()}}
+      </button>
+
+      <!-- Loupe -->
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
+              aria-pressed="false"
+              aria-label="Toggle loupe magnifier">
+        L
+      </button>
+
+      <!-- CDR/RDR Tool -->
+      <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
+          CDR/RDR
+        </button>
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-clear" disabled>
+          Clear
+        </button>
+      </div>
+
+      <!-- Shortcut hint -->
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger align-self-end"
+              data-bs-toggle="modal"
+              data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
+              aria-label="Keyboard shortcuts">
+        <span aria-hidden="true">?</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="fw-semibold">CDR/RDR Measurement</div>
+      <div class="small text-muted imggr-cdr-status">Inactive</div>
+    </div>
+    <div class="small text-muted mt-1">
+      Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 small">
+      <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value fw-semibold">—</span></div>
+      <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value fw-semibold">—</span></div>
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>
+        Done
+      </button>
+    </div>
+  </div>
+</div>
+
+  <div class="card-body flex p-0">
+
+    <div id="imggr-view-{{ uuid }}" 
+        class="imggr-viewer-root d-flex justify-content-center" 
+        data-enc-id="{{ uuid }}">
+      
+        <div class="imggr-stage position-relative d-flex justify-content-center">
+
+          <div class="imggr-main bg-black rounded position-relative">
+            <img       
+              class="imggr-main-img" 
+              style="width:100%; height:100%; object-fit:contain; display:block;"
+              src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
+              alt="Image" 
+              data-index="0" 
+            />  
+            <button 
+              class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" 
+              type="button">
+              Fullscreen
+            </button>
+        </div>
+
+        <div class="imggr-loupe" aria-hidden="true"></div>
+
+      </div>
+      
+    </div>
+  </div>
+  <div class="card-footer py-2">
+    <div class="mb-2">
+
+   
+
+      <!-- Zoom Slider -->
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ uuid }}">Zoom:</label>
+        <input id="imggr-zoom-slider-{{ uuid }}"
+               class="form-range imggr-zoom-slider flex-grow-1"
+               type="range"
+               min="10"
+               max="400"
+               step="5"
+               value="100"
+               title="Adjust image zoom level">
+        <button type="button"
+                 class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
+                 title="Fit image to container">
+          Fit
+        </button>
+      </div>
+
+         <!-- Zoom Info -->
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted imggr-zoom-info" id="imggr-zoom-{{ uuid }}"
+              title="Current zoom level as percentage of original image size">
+          <span class="imggr-zoom-level">100%</span> zoom
+        </small>
+        <small class="text-muted imggr-dim-info" id="imggr-dim-{{ uuid }}"
+              title="Image dimensions in pixels (width × height)">
+          Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
+        </small>
+      </div>
+      <div class="d-flex flex-wrap gap-2 small text-muted">
+        {% if image_metadata %}
+          {% if image_metadata.mode %}
+            <span class="me-2">Color: {{ image_metadata.mode }}</span>
+          {% endif %}
+          {% if image_metadata.avg_luminance is not none %}
+            <span class="me-2">Luminance: {{ '%.1f'|format(image_metadata.avg_luminance) }}</span>
+          {% endif %}
+          {% if image_metadata.width and image_metadata.height %}
+            <span class="me-2">Dimensions: {{ image_metadata.width }}x{{ image_metadata.height }}</span>
+          {% endif %}
+        {% else %}
+          <span>Metadata pending</span>
+        {% endif %}
+      </div>
+
+      <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="fw-semibold">CDR/RDR Measurement</div>
+          <div class="small text-muted imggr-cdr-status">Inactive</div>
+        </div>
+        <div class="small text-muted mt-1">
+          Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
+        </div>
+        <div class="d-flex flex-wrap gap-3 mt-2 small">
+          <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value">—</span></div>
+          <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value">—</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Modal -->
+<div class="modal fade" id="imggr-shortcuts-modal-{{ uuid }}" tabindex="-1" aria-labelledby="shortcutsModalLabel-{{ uuid }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="shortcutsModalLabel-{{ uuid }}">Image Viewer Controls</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Image Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>Z</kbd>/<kbd>X</kbd></dt>
+              <dd class="col-7">Zoom in/out</dd>
+              <dt class="col-5"><kbd>0</kbd></dt>
+              <dd class="col-7">Reset zoom to 100%</dd>
+              <dt class="col-5"><kbd>Home</kbd></dt>
+              <dd class="col-7">Fit to container</dd>
+              <dt class="col-5"><kbd>Ctrl</kbd>+<kbd>Wheel</kbd></dt>
+              <dd class="col-7">Zoom with mouse</dd>
+              <dt class="col-5"><kbd>Left Click + Drag</kbd></dt>
+              <dd class="col-7">Pan image with mouse</dd>
+              <dt class="col-5"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
+              <dd class="col-7">Pan base image</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Touch Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>Touch</kbd></dt>
+              <dd class="col-7">1-finger drag to pan, 2-finger drag/pan, pinch to zoom</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Presets</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>1</kbd>-<kbd>5</kbd></dt>
+              <dd class="col-7">Apply preset 1-5</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Loupe Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>L</kbd></dt>
+              <dd class="col-7">Toggle loupe magnifier</dd>
+              <dt class="col-5"><kbd>[</kbd>/<kbd>]</kbd></dt>
+              <dd class="col-7">Change loupe size</dd>
+              <dt class="col-5"><kbd>-</kbd>/<kbd>=</kbd></dt>
+              <dd class="col-7">Change loupe zoom</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Filter & Display</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd><</kbd>/<kbd>></kbd></dt>
+              <dd class="col-7">Adjust brightness</dd>
+              <dt class="col-5"><kbd>;</kbd>/<kbd>'</kbd></dt>
+              <dd class="col-7">Adjust contrast</dd>
+              <dt class="col-5"><kbd>←</kbd>/<kbd>→</kbd></dt>
+              <dd class="col-7">Cycle filters</dd>
+              <dt class="col-5"><kbd>F</kbd></dt>
+              <dd class="col-7">Toggle fullscreen</dd>
+              <dt class="col-5"><kbd>/</kbd></dt>
+              <dd class="col-7">Reset sliders & filters</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preset Save Modal -->
+<div class="modal fade" id="imggr-preset-modal-{{ uuid }}" tabindex="-1" aria-labelledby="presetModalLabel-{{ uuid }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="presetModalLabel-{{ uuid }}">Save Viewer Preset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Select a preset slot to save current settings:</p>
+        
+        <div class="row">
+          <div class="col-12">
+            <h6 class="text-muted small mb-2">Current Settings:</h6>
+            <div class="small mb-3 p-2  rounded">
+              <div class="row g-2">
+                <div class="col-6">
+                  <strong>Filter:</strong> <span id="current-filter-display">None</span>
+                </div>
+                <div class="col-6">
+                  <strong>Brightness:</strong> <span id="current-brightness-display">1.0</span>
+                </div>
+                <div class="col-6">
+                  <strong>Contrast:</strong> <span id="current-contrast-display">1.0</span>
+                </div>
+                <div class="col-6">
+                  <strong>Zoom:</strong> <span id="current-zoom-display">100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="row g-2" id="preset-slots">
+          <!-- Preset slots will be populated by JavaScript -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ensure viewer script is loaded once and scroll into view #}
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+(function(){
+  var rootId = 'imggr-view-{{ uuid }}';
+  function run(){
+    try { if (window.initImggrViewers) window.initImggrViewers(document.getElementById(rootId)); } catch(_) {}
+  }
+  if (!window.__imggrViewerLoaded) {
+    var s=document.createElement('script');
+    // Build static URL with cache-busting via ASSETS_VERSION; avoid string concat
+    s.src = "{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}";
+    s.defer=true; s.onload = run; document.head.appendChild(s);
+  } else {
+    // JS already present
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  }
+})();
+</script>

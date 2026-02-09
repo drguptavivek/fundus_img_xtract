@@ -175,7 +175,7 @@ def intra_rater_viewer(image_uuid: str):
             return ("Not found", 404)
 
         image_obj = task.encounter_file or task.direct_image
-        return render_template("grading/_viewer_card.html", image=image_obj, image_uuid=image_uuid)
+        return render_template("partials/_grading_card.html", image=image_obj, image_uuid=image_uuid)
 
 
 @bp.route("/intra-rater/tasks/<int:task_id>/submit", methods=["POST"])

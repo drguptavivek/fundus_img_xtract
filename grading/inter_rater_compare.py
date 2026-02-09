@@ -335,7 +335,7 @@ def inter_rater_viewer(image_uuid: str):
             .first()
         )
         return render_template(
-            "grading/_viewer_card.html",
+            "partials/_grading_card.html",
             image=image_obj,
             image_uuid=image_uuid,
             image_metadata=image_metadata,

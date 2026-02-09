@@ -196,7 +196,7 @@
         <div id="viewerCardWrapper" style="max-height: 90vh; overflow: auto;" data-image-uuid="{{ selected_image_uuid or '' }}">
           {% if selected_image_uuid %}
             {% set image_uuid = selected_image_uuid %}
-            {% include 'grading/_viewer_card.html' %}
+            {% include 'partials/_grading_card.html' %}
           {% else %}
             <div class="alert alert-info">Select a task with an image to view.</div>
           {% endif %}

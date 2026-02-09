@@ -15,7 +15,7 @@
   }
 
   // Ordered list of filter values for cycling
-  const FILTER_ORDER = ['none','redfree','greenboost','bluemono','gray','contrast'];
+  const FILTER_ORDER = ['none','redfree','greenboost','bluemono','gray','contrast','enhance'];
   const viewerStates = new WeakMap();
   const DEFAULT_LOUPE_SIZE = 200;
   const LOUPE_SIZE_STEP = 20;
@@ -37,6 +37,19 @@
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
+  }
+
+  const ENHANCE_FILTER_ID = 'pswp-enhance';
+  let lastEnhanceBrightness = null;
+
+  function applyMaskedBrightnessFilter(brightness){
+    const rounded = Math.round((Number(brightness) || 1) * 100) / 100;
+    if (lastEnhanceBrightness === rounded) return;
+    lastEnhanceBrightness = rounded;
+    const filter = document.getElementById(ENHANCE_FILTER_ID);
+    if (!filter) return;
+    const funcs = filter.querySelectorAll('feComponentTransfer[in="SourceGraphic"] feFuncR, feComponentTransfer[in="SourceGraphic"] feFuncG, feComponentTransfer[in="SourceGraphic"] feFuncB');
+    funcs.forEach(fn => fn.setAttribute('slope', String(rounded)));
   }
 
   // Helper function to get CSRF token from the save button
@@ -186,7 +199,10 @@
   if (!window.__imggrKeysBound) {
     window.__imggrKeysBound = true;
     window.addEventListener('keydown', (e) => {
-      if (!activeRoot) return;
+      if (!activeRoot) {
+        activeRoot = document.querySelector('.imggr-viewer-root');
+        if (!activeRoot) return;
+      }
     const state = viewerStates.get(activeRoot);
     if (state && typeof state.isCdrActive === 'function' && state.isCdrActive()) return;
       const rawKey = e.key || '';
@@ -194,14 +210,8 @@
       if (!k) return;
       const card = activeRoot.closest('.card');
 
-      if (k === 'l' && state?.getCurrentLoupeEnabled?.()) {
-        e.preventDefault();
-        state?.toggleLoupe?.();
-        return;
-      }
-
       const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-      if (['input','textarea','select'].includes(tag)) return;
+      const isFormField = ['input','textarea','select'].includes(tag);
 
       const main = activeRoot.querySelector('.imggr-main');
       if (!main) return;
@@ -232,10 +242,13 @@
       if (rawKey === '/' || rawKey === '?') {
         e.preventDefault();
         resetBtn?.click();
-        // Reset loupe values but don't disable it
+        // Reset loupe values and disable it
         state?.resetLoupe?.();
+        state?.setLoupeEnabled?.(false);
         return;
       }
+
+      if (isFormField) return;
 
       if (k === 'f') { e.preventDefault(); isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); return; }
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }
@@ -251,13 +264,14 @@
         }
         return;
       }
-      if (['r','g','b','y','h','c','n'].includes(k)) {
+      if (['r','g','b','y','h','e','c','n'].includes(k)) {
         e.preventDefault();
         if (k === 'r') selectFilter(activeRoot, 'redfree');
         else if (k === 'g') selectFilter(activeRoot, 'greenboost');
         else if (k === 'b') selectFilter(activeRoot, 'bluemono');
         else if (k === 'y') selectFilter(activeRoot, 'gray');
         else if (k === 'h') selectFilter(activeRoot, 'contrast');
+        else if (k === 'e') selectFilter(activeRoot, 'enhance');
         else selectFilter(activeRoot, 'none');
       }
     }, { capture: true });
@@ -337,19 +351,7 @@
       }
     }
     
-    // Apply other saved settings (excluding zoom/pan)
-    if (savedSettings.brightness !== undefined && bright) {
-      bright.value = clamp(savedSettings.brightness, 0.5, 5);
-    }
-    if (savedSettings.contrast !== undefined && contr) {
-      contr.value = clamp(savedSettings.contrast, 0.5, 5);
-    }
-    if (savedSettings.filter) {
-      const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
-      if (filterInput) {
-        filterInput.checked = true;
-      }
-    }
+    // Do not restore brightness/contrast/filters across images
     
     // Preset management functions
     async function loadViewerPresets() {
@@ -399,10 +401,10 @@
       }
       
       // Apply brightness and contrast
-      if (preset.brightness && bright) {
+      if (preset.brightness !== undefined && bright) {
         bright.value = clamp(preset.brightness, 0.5, 5);
       }
-      if (preset.contrast && contr) {
+      if (preset.contrast !== undefined && contr) {
         contr.value = clamp(preset.contrast, 0.5, 5);
       }
       
@@ -565,9 +567,6 @@
     function saveViewerSettingsToStorage() {
       try {
         const settings = {
-          brightness: bright ? parseFloat(bright.value) : 1,
-          contrast: contr ? parseFloat(contr.value) : 1,
-          filter: currentRadio(),
           loupeEnabled: loupeEnabled
         };
         window.localStorage?.setItem(VIEWER_SETTINGS_KEY, JSON.stringify(settings));
@@ -599,6 +598,7 @@
         case 'bluemono': return 'url(#pswp-bluemono)';
         case 'gray': return 'url(#pswp-gray)';
         case 'contrast': return 'url(#pswp-contrast)';
+        case 'enhance': return 'url(#pswp-enhance)';
         default: return '';
       }
     }
@@ -612,10 +612,15 @@
     let isApplyingSavedSettings = false;
     
     function applyFilter(){
-      const url = svgUrlFor(currentRadio());
+      const filterVal = currentRadio();
+      const url = svgUrlFor(filterVal);
       const b = parseFloat((bright && bright.value) || '1') || 1;
       const c = parseFloat((contr && contr.value) || '1') || 1;
-      const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+      let chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+      if (filterVal === 'enhance') {
+        applyMaskedBrightnessFilter(b);
+        chain = `${url}${url? ' ' : ''}brightness(1) contrast(${c})`;
+      }
       try {
         mainImg.style.filter = chain;
         if (loupe) loupe.style.filter = chain;
@@ -693,10 +698,15 @@
       // Settings are saved by applyFilter()
     });
     // Initial apply without saving
-    const url = svgUrlFor(currentRadio());
+    const initFilter = currentRadio();
+    const url = svgUrlFor(initFilter);
     const b = parseFloat((bright && bright.value) || '1') || 1;
     const c = parseFloat((contr && contr.value) || '1') || 1;
-    const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+    let chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+    if (initFilter === 'enhance') {
+      applyMaskedBrightnessFilter(b);
+      chain = `${url}${url? ' ' : ''}brightness(1) contrast(${c})`;
+    }
     try {
       mainImg.style.filter = chain;
       if (loupe) loupe.style.filter = chain;
@@ -707,22 +717,7 @@
       isApplyingSavedSettings = true;
       
       // Apply saved filter
-      if (savedSettings.filter) {
-        const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
-        if (filterInput) {
-          filterInput.checked = true;
-        }
-      }
-      
-      // Apply saved brightness and contrast
-      if (savedSettings.brightness && bright) {
-        bright.value = clamp(savedSettings.brightness, 0.5, 5);
-      }
-      if (savedSettings.contrast && contr) {
-        contr.value = clamp(savedSettings.contrast, 0.5, 5);
-      }
-      
-      // Apply the filter with the saved values
+      // Apply current defaults only (no persisted filters/brightness/contrast)
       applyFilter();
       
       // Mark initialization as complete so future changes will be saved
@@ -1741,6 +1736,7 @@
         const currentState = loupeEnabled;
         setLoupeEnabled(!currentState);
       },
+      setLoupeEnabled,
       adjustLoupeSize,
       adjustLoupeZoom,
       adjustImagePan,

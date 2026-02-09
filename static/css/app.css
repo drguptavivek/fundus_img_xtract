@@ -115,6 +115,10 @@ body {
   filter: url(#pswp-contrast);
 }
 
+.pswp-img-filter-enhance {
+  filter: url(#pswp-enhance);
+}
+
 .pswp-img-filter-bluemono {
   filter: url(#pswp-bluemono);
 }
@@ -808,6 +812,7 @@ body {
 .card:has(.imggr-filters input[value="bluemono"]:checked) .imggr-main-img { filter: url(#pswp-bluemono); }
 .card:has(.imggr-filters input[value="gray"]:checked) .imggr-main-img { filter: url(#pswp-gray); }
 .card:has(.imggr-filters input[value="contrast"]:checked) .imggr-main-img { filter: url(#pswp-contrast); }
+.card:has(.imggr-filters input[value="enhance"]:checked) .imggr-main-img { filter: url(#pswp-enhance); }
 
 
 [data-bs-theme="dark"]  .btn-outline-secondary {

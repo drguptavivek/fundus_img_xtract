@@ -337,16 +337,7 @@
       }
     }
     
-    // Apply other saved settings
-    if (savedSettings.zoom !== undefined) {
-      currentZoom = clamp(savedSettings.zoom, ZOOM_MIN, ZOOM_MAX);
-    }
-    if (savedSettings.panX !== undefined) {
-      imgPanX = clamp(savedSettings.panX, IMG_PAN_MIN, IMG_PAN_MAX);
-    }
-    if (savedSettings.panY !== undefined) {
-      imgPanY = clamp(savedSettings.panY, IMG_PAN_MIN, IMG_PAN_MAX);
-    }
+    // Apply other saved settings (excluding zoom/pan)
     if (savedSettings.brightness !== undefined && bright) {
       bright.value = clamp(savedSettings.brightness, 0.5, 5);
     }
@@ -574,9 +565,6 @@
     function saveViewerSettingsToStorage() {
       try {
         const settings = {
-          zoom: currentZoom,
-          panX: imgPanX,
-          panY: imgPanY,
           brightness: bright ? parseFloat(bright.value) : 1,
           contrast: contr ? parseFloat(contr.value) : 1,
           filter: currentRadio(),
@@ -1368,12 +1356,13 @@
     if (cdrClear) {
       cdrClear.addEventListener('click', () => {
         clearCdrState();
-        if (cdrActive) {
-          if (cdrPanel) cdrPanel.classList.add('is-active');
-          updateCdrStatus('Select disc line: click 2 points');
-          cdrStep = 1;
-          if (cdrClear) cdrClear.disabled = false;
+        cdrActive = false;
+        if (cdrToggle) {
+          cdrToggle.setAttribute('aria-pressed', 'false');
+          cdrToggle.classList.remove('active');
         }
+        if (cdrPanel) cdrPanel.classList.remove('is-active');
+        setViewerControlsLocked(false);
       });
     }
 
@@ -1706,17 +1695,8 @@
       }
     }
 
-    // Apply saved zoom and pan settings
-    if (savedSettings.zoom) {
-      currentZoom = clamp(savedSettings.zoom, ZOOM_MIN, ZOOM_MAX);
-    }
-    if (savedSettings.panX !== undefined) {
-      imgPanX = clamp(savedSettings.panX, IMG_PAN_MIN, IMG_PAN_MAX);
-    }
-    if (savedSettings.panY !== undefined) {
-      imgPanY = clamp(savedSettings.panY, IMG_PAN_MIN, IMG_PAN_MAX);
-    }
-    
+    // Zoom/pan are not persisted across images
+
     applyImagePan();
     applyLoupeDimensions();
     updateZoomDisplay();

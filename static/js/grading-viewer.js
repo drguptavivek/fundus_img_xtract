@@ -154,7 +154,11 @@
     try { (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen)?.call(el); } catch(_) {}
   }
   function exitFullscreen(){
-    try { (document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen)?.call(document); } catch(_) {}
+    try {
+      const hasFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+      if (!hasFullscreen) return;
+      (document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen)?.call(document);
+    } catch(_) {}
   }
   function isFullscreenFor(el){
     return document.fullscreenElement === el || document.webkitFullscreenElement === el;
@@ -183,11 +187,12 @@
     window.__imggrKeysBound = true;
     window.addEventListener('keydown', (e) => {
       if (!activeRoot) return;
+    const state = viewerStates.get(activeRoot);
+    if (state && typeof state.isCdrActive === 'function' && state.isCdrActive()) return;
       const rawKey = e.key || '';
       const k = rawKey.toLowerCase();
       if (!k) return;
       const card = activeRoot.closest('.card');
-      const state = viewerStates.get(activeRoot);
 
       if (k === 'l' && state?.getCurrentLoupeEnabled?.()) {
         e.preventDefault();
@@ -276,16 +281,36 @@
     const bright = card ? card.querySelector('.imggr-bright') : null;
     const contr = card ? card.querySelector('.imggr-contrast') : null;
     const resetBtn = card ? card.querySelector('.imggr-reset') : null;
+
     const loupeToggle = card ? card.querySelector('.imggr-loupe-toggle') : null;
     const loupe = root.querySelector('.imggr-loupe');
+    const cdrToggle = card ? card.querySelector('.imggr-cdr-toggle') : null;
+    const cdrClear = card ? card.querySelector('.imggr-cdr-clear') : null;
+    const cdrPanel = card ? card.querySelector('.imggr-cdr-panel') : null;
+    const cdrStatus = cdrPanel ? cdrPanel.querySelector('.imggr-cdr-status') : null;
+    const cdrValue = cdrPanel ? cdrPanel.querySelector('.imggr-cdr-value') : null;
+    const rdrValue = cdrPanel ? cdrPanel.querySelector('.imggr-rdr-value') : null;
+    const cdrDone = cdrPanel ? cdrPanel.querySelector('.imggr-cdr-done') : null;
     let loupeEnabled = false;
     const storedLoupe = readLoupePrefs();
     let loupeSize = storedLoupe?.size ?? DEFAULT_LOUPE_SIZE;
     let loupeZoom = storedLoupe?.zoom ?? DEFAULT_LOUPE_ZOOM;
     let lastPointerPos = null;
+
     let imgPanX = 0;
     let imgPanY = 0;
     let currentZoom = 100; // Store current zoom level as percentage
+    let cdrActive = false;
+    let cdrStep = 0;
+    let cdrDiscPoints = [];
+    let cdrCupPoints = [];
+    let cdrOverlay = null;
+    let cdrDragging = false;
+    let cdrDragTarget = null;
+    let lastCommentTarget = null;
+    let cdrDrawPending = false;
+    let cdrLastSize = { width: 0, height: 0 };
+    let cdrRedrawTimer = null;
     
     // Load saved viewer settings from localStorage for rapid loading
     function loadViewerSettingsFromStorage() {
@@ -723,12 +748,42 @@
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
+      if (cdrDiscPoints.length || cdrCupPoints.length || cdrActive) {
+        resizeCdrOverlay();
+        scheduleCdrDraw();
+      }
     });
     
     // If image is already loaded, apply settings immediately
     if (mainImg.complete && mainImg.naturalWidth > 0) {
       applySavedSettings();
     }
+
+    if (main) {
+      main.addEventListener('click', handleCdrClick);
+      main.addEventListener('pointerdown', handleCdrPointerDown);
+      main.addEventListener('pointermove', handleCdrPointerMove);
+      main.addEventListener('pointerup', handleCdrPointerUp);
+      main.addEventListener('pointerleave', handleCdrPointerUp);
+      main.addEventListener('pointercancel', handleCdrPointerUp);
+    }
+
+    window.addEventListener('resize', () => {
+      if (cdrDiscPoints.length || cdrCupPoints.length || cdrActive) {
+        resizeCdrOverlay();
+        scheduleCdrDraw();
+      }
+    });
+
+    const commentTargets = findCommentTargets();
+    commentTargets.forEach(el => {
+      el.addEventListener('focus', () => {
+        lastCommentTarget = el;
+      });
+      el.addEventListener('click', () => {
+        lastCommentTarget = el;
+      });
+    });
 
     function applyLoupeDimensions(){
       if (!loupe) return;
@@ -739,11 +794,16 @@
     function applyImagePan(){
       if (!mainImg) return;
       mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%) scale(${currentZoom / 100})`;
+      if (cdrDiscPoints.length || cdrCupPoints.length || cdrActive) {
+        setCdrOverlayVisible(false);
+        scheduleCdrRedrawAfterIdle();
+      }
     }
 
     function getDisplayedImageMetrics(){
-      if (!mainImg) return null;
+      if (!mainImg || !main) return null;
       const rect = mainImg.getBoundingClientRect();
+      const containerRect = main.getBoundingClientRect();
       const natW = mainImg.naturalWidth || 0;
       const natH = mainImg.naturalHeight || 0;
       if (!rect.width || !rect.height || !natW || !natH) {
@@ -751,28 +811,454 @@
           rect,
           displayWidth: rect.width,
           displayHeight: rect.height,
-          offsetX: 0,
-          offsetY: 0,
+          offsetX: rect.left - containerRect.left,
+          offsetY: rect.top - containerRect.top,
           zoomLevel: 0,
         };
       }
-      const aspect = natW / natH;
-      const containerAspect = rect.width / rect.height;
-      let displayWidth, displayHeight, offsetX, offsetY;
-      if (aspect > containerAspect) {
-        displayWidth = rect.width;
-        displayHeight = rect.width / aspect;
-        offsetX = 0;
-        offsetY = (rect.height - displayHeight) / 2;
-      } else {
-        displayHeight = rect.height;
-        displayWidth = rect.height * aspect;
-        offsetY = 0;
-        offsetX = (rect.width - displayWidth) / 2;
-      }
-      // Calculate zoom level as percentage of natural size
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+      const offsetX = rect.left - containerRect.left;
+      const offsetY = rect.top - containerRect.top;
       const zoomLevel = Math.round((displayWidth / natW) * 100);
       return { rect, displayWidth, displayHeight, offsetX, offsetY, zoomLevel, natW, natH };
+    }
+
+
+    function ensureCdrOverlay(){
+      if (!main) return null;
+      if (!cdrOverlay) {
+        cdrOverlay = document.createElement('canvas');
+        cdrOverlay.className = 'imggr-cdr-overlay';
+        cdrOverlay.setAttribute('aria-hidden', 'true');
+        cdrOverlay.style.position = 'absolute';
+        cdrOverlay.style.top = '0';
+        cdrOverlay.style.left = '0';
+        cdrOverlay.style.width = '100%';
+        cdrOverlay.style.height = '100%';
+        cdrOverlay.style.pointerEvents = 'none';
+        main.appendChild(cdrOverlay);
+      }
+      return cdrOverlay;
+    }
+
+    function resizeCdrOverlay(){
+      if (!cdrOverlay || !main) return;
+      const rect = main.getBoundingClientRect();
+      const deviceScale = window.devicePixelRatio || 1;
+      const nextWidth = Math.max(1, Math.round(rect.width * deviceScale));
+      const nextHeight = Math.max(1, Math.round(rect.height * deviceScale));
+      if (nextWidth === cdrLastSize.width && nextHeight === cdrLastSize.height) {
+        return;
+      }
+      cdrLastSize = { width: nextWidth, height: nextHeight };
+      cdrOverlay.width = nextWidth;
+      cdrOverlay.height = nextHeight;
+      const ctx = cdrOverlay.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
+      }
+    }
+
+    function updateCdrStatus(text){
+      if (cdrStatus) {
+        cdrStatus.textContent = text;
+      }
+    }
+
+    function resetCdrValues(){
+      if (cdrValue) cdrValue.textContent = '—';
+      if (rdrValue) rdrValue.textContent = '—';
+    }
+
+    function clearCdrState(){
+      cdrStep = 0;
+      cdrDiscPoints = [];
+      cdrCupPoints = [];
+      resetCdrValues();
+      setCdrDoneEnabled(false);
+      scheduleCdrDraw();
+      updateCdrStatus('Inactive');
+      if (cdrClear) cdrClear.disabled = true;
+    }
+
+    function setViewerControlsLocked(flag){
+      if (!card) return;
+      const disabled = !!flag;
+      card.classList.toggle('imggr-cdr-locked', disabled);
+      const zoomSlider = card.querySelector('.imggr-zoom-slider');
+      const zoomFitButton = card.querySelector('.imggr-zoom-fit');
+      if (zoomSlider) zoomSlider.disabled = disabled;
+      if (zoomFitButton) zoomFitButton.disabled = disabled;
+    }
+
+    function findCommentTargets(){
+      const candidates = Array.from(document.querySelectorAll('textarea'))
+        .filter(el => {
+          if (el.disabled) return false;
+          if (el.closest('[aria-hidden="true"]')) return false;
+          if (el.offsetParent === null) return false;
+          const name = (el.getAttribute('name') || '').toLowerCase();
+          const id = (el.getAttribute('id') || '').toLowerCase();
+          return name.startsWith('comment') || id.includes('comment');
+        });
+      return candidates;
+    }
+
+    function selectCommentTarget(){
+      if (lastCommentTarget && !lastCommentTarget.disabled) {
+        return lastCommentTarget;
+      }
+      const candidates = findCommentTargets();
+      if (candidates.length === 1) return candidates[0];
+      if (candidates.length > 1) {
+        const focused = candidates.find(el => el === document.activeElement);
+        if (focused) return focused;
+        return candidates[0];
+      }
+      return null;
+    }
+
+    function normalizeCdrNumber(value, decimals){
+      const num = Number(value);
+      if (!Number.isFinite(num)) return '0.00';
+      return num.toFixed(decimals);
+    }
+
+    function buildCdrTag(){
+      if (cdrDiscPoints.length !== 2 || cdrCupPoints.length !== 2) return null;
+      const discA = cdrDiscPoints[0];
+      const discB = cdrDiscPoints[1];
+      const cupA = cdrCupPoints[0];
+      const cupB = cdrCupPoints[1];
+      const discLength = Math.hypot(discB.x - discA.x, discB.y - discA.y);
+      const cupLength = Math.hypot(cupB.x - cupA.x, cupB.y - cupA.y);
+      if (!discLength) return null;
+      const cdr = Math.min(1, Math.max(0, cupLength / discLength));
+      const rdr = Math.min(1, Math.max(0, 1 - cdr));
+      const metrics = getDisplayedImageMetrics();
+      const natW = metrics ? metrics.natW : 0;
+      const natH = metrics ? metrics.natH : 0;
+      const toPx = (pt) => ({
+        x: Math.round((pt.x || 0) * natW),
+        y: Math.round((pt.y || 0) * natH)
+      });
+      const coord = (pt) => `${toPx(pt).x},${toPx(pt).y}`;
+      const discLine = `(${coord(discA)})-(${coord(discB)})`;
+      const cupSeg = `(${coord(cupA)})-(${coord(cupB)})`;
+      return `CDR=${normalizeCdrNumber(cdr, 2)}; RDR=${normalizeCdrNumber(rdr, 2)}; DiscLine=${discLine}; CupSeg=${cupSeg}`;
+    }
+
+    function upsertCdrTag(text, tag){
+      const regex = /CDR=[^;]+;\s*RDR=[^;]+;\s*DiscLine=\([^\)]*\)-\([^\)]*\);\s*CupSeg=\([^\)]*\)-\([^\)]*\)/;
+      if (regex.test(text)) {
+        return text.replace(regex, tag);
+      }
+      if (!text) return tag;
+      return `${text.trim()}\n${tag}`;
+    }
+
+    function setCdrDoneEnabled(flag){
+      if (cdrDone) {
+        cdrDone.disabled = !flag;
+      }
+    }
+
+    function setCdrActive(active){
+      cdrActive = !!active;
+      if (cdrToggle) {
+        cdrToggle.setAttribute('aria-pressed', cdrActive ? 'true' : 'false');
+        cdrToggle.classList.toggle('active', cdrActive);
+      }
+      setViewerControlsLocked(cdrActive);
+      if (cdrActive) {
+        if (cdrPanel) cdrPanel.classList.add('is-active');
+        ensureCdrOverlay();
+        resizeCdrOverlay();
+        setCdrOverlayVisible(true);
+        cdrStep = 1;
+        updateCdrStatus('Select disc line: click 2 points');
+        if (cdrClear) cdrClear.disabled = false;
+        setCdrDoneEnabled(cdrDiscPoints.length === 2 && cdrCupPoints.length === 2);
+      } else {
+        if (cdrPanel) cdrPanel.classList.remove('is-active');
+        clearCdrState();
+      }
+    }
+
+    function projectPointToLine(point, lineStart, lineEnd){
+      const vx = lineEnd.x - lineStart.x;
+      const vy = lineEnd.y - lineStart.y;
+      const lenSq = (vx * vx) + (vy * vy);
+      if (lenSq == 0) {
+        return { x: lineStart.x, y: lineStart.y, t: 0 };
+      }
+      const rawT = ((point.x - lineStart.x) * vx + (point.y - lineStart.y) * vy) / lenSq;
+      const t = Math.min(1, Math.max(0, rawT));
+      return {
+        x: lineStart.x + t * vx,
+        y: lineStart.y + t * vy,
+        t
+      };
+    }
+
+    function getPointOnImageFromEvent(event){
+      if (!main || !mainImg) return null;
+      const rect = main.getBoundingClientRect();
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics) return null;
+      const { displayWidth, displayHeight, offsetX, offsetY } = metrics;
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+      const imgLeft = offsetX;
+      const imgTop = offsetY;
+      const imgRight = offsetX + displayWidth;
+      const imgBottom = offsetY + displayHeight;
+      if (pointerX < imgLeft || pointerX > imgRight || pointerY < imgTop || pointerY > imgBottom) {
+        return null;
+      }
+      const relX = (pointerX - imgLeft) / displayWidth;
+      const relY = (pointerY - imgTop) / displayHeight;
+      return { x: relX, y: relY };
+    }
+
+
+    function getCanvasPointForImagePoint(point){
+      if (!main || !point) return null;
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics) return null;
+      const { displayWidth, displayHeight, offsetX, offsetY } = metrics;
+      return {
+        x: offsetX + point.x * displayWidth,
+        y: offsetY + point.y * displayHeight
+      };
+    }
+
+    function findNearestCdrPoint(point, thresholdPx){
+      const threshold = thresholdPx || 10;
+      const target = getCanvasPointForImagePoint(point);
+      if (!target) return null;
+
+      const candidates = [];
+      cdrDiscPoints.forEach((pt, idx) => {
+        const c = getCanvasPointForImagePoint(pt);
+        if (!c) return;
+        candidates.push({ type: 'disc', index: idx, dist: Math.hypot(c.x - target.x, c.y - target.y) });
+      });
+      cdrCupPoints.forEach((pt, idx) => {
+        const c = getCanvasPointForImagePoint(pt);
+        if (!c) return;
+        candidates.push({ type: 'cup', index: idx, dist: Math.hypot(c.x - target.x, c.y - target.y) });
+      });
+      if (!candidates.length) return null;
+      candidates.sort((a, b) => a.dist - b.dist);
+      const nearest = candidates[0];
+      if (nearest.dist > threshold) return null;
+      return nearest;
+    }
+
+    function updateCdrPoint(pointType, index, point){
+      if (pointType === 'disc') {
+        cdrDiscPoints[index] = point;
+        if (cdrDiscPoints.length === 2 && cdrCupPoints.length > 0) {
+          cdrCupPoints = cdrCupPoints.map(pt => {
+            const projected = projectPointToLine(pt, cdrDiscPoints[0], cdrDiscPoints[1]);
+            return { x: projected.x, y: projected.y };
+          });
+        }
+      } else if (pointType === 'cup') {
+        const projected = projectPointToLine(point, cdrDiscPoints[0], cdrDiscPoints[1]);
+        cdrCupPoints[index] = { x: projected.x, y: projected.y };
+      }
+      scheduleCdrDraw();
+      updateCdrValues();
+    }
+
+    function drawLine(ctx, start, end, color, width){
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPoint(ctx, point, color){
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function setCdrOverlayVisible(flag){
+      if (!cdrOverlay) return;
+      cdrOverlay.style.opacity = flag ? '1' : '0';
+    }
+
+    function scheduleCdrRedrawAfterIdle(){
+      if (cdrRedrawTimer) {
+        clearTimeout(cdrRedrawTimer);
+      }
+      cdrRedrawTimer = setTimeout(() => {
+        cdrRedrawTimer = null;
+        if (!cdrOverlay) return;
+        resizeCdrOverlay();
+        drawCdrOverlay();
+        setCdrOverlayVisible(true);
+      }, 1000);
+    }
+
+    function scheduleCdrDraw(){
+      if (cdrDrawPending) return;
+      cdrDrawPending = true;
+      requestAnimationFrame(() => {
+        cdrDrawPending = false;
+        drawCdrOverlay();
+        setCdrOverlayVisible(true);
+      });
+    }
+
+    function drawCdrOverlay(){
+      if (!cdrOverlay || !main) return;
+      resizeCdrOverlay();
+      const ctx = cdrOverlay.getContext('2d');
+      if (!ctx) return;
+      const rect = main.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics) return;
+      const { displayWidth, displayHeight, offsetX, offsetY } = metrics;
+      const toCanvas = (point) => ({
+        x: offsetX + point.x * displayWidth,
+        y: offsetY + point.y * displayHeight
+      });
+
+      if (cdrDiscPoints.length > 0) {
+        drawPoint(ctx, toCanvas(cdrDiscPoints[0]), '#0088ff');
+      }
+      if (cdrDiscPoints.length == 2) {
+        drawLine(ctx, toCanvas(cdrDiscPoints[0]), toCanvas(cdrDiscPoints[1]), '#0088ff', 4);
+        drawPoint(ctx, toCanvas(cdrDiscPoints[1]), '#0088ff');
+      }
+      if (cdrCupPoints.length > 0) {
+        drawPoint(ctx, toCanvas(cdrCupPoints[0]), '#00ff6a');
+      }
+      if (cdrCupPoints.length == 2) {
+        drawLine(ctx, toCanvas(cdrCupPoints[0]), toCanvas(cdrCupPoints[1]), '#00ff6a', 4);
+        drawPoint(ctx, toCanvas(cdrCupPoints[1]), '#00ff6a');
+      }
+    }
+
+    function updateCdrValues(){
+      if (cdrDiscPoints.length != 2 || cdrCupPoints.length != 2) {
+        resetCdrValues();
+        setCdrDoneEnabled(false);
+        return;
+      }
+      const discA = cdrDiscPoints[0];
+      const discB = cdrDiscPoints[1];
+      const cupA = cdrCupPoints[0];
+      const cupB = cdrCupPoints[1];
+      const discLength = Math.hypot(discB.x - discA.x, discB.y - discA.y);
+      if (!discLength) {
+        resetCdrValues();
+        return;
+      }
+      const cupLength = Math.hypot(cupB.x - cupA.x, cupB.y - cupA.y);
+      const cdr = Math.min(1, Math.max(0, cupLength / discLength));
+      const rdr = Math.min(1, Math.max(0, 1 - cdr));
+      if (cdrValue) cdrValue.textContent = cdr.toFixed(2);
+      if (rdrValue) rdrValue.textContent = rdr.toFixed(2);
+      updateCdrStatus('Measurement ready');
+      setCdrDoneEnabled(true);
+    }
+
+    function handleCdrClick(event){
+      if (!cdrActive) return;
+      if (isMouseDragging || isDragging || cdrDragging) return;
+      const point = getPointOnImageFromEvent(event);
+      if (!point) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const nearest = findNearestCdrPoint(point, 12);
+      if (nearest) {
+        updateCdrPoint(nearest.type, nearest.index, point);
+        return;
+      }
+
+      if (cdrStep == 1) {
+        cdrDiscPoints = [point];
+        cdrCupPoints = [];
+        updateCdrStatus('Select disc line: click 2nd point');
+        cdrStep = 2;
+        scheduleCdrDraw();
+        return;
+      }
+      if (cdrStep == 2) {
+        cdrDiscPoints = [cdrDiscPoints[0], point];
+        cdrCupPoints = [];
+        updateCdrStatus('Select cup segment: click 1st point');
+        cdrStep = 3;
+        scheduleCdrDraw();
+        return;
+      }
+      if (cdrStep == 3) {
+        const projected = projectPointToLine(point, cdrDiscPoints[0], cdrDiscPoints[1]);
+        cdrCupPoints = [{ x: projected.x, y: projected.y }];
+        updateCdrStatus('Select cup segment: click 2nd point');
+        cdrStep = 4;
+        scheduleCdrDraw();
+        return;
+      }
+      if (cdrStep == 4) {
+        const projected = projectPointToLine(point, cdrDiscPoints[0], cdrDiscPoints[1]);
+        cdrCupPoints = [cdrCupPoints[0], { x: projected.x, y: projected.y }];
+        cdrStep = 5;
+        scheduleCdrDraw();
+        updateCdrValues();
+      }
+    }
+
+    function handleCdrPointerDown(event){
+      if (!cdrActive) return;
+      const point = getPointOnImageFromEvent(event);
+      if (!point) return;
+      const nearest = findNearestCdrPoint(point, 12);
+      if (!nearest) return;
+      cdrDragging = true;
+      cdrDragTarget = nearest;
+      updateCdrPoint(nearest.type, nearest.index, point);
+      if (event.pointerId != null && main && main.setPointerCapture) {
+        try { main.setPointerCapture(event.pointerId); } catch(_) {}
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function handleCdrPointerMove(event){
+      if (!cdrActive || !cdrDragging || !cdrDragTarget) return;
+      const point = getPointOnImageFromEvent(event);
+      if (!point) return;
+      updateCdrPoint(cdrDragTarget.type, cdrDragTarget.index, point);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function handleCdrPointerUp(event){
+      if (!cdrActive || !cdrDragging) return;
+      cdrDragging = false;
+      cdrDragTarget = null;
+      if (event.pointerId != null && main && main.releasePointerCapture) {
+        try { main.releasePointerCapture(event.pointerId); } catch(_) {}
+      }
+      event.preventDefault();
+      event.stopPropagation();
     }
 
     function adjustImagePan(stepX, stepY){
@@ -874,6 +1360,49 @@
       writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
 
+    if (cdrToggle) {
+      cdrToggle.addEventListener('click', () => {
+        setCdrActive(!cdrActive);
+      });
+    }
+    if (cdrClear) {
+      cdrClear.addEventListener('click', () => {
+        clearCdrState();
+        if (cdrActive) {
+          if (cdrPanel) cdrPanel.classList.add('is-active');
+          updateCdrStatus('Select disc line: click 2 points');
+          cdrStep = 1;
+          if (cdrClear) cdrClear.disabled = false;
+        }
+      });
+    }
+
+    if (cdrDone) {
+      cdrDone.addEventListener('click', () => {
+        const tag = buildCdrTag();
+        if (!tag) {
+          updateCdrStatus('Complete CDR steps first');
+          return;
+        }
+        const target = selectCommentTarget();
+        if (!target) {
+          updateCdrStatus('No comment field found');
+          return;
+        }
+        const nextValue = upsertCdrTag(target.value || '', tag);
+        target.value = nextValue;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        updateCdrStatus('Added to comments');
+        cdrActive = false;
+        if (cdrToggle) {
+          cdrToggle.setAttribute('aria-pressed', 'false');
+          cdrToggle.classList.remove('active');
+        }
+        setViewerControlsLocked(false);
+      });
+    }
+
     function adjustLoupeZoom(stepDir){
       if (!loupe) return;
       const next = clamp(parseFloat((loupeZoom + (stepDir * LOUPE_ZOOM_STEP)).toFixed(2)), LOUPE_ZOOM_MIN, LOUPE_ZOOM_MAX);
@@ -973,6 +1502,9 @@
     }
     
     function handleTouchStart(e) {
+      if (cdrActive) {
+        return;
+      }
       if (e.touches.length === 1) {
         // Single touch - prepare for drag
         isDragging = true;
@@ -990,6 +1522,9 @@
     }
     
     function handleTouchMove(e) {
+      if (cdrActive) {
+        return;
+      }
       if (e.touches.length === 1 && isDragging) {
         // Single touch drag - pan the image
         const deltaX = e.touches[0].clientX - dragStartX;
@@ -1033,6 +1568,9 @@
     
     // Mouse wheel zoom for desktop
     main.addEventListener('wheel', (e) => {
+      if (cdrActive) {
+        return;
+      }
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
@@ -1043,6 +1581,9 @@
     // Mouse drag panning for desktop
     function handleMouseDown(e) {
       // Only enable mouse panning when left mouse button is pressed and loupe is not active
+      if (cdrActive) {
+        return;
+      }
       if (e.button === 0 && !loupeEnabled) {
         isMouseDragging = true;
         mouseDragStartX = e.clientX;
@@ -1055,6 +1596,9 @@
     }
     
     function handleMouseMove(e) {
+      if (cdrActive) {
+        return;
+      }
       if (isMouseDragging) {
         const deltaX = e.clientX - mouseDragStartX;
         const deltaY = e.clientY - mouseDragStartY;
@@ -1177,6 +1721,8 @@
     
     function setZoomLevel(zoomPercent) {
       currentZoom = clamp(zoomPercent, ZOOM_MIN, ZOOM_MAX);
+      setCdrOverlayVisible(false);
+      scheduleCdrRedrawAfterIdle();
       applyImagePan();
       updateZoomDisplay();
       if (loupeEnabled) {
@@ -1224,7 +1770,8 @@
         if (preset) {
           applyPreset(preset);
         }
-      }
+      },
+      isCdrActive: () => cdrActive
     });
 
     const activate = () => { activeRoot = root; };

@@ -85,6 +85,16 @@
         L
       </button>
 
+      <!-- CDR/RDR Tool -->
+      <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
+          CDR/RDR
+        </button>
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-clear" disabled>
+          Clear
+        </button>
+      </div>
+
       <!-- Shortcut hint -->
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger align-self-end"
@@ -92,6 +102,23 @@
               data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
               aria-label="Keyboard shortcuts">
         <span aria-hidden="true">?</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="fw-semibold">CDR/RDR Measurement</div>
+      <div class="small text-muted imggr-cdr-status">Inactive</div>
+    </div>
+    <div class="small text-muted mt-1">
+      Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 small">
+      <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value fw-semibold">—</span></div>
+      <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value fw-semibold">—</span></div>
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>
+        Done
       </button>
     </div>
   </div>
@@ -174,6 +201,20 @@
         {% else %}
           <span>Metadata pending</span>
         {% endif %}
+      </div>
+
+      <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="fw-semibold">CDR/RDR Measurement</div>
+          <div class="small text-muted imggr-cdr-status">Inactive</div>
+        </div>
+        <div class="small text-muted mt-1">
+          Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
+        </div>
+        <div class="d-flex flex-wrap gap-3 mt-2 small">
+          <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value">—</span></div>
+          <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value">—</span></div>
+        </div>
       </div>
 
     </div>

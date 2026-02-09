@@ -1110,7 +1110,7 @@
         resizeCdrOverlay();
         drawCdrOverlay();
         setCdrOverlayVisible(true);
-      }, 1000);
+      }, 2000);
     }
 
     function scheduleCdrDraw(){

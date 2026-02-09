@@ -32,7 +32,10 @@ from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
 
 
-def render_discrepancy_review(page_title: str | None = None):
+def render_discrepancy_review(
+    page_title: str | None = None,
+    enforced_filters: Dict[str, str] | None = None,
+):
     """Main page for discrepancy review process.
 
     Note: Even though this route requires admin or data_manager roles,
@@ -84,6 +87,8 @@ def render_discrepancy_review(page_title: str | None = None):
             query_params = {k: v for k, v in query_params.items() if k != 'disease_id'}
             return redirect(url_for('review.discrepancy_review', **query_params))
         
+        regrade_creator_mode = bool(enforced_filters)
+
         # Clear the error flag if disease is selected
         if disease_id and session.get('_disease_error_shown'):
             session.pop('_disease_error_shown', None)
@@ -105,6 +110,7 @@ def render_discrepancy_review(page_title: str | None = None):
                 ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
                 filters={},
                 page_title=page_title,
+                regrade_creator_mode=regrade_creator_mode,
             )
         
         # Apply lab unit filter
@@ -142,6 +148,12 @@ def render_discrepancy_review(page_title: str | None = None):
 
         # Resident comparison filter
         resident_compare = request.args.get("resident_compare", type=str)
+
+        enforced = enforced_filters or {}
+        if enforced:
+            resident_compare = enforced.get("resident_compare", resident_compare)
+            has_arbitrator = enforced.get("has_arbitrator", has_arbitrator)
+            has_regrade = enforced.get("has_regrade", has_regrade)
         
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
@@ -172,6 +184,7 @@ def render_discrepancy_review(page_title: str | None = None):
                 has_next=False,
                 filters={},
                 page_title=page_title,
+                regrade_creator_mode=regrade_creator_mode,
             )
 
         filters = {
@@ -214,6 +227,7 @@ def render_discrepancy_review(page_title: str | None = None):
                 ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
                 filters=filters,
                 page_title=page_title,
+                regrade_creator_mode=regrade_creator_mode,
             )
 
         base_query = f"""
@@ -345,6 +359,7 @@ def render_discrepancy_review(page_title: str | None = None):
                 "ai_review_status": ai_review_statuses,
             },
             page_title=page_title,
+            regrade_creator_mode=regrade_creator_mode,
         )
 
 
@@ -575,5 +590,3 @@ def _build_grades_from_row(row: Any, selected_ai_model_id: Optional[int]) -> Dic
                     "ai_review_comments": all_comments,
                 }
     return grades
-
-

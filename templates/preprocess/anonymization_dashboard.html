@@ -71,12 +71,135 @@
         </div>
         {% endif %}
     </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            Pending Anonymization
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Filename</th>
+                            <th>Hospital</th>
+                            <th>Lab Unit</th>
+                            <th>Camera</th>
+                            <th>Disease</th>
+                            <th>Area</th>
+                            <th>PII Status</th>
+                            <th>Status</th>
+                            <th>Uploaded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if pending_uploads %}
+                        {% for upload in pending_uploads %}
+                        {% set verification = pending_verifications.get(upload.id) if pending_verifications else None %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('preprocess.anonymize_image', uuid=upload.uuid) }}" class="text-decoration-none">
+                                    <img src="{{ url_for('direct_uploads.get_thumbnail', uuid=upload.uuid) }}" alt="{{ upload.filename }}"
+                                         style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"
+                                         onerror="this.style.display='none'">
+                                </a>
+                            </td>
+                            <td style="max-width: 150px; word-wrap: break-word;">
+                                <a href="{{ url_for('preprocess.anonymize_image', uuid=upload.uuid) }}" title="{{ upload.filename }}">
+                                    {{ upload.filename[:15] }}{% if upload.filename|length > 15 %}...{% endif %}
+                                </a>
+                            </td>
+                            <td>{{ upload.hospital.name if upload.hospital else '-' }}</td>
+                            <td>{{ upload.lab_unit.name if upload.lab_unit else '-' }}</td>
+                            <td>{{ upload.camera.name if upload.camera else '-' }}</td>
+                            <td>{{ upload.disease.name if upload.disease else '-' }}</td>
+                            <td>{{ upload.area.name if upload.area else '-' }}</td>
+                            {% set pii_row = pii_status_map.get(upload.uuid) if pii_status_map is defined else None %}
+                            <td>
+                                {% if pii_row %}
+                                    {% if pii_row.pii_status == 'clear' %}
+                                        <span class="badge bg-success">Clear</span>
+                                    {% elif pii_row.pii_status == 'detected' %}
+                                        <span class="badge bg-danger">Detected</span>
+                                    {% elif pii_row.pii_status == 'error' %}
+                                        <span class="badge bg-warning text-dark">Error</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ pii_row.pii_status }}</span>
+                                    {% endif %}
+                                    <div class="small text-muted">{{ pii_row.source }}</div>
+                                {% else %}
+                                    <span class="badge bg-secondary">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if verification %}
+                                    {% if verification.verified_status == 'unverified' %}
+                                        <span class="badge bg-danger">Unverified</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ verification.verified_status }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ upload.created_at|user_datetime('%Y-%m-%d %H:%M') }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-muted text-center">No pending anonymization activity matching the criteria.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <nav aria-label="Pending pagination" class="overflow-auto">
+                <ul class="pagination pagination-sm flex-wrap">
+                    <li class="page-item {% if pending_page <= 1 %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page, pending_page=pending_page-1, **filters) }}">Previous</a>
+                    </li>
+                    {% set p_start = pending_page - 2 if pending_page - 2 > 1 else 1 %}
+                    {% set p_end = pending_page + 2 if pending_page + 2 < pending_total_pages else pending_total_pages %}
+                    {% if p_start > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page, pending_page=1, **filters) }}">1</a>
+                        </li>
+                        {% if p_start > 2 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                        {% endif %}
+                    {% endif %}
+                    {% for p in range(p_start, p_end + 1) %}
+                        <li class="page-item {% if p == pending_page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page, pending_page=p, **filters) }}">{{ p }}</a>
+                        </li>
+                    {% endfor %}
+                    {% if p_end < pending_total_pages %}
+                        {% if p_end < pending_total_pages - 1 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page, pending_page=pending_total_pages, **filters) }}">{{ pending_total_pages }}</a>
+                        </li>
+                    {% endif %}
+                    <li class="page-item {% if pending_page >= pending_total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page, pending_page=pending_page+1, **filters) }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+            <p class="text-muted">Showing {{ pending_uploads|length }} of {{ pending_total_items }} pending results.</p>
+        </div>
+    </div>
 
     <div class="card mb-4">
         <div class="card-header">
             Recent Anonymization Activity
         </div>
-        <div class="card-body">
+        <div class="card-body p-4">
             <form method="get" action="{{ url_for('preprocess.anonymization_dashboard') }}" class="mb-4">
                 <div class="row g-3">
                     <div class="col-md-3">
@@ -137,6 +260,33 @@
                             <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
                         </select>
                     </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="pii_status">PII Status</label>
+                        <select class="form-select" name="pii_status" id="pii_status">
+                            <option value="" {% if not filters.get('pii_status') %}selected{% endif %}>All</option>
+                            <option value="pending" {% if filters.get('pii_status') == 'pending' %}selected{% endif %}>Pending</option>
+                            <option value="clear" {% if filters.get('pii_status') == 'clear' %}selected{% endif %}>Clear</option>
+                            <option value="detected" {% if filters.get('pii_status') == 'detected' %}selected{% endif %}>Detected</option>
+                            <option value="error" {% if filters.get('pii_status') == 'error' %}selected{% endif %}>Error</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="pii_source">PII Source</label>
+                        <select class="form-select" name="pii_source" id="pii_source">
+                            <option value="" {% if not filters.get('pii_source') %}selected{% endif %}>All</option>
+                            <option value="auto" {% if filters.get('pii_source') == 'auto' %}selected{% endif %}>Auto</option>
+                            <option value="manual" {% if filters.get('pii_source') == 'manual' %}selected{% endif %}>Manual</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label" for="pii_detected">PII Detected</label>
+                        <select class="form-select" name="pii_detected" id="pii_detected">
+                            <option value="" {% if not filters.get('pii_detected') %}selected{% endif %}>All</option>
+                            <option value="yes" {% if filters.get('pii_detected') == 'yes' %}selected{% endif %}>Yes</option>
+                            <option value="no" {% if filters.get('pii_detected') == 'no' %}selected{% endif %}>No</option>
+                        </select>
+                    </div>
                     <div class="col-md-3">
                         <label for="verified_by_id" class="form-label">Verified By</label>
                         <select name="verified_by_id" id="verified_by_id" class="form-select">
@@ -165,6 +315,7 @@
                             <th>Camera</th>
                             <th>Disease</th>
                             <th>Area</th>
+                            <th>PII Status</th>
                             <th>Status</th>
                             <th>Verified By</th>
                             <th>Verified At</th>
@@ -194,6 +345,23 @@
                             <td>{{ verification.image_upload.camera.name if verification.image_upload.camera else '-' }}</td>
                             <td>{{ verification.image_upload.disease.name if verification.image_upload.disease else '-' }}</td>
                             <td>{{ verification.image_upload.area.name if verification.image_upload.area else '-' }}</td>
+                            {% set pii_row = pii_status_map.get(verification.image_upload.uuid) if pii_status_map is defined else None %}
+                            <td>
+                                {% if pii_row %}
+                                    {% if pii_row.pii_status == 'clear' %}
+                                        <span class="badge bg-success">Clear</span>
+                                    {% elif pii_row.pii_status == 'detected' %}
+                                        <span class="badge bg-danger">Detected</span>
+                                    {% elif pii_row.pii_status == 'error' %}
+                                        <span class="badge bg-warning text-dark">Error</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ pii_row.pii_status }}</span>
+                                    {% endif %}
+                                    <div class="small text-muted">{{ pii_row.source }}</div>
+                                {% else %}
+                                    <span class="badge bg-secondary">Pending</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if verification.verified_status == 'verified' %}
                                     <span class="badge bg-success">Anonymized</span>
@@ -212,16 +380,38 @@
                 </table>
             </div>
 
-            <nav aria-label="Page navigation">
-                <ul class="pagination">
+            <nav aria-label="Page navigation" class="overflow-auto">
+                <ul class="pagination pagination-sm flex-wrap">
                     <li class="page-item {% if page <= 1 %}disabled{% endif %}">
                         <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page-1, **filters) }}">Previous</a>
                     </li>
-                    {% for p in range(1, total_pages + 1) %}
+                    {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+                    {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+                    {% if start_page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=1, **filters) }}">1</a>
+                        </li>
+                        {% if start_page > 2 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                        {% endif %}
+                    {% endif %}
+                    {% for p in range(start_page, end_page + 1) %}
                         <li class="page-item {% if p == page %}active{% endif %}">
                             <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=p, **filters) }}">{{ p }}</a>
                         </li>
                     {% endfor %}
+                    {% if end_page < total_pages %}
+                        {% if end_page < total_pages - 1 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=total_pages, **filters) }}">{{ total_pages }}</a>
+                        </li>
+                    {% endif %}
                     <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
                         <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page+1, **filters) }}">Next</a>
                     </li>
@@ -235,14 +425,6 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header">
-            Filters (Coming Soon)
-        </div>
-        <div class="card-body">
-            <p>Filtering options for Hospital, Lab Unit, Image Type, Disease, and Area will be available here.</p>
-        </div>
-    </div>
 
 </div>
 {% endblock %}

@@ -156,6 +156,64 @@ def _compute_totals(grouped: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[
     return totals
 
 
+def _fetch_grader_totals(
+    db,
+    allowed_lab_unit_ids: Iterable[int],
+    start_dt: datetime | None,
+) -> Dict[Tuple[Any, ...], Dict[str, Any]]:
+    query = (
+        db.query(
+            User.id.label("user_id"),
+            User.username.label("username"),
+            User.full_name.label("full_name"),
+            func.count(Grade.id).label("grade_count"),
+        )
+        .join(GradingTask, Grade.task_id == GradingTask.id)
+        .join(User, Grade.grader_user_id == User.id)
+        .filter(Grade.role_slot != "ai")
+        .filter(GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        .group_by(User.id, User.username, User.full_name)
+    )
+    if start_dt:
+        query = query.filter(Grade.created_at >= start_dt)
+
+    rows = query.all()
+    results: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+    for row in rows:
+        key = row.user_id
+        results[key] = {
+            "user_id": row.user_id,
+            "username": row.username,
+            "full_name": row.full_name,
+            "count": row.grade_count or 0,
+        }
+    return results
+
+
+def _merge_grader_totals(
+    total_counts: Dict[Tuple[Any, ...], Dict[str, Any]],
+    month_counts: Dict[Tuple[Any, ...], Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    all_keys = set(total_counts) | set(month_counts)
+    for key in all_keys:
+        base = total_counts.get(key) or month_counts.get(key)
+        if not base:
+            continue
+        rows.append(
+            {
+                "grader_name": _format_grader_name(base),
+                "username": base.get("username"),
+                "month_count": month_counts.get(key, {}).get("count", 0),
+                "total_count": total_counts.get(key, {}).get("count", 0),
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda r: (-r.get("total_count", 0), -r.get("month_count", 0), r.get("grader_name") or ""),
+    )
+
+
 @roles_required("ophthalmologist", "local_admin", "data_manager", "admin")
 def grader_statistics():
     """Show per-grader grade counts by disease and lab unit (monthly + cumulative)."""
@@ -170,6 +228,7 @@ def grader_statistics():
                 "grading/grader_statistics.html",
                 month_label="Last 30 days",
                 month_start=None,
+                grader_totals=[],
                 human_data={},
                 ai_data={},
                 human_totals={},
@@ -189,10 +248,16 @@ def grader_statistics():
         human_data = _group_by_disease(human_rows)
         ai_data = _group_by_disease(ai_rows)
 
+        grader_totals = _merge_grader_totals(
+            _fetch_grader_totals(db, allowed_lab_unit_ids, start_dt=None),
+            _fetch_grader_totals(db, allowed_lab_unit_ids, start_dt=month_start),
+        )
+
         return render_template(
             "grading/grader_statistics.html",
             month_label="Last 30 days",
             month_start=month_start,
+            grader_totals=grader_totals,
             human_data=human_data,
             ai_data=ai_data,
             human_totals=_compute_totals(human_data),

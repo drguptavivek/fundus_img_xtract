@@ -75,11 +75,11 @@ def create_regrade_tasks():
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
             "has_review": request.form.get("has_review", type=str),
-            "has_arbitrator": request.form.get("has_arbitrator", type=str),
+            "has_arbitrator": "yes",
             "review_grade": request.form.getlist("review_grade"),
             "has_consensus": request.form.get("has_consensus", type=str),
             "consensus_method": request.form.get("consensus_method", type=str),
-            "resident_compare": request.form.get("resident_compare", type=str),
+            "resident_compare": "mismatch",
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": [
@@ -87,6 +87,8 @@ def create_regrade_tasks():
                 for status in request.form.getlist("ai_review_status")
                 if status in AI_REVIEW_STATUS_LABELS
             ],
+            "has_regrade": "no",
+            "regrade_grade": [],
             "allowed_lab_units": list(allowed_lab_unit_ids),
         }
 
@@ -149,4 +151,12 @@ def create_regrade_tasks():
 @bp.route("/regrade-task-creator", methods=["GET"])
 @roles_required("admin", "local_admin")
 def regrade_task_creator():
-    return render_discrepancy_review(page_title="Regrade Task Creator")
+    enforced_filters = {
+        "resident_compare": "mismatch",
+        "has_arbitrator": "yes",
+        "has_regrade": "no",
+    }
+    return render_discrepancy_review(
+        page_title="Regrade Task Creator",
+        enforced_filters=enforced_filters,
+    )

@@ -505,60 +505,6 @@ def regrade_task_submit(regrade_task_id: int):
         flash("Invalid regrade task reference.", "danger")
         return redirect(url_for("grading.regrade_tasks"))
 
-
-@roles_required("admin", "local_admin")
-def regrade_task_reassign(regrade_task_id: int):
-    if not regrade_task_id or regrade_task_id <= 0:
-        flash("Invalid regrade task reference.", "danger")
-        return redirect(url_for("grading.regrade_tasks"))
-
-    assigned_to_user_id = request.form.get("assigned_to_user_id", type=int)
-    if not assigned_to_user_id:
-        flash("Regrade adjudicator is required.", "danger")
-        return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-    with transaction_scope() as db:
-        _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
-        regrade_task = _fetch_regrade_task(db, regrade_task_id, allowed_lab_unit_ids)
-        if not regrade_task:
-            flash("Regrade task not found.", "danger")
-            return redirect(url_for("grading.regrade_tasks"))
-
-        if regrade_task.status != "regrade_pending":
-            flash("Only pending regrade tasks can be reassigned.", "warning")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        eligible_user = (
-            db.query(User)
-            .join(User.roles)
-            .join(user_lab_units, user_lab_units.c.user_id == User.id)
-            .filter(User.id == assigned_to_user_id)
-            .filter(User.is_active.is_(True))
-            .filter(Role.name == "regrade_adjudicator")
-            .filter(user_lab_units.c.lab_unit_id == regrade_task.lab_unit_id)
-            .first()
-        )
-        if not eligible_user:
-            flash("Selected user is not a valid regrade adjudicator for this lab unit.", "danger")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        if regrade_task.assigned_to_user_id == assigned_to_user_id:
-            flash("Regrade task is already assigned to that user.", "info")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        previous_assignee_id = regrade_task.assigned_to_user_id
-        regrade_task.assigned_to_user_id = assigned_to_user_id
-
-        regrade_logger.info(
-            "Regrade reassigned [regrade_task_id=%s] [from_user_id=%s] [to_user_id=%s]",
-            sanitize_log_value(regrade_task.id),
-            sanitize_log_value(previous_assignee_id),
-            sanitize_log_value(assigned_to_user_id),
-        )
-
-        flash("Regrade task reassigned successfully.", "success")
-        return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
     action = (request.form.get("action") or "").strip().lower()
@@ -720,3 +666,57 @@ def regrade_task_reassign(regrade_task_id: int):
             return redirect(url_for("grading.start_random_regrade_task"))
 
         return redirect(url_for("grading.regrade_tasks"))
+
+
+@roles_required("admin", "local_admin")
+def regrade_task_reassign(regrade_task_id: int):
+    if not regrade_task_id or regrade_task_id <= 0:
+        flash("Invalid regrade task reference.", "danger")
+        return redirect(url_for("grading.regrade_tasks"))
+
+    assigned_to_user_id = request.form.get("assigned_to_user_id", type=int)
+    if not assigned_to_user_id:
+        flash("Regrade adjudicator is required.", "danger")
+        return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
+    with transaction_scope() as db:
+        _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
+        regrade_task = _fetch_regrade_task(db, regrade_task_id, allowed_lab_unit_ids)
+        if not regrade_task:
+            flash("Regrade task not found.", "danger")
+            return redirect(url_for("grading.regrade_tasks"))
+
+        if regrade_task.status != "regrade_pending":
+            flash("Only pending regrade tasks can be reassigned.", "warning")
+            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
+        eligible_user = (
+            db.query(User)
+            .join(User.roles)
+            .join(user_lab_units, user_lab_units.c.user_id == User.id)
+            .filter(User.id == assigned_to_user_id)
+            .filter(User.is_active.is_(True))
+            .filter(Role.name == "regrade_adjudicator")
+            .filter(user_lab_units.c.lab_unit_id == regrade_task.lab_unit_id)
+            .first()
+        )
+        if not eligible_user:
+            flash("Selected user is not a valid regrade adjudicator for this lab unit.", "danger")
+            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
+        if regrade_task.assigned_to_user_id == assigned_to_user_id:
+            flash("Regrade task is already assigned to that user.", "info")
+            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
+        previous_assignee_id = regrade_task.assigned_to_user_id
+        regrade_task.assigned_to_user_id = assigned_to_user_id
+
+        regrade_logger.info(
+            "Regrade reassigned [regrade_task_id=%s] [from_user_id=%s] [to_user_id=%s]",
+            sanitize_log_value(regrade_task.id),
+            sanitize_log_value(previous_assignee_id),
+            sanitize_log_value(assigned_to_user_id),
+        )
+
+        flash("Regrade task reassigned successfully.", "success")
+        return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))

@@ -1598,7 +1598,7 @@ class ViewerSettings(Base):
         CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_settings_zoom"),
         CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_settings_pan_x"),
         CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_settings_pan_y"),
-        CheckConstraint("brightness >= 0.5 AND brightness <= 1.5", name="ck_viewer_settings_brightness"),
+        CheckConstraint("brightness >= 0.5 AND brightness <= 5.0", name="ck_viewer_settings_brightness"),
         CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_settings_contrast"),
         CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_settings_filter"),
     )
@@ -1644,7 +1644,7 @@ class ViewerPresets(Base):
         CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_presets_zoom"),
         CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_presets_pan_x"),
         CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_presets_pan_y"),
-        CheckConstraint("brightness >= 0.5 AND brightness <= 1.5", name="ck_viewer_presets_brightness"),
+        CheckConstraint("brightness >= 0.5 AND brightness <= 5.0", name="ck_viewer_presets_brightness"),
         CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_presets_contrast"),
         CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_presets_filter"),
     )

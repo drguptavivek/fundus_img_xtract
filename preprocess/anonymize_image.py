@@ -201,6 +201,9 @@ def anonymization_dashboard():
         f_disease_id = request.args.get('disease_id', default=None, type=int)
         f_area_id = request.args.get('area_id', default=None, type=int)
         f_status = request.args.get('status', '', type=str)
+        f_pii_status = request.args.get('pii_status', '', type=str)
+        f_pii_source = request.args.get('pii_source', '', type=str)
+        f_pii_detected = request.args.get('pii_detected', '', type=str)
         f_verified_by_id = request.args.get('verified_by_id', default=None, type=int)
         f_filename = request.args.get('filename', '', type=str)
 
@@ -264,7 +267,7 @@ def anonymization_dashboard():
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.camera),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.disease),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.area),
-                selectinload(DirectImageVerify.verified_by)
+                                selectinload(DirectImageVerify.verified_by)
             )
         )
         query = query.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
@@ -282,6 +285,57 @@ def anonymization_dashboard():
             query = query.where(DirectImageUpload.area_id == f_area_id)
         if f_status:
             query = query.where(DirectImageVerify.verified_status == f_status)
+        if f_pii_status:
+            if f_pii_status == 'pending':
+                query = query.where(
+                    ~exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig'
+                        )
+                    ))
+                )
+            else:
+                query = query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == f_pii_status
+                        )
+                    ))
+                )
+        if f_pii_source:
+            query = query.where(
+                exists(select(1).where(
+                    and_(
+                        ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                        ImagePiiVerification.image_variant == 'orig',
+                        ImagePiiVerification.source == f_pii_source
+                    )
+                ))
+            )
+        if f_pii_detected:
+            if f_pii_detected == 'yes':
+                query = query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == 'detected'
+                        )
+                    ))
+                )
+            elif f_pii_detected == 'no':
+                query = query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == 'clear'
+                        )
+                    ))
+                )
         if f_verified_by_id:
             query = query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
         if f_filename:
@@ -297,6 +351,110 @@ def anonymization_dashboard():
             .offset((page - 1) * per_page)
             .limit(per_page)
         ).scalars().all()
+
+        pending_page = request.args.get('pending_page', 1, type=int)
+        pending_query = (
+            select(DirectImageUpload, DirectImageVerify)
+            .outerjoin(DirectImageVerify, DirectImageVerify.image_upload_id == DirectImageUpload.id)
+            .where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+        )
+        if f_hospital_id:
+            pending_query = pending_query.where(DirectImageUpload.hospital_id == f_hospital_id)
+        if f_lab_unit_id:
+            pending_query = pending_query.where(DirectImageUpload.lab_unit_id == f_lab_unit_id)
+        if f_camera_id:
+            pending_query = pending_query.where(DirectImageUpload.camera_id == f_camera_id)
+        if f_disease_id:
+            pending_query = pending_query.where(DirectImageUpload.disease_id == f_disease_id)
+        if f_area_id:
+            pending_query = pending_query.where(DirectImageUpload.area_id == f_area_id)
+        if f_filename:
+            pending_query = pending_query.where(DirectImageUpload.filename.ilike(f'%{f_filename}%'))
+        if f_pii_status:
+            if f_pii_status == 'pending':
+                pending_query = pending_query.where(
+                    ~exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig'
+                        )
+                    ))
+                )
+            else:
+                pending_query = pending_query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == f_pii_status
+                        )
+                    ))
+                )
+        if f_pii_source:
+            pending_query = pending_query.where(
+                exists(select(1).where(
+                    and_(
+                        ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                        ImagePiiVerification.image_variant == 'orig',
+                        ImagePiiVerification.source == f_pii_source
+                    )
+                ))
+            )
+        if f_pii_detected:
+            if f_pii_detected == 'yes':
+                pending_query = pending_query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == 'detected'
+                        )
+                    ))
+                )
+            elif f_pii_detected == 'no':
+                pending_query = pending_query.where(
+                    exists(select(1).where(
+                        and_(
+                            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+                            ImagePiiVerification.image_variant == 'orig',
+                            ImagePiiVerification.pii_status == 'clear'
+                        )
+                    ))
+                )
+
+        pending_query = pending_query.where(
+            (DirectImageVerify.id.is_(None)) | (DirectImageVerify.verified_status != 'verified')
+        )
+        if f_status and f_status in {'unverified', 'pending'}:
+            pending_query = pending_query.where(DirectImageVerify.verified_status == f_status)
+        if f_verified_by_id:
+            pending_query = pending_query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
+
+        pending_total = db_session.execute(select(func.count()).select_from(pending_query.subquery())).scalar_one()
+        pending_total_pages = ceil(pending_total / per_page) if pending_total else 0
+        pending_rows = db_session.execute(
+            pending_query.order_by(DirectImageUpload.created_at.desc())
+            .offset((pending_page - 1) * per_page)
+            .limit(per_page)
+        ).all()
+        pending_uploads = [row[0] for row in pending_rows]
+        pending_verifications = {row[0].id: row[1] for row in pending_rows if row[1] is not None}
+
+        image_uuids = [v.image_upload.uuid for v in verifications if v.image_upload]
+        image_uuids.extend([u.uuid for u in pending_uploads])
+        pii_status_map = {}
+        if image_uuids:
+            pii_rows = db_session.execute(
+                select(ImagePiiVerification)
+                .where(
+                    ImagePiiVerification.image_uuid.in_(image_uuids),
+                    ImagePiiVerification.image_variant == "orig",
+                )
+                .order_by(ImagePiiVerification.updated_at.desc())
+            ).scalars().all()
+            for row in pii_rows:
+                if row.image_uuid not in pii_status_map:
+                    pii_status_map[row.image_uuid] = row
 
         next_uuid = _get_next_unverified_uuid(db_session, allowed_lab_unit_ids)
 
@@ -343,6 +501,9 @@ def anonymization_dashboard():
             'disease_id': str(f_disease_id) if f_disease_id is not None else "",
             'area_id': str(f_area_id) if f_area_id is not None else "",
             'status': f_status,
+            'pii_status': f_pii_status,
+            'pii_source': f_pii_source,
+            'pii_detected': f_pii_detected,
             'verified_by_id': str(f_verified_by_id) if f_verified_by_id is not None else "",
             'filename': f_filename,
         }
@@ -353,6 +514,7 @@ def anonymization_dashboard():
             pending_anonymization_images=pending_anonymization_images,
             user_verified_images=user_verified_images,
             recent_verifications=verifications,
+            pii_status_map=pii_status_map,
             next_unverified_uuid=next_uuid,
             chart_data=chart_data,
             # Pagination
@@ -360,6 +522,11 @@ def anonymization_dashboard():
             per_page=per_page,
             total_pages=total_pages,
             total_items=total_items,
+            pending_page=pending_page,
+            pending_total_pages=pending_total_pages,
+            pending_total_items=pending_total,
+            pending_uploads=pending_uploads,
+            pending_verifications=pending_verifications,
             # Filters data
             hospitals=hospitals,
             lab_units=lab_units,
@@ -379,8 +546,15 @@ def anonymization_dashboard():
             pending_anonymization_images=0,
             user_verified_images=0,
             recent_verifications=[],
+            pii_status_map={},
             next_unverified_uuid=None,
+            chart_data={},
             page=1, per_page=20, total_pages=0, total_items=0,
+            pending_page=1,
+            pending_total_pages=0,
+            pending_total_items=0,
+            pending_uploads=[],
+            pending_verifications={},
             hospitals=[], lab_units=[], cameras=[], diseases=[], areas=[], users=[],
             filters={}
         )

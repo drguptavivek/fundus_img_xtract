@@ -32,6 +32,36 @@
   </div>
 
   <div class="mb-4">
+    <h2 class="h6 mb-3">Overall Human Grader Summary</h2>
+    {% if grader_totals %}
+      <div class="card mb-3">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Grader</th>
+                <th class="text-end">Last 30 days</th>
+                <th class="text-end">Cumulative</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in grader_totals %}
+              <tr>
+                <td>{{ row.grader_name }}</td>
+                <td class="text-end">{{ row.month_count }}</td>
+                <td class="text-end">{{ row.total_count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No human grades found for your lab units.</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-4">
     <h2 class="h6 mb-3">Human Grades</h2>
     {% if human_data %}
       {% for disease_name, rows in human_data.items() %}

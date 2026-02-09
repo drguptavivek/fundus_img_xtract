@@ -55,6 +55,29 @@ def _extract_ai_probability(comment: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def _apply_ai_influence_comment(comment: str | None, ai_influence: str | None) -> str | None:
+    if not ai_influence:
+        return comment
+    normalized = ai_influence.strip().lower()
+    if normalized not in {"yes", "no"}:
+        return comment
+    tag = f"AI influence: {'yes' if normalized == 'yes' else 'no'}"
+    if not comment:
+        return tag
+    lines = [line for line in comment.splitlines() if line.strip()]
+    updated = []
+    replaced = False
+    for line in lines:
+        if line.lower().startswith("ai influence:"):
+            updated.append(tag)
+            replaced = True
+        else:
+            updated.append(line)
+    if not replaced:
+        updated.append(tag)
+    return "\n".join(updated)
+
+
 def _kick_off_mv_refresh(app) -> None:
     """Trigger materialized view refresh asynchronously to avoid blocking response."""
     try:
@@ -216,6 +239,7 @@ def review_task_details(task_id: int):
                     "review_comment": ai_grade.ai_review_comment,
                 }
             )
+        ai_visible = bool(ai_grades_for_display)
 
         ai_grade_meta: dict[int, dict[str, object]] = {
             entry["id"]: entry for entry in ai_grades_for_display if isinstance(entry.get("id"), int)
@@ -225,6 +249,7 @@ def review_task_details(task_id: int):
         if request.method == 'POST' and can_review:
             grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
+            ai_influence = (request.form.get('ai_influence') or '').strip().lower()
             action = request.form.get('action') or 'save'
             form_next_task_id = request.form.get('next_task_id', type=int)
             target_next_task_id = form_next_task_id or next_task_id
@@ -318,6 +343,10 @@ def review_task_details(task_id: int):
                 flash('Please select a grade', 'error')
                 return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
+            if grading_id and ai_visible and ai_influence not in {"yes", "no"}:
+                flash('Please specify whether the review was updated based on AI.', 'error')
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+
             # Get the disease grading
             disease_grading = None
             if grading_id:
@@ -396,6 +425,8 @@ def review_task_details(task_id: int):
             # Log using dedicated grades logger
             grades_logger.info(log_message)
             
+            comment = _apply_ai_influence_comment(comment, ai_influence) if grading_id else comment
+
             # Create or update review grade
             if grading_id and disease_grading:
                 if existing_review_grade:

@@ -48,6 +48,17 @@ Regrade work is restricted by role and lab unit scope:
 - Role: `regrade_adjudicator` (or admin/local_admin for monitoring)
 - Lab unit scope: `user_lab_units` and hospital scoping apply
 
+## Reassignment
+
+Admins/local admins can reassign pending regrade tasks:
+- Single task: `POST /grading/regrade-task/<regrade_task_id>/reassign`
+- Bulk: `GET/POST /grading/regrade-tasks/reassign`
+
+Reassignment rules:
+- Only `regrade_pending` tasks are eligible.
+- Target user must have role `regrade_adjudicator`.
+- Target user must be assigned to the task’s lab unit.
+
 ## Data Integrity
 
 - RegradeTask creation is idempotent for pending tasks: existing `regrade_pending` tasks are skipped.

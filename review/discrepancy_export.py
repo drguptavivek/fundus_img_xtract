@@ -46,6 +46,7 @@ class ExportTaskRow:
     consensus_status: Optional[str]
     consensus_method: Optional[str]
     final_impression: Optional[str]
+    final_plus_review: Optional[str]
     grading_details_json: str
     ai_review_comments: List[str]
     ai_review_statuses: List[str]
@@ -256,7 +257,12 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 v.review_grade_name,
                 v.review_comment,
                 v.review_selected_features_json,
+                v.regrade_adj_grade_name,
+                v.regrade_adj_comment,
+                v.regrade_adj_selected_features_json,
                 v.ai_models_json,
+                v.final_impression,
+                v.final_plus_review,
                 v.image_uuid,
                 v.encounter_file_id,
                 v.encounter_file_uuid,
@@ -289,7 +295,8 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                     state=row.task_state,
                     consensus_status=row.has_consensus,
                     consensus_method=row.consensus_type,
-                    final_impression=row.final_grade_name,
+                    final_impression=row.final_impression,
+                    final_plus_review=row.final_plus_review,
                     grading_details_json=grading_details_json,
                     ai_review_comments=ai_review_comments,
                     ai_review_statuses=ai_review_statuses,
@@ -361,6 +368,7 @@ def _build_grading_details_json(row: Any, ai_models: Dict[str, Dict[str, Any]]) 
     _add_role("resident2", row.resident2_grade_name, row.resident2_comment, row.resident2_selected_features_json)
     _add_role("arbitrator", row.arbitrator_grade_name, row.arbitrator_comment, row.arbitrator_selected_features_json)
     _add_role("review", row.review_grade_name, row.review_comment, row.review_selected_features_json)
+    _add_role("regrade_adj", row.regrade_adj_grade_name, row.regrade_adj_comment, row.regrade_adj_selected_features_json)
 
     for key in sorted(ai_models.keys(), key=lambda k: int(k) if str(k).isdigit() else k):
         model = ai_models[key]
@@ -516,6 +524,7 @@ def _build_task_payload(
                 "consensus_status": row.consensus_status,
                 "consensus_method": row.consensus_method,
                 "final_impression": row.final_impression,
+                "final_plus_review": row.final_plus_review,
                 "has_review": "yes" if has_review else "no",
                 "resident_grade": grades.get("resident", {}).get("impression"),
                 "resident_comment": grades.get("resident", {}).get("comment"),
@@ -596,7 +605,12 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                 v.review_grade_name,
                 v.review_comment,
                 v.review_selected_features_json,
+                v.regrade_adj_grade_name,
+                v.regrade_adj_comment,
+                v.regrade_adj_selected_features_json,
                 v.ai_models_json,
+                v.final_impression,
+                v.final_plus_review,
                 v.image_uuid,
                 v.encounter_file_id,
                 v.encounter_file_uuid,
@@ -628,7 +642,8 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                     state=row.task_state,
                     consensus_status=row.has_consensus,
                     consensus_method=row.consensus_type,
-                    final_impression=row.final_grade_name,
+                    final_impression=row.final_impression,
+                    final_plus_review=row.final_plus_review,
                     grading_details_json=grading_details_json,
                     ai_review_comments=ai_review_comments,
                     ai_review_statuses=ai_review_statuses,

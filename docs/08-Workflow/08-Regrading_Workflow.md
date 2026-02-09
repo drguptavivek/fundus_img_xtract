@@ -34,6 +34,21 @@ This workflow documents how regrade tasks are created and completed.
    - Create/update `Consensus` with `method = 'regrade'`
    - Set `RegradeTask.status = 'regrade_done'`
 
+## Phase 2b: Admin Reassignment (Optional)
+
+Admins/local admins can reassign pending tasks:
+- Single task:
+  - Route: `POST /grading/regrade-task/<regrade_task_id>/reassign`
+- Bulk reassignment:
+  - Route: `GET /grading/regrade-tasks/reassign`
+  - Filter by assignee (including users who no longer hold the role)
+  - Select tasks (Select All or individual)
+  - Choose target adjudicator and submit
+
+Rules:
+- Only `regrade_pending` tasks can be reassigned.
+- Target user must have `regrade_adjudicator` role and lab unit coverage.
+
 ## Phase 3: Revision Window
 
 Regrades can be revised by the adjudicator for 24 hours:

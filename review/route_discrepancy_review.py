@@ -26,7 +26,7 @@ from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
-from utils.mvw_image_listing_v2 import get_mv_name_for_disease
+from utils.discrepancy_filters import build_discrepancy_filter_query
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
@@ -122,6 +122,8 @@ def render_discrepancy_review(page_title: str | None = None):
         # Get review grade filter
         has_review = request.args.get("has_review", type=str)
         review_grades = request.args.getlist("review_grade")
+        has_regrade = request.args.get("has_regrade", type=str)
+        regrade_grades = request.args.getlist("regrade_grade")
         has_arbitrator = request.args.get("has_arbitrator", type=str)
 
         # Get consensus filter
@@ -135,6 +137,8 @@ def render_discrepancy_review(page_title: str | None = None):
             arbitrator_grades = []
             has_review = None
             review_grades = []
+            has_regrade = None
+            regrade_grades = []
 
         # Resident comparison filter
         resident_compare = request.args.get("resident_compare", type=str)
@@ -149,14 +153,6 @@ def render_discrepancy_review(page_title: str | None = None):
             for status in request.args.getlist("ai_review_status")
             if status in AI_REVIEW_STATUS_LABELS
         ]
-
-        # If user didn't request AI-grade-only records, ignore AI-specific filters
-        if has_ai_grade != "yes":
-            ai_model_ids = []
-            ai_grades = []
-            ai_review_statuses = []
-
-        mv_name = get_mv_name_for_disease(db, disease_id)
 
         # Restrict to lab units the user can access (via GradingTask.lab_unit_id)
         allowed_lab_units = list(user_lab_unit_ids)
@@ -178,120 +174,47 @@ def render_discrepancy_review(page_title: str | None = None):
                 page_title=page_title,
             )
 
-        # Allow only one AI model selection at a time (pick the first if multiple)
-        selected_ai_model_id: Optional[int] = None
-        if ai_model_ids:
-            cleaned_models = [mid for mid in ai_model_ids if mid]
-            if cleaned_models:
-                selected_ai_model_id = int(cleaned_models[0])
-                ai_model_ids = [str(selected_ai_model_id)]
-            else:
-                ai_model_ids = []
-
-        # Build dynamic WHERE clauses
-        where_clauses: List[str] = [
-            "v.disease_id = :disease_id",
-            "v.task_lab_unit_id = ANY(:allowed_lab_units)",
-        ]
-        params: Dict[str, Any] = {
+        filters = {
             "disease_id": disease_id,
+            "lab_unit_id": lab_unit_id,
+            "resident_grade": resident_grades,
+            "resident2_grade": resident2_grades,
+            "arbitrator_grade": arbitrator_grades,
+            "regrade_grade": regrade_grades,
+            "final_grade": final_grades,
+            "has_ai_grade": has_ai_grade,
+            "has_review": has_review,
+            "has_regrade": has_regrade,
+            "has_arbitrator": has_arbitrator,
+            "review_grade": review_grades,
+            "has_consensus": has_consensus,
+            "consensus_method": consensus_method,
+            "resident_compare": resident_compare,
+            "ai_model_id": ai_model_ids,
+            "ai_grade": ai_grades,
+            "ai_review_status": ai_review_statuses,
             "allowed_lab_units": allowed_lab_units,
         }
 
-        if lab_unit_id and lab_unit_id in user_lab_unit_ids:
-            where_clauses.append("v.task_lab_unit_id = :lab_unit_id")
-            params["lab_unit_id"] = lab_unit_id
-
-        # Consensus filter
-        if has_consensus == "has_consensus":
-            where_clauses.append("v.has_consensus = TRUE")
-        elif has_consensus == "no":
-            where_clauses.append("v.has_consensus = FALSE")
-
-        if consensus_method in {"match", "adjudication", "task_review", "regrade"}:
-            where_clauses.append("v.consensus_type = :consensus_method")
-            params["consensus_method"] = consensus_method
-
-        # Review filter
-        if has_review == "yes":
-            where_clauses.append("v.has_review = TRUE")
-            valid_review_grades = [g for g in review_grades if g]
-            if valid_review_grades:
-                where_clauses.append("v.review_grade_name = ANY(:review_grades)")
-                params["review_grades"] = valid_review_grades
-        elif has_review == "no":
-            where_clauses.append("v.has_review = FALSE")
-
-        # Arbitrator filter
-        if has_arbitrator == "yes":
-            where_clauses.append("v.has_arbitrator = TRUE")
-        elif has_arbitrator == "no":
-            where_clauses.append("v.has_arbitrator = FALSE")
-
-        # Has AI grade filter
-        if has_ai_grade == "yes":
-            where_clauses.append("v.has_ai = TRUE")
-        elif has_ai_grade == "no":
-            where_clauses.append("v.has_ai = FALSE")
-
-        # Role-specific grade filters (resident, resident2, arbitrator)
-        role_grade_filters = [
-            ("resident", resident_grades, "resident_grade_name"),
-            ("resident2", resident2_grades, "resident2_grade_name"),
-            ("arbitrator", arbitrator_grades, "arbitrator_grade_name"),
-        ]
-        for role, impressions, column in role_grade_filters:
-            if impressions:
-                valid_impressions = [g for g in impressions if g]
-                if valid_impressions:
-                    where_clauses.append(f"v.{column} = ANY(:grade_names_{role})")
-                    params[f"grade_names_{role}"] = valid_impressions
-
-        if resident_compare in {"match", "mismatch"}:
-            where_clauses.append("v.resident_vs_resident2 = :resident_compare")
-            params["resident_compare"] = resident_compare
-
-        # AI model filter (single model enforced)
-        if selected_ai_model_id is not None:
-            where_clauses.append("v.ai_models_json ? :ai_model_key")
-            params["ai_model_key"] = str(selected_ai_model_id)
-
-        # AI grade filter (multiple values)
-        if ai_grades:
-            valid_ai_grades = [g for g in ai_grades if g]
-            if valid_ai_grades:
-                if selected_ai_model_id is not None:
-                    where_clauses.append(
-                        "(v.ai_models_json -> :ai_model_key) ->> 'ai_grade_name' = ANY(:ai_grade_names)"
-                    )
-                else:
-                    where_clauses.append(
-                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
-                        "WHERE kv.value->>'ai_grade_name' = ANY(:ai_grade_names))"
-                    )
-                params["ai_grade_names"] = valid_ai_grades
-
-        # AI review status filter
-        if ai_review_statuses:
-            if selected_ai_model_id is not None:
-                where_clauses.append(
-                    "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status' = ANY(:ai_review_statuses)"
-                )
-            else:
-                where_clauses.append(
-                    "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
-                    "WHERE kv.value->>'ai_review_status' = ANY(:ai_review_statuses))"
-                )
-            params["ai_review_statuses"] = ai_review_statuses
-
-        # Final grade filter
-        if final_grades:
-            valid_final_grades = [g for g in final_grades if g]
-            if valid_final_grades:
-                where_clauses.append("v.final_grade_name = ANY(:final_grades)")
-                params["final_grades"] = valid_final_grades
-
-        where_sql = " AND ".join(where_clauses)
+        mv_name, where_sql, params, selected_ai_model_id = build_discrepancy_filter_query(db, filters)
+        if not mv_name:
+            return render_template(
+                "review/discrepancy_review.html",
+                diseases=diseases,
+                lab_units=lab_units,
+                grade_options=grade_options,
+                ai_models=ai_models,
+                regrade_adjudicators=regrade_adjudicators,
+                tasks=[],
+                total_count=0,
+                page=1,
+                total_pages=0,
+                has_prev=False,
+                has_next=False,
+                ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+                filters=filters,
+                page_title=page_title,
+            )
 
         base_query = f"""
             FROM {mv_name} v
@@ -321,6 +244,8 @@ def render_discrepancy_review(page_title: str | None = None):
                 v.has_consensus,
                 v.consensus_type,
                 v.final_grade_name,
+                v.final_impression,
+                v.final_plus_review,
                 v.resident_grade_name,
                 v.resident_comment,
                 v.resident_selected_features_json,
@@ -333,6 +258,9 @@ def render_discrepancy_review(page_title: str | None = None):
                 v.review_grade_name,
                 v.review_comment,
                 v.review_selected_features_json,
+                v.regrade_adj_grade_name,
+                v.regrade_adj_comment,
+                v.regrade_adj_selected_features_json,
                 v.ai_models_json
             {base_query}
             ORDER BY v.task_id DESC
@@ -360,6 +288,8 @@ def render_discrepancy_review(page_title: str | None = None):
                 "direct_image_uuid": row.direct_image_uuid or row.image_uuid,
                 "grades": grades_by_role,
                 "consensus": None,
+                "final_impression": row.final_impression,
+                "final_plus_review": row.final_plus_review,
                 "next_task_id": next_task_id,
                 "next_after_task_id": next_after_task_id,
             }
@@ -403,8 +333,10 @@ def render_discrepancy_review(page_title: str | None = None):
                 "final_grade": final_grades,
                 "has_ai_grade": has_ai_grade,
                 "has_review": has_review,
+                "has_regrade": has_regrade,
                 "has_arbitrator": has_arbitrator,
                 "review_grade": review_grades,
+                "regrade_grade": regrade_grades,
                 "has_consensus": has_consensus,
                 "consensus_method": consensus_method,
                 "resident_compare": resident_compare,
@@ -475,9 +407,11 @@ def discrepancy_export():
             "resident_grade": request.form.getlist("resident_grade"),
             "resident2_grade": request.form.getlist("resident2_grade"),
             "arbitrator_grade": request.form.getlist("arbitrator_grade"),
+            "regrade_grade": request.form.getlist("regrade_grade"),
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
             "has_review": request.form.get("has_review", type=str),
+            "has_regrade": request.form.get("has_regrade", type=str),
             "has_arbitrator": request.form.get("has_arbitrator", type=str),
             "review_grade": request.form.getlist("review_grade"),
             "has_consensus": request.form.get("has_consensus", type=str),
@@ -594,6 +528,7 @@ def _build_grades_from_row(row: Any, selected_ai_model_id: Optional[int]) -> Dic
     _add_role("resident2", row.resident2_grade_name, row.resident2_comment, row.resident2_selected_features_json)
     _add_role("arbitrator", row.arbitrator_grade_name, row.arbitrator_comment, row.arbitrator_selected_features_json)
     _add_role("review", row.review_grade_name, row.review_comment, row.review_selected_features_json)
+    _add_role("regrade_adj", row.regrade_adj_grade_name, row.regrade_adj_comment, row.regrade_adj_selected_features_json)
 
     ai_models = _parse_ai_models(row.ai_models_json)
     if ai_models:
@@ -640,3 +575,5 @@ def _build_grades_from_row(row: Any, selected_ai_model_id: Optional[int]) -> Dic
                     "ai_review_comments": all_comments,
                 }
     return grades
+
+

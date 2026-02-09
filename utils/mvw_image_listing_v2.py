@@ -190,18 +190,22 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             MAX(grade_name) FILTER (WHERE role_slot = 'resident2') AS resident2_grade_name,
             MAX(grade_name) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_grade_name,
             MAX(grade_name) FILTER (WHERE role_slot = 'review') AS review_grade_name,
+            MAX(grade_name) FILTER (WHERE role_slot = 'regrade_adj') AS regrade_adj_grade_name,
             MAX(comment) FILTER (WHERE role_slot = 'resident') AS resident_comment,
             MAX(comment) FILTER (WHERE role_slot = 'resident2') AS resident2_comment,
             MAX(comment) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_comment,
             MAX(comment) FILTER (WHERE role_slot = 'review') AS review_comment,
+            MAX(comment) FILTER (WHERE role_slot = 'regrade_adj') AS regrade_adj_comment,
             MAX(selected_features_json) FILTER (WHERE role_slot = 'resident') AS resident_selected_features_json,
             MAX(selected_features_json) FILTER (WHERE role_slot = 'resident2') AS resident2_selected_features_json,
             MAX(selected_features_json) FILTER (WHERE role_slot = 'arbitrator') AS arbitrator_selected_features_json,
             MAX(selected_features_json) FILTER (WHERE role_slot = 'review') AS review_selected_features_json,
+            MAX(selected_features_json) FILTER (WHERE role_slot = 'regrade_adj') AS regrade_adj_selected_features_json,
             MAX(CASE WHEN role_slot = 'resident' THEN 1 ELSE 0 END) AS has_resident,
             MAX(CASE WHEN role_slot = 'resident2' THEN 1 ELSE 0 END) AS has_resident2,
             MAX(CASE WHEN role_slot = 'arbitrator' THEN 1 ELSE 0 END) AS has_arbitrator,
-            MAX(CASE WHEN role_slot = 'review' THEN 1 ELSE 0 END) AS has_review
+            MAX(CASE WHEN role_slot = 'review' THEN 1 ELSE 0 END) AS has_review,
+            MAX(CASE WHEN role_slot = 'regrade_adj' THEN 1 ELSE 0 END) AS has_regrade_adj
         FROM latest_role_grades
         GROUP BY task_id
     ),
@@ -285,20 +289,43 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         rg.resident2_grade_name,
         rg.arbitrator_grade_name,
         rg.review_grade_name,
+        rg.regrade_adj_grade_name,
         rg.resident_comment,
         rg.resident2_comment,
         rg.arbitrator_comment,
         rg.review_comment,
+        rg.regrade_adj_comment,
         rg.resident_selected_features_json,
         rg.resident2_selected_features_json,
         rg.arbitrator_selected_features_json,
         rg.review_selected_features_json,
+        rg.regrade_adj_selected_features_json,
         COALESCE(rg.has_resident, 0) > 0 AS has_resident,
         COALESCE(rg.has_resident2, 0) > 0 AS has_resident2,
         COALESCE(rg.has_arbitrator, 0) > 0 AS has_arbitrator,
         COALESCE(rg.has_review, 0) > 0 AS has_review,
+        COALESCE(rg.has_regrade_adj, 0) > 0 AS has_regrade_adj,
         COALESCE(am.has_ai, FALSE) AS has_ai,
         COALESCE(am.ai_models_json, '{{}}'::jsonb) AS ai_models_json,
+        COALESCE(
+            rg.regrade_adj_grade_name,
+            rg.arbitrator_grade_name,
+            CASE
+                WHEN rg.resident_grade_name = rg.resident2_grade_name THEN rg.resident_grade_name
+                ELSE NULL
+            END
+        ) AS final_impression,
+        COALESCE(
+            rg.review_grade_name,
+            COALESCE(
+                rg.regrade_adj_grade_name,
+                rg.arbitrator_grade_name,
+                CASE
+                    WHEN rg.resident_grade_name = rg.resident2_grade_name THEN rg.resident_grade_name
+                    ELSE NULL
+                END
+            )
+        ) AS final_plus_review,
         CASE
             WHEN rg.resident_grade_name IS NULL OR rg.resident2_grade_name IS NULL THEN NULL
             WHEN rg.resident_grade_name = rg.resident2_grade_name THEN 'match'

@@ -203,10 +203,12 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
@@ -220,10 +222,12 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
@@ -296,10 +300,12 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
@@ -313,10 +319,12 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,
@@ -384,10 +392,12 @@
             <th>Resident Grade</th>
             <th>Resident2 Grade</th>
             <th>Arbitrator Grade</th>
+            <th>Arbitrator Regrade</th>
+            <th>Final</th>
             <th>Review</th>
-            <th>Final Grade</th>
-            <th>Status</th>
+            <th>Final Plus Review</th>
             <th>AI Grade</th>
+            <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -426,6 +436,23 @@
               {% endif %}
             </td>
             <td>
+              {% set grade = task.grades.get('regrade_adj') %}
+              {% if grade %}
+              <span class="badge bg-success">{{ grade.impression or '-' }}</span>
+              {% if grade.comment %}<small class="text-muted d-block">Note: {{ grade.comment | mask_text_emails |
+                truncate(30) }}</small>{% endif %}
+              {% else %}
+              <span class="text-muted">No regrade</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if task.final_impression %}
+              <span class="badge bg-success">{{ task.final_impression }}</span>
+              {% else %}
+              <span class="text-muted">No final</span>
+              {% endif %}
+            </td>
+            <td>
               {% set review_grade = task.grades.get('review') %}
               {% if review_grade %}
               <span class="badge bg-info">{{ review_grade.impression or '-' }}</span>
@@ -436,20 +463,10 @@
               {% endif %}
             </td>
             <td>
-              {% if task.consensus %}
-              {% set method_label = {
-              'match': 'Match',
-              'adjudication': 'Adjudication',
-              'task_review': 'Review override',
-              'regrade': 'Regrade'
-              }.get(task.consensus.method, task.consensus.method) %}
-              <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
-              <small class="text-muted d-block">{{ method_label or '' }}</small>
+              {% if task.final_plus_review %}
+              <span class="badge bg-info text-dark">{{ task.final_plus_review }}</span>
               {% else %}
-              <button type="button" class="btn btn-sm btn-outline-secondary" disabled
-                data-bs-toggle="tooltip" title="Cannot review till final grade assigned">
-                Review
-              </button>
+              <span class="text-muted">No final</span>
               {% endif %}
             </td>
             <td>
@@ -498,11 +515,13 @@
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                   has_arbitrator=filters.has_arbitrator,
                   has_ai_grade=filters.has_ai_grade,
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   ai_grade=filters.ai_grade or []
@@ -540,10 +559,12 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
                   consensus_method=filters.consensus_method,

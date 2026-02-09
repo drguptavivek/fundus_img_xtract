@@ -228,6 +228,7 @@ def get_task_detail(db_session, task_id: int, mask_pii_override: bool = False) -
     consensus_info = {
         'has_consensus': has_consensus,
         'consensus_grading': None,
+        'consensus_method': task.consensus.method if task.consensus else None,
         'arbitrator_note': None  # Not available in the current models
     }
     

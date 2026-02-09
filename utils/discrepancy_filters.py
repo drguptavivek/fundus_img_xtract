@@ -17,9 +17,11 @@ def build_discrepancy_filter_query(
     resident_grades = filters.get("resident_grade", [])
     resident2_grades = filters.get("resident2_grade", [])
     arbitrator_grades = filters.get("arbitrator_grade", [])
+    regrade_grades = filters.get("regrade_grade", [])
     final_grades = filters.get("final_grade", [])
     has_ai_grade = filters.get("has_ai_grade")
     has_review = filters.get("has_review")
+    has_regrade = filters.get("has_regrade")
     has_arbitrator = filters.get("has_arbitrator")
     review_grades = filters.get("review_grade", [])
     has_consensus = filters.get("has_consensus")
@@ -32,6 +34,8 @@ def build_discrepancy_filter_query(
         arbitrator_grades = []
         has_review = None
         review_grades = []
+        has_regrade = None
+        regrade_grades = []
 
     ai_model_ids = filters.get("ai_model_id", [])
     ai_grades = filters.get("ai_grade", [])
@@ -55,6 +59,7 @@ def build_discrepancy_filter_query(
         resident_grades = [g for g in resident_grades if g in valid_grade_impressions]
         resident2_grades = [g for g in resident2_grades if g in valid_grade_impressions]
         arbitrator_grades = [g for g in arbitrator_grades if g in valid_grade_impressions]
+        regrade_grades = [g for g in regrade_grades if g in valid_grade_impressions]
         final_grades = [g for g in final_grades if g in valid_grade_impressions]
         review_grades = [g for g in review_grades if g in valid_grade_impressions]
         ai_grades = [g for g in ai_grades if g in valid_grade_impressions]
@@ -91,6 +96,15 @@ def build_discrepancy_filter_query(
             params["review_grades"] = valid_review_grades
     elif has_review == "no":
         where_clauses.append("v.has_review = FALSE")
+
+    if has_regrade == "yes":
+        where_clauses.append("v.has_regrade_adj = TRUE")
+        valid_regrade_grades = [g for g in regrade_grades if g]
+        if valid_regrade_grades:
+            where_clauses.append("v.regrade_adj_grade_name = ANY(:regrade_grades)")
+            params["regrade_grades"] = valid_regrade_grades
+    elif has_regrade == "no":
+        where_clauses.append("v.has_regrade_adj = FALSE")
 
     if has_arbitrator == "yes":
         where_clauses.append("v.has_arbitrator = TRUE")
@@ -166,7 +180,7 @@ def build_discrepancy_filter_query(
     if final_grades:
         valid_final_grades = [g for g in final_grades if g]
         if valid_final_grades:
-            where_clauses.append("v.final_grade_name = ANY(:final_grades)")
+            where_clauses.append("v.final_impression = ANY(:final_grades)")
             params["final_grades"] = valid_final_grades
 
     excluded_dataset_ids = filters.get("excluded_dataset_ids", [])

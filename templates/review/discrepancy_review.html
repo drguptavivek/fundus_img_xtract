@@ -203,6 +203,48 @@
           </div>
 
           <div class="col-md-3">
+            <label for="hasRegradeSelect" class="form-label">Has Arbitrator Regrade</label>
+            <select class="form-select" id="hasRegradeSelect" name="has_regrade">
+              <option value="">All Tasks</option>
+              <option value="yes" {% if filters.has_regrade=='yes' %}selected{% endif %}>Has Regrade</option>
+              <option value="no" {% if filters.has_regrade=='no' %}selected{% endif %}>No Regrade</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label d-flex align-items-center gap-2">
+              Arbitrator Regrade
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
+                title="Regrade adjudicator grades are stored as role_slot=regrade_adj."
+                aria-label="Regrade adjudicator grades are stored as role_slot=regrade_adj">
+                i
+              </button>
+            </label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+                id="regradeGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="regradeGradeText" data-default-label="All Regrade Grades">All Regrade Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="regradeGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}"
+                      id="regrade_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="regrade_grade"
+                      {% if grade.impression in (filters.regrade_grade if filters.regrade_grade else [])
+                      %}checked{% endif %}>
+                    <label class="form-check-label"
+                      for="regrade_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-md-3">
             <label for="hasReviewSelect" class="form-label">Has Review</label>
             <select class="form-select" id="hasReviewSelect" name="has_review">
               <option value="">All Tasks</option>
@@ -287,8 +329,8 @@
             <label class="form-label d-flex align-items-center gap-2">
               Final Grade
               <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
-                title="Final grade comes from consensus (match, adjudication, or review override)."
-                aria-label="Final grade comes from consensus">
+                title="Final grade is derived from regrade adjudicator (if present), else arbitrator, else resident/resident2 match. Review override is tracked separately."
+                aria-label="Final grade is derived from regrade adjudicator, arbitrator, or resident match. Review override tracked separately.">
                 i
               </button>
             </label>
@@ -453,6 +495,7 @@
     document.getElementById('resident2GradeText').textContent = 'All Grades';
     document.getElementById('arbitratorGradeText').textContent = 'All Grades';
     document.getElementById('reviewGradeText').textContent = 'All Review Grades';
+    document.getElementById('regradeGradeText').textContent = 'All Regrade Grades';
     document.getElementById('finalGradeText').textContent = 'All Grades';
     document.getElementById('aiModelText').textContent = 'All Models';
     document.getElementById('aiGradeText').textContent = 'All AI Grades';
@@ -462,6 +505,9 @@
   }
     if (typeof toggleReviewGradeControls === 'function') {
       toggleReviewGradeControls();
+  }
+    if (typeof toggleRegradeGradeControls === 'function') {
+      toggleRegradeGradeControls();
   }
 
     window.location = "{{ url_for('review.discrepancy_review') }}";
@@ -477,6 +523,7 @@
     const resident2GradeList = document.getElementById('resident2GradeList');
     const arbitratorGradeList = document.getElementById('arbitratorGradeList');
     const reviewGradeList = document.getElementById('reviewGradeList');
+    const regradeGradeList = document.getElementById('regradeGradeList');
     const finalGradeList = document.getElementById('finalGradeList');
     const aiGradeList = document.getElementById('aiGradeList');
 
@@ -486,6 +533,7 @@
     resident2: Array.from(resident2GradeList.querySelectorAll('li')),
     arbitrator: Array.from(arbitratorGradeList.querySelectorAll('li')),
     review: Array.from(reviewGradeList.querySelectorAll('li')),
+    regrade: Array.from(regradeGradeList.querySelectorAll('li')),
     final: Array.from(finalGradeList.querySelectorAll('li')),
     ai: Array.from(aiGradeList.querySelectorAll('li'))
   };
@@ -515,6 +563,7 @@
     updateGradeCheckboxes(resident2GradeList, selectedDisease.gradings, allGradeOptions.resident2);
     updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
     updateGradeCheckboxes(reviewGradeList, selectedDisease.gradings, allGradeOptions.review, 'All Review Grades');
+    updateGradeCheckboxes(regradeGradeList, selectedDisease.gradings, allGradeOptions.regrade, 'All Regrade Grades');
     updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
     updateGradeCheckboxes(aiGradeList, selectedDisease.gradings, allGradeOptions.ai, 'All AI Grades');
       }
@@ -569,6 +618,17 @@
     reviewGradeList.appendChild(newLi);
       });
 
+    regradeGradeList.innerHTML = '';
+      allGradeOptions.regrade.forEach(li => {
+        const existingChecked = regradeGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+    const isChecked = existingChecked ? existingChecked.checked : false;
+    const newLi = li.cloneNode(true);
+    if (isChecked) {
+      newLi.querySelector('input').checked = true;
+        }
+    regradeGradeList.appendChild(newLi);
+      });
+
     finalGradeList.innerHTML = '';
       allGradeOptions.final.forEach(li => {
         const existingChecked = finalGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
@@ -592,8 +652,10 @@
       });
     updateDropdownText(aiGradeList, 'All AI Grades');
     updateDropdownText(reviewGradeList, 'All Review Grades');
+    updateDropdownText(regradeGradeList, 'All Regrade Grades');
     }
     toggleReviewGradeControls();
+    toggleRegradeGradeControls();
   }
 
     // Update grade options when disease selection changes
@@ -759,6 +821,20 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
     updateDropdownText(reviewGradeList, 'All Review Grades');
 }
 
+    function toggleRegradeGradeControls() {
+  const hasRegrade = document.getElementById('hasRegradeSelect').value === 'yes';
+    const regradeGradeDropdown = document.getElementById('regradeGradeDropdown');
+    const regradeGradeList = document.getElementById('regradeGradeList');
+    regradeGradeDropdown.disabled = !hasRegrade;
+  regradeGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+      cb.disabled = !hasRegrade;
+    if (!hasRegrade) {
+      cb.checked = false;
+    }
+  });
+    updateDropdownText(regradeGradeList, 'All Regrade Grades');
+}
+
     let lastConsensusValue = null;
 
     function toggleConsensusControls() {
@@ -815,6 +891,14 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
         }
         hasReviewSelect.dispatchEvent(new Event('change', { bubbles: true }));
       }
+      const hasRegradeSelect = document.getElementById('hasRegradeSelect');
+      if (hasRegradeSelect) {
+        hasRegradeSelect.value = '';
+        if (hasRegradeSelect.selectedIndex < 0) {
+          hasRegradeSelect.selectedIndex = 0;
+        }
+        hasRegradeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       const reviewGradeDropdown = document.getElementById('reviewGradeDropdown');
       const reviewGradeList = document.getElementById('reviewGradeList');
       if (reviewGradeDropdown && reviewGradeList) {
@@ -823,7 +907,16 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
         });
         updateDropdownText(reviewGradeList, 'All Review Grades');
       }
+      const regradeGradeDropdown = document.getElementById('regradeGradeDropdown');
+      const regradeGradeList = document.getElementById('regradeGradeList');
+      if (regradeGradeDropdown && regradeGradeList) {
+        regradeGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+          cb.checked = false;
+        });
+        updateDropdownText(regradeGradeList, 'All Regrade Grades');
+      }
       toggleReviewGradeControls();
+      toggleRegradeGradeControls();
     }
 
     const consensusNote = document.getElementById('consensusNoNote');
@@ -832,7 +925,7 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
     }
 
     if (currentValue === 'no' && lastConsensusValue !== 'no') {
-      const message = 'Consensus is required for arbitrator/review and final grade filters, so those were cleared.';
+    const message = 'Consensus is required for arbitrator/regrade/review and final grade filters, so those were cleared.';
       if (typeof window.showFlashToast === 'function') {
         window.showFlashToast(message, 'danger');
       }
@@ -873,10 +966,12 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
 
     document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
     document.getElementById('hasReviewSelect').addEventListener('change', toggleReviewGradeControls);
+    document.getElementById('hasRegradeSelect').addEventListener('change', toggleRegradeGradeControls);
     document.getElementById('hasConsensusSelect').addEventListener('change', toggleConsensusControls);
     // Initialize on load
     toggleAiControls();
     toggleReviewGradeControls();
+    toggleRegradeGradeControls();
     toggleConsensusControls();
     document.addEventListener('DOMContentLoaded', updateAiReviewStatusDropdown);
 

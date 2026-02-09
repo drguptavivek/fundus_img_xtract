@@ -34,7 +34,7 @@ Slug rules:
 ## Task and Consensus
 - `task_id`, `task_uuid`, `task_state`, `task_lab_unit_id`
 - `has_consensus`
-- `consensus_type` (`match`, `adjudication`, `task_review`)
+- `consensus_type` (`match`, `adjudication`, `task_review`, `regrade`)
 - `final_grade_name`
 
 ## Latest Role Grades (by `grades.created_at`)
@@ -42,20 +42,25 @@ Slug rules:
 - `resident2_grade_name`
 - `arbitrator_grade_name`
 - `review_grade_name`
+- `regrade_adj_grade_name`
 - `resident_comment`, `resident_selected_features_json`
 - `resident2_comment`, `resident2_selected_features_json`
 - `arbitrator_comment`, `arbitrator_selected_features_json`
 - `review_comment`, `review_selected_features_json`
+- `regrade_adj_comment`, `regrade_adj_selected_features_json`
 
 ## Role Presence Flags
 - `has_resident`
 - `has_resident2`
 - `has_arbitrator`
 - `has_review`
+- `has_regrade_adj`
 - `has_ai`
 
 ## Derived Field
 - `resident_vs_resident2` (`match`, `mismatch`, `null`)
+- `final_impression` (regrade_adj > arbitrator > resident match)
+- `final_plus_review` (review override if present, else final_impression)
 
 ## AI Model Map
 - `ai_models_json` (JSONB map keyed by `ai_model_id`)

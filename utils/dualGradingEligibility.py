@@ -98,10 +98,7 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
     if not user:
         return None
     
-    # Check if user is admin (admins have access to all lab units)
-    if user.has_role('admin'):
-        lab_units = db.query(LabUnit).all()
-        return [lab_unit.id for lab_unit in lab_units]
+    # Admins should not bypass lab-unit eligibility for grading slots.
     
     # Check role-specific permissions
     # Allow both residents and ophthalmologists to do resident grading based on eligibility

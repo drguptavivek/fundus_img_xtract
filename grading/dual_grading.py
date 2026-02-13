@@ -460,7 +460,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
 
             if slot_type in ("resident", "resident2", "arbitrator"):
                 primary_disease_id = get_primary_disease_id(db, task.disease_id)
-                if primary_disease_id != task.disease_id:
+                if primary_disease_id != task.disease_id and not linked_followup:
                     # Redirect linked disease grading to the primary task for this image
                     primary_task = None
                     if task.encounter_file_id:
@@ -484,7 +484,9 @@ def dual_grading_task(task_uuid: str, slot_type: str):
 
                 linked_disease_ids = get_linked_disease_ids(db, task.disease_id)
                 if linked_followup and linked_followup_disease_id:
-                    if linked_followup_disease_id not in linked_disease_ids:
+                    primary_disease_id_for_links = get_primary_disease_id(db, task.disease_id)
+                    primary_linked_ids = get_linked_disease_ids(db, primary_disease_id_for_links)
+                    if linked_followup_disease_id not in primary_linked_ids or task.disease_id != linked_followup_disease_id:
                         flash("Linked follow-up disease is not associated with this task.", "warning")
                         return redirect(url_for("grading.index"))
                     linked_disease_ids = [linked_followup_disease_id]
@@ -595,8 +597,6 @@ def dual_grading_task(task_uuid: str, slot_type: str):
 
                         # Determine read_only status for this panel
                         panel_read_only = eligibility_error is not None
-                        if linked_followup and panel_task_id == task.id:
-                            panel_read_only = True
                         if slot_type == 'arbitrator':
                             # Arbitrator can grade 'arbitration' tasks
                             # For 'final' tasks, check if eligible for revision

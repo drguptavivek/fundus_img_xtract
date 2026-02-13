@@ -18,6 +18,9 @@ The Linked Grading workflow optimizes the user experience by bundling related di
 ### Primary Task Redirection
 If a user attempts to access a grading task for a **linked** disease directly (e.g., via a link or bookmark), the system automatically identifies the **primary** disease and redirects the user to the primary task's view. This ensures that the primary disease is always the entry point for the group.
 
+**Exception: Linked Follow-up Mode**
+When a user enters via the linked follow-up route (`/grading/linked-followup/...`), the system intentionally opens the **linked disease task** and does **not** redirect to the primary task. This allows the pending linked task to be graded directly.
+
 ### The Grading Carousel
 When linked diseases are detected, the grading interface switches to **Linked Mode**:
 - **Carousel UI**: Each disease (primary + all linked) is presented as a separate slide in a carousel.
@@ -76,9 +79,9 @@ When mismatches exist (and linked tasks already exist), a follow-up entrypoint a
 - **Slot preference**: If the user can grade resident2, follow-up assigns resident2 first; otherwise resident.
 
 ### Follow-up Task View
-- Primary panel is always read-only.
-- Only linked panels in the mismatch state are editable.
-- Submission is restricted to editable linked panels only.
+- The view opens the **linked disease task** directly (no primary redirect).
+- Only the target linked task is shown and is editable (if eligible).
+- Submission is restricted to the linked task being graded in follow-up mode.
 
 ## Validation Rules for Linked Panels
 

@@ -671,8 +671,8 @@ def _atomically_get_and_lock_linked_followup_task(
     )
 
     query = (
-        db.query(PrimaryTask)
-        .join(LinkedTask, image_match)
+        db.query(LinkedTask)
+        .join(PrimaryTask, image_match)
         .join(
             LinkedDiseaseGrading,
             and_(

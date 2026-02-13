@@ -55,6 +55,22 @@ def _run_pii_detection(image_uuid: str, image_variant: str, image_path: str) -> 
         return payload, 0
 
 
+def _safe_get(record: Any, key: str, default: Any = None) -> Any:
+    if record is None:
+        return default
+    if isinstance(record, dict):
+        return record.get(key, default)
+    mapping = getattr(record, "_mapping", None)
+    if mapping is not None:
+        return mapping.get(key, default)
+    if hasattr(record, key):
+        return getattr(record, key)
+    try:
+        return record[key]
+    except Exception:
+        return default
+
+
 def _resolve_image_variant_map(image_uuids: Iterable[str]) -> Dict[str, Optional[str]]:
     uuids = [uuid for uuid in image_uuids if uuid]
     if not uuids:
@@ -241,12 +257,14 @@ def api_ocr_pii_batch():
                 "variant": variant,
             }
             continue
+        checked_at = _safe_get(record, "checked_at")
+        pii_status = _safe_get(record, "pii_status")
         response_data[uuid] = {
-            "status": record.pii_status,
-            "label": "PII detected" if record.pii_status == "detected" else "No PII detected",
+            "status": pii_status,
+            "label": "PII detected" if pii_status == "detected" else "No PII detected",
             "variant": variant,
-            "checked_at": record.checked_at.isoformat(),
-            "source": record.source,
+            "checked_at": checked_at.isoformat() if checked_at else None,
+            "source": _safe_get(record, "source"),
         }
 
     return jsonify({"success": True, "data": response_data})
@@ -322,30 +340,33 @@ def api_ocr_pii_boxes(image_uuid: str):
 
         record, processed = _run_pii_detection(image_uuid, image_variant, image_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        if record and record.get('detections_json'):
-            detections = json.loads(record.get('detections_json') or '[]')
-            roi = json.loads(record.get('roi_json') or 'null') if record.roi_json else None
+        if record and _safe_get(record, "detections_json"):
+            detections = json.loads(_safe_get(record, "detections_json") or "[]")
+            roi_raw = _safe_get(record, "roi_json")
+            roi = json.loads(roi_raw or "null") if roi_raw else None
+            pii_status = _safe_get(record, "pii_status")
             result: Dict[str, Any] = {
-                "status": record.get('pii_status'),
-                "label": "PII detected" if record.get('pii_status') == "detected" else "No PII detected",
+                "status": pii_status,
+                "label": "PII detected" if pii_status == "detected" else "No PII detected",
                 "valid_detections": len(detections),
                 "pattern_matches": len([d for d in detections if d.get("matches_pattern")]),
                 "detections": detections,
                 "roi": roi,
                 "duration_ms": duration_ms,
-                "source": record.get('source'),
+                "source": _safe_get(record, "source"),
             }
             return jsonify({"success": True, "data": result})
         if record:
+            pii_status = _safe_get(record, "pii_status")
             result = {
-                "status": record.get('pii_status'),
-                "label": "PII detected" if record.get('pii_status') == "detected" else "No PII detected",
+                "status": pii_status,
+                "label": "PII detected" if pii_status == "detected" else "No PII detected",
                 "valid_detections": 0,
                 "pattern_matches": 0,
                 "detections": [],
                 "roi": None,
                 "duration_ms": duration_ms,
-                "source": record.get('source'),
+                "source": _safe_get(record, "source"),
             }
             return jsonify({"success": True, "data": result})
 
@@ -428,14 +449,15 @@ def api_ocr_pii(image_uuid: str):
         record, processed = _run_pii_detection(image_uuid, image_variant, image_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
         if record:
+            pii_status = _safe_get(record, "pii_status")
             result: Dict[str, Any] = {
-                "status": record.get('pii_status'),
-                "label": "PII detected" if record.get('pii_status') == "detected" else "No PII detected",
+                "status": pii_status,
+                "label": "PII detected" if pii_status == "detected" else "No PII detected",
                 "valid_detections": 0,
                 "pattern_matches": 0,
                 "version": cache_version,
                 "duration_ms": duration_ms,
-                "source": record.get('source'),
+                "source": _safe_get(record, "source"),
             }
             cache.set(cache_key, result, timeout=_OCR_CACHE_TTL_SECONDS)
             return jsonify({"success": True, "data": result, "cached": False})

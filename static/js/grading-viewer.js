@@ -226,6 +226,8 @@
       const contr = card ? card.querySelector('.imggr-contrast') : null;
       const resetBtn = card ? card.querySelector('.imggr-reset') : null;
 
+      if (isFormField) return;
+
       if (k === 'l') {
         e.preventDefault();
         const next = !(state?.getCurrentLoupeEnabled?.() ?? false);
@@ -262,8 +264,6 @@
         state?.setLoupeEnabled?.(false);
         return;
       }
-
-      if (isFormField) return;
 
       if (k === 'f') { e.preventDefault(); isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); return; }
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }

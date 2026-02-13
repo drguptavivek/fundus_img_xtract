@@ -72,7 +72,9 @@ This prevents growing inconsistencies in the main grading queue.
 ## Linked Follow-up Flow
 
 - Follow-up entrypoints appear per primary disease as `Pending <LinkedDiseaseName>`.
-- Follow-up grading loads the primary task for context (read-only) and opens only the mismatched linked panels for editing.
+- Follow-up grading opens the **linked disease task directly** (no primary redirect).
+- In follow-up mode, the **target linked task is editable** if the user is eligible.
+- The primary task is not auto-loaded as a separate editable panel.
 - Resident2 is preferred when the user has eligibility; otherwise resident.
 
 ## Dashboard and KPI Behavior

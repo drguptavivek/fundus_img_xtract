@@ -30,6 +30,7 @@ Submission steps:
    - `method = 'regrade'`
    - `final_disease_grading_id`
    - `decided_by_user_id = current_user.id`
+   - Overwrites any previous consensus for the source task
 6. Set `RegradeTask.status = 'regrade_done'`
 
 ## Revision Window (24 Hours)

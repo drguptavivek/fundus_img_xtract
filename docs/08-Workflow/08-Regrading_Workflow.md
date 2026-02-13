@@ -19,6 +19,7 @@ This workflow documents how regrade tasks are created and completed.
    - Status: `regrade_pending`
    - Assigned to the adjudicator
    - Skips tasks already pending regrade
+   - If a prior regrade is `regrade_done`, a new pending regrade **can** be created
 
 ## Phase 2: Adjudicator Work
 
@@ -31,7 +32,7 @@ This workflow documents how regrade tasks are created and completed.
    - Route: `POST /grading/regrade-task/<regrade_task_id>/submit`
 4. System actions on submit:
    - Create/update `Grade` with `role_slot = 'regrade_adj'`
-   - Create/update `Consensus` with `method = 'regrade'`
+   - Create/update `Consensus` with `method = 'regrade'` (overwrites prior consensus)
    - Set `RegradeTask.status = 'regrade_done'`
 
 ## Phase 2b: Admin Reassignment (Optional)

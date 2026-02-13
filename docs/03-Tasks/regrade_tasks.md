@@ -19,6 +19,7 @@ Creation logic:
 3. Ensure the assigned user is scoped to all lab units for the selected tasks.
 4. Create `RegradeTask` rows with `status = 'regrade_pending'`.
 5. Skip tasks that already have a pending regrade.
+6. If a prior regrade is `regrade_done`, a new pending regrade **can** be created (multiple historical regrades allowed).
 
 ## Assignment
 
@@ -36,7 +37,7 @@ Entry points:
 
 Regrade submissions:
 - Create or update a `Grade` with `role_slot = 'regrade_adj'`.
-- Update or create a `Consensus` row with `method = 'regrade'`.
+- Update or create a `Consensus` row with `method = 'regrade'` (overwrites prior consensus).
 - Mark `RegradeTask.status = 'regrade_done'`.
 
 ## Revision Window

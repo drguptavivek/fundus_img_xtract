@@ -13,6 +13,9 @@ When the current task’s disease is a primary disease with active linked diseas
 
 If a user attempts to open a linked disease directly, the system redirects to the primary disease task for that image. This ensures a single entry point for the linked group.
 
+**Exception: Linked Follow-up Mode**
+When entering via `GET /grading/linked-followup/<primary_disease_id>/<linked_disease_id>`, the system intentionally opens the **linked disease task** and does **not** redirect to the primary disease.
+
 ## Editability Rules
 
 ### Resident / Resident2
@@ -25,8 +28,8 @@ If a user attempts to open a linked disease directly, the system redirects to th
 - Editable and read-only panels are mixed in the same carousel for context.
 
 ### Linked Follow-up
-- The primary panel is read-only.
-- Only the linked panel(s) in mismatch state are editable.
+- The follow-up view opens the **linked disease task** directly.
+- The **target linked task** is editable if the user is eligible.
 - Submissions include only editable panels.
 
 ## Submission Behavior

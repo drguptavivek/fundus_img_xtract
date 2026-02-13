@@ -415,6 +415,7 @@ def discrepancy_export():
         include_original_filename = request.form.get("include_original_filename") == "1"
         if include_original_filename and not current_user.has_role("admin"):
             include_original_filename = False
+        skip_image_zips = request.form.get("skip_image_zips") == "1"
 
         filters = {
             "disease_id": disease_id,
@@ -437,6 +438,7 @@ def discrepancy_export():
             "ai_review_status": ai_review_statuses,
             "allowed_lab_units": list(allowed_lab_unit_ids),
             "include_original_filename": include_original_filename,
+            "skip_image_zips": skip_image_zips,
         }
 
         xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()

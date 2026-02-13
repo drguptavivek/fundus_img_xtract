@@ -139,13 +139,27 @@ def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_con
         )
         excel_path = _write_excel(graded_rows, filters, export_dir)
         _write_grading_scheme(filters.get("disease_id"), export_dir)
-        zip_paths, warnings = _write_zips(graded_rows, export_dir)
+        include_original = bool(filters.get("include_original_filename"))
+        skip_image_zips = bool(filters.get("skip_image_zips"))
+        zip_paths: List[Path] = []
+        warnings: List[str] = []
+        if include_original:
+            warnings.append("Image ZIPs skipped because include_original_filename=true")
+        elif skip_image_zips:
+            warnings.append("Image ZIPs skipped because skip_image_zips=true")
+        else:
+            zip_paths, warnings = _write_zips(graded_rows, export_dir)
 
         if warnings:
             (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
 
         db_set_job_status(job_token, "done")
-        db_set_item_state(job_token, "discrepancy_export", "completed", f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}")
+        db_set_item_state(
+            job_token,
+            "discrepancy_export",
+            "completed",
+            f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}",
+        )
     except Exception as exc:
         db_set_job_status(job_token, "error", error=str(exc))
         db_set_item_state(job_token, "discrepancy_export", "error", str(exc))

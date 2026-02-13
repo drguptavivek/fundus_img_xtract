@@ -58,11 +58,11 @@ docker volume rm   fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_
 
 ## Bring up VNEV Builders
 docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
-
+docker compose logs  web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder --tail=100
 
 # THIRD STEP Main Containers SERVICES SECOND
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
-docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
+docker compose logs web-venv-builder web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
 
 
 

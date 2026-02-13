@@ -69,7 +69,7 @@ packaging==26.0
     #   kombu
     #   matplotlib
     #   pytesseract
-pillow==12.1.0
+pillow==12.1.1
     # via
     #   fundus-img-xtract
     #   matplotlib

@@ -209,7 +209,7 @@ FROM ocr-base AS ocr-venv-builder
 COPY requirements-ocr.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install --no-cache -r requirements-ocr.txt"]
+CMD ["sh", "-c", "uv venv --clear && uv pip install --no-cache -r requirements-ocr.txt"]
 
 # ======================================================================
 # WEB VENV BUILDER — installs web deps into web venv volume
@@ -219,7 +219,7 @@ FROM web-base AS web-venv-builder
 COPY requirements-web.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install --no-cache -r requirements-web.txt"]
+CMD ["sh", "-c", "uv venv --clear && uv pip install --no-cache -r requirements-web.txt"]
 
 # ======================================================================
 # BEAT BASE — minimal runtime for celery beat
@@ -261,7 +261,7 @@ FROM beat-base AS beat-venv-builder
 COPY requirements-beat.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install --no-cache -r requirements-beat.txt"]
+CMD ["sh", "-c", "uv venv --clear && uv pip install --no-cache -r requirements-beat.txt"]
 
 # ======================================================================
 # GENERAL BASE — minimal runtime for celery general worker
@@ -303,4 +303,4 @@ FROM general-base AS general-venv-builder
 COPY requirements-general.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install --no-cache -r requirements-general.txt"]
+CMD ["sh", "-c", "uv venv --clear && uv pip install --no-cache -r requirements-general.txt"]

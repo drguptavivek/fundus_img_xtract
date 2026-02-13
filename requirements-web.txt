@@ -78,7 +78,7 @@ contourpy==1.3.3
     # via
     #   fundus-img-xtract
     #   matplotlib
-cryptography==46.0.4
+cryptography==46.0.5
     # via fundus-img-xtract
 cycler==0.12.1
     # via
@@ -242,13 +242,15 @@ packaging==26.0
     #   pytest
 pandas==3.0.0
     # via fundus-img-xtract
-pillow==12.1.0
+pillow==12.1.1
     # via
     #   captcha
     #   fundus-img-xtract
     #   matplotlib
-pip==25.3
-    # via pip-api
+pip==26.0
+    # via
+    #   fundus-img-xtract
+    #   pip-api
 pip-api==0.0.34
     # via
     #   fundus-img-xtract

@@ -33,7 +33,7 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
-cryptography==46.0.4
+cryptography==46.0.5
     # via fundus-img-xtract
 et-xmlfile==2.0.0
     # via openpyxl
@@ -73,7 +73,7 @@ packaging==26.0
     # via kombu
 pandas==3.0.0
     # via fundus-img-xtract
-pillow==12.1.0
+pillow==12.1.1
     # via fundus-img-xtract
 prompt-toolkit==3.0.52
     # via click-repl

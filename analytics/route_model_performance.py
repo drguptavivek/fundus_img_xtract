@@ -14,6 +14,7 @@ from . import bp
 from models import AIModel, Camera, Disease, DiseaseGrading, LabUnit
 from utils.hospital_scoping import apply_scoping
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 from db_transaction_manager import get_db_session
 
 import json
@@ -603,7 +604,7 @@ def _build_binary_with_ci(
 @bp.route("/model-performance", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def model_performance() -> str:
-    """Show AI model performance against human reference grades using mvw_grading_data_all."""
+    """Show AI model performance against human reference grades using per-disease v2 MVs."""
     if not _ensure_sklearn():
         return render_template(
             "analytics/model_performance.html",
@@ -738,113 +739,99 @@ def model_performance() -> str:
                             roc_points_json=json.dumps(performance.roc_points) if performance and performance.roc_points else "[]",
                             class_map_json=json.dumps(class_definitions),
                         )
-                # Build base query from materialized view
+                mv_name = get_mv_name_for_disease(db, disease_id)
                 sql_parts = [
-                    """
+                    f"""
                     SELECT
                         task_id,
+                        task_uuid,
                         task_created_at,
                         image_uuid,
-                        image_source,
+                        upload_type,
                         camera_id,
-                        lab_unit_id,
+                        task_lab_unit_id AS lab_unit_id,
                         lab_unit_name,
+                        hospital_id,
                         hospital_name,
                         disease_id,
                         disease_name,
                         task_state,
-                        grade_role_slot,
-                        grade_name,
-                        grade_comment,
-                        grade_created_at,
-                        ai_model_id,
-                        ai_model_name,
-                        ai_model_version,
-                        consensus_final_grade_name
-                    FROM mvw_grading_data_all
-                    WHERE disease_id = :disease_id
+                        final_grade_name,
+                        resident_grade_name,
+                        resident2_grade_name,
+                        arbitrator_grade_name,
+                        ai_models_json
+                    FROM {mv_name} v
+                    WHERE v.disease_id = :disease_id
                     """
                 ]
                 params: Dict[str, object] = {"disease_id": disease_id}
 
                 if upload_type in {"zip", "direct"}:
-                    params["image_source"] = "encounter_file" if upload_type == "zip" else "direct_upload"
-                    sql_parts.append("AND image_source = :image_source")
+                    if upload_type == "zip":
+                        sql_parts.append("AND upload_type = ANY(:upload_types)")
+                        params["upload_types"] = ["ZIP", "SET"]
+                    else:
+                        sql_parts.append("AND upload_type = ANY(:upload_types)")
+                        params["upload_types"] = ["Direct", "Pregraded"]
 
                 if camera_id:
                     params["camera_id"] = camera_id
                     sql_parts.append("AND camera_id = :camera_id")
 
-                # Lab unit filter respecting access
                 if selected_lab_units:
-                    # Only allow lab units that the user actually has access to
                     requested = set(selected_lab_units) & set(user_lab_unit_ids)
                     if requested:
-                        sql_parts.append("AND lab_unit_id = ANY(:selected_lab_unit_ids)")
+                        sql_parts.append("AND task_lab_unit_id = ANY(:selected_lab_unit_ids)")
                         params["selected_lab_unit_ids"] = list(requested)
                     else:
                         sql_parts.append("AND 1=0")
                 elif user_lab_unit_ids:
-                    # Default: restrict to ALL lab units the user has access to
-                    sql_parts.append("AND lab_unit_id = ANY(:allowed_lab_unit_ids)")
+                    sql_parts.append("AND task_lab_unit_id = ANY(:allowed_lab_unit_ids)")
                     params["allowed_lab_unit_ids"] = user_lab_unit_ids
                 elif not current_user.is_master_admin:
-                    # No lab units and not master admin = no access
                     sql_parts.append("AND 1=0")
 
-                sql_parts.append("ORDER BY task_created_at DESC, grade_created_at DESC")
+                sql_parts.append("ORDER BY task_created_at DESC")
                 query = text("\n".join(sql_parts))
 
                 rows = db.execute(query, params).mappings().all()
 
-                # Organize by task_id
                 tasks: Dict[int, Dict[str, object]] = {}
                 for row in rows:
+                    ai_models = row.get("ai_models_json") or {}
+                    ai_entry = ai_models.get(str(ai_model_id)) or ai_models.get(ai_model_id)
+                    if not ai_entry:
+                        continue
+
                     task_id = row["task_id"]
-                    if task_id not in tasks:
-                        tasks[task_id] = {
-                            "task_id": task_id,
-                            "task_created_at": row["task_created_at"],
-                            "image_uuid": row["image_uuid"],
-                            "image_source": row["image_source"],
-                            "camera_id": row["camera_id"],
-                            "lab_unit_id": row["lab_unit_id"],
-                            "lab_unit_name": row["lab_unit_name"],
-                            "hospital_name": row["hospital_name"],
-                            "disease_id": row["disease_id"],
-                            "disease_name": row["disease_name"],
-                            "task_state": row["task_state"],
-                            "consensus_label": row["consensus_final_grade_name"],
-                            "ai_grades": [],
-                            "ref_grades": {
-                                "resident": None,
-                                "resident2": None,
-                                "arbitrator": None,
-                            },
-                        }
-
-                    # Capture AI grades for selected model
-                    if row["grade_role_slot"] == "ai" and row["ai_model_id"] == ai_model_id:
-                        tasks[task_id]["ai_grades"].append(
+                    tasks[task_id] = {
+                        "task_id": task_id,
+                        "task_created_at": row["task_created_at"],
+                        "image_uuid": row["image_uuid"],
+                        "image_source": row["upload_type"],
+                        "camera_id": row["camera_id"],
+                        "lab_unit_id": row["lab_unit_id"],
+                        "lab_unit_name": row["lab_unit_name"],
+                        "hospital_name": row["hospital_name"],
+                        "disease_id": row["disease_id"],
+                        "disease_name": row["disease_name"],
+                        "task_state": row["task_state"],
+                        "consensus_label": row["final_grade_name"],
+                        "ai_grades": [
                             {
-                                "label": row["grade_name"],
-                                "comment": row["grade_comment"],
-                                "created_at": row["grade_created_at"],
+                                "label": ai_entry.get("ai_grade_name"),
+                                "comment": ai_entry.get("ai_comment"),
+                                "created_at": ai_entry.get("ai_grade_created_at"),
+                                "probability": ai_entry.get("ai_probability"),
                             }
-                        )
-
-                    # Capture reference grades
-                    if row["grade_role_slot"] in {"resident", "resident2", "arbitrator"} and row["grade_name"]:
-                        current = tasks[task_id]["ref_grades"].get(row["grade_role_slot"])
-                        # Keep latest by grade_created_at
-                        if current is None or (row["grade_created_at"] and row["grade_created_at"] > current["created_at"]):
-                            tasks[task_id]["ref_grades"][row["grade_role_slot"]] = {
-                                "label": row["grade_name"],
-                                "created_at": row["grade_created_at"],
-                            }
-
-                # Keep only tasks that have an AI grade for this model
-                tasks = {tid: data for tid, data in tasks.items() if data["ai_grades"]}
+                        ],
+                        "ref_grades": {
+                            "resident": {"label": row["resident_grade_name"]} if row["resident_grade_name"] else None,
+                            "resident2": {"label": row["resident2_grade_name"]} if row["resident2_grade_name"] else None,
+                            "arbitrator": {"label": row["arbitrator_grade_name"]} if row["arbitrator_grade_name"] else None,
+                        },
+                    }
 
                 # Group by image_uuid + disease to choose the latest task per image
                 grouped: Dict[Tuple[str, int], List[Tuple[int, Dict[str, object]]]] = {}
@@ -887,7 +874,14 @@ def model_performance() -> str:
                     ai_grades = sorted(data["ai_grades"], key=lambda g: g["created_at"] or 0, reverse=True)
                     ai_grade = ai_grades[0]
                     pred_class = label_to_class.get(ai_grade["label"])
-                    ai_score = _parse_ai_probability(ai_grade.get("comment"))
+                    ai_score = ai_grade.get("probability")
+                    if isinstance(ai_score, str):
+                        try:
+                            ai_score = float(ai_score)
+                        except ValueError:
+                            ai_score = None
+                    if ai_score is None:
+                        ai_score = _parse_ai_probability(ai_grade.get("comment"))
 
                     if not pred_class:
                         continue
@@ -1215,37 +1209,41 @@ def threshold_explorer() -> object:
 
         user_lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
 
+        mv_name = get_mv_name_for_disease(db, disease_id)
         sql_parts = [
-            """
+            f"""
             SELECT
                 task_id,
+                task_uuid,
                 task_created_at,
                 image_uuid,
-                image_source,
+                upload_type,
                 camera_id,
-                lab_unit_id,
+                task_lab_unit_id AS lab_unit_id,
                 lab_unit_name,
+                hospital_id,
                 hospital_name,
                 disease_id,
                 disease_name,
                 task_state,
-                grade_role_slot,
-                grade_name,
-                grade_comment,
-                grade_created_at,
-                ai_model_id,
-                ai_model_name,
-                ai_model_version,
-                consensus_final_grade_name
-            FROM mvw_grading_data_all
-            WHERE disease_id = :disease_id
+                final_grade_name,
+                resident_grade_name,
+                resident2_grade_name,
+                arbitrator_grade_name,
+                ai_models_json
+            FROM {mv_name} v
+            WHERE v.disease_id = :disease_id
             """
         ]
         params: Dict[str, object] = {"disease_id": disease_id}
 
         if upload_type in {"zip", "direct"}:
-            params["image_source"] = "encounter_file" if upload_type == "zip" else "direct_upload"
-            sql_parts.append("AND image_source = :image_source")
+            if upload_type == "zip":
+                sql_parts.append("AND upload_type = ANY(:upload_types)")
+                params["upload_types"] = ["ZIP", "SET"]
+            else:
+                sql_parts.append("AND upload_type = ANY(:upload_types)")
+                params["upload_types"] = ["Direct", "Pregraded"]
 
         if camera_id:
             params["camera_id"] = camera_id
@@ -1259,7 +1257,7 @@ def threshold_explorer() -> object:
                     key = f"lab_unit_id_{idx}"
                     params[key] = val
                     placeholders.append(f":{key}")
-                sql_parts.append(f"AND lab_unit_id IN ({', '.join(placeholders)})")
+                sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
             else:
                 sql_parts.append("AND 1=0")
         elif user_lab_unit_ids:
@@ -1269,56 +1267,47 @@ def threshold_explorer() -> object:
                 params[key] = val
                 placeholders.append(f":{key}")
             if placeholders:
-                sql_parts.append(f"AND lab_unit_id IN ({', '.join(placeholders)})")
+                sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
 
-        sql_parts.append("ORDER BY task_created_at DESC, grade_created_at DESC")
+        sql_parts.append("ORDER BY task_created_at DESC")
         query = text("\n".join(sql_parts))
 
         rows = db.execute(query, params).mappings().all()
 
-        # Organize AI and reference grades per task/image
         tasks: Dict[int, Dict[str, object]] = {}
         for row in rows:
+            ai_models = row.get("ai_models_json") or {}
+            ai_entry = ai_models.get(str(ai_model_id)) or ai_models.get(ai_model_id)
+            if not ai_entry:
+                continue
+
             task_id = row["task_id"]
-            if task_id not in tasks:
-                tasks[task_id] = {
-                    "task_created_at": row["task_created_at"],
-                    "image_uuid": row["image_uuid"],
-                    "image_source": row["image_source"],
-                    "camera_id": row["camera_id"],
-                    "lab_unit_id": row["lab_unit_id"],
-                    "lab_unit_name": row["lab_unit_name"],
-                    "hospital_name": row["hospital_name"],
-                    "disease_id": row["disease_id"],
-                    "disease_name": row["disease_name"],
-                    "task_state": row["task_state"],
-                    "consensus_label": row["consensus_final_grade_name"],
-                    "ai_grades": [],
-                    "ref_grades": {
-                        "resident": None,
-                        "resident2": None,
-                        "arbitrator": None,
-                    },
-                }
-
-            if row["grade_role_slot"] == "ai" and row["ai_model_id"] == ai_model_id:
-                tasks[task_id]["ai_grades"].append(
+            tasks[task_id] = {
+                "task_created_at": row["task_created_at"],
+                "image_uuid": row["image_uuid"],
+                "image_source": row["upload_type"],
+                "camera_id": row["camera_id"],
+                "lab_unit_id": row["lab_unit_id"],
+                "lab_unit_name": row["lab_unit_name"],
+                "hospital_name": row["hospital_name"],
+                "disease_id": row["disease_id"],
+                "disease_name": row["disease_name"],
+                "task_state": row["task_state"],
+                "consensus_label": row["final_grade_name"],
+                "ai_grades": [
                     {
-                        "label": row["grade_name"],
-                        "comment": row["grade_comment"],
-                        "created_at": row["grade_created_at"],
+                        "label": ai_entry.get("ai_grade_name"),
+                        "comment": ai_entry.get("ai_comment"),
+                        "created_at": ai_entry.get("ai_grade_created_at"),
+                        "probability": ai_entry.get("ai_probability"),
                     }
-                )
-
-            if row["grade_role_slot"] in {"resident", "resident2", "arbitrator"} and row["grade_name"]:
-                current = tasks[task_id]["ref_grades"].get(row["grade_role_slot"])
-                if current is None or (row["grade_created_at"] and row["grade_created_at"] > current["created_at"]):
-                    tasks[task_id]["ref_grades"][row["grade_role_slot"]] = {
-                        "label": row["grade_name"],
-                        "created_at": row["grade_created_at"],
-                    }
-
-        tasks = {tid: data for tid, data in tasks.items() if data["ai_grades"]}
+                ],
+                "ref_grades": {
+                    "resident": {"label": row["resident_grade_name"]} if row["resident_grade_name"] else None,
+                    "resident2": {"label": row["resident2_grade_name"]} if row["resident2_grade_name"] else None,
+                    "arbitrator": {"label": row["arbitrator_grade_name"]} if row["arbitrator_grade_name"] else None,
+                },
+            }
 
         grouped: Dict[Tuple[str, int], List[Tuple[int, Dict[str, object]]]] = {}
         for tid, data in tasks.items():
@@ -1352,7 +1341,14 @@ def threshold_explorer() -> object:
             ai_grades = sorted(data["ai_grades"], key=lambda g: g["created_at"] or 0, reverse=True)
             ai_grade = ai_grades[0]
             pred_class = label_to_class.get(ai_grade["label"])
-            ai_score = _parse_ai_probability(ai_grade.get("comment"))
+            ai_score = ai_grade.get("probability")
+            if isinstance(ai_score, str):
+                try:
+                    ai_score = float(ai_score)
+                except ValueError:
+                    ai_score = None
+            if ai_score is None:
+                ai_score = _parse_ai_probability(ai_grade.get("comment"))
 
             if not pred_class:
                 continue

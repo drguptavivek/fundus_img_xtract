@@ -18,6 +18,19 @@ Slug rules:
 - Refresh (every 30 minutes):
   - `celery_tasks.tasks.mv_tasks.refresh_image_listing_v2_task`
 
+## Manual Rebuild Script
+If you change the v2 MV schema (add/remove columns), you must drop and recreate all per-disease views.
+Use:
+
+```bash
+docker compose exec web uv run python scripts/rebuild_mvw_image_listing_v2.py
+```
+
+Flags:
+- `--drop` (drop only)
+- `--create` (create only)
+- `--refresh` (refresh only)
+
 ## Base Fields (All Rows)
 - `image_uuid`
 - `direct_image_uuid`, `encounter_file_uuid`

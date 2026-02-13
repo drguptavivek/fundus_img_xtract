@@ -27,6 +27,7 @@ from models import (
     user_lab_units,
 )
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
+from utils.feature_geometry import parse_feature_geometry_payload, validate_feature_geometry_payload
 from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
 from utils.masterUtils import fetch_active_disease_gradings
@@ -491,6 +492,7 @@ def regrade_task_detail(regrade_task_id: int):
             grading_features=grading_features,
             existing_grade=existing_grade,
             existing_selected_features=existing_selected_features,
+            existing_feature_geometry=existing_grade.feature_geometry_json if existing_grade else None,
             allow_revision=allow_revision,
             current_user_id=getattr(current_user, "id", None),
             current_slot="regrade_adj",
@@ -586,6 +588,21 @@ def regrade_task_submit(regrade_task_id: int):
                 ]
             )
 
+        raw_feature_geometry = request.form.get("feature_geometry_json")
+        parsed_feature_geometry = None
+        if raw_feature_geometry is not None:
+            parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
+
+        image_uuid = _resolve_image_uuid(source_task)
+        image_metadata = _fetch_image_metadata(db, image_uuid)
+        if raw_feature_geometry:
+            is_valid_geometry, geometry_error = validate_feature_geometry_payload(
+                parsed_feature_geometry, unique_feature_ids, image_metadata
+            )
+            if not is_valid_geometry:
+                flash(geometry_error or "Invalid feature geometry submitted.", "danger")
+                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
         existing_grade = fetch_existing_grade_for_user(
             db,
             source_task.id,
@@ -593,6 +610,10 @@ def regrade_task_submit(regrade_task_id: int):
             "regrade_adj",
             user=current_user,
         )
+        if raw_feature_geometry is None or not raw_feature_geometry.strip():
+            feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
+        else:
+            feature_geometry = parsed_feature_geometry
         if existing_grade and existing_grade.created_at:
             if (utcnow() - existing_grade.created_at) > timedelta(hours=24):
                 flash("Revision window has closed (24 hours).", "warning")
@@ -607,6 +628,7 @@ def regrade_task_submit(regrade_task_id: int):
             existing_grade.disease_grading_id = label_id
             existing_grade.comment = comment
             existing_grade.selected_features_json = selected_features_json
+            existing_grade.feature_geometry_json = feature_geometry
             existing_grade.disease_name = disease.name if disease else None
             existing_grade.grade_name = disease_grading.impression if disease_grading else None
             existing_grade.grade_description = disease_grading.guidelines if disease_grading else None
@@ -620,6 +642,7 @@ def regrade_task_submit(regrade_task_id: int):
                 disease_grading_id=label_id,
                 comment=comment,
                 selected_features_json=selected_features_json,
+                feature_geometry_json=feature_geometry,
                 disease_name=disease.name if disease else None,
                 grade_name=disease_grading.impression if disease_grading else None,
                 grade_description=disease_grading.guidelines if disease_grading else None,

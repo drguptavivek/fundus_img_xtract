@@ -11,6 +11,7 @@ from typing import Optional
 
 from flask import (
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -22,13 +23,14 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
-from models import IntraRaterTask, GradingsFeatures, ImageMetadata
+from models import IntraRaterTask, IntraRaterGrade, GradingsFeatures, ImageMetadata
 from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task_atomic,
     get_next_eligible_resident2_task_atomic,
     get_next_eligible_resident_task_atomic,
 )
+from utils.feature_geometry import parse_feature_geometry_payload, validate_feature_geometry_payload
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.utils2 import is_valid_uuid
 
@@ -47,6 +49,11 @@ def register_routes(bp) -> None:
     """Register intra-rater grading routes."""
     bp.add_url_rule("/intra-task/<string:task_uuid>", view_func=intra_rater_task, methods=["GET"])
     bp.add_url_rule("/intra-task/submit", view_func=intra_rater_submit, methods=["POST"])
+    bp.add_url_rule(
+        "/intra-task/<string:task_uuid>/feature-geometry",
+        view_func=intra_rater_feature_geometry,
+        methods=["GET"],
+    )
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -156,6 +163,73 @@ def intra_rater_task(task_uuid: str):
 
 
 @roles_required("resident", "ophthalmologist", "admin")
+def intra_rater_feature_geometry(task_uuid: str):
+    """Fetch stored feature geometry for an intra-rater task."""
+    task_uuid = (task_uuid or "").strip()
+    if not task_uuid or not is_valid_uuid(task_uuid):
+        return jsonify({"success": False, "message": "Invalid intra-rater task reference."}), 400
+
+    with transaction_scope() as db:
+        task: Optional[IntraRaterTask] = (
+            db.query(IntraRaterTask)
+            .options(
+                selectinload(IntraRaterTask.encounter_file),
+                selectinload(IntraRaterTask.direct_image_upload),
+            )
+            .filter(IntraRaterTask.uuid == task_uuid)
+            .first()
+        )
+
+        if task is None:
+            return jsonify({"success": False, "message": "Intra-rater task not found."}), 404
+
+        if task.grader_user_id != current_user.id:
+            return jsonify({"success": False, "message": "Not authorized to view geometry."}), 403
+
+        existing_grade = (
+            db.query(IntraRaterGrade)
+            .filter(
+                IntraRaterGrade.task_id == task.id,
+                IntraRaterGrade.grader_user_id == current_user.id,
+            )
+            .first()
+        )
+
+        image_uuid = None
+        if task.encounter_file:
+            image_uuid = task.encounter_file.uuid
+        elif task.direct_image_upload:
+            image_uuid = task.direct_image_upload.uuid
+        image_metadata = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == "orig",
+            )
+            .first()
+            if image_uuid
+            else None
+        )
+
+        geometry_payload = None
+        if existing_grade and existing_grade.feature_geometry_json:
+            geometry_payload = existing_grade.feature_geometry_json
+
+        return jsonify(
+            {
+                "success": True,
+                "task_uuid": task_uuid,
+                "feature_geometry": geometry_payload,
+                "image": {
+                    "uuid": image_uuid,
+                    "width": image_metadata.width if image_metadata else None,
+                    "height": image_metadata.height if image_metadata else None,
+                },
+            }
+        )
+
+
+@roles_required("resident", "ophthalmologist", "admin")
 def intra_rater_submit():
     """Persist an intra-rater grade and continue the grading flow."""
     action = (request.form.get("action") or "").strip().lower()
@@ -188,6 +262,10 @@ def intra_rater_submit():
             seen_feature_ids.add(feature_id)
 
     selected_features_json: str | None = None
+    raw_feature_geometry = request.form.get("feature_geometry_json")
+    parsed_feature_geometry = None
+    if raw_feature_geometry is not None:
+        parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
     
     # Validate selected features if any were provided
     if unique_feature_ids:
@@ -247,6 +325,31 @@ def intra_rater_submit():
             flash("You are not authorized to submit this intra-rater task.", "danger")
             return redirect(url_for("grading.index"))
 
+        image_uuid = None
+        if task.encounter_file:
+            image_uuid = task.encounter_file.uuid
+        elif task.direct_image_upload:
+            image_uuid = task.direct_image_upload.uuid
+        image_metadata = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == "orig",
+            )
+            .first()
+            if image_uuid
+            else None
+        )
+        if raw_feature_geometry:
+            is_valid_geometry, geometry_error = validate_feature_geometry_payload(
+                parsed_feature_geometry, unique_feature_ids, image_metadata
+            )
+            if not is_valid_geometry:
+                flash(geometry_error or "Invalid feature geometry submitted.", "danger")
+                return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
+
+        feature_geometry = parsed_feature_geometry if raw_feature_geometry and parsed_feature_geometry else None
+
         if task.state != STATE_PENDING:
             flash("This intra-rater task has already been completed.", "info")
             return redirect(url_for("grading.index"))
@@ -288,6 +391,7 @@ def intra_rater_submit():
             disease_grading_id=label_id,
             comment=comment,
             selected_features_json=selected_features_json,
+            feature_geometry_json=feature_geometry,
             time_taken=time_taken,
             start_time=start_time,
         )

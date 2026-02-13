@@ -127,6 +127,13 @@
           {% endif %}
 
           <input type="hidden" name="slot" value="{{ current_slot }}">
+          {% if linked_mode %}
+          {% for panel in linked_panels %}
+          <input type="hidden" name="feature_geometry_json_{{ panel.task.uuid }}" data-feature-geometry-field="{{ panel.task.uuid }}">
+          {% endfor %}
+          {% else %}
+          <input type="hidden" name="feature_geometry_json" id="feature-geometry-json">
+          {% endif %}
 
           <!-- Add the start_time as a hidden input field to prevent session expiration issues -->
           {% if start_time_iso %}
@@ -388,6 +395,11 @@
     window.existingSelectedFeatures = {{ existing_selected_features | tojson}};
     {% else %}
     window.existingSelectedFeatures = null;
+    {% endif %}
+    {% if existing_feature_geometry %}
+    window.existingFeatureGeometry = {{ existing_feature_geometry | tojson }};
+    {% else %}
+    window.existingFeatureGeometry = null;
     {% endif %}
     {% if linked_mode %}
     window.linkedGradingData = {{ linked_grading_data | tojson }};

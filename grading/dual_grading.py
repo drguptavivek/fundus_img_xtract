@@ -49,6 +49,7 @@ from utils.dualGradingFetchDetailUtils import (
     fetch_task_with_related_data_by_uuid,
     fetch_existing_grade_for_user,
 )
+from utils.feature_geometry import parse_feature_geometry_payload, validate_feature_geometry_payload
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
@@ -77,6 +78,14 @@ def _fetch_image_metadata(db, image_uuid: str | None) -> ImageMetadata | None:
     )
 
 
+def _resolve_task_image_uuid(task: GradingTask) -> str | None:
+    if task.encounter_file:
+        return task.encounter_file.uuid
+    if task.direct_image:
+        return task.direct_image.uuid
+    return None
+
+
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
     """Convert persisted selected feature payload into a python list for display."""
     if not selected_features_json:
@@ -97,6 +106,11 @@ def register_routes(bp):
     bp.add_url_rule("/task/<string:task_uuid>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])
     bp.add_url_rule("/task/submit", view_func=dual_grading_submit, methods=["POST"])
     bp.add_url_rule("/revise/<int:grade_id>", view_func=revise_grading, methods=["GET"])
+    bp.add_url_rule(
+        "/task/<string:task_uuid>/feature-geometry",
+        view_func=dual_grading_feature_geometry,
+        methods=["GET"],
+    )
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -225,6 +239,7 @@ def revise_grading(grade_id: int):
             # Use the existing grade as the existing_grade parameter
             existing_grade = grade
             existing_selected_features = _parse_selected_features(existing_grade.selected_features_json)
+            existing_feature_geometry = existing_grade.feature_geometry_json
             image_metadata = _fetch_image_metadata(db, image_uuid)
 
             response = make_response(render_template(
@@ -236,6 +251,7 @@ def revise_grading(grade_id: int):
                 current_slot=slot_type,
                 existing_grade=existing_grade,
                 existing_selected_features=existing_selected_features,
+                existing_feature_geometry=existing_feature_geometry,
                 image_uuid=image_uuid,
                 image_metadata=image_metadata,
                 grades=task.grades,
@@ -450,6 +466,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             existing_selected_features = _parse_selected_features(
                 existing_grade.selected_features_json if existing_grade else None
             )
+            existing_feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
             image_metadata = _fetch_image_metadata(db, image_uuid)
 
             linked_mode = False
@@ -621,6 +638,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                 "grading_features": panel_grading_data["grading_features"],
                                 "existing_grade": panel_existing_grade,
                                 "existing_selected_features": panel_existing_features,
+                                "existing_feature_geometry": panel_existing_grade.feature_geometry_json if panel_existing_grade else None,
                                 "read_only": panel_read_only,
                                 "eligibility_error": eligibility_error,
                             }
@@ -630,6 +648,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             "guidelines": panel_grading_data["grading_guidelines"],
                             "features": panel_grading_data["grading_features"],
                             "existingSelectedFeatures": panel_existing_features,
+                            "existingFeatureGeometry": panel_existing_grade.feature_geometry_json if panel_existing_grade else None,
                             "readOnly": panel_read_only,
                             "taskUuid": panel_task.uuid,
                         }
@@ -697,6 +716,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 current_user_id=getattr(current_user, "id", None),
                 grading_features=grading_features,
                 existing_selected_features=existing_selected_features,
+                existing_feature_geometry=existing_feature_geometry,
                 linked_mode=linked_mode,
                 linked_panels=linked_panels,
                 linked_grading_data=linked_grading_data,
@@ -710,6 +730,48 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             grades_logger.exception("Failed to load grading task: %s", e)
             flash("Failed to load grading task.", "danger")
             return redirect(url_for("grading.index"))
+
+
+@roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "regrade_adjudicator", "admin", "local_admin")
+def dual_grading_feature_geometry(task_uuid: str):
+    """Fetch stored feature geometry for the current user/slot."""
+    slot = (request.args.get("slot") or "").strip().lower()
+    if slot not in {"resident", "resident2", "arbitrator", "review", "regrade_adj"}:
+        return jsonify({"success": False, "message": "Invalid slot."}), 400
+
+    task_uuid = (task_uuid or "").strip()
+    if not task_uuid:
+        return jsonify({"success": False, "message": "Missing task reference."}), 400
+
+    with transaction_scope() as db:
+        task = fetch_task_with_related_data_by_uuid(db, task_uuid, user=current_user)
+        if not task:
+            return jsonify({"success": False, "message": "Task not found."}), 404
+
+        existing_grade = fetch_existing_grade_for_user(db, task.id, current_user.id, slot, user=current_user)
+        if existing_grade is None and not get_user_eligibility_for_task(db, current_user.id, task.id, slot):
+            return jsonify({"success": False, "message": "Not eligible to view geometry."}), 403
+
+        image_uuid = _resolve_task_image_uuid(task)
+        image_metadata = _fetch_image_metadata(db, image_uuid) if image_uuid else None
+
+        geometry_payload = None
+        if existing_grade and existing_grade.feature_geometry_json:
+            geometry_payload = existing_grade.feature_geometry_json
+
+        return jsonify(
+            {
+                "success": True,
+                "task_uuid": task_uuid,
+                "slot": slot,
+                "feature_geometry": geometry_payload,
+                "image": {
+                    "uuid": image_uuid,
+                    "width": image_metadata.width if image_metadata else None,
+                    "height": image_metadata.height if image_metadata else None,
+                },
+            }
+        )
 
  
 @roles_required("resident", "ophthalmologist", "admin")
@@ -953,6 +1015,26 @@ def dual_grading_submit():
                         ]
                     )
 
+                geometry_key = (
+                    f"feature_geometry_json_{current_task_uuid}"
+                    if is_linked_submission
+                    else "feature_geometry_json"
+                )
+                raw_feature_geometry = request.form.get(geometry_key)
+                parsed_feature_geometry = None
+                if raw_feature_geometry is not None:
+                    parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
+
+                image_uuid = _resolve_task_image_uuid(task)
+                image_metadata = _fetch_image_metadata(db, image_uuid) if image_uuid else None
+                if raw_feature_geometry:
+                    is_valid_geometry, geometry_error = validate_feature_geometry_payload(
+                        parsed_feature_geometry, unique_feature_ids, image_metadata
+                    )
+                    if not is_valid_geometry:
+                        flash(geometry_error or "Invalid feature geometry submitted.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
                 conflicting_slots = []
                 conflict_message = None
                 if slot == "resident":
@@ -968,6 +1050,10 @@ def dual_grading_submit():
 
                 existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
                 had_existing_grade = existing_grade is not None
+                if raw_feature_geometry is None or not raw_feature_geometry.strip():
+                    feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
+                else:
+                    feature_geometry = parsed_feature_geometry
 
                 prev_grade_id = None
                 prev_comment = None
@@ -1016,6 +1102,7 @@ def dual_grading_submit():
                     existing_grade.disease_grading_id = current_label_id
                     existing_grade.comment = current_comment
                     existing_grade.selected_features_json = selected_features_json
+                    existing_grade.feature_geometry_json = feature_geometry
                     existing_grade.time_taken = time_taken
                     existing_grade.disease_name = disease.name if disease else None
                     existing_grade.grade_name = disease_grading.impression if disease_grading else None
@@ -1030,6 +1117,7 @@ def dual_grading_submit():
                         disease_grading_id=current_label_id,
                         comment=current_comment,
                         selected_features_json=selected_features_json,
+                        feature_geometry_json=feature_geometry,
                         time_taken=time_taken,
                         disease_name=disease.name if disease else None,
                         grade_name=disease_grading.impression if disease_grading else None,

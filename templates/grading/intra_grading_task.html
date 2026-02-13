@@ -57,6 +57,7 @@
           <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
           <input type="hidden" name="resume_slot" value="{{ resume_slot or '' }}">
           <input type="hidden" name="resume_disease_id" value="{{ resume_disease_id or '' }}">
+          <input type="hidden" name="feature_geometry_json" id="feature-geometry-json">
           {% if start_time_iso %}
           <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
           {% endif %}
@@ -146,6 +147,7 @@
     window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
     // Pass existing selected features if available
     window.existingSelectedFeatures = null;
+    window.existingFeatureGeometry = null;
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

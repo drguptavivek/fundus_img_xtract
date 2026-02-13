@@ -102,6 +102,7 @@
         <form method="post" action="{{ url_for('grading.regrade_task_submit', regrade_task_id=regrade_task.id) }}"
           data-grading-form="true">
           {{ csrf_field() }}
+          <input type="hidden" name="feature_geometry_json" id="feature-geometry-json">
 
           <div class="mb-2">
             <label class="form-label mt-2">Select a Grade for <strong class="mb-0">{{ regrade_task.disease.name if regrade_task.disease else '-' }}</strong></label>
@@ -197,6 +198,11 @@
   window.existingSelectedFeatures = {{ existing_selected_features | tojson }};
   {% else %}
   window.existingSelectedFeatures = null;
+  {% endif %}
+  {% if existing_feature_geometry %}
+  window.existingFeatureGeometry = {{ existing_feature_geometry | tojson }};
+  {% else %}
+  window.existingFeatureGeometry = null;
   {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote, urlparse
 from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
@@ -1090,6 +1091,7 @@ class Grade(Base):
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id'), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     selected_features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing selected feature metadata (id/label/sr_no)
+    feature_geometry_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # JSON geometry payload for feature markings
     time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)  # Time taken in seconds
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -1533,6 +1535,7 @@ class IntraRaterGrade(Base):
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey("disease_gradings.id"), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     selected_features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing selected feature metadata (id/label/sr_no)
+    feature_geometry_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # JSON geometry payload for feature markings
     time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

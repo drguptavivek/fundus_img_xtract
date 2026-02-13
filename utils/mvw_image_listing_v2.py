@@ -42,6 +42,13 @@ def get_mv_name_for_disease(db, disease_id: int) -> str:
     return _mv_name(str(disease.name), int(disease.id))
 
 
+def get_mv_name_for_disease_name(disease_name: str, disease_id: int) -> str:
+    """Return the per-disease MV v2 name for a known disease name/id pair."""
+    if not disease_name:
+        raise ValueError("Disease name is required")
+    return _mv_name(str(disease_name), int(disease_id))
+
+
 def _index_name(mv_name: str, suffix: str) -> str:
     suffix = suffix.strip("_")
     max_base_len = _MAX_IDENT_LEN - len(suffix) - 1
@@ -89,8 +96,11 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             diu.folder_rel AS image_folder_rel,
             FALSE AS is_set_based,
             NULL::date AS capture_date,
-            diu.created_at AS upload_date_utc
+            diu.created_at AS upload_date_utc,
+            div.verified_status AS direct_image_verified_status,
+            NULL::text AS encounter_verified_status
         FROM direct_image_uploads diu
+        LEFT JOIN direct_image_verifications div ON div.image_upload_id = diu.id
         LEFT JOIN hospitals h ON diu.hospital_id = h.id
         LEFT JOIN lab_units lu ON diu.lab_unit_id = lu.id
         LEFT JOIN cameras cam ON diu.camera_id = cam.id
@@ -121,7 +131,9 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             NULL::text AS image_folder_rel,
             COALESCE(pe.is_set_based, FALSE) AS is_set_based,
             pe.capture_date_dt AS capture_date,
-            zf.upload_date AS upload_date_utc
+            zf.upload_date AS upload_date_utc,
+            NULL::text AS direct_image_verified_status,
+            pe.encounter_verified_status AS encounter_verified_status
         FROM encounter_files ef
         LEFT JOIN patient_encounters pe ON ef.patient_encounter_id = pe.id
         LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
@@ -153,7 +165,9 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             NULL::text AS image_folder_rel,
             COALESCE(pe.is_set_based, FALSE) AS is_set_based,
             pe.capture_date_dt AS capture_date,
-            zf.upload_date AS upload_date_utc
+            zf.upload_date AS upload_date_utc,
+            NULL::text AS direct_image_verified_status,
+            pe.encounter_verified_status AS encounter_verified_status
         FROM patient_encounters pe
         LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
         LEFT JOIN lab_units lu ON pe.lab_unit_id = lu.id
@@ -285,6 +299,8 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         b.is_set_based,
         b.capture_date,
         b.upload_date_utc,
+        b.direct_image_verified_status,
+        b.encounter_verified_status,
         {int(disease_id)}::integer AS disease_id,
         '{disease_name_literal}'::text AS disease_name,
         dt.task_id,
@@ -362,6 +378,8 @@ def _create_indexes_sql(mv_name: str) -> Iterable[str]:
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'hospital_id')} ON {mv_name}(hospital_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'camera_id')} ON {mv_name}(camera_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_created_at')} ON {mv_name}(task_created_at);",
+        f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'direct_image_verified_status')} ON {mv_name}(direct_image_verified_status);",
+        f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'encounter_verified_status')} ON {mv_name}(encounter_verified_status);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'has_consensus')} ON {mv_name}(has_consensus);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'resident_vs_resident2')} ON {mv_name}(resident_vs_resident2);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'image_uuid')} ON {mv_name}(image_uuid);",

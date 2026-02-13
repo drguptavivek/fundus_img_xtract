@@ -62,9 +62,9 @@ Check if a user is eligible for a specific role slot for a task.
 **Returns:**
 - True if user is eligible, False otherwise
 
-### `_has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool`
+### `_has_user_graded_task_4weeks(db, user_id: int, task_id: int) -> bool`
 
-Check if a user has graded a task in the past 2 weeks.
+Check if a user has graded a task in the past 4 weeks.
 
 **Parameters:**
 - `db`: Database session
@@ -72,4 +72,4 @@ Check if a user has graded a task in the past 2 weeks.
 - `task_id` (int): The ID of the task
 
 **Returns:**
-- True if user has graded the task in the past 2 weeks, False otherwise
+- True if user has graded the task in the past 4 weeks, False otherwise

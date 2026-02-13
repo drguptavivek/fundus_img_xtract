@@ -76,11 +76,11 @@ This document provides a summary of functions across multiple utility modules fo
 
 ---
 
-### 5. `_has_user_graded_task_2weeks(db, user_id: int, task_id: int)`
+### 5. `_has_user_graded_task_4weeks(db, user_id: int, task_id: int)`
 
 **Classification:** Eligibility Check
 
-**Description:** Checks if a user has graded a specific task in the past 2 weeks. This function helps prevent users from grading the same task multiple times within a short timeframe, which could be useful for quality control and preventing conflicts of interest.
+**Description:** Checks if a user has graded a specific task in the past 4 weeks. This function helps prevent users from grading the same task multiple times within a short timeframe, which could be useful for quality control and preventing conflicts of interest.
 
 **Parameters:**
 - `db`: Database session
@@ -88,7 +88,7 @@ This document provides a summary of functions across multiple utility modules fo
 - `task_id` (int): The ID of the task
 
 **Returns:**
-- True if user has graded the task in the past 2 weeks, False otherwise
+- True if user has graded the task in the past 4 weeks, False otherwise
 
 ---
 
@@ -281,7 +281,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Task Assignment
 
-**Description:** Gets the next eligible task for a resident user. Filters for pending tasks in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 2 weeks.
+**Description:** Gets the next eligible task for a resident user. Filters for pending tasks in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 4 weeks.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be a resident or admin)
@@ -297,7 +297,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Task Assignment
 
-**Description:** Gets the next eligible task for a resident2 user. Filters for tasks in resident_done state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 2 weeks.
+**Description:** Gets the next eligible task for a resident2 user. Filters for tasks in resident_done state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 4 weeks.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)
@@ -313,7 +313,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Task Assignment
 
-**Description:** Gets the next eligible task for an arbitrator user. Filters for tasks in arbitration state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 2 weeks.
+**Description:** Gets the next eligible task for an arbitrator user. Filters for tasks in arbitration state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 4 weeks.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)

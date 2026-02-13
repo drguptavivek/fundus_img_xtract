@@ -458,7 +458,7 @@ Step 4: Cross-Hospital Grading
 
 #### Workflow
 
-Due to small grader pool, same ophthalmologist can grade both R1 and R2 slots for same image, but **only after 2-week cooling-off period** to ensure independence:
+Due to small grader pool, same ophthalmologist can grade both R1 and R2 slots for same image, but **only after 4-week cooling-off period** to ensure independence:
 
 ```python
 # Ophthalmologist grades as R1 at time T
@@ -473,8 +473,8 @@ else:
 
 **Grading Workflow:**
 1. Image → R1 grading (Ophthalmologist A, Day 0)
-2. If < 2 weeks: R2 → Ophthalmologist B (different grader)
-3. If ≥ 2 weeks: R2 → Ophthalmologist A allowed (same grader)
+2. If < 4 weeks: R2 → Ophthalmologist B (different grader)
+3. If ≥ 4 weeks: R2 → Ophthalmologist A allowed (same grader)
 4. If R1 ≠ R2 → Arbitrator (senior ophthalmologist)
 
 ### Database Security
@@ -523,7 +523,7 @@ tasks = query.join(UserDiseaseUnitRole).filter(
 2. ✅ Grading UI shows ZERO patient data/hospital identifiers
 3. ✅ Hospital A user cannot access Hospital B operational data
 4. ✅ Optometrist strips PII before task creation
-5. ✅ Same grader cannot do R2 grading within 2 weeks
+5. ✅ Same grader cannot do R2 grading within 4 weeks
 6. ✅ Site admin cannot manage users in other hospitals
 7. ✅ Dataset creator can access all hospitals (anonymized)
 8. ✅ Regular data exporter sees only own hospital data
@@ -542,7 +542,7 @@ tasks = query.join(UserDiseaseUnitRole).filter(
 - Check no PII leaking to grading interface
 - Validate anonymization workflow
 - Review cross-hospital access patterns
-- Check 2-week cooling-off enforcement
+- Check 4-week cooling-off enforcement
 
 ---
 

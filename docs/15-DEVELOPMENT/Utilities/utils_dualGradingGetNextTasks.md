@@ -46,7 +46,7 @@ Get filtered tasks based on role slot and other criteria.
   - Arbitrators: only see tasks in "arbitration" state
   - Residents: only see tasks in "pending" state
   - Resident2: only see tasks in "resident_done" state
-- Excludes tasks that the user has graded in the past 2 weeks
+- Excludes tasks that the user has graded in the past 4 weeks
 
 ### `get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
 

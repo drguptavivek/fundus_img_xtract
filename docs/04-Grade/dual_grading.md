@@ -94,7 +94,7 @@ The system checks:
 1. User has appropriate role for the requested slot
 2. User has permissions for the disease and lab unit via `UserDiseaseUnitRole` table
 3. Task is in correct state for the requested role
-4. User hasn't graded this task in the last 2 weeks (across any role)
+4. User hasn't graded this task in the last 4 weeks (across any role)
 
 ### Lab Unit Eligibility
 - Users can only grade tasks assigned to their authorized lab units
@@ -106,7 +106,7 @@ The system checks:
 ### Time-Based Restrictions
 - **Residents and Resident2**: Can revise grades until task is finalized
 - **Arbitrators**: Can only revise within 6 hours of submission (configurable via `ARBITRATOR_REVISION_HOURS`)
-- **General exclusion**: Users cannot be assigned tasks they've graded in the last 2 weeks
+- **General exclusion**: Users cannot be assigned tasks they've graded in the last 4 weeks
 
 ### Revision Process
 1. Users access their previous grade via `/grading/revise/<grade_id>` or by accessing the task again
@@ -191,7 +191,7 @@ Initial: Task in 'final' with arbitrator decision C
 
 | Condition | Affected Roles | Block Reason |
 |-----------|----------------|--------------|
-| Task graded by same user in last 2 weeks | All roles | Prevents bias and ensures fresh perspective |
+| Task graded by same user in last 4 weeks | All roles | Prevents bias and ensures fresh perspective |
 | Task locked by another user | All roles | Prevents concurrent modifications |
 | User account inactive/deactivated | All roles | Security restriction |
 | Disease or lab unit permissions revoked | All roles | Access control enforcement |

@@ -33,7 +33,7 @@ This workflow describes the complete lifecycle of grading tasks from creation th
 5.  **Task Assignment**: Resident accesses grading dashboard via `GET /grading/dashboard`:
     -   System fetches tasks where `state = 'pending'`
     -   Filters by user's `UserDiseaseUnitRole` permissions (disease + lab unit)
-    -   Excludes tasks graded by user in last 2 weeks (conflict prevention)
+    -   Excludes tasks graded by user in last 4 weeks (conflict prevention)
     -   Randomly selects one task for unbiased distribution
 6.  **Task Tracking**: System creates `TaskTracker` record:
     -   Records `task_id`, `user_id`, `role_slot = 'resident'`, `started_at`
@@ -54,7 +54,7 @@ This workflow describes the complete lifecycle of grading tasks from creation th
 10. **Task Assignment**: Resident2 (Ophthalmologist) accesses dashboard:
     -   System fetches tasks where `state = 'resident_done'`
     -   Filters by `UserDiseaseUnitRole` with `can_grade_resident2 = True`
-    -   Excludes tasks graded by user in last 2 weeks
+    -   Excludes tasks graded by user in last 4 weeks
     -   Randomly selects one task
 11. **Independent Assessment**: Resident2 views task **without seeing Resident grade**:
     -   Interface hides previous grades to ensure independence
@@ -187,7 +187,7 @@ sequenceDiagram
 3.  **Task Assignment Logic** (`utils/dualGradingGetNextTasks.py`):
     -   **State-based Filtering**: Different task states for each role
     -   **Permission Filtering**: Checks `UserDiseaseUnitRole` for eligibility
-    -   **Conflict Prevention**: 2-week cooldown prevents same grader seeing same task
+    -   **Conflict Prevention**: 4-week cooldown prevents same grader seeing same task
     -   **Random Selection**: Unbiased task distribution using `random.choice()`
     -   **Load Balancing**: Distributes tasks among qualified graders
 

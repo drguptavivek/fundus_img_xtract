@@ -211,7 +211,7 @@ def test_linked_arbitration_discovery(db_session, core_test_data, linked_grading
     #   Should KPIs exclude busy tasks? 
     #   Usually "Pending" count means "Available". 
     #   If I modify KPI logic, I need to check if I updated dualGradingKPIs.py.
-    #   I checked my history, I only added `_has_user_graded_task_2weeks` check.
+    #   I checked my history, I only added `_has_user_graded_task_4weeks` check.
     #   I did NOT add TaskTracker check to KPIs.
     #   So KPI count might be 4 (A, B, D, E) unless I update KPIs too.
     #   Let's check if the prompt implies KPI update. "check for task locking".

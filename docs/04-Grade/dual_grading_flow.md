@@ -48,7 +48,7 @@ Filters tasks based on:
    - Residents: `state == "pending"`
    - Resident2: `state == "resident_done"`
    - Arbitrators: `state == "arbitration"`
-4. Excludes tasks graded by user in last 2 weeks
+4. Excludes tasks graded by user in last 4 weeks
 
 #### Random Task Selection
 - Uses `random.choice()` for unbiased task distribution
@@ -94,7 +94,7 @@ create_or_update_consensus(task.id, db)
 
 #### Time-Based Restrictions
 - **Arbitrator revision window**: Configurable via `ARBITRATOR_REVISION_HOURS` (default: 6)
-- **General exclusion**: 2-week restriction across all role slots
+- **General exclusion**: 4-week restriction across all role slots
 - Time windows stored in UTC for consistency
 
 #### Revision Eligibility Functions

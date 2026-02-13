@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from flask import render_template
 from flask.typing import ResponseReturnValue
@@ -11,6 +11,7 @@ from app_cache import cache
 from db_transaction_manager import get_db_session
 from models import EncounterFile, PatientEncounters, GlaucomaResultsCleaned, DirectImageUpload
 from models import DirectImageVerify, Disease, Grade, DiseaseGrading
+from utils.mvw_image_listing_v2 import get_mv_name_for_disease_name
 
 _CACHE_KEY = "home:charts:v1"
 _CACHE_TTL_SECONDS = 15 * 60  # 15 minutes
@@ -19,6 +20,54 @@ _CACHE_TTL_SECONDS = 15 * 60  # 15 minutes
 def _rows_to_dicts(rows: List[Any]) -> List[Dict[str, Any]]:
     """Convert SQLAlchemy row objects to plain dictionaries."""
     return [dict(row._mapping) for row in rows]
+
+
+def _build_v2_union_sql(disease_rows: List[Tuple[int, str]]) -> str:
+    selects = []
+    for disease_id, disease_name in disease_rows:
+        mv_name = get_mv_name_for_disease_name(str(disease_name), int(disease_id))
+        selects.append(
+            f"""
+            SELECT
+                image_uuid,
+                disease_id,
+                disease_name,
+                lab_unit_name,
+                task_lab_unit_id,
+                task_id,
+                final_grade_name,
+                final_impression,
+                has_resident,
+                has_resident2,
+                has_arbitrator,
+                has_review,
+                has_regrade_adj,
+                direct_image_verified_status,
+                encounter_verified_status
+            FROM {mv_name}
+            """
+        )
+    if not selects:
+        return """
+            SELECT
+                NULL::text AS image_uuid,
+                NULL::integer AS disease_id,
+                NULL::text AS disease_name,
+                NULL::text AS lab_unit_name,
+                NULL::integer AS task_lab_unit_id,
+                NULL::integer AS task_id,
+                NULL::text AS final_grade_name,
+                NULL::text AS final_impression,
+                FALSE AS has_resident,
+                FALSE AS has_resident2,
+                FALSE AS has_arbitrator,
+                FALSE AS has_review,
+                FALSE AS has_regrade_adj,
+                NULL::text AS direct_image_verified_status,
+                NULL::text AS encounter_verified_status
+            WHERE 1=0
+        """
+    return " UNION ALL ".join(selects)
 
 
 @cache.cached(timeout=_CACHE_TTL_SECONDS, key_prefix=_CACHE_KEY)
@@ -160,14 +209,21 @@ def _compute_home_payload() -> Dict[str, Any]:
             }
         )
 
+        disease_rows = db.execute(select(Disease.id, Disease.name).order_by(Disease.id)).all()
+        v2_union = _build_v2_union_sql(disease_rows)
+        has_grade_expr = (
+            "has_resident OR has_resident2 OR has_arbitrator OR has_review OR has_regrade_adj"
+        )
+
         target_diseases = {"glaucoma", "dr"}
         total_gradable_images = db.execute(
             text(
-                """
+                f"""
+                WITH v2 AS ({v2_union})
                 SELECT COUNT(*) AS total_count
-                FROM mvw_grading_data_all
+                FROM v2
                 WHERE
-                    grade_id IS NOT NULL
+                    ({has_grade_expr})
                     AND LOWER(disease_name) IN :diseases
                 """
             ).bindparams(bindparam("diseases", expanding=True)),
@@ -176,13 +232,14 @@ def _compute_home_payload() -> Dict[str, Any]:
 
         ungradable_images = db.execute(
             text(
-                """
+                f"""
+                WITH v2 AS ({v2_union})
                 SELECT COUNT(*) AS ungradable_count
-                FROM mvw_grading_data_all
+                FROM v2
                 WHERE
-                    grade_id IS NOT NULL
+                    ({has_grade_expr})
                     AND LOWER(disease_name) IN :diseases
-                    AND LOWER(COALESCE(consensus_final_grade_name, grade_name, '')) = 'not gradable'
+                    AND LOWER(COALESCE(final_grade_name, final_impression, '')) = 'not gradable'
                 """
             ).bindparams(bindparam("diseases", expanding=True)),
             {"diseases": tuple(target_diseases)},
@@ -193,12 +250,13 @@ def _compute_home_payload() -> Dict[str, Any]:
         disease_image_distribution = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
                         COALESCE(disease_name, 'Unknown') AS disease_name,
-                        COUNT(DISTINCT image_id) AS image_count
-                    FROM mvw_grading_data_all
-                    WHERE image_id IS NOT NULL
+                        COUNT(DISTINCT image_uuid) AS image_count
+                    FROM v2
+                    WHERE image_uuid IS NOT NULL
                     GROUP BY COALESCE(disease_name, 'Unknown')
                     ORDER BY image_count DESC
                     """
@@ -209,12 +267,13 @@ def _compute_home_payload() -> Dict[str, Any]:
         grading_distribution = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
                         COALESCE(disease_name, 'Unknown') AS disease_name,
-                        COUNT(grade_id) AS grade_count
-                    FROM mvw_grading_data_all
-                    WHERE grade_id IS NOT NULL
+                        COUNT(task_id) AS grade_count
+                    FROM v2
+                    WHERE ({has_grade_expr})
                     GROUP BY COALESCE(disease_name, 'Unknown')
                     ORDER BY grade_count DESC
                     """
@@ -225,15 +284,17 @@ def _compute_home_payload() -> Dict[str, Any]:
         dr_impression_distribution = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
-                        COALESCE(consensus_final_grade_name, grade_name) AS impression,
+                        COALESCE(final_grade_name, final_impression) AS impression,
                         COUNT(*) AS grade_count
-                    FROM mvw_grading_data_all
+                    FROM v2
                     WHERE
-                        grade_id IS NOT NULL
+                        ({has_grade_expr})
                         AND LOWER(disease_name) = 'dr'
-                    GROUP BY COALESCE(consensus_final_grade_name, grade_name)
+                        AND COALESCE(final_grade_name, final_impression) IS NOT NULL
+                    GROUP BY COALESCE(final_grade_name, final_impression)
                     ORDER BY grade_count DESC
                     """
                 )
@@ -243,16 +304,17 @@ def _compute_home_payload() -> Dict[str, Any]:
         glaucoma_impression_distribution = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
-                        consensus_final_grade_name AS impression,
-                        COUNT(DISTINCT image_id) AS image_count
-                    FROM mvw_grading_data_all
+                        final_grade_name AS impression,
+                        COUNT(DISTINCT image_uuid) AS image_count
+                    FROM v2
                     WHERE
-                        image_id IS NOT NULL
+                        image_uuid IS NOT NULL
                         AND LOWER(disease_name) = 'glaucoma'
-                        AND consensus_final_grade_name IS NOT NULL
-                    GROUP BY consensus_final_grade_name
+                        AND final_grade_name IS NOT NULL
+                    GROUP BY final_grade_name
                     ORDER BY image_count DESC
                     """
                 )
@@ -262,12 +324,13 @@ def _compute_home_payload() -> Dict[str, Any]:
         images_by_lab_unit_disease = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
                         lab_unit_name,
                         disease_name,
-                        COUNT(DISTINCT image_id) AS image_count
-                    FROM mvw_grading_data_all
+                        COUNT(DISTINCT image_uuid) AS image_count
+                    FROM v2
                     WHERE lab_unit_name IS NOT NULL AND disease_name IS NOT NULL
                     GROUP BY lab_unit_name, disease_name
                     ORDER BY lab_unit_name, disease_name
@@ -279,16 +342,17 @@ def _compute_home_payload() -> Dict[str, Any]:
         verified_images_by_lab_unit_disease = _rows_to_dicts(
             db.execute(
                 text(
-                    """
+                    f"""
+                    WITH v2 AS ({v2_union})
                     SELECT
                         lab_unit_name,
                         disease_name,
-                        COUNT(DISTINCT image_id) AS total_images,
+                        COUNT(DISTINCT image_uuid) AS total_images,
                         COUNT(DISTINCT CASE
                             WHEN LOWER(COALESCE(direct_image_verified_status, encounter_verified_status, '')) = 'verified'
-                            THEN image_id
+                            THEN image_uuid
                         END) AS verified_images
-                    FROM mvw_grading_data_all
+                    FROM v2
                     WHERE lab_unit_name IS NOT NULL AND disease_name IS NOT NULL
                     GROUP BY lab_unit_name, disease_name
                     ORDER BY lab_unit_name, disease_name

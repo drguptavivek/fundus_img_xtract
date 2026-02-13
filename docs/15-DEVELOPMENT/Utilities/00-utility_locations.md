@@ -74,7 +74,7 @@ For detailed documentation, see [utils_dualGradingEligibility.md](utils_dualGrad
 | `_get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot: str)` | Get the list of lab unit IDs that a user is eligible for a specific role and disease |
 | `check_arbitration_eligibility(db, user_id: int, disease_id: int, lab_unit_id: int)` | Check if a user is eligible to arbitrate for a specific disease and lab unit |
 | `get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str)` | Check if a user is eligible for a specific role slot for a task |
-| `_has_user_graded_task_2weeks(db, user_id: int, task_id: int)` | Check if a user has graded a task in the past 2 weeks |
+| `_has_user_graded_task_4weeks(db, user_id: int, task_id: int)` | Check if a user has graded a task in the past 4 weeks |
 
 ### utils/dualGradingConsensusUtils.py
 

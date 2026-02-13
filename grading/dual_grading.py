@@ -33,7 +33,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident_task,
     get_next_eligible_resident2_task,
     get_next_eligible_arbitrator_task,
-    _has_user_graded_task_2weeks,
+    _has_user_graded_task_4weeks,
     get_next_linked_followup_task_atomic,
 )
 from utils.dualGradingEligibility import (
@@ -908,9 +908,9 @@ def dual_grading_submit():
                         existing_grade.grader_user_id == current_user.id
                     )
 
-                    if not is_arbitrator_revision and _has_user_graded_task_2weeks(db, current_user.id, task_id):
+                    if not is_arbitrator_revision and _has_user_graded_task_4weeks(db, current_user.id, task_id):
                         flash(
-                            "You cannot arbitrate a task you've graded as resident or resident2 within the last 2 weeks.",
+                            "You cannot arbitrate a task you've graded as resident or resident2 within the last 4 weeks.",
                             "danger",
                         )
                         return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))

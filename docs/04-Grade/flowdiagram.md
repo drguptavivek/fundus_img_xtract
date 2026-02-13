@@ -236,7 +236,7 @@ classDiagram
 - `get_next_eligible_arbitrator_task_atomic()`
 - `_get_user_eligible_lab_unit_ids()`
 - `_get_filtered_tasks()`
-- `_has_user_graded_task_2weeks()`
+- `_has_user_graded_task_4weeks()`
 
 ## Task Allocation Prioritization
 
@@ -294,15 +294,15 @@ When multiple eligible tasks are available, the system applies the following pri
 ## Cooldown Rules
 
 ### General Cooldown Rule:
-- A user cannot be assigned the same task for grading in any role slot if they have already graded it in the last 2 weeks
+- A user cannot be assigned the same task for grading in any role slot if they have already graded it in the last 4 weeks
 - This applies across all role slots (resident, resident2, arbitrator)
 
 ### Specific Cooldown Rules:
-- **After resident grading**: The same user cannot be assigned the task as resident2 or arbitrator for 2 weeks
-- **After resident2 grading**: The same user cannot be assigned the task as resident or arbitrator for 2 weeks
-- **After arbitrator grading**: The same user cannot be assigned the task as resident or resident2 for 2 weeks
+- **After resident grading**: The same user cannot be assigned the task as resident2 or arbitrator for 4 weeks
+- **After resident2 grading**: The same user cannot be assigned the task as resident or arbitrator for 4 weeks
+- **After arbitrator grading**: The same user cannot be assigned the task as resident or resident2 for 4 weeks
 - **Arbitrator self-revision**: An arbitrator can revise their own grade within 6 hours of submission (configurable via ARBITRATOR_REVISION_HOURS environment variable)
-- **Arbitrator exclusion**: An arbitrator cannot arbitrate a task they previously graded as resident or resident2 within the last 2 weeks, unless they're revising their own arbitrator grade
+- **Arbitrator exclusion**: An arbitrator cannot arbitrate a task they previously graded as resident or resident2 within the last 4 weeks, unless they're revising their own arbitrator grade
 
 ## Task State Rules
 

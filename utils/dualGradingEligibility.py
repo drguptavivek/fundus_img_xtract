@@ -221,9 +221,9 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
     return True
 
 
-def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
+def _has_user_graded_task_4weeks(db, user_id: int, task_id: int) -> bool:
     """
-    Check if a user has graded a task in the past 2 weeks.
+    Check if a user has graded a task in the past 4 weeks.
     
     Args:
         db: Database session
@@ -231,11 +231,11 @@ def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
         task_id: The ID of the task
         
     Returns:
-        True if user has graded the task in the past 2 weeks, False otherwise
+        True if user has graded the task in the past 4 weeks, False otherwise
     """
     from datetime import timezone
     # Use timezone-aware datetime for comparison
-    two_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=2)
+    four_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=4)
     
     # Get all grades by this user for this task
     user_grades = db.query(Grade).filter(
@@ -243,7 +243,7 @@ def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
         Grade.task_id == task_id
     ).all()
     
-    # Check if any of the grades were created in the last 2 weeks
+    # Check if any of the grades were created in the last 4 weeks
     for grade in user_grades:
         # Handle timezone-naive datetimes from the database
         grade_created_at = grade.created_at
@@ -251,7 +251,7 @@ def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
             # Assume naive datetime is in UTC
             grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
         
-        if grade_created_at >= two_weeks_ago:
+        if grade_created_at >= four_weeks_ago:
             return True
     
     return False

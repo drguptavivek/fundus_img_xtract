@@ -221,10 +221,10 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             arbitration_tasks = q.distinct().all()
             
             # Apply same filtering as in task assignment to exclude tasks user recently graded
-            from utils.dualGradingGetNextTasks import _has_user_graded_task_2weeks
+            from utils.dualGradingGetNextTasks import _has_user_graded_task_4weeks
             eligible_arbitration_tasks = []
             for task in arbitration_tasks:
-                if not _has_user_graded_task_2weeks(db, user_id, task.id):
+                if not _has_user_graded_task_4weeks(db, user_id, task.id):
                     eligible_arbitration_tasks.append(task)
             
             counts['arbitration_pending'] = len(eligible_arbitration_tasks)

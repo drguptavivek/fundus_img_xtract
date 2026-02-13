@@ -17,7 +17,7 @@ load_environment()
 
 from utils.dualGradingEligibility import (
     _get_user_eligible_lab_unit_ids,
-    _has_user_graded_task_2weeks,
+    _has_user_graded_task_4weeks,
     has_user_graded_task,
 )
 from datetime import datetime, timedelta, timezone
@@ -207,7 +207,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     # Get all matching tasks
     tasks = query.all()
     
-    # Filter out tasks that the user has graded in the past 2 weeks
+    # Filter out tasks that the user has graded in the past 4 weeks
     filtered_tasks = []
     conflicting_slots: List[str] = []
     if role_slot == "resident":
@@ -216,7 +216,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         conflicting_slots = ["resident"]
 
     for task in tasks:
-        if not _has_user_graded_task_2weeks(db, user_id, task.id):
+        if not _has_user_graded_task_4weeks(db, user_id, task.id):
             if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
                 continue
             _ensure_task_uuid(db, task)
@@ -260,7 +260,7 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
 
     filtered_tasks = []
     for task in tasks:
-        if _has_user_graded_task_2weeks(db, user_id, task.id):
+        if _has_user_graded_task_4weeks(db, user_id, task.id):
             continue
         if has_user_graded_task(db, user_id, task.id, ["resident2"]):
             continue
@@ -557,7 +557,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     task = query.with_for_update().order_by(func.random()).first()
     
     # If a task was found, verify that the user hasn't graded it recently
-    if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
+    if task and not _has_user_graded_task_4weeks(db, user_id, task.id):
         _ensure_task_uuid(db, task)
         return task
 
@@ -737,7 +737,7 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         .first()
     )
 
-    if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
+    if task and not _has_user_graded_task_4weeks(db, user_id, task.id):
         _ensure_task_uuid(db, task)
         return task
 

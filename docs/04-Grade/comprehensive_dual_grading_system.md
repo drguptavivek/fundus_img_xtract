@@ -32,7 +32,7 @@ The Fundus Image Manager implements a sophisticated three-tier dual grading syst
 - Lab unit-based scoping via `UserDiseaseUnitRole` permissions
 - Role-specific task routing (resident → resident2 → arbitrator)
 - Load balancing among qualified graders
-- Conflict prevention (2-week cooldown per grader)
+- Conflict prevention (4-week cooldown per grader)
 
 **Database Models:**
 - `GradingTask` - Main task record with state tracking
@@ -44,7 +44,7 @@ The Fundus Image Manager implements a sophisticated three-tier dual grading syst
 - Role requirement: `resident` or equivalent
 - Disease and lab unit permissions
 - Task state: `pending`
-- No previous grading in last 2 weeks
+- No previous grading in last 4 weeks
 
 **Grading Interface:**
 - Image display with clinical controls

@@ -56,7 +56,7 @@ CORE_AREAS = [
 CORE_DISEASES = {
     1: "Glaucoma",
     2: "DR",  # Diabetic Retinopathy
-    3: "AMD",  # Age-related Macular Degeneration
+    3: "Dry AMD",  # Dry Age-related Macular Degeneration
     4: "DME"  # Diabetic Macular Edema
 }
 
@@ -82,12 +82,12 @@ STANDARD_GRADINGS = {
         {"impression": "Not Gradable", "display_order": 7, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
     ],
     
-    # Age-related Macular Degeneration (AMD) gradings
-    "AMD": [
+    # Dry Age-related Macular Degeneration gradings
+    "Dry AMD": [
         {"impression": "No AMD", "display_order": 1, "is_active": True, "guidelines": "No signs of age-related macular degeneration."},
-        {"impression": "Early AMD", "display_order": 2, "is_active": True, "guidelines": "Few small drusen, pigmentary changes in the macula."},
-        {"impression": "Intermediate AMD", "display_order": 3, "is_active": True, "guidelines": "Many medium-sized drusen, one or more large drusen, pigmentary changes."},
-        {"impression": "Late AMD", "display_order": 4, "is_active": True, "guidelines": "Geographic atrophy (dry) or neovascular AMD (wet)."},
+        {"impression": "Early AMD", "display_order": 2, "is_active": True, "guidelines": "<p>Medium drusen &gt;63 μm and ≤125 μm and No AMD pigmentary abnormalities within 2 disc diameters of fovea</p>"},
+        {"impression": "Intermediate AMD", "display_order": 3, "is_active": True, "guidelines": "<p>Large drusen &gt; 125 μm and/or Any AMD pigmentary abnormalities within 2 disc diameters of fovea</p>"},
+        {"impression": "Late AMD", "display_order": 4, "is_active": True, "guidelines": "<p>Any geographic atrophy</p>"},
         {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No AMD , <strong>BUT Any other retinal or disc pathology.</strong> Note disease in remarks.</p>"},
         {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable. Note reasons in remarks.</p>"}
     ],
@@ -205,31 +205,24 @@ SAMPLE_FEATURES = {
             "remarks": "Cannot grade due to poor image quality or other factors"
         }
     },
-    "AMD": {
+    "Dry AMD": {
         "No AMD": {
             "features": [],
             "remarks": "No signs of age-related macular degeneration"
         },
         "Early AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Few small drusen"},
-                {"sr_no": 2, "label": "Pigmentary changes"}
-            ],
+            "features": [],
             "remarks": "Early age-related macular degeneration"
         },
         "Intermediate AMD": {
             "features": [
-                {"sr_no": 1, "label": "Many medium-sized drusen"},
-                {"sr_no": 2, "label": "One or more large drusen"},
-                {"sr_no": 3, "label": "Pigmentary changes"}
+                {"sr_no": 1, "label": "Large drusen > 125 μm"},
+                {"sr_no": 2, "label": "Any AMD pigmentary abnormalities"}
             ],
             "remarks": "Intermediate age-related macular degeneration"
         },
         "Late AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Geographic atrophy"},
-                {"sr_no": 2, "label": "Neovascular AMD"}
-            ],
+            "features": [],
             "remarks": "Late age-related macular degeneration"
         },
         "Other Retinal": {
@@ -237,7 +230,13 @@ SAMPLE_FEATURES = {
             "remarks": "No AMD BUT Any other retinal or disc pathology. Note disease in remarks"
         },
         "Not Gradable": {
-            "features": [],
+            "features": [
+                {"sr_no": 1, "label": "Media opacity (cataract/hemorrhage)"},
+                {"sr_no": 2, "label": "Poor focus or motion blur"},
+                {"sr_no": 3, "label": "Small pupil / inadequate dilation"},
+                {"sr_no": 4, "label": "Glare or reflection artifact"},
+                {"sr_no": 5, "label": "Inadequate field of view"}
+            ],
             "remarks": "Cannot grade due to poor image quality or other factors"
         }
     }
@@ -317,7 +316,7 @@ def setup_core_areas(db):
             print(f"  Created area ID {area_data['id']}: '{area_data['name']}'")
 
 def setup_core_diseases(db):
-    """Setup core diseases (Glaucoma, DR, AMD)."""
+    """Setup core diseases (Glaucoma, DR, Dry AMD)."""
     print("Setting up core diseases...")
     
     for disease_id, disease_name in CORE_DISEASES.items():

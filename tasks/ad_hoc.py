@@ -256,6 +256,16 @@ def search():
         disease_ids = [disease_id] if disease_id else None
         area_ids = [area_id] if area_id else None
         image_type = None if source == 'all' else source
+        if image_type == 'zip':
+            camera_ids = None
+            disease_ids = None
+            area_ids = None
+            is_mydriatic = None
+        elif image_type == 'direct':
+            has_dr_report = None
+            has_glaucoma_report = None
+            capture_start = None
+            capture_end = None
 
         from utils.search_params import parse_bool_param, parse_search_date
         try:
@@ -340,6 +350,17 @@ def preview():
 
         try:
             from utils.search_params import parse_bool_param, parse_search_date
+            image_type = None if source == 'all' else source
+            if image_type == 'zip':
+                camera_id = None
+                disease_id = None
+                area_id = None
+                is_mydriatic = None
+            elif image_type == 'direct':
+                has_dr_report = None
+                has_glaucoma_report = None
+                capture_start = None
+                capture_end = None
             images, total = search_images_strict(
                 db_session=db,
                 page=page,
@@ -356,7 +377,7 @@ def preview():
                 has_glaucoma_report=parse_bool_param(has_glaucoma_report),
                 capture_start=parse_search_date(capture_start),
                 capture_end=parse_search_date(capture_end),
-                image_type=None if source == 'all' else source,
+                image_type=image_type,
             )
         except ImageSearchError as e:
             current_app.logger.warning("Preview search failed: %s", sanitize_log_value(e))
@@ -492,6 +513,16 @@ def create():
         'image_type': (None if source == 'all' else source),
         'source': source,
     }
+    if filters_norm.get('image_type') == 'zip':
+        filters_norm['camera_id'] = None
+        filters_norm['disease_id'] = None
+        filters_norm['area_id'] = None
+        filters_norm['is_mydriatic'] = None
+    elif filters_norm.get('image_type') == 'direct':
+        filters_norm['has_dr_report'] = None
+        filters_norm['has_glaucoma_report'] = None
+        filters_norm['capture_start'] = None
+        filters_norm['capture_end'] = None
 
     with Session() as session:
         expanded_diseases: list[int] = []

@@ -106,6 +106,10 @@ def _configure_base_settings(app: Flask) -> None:
         "THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES",
         "00:00,08:00,16:00",
     ).split(",")
+    app.config["THUMBNAIL_MAINTENANCE_USE_DB_SCHEDULES"] = _env_bool(
+        "THUMBNAIL_MAINTENANCE_USE_DB_SCHEDULES",
+        "true",
+    )
     app.config["THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT"] = int(
         os.getenv("THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT", "1000")
     )
@@ -863,19 +867,24 @@ def _initialize_schedulers(
         materialized_view_logger.info("Materialized view scheduler disabled by configuration")
 
     if app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False):
-        try:
-            from utils.thumbnail_maintenance_scheduler import initialize_scheduler
-            maintenance_scheduler_thread = initialize_scheduler(app)
-            if maintenance_scheduler_thread:
-                maintenance_scheduler_thread.start()
-                thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler started successfully")
-            else:
-                thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled")
-        except Exception as e:
-            thumbnail_maintenance_logger.error(
-                "Failed to start thumbnail maintenance scheduler: %s",
-                sanitize_log_value(e),
+        if app.config.get("THUMBNAIL_MAINTENANCE_USE_DB_SCHEDULES", False):
+            thumbnail_maintenance_logger.info(
+                "Thumbnail maintenance scheduler disabled (using Celery Beat DB schedules)"
             )
+        else:
+            try:
+                from utils.thumbnail_maintenance_scheduler import initialize_scheduler
+                maintenance_scheduler_thread = initialize_scheduler(app)
+                if maintenance_scheduler_thread:
+                    maintenance_scheduler_thread.start()
+                    thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler started successfully")
+                else:
+                    thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled")
+            except Exception as e:
+                thumbnail_maintenance_logger.error(
+                    "Failed to start thumbnail maintenance scheduler: %s",
+                    sanitize_log_value(e),
+                )
     else:
         thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled by configuration")
 

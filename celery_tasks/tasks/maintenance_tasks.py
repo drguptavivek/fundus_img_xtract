@@ -52,6 +52,20 @@ def regenerate_missing_thumbnails_task(
     return regenerate_missing_thumbnails(app, schedule_time="celery_beat", limit=limit)
 
 
+@celery_app.task(
+    name="celery_tasks.tasks.maintenance_tasks.regenerate_missing_thumbnails_fast_task",
+    bind=True,
+    acks_late=True,
+)
+def regenerate_missing_thumbnails_fast_task(
+    self,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> dict:
+    app = build_task_app()
+    return regenerate_missing_thumbnails(app, schedule_time="celery_beat_fast", limit=200)
+
+
 @celery_app.task(name="celery_tasks.tasks.maintenance_tasks.validate_thumbnail_integrity_task", bind=True, acks_late=True)
 def validate_thumbnail_integrity_task(
     self,

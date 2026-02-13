@@ -77,19 +77,20 @@ def make_celery_beat_app() -> Celery:
             },
         }
 
-        mv_times = _parse_times(os.getenv("MATERIALIZED_VIEW_SCHEDULE_TIMES", ""))
-        for idx, schedule in enumerate(_times_to_crontab(mv_times)):
-            beat_schedule[f"materialized-view-refresh-{idx}"] = {
-                "task": "celery_tasks.tasks.maintenance_tasks.refresh_materialized_views_task",
-                "schedule": schedule,
-            }
+        if not _env_bool("CELERY_BEAT_USE_DB_SCHEDULES", "true"):
+            mv_times = _parse_times(os.getenv("MATERIALIZED_VIEW_SCHEDULE_TIMES", ""))
+            for idx, schedule in enumerate(_times_to_crontab(mv_times)):
+                beat_schedule[f"materialized-view-refresh-{idx}"] = {
+                    "task": "celery_tasks.tasks.maintenance_tasks.refresh_materialized_views_task",
+                    "schedule": schedule,
+                }
 
-        thumb_times = _parse_times(os.getenv("THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES", ""))
-        for idx, schedule in enumerate(_times_to_crontab(thumb_times)):
-            beat_schedule[f"thumbnail-maintenance-{idx}"] = {
-                "task": "celery_tasks.tasks.maintenance_tasks.run_thumbnail_maintenance_task",
-                "schedule": schedule,
-            }
+            thumb_times = _parse_times(os.getenv("THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES", ""))
+            for idx, schedule in enumerate(_times_to_crontab(thumb_times)):
+                beat_schedule[f"thumbnail-maintenance-{idx}"] = {
+                    "task": "celery_tasks.tasks.maintenance_tasks.run_thumbnail_maintenance_task",
+                    "schedule": schedule,
+                }
 
         app.conf.beat_schedule = beat_schedule
 

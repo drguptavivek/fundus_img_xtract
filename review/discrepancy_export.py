@@ -18,6 +18,7 @@ from models import (
     BASE_DIR,
     IMAGE_DIR,
     Disease,
+    DiseaseGrading,
     Grade,
     GradingTask,
     EncounterFile,
@@ -546,6 +547,11 @@ def _build_task_payload(
                 "review_comment": grades.get("review", {}).get("comment"),
                 "review_features_json": _serialize_features_json(
                     grades.get("review", {}).get("selected_features")
+                ),
+                "regrade_adj_grade": grades.get("regrade_adj", {}).get("impression"),
+                "regrade_adj_comment": grades.get("regrade_adj", {}).get("comment"),
+                "regrade_adj_features_json": _serialize_features_json(
+                    grades.get("regrade_adj", {}).get("selected_features")
                 ),
                 "ai_grade": ai_grade.get("impression"),
                 "ai_model_name": ai_grade.get("ai_model_name"),

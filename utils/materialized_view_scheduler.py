@@ -93,7 +93,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
                     ("mvw_glaucoma_grading_pivot", "Glaucoma Pivot"),
                     ("mvw_amd_grading_pivot", "AMD Pivot"),
                     ("mvw_encounter_pivot", "Encounter Pivot"),
-                    ("mvw_image_listing_all", "Image Listing All")
+                    ("mvw_image_listing_all", "Image Listing All"),
                 ]
 
                 total_duration = 0
@@ -124,10 +124,45 @@ def refresh_materialized_view(app, schedule_time="manual"):
                         logger.exception("Failed to refresh %s (%s)", view_description, view_name)
                         # Continue with other views even if one fails
 
+                # Refresh per-disease image listing v2 MVs
+                per_disease_views = db.execute(
+                    text(
+                        """
+                        SELECT matviewname
+                        FROM pg_matviews
+                        WHERE schemaname = 'public'
+                          AND matviewname LIKE 'mvw_image_listing_%_v2'
+                        ORDER BY matviewname
+                        """
+                    )
+                ).scalars().all()
+
+                for view_name in per_disease_views:
+                    view_start_time = datetime.now(pytz.UTC)
+                    try:
+                        logger.info(
+                            "Refreshing Per-Disease Image Listing (%s)",
+                            sanitize_log_value(view_name),
+                        )
+                        db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
+
+                        view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
+                        total_duration += view_duration
+                        successful_refreshes += 1
+
+                        logger.info(
+                            "Successfully refreshed %s in %s seconds",
+                            sanitize_log_value(view_name),
+                            sanitize_log_value(f"{view_duration:.2f}"),
+                        )
+                    except Exception:
+                        logger.exception("Failed to refresh per-disease MV %s", sanitize_log_value(view_name))
+                        # Continue with other views even if one fails
+
                 overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
 
                 # Update log entry with overall success
-                success = successful_refreshes == len(views_to_refresh)
+                success = successful_refreshes == (len(views_to_refresh) + len(per_disease_views))
                 db.execute(
                     text("""
                         UPDATE materialized_view_refresh_log

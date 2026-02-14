@@ -47,7 +47,7 @@ There is no standalone save API. Geometry is submitted with grade forms:
 - Geometry must match selected features and stay within ROI bounds.
 - Submit accepts strict v1 payload shape only:
   - `version=1`
-  - `grid.rows=32`, `grid.cols=32`
+  - `grid.rows/grid.cols` in `3..32`
   - `items[].{feature_id, roi, polygon, mask}`
 - Legacy `geom` payload shape is rejected.
 - Malformed JSON is rejected (not silently dropped).

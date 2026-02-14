@@ -7,7 +7,9 @@ from models import ImageMetadata
 logger = logging.getLogger("feature_geometry")
 
 EXPECTED_VERSION = 1
-GRID_SIZE = 32
+MIN_GRID_SIZE = 3
+MAX_GRID_SIZE = 32
+DEFAULT_GRID_SIZE = 8
 
 
 def parse_feature_geometry_payload(raw: str | None) -> dict | None:
@@ -41,7 +43,9 @@ def validate_feature_geometry_payload(
     grid = payload.get("grid")
     if not isinstance(grid, dict):
         return False, "Invalid feature geometry payload."
-    if grid.get("rows") != GRID_SIZE or grid.get("cols") != GRID_SIZE:
+    grid_rows = grid.get("rows")
+    grid_cols = grid.get("cols")
+    if not _is_valid_grid_size(grid_rows) or not _is_valid_grid_size(grid_cols):
         return False, "Invalid feature geometry grid."
 
     items = payload.get("items")
@@ -120,6 +124,13 @@ def prepare_feature_geometry_for_storage(
     feature_metadata_by_id = feature_metadata_by_id or {}
     width = image_metadata.width if image_metadata else None
     height = image_metadata.height if image_metadata else None
+    payload_grid = payload.get("grid") if isinstance(payload.get("grid"), dict) else {}
+    normalized_grid_rows = payload_grid.get("rows", DEFAULT_GRID_SIZE)
+    normalized_grid_cols = payload_grid.get("cols", DEFAULT_GRID_SIZE)
+    if not _is_valid_grid_size(normalized_grid_rows):
+        normalized_grid_rows = DEFAULT_GRID_SIZE
+    if not _is_valid_grid_size(normalized_grid_cols):
+        normalized_grid_cols = DEFAULT_GRID_SIZE
 
     for item in payload.get("items", []):
         feature_id = int(item["feature_id"])
@@ -131,6 +142,12 @@ def prepare_feature_geometry_for_storage(
         roi_norm = _normalize_points(roi["norm"])
         polygon_pixel = _normalize_points(polygon["pixel"])
         polygon_norm = _normalize_points(polygon["norm"])
+        mask_rows = mask.get("rows")
+        mask_cols = mask.get("cols")
+        if not _is_valid_grid_size(mask_rows):
+            mask_rows = normalized_grid_rows
+        if not _is_valid_grid_size(mask_cols):
+            mask_cols = normalized_grid_cols
         mask_cells = _normalize_cells(mask.get("cells", []))
 
         roi_bbox_pixel = _bbox_from_points(roi_pixel)
@@ -154,8 +171,8 @@ def prepare_feature_geometry_for_storage(
                 "norm": polygon_norm,
             },
             "mask": {
-                "rows": GRID_SIZE,
-                "cols": GRID_SIZE,
+                "rows": int(mask_rows),
+                "cols": int(mask_cols),
                 "cells": mask_cells,
             },
             "export": {
@@ -177,7 +194,7 @@ def prepare_feature_geometry_for_storage(
 
     normalized_payload: dict[str, Any] = {
         "version": EXPECTED_VERSION,
-        "grid": {"rows": GRID_SIZE, "cols": GRID_SIZE},
+        "grid": {"rows": int(normalized_grid_rows), "cols": int(normalized_grid_cols)},
         "items": normalized_items,
         "export_meta": {
             "dicom_ready": True,
@@ -250,11 +267,13 @@ def _validate_mask(mask: dict) -> bool:
     rows = mask.get("rows")
     cols = mask.get("cols")
     cells = mask.get("cells")
-    if rows != GRID_SIZE or cols != GRID_SIZE:
+    if not _is_valid_grid_size(rows) or not _is_valid_grid_size(cols):
         return False
     if not isinstance(cells, list):
         return False
 
+    rows_int = int(rows)
+    cols_int = int(cols)
     seen: set[tuple[int, int]] = set()
     for cell in cells:
         if not isinstance(cell, (list, tuple)) or len(cell) != 2:
@@ -262,13 +281,17 @@ def _validate_mask(mask: dict) -> bool:
         row, col = cell
         if not isinstance(row, int) or not isinstance(col, int):
             return False
-        if row < 0 or col < 0 or row >= rows or col >= cols:
+        if row < 0 or col < 0 or row >= rows_int or col >= cols_int:
             return False
         key = (row, col)
         if key in seen:
             return False
         seen.add(key)
     return True
+
+
+def _is_valid_grid_size(value: Any) -> bool:
+    return isinstance(value, int) and MIN_GRID_SIZE <= value <= MAX_GRID_SIZE
 
 
 def _normalize_points(points: list) -> list[list[float]]:

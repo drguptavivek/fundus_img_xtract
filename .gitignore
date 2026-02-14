@@ -118,3 +118,5 @@ security-audit/reports/
 daemon-2026*.*
 bd.sock.*
 
+.beads/bead_issue_mapping.txt
+.beads/open_issues_cache.txt

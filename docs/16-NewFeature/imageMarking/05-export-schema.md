@@ -78,7 +78,7 @@ Required per item:
 
 ## Validation Checklist
 - [ ] All polygon points inside ROI bounds
-- [ ] Mask cells valid and unique within `32x32`
+- [ ] Mask cells valid and unique within configured grid (`3..32` per side)
 - [ ] Normalized coords in `[0,1]`
 - [ ] `feature_id` belongs to selected features
 - [ ] Export fields present for each item

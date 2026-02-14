@@ -10,7 +10,7 @@ High-level schema stored in JSONB:
 ```json
 {
   "version": 1,
-  "grid": {"rows": 32, "cols": 32},
+  "grid": {"rows": 8, "cols": 8},
   "items": [
     {
       "feature_id": 123,
@@ -24,8 +24,8 @@ High-level schema stored in JSONB:
         "norm": [[xn,yn],...]
       },
       "mask": {
-        "rows": 32,
-        "cols": 32,
+        "rows": 8,
+        "cols": 8,
         "cells": [[r,c], [r,c], ...]
       },
       "export": {
@@ -50,6 +50,7 @@ High-level schema stored in JSONB:
 - Saved only on grade submit.
 - Preserves history via grade records (no separate audit table required).
 - Supports multiple geometries per feature by using multiple `items` with the same `feature_id`.
+- Grid precision is configurable (`3..32`) and persisted per item (`mask.rows`, `mask.cols`).
 
 ## Migration
 Migration already applied:

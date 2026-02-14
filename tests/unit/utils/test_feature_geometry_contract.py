@@ -12,7 +12,7 @@ from utils.feature_geometry import (
 def _valid_payload() -> dict:
     return {
         "version": 1,
-        "grid": {"rows": 32, "cols": 32},
+        "grid": {"rows": 8, "cols": 8},
         "items": [
             {
                 "feature_id": 101,
@@ -26,8 +26,8 @@ def _valid_payload() -> dict:
                     "norm": [[0.12, 0.12], [0.4, 0.13], [0.32, 0.3]],
                 },
                 "mask": {
-                    "rows": 32,
-                    "cols": 32,
+                    "rows": 8,
+                    "cols": 8,
                     "cells": [[1, 1], [1, 2], [2, 2]],
                 },
             }
@@ -53,6 +53,14 @@ def test_validate_rejects_wrong_version() -> None:
     is_valid, error = validate_feature_geometry_payload(payload, [101], None)
     assert is_valid is False
     assert "version" in error.lower()
+
+
+def test_validate_rejects_grid_below_minimum() -> None:
+    payload = _valid_payload()
+    payload["grid"] = {"rows": 2, "cols": 2}
+    is_valid, error = validate_feature_geometry_payload(payload, [101], None)
+    assert is_valid is False
+    assert "grid" in error.lower()
 
 
 def test_validate_rejects_polygon_outside_roi() -> None:
@@ -81,7 +89,7 @@ def test_validate_rejects_invalid_mask_cells() -> None:
 def test_validate_rejects_legacy_geom_payload() -> None:
     payload = {
         "version": 1,
-        "grid": {"rows": 32, "cols": 32},
+        "grid": {"rows": 8, "cols": 8},
         "items": [
             {
                 "feature_id": 101,
@@ -108,7 +116,7 @@ def test_prepare_payload_includes_export_and_dicom_blocks() -> None:
     prepared = prepare_feature_geometry_for_storage(payload, SimpleNamespace(width=1000, height=1000))
     assert prepared is not None
     assert prepared["version"] == 1
-    assert prepared["grid"] == {"rows": 32, "cols": 32}
+    assert prepared["grid"] == {"rows": 8, "cols": 8}
     assert prepared["image"] == {"width": 1000, "height": 1000}
     assert prepared["export_meta"] == {"dicom_ready": True, "ai_ready": True}
 
@@ -133,3 +141,14 @@ def test_prepare_payload_embeds_feature_label_metadata() -> None:
     assert item["feature_id"] == 101
     assert item["feature_label"] == "Hard Exudates"
     assert item["feature_sr_no"] == 7
+
+
+def test_prepare_payload_preserves_mask_precision() -> None:
+    payload = _valid_payload()
+    payload["grid"] = {"rows": 16, "cols": 16}
+    payload["items"][0]["mask"]["rows"] = 16
+    payload["items"][0]["mask"]["cols"] = 16
+    prepared = prepare_feature_geometry_for_storage(payload, SimpleNamespace(width=1000, height=1000))
+    assert prepared["grid"] == {"rows": 16, "cols": 16}
+    assert prepared["items"][0]["mask"]["rows"] == 16
+    assert prepared["items"][0]["mask"]["cols"] == 16

@@ -15,8 +15,9 @@
   - `Esc` = Cancel current draw
 
 ## Grid
-- Fixed 32x32 grid **within ROI**.
-- Cell size depends on ROI size (fine for small lesions).
+- Configurable grid **within ROI** with slider range `3x3` to `32x32`.
+- Default grid precision: `8x8` (faster marking).
+- Cell size depends on ROI size.
 
 ## Overlay
 - Toggle overlay visibility on/off.
@@ -30,7 +31,7 @@ Per feature:
   "feature_id": 123,
   "roi": {"type":"box","pixel":[[x1,y1],[x2,y2]],"norm":[[x1n,y1n],[x2n,y2n]]},
   "polygon": {"pixel":[[x,y],...],"norm":[[xn,yn],...]},
-  "mask": {"rows":32,"cols":32,"cells":[[r,c],...]},
+  "mask": {"rows":8,"cols":8,"cells":[[r,c],...]},
   "dicom": {
     "tracking_uid": "2.25....",
     "tracking_id": "feature-123",
@@ -47,9 +48,8 @@ Per feature:
 ## Implementation Reality Check (from 02 API verification)
 - GET endpoints and submit wiring exist for dual/intra/regrade.
 - Hidden fields for geometry are already present in grading templates.
-- Current backend validation still expects `items[].geom.{type,pixel,norm}` shape.
-- Planned `roi/polygon/mask` v1 payload is not yet validated server-side.
-- Invalid JSON currently degrades to `None` and may be treated as empty geometry.
+- Backend validation now enforces strict v1 payload and rejects legacy `geom`.
+- Malformed JSON is rejected (not silently dropped).
 
 ## Detailed Plan (03)
 
@@ -59,7 +59,7 @@ Per feature:
   - `roi` (`pixel`, `norm`)
   - `polygon` (`pixel`, `norm`)
   - `mask` (`rows`, `cols`, `cells`)
-- Keep `grid.rows=32`, `grid.cols=32` fixed.
+- Grid precision is configurable with allowed range `3..32`.
 - Decide migration strategy for old `geom` payloads:
   - temporary compatibility read support, or
   - hard switch with rejection.
@@ -67,7 +67,7 @@ Per feature:
   so export is deterministic and standards-aligned.
 
 ### 1.1) DICOM Export Target (mandatory)
-- Primary export format: **DICOM SEG** (binary mask from ROI-local 32x32 cells projected to image space).
+- Primary export format: **DICOM SEG** (binary mask projected from ROI-local `NxN` cells, `N in 3..32`).
 - Secondary/companion export: **DICOM SR TID 1500** with:
   - coded findings
   - tracking UID/ID
@@ -91,7 +91,7 @@ Per feature:
   - required keys and types
   - ROI bounds inside image
   - polygon points inside ROI and image bounds
-  - mask cell integrity (`0..31`, unique pairs)
+  - mask cell integrity (index bounds based on selected grid precision, unique pairs)
   - `feature_id` must be in selected features
 - Treat malformed JSON as a submit error, not silent drop.
 - Keep submit-only persistence behavior.
@@ -110,7 +110,7 @@ Per feature:
   - mode state machine: ROI / Polygon / Add / Subtract / Pan
   - ROI box draw/adjust
   - polygon draw/edit
-  - ROI-local 32x32 grid and paint interactions
+  - ROI-local `3..32` grid and paint interactions with precision slider
   - serialization/deserialization helpers
 - Scope geometry by selected feature (`feature_id`).
 

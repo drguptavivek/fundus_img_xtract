@@ -85,6 +85,7 @@
       .fgx-box-actions .btn { background: #f3f4f6; }
       [data-bs-theme="dark"] .fgx-box-actions .btn { background: rgba(148, 163, 184, 0.2); }
       .imggr-viewer-root.fgx-geometry-active .imggr-main-img { transition: none !important; }
+      .imggr-loupe .fgx-loupe-overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; border-radius:inherit; }
     `;
     document.head.appendChild(style);
   }
@@ -454,6 +455,13 @@
     return state.selectedBoxRef.ctxKey === ctx.key && state.selectedBoxRef.annId === item._annId;
   }
 
+  function getSelectedBoxItem(ctx) {
+    if (!ctx || !state.selectedBoxRef) return null;
+    if (state.selectedBoxRef.ctxKey !== ctx.key) return null;
+    const annId = state.selectedBoxRef.annId;
+    return (ctx.payload.items || []).find((it) => it && it._annId === annId) || null;
+  }
+
   function activeContext() {
     if (!state.activeContextKey) return null;
     return state.contexts.get(state.activeContextKey) || null;
@@ -495,11 +503,18 @@
 
     wrap.querySelector("[data-fgx-box-lock]")?.addEventListener("click", () => {
       const ctx = activeContext();
-      const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi) return;
+      ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
+      setSelectedBox(ctx, item);
       item._locked = !item._locked;
       if (item._locked && state.drawing && state.drawing.itemAnnId === item._annId) {
         state.drawing = null;
+      } else if (!item._locked) {
+        // Unlock implies editable: switch to move mode for immediate resize/move.
+        state.mode = MODES.MOVE;
+        setCanvasPointerMode();
+        refreshToolbarStates();
       }
       syncField(ctx);
       redraw();
@@ -507,8 +522,9 @@
 
     wrap.querySelector("[data-fgx-box-done]")?.addEventListener("click", () => {
       const ctx = activeContext();
-      const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi) return;
+      ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
       setSelectedBox(ctx, item);
       item._locked = true;
       syncField(ctx);
@@ -520,7 +536,7 @@
 
     wrap.querySelector("[data-fgx-box-dup]")?.addEventListener("click", () => {
       const ctx = activeContext();
-      const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi || state.activeFeatureId == null) return;
       const src = reorderRoi(item.roi);
       const dx = Math.max(10, (src[1][0] - src[0][0]) * 0.08);
@@ -541,7 +557,7 @@
 
     wrap.querySelector("[data-fgx-box-del]")?.addEventListener("click", () => {
       const ctx = activeContext();
-      const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item) return;
       if (!window.confirm("Delete selected box?")) return;
       removeAnnotationItem(ctx, item);
@@ -1054,14 +1070,23 @@
     return reorderRoi([[px, py], anchor]);
   }
 
-  function findBoxHit(ctx, point) {
+  function findBoxHit(ctx, point, preferredAnnId = null) {
     if (!ctx || !point) return null;
     const selectedIds = new Set(getSelectedFeatureIds(ctx));
     const items = (ctx.payload.items || []).filter((it) => (
       it && it.roi && !it._hidden && selectedIds.has(it.feature_id)
     ));
+    if (preferredAnnId != null) {
+      const preferred = items.find((it) => it._annId === preferredAnnId);
+      if (preferred) {
+        const handle = getRoiResizeHandle(point, preferred.roi);
+        if (handle >= 0) return { item: preferred, handle };
+        if (pointInRoi(point, preferred.roi)) return { item: preferred, handle: -1 };
+      }
+    }
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
+      if (preferredAnnId != null && item._annId === preferredAnnId) continue;
       const handle = getRoiResizeHandle(point, item.roi);
       if (handle >= 0) return { item, handle };
       if (pointInRoi(point, item.roi)) return { item, handle: -1 };
@@ -1088,7 +1113,8 @@
       clearHoverInfo();
       return;
     }
-    const hit = findBoxHit(ctx, point);
+    const preferredAnnId = getSelectedBoxItem(ctx)?._annId ?? null;
+    const hit = findBoxHit(ctx, point, preferredAnnId);
     if (!hit) {
       clearHoverInfo();
       return;
@@ -1718,6 +1744,7 @@
     const rect = state.main.getBoundingClientRect();
     state.ctx.clearRect(0, 0, rect.width, rect.height);
     hideBoxActions();
+    clearLoupeOverlay();
 
     if (!state.overlayVisible) return;
 
@@ -1744,7 +1771,154 @@
       drawRoiOutline(roi, "#ffffff", true);
     }
     drawHoverInfo(activeCtx);
+    drawLoupeOverlay(activeCtx);
     positionBoxActions();
+  }
+
+  function getLoupeOverlayCanvas() {
+    const loupe = state.viewerRoot?.querySelector(".imggr-loupe");
+    if (!loupe) return null;
+    let canvas = loupe.querySelector("canvas.fgx-loupe-overlay");
+    if (!canvas) {
+      canvas = document.createElement("canvas");
+      canvas.className = "fgx-loupe-overlay";
+      loupe.appendChild(canvas);
+    }
+    return canvas;
+  }
+
+  function clearLoupeOverlay() {
+    const canvas = getLoupeOverlayCanvas();
+    if (!canvas) return;
+    const ctx2 = canvas.getContext("2d");
+    if (!ctx2) return;
+    ctx2.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+  }
+
+  function parsePxPair(raw) {
+    if (!raw || typeof raw !== "string") return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const x = Number.parseFloat(parts[0]);
+    const y = Number.parseFloat(parts[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [x, y];
+  }
+
+  function parsePercentPair(raw) {
+    if (!raw || typeof raw !== "string") return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const x = Number.parseFloat(parts[0].replace("%", ""));
+    const y = Number.parseFloat(parts[1].replace("%", ""));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [x, y];
+  }
+
+  function parseNumericPair(raw) {
+    if (!raw || typeof raw !== "string") return null;
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    const x = Number.parseFloat(parts[0]);
+    const y = Number.parseFloat(parts[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [x, y];
+  }
+
+  function drawLoupeOverlay(activeCtx) {
+    const loupe = state.viewerRoot?.querySelector(".imggr-loupe");
+    if (!loupe) return;
+    const canvas = getLoupeOverlayCanvas();
+    if (!canvas) return;
+    const ctx2 = canvas.getContext("2d");
+    if (!ctx2) return;
+
+    const lw = Math.max(1, loupe.clientWidth);
+    const lh = Math.max(1, loupe.clientHeight);
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.max(1, Math.round(lw * dpr));
+    const ch = Math.max(1, Math.round(lh * dpr));
+    if (canvas.width !== cw || canvas.height !== ch) {
+      canvas.width = cw;
+      canvas.height = ch;
+    }
+    ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx2.clearRect(0, 0, lw, lh);
+
+    if (!loupe.classList.contains("is-active")) return;
+    if (!activeCtx) return;
+
+    const m = getImageMetrics();
+    if (!m || !m.imgRect.width || !m.imgRect.height) return;
+
+    const selectedIds = new Set(getSelectedFeatureIds(activeCtx));
+    if (!selectedIds.size) return;
+    const activeItem = getActiveAnnotationItem(activeCtx, false);
+    const activeAnnId = activeItem ? activeItem._annId : null;
+
+    const dsZoom = Number.parseFloat(loupe.dataset.imgZoom || "");
+    const dsX = Number.parseFloat(loupe.dataset.imgX || "");
+    const dsY = Number.parseFloat(loupe.dataset.imgY || "");
+    const dsW = Number.parseFloat(loupe.dataset.imgW || "");
+    const dsH = Number.parseFloat(loupe.dataset.imgH || "");
+
+    let zoom = Number.isFinite(dsZoom) ? dsZoom : 1;
+    let centerX = Number.isFinite(dsX) ? dsX : (m.imgRect.width / 2);
+    let centerY = Number.isFinite(dsY) ? dsY : (m.imgRect.height / 2);
+
+    // Fallback when loupe mapping dataset is not available yet.
+    if (!Number.isFinite(dsZoom) || !Number.isFinite(dsX) || !Number.isFinite(dsY)) {
+      const bgSizeRaw = loupe.style.backgroundSize || window.getComputedStyle(loupe).backgroundSize;
+      const bgPosRaw = loupe.style.backgroundPosition || window.getComputedStyle(loupe).backgroundPosition;
+      const bgSize = parsePxPair(bgSizeRaw);
+      const bgPosPct = parsePercentPair(bgPosRaw);
+      const bgPosPx = parseNumericPair(bgPosRaw);
+      if (bgSize && bgSize[0] > 0) zoom = bgSize[0] / m.imgRect.width;
+      if (bgPosPct) {
+        centerX = (bgPosPct[0] / 100) * (Number.isFinite(dsW) ? dsW : m.imgRect.width);
+        centerY = (bgPosPct[1] / 100) * (Number.isFinite(dsH) ? dsH : m.imgRect.height);
+      } else if (bgPosPx) {
+        centerX = ((lw / 2) - bgPosPx[0]) / Math.max(zoom, 1e-6);
+        centerY = ((lh / 2) - bgPosPx[1]) / Math.max(zoom, 1e-6);
+      }
+    }
+    const imgOffsetX = m.imgRect.left - m.mainRect.left;
+    const imgOffsetY = m.imgRect.top - m.mainRect.top;
+
+    function project(point) {
+      const c = pixelToCanvas(point);
+      if (!c) return null;
+      const ix = c[0] - imgOffsetX;
+      const iy = c[1] - imgOffsetY;
+      return [
+        (lw / 2) + ((ix - centerX) * zoom),
+        (lh / 2) + ((iy - centerY) * zoom),
+      ];
+    }
+
+    (activeCtx.payload.items || []).forEach((item) => {
+      if (!item || !item.roi || item._hidden) return;
+      if (!selectedIds.has(item.feature_id)) return;
+      const roi = clampRoiToImage(item.roi);
+      const p1 = project(roi[0]);
+      const p2 = project(roi[1]);
+      if (!p1 || !p2) return;
+      const x = Math.min(p1[0], p2[0]);
+      const y = Math.min(p1[1], p2[1]);
+      const w = Math.abs(p2[0] - p1[0]);
+      const h = Math.abs(p2[1] - p1[1]);
+      if (w < 1 || h < 1) return;
+      const color = (window.FeatureGeometryColors && window.FeatureGeometryColors.colorForFeature)
+        ? window.FeatureGeometryColors.colorForFeature(item.feature_id)
+        : "#ff6b6b";
+      const active = activeAnnId != null && activeAnnId === item._annId;
+      ctx2.save();
+      ctx2.strokeStyle = color;
+      ctx2.lineWidth = active ? 2 : 1.5;
+      ctx2.setLineDash(active ? [] : [4, 3]);
+      ctx2.strokeRect(x, y, w, h);
+      ctx2.restore();
+    });
   }
 
   function drawHoverInfo(ctx) {

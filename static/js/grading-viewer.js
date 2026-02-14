@@ -201,6 +201,19 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  function hardResetAllLoupes() {
+    viewerStates.forEach((st) => {
+      st?.resetLoupe?.();
+      st?.setLoupeEnabled?.(false);
+    });
+    // Defensive DOM cleanup in case a viewer state is stale/missing.
+    document.querySelectorAll('.imggr-loupe').forEach((el) => el.classList.remove('is-active'));
+    document.querySelectorAll('.imggr-loupe-toggle').forEach((btn) => {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
+    });
+  }
+
   // Bind once: global keyboard shortcuts routed to the active viewer
   if (!window.__imggrKeysBound) {
     window.__imggrKeysBound = true;
@@ -231,15 +244,26 @@
       const contr = card ? card.querySelector('.imggr-contrast') : null;
       const resetBtn = card ? card.querySelector('.imggr-reset') : null;
 
+      // Always allow global hard reset, even while typing in form fields.
+      if (rawKey === '/' || rawKey === '?') {
+        e.preventDefault();
+        resetBtn?.click();
+        hardResetAllLoupes();
+        return;
+      }
+
       if (isFormField) return;
 
       if (k === 'l') {
         e.preventDefault();
-        const next = !(state?.getCurrentLoupeEnabled?.() ?? false);
-        if (state?.setLoupeEnabled) {
-          state.setLoupeEnabled(next);
+        const loupeBtn = activeRoot?.closest('.card')?.querySelector('.imggr-loupe-toggle');
+        if (loupeBtn) {
+          loupeBtn.click();
+        } else if (state?.toggleLoupe) {
+          state.toggleLoupe();
         } else {
-          state?.toggleLoupe?.();
+          const next = !(state?.getCurrentLoupeEnabled?.() ?? false);
+          state?.setLoupeEnabled?.(next);
         }
         return;
       }
@@ -261,15 +285,6 @@
       if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
       if (rawKey === ';' || rawKey === ':') { e.preventDefault(); adjustRangeInput(contr, -1); return; }
       if (rawKey === '\'' || rawKey === '"') { e.preventDefault(); adjustRangeInput(contr, +1); return; }
-      if (rawKey === '/' || rawKey === '?') {
-        e.preventDefault();
-        resetBtn?.click();
-        // Reset loupe values and disable it
-        state?.resetLoupe?.();
-        state?.setLoupeEnabled?.(false);
-        return;
-      }
-
       if (k === 'f') { e.preventDefault(); isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); return; }
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }
       if (k === 'arrowleft') { e.preventDefault(); cycleFilter(activeRoot, -1); return; }
@@ -722,6 +737,7 @@
       }
       // Reset both zoom and pan
       resetImagePan();
+      hardResetAllLoupes();
       applyFilter();
       // Settings are saved by applyFilter()
     });
@@ -756,7 +772,7 @@
     // Apply saved filter and brightness/contrast after image is loaded
     mainImg.addEventListener('load', () => {
       applySavedSettings();
-      updateLoupeAssets();
+      if (loupeEnabled) updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
       if (cdrDiscPoints.length || cdrCupPoints.length || cdrActive) {
@@ -1373,9 +1389,8 @@
     }
 
     function updateLoupeAssets(){
-      if (!loupe || !mainImg) return;
-      const src = mainImg.currentSrc || mainImg.src;
-      if (src) loupe.style.backgroundImage = `url(${JSON.stringify(src)})`;
+      if (!loupe || !mainImg || !loupeEnabled) return;
+      loupe.style.backgroundImage = 'none';
       const metrics = getDisplayedImageMetrics();
       if (!metrics) return;
       const { displayWidth, displayHeight } = metrics;
@@ -1386,13 +1401,77 @@
       }
     }
 
+    function getLoupeBaseCanvas(){
+      if (!loupe) return null;
+      let canvas = loupe.querySelector('canvas.imggr-loupe-base');
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.className = 'imggr-loupe-base';
+        canvas.style.position = 'absolute';
+        canvas.style.inset = '0';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.borderRadius = 'inherit';
+        canvas.style.pointerEvents = 'none';
+        loupe.prepend(canvas);
+      }
+      return canvas;
+    }
+
+    function clearLoupeBase(){
+      const canvas = getLoupeBaseCanvas();
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+    }
+
+    function renderLoupeBase(imageX, imageY, displayWidth, displayHeight){
+      if (!loupe || !mainImg || !loupeEnabled) return;
+      const canvas = getLoupeBaseCanvas();
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const lw = Math.max(1, loupe.clientWidth || 1);
+      const lh = Math.max(1, loupe.clientHeight || 1);
+      const cw = Math.max(1, Math.round(lw * dpr));
+      const ch = Math.max(1, Math.round(lh * dpr));
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width = cw;
+        canvas.height = ch;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, lw, lh);
+
+      const natW = mainImg.naturalWidth || 0;
+      const natH = mainImg.naturalHeight || 0;
+      if (!natW || !natH || !displayWidth || !displayHeight) return;
+
+      const centerNatX = (imageX / displayWidth) * natW;
+      const centerNatY = (imageY / displayHeight) * natH;
+      const srcW = (lw / Math.max(loupeZoom, 1e-6)) * (natW / displayWidth);
+      const srcH = (lh / Math.max(loupeZoom, 1e-6)) * (natH / displayHeight);
+      const sx = clamp(centerNatX - (srcW / 2), 0, Math.max(0, natW - srcW));
+      const sy = clamp(centerNatY - (srcH / 2), 0, Math.max(0, natH - srcH));
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      try {
+        ctx.drawImage(mainImg, sx, sy, srcW, srcH, 0, 0, lw, lh);
+      } catch(_) {}
+    }
+
     function setLoupeEnabled(flag){
-      if (!loupe || !loupeToggle) return;
+      if (!loupe) return;
       loupeEnabled = !!flag;
-      loupeToggle.setAttribute('aria-pressed', loupeEnabled ? 'true' : 'false');
-      loupeToggle.classList.toggle('active', loupeEnabled);
+      if (loupeToggle) {
+        loupeToggle.setAttribute('aria-pressed', loupeEnabled ? 'true' : 'false');
+        loupeToggle.classList.toggle('active', loupeEnabled);
+      }
       if (!loupeEnabled) {
         loupe.classList.remove('is-active');
+        clearLoupeBase();
         return;
       }
       applyLoupeDimensions();
@@ -1419,9 +1498,18 @@
       if (imgRect.width && imgRect.height) {
         const imageX = clamp(constrainedX - offsetX, 0, displayWidth);
         const imageY = clamp(constrainedY - offsetY, 0, displayHeight);
-        const bgX = displayWidth > 0 ? (imageX / displayWidth) * 100 : 50;
-        const bgY = displayHeight > 0 ? (imageY / displayHeight) * 100 : 50;
-        loupe.style.backgroundPosition = `${bgX}% ${bgY}%`;
+        const loupeW = loupe.clientWidth || 0;
+        const loupeH = loupe.clientHeight || 0;
+        const bgPosX = (loupeW / 2) - (imageX * loupeZoom);
+        const bgPosY = (loupeH / 2) - (imageY * loupeZoom);
+        loupe.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+        // Expose exact loupe mapping for overlay renderers (e.g., ROI overlay in feature geometry editor).
+        loupe.dataset.imgX = String(imageX);
+        loupe.dataset.imgY = String(imageY);
+        loupe.dataset.imgW = String(displayWidth);
+        loupe.dataset.imgH = String(displayHeight);
+        loupe.dataset.imgZoom = String(loupeZoom);
+        renderLoupeBase(imageX, imageY, displayWidth, displayHeight);
       }
       loupe.classList.add('is-active');
     }
@@ -1430,6 +1518,7 @@
       lastPointerPos = null;
       if (!loupeEnabled || !loupe) return;
       loupe.classList.remove('is-active');
+      clearLoupeBase();
     }
 
     function adjustLoupeSize(stepDir){
@@ -1520,7 +1609,7 @@
       loupeZoom = DEFAULT_LOUPE_ZOOM;
       lastPointerPos = null;
       applyLoupeDimensions();
-      updateLoupeAssets();
+      if (loupeEnabled) updateLoupeAssets();
       // If loupe is currently enabled, update it with new values
       if (loupeEnabled && lastPointerPos) {
         updateLoupePosition(lastPointerPos);

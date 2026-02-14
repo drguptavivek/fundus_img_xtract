@@ -47,3 +47,6 @@ export-state/
 *.mapping_last_update*
 *daemon-2026*
 .jsonl.lock
+
+bd.sock*
+bd.sock.*

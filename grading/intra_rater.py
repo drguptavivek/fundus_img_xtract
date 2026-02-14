@@ -30,7 +30,11 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident2_task_atomic,
     get_next_eligible_resident_task_atomic,
 )
-from utils.feature_geometry import parse_feature_geometry_payload, validate_feature_geometry_payload
+from utils.feature_geometry import (
+    parse_feature_geometry_payload,
+    prepare_feature_geometry_for_storage,
+    validate_feature_geometry_payload,
+)
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.utils2 import is_valid_uuid
 
@@ -266,6 +270,9 @@ def intra_rater_submit():
     parsed_feature_geometry = None
     if raw_feature_geometry is not None:
         parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
+        if raw_feature_geometry.strip() and parsed_feature_geometry is None:
+            flash("Invalid feature geometry submitted.", "danger")
+            return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
     
     # Validate selected features if any were provided
     if unique_feature_ids:
@@ -348,7 +355,11 @@ def intra_rater_submit():
                 flash(geometry_error or "Invalid feature geometry submitted.", "danger")
                 return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
 
-        feature_geometry = parsed_feature_geometry if raw_feature_geometry and parsed_feature_geometry else None
+        feature_geometry = (
+            prepare_feature_geometry_for_storage(parsed_feature_geometry, image_metadata)
+            if raw_feature_geometry and parsed_feature_geometry
+            else None
+        )
 
         if task.state != STATE_PENDING:
             flash("This intra-rater task has already been completed.", "info")

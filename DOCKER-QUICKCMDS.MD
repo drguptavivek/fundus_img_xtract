@@ -100,8 +100,8 @@ docker compose restart web celery-ocr-worker celery-general-worker celery-beat
 docker compose logs --tail = 200 -f  web celery-ocr-worker celery-general-worker celery-beat
 
 # Database backup (timestamped)
-mkdir -p backups
-docker compose exec -T db bash -lc 'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"' > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+python3 scripts/backup_db.py 
+
 
 # Alembic Commands
 docker compose exec web  uv run alembic history
@@ -184,3 +184,7 @@ docker compose   logs web -f
 
 
 ``
+
+
+docker compose exec web uv run scripts/rebuild_mvw_image_listing_v2.py
+

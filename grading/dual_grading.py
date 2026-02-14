@@ -49,7 +49,11 @@ from utils.dualGradingFetchDetailUtils import (
     fetch_task_with_related_data_by_uuid,
     fetch_existing_grade_for_user,
 )
-from utils.feature_geometry import parse_feature_geometry_payload, validate_feature_geometry_payload
+from utils.feature_geometry import (
+    parse_feature_geometry_payload,
+    prepare_feature_geometry_for_storage,
+    validate_feature_geometry_payload,
+)
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
@@ -1024,6 +1028,9 @@ def dual_grading_submit():
                 parsed_feature_geometry = None
                 if raw_feature_geometry is not None:
                     parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
+                    if raw_feature_geometry.strip() and parsed_feature_geometry is None:
+                        flash("Invalid feature geometry submitted.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
 
                 image_uuid = _resolve_task_image_uuid(task)
                 image_metadata = _fetch_image_metadata(db, image_uuid) if image_uuid else None
@@ -1053,7 +1060,7 @@ def dual_grading_submit():
                 if raw_feature_geometry is None or not raw_feature_geometry.strip():
                     feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
                 else:
-                    feature_geometry = parsed_feature_geometry
+                    feature_geometry = prepare_feature_geometry_for_storage(parsed_feature_geometry, image_metadata)
 
                 prev_grade_id = None
                 prev_comment = None

@@ -27,9 +27,22 @@ High-level schema stored in JSONB:
         "rows": 32,
         "cols": 32,
         "cells": [[r,c], [r,c], ...]
+      },
+      "export": {
+        "bbox_pixel_xyxy": [x1,y1,x2,y2],
+        "bbox_norm_xyxy": [x1n,y1n,x2n,y2n],
+        "yolo_bbox_xywh": [x_center,y_center,w,h],
+        "yolo_polygon_norm": [x1,y1,x2,y2,...]
+      },
+      "dicom": {
+        "tracking_id": "feature-123",
+        "tracking_uid": "2.25....",
+        "finding_code": {"scheme":"SCT","value":"...","meaning":"..."},
+        "finding_site_code": {"scheme":"SCT","value":"...","meaning":"..."}
       }
     }
-  ]
+  ],
+  "export_meta": {"dicom_ready": true, "ai_ready": true}
 }
 ```
 

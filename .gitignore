@@ -116,4 +116,5 @@ security-audit/reports/
 .last_full_check
 .mapping_last_update
 daemon-2026*.*
+bd.sock.*
 

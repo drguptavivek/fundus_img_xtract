@@ -247,10 +247,10 @@
       if (rawKey === ']' || rawKey === '}') { e.preventDefault(); state?.adjustLoupeSize?.(+1); return; }
       if (rawKey === '-' || rawKey === '_') { e.preventDefault(); state?.adjustLoupeZoom?.(-1); return; }
       if (rawKey === '=' || rawKey === '+' ) { e.preventDefault(); state?.adjustLoupeZoom?.(+1); return; }
-      if (k === 'w') { e.preventDefault(); state?.adjustImagePan?.(0, -1); return; }
-      if (k === 's') { e.preventDefault(); state?.adjustImagePan?.(0, +1); return; }
-      if (k === 'a') { e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
-      if (k === 'd') { e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
+      if (k === 'w') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(0, -1); return; }
+      if (k === 's') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(0, +1); return; }
+      if (k === 'a') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
+      if (k === 'd') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
       // Use Z and X keys for image zoom to avoid conflict with loupe zoom
       if (k === 'z') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) + ZOOM_STEP); return; }
       if (k === 'x') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) - ZOOM_STEP); return; }
@@ -347,6 +347,10 @@
     let cdrDrawPending = false;
     let cdrLastSize = { width: 0, height: 0 };
     let cdrRedrawTimer = null;
+
+    function isPanLocked() {
+      return root?.dataset?.imggrPanLocked === 'true';
+    }
     
     // Load saved viewer settings from localStorage for rapid loading
     function loadViewerSettingsFromStorage() {
@@ -1267,6 +1271,9 @@
     }
 
     function adjustImagePan(stepX, stepY){
+      if (isPanLocked()) {
+        return;
+      }
       const nextX = clamp(imgPanX + stepX * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
       const nextY = clamp(imgPanY + stepY * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
       if (Math.abs(nextX - imgPanX) < 0.01 && Math.abs(nextY - imgPanY) < 0.01) return;
@@ -1518,6 +1525,9 @@
       if (cdrActive) {
         return;
       }
+      if (isPanLocked()) {
+        return;
+      }
       if (e.touches.length === 1) {
         // Single touch - prepare for drag
         isDragging = true;
@@ -1536,6 +1546,9 @@
     
     function handleTouchMove(e) {
       if (cdrActive) {
+        return;
+      }
+      if (isPanLocked()) {
         return;
       }
       if (e.touches.length === 1 && isDragging) {
@@ -1597,6 +1610,9 @@
       if (cdrActive) {
         return;
       }
+      if (isPanLocked()) {
+        return;
+      }
       if (e.button === 0 && !loupeEnabled) {
         isMouseDragging = true;
         mouseDragStartX = e.clientX;
@@ -1610,6 +1626,9 @@
     
     function handleMouseMove(e) {
       if (cdrActive) {
+        return;
+      }
+      if (isPanLocked()) {
         return;
       }
       if (isMouseDragging) {
@@ -1763,6 +1782,7 @@
       adjustLoupeSize,
       adjustLoupeZoom,
       adjustImagePan,
+      setPanPercent,
       resetLoupe,
       resetImagePan,
       setZoomLevel,
@@ -1776,8 +1796,10 @@
           applyPreset(preset);
         }
       },
-      isCdrActive: () => cdrActive
+      isCdrActive: () => cdrActive,
+      isPanLocked,
     });
+    root.__imggrState = viewerStates.get(root);
 
     const activate = () => { activeRoot = root; };
     main.addEventListener('click', activate);
@@ -1796,3 +1818,14 @@
   // Mark as loaded so partial can avoid double-loading
   try { window.__imggrViewerLoaded = true; } catch(_) {}
 })();
+    function setPanPercent(nextPanX, nextPanY) {
+      imgPanX = clamp(Number(nextPanX) || 0, IMG_PAN_MIN, IMG_PAN_MAX);
+      imgPanY = clamp(Number(nextPanY) || 0, IMG_PAN_MIN, IMG_PAN_MAX);
+      applyImagePan();
+      updateZoomDisplay();
+      if (loupeEnabled) {
+        updateLoupeAssets();
+        if (lastPointerPos) updateLoupePosition(lastPointerPos);
+      }
+      saveViewerSettingsToStorage();
+    }

@@ -46,3 +46,4 @@ export-state/
 *.last_full_check*
 *.mapping_last_update*
 *daemon-2026*
+.jsonl.lock

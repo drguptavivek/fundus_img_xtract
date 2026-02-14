@@ -78,6 +78,26 @@ def test_validate_rejects_invalid_mask_cells() -> None:
     assert "mask" in error.lower()
 
 
+def test_validate_rejects_legacy_geom_payload() -> None:
+    payload = {
+        "version": 1,
+        "grid": {"rows": 32, "cols": 32},
+        "items": [
+            {
+                "feature_id": 101,
+                "geom": {
+                    "type": "polygon",
+                    "pixel": [[1, 1], [2, 2], [3, 3]],
+                    "norm": [[0.01, 0.01], [0.02, 0.02], [0.03, 0.03]],
+                },
+            }
+        ],
+    }
+    is_valid, error = validate_feature_geometry_payload(payload, [101], SimpleNamespace(width=1000, height=1000))
+    assert is_valid is False
+    assert "payload" in error.lower()
+
+
 def test_prepare_payload_includes_export_and_dicom_blocks() -> None:
     payload = _valid_payload()
     payload["items"][0]["dicom"] = {
@@ -98,3 +118,18 @@ def test_prepare_payload_includes_export_and_dicom_blocks() -> None:
     assert item["export"]["bbox_norm_xyxy"] == [0.1, 0.1, 0.5, 0.5]
     assert item["export"]["yolo_bbox_xywh"] == pytest.approx([0.3, 0.3, 0.4, 0.4], abs=1e-9)
     assert item["export"]["yolo_polygon_norm"] == [0.12, 0.12, 0.4, 0.13, 0.32, 0.3]
+
+
+def test_prepare_payload_embeds_feature_label_metadata() -> None:
+    payload = _valid_payload()
+    prepared = prepare_feature_geometry_for_storage(
+        payload,
+        SimpleNamespace(width=1000, height=1000),
+        feature_metadata_by_id={
+            101: {"label": "Hard Exudates", "sr_no": 7},
+        },
+    )
+    item = prepared["items"][0]
+    assert item["feature_id"] == 101
+    assert item["feature_label"] == "Hard Exudates"
+    assert item["feature_sr_no"] == 7

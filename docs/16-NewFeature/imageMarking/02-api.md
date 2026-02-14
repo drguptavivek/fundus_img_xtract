@@ -45,3 +45,20 @@ There is no standalone save API. Geometry is submitted with grade forms:
 - Eligibility check before returning geometry.
 - Image dimensions retrieved from `image_metadata` for bounds validation on submit.
 - Geometry must match selected features and stay within ROI bounds.
+- Submit accepts strict v1 payload shape only:
+  - `version=1`
+  - `grid.rows=32`, `grid.cols=32`
+  - `items[].{feature_id, roi, polygon, mask}`
+- Legacy `geom` payload shape is rejected.
+- Malformed JSON is rejected (not silently dropped).
+
+## Storage Normalization (on submit)
+Accepted payload is normalized before DB save to include export-ready fields:
+- `export.bbox_pixel_xyxy`
+- `export.bbox_norm_xyxy`
+- `export.yolo_bbox_xywh`
+- `export.yolo_polygon_norm`
+- item-level metadata for self-contained export:
+  - `feature_label`
+  - `feature_sr_no`
+  - `dicom.*` (tracking/coded finding hints)

@@ -110,12 +110,14 @@ def validate_feature_geometry_payload(
 def prepare_feature_geometry_for_storage(
     payload: dict | None,
     image_metadata: ImageMetadata | None,
+    feature_metadata_by_id: dict[int, dict[str, Any]] | None = None,
 ) -> dict | None:
     """Normalize geometry payload and embed export-friendly derived fields."""
     if payload is None:
         return None
 
     normalized_items: list[dict[str, Any]] = []
+    feature_metadata_by_id = feature_metadata_by_id or {}
     width = image_metadata.width if image_metadata else None
     height = image_metadata.height if image_metadata else None
 
@@ -136,9 +138,12 @@ def prepare_feature_geometry_for_storage(
 
         dicom_payload = item.get("dicom") if isinstance(item.get("dicom"), dict) else {}
         tracking_id = dicom_payload.get("tracking_id") or f"feature-{feature_id}"
+        feature_meta = feature_metadata_by_id.get(feature_id, {})
 
         normalized_item: dict[str, Any] = {
             "feature_id": feature_id,
+            "feature_label": feature_meta.get("label"),
+            "feature_sr_no": feature_meta.get("sr_no"),
             "roi": {
                 "type": "box",
                 "pixel": roi_pixel,

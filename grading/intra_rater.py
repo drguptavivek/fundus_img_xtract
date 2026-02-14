@@ -274,6 +274,7 @@ def intra_rater_submit():
             flash("Invalid feature geometry submitted.", "danger")
             return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
     
+    feature_metadata_by_id: dict[int, dict[str, object]] = {}
     # Validate selected features if any were provided
     if unique_feature_ids:
         with transaction_scope() as db:
@@ -293,6 +294,13 @@ def intra_rater_submit():
                 (features_by_id[fid] for fid in unique_feature_ids),
                 key=lambda feature: ((feature.sr_no or 0), feature.id),
             )
+            feature_metadata_by_id = {
+                int(feature.id): {
+                    "label": feature.label,
+                    "sr_no": feature.sr_no,
+                }
+                for feature in selected_feature_entities
+            }
 
             selected_features_json = json.dumps(
                 [
@@ -356,7 +364,11 @@ def intra_rater_submit():
                 return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
 
         feature_geometry = (
-            prepare_feature_geometry_for_storage(parsed_feature_geometry, image_metadata)
+            prepare_feature_geometry_for_storage(
+                parsed_feature_geometry,
+                image_metadata,
+                feature_metadata_by_id=feature_metadata_by_id if unique_feature_ids else None,
+            )
             if raw_feature_geometry and parsed_feature_geometry
             else None
         )

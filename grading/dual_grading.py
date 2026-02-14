@@ -991,6 +991,7 @@ def dual_grading_submit():
                     flash("Invalid label.", "danger")
                     return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
 
+                feature_metadata_by_id: dict[int, dict[str, object]] = {}
                 if unique_feature_ids:
                     available_features = (
                         db.query(GradingsFeatures)
@@ -1007,6 +1008,13 @@ def dual_grading_submit():
                         (features_by_id[fid] for fid in unique_feature_ids),
                         key=lambda feature: ((feature.sr_no or 0), feature.id),
                     )
+                    feature_metadata_by_id = {
+                        int(feature.id): {
+                            "label": feature.label,
+                            "sr_no": feature.sr_no,
+                        }
+                        for feature in selected_feature_entities
+                    }
 
                     selected_features_json = json.dumps(
                         [
@@ -1060,7 +1068,11 @@ def dual_grading_submit():
                 if raw_feature_geometry is None or not raw_feature_geometry.strip():
                     feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
                 else:
-                    feature_geometry = prepare_feature_geometry_for_storage(parsed_feature_geometry, image_metadata)
+                    feature_geometry = prepare_feature_geometry_for_storage(
+                        parsed_feature_geometry,
+                        image_metadata,
+                        feature_metadata_by_id=feature_metadata_by_id if unique_feature_ids else None,
+                    )
 
                 prev_grade_id = None
                 prev_comment = None

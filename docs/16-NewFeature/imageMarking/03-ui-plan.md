@@ -45,6 +45,20 @@ Per feature:
 - Use `window.linkedGradingData[taskUuid].existingFeatureGeometry` for preload.
 - Save to the per-panel hidden field.
 
+## Draft + History Behavior
+- Source of truth remains DB (saved on submit).
+- Add local draft cache in `localStorage` for crash/reload resilience:
+  - key: `geometry_draft:<user_id>:<task_uuid>:<slot>`
+  - value: in-progress v1 payload + timestamp
+- On load:
+  - load server geometry first
+  - if a newer local draft exists for same key, prompt user to restore draft or keep server version
+- On successful submit:
+  - clear draft key
+- For adjudicator/review:
+  - render prior graders' server-stored geometry as read-only overlay layers
+  - do not rely on localStorage for cross-user visibility
+
 ## Implementation Reality Check (from 02 API verification)
 - GET endpoints and submit wiring exist for dual/intra/regrade.
 - Hidden fields for geometry are already present in grading templates.
@@ -128,6 +142,14 @@ Per feature:
   - `feature_geometry_json_<task_uuid>`
 - Ensure panel isolation (no cross-panel geometry bleed).
 
+### 6.1) Prior Annotator Overlay Layers
+- Backend should provide prior-slot geometry payloads for adjudicator/review contexts.
+- UI renders layered read-only overlays for:
+  - resident
+  - resident2
+  - current slot (editable)
+- Each layer has distinct color and visibility toggle in legend.
+
 ### 7) UX + Keyboard Mapping
 - Add toolbar buttons for each mode with active state.
 - Keyboard map (no conflicts with viewer keys):
@@ -137,6 +159,7 @@ Per feature:
   - `P`: Subtract
   - `Esc`: cancel current draw action
 - Add per-feature clear and overlay visibility toggle.
+- Add `Q` hold for temporary pan mode (instead of Space to avoid page scroll side effects).
 
 ### 8) Test Plan
 - Unit tests for validator:
@@ -150,6 +173,8 @@ Per feature:
 - JS integration checks for:
   - preload -> edit -> hidden-field serialization
   - linked panel field isolation.
+  - local draft restore flow
+  - prior-layer visibility toggles in adjudicator/review
 - Export validation checks:
   - DICOM SEG/SR round-trip opens in standard DICOM viewers.
   - YOLO/COCO output passes schema validators and sample training data loaders.

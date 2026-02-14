@@ -405,6 +405,8 @@
     window.linkedGradingData = {{ linked_grading_data | tojson }};
     {% endif %}
 </script>
+<script src="{{ url_for('static', filename='js/feature-geometry-colors.js') }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-draft.js') }}"></script>
 {% if linked_mode %}
 <script src="{{ url_for('static', filename='js/linked-grading-task.js') }}"></script>
 {% else %}

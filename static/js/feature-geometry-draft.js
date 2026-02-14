@@ -63,19 +63,8 @@
     const existingDraft = readDraft(key);
     if (existingDraft) {
       const draftSer = stableStringify(existingDraft.payload);
-      const fieldSer = stableStringify(safeJsonParse(field.value));
       if (draftSer && serverSer && draftSer === serverSer) {
         window.localStorage.removeItem(key);
-      }
-      const shouldPromptRestore = draftSer && draftSer !== serverSer && draftSer !== fieldSer;
-      if (shouldPromptRestore) {
-        const restore = window.confirm(
-          "A local annotation draft was found for this task. Restore draft?"
-        );
-        if (restore) {
-          field.value = draftSer;
-          lastSeenValue = draftSer;
-        }
       }
     }
 

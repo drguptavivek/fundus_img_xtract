@@ -41,6 +41,8 @@
     imageResizeObserver: null,
     boxActionsEl: null,
     selectedBoxRef: null,
+    mainPointerDown: false,
+    hoverInfo: null,
   };
 
   function clamp(v, min, max) {
@@ -82,6 +84,7 @@
       .fgx-box-actions .btn { width:1.85rem; min-width:1.85rem; padding:.18rem .2rem; display:inline-flex; align-items:center; justify-content:center; }
       .fgx-box-actions .btn { background: #f3f4f6; }
       [data-bs-theme="dark"] .fgx-box-actions .btn { background: rgba(148, 163, 184, 0.2); }
+      .imggr-viewer-root.fgx-geometry-active .imggr-main-img { transition: none !important; }
     `;
     document.head.appendChild(style);
   }
@@ -184,6 +187,7 @@
       const clean = {
         feature_id: featureId,
         feature_label: typeof item.feature_label === "string" ? item.feature_label : null,
+        _locked: true,
         roi: normalizeRoi(roiPixel),
         polygon: normalizePolygon(polygonPixel),
         mask: {
@@ -249,6 +253,39 @@
     return [[x1, y1], [x2, y2]];
   }
 
+  function isBoxItem(item) {
+    return !item?._geometryType || item._geometryType === "box";
+  }
+
+  function clearBoxResidualGeometry(item) {
+    if (!item || !isBoxItem(item)) return;
+    item.polygon = [];
+    if (item.mask && Array.isArray(item.mask.cells)) {
+      item.mask.cells = [];
+    }
+  }
+
+  function clampPointToImage(point) {
+    const m = getImageMetrics();
+    if (!m || !point) return point;
+    return [
+      clamp(point[0], 0, m.naturalWidth),
+      clamp(point[1], 0, m.naturalHeight),
+    ];
+  }
+
+  function clampRoiToImage(roi) {
+    if (!roi) return roi;
+    const p1 = clampPointToImage(roi[0]);
+    const p2 = clampPointToImage(roi[1]);
+    return reorderRoi([p1, p2]);
+  }
+
+  function clampPolygonToImage(points) {
+    if (!Array.isArray(points)) return [];
+    return points.map((p) => clampPointToImage(p));
+  }
+
   function isCompleteItem(item) {
     if (!item || !item.roi) return false;
     return true;
@@ -261,15 +298,22 @@
     const items = (ctx.payload.items || [])
       .filter((it) => selectedIds.has(it.feature_id) && isCompleteItem(it))
       .map((item) => {
-        const roi = reorderRoi(item.roi);
-        const polygonRaw = Array.isArray(item.polygon) && item.polygon.length >= 3
-          ? item.polygon
-          : [
+        const roi = clampRoiToImage(item.roi);
+        const polygonRaw = isBoxItem(item)
+          ? [
               [roi[0][0], roi[0][1]],
               [roi[1][0], roi[0][1]],
               [roi[1][0], roi[1][1]],
               [roi[0][0], roi[1][1]],
-            ];
+            ]
+          : (Array.isArray(item.polygon) && item.polygon.length >= 3
+            ? item.polygon
+            : [
+                [roi[0][0], roi[0][1]],
+                [roi[1][0], roi[0][1]],
+                [roi[1][0], roi[1][1]],
+                [roi[0][0], roi[1][1]],
+              ]);
         const polygon = polygonRaw.map((p) => [Number(p[0]), Number(p[1])]);
         const rows = sanitizeGrid(item.mask.rows ?? grid);
         const cols = sanitizeGrid(item.mask.cols ?? grid);
@@ -332,6 +376,7 @@
       feature_id: featureId,
       feature_label: getFeatureLabel(ctx, featureId),
       _geometryType: "box",
+      _locked: false,
       roi: null,
       polygon: [],
       mask: {
@@ -387,6 +432,10 @@
     state.selectedBoxRef = null;
   }
 
+  function clearHoverInfo() {
+    state.hoverInfo = null;
+  }
+
   function setSelectedBox(ctx, annOrItem) {
     if (!ctx || annOrItem == null) {
       clearSelectedBox();
@@ -428,6 +477,9 @@
     wrap.style.zIndex = "30";
     wrap.style.display = "none";
     wrap.innerHTML = `
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-lock title="Lock ROI" aria-label="Lock ROI">
+        <i class="fa-solid fa-lock"></i>
+      </button>
       <button type="button" class="btn btn-outline-success btn-sm" data-fgx-box-done title="Done" aria-label="Done">
         <i class="fa-solid fa-check"></i>
       </button>
@@ -441,11 +493,24 @@
     state.main.appendChild(wrap);
     state.boxActionsEl = wrap;
 
+    wrap.querySelector("[data-fgx-box-lock]")?.addEventListener("click", () => {
+      const ctx = activeContext();
+      const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+      if (!ctx || !item || !item.roi) return;
+      item._locked = !item._locked;
+      if (item._locked && state.drawing && state.drawing.itemAnnId === item._annId) {
+        state.drawing = null;
+      }
+      syncField(ctx);
+      redraw();
+    });
+
     wrap.querySelector("[data-fgx-box-done]")?.addEventListener("click", () => {
       const ctx = activeContext();
       const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
       if (!ctx || !item || !item.roi) return;
       setSelectedBox(ctx, item);
+      item._locked = true;
       syncField(ctx);
       state.mode = MODES.PAN;
       setCanvasPointerMode();
@@ -466,6 +531,7 @@
         [src[1][0] + dx, src[1][1] + dy],
       ];
       dup._geometryType = "box";
+      dup._locked = false;
       setSelectedBox(ctx, dup);
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
@@ -508,7 +574,18 @@
       state.boxActionsEl.style.display = "none";
       return;
     }
-    const roi = reorderRoi(item.roi);
+    const lockBtn = state.boxActionsEl.querySelector("[data-fgx-box-lock]");
+    if (lockBtn) {
+      const locked = item._locked !== false;
+      lockBtn.classList.toggle("btn-outline-secondary", !locked);
+      lockBtn.classList.toggle("btn-outline-success", locked);
+      lockBtn.title = locked ? "Unlock ROI" : "Lock ROI";
+      lockBtn.setAttribute("aria-label", locked ? "Unlock ROI" : "Lock ROI");
+      lockBtn.innerHTML = locked
+        ? '<i class="fa-solid fa-lock"></i>'
+        : '<i class="fa-solid fa-lock-open"></i>';
+    }
+    const roi = clampRoiToImage(item.roi);
     const boxW = Math.abs(roi[1][0] - roi[0][0]);
     const boxH = Math.abs(roi[1][1] - roi[0][1]);
     if (boxW < 4 || boxH < 4) {
@@ -608,13 +685,11 @@
     if (!selected.length) {
       ctx.featureSelectEl.disabled = true;
       ctx.annotationSelectEl.disabled = true;
-      if (ctx.addAnnotationBtn) ctx.addAnnotationBtn.disabled = true;
       if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
       return;
     }
 
     ctx.featureSelectEl.disabled = false;
-    if (ctx.addAnnotationBtn) ctx.addAnnotationBtn.disabled = false;
     const next = selected.includes(previous) ? previous : selected[0];
     state.activeFeatureId = next;
     ctx.featureSelectEl.value = String(next);
@@ -706,9 +781,6 @@
         <select class="form-select form-select-sm" data-fgx-annotation></select>
       </div>
       <div class="fgx-group fgx-ann-actions" aria-label="Annotation actions">
-        <button type="button" class="btn btn-success btn-sm" data-fgx-ann-add title="Add annotation" aria-label="Add annotation">
-          <i class="fa-solid fa-plus"></i>
-        </button>
         <button type="button" class="btn btn-primary btn-sm" data-fgx-ann-view title="Hide annotation" aria-label="Hide annotation">
           <i class="fa-solid fa-eye"></i>
         </button>
@@ -731,7 +803,7 @@
     ctx.panelBottomEl = panel;
     ctx.featureSelectEl = panel.querySelector("[data-fgx-feature]");
     ctx.annotationSelectEl = panel.querySelector("[data-fgx-annotation]");
-    ctx.addAnnotationBtn = panel.querySelector("[data-fgx-ann-add]");
+    ctx.addAnnotationBtn = null;
     ctx.viewAnnotationBtn = panel.querySelector("[data-fgx-ann-view]");
     ctx.editAnnotationBtn = panel.querySelector("[data-fgx-ann-edit]");
     ctx.removeAnnotationBtn = panel.querySelector("[data-fgx-ann-remove]");
@@ -787,16 +859,6 @@
       redraw();
     });
 
-    ctx.addAnnotationBtn.addEventListener("click", () => {
-      if (state.activeFeatureId == null) return;
-      createAnnotationItem(ctx, state.activeFeatureId);
-      clearSelectedBox();
-      updateAnnotationOptions(ctx);
-      refreshAnnotationButtons(ctx);
-      syncField(ctx);
-      redraw();
-    });
-
     ctx.viewAnnotationBtn.addEventListener("click", () => {
       const item = getActiveAnnotationItem(ctx, false);
       if (!item) return;
@@ -810,6 +872,10 @@
       const item = getActiveAnnotationItem(ctx, false);
       if (!item) return;
       ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
+      setSelectedBox(ctx, item);
+      state.mode = MODES.MOVE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
       refreshAnnotationButtons(ctx);
       redraw();
     });
@@ -1003,6 +1069,33 @@
     return null;
   }
 
+  function buildHoverInfo(ctx, item) {
+    if (!ctx || !item) return null;
+    const anns = getItemsForFeature(ctx, item.feature_id);
+    const idx = anns.findIndex((it) => it._annId === item._annId);
+    const annSr = idx >= 0 ? idx + 1 : item._annId;
+    const featureName = item.feature_label || getFeatureLabel(ctx, item.feature_id) || `Feature ${item.feature_id}`;
+    return {
+      ctxKey: ctx.key,
+      annId: item._annId,
+      text: `${featureName} • Ann ${annSr}`,
+      roi: item.roi,
+    };
+  }
+
+  function updateHoverInfoFromPoint(ctx, point) {
+    if (!ctx || !point) {
+      clearHoverInfo();
+      return;
+    }
+    const hit = findBoxHit(ctx, point);
+    if (!hit) {
+      clearHoverInfo();
+      return;
+    }
+    state.hoverInfo = buildHoverInfo(ctx, hit.item);
+  }
+
   function selectItemInUi(ctx, item) {
     if (!ctx || !item) return;
     state.activeFeatureId = item.feature_id;
@@ -1017,7 +1110,7 @@
 
   function cellForPoint(item, point) {
     if (!item || !item.roi || !pointInRoi(point, item.roi)) return null;
-    const roi = reorderRoi(item.roi);
+    const roi = clampRoiToImage(item.roi);
     const rows = sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID);
     const cols = sanitizeGrid(item.mask?.cols ?? DEFAULT_GRID);
     const roiW = Math.max(1e-6, roi[1][0] - roi[0][0]);
@@ -1071,7 +1164,7 @@
     ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
     const rows = item.mask.rows;
     const cols = item.mask.cols;
-    const roi = reorderRoi(item.roi);
+    const roi = clampRoiToImage(item.roi);
     const cells = [];
     for (let r = 0; r < rows; r += 1) {
       for (let c = 0; c < cols; c += 1) {
@@ -1133,6 +1226,10 @@
         [item.roi[1][0] + adjustedDx, item.roi[1][1] + adjustedDy],
       ];
     }
+    if (isBoxItem(item)) {
+      clearBoxResidualGeometry(item);
+      return;
+    }
     if (Array.isArray(item.polygon) && item.polygon.length) {
       item.polygon = item.polygon.map((p) => [p[0] + adjustedDx, p[1] + adjustedDy]);
     }
@@ -1154,6 +1251,14 @@
     if (hit) {
       item = hit.item;
       selectItemInUi(ctx, item);
+      const locked = item._locked !== false;
+      if (locked) {
+        state.drawing = null;
+        event.preventDefault();
+        event.stopPropagation();
+        redraw();
+        return;
+      }
       setPanLock(true);
       if (hit.handle >= 0) {
         state.drawing = { kind: "resize", handle: hit.handle, itemAnnId: item._annId };
@@ -1166,7 +1271,11 @@
       return;
     }
 
-    if (mode === MODES.PAN) return;
+    if (mode === MODES.PAN) {
+      clearSelectedBox();
+      redraw();
+      return;
+    }
 
     if (mode === MODES.MOVE) {
       clearSelectedBox();
@@ -1179,6 +1288,7 @@
       setPanLock(true);
       state.drawing = { kind: "roi", start: point, current: point };
       item.roi = [point, point];
+      clearBoxResidualGeometry(item);
       item.mask.rows = grid;
       item.mask.cols = grid;
       item.mask.cells = [];
@@ -1275,6 +1385,7 @@
     if (!item) return;
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
+    updateHoverInfoFromPoint(ctx, point);
 
     if (state.drawing && state.drawing.kind === "roi") {
       state.drawing.current = point;
@@ -1299,6 +1410,7 @@
 
     if (state.drawing && state.drawing.kind === "resize") {
       item.roi = resizeRoiByHandle(item.roi, state.drawing.handle, point);
+      clearBoxResidualGeometry(item);
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -1410,6 +1522,52 @@
       event.preventDefault();
       event.stopPropagation();
     }
+  }
+
+  function handleMainClickForSelection(event) {
+    if (effectiveMode() !== MODES.PAN) return;
+    const ctx = activeContext();
+    if (!ctx || state.activeFeatureId == null) return;
+    const point = clientToPixel(event.clientX, event.clientY);
+    if (!point) return;
+    const hit = findBoxHit(ctx, point);
+    if (!hit) {
+      clearSelectedBox();
+      redraw();
+      return;
+    }
+    selectItemInUi(ctx, hit.item);
+    setSelectedBox(ctx, hit.item);
+    redraw();
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleMainPointerDown() {
+    state.mainPointerDown = true;
+  }
+
+  function handleMainPointerUp() {
+    state.mainPointerDown = false;
+  }
+
+  function handleMainPointerMoveForPanSync(event) {
+    const ctx = activeContext();
+    const point = clientToPixel(event.clientX, event.clientY);
+    updateHoverInfoFromPoint(ctx, point);
+    if (effectiveMode() !== MODES.PAN) {
+      redraw();
+      return;
+    }
+    if (!state.mainPointerDown) {
+      redraw();
+      return;
+    }
+    redraw();
+  }
+
+  function handleMainWheelForPanSync() {
+    redraw();
   }
 
   function handleKeyDown(event) {
@@ -1585,7 +1743,50 @@
       const roi = reorderRoi([state.drawing.start, state.drawing.current]);
       drawRoiOutline(roi, "#ffffff", true);
     }
+    drawHoverInfo(activeCtx);
     positionBoxActions();
+  }
+
+  function drawHoverInfo(ctx) {
+    if (!ctx || !state.hoverInfo) return;
+    if (state.hoverInfo.ctxKey !== ctx.key) return;
+    const roi = state.hoverInfo.roi ? clampRoiToImage(state.hoverInfo.roi) : null;
+    if (!roi) return;
+    const p1 = pixelToCanvas(roi[0]);
+    const p2 = pixelToCanvas(roi[1]);
+    if (!p1 || !p2) return;
+
+    const text = state.hoverInfo.text || "";
+    if (!text) return;
+    const x = (Math.min(p1[0], p2[0]) + Math.max(p1[0], p2[0])) / 2;
+    const y = Math.min(p1[1], p2[1]) - 10;
+
+    state.ctx.save();
+    state.ctx.font = "600 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    const padX = 8;
+    const textW = Math.ceil(state.ctx.measureText(text).width);
+    const w = textW + padX * 2;
+    const h = 22;
+    const bx = x - w / 2;
+    const by = y - h;
+
+    state.ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+    state.ctx.strokeStyle = "rgba(148, 163, 184, 0.8)";
+    state.ctx.lineWidth = 1;
+    if (typeof state.ctx.roundRect === "function") {
+      state.ctx.beginPath();
+      state.ctx.roundRect(bx, by, w, h, 7);
+      state.ctx.fill();
+      state.ctx.stroke();
+    } else {
+      state.ctx.fillRect(bx, by, w, h);
+      state.ctx.strokeRect(bx, by, w, h);
+    }
+
+    state.ctx.fillStyle = "#f8fafc";
+    state.ctx.textBaseline = "middle";
+    state.ctx.fillText(text, bx + padX, by + h / 2 + 0.5);
+    state.ctx.restore();
   }
 
   function drawItem(item, active, selected) {
@@ -1594,13 +1795,14 @@
       : "#ff6b6b";
 
     if (item.roi) {
-      drawRoiOutline(item.roi, color, active, selected);
-      drawGrid(item.roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
-      drawCells(item.roi, item.mask, color, active ? 0.35 : 0.2);
+      const roi = clampRoiToImage(item.roi);
+      drawRoiOutline(roi, color, active, selected);
+      drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
+      drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
     }
 
-    if (Array.isArray(item.polygon) && item.polygon.length > 0) {
-      drawPolygon(item.polygon, color, active);
+    if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length > 0) {
+      drawPolygon(clampPolygonToImage(item.polygon), color, active);
     }
   }
 
@@ -1840,6 +2042,7 @@
     state.viewerRoot = viewerRoot;
     state.main = main;
     state.mainImg = img;
+    state.viewerRoot.classList.add("fgx-geometry-active");
 
     const canvas = document.createElement("canvas");
     canvas.className = "fgx-overlay-canvas";
@@ -1854,6 +2057,13 @@
     canvas.addEventListener("pointerup", handlePointerUp);
     canvas.addEventListener("pointercancel", handlePointerUp);
     canvas.addEventListener("pointerleave", handlePointerUp);
+    main.addEventListener("click", handleMainClickForSelection);
+    main.addEventListener("pointerdown", handleMainPointerDown);
+    main.addEventListener("pointerup", handleMainPointerUp);
+    main.addEventListener("pointercancel", handleMainPointerUp);
+    main.addEventListener("pointerleave", handleMainPointerUp);
+    main.addEventListener("pointermove", handleMainPointerMoveForPanSync);
+    main.addEventListener("wheel", handleMainWheelForPanSync, { passive: true });
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp, { capture: true });

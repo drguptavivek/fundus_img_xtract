@@ -5,6 +5,34 @@ from auth.roles import roles_required
 from utils.log_sanitize import sanitize_log_value
 from . import api_bp
 
+_VIEWER_FILTERS = {
+    "none",
+    "redfree",
+    "greenboost",
+    "bluemono",
+    "gray",
+    "contrast",
+    "enhance",
+}
+# TODO: add when UI/JS supports them:
+# greenchannel, blueonly, redgreenfree, greenfree
+
+
+def _clamp_float(value, default, min_value, max_value):
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        val = float(default)
+    return max(min_value, min(max_value, val))
+
+
+def _clamp_int(value, default, min_value, max_value):
+    try:
+        val = int(value)
+    except (TypeError, ValueError):
+        val = int(default)
+    return max(min_value, min(max_value, val))
+
 @api_bp.route("/viewer/settings", methods=["GET"])
 @login_required
 def get_viewer_settings():
@@ -73,23 +101,24 @@ def save_viewer_settings_impl(db):
         
         # Only update settings that are explicitly provided
         if 'loupe_size' in data:
-            settings.loupe_size = int(data.get('loupe_size', 200))
+            settings.loupe_size = _clamp_int(data.get('loupe_size', 200), 200, 100, 500)
         if 'loupe_zoom' in data:
-            settings.loupe_zoom = float(data.get('loupe_zoom', 2.0))
+            settings.loupe_zoom = _clamp_float(data.get('loupe_zoom', 2.0), 2.0, 1.0, 4.0)
         if 'loupe_enabled' in data:
             settings.loupe_enabled = bool(data.get('loupe_enabled', False))
         if 'zoom' in data:
-            settings.zoom = int(data.get('zoom', 100))
+            settings.zoom = _clamp_int(data.get('zoom', 100), 100, 40, 500)
         if 'pan_x' in data:
-            settings.pan_x = int(data.get('pan_x', 0))
+            settings.pan_x = _clamp_int(data.get('pan_x', 0), 0, -600, 600)
         if 'pan_y' in data:
-            settings.pan_y = int(data.get('pan_y', 0))
+            settings.pan_y = _clamp_int(data.get('pan_y', 0), 0, -600, 600)
         if 'brightness' in data:
-            settings.brightness = float(data.get('brightness', 1.0))
+            settings.brightness = _clamp_float(data.get('brightness', 1.0), 1.0, 0.5, 5.0)
         if 'contrast' in data:
-            settings.contrast = float(data.get('contrast', 1.0))
+            settings.contrast = _clamp_float(data.get('contrast', 1.0), 1.0, 0.5, 5.0)
         if 'filter' in data:
-            settings.filter = str(data.get('filter', 'none'))
+            value = str(data.get('filter', 'none'))
+            settings.filter = value if value in _VIEWER_FILTERS else "none"
 
         return jsonify({'success': True})
     except Exception as e:
@@ -166,15 +195,16 @@ def save_viewer_preset_impl(db, slot_number):
         
         # Update preset with provided data
         preset.name = data.get('name')
-        preset.loupe_size = int(data.get('loupe_size', 200))
-        preset.loupe_zoom = float(data.get('loupe_zoom', 2.0))
+        preset.loupe_size = _clamp_int(data.get('loupe_size', 200), 200, 100, 500)
+        preset.loupe_zoom = _clamp_float(data.get('loupe_zoom', 2.0), 2.0, 1.0, 4.0)
         preset.loupe_enabled = bool(data.get('loupe_enabled', False))
-        preset.zoom = int(data.get('zoom', 100))
-        preset.pan_x = int(data.get('pan_x', 0))
-        preset.pan_y = int(data.get('pan_y', 0))
-        preset.brightness = float(data.get('brightness', 1.0))
-        preset.contrast = float(data.get('contrast', 1.0))
-        preset.filter = str(data.get('filter', 'none'))
+        preset.zoom = _clamp_int(data.get('zoom', 100), 100, 40, 500)
+        preset.pan_x = _clamp_int(data.get('pan_x', 0), 0, -600, 600)
+        preset.pan_y = _clamp_int(data.get('pan_y', 0), 0, -600, 600)
+        preset.brightness = _clamp_float(data.get('brightness', 1.0), 1.0, 0.5, 5.0)
+        preset.contrast = _clamp_float(data.get('contrast', 1.0), 1.0, 0.5, 5.0)
+        value = str(data.get('filter', 'none'))
+        preset.filter = value if value in _VIEWER_FILTERS else "none"
 
         return jsonify({'success': True})
     except Exception as e:

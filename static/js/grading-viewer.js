@@ -1,4 +1,9 @@
 (function(){
+  // TODO: add UI + JS support for new filters:
+  // greenchannel, blueonly, redgreenfree, greenfree
+  // NOTE: DB/model ranges are wider than UI/JS controls:
+  // loupe_size 50-1000, loupe_zoom 0.5-8.0, zoom 10-800,
+  // pan_x/pan_y -1200-1200, brightness 0-10, contrast 0-10.
   // Active root for global key handling (Safari-friendly)
   let activeRoot = null;
   let defaultRoot = null;

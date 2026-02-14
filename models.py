@@ -1596,14 +1596,17 @@ class ViewerSettings(Base):
     user: Mapped["User"] = relationship("User", lazy="selectin")
     
     __table_args__ = (
-        CheckConstraint("loupe_size >= 100 AND loupe_size <= 500", name="ck_viewer_settings_loupe_size"),
-        CheckConstraint("loupe_zoom >= 1.0 AND loupe_zoom <= 4.0", name="ck_viewer_settings_loupe_zoom"),
-        CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_settings_zoom"),
-        CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_settings_pan_x"),
-        CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_settings_pan_y"),
-        CheckConstraint("brightness >= 0.5 AND brightness <= 5.0", name="ck_viewer_settings_brightness"),
-        CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_settings_contrast"),
-        CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_settings_filter"),
+        CheckConstraint("loupe_size >= 50 AND loupe_size <= 1000", name="ck_viewer_settings_loupe_size"),
+        CheckConstraint("loupe_zoom >= 0.5 AND loupe_zoom <= 8.0", name="ck_viewer_settings_loupe_zoom"),
+        CheckConstraint("zoom >= 10 AND zoom <= 800", name="ck_viewer_settings_zoom"),
+        CheckConstraint("pan_x >= -1200 AND pan_x <= 1200", name="ck_viewer_settings_pan_x"),
+        CheckConstraint("pan_y >= -1200 AND pan_y <= 1200", name="ck_viewer_settings_pan_y"),
+        CheckConstraint("brightness >= 0 AND brightness <= 10.0", name="ck_viewer_settings_brightness"),
+        CheckConstraint("contrast >= 0 AND contrast <= 10.0", name="ck_viewer_settings_contrast"),
+        CheckConstraint(
+            "filter IN ('none','redfree','greenboost','bluemono','gray','contrast','enhance','greenchannel','blueonly','redgreenfree','greenfree')",
+            name="ck_viewer_settings_filter",
+        ),
     )
 
 
@@ -1642,14 +1645,17 @@ class ViewerPresets(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "slot_number", name="uq_viewer_presets_user_slot"),
         CheckConstraint("slot_number >= 1 AND slot_number <= 5", name="ck_viewer_presets_slot_number"),
-        CheckConstraint("loupe_size >= 100 AND loupe_size <= 500", name="ck_viewer_presets_loupe_size"),
-        CheckConstraint("loupe_zoom >= 1.0 AND loupe_zoom <= 4.0", name="ck_viewer_presets_loupe_zoom"),
-        CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_presets_zoom"),
-        CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_presets_pan_x"),
-        CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_presets_pan_y"),
-        CheckConstraint("brightness >= 0.5 AND brightness <= 5.0", name="ck_viewer_presets_brightness"),
-        CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_presets_contrast"),
-        CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_presets_filter"),
+        CheckConstraint("loupe_size >= 50 AND loupe_size <= 1000", name="ck_viewer_presets_loupe_size"),
+        CheckConstraint("loupe_zoom >= 0.5 AND loupe_zoom <= 8.0", name="ck_viewer_presets_loupe_zoom"),
+        CheckConstraint("zoom >= 10 AND zoom <= 800", name="ck_viewer_presets_zoom"),
+        CheckConstraint("pan_x >= -1200 AND pan_x <= 1200", name="ck_viewer_presets_pan_x"),
+        CheckConstraint("pan_y >= -1200 AND pan_y <= 1200", name="ck_viewer_presets_pan_y"),
+        CheckConstraint("brightness >= 0 AND brightness <= 10.0", name="ck_viewer_presets_brightness"),
+        CheckConstraint("contrast >= 0 AND contrast <= 10.0", name="ck_viewer_presets_contrast"),
+        CheckConstraint(
+            "filter IN ('none','redfree','greenboost','bluemono','gray','contrast','enhance','greenchannel','blueonly','redgreenfree','greenfree')",
+            name="ck_viewer_presets_filter",
+        ),
     )
 
  

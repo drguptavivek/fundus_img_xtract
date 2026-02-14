@@ -5,6 +5,7 @@
     ELLIPSE: "ellipse",
     ADD: "add",
     SUBTRACT: "subtract",
+    MOVE: "move",
     PAN: "pan",
   };
 
@@ -32,6 +33,7 @@
     overlayVisible: true,
     rafId: null,
     observersReady: false,
+    quickBindingsDone: false,
   };
 
   function clamp(v, min, max) {
@@ -59,16 +61,15 @@
     style.id = "feature-geometry-editor-style";
     style.textContent = `
       .fgx-overlay-canvas { position:absolute; inset:0; width:100%; height:100%; z-index:15; cursor:crosshair; }
-      .fgx-panel { margin-top:.5rem; border:1px solid var(--bs-border-color); border-radius:.5rem; padding:.625rem; background:var(--bs-body-bg); }
-      .fgx-toolbar { display:flex; flex-wrap:wrap; gap:.25rem; margin-bottom:.5rem; }
-      .fgx-toolbar .btn { min-width:2.5rem; }
-      .fgx-feature-row { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; }
+      .fgx-panel { display:flex; flex-direction:column; gap:.5rem; }
+      .fgx-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+      .fgx-toolbar .btn { min-width:2.4rem; }
+      .fgx-feature-row { display:flex; gap:.35rem; align-items:center; }
       .fgx-color-dot { width:.75rem; height:.75rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.2); }
-      .fgx-grid-row { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; }
-      .fgx-quick-row { display:flex; flex-wrap:wrap; gap:.25rem; }
-      .fgx-status { font-size:.8rem; color:var(--bs-secondary-color); margin-top:.35rem; min-height:1rem; }
-      .fgx-layer-note { font-size:.75rem; color:var(--bs-secondary-color); }
+      .fgx-grid-row { display:flex; gap:.35rem; align-items:center; }
+      .fgx-feature-row select, .fgx-grid-row select { width:100%; min-width:0; }
       .fgx-toolbar .btn.active { font-weight:600; }
+      .fgx-block-label { font-size:.73rem; color:var(--bs-secondary-color); text-transform:uppercase; letter-spacing:.03em; }
     `;
     document.head.appendChild(style);
   }
@@ -289,13 +290,27 @@
     });
   }
 
-  function getOrCreateItem(ctx, featureId) {
-    let item = (ctx.payload.items || []).find((it) => it.feature_id === featureId);
-    if (item) {
-      item.feature_label = getFeatureLabel(ctx, featureId);
-      return item;
+  function ensureItemIdentity(ctx, item) {
+    if (!item) return;
+    if (typeof item._annId !== "number") {
+      item._annId = ctx.nextAnnotationId;
+      ctx.nextAnnotationId += 1;
+      return;
     }
-    item = {
+    if (item._annId >= ctx.nextAnnotationId) {
+      ctx.nextAnnotationId = item._annId + 1;
+    }
+  }
+
+  function getItemsForFeature(ctx, featureId) {
+    const out = (ctx.payload.items || []).filter((it) => it.feature_id === featureId);
+    out.forEach((it) => ensureItemIdentity(ctx, it));
+    return out.sort((a, b) => (a._annId || 0) - (b._annId || 0));
+  }
+
+  function createAnnotationItem(ctx, featureId) {
+    const item = {
+      _annId: ctx.nextAnnotationId,
       feature_id: featureId,
       feature_label: getFeatureLabel(ctx, featureId),
       roi: null,
@@ -306,23 +321,44 @@
         cells: [],
       },
     };
+    ctx.nextAnnotationId += 1;
     ctx.payload.items.push(item);
+    ctx.activeAnnotationByFeature[featureId] = item._annId;
     return item;
   }
 
-  function removeItemIfEmpty(ctx, featureId) {
-    ctx.payload.items = (ctx.payload.items || []).filter((it) => {
-      if (it.feature_id !== featureId) return true;
-      if (it.roi) return true;
-      if (Array.isArray(it.polygon) && it.polygon.length) return true;
-      if (it.mask && Array.isArray(it.mask.cells) && it.mask.cells.length) return true;
-      return false;
-    });
+  function getActiveAnnotationItem(ctx, createIfMissing = false) {
+    const featureId = state.activeFeatureId;
+    if (featureId == null) return null;
+    const items = getItemsForFeature(ctx, featureId);
+    if (!items.length) {
+      return createIfMissing ? createAnnotationItem(ctx, featureId) : null;
+    }
+    const selectedAnnId = ctx.activeAnnotationByFeature[featureId];
+    const selected = items.find((it) => it._annId === selectedAnnId);
+    if (selected) {
+      selected.feature_label = getFeatureLabel(ctx, featureId);
+      return selected;
+    }
+    ctx.activeAnnotationByFeature[featureId] = items[0]._annId;
+    items[0].feature_label = getFeatureLabel(ctx, featureId);
+    return items[0];
+  }
+
+  function removeAnnotationItem(ctx, item) {
+    if (!item) return;
+    const featureId = item.feature_id;
+    ctx.payload.items = (ctx.payload.items || []).filter((it) => it !== item);
+    const remaining = getItemsForFeature(ctx, featureId);
+    if (!remaining.length) {
+      delete ctx.activeAnnotationByFeature[featureId];
+      return;
+    }
+    ctx.activeAnnotationByFeature[featureId] = remaining[0]._annId;
   }
 
   function setStatus(ctx, text) {
-    if (!ctx || !ctx.statusEl) return;
-    ctx.statusEl.textContent = text || "";
+    return;
   }
 
   function activeContext() {
@@ -338,12 +374,29 @@
     if (!state.canvas) return;
     const mode = effectiveMode();
     state.canvas.style.pointerEvents = mode === MODES.PAN ? "none" : "auto";
-    state.canvas.style.cursor = mode === MODES.PAN ? "default" : "crosshair";
+    state.canvas.style.cursor = mode === MODES.MOVE ? "move" : (mode === MODES.PAN ? "default" : "crosshair");
   }
 
   function setPanLock(flag) {
     if (!state.viewerRoot) return;
     state.viewerRoot.dataset.imggrPanLocked = flag ? "true" : "false";
+    try {
+      state.viewerRoot.__imggrState?.refreshLockState?.();
+    } catch (_) {}
+    updateQuickLockUi();
+  }
+
+  function updateQuickLockUi() {
+    const quickLockBtn = document.querySelector("[data-fgx-quick-lock]");
+    const locked = state.viewerRoot?.dataset?.imggrPanLocked === "true";
+    if (quickLockBtn) {
+      quickLockBtn.classList.toggle("active", !!locked);
+      quickLockBtn.title = locked ? "Unlock image position" : "Lock image position";
+      quickLockBtn.setAttribute("aria-label", locked ? "Unlock image position" : "Lock image position");
+      quickLockBtn.innerHTML = locked
+        ? '<i class="fa-solid fa-lock"></i><span class="visually-hidden">Unlock</span>'
+        : '<i class="fa-solid fa-lock-open"></i><span class="visually-hidden">Lock</span>';
+    }
   }
 
   function pickActiveContext() {
@@ -370,7 +423,7 @@
   }
 
   function updatePanelFeatureOptions(ctx) {
-    if (!ctx || !ctx.featureSelectEl) return;
+    if (!ctx || !ctx.featureSelectEl || !ctx.annotationSelectEl) return;
     const selected = getSelectedFeatureIds(ctx);
     const previous = state.activeFeatureId;
 
@@ -385,14 +438,68 @@
     if (!selected.length) {
       state.activeFeatureId = null;
       ctx.featureSelectEl.disabled = true;
+      ctx.annotationSelectEl.disabled = true;
+      if (ctx.addAnnotationBtn) ctx.addAnnotationBtn.disabled = true;
+      if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
       return;
     }
 
     ctx.featureSelectEl.disabled = false;
+    if (ctx.addAnnotationBtn) ctx.addAnnotationBtn.disabled = false;
     const next = selected.includes(previous) ? previous : selected[0];
     state.activeFeatureId = next;
     ctx.featureSelectEl.value = String(next);
     updateFeatureColorChip(ctx, next);
+    updateAnnotationOptions(ctx);
+  }
+
+  function updateAnnotationOptions(ctx) {
+    if (!ctx || !ctx.annotationSelectEl || state.activeFeatureId == null) return;
+    const featureId = state.activeFeatureId;
+    const items = getItemsForFeature(ctx, featureId);
+    ctx.annotationSelectEl.innerHTML = "";
+
+    items.forEach((item, idx) => {
+      const option = document.createElement("option");
+      option.value = String(item._annId);
+      option.textContent = `${item._hidden ? "○" : "●"} Ann ${idx + 1}`;
+      ctx.annotationSelectEl.appendChild(option);
+    });
+
+    if (!items.length) {
+      ctx.annotationSelectEl.disabled = true;
+      if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
+      return;
+    }
+
+    ctx.annotationSelectEl.disabled = false;
+    if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = false;
+    const currentAnnId = ctx.activeAnnotationByFeature[featureId];
+    const current = items.find((it) => it._annId === currentAnnId) || items[0];
+    ctx.activeAnnotationByFeature[featureId] = current._annId;
+    ctx.annotationSelectEl.value = String(current._annId);
+    refreshAnnotationButtons(ctx);
+  }
+
+  function refreshAnnotationButtons(ctx) {
+    const item = getActiveAnnotationItem(ctx, false);
+    if (!item) {
+      if (ctx.viewAnnotationBtn) ctx.viewAnnotationBtn.disabled = true;
+      if (ctx.editAnnotationBtn) ctx.editAnnotationBtn.disabled = true;
+      if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
+      return;
+    }
+    if (ctx.viewAnnotationBtn) {
+      ctx.viewAnnotationBtn.disabled = false;
+      ctx.viewAnnotationBtn.textContent = item._hidden ? "View" : "Hide";
+    }
+    if (ctx.editAnnotationBtn) {
+      ctx.editAnnotationBtn.disabled = false;
+      ctx.editAnnotationBtn.classList.add("active");
+    }
+    if (ctx.removeAnnotationBtn) {
+      ctx.removeAnnotationBtn.disabled = false;
+    }
   }
 
   function updateFeatureColorChip(ctx, featureId) {
@@ -402,53 +509,163 @@
   }
 
   function ensurePanel(ctx) {
-    if (ctx.panelEl) return;
+    if (ctx.panelTopEl && ctx.panelBottomEl) return;
+    const sidebarHost = document.querySelector("[data-geometry-sidebar-host]");
+    if (!sidebarHost) return;
+
     const panel = document.createElement("div");
     panel.className = "fgx-panel";
     panel.dataset.geometryContextKey = ctx.key;
     panel.innerHTML = `
-      <div class="fw-semibold mb-1">Feature Geometry</div>
-      <div class="fgx-feature-row">
+      <div class="fgx-block-label">Feature</div>
+      <div class="fgx-group fgx-feature-row">
         <span class="fgx-color-dot" data-fgx-color></span>
         <select class="form-select form-select-sm" data-fgx-feature></select>
       </div>
-      <div class="fgx-toolbar" role="toolbar" aria-label="Feature geometry tools">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="roi" title="ROI (U)">ROI</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="polygon" title="Polygon (I)">Polygon</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="ellipse" title="Ellipse (J)">Ellipse</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Add cells (O)">Add</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract" title="Subtract cells (P)">Subtract</button>
-      </div>
-      <div class="fgx-grid-row">
-        <label class="small mb-0">Grid</label>
-        <input type="range" class="form-range" min="3" max="32" step="1" data-fgx-grid>
-        <span class="small text-muted" data-fgx-grid-label>8x8</span>
-      </div>
-      <div class="fgx-quick-row">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-complete>Complete</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-delete-pt>Delete Last Pt</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-clear>Clear Feature</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-toggle>Hide Overlay</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-focus>Focus + Lock</button>
-      </div>
-      <div class="fgx-layer-note">Shortcuts: U/I/J/O/P tools, Q hold pan, Esc cancel.</div>
-      <div class="fgx-status" data-fgx-status></div>
-    `;
 
-    ctx.sectionEl.appendChild(panel);
-    ctx.panelEl = panel;
+      <div class="fgx-block-label">Annotation</div>
+      <div class="fgx-group fgx-feature-row">
+        <select class="form-select form-select-sm" data-fgx-annotation></select>
+      </div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-ann-add title="Add annotation">+ Add</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-ann-view title="Toggle visibility">Eye</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-ann-edit title="Edit selected">Edit</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-fgx-ann-remove title="Delete selected">Delete</button>
+      </div>
+
+      <div class="fgx-block-label">ROI / Type</div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="roi">ROI</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="move">Move</button>
+      </div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add">Add Region</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract">Remove Region</button>
+      </div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="polygon">Polygon</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="ellipse">Ellipse</button>
+      </div>
+
+      <div class="fgx-block-label">Grid</div>
+      <div class="fgx-group fgx-grid-row">
+        <select class="form-select form-select-sm" data-fgx-grid></select>
+      </div>
+
+      <div class="fgx-block-label">Annotation Controls</div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pt>Add Pt</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-sub-pt>Sub Pt</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-clear>Clear</button>
+      </div>
+      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-toggle>Show/Hide</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-save>Save</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-save-add>Save + Add</button>
+      </div>
+    `;
+    sidebarHost.appendChild(panel);
+
+    ctx.panelTopEl = panel;
+    ctx.panelBottomEl = panel;
     ctx.featureSelectEl = panel.querySelector("[data-fgx-feature]");
+    ctx.annotationSelectEl = panel.querySelector("[data-fgx-annotation]");
+    ctx.addAnnotationBtn = panel.querySelector("[data-fgx-ann-add]");
+    ctx.viewAnnotationBtn = panel.querySelector("[data-fgx-ann-view]");
+    ctx.editAnnotationBtn = panel.querySelector("[data-fgx-ann-edit]");
+    ctx.removeAnnotationBtn = panel.querySelector("[data-fgx-ann-remove]");
+    ctx.lockBtn = null;
     ctx.colorChipEl = panel.querySelector("[data-fgx-color]");
     ctx.gridInputEl = panel.querySelector("[data-fgx-grid]");
-    ctx.gridLabelEl = panel.querySelector("[data-fgx-grid-label]");
-    ctx.statusEl = panel.querySelector("[data-fgx-status]");
+    ctx.gridLabelEl = null;
+    ctx.statusEl = null;
     ctx.toggleOverlayBtn = panel.querySelector("[data-fgx-toggle]");
+    ctx.saveBtn = panel.querySelector("[data-fgx-save]");
+    ctx.saveAddBtn = panel.querySelector("[data-fgx-save-add]");
+    ctx.addPointBtn = panel.querySelector("[data-fgx-add-pt]");
+    ctx.subPointBtn = panel.querySelector("[data-fgx-sub-pt]");
+    ctx.clearBtn = panel.querySelector("[data-fgx-clear]");
+
+    if (!state.quickBindingsDone) {
+      const quickPanBtn = document.querySelector("[data-fgx-quick-pan]");
+      const quickLockBtn = document.querySelector("[data-fgx-quick-lock]");
+      if (quickPanBtn) {
+        quickPanBtn.addEventListener("click", () => {
+          state.mode = MODES.PAN;
+          setCanvasPointerMode();
+          refreshToolbarStates();
+        });
+      }
+      if (quickLockBtn) {
+        quickLockBtn.addEventListener("click", () => {
+          const nowLocked = state.viewerRoot?.dataset?.imggrPanLocked === "true";
+          setPanLock(!nowLocked);
+          updateQuickLockUi();
+        });
+      }
+      state.quickBindingsDone = true;
+    }
+
+    for (let g = GRID_MIN; g <= GRID_MAX; g += 1) {
+      const option = document.createElement("option");
+      option.value = String(g);
+      option.textContent = `${g} x ${g}`;
+      ctx.gridInputEl.appendChild(option);
+    }
 
     ctx.featureSelectEl.addEventListener("change", () => {
       const id = Number(ctx.featureSelectEl.value);
       if (Number.isNaN(id)) return;
       state.activeFeatureId = id;
       updateFeatureColorChip(ctx, id);
+      updateAnnotationOptions(ctx);
+      redraw();
+    });
+
+    ctx.annotationSelectEl.addEventListener("change", () => {
+      if (state.activeFeatureId == null) return;
+      const annId = Number(ctx.annotationSelectEl.value);
+      if (Number.isNaN(annId)) return;
+      ctx.activeAnnotationByFeature[state.activeFeatureId] = annId;
+      refreshAnnotationButtons(ctx);
+      redraw();
+    });
+
+    ctx.addAnnotationBtn.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      createAnnotationItem(ctx, state.activeFeatureId);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      syncField(ctx);
+      redraw();
+    });
+
+    ctx.viewAnnotationBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item) return;
+      item._hidden = !item._hidden;
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      redraw();
+    });
+
+    ctx.editAnnotationBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item) return;
+      ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
+      refreshAnnotationButtons(ctx);
+      redraw();
+    });
+
+    ctx.removeAnnotationBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item) return;
+      if (!window.confirm("Delete selected annotation?")) return;
+      removeAnnotationItem(ctx, item);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      syncField(ctx);
       redraw();
     });
 
@@ -457,7 +674,6 @@
         state.mode = btn.dataset.fgxMode;
         setCanvasPointerMode();
         refreshToolbarStates();
-        setStatus(ctx, `Mode: ${state.mode.toUpperCase()}`);
       });
     });
 
@@ -469,62 +685,79 @@
       redraw();
     });
 
-    panel.querySelector("[data-fgx-clear]").addEventListener("click", () => {
-      if (state.activeFeatureId == null) return;
-      clearFeature(ctx, state.activeFeatureId);
-      setStatus(ctx, "Feature cleared.");
-    });
-
-    panel.querySelector("[data-fgx-delete-pt]").addEventListener("click", () => {
-      if (state.activeFeatureId == null) return;
-      const item = getOrCreateItem(ctx, state.activeFeatureId);
-      if (item.polygon.length) {
-        item.polygon.pop();
-        syncField(ctx);
-        redraw();
-      }
-    });
-
-    panel.querySelector("[data-fgx-complete]").addEventListener("click", () => {
-      if (state.activeFeatureId == null) return;
-      const item = getOrCreateItem(ctx, state.activeFeatureId);
-      if (item.polygon.length >= 3) {
-        setStatus(ctx, "Polygon complete.");
-        syncField(ctx);
-        redraw();
-      }
-    });
-
-    ctx.toggleOverlayBtn.addEventListener("click", () => {
-      state.overlayVisible = !state.overlayVisible;
-      ctx.toggleOverlayBtn.textContent = state.overlayVisible ? "Hide Overlay" : "Show Overlay";
+    ctx.clearBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item) return;
+      item.roi = null;
+      item.polygon = [];
+      item.mask = {
+        rows: sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID),
+        cols: sanitizeGrid(ctx.payload?.grid?.cols ?? DEFAULT_GRID),
+        cells: [],
+      };
+      syncField(ctx);
       redraw();
     });
 
-    panel.querySelector("[data-fgx-focus]").addEventListener("click", () => {
-      if (state.activeFeatureId == null) return;
-      const item = getOrCreateItem(ctx, state.activeFeatureId);
-      autoFocusToItem(item);
-      setPanLock(true);
-      setStatus(ctx, "Focused and pan locked.");
+    ctx.subPointBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item || !item.polygon.length) return;
+      item.polygon.pop();
+      syncField(ctx);
+      redraw();
     });
+
+    ctx.addPointBtn.addEventListener("click", () => {
+      state.mode = MODES.POLYGON;
+      refreshToolbarStates();
+      setCanvasPointerMode();
+    });
+
+    ctx.toggleOverlayBtn.addEventListener("click", () => {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item) return;
+      item._hidden = !item._hidden;
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      redraw();
+    });
+
+    ctx.saveBtn.addEventListener("click", () => {
+      syncField(ctx);
+    });
+
+    ctx.saveAddBtn.addEventListener("click", () => {
+      syncField(ctx);
+      if (state.activeFeatureId == null) return;
+      createAnnotationItem(ctx, state.activeFeatureId);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      redraw();
+    });
+
+    refreshAnnotationButtons(ctx);
   }
 
   function refreshToolbarStates() {
     const ctx = activeContext();
-    if (!ctx || !ctx.panelEl) return;
-    ctx.panelEl.querySelectorAll("[data-fgx-mode]").forEach((btn) => {
+    if (!ctx || !ctx.panelBottomEl) return;
+    ctx.panelBottomEl.querySelectorAll("[data-fgx-mode]").forEach((btn) => {
       const active = btn.dataset.fgxMode === state.mode;
       btn.classList.toggle("active", active);
       btn.classList.toggle("btn-primary", active);
       btn.classList.toggle("btn-outline-secondary", !active);
     });
+    const quickPanBtn = document.querySelector("[data-fgx-quick-pan]");
+    if (quickPanBtn) {
+      quickPanBtn.classList.toggle("active", state.mode === MODES.PAN);
+    }
+    const quickLockBtn = document.querySelector("[data-fgx-quick-lock]");
+    if (quickLockBtn) updateQuickLockUi();
   }
 
   function updateGridLabel(ctx) {
-    if (!ctx || !ctx.gridLabelEl) return;
+    if (!ctx || !ctx.gridInputEl) return;
     const s = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
-    ctx.gridLabelEl.textContent = `${s}x${s}`;
     if (ctx.gridInputEl) ctx.gridInputEl.value = String(s);
   }
 
@@ -566,20 +799,6 @@
       out.push([nr, nc]);
     });
     return out;
-  }
-
-  function clearFeature(ctx, featureId) {
-    const item = getOrCreateItem(ctx, featureId);
-    item.roi = null;
-    item.polygon = [];
-    item.mask = {
-      rows: sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID),
-      cols: sanitizeGrid(ctx.payload?.grid?.cols ?? DEFAULT_GRID),
-      cells: [],
-    };
-    removeItemIfEmpty(ctx, featureId);
-    syncField(ctx);
-    redraw();
   }
 
   function syncField(ctx) {
@@ -696,6 +915,59 @@
     item.mask.cells = cells;
   }
 
+  function enforceGeometryType(item, nextType) {
+    if (!item) return;
+    const current = item._geometryType || null;
+    if (current === nextType) return;
+    item._geometryType = nextType;
+    if (nextType === "region") {
+      item.polygon = [];
+    } else if (nextType === "polygon" || nextType === "ellipse") {
+      item.mask = item.mask || { rows: DEFAULT_GRID, cols: DEFAULT_GRID, cells: [] };
+      item.mask.cells = [];
+    }
+  }
+
+  function itemBounds(item) {
+    const pts = [];
+    if (item?.roi) {
+      pts.push(item.roi[0], item.roi[1]);
+    }
+    if (Array.isArray(item?.polygon)) {
+      item.polygon.forEach((p) => pts.push(p));
+    }
+    if (!pts.length) return null;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    pts.forEach((p) => {
+      minX = Math.min(minX, p[0]);
+      minY = Math.min(minY, p[1]);
+      maxX = Math.max(maxX, p[0]);
+      maxY = Math.max(maxY, p[1]);
+    });
+    return { minX, minY, maxX, maxY };
+  }
+
+  function moveItemByDelta(item, dx, dy) {
+    const m = getImageMetrics();
+    if (!m || !item) return;
+    const b = itemBounds(item);
+    if (!b) return;
+    const adjustedDx = clamp(dx, -b.minX, m.naturalWidth - b.maxX);
+    const adjustedDy = clamp(dy, -b.minY, m.naturalHeight - b.maxY);
+    if (item.roi) {
+      item.roi = [
+        [item.roi[0][0] + adjustedDx, item.roi[0][1] + adjustedDy],
+        [item.roi[1][0] + adjustedDx, item.roi[1][1] + adjustedDy],
+      ];
+    }
+    if (Array.isArray(item.polygon) && item.polygon.length) {
+      item.polygon = item.polygon.map((p) => [p[0] + adjustedDx, p[1] + adjustedDy]);
+    }
+  }
+
   function handlePointerDown(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
@@ -705,9 +977,16 @@
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
 
-    const item = getOrCreateItem(ctx, state.activeFeatureId);
+    const item = getActiveAnnotationItem(ctx, true);
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
     ensureMask(item, grid);
+
+    if (mode === MODES.MOVE) {
+      state.drawing = { kind: "move", start: point, last: point };
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (mode === MODES.ROI) {
       state.drawing = { kind: "roi", start: point, current: point };
@@ -724,6 +1003,7 @@
     }
 
     if (mode === MODES.ELLIPSE) {
+      enforceGeometryType(item, "ellipse");
       state.drawing = { kind: "ellipse", start: point, current: point };
       event.preventDefault();
       event.stopPropagation();
@@ -731,6 +1011,7 @@
     }
 
     if (mode === MODES.POLYGON) {
+      enforceGeometryType(item, "polygon");
       if (item.polygon.length) {
         const nearest = findNearestPolygonPoint(item, point);
         if (nearest >= 0) {
@@ -779,6 +1060,7 @@
     }
 
     if (mode === MODES.ADD || mode === MODES.SUBTRACT) {
+      enforceGeometryType(item, "region");
       if (!item.roi) {
         setStatus(ctx, "Draw ROI first.");
         return;
@@ -798,13 +1080,26 @@
   function handlePointerMove(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
-    const item = getOrCreateItem(ctx, state.activeFeatureId);
+    const item = getActiveAnnotationItem(ctx, false);
+    if (!item) return;
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
 
     if (state.drawing && state.drawing.kind === "roi") {
       state.drawing.current = point;
       item.roi = reorderRoi([state.drawing.start, point]);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (state.drawing && state.drawing.kind === "move") {
+      const dx = point[0] - state.drawing.last[0];
+      const dy = point[1] - state.drawing.last[1];
+      state.drawing.last = point;
+      moveItemByDelta(item, dx, dy);
+      syncField(ctx);
       redraw();
       event.preventDefault();
       event.stopPropagation();
@@ -847,9 +1142,19 @@
   function handlePointerUp(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
-    const item = getOrCreateItem(ctx, state.activeFeatureId);
+    const item = getActiveAnnotationItem(ctx, false);
+    if (!item) return;
 
     if (state.drawing && state.drawing.kind === "roi") {
+      state.drawing = null;
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (state.drawing && state.drawing.kind === "move") {
       state.drawing = null;
       syncField(ctx);
       redraw();
@@ -925,8 +1230,8 @@
     }
 
     if (key === "enter" && state.activeFeatureId != null) {
-      const item = getOrCreateItem(ctx, state.activeFeatureId);
-      if (item.polygon.length >= 3) {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (item && item.polygon.length >= 3) {
         refillMaskFromPolygon(item);
         syncField(ctx);
         redraw();
@@ -1038,10 +1343,13 @@
 
     const selectedIds = new Set(getSelectedFeatureIds(activeCtx));
     if (!selectedIds.size) return;
+    const activeItem = getActiveAnnotationItem(activeCtx, false);
+    const activeAnnId = activeItem ? activeItem._annId : null;
 
     (activeCtx.payload.items || []).forEach((item) => {
       if (!selectedIds.has(item.feature_id)) return;
-      drawItem(item, item.feature_id === state.activeFeatureId);
+      if (item._hidden) return;
+      drawItem(item, activeAnnId != null && item._annId === activeAnnId);
     });
 
     if (state.drawing && (state.drawing.kind === "roi" || state.drawing.kind === "ellipse")) {
@@ -1181,19 +1489,30 @@
 
   function wireContext(sectionEl, featuresContainerEl, hiddenField, key, initialPayloadRaw) {
     const initial = sanitizePayload(initialPayloadRaw, DEFAULT_GRID);
+    let nextAnnotationId = 1;
+    (initial.items || []).forEach((item) => {
+      item._annId = nextAnnotationId;
+      nextAnnotationId += 1;
+    });
     const ctx = {
       key,
       sectionEl,
       featuresContainerEl,
       hiddenField,
       payload: initial,
-      panelEl: null,
+      panelTopEl: null,
+      panelBottomEl: null,
       featureSelectEl: null,
+      annotationSelectEl: null,
+      addAnnotationBtn: null,
+      removeAnnotationBtn: null,
       colorChipEl: null,
       gridInputEl: null,
       gridLabelEl: null,
       statusEl: null,
       toggleOverlayBtn: null,
+      activeAnnotationByFeature: {},
+      nextAnnotationId,
     };
 
     ensurePanel(ctx);
@@ -1257,9 +1576,8 @@
     setCanvasPointerMode();
 
     state.contexts.forEach((c) => {
-      if (c.panelEl) {
-        c.panelEl.style.display = c.key === ctx.key ? "block" : "none";
-      }
+      if (c.panelTopEl) c.panelTopEl.style.display = c.key === ctx.key ? "flex" : "none";
+      if (c.panelBottomEl) c.panelBottomEl.style.display = c.key === ctx.key ? "flex" : "none";
     });
 
     redraw();

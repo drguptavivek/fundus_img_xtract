@@ -5,7 +5,7 @@
 {% set uuid = image_uuid or image.uuid %}
 {% from "_forms.html" import csrf_field %}
 
-<div class="card shadow-sm h-100">
+<div class="card shadow-sm">
 <div class="card-header">
   <div class="d-flex align-items-center justify-content-start flex-wrap gap-2">
     <!-- Filter buttons -->
@@ -33,11 +33,13 @@
     </div>
 
     <!-- Brightness / Contrast Controls -->
-    <div class="d-flex flex-sm-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls flex-grow-1">
+    <div class="d-flex flex-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls">
       <!-- Brightness -->
-      <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
-        <label class="small mb-0" for="imggr-bright-{{ uuid }}">Brightness</label>
-        <div class="imggr-range-wrap position-relative flex-grow-1">
+      <div class="d-flex align-items-center gap-1" style="width: 210px; min-width: 210px;">
+        <label class="small mb-0 d-flex align-items-center" for="imggr-bright-{{ uuid }}" title="Brightness" aria-label="Brightness">
+          <i class="fa-solid fa-sun"></i>
+        </label>
+        <div class="imggr-range-wrap position-relative flex-grow-1 ms-1">
           <input id="imggr-bright-{{ uuid }}" class="form-range imggr-bright form-range-light"
                  type="range" min="0.5" max="5" step="0.05" value="1">
           <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-bright-tip d-none">1.00</span>
@@ -45,9 +47,11 @@
       </div>
 
       <!-- Contrast -->
-      <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
-        <label class="small mb-0" for="imggr-contrast-{{ uuid }}">Contrast</label>
-        <div class="imggr-range-wrap position-relative flex-grow-1">
+      <div class="d-flex align-items-center gap-1" style="width: 210px; min-width: 210px;">
+        <label class="small mb-0 d-flex align-items-center" for="imggr-contrast-{{ uuid }}" title="Contrast" aria-label="Contrast">
+          <i class="fa-solid fa-circle-half-stroke"></i>
+        </label>
+        <div class="imggr-range-wrap position-relative flex-grow-1 ms-1">
           <input id="imggr-contrast-{{ uuid }}" class="form-range imggr-contrast form-range-light"
                  type="range" min="0.5" max="5" step="0.05" value="1">
           <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-contrast-tip d-none">1.00</span>
@@ -56,13 +60,13 @@
 
     </div>
 
-    <!-- Reset loupe Help tooltips-->
-    <div class="d-flex gap-2 flex-grow-1 align-items-sm-end justify-content-end">
+    <!-- First-row quick controls -->
+    <div class="d-flex gap-2 align-items-sm-end justify-content-end ms-auto">
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
 
       <!-- Presets -->
-      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets" id = "imggr-presets-section">
+      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets" id="imggr-presets-section">
         
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="1">1</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="2">2</button>
@@ -80,49 +84,59 @@
         Save
         {{csrf_field()}}
       </button>
+    </div>
+  </div>
 
-      <!-- Loupe -->
+  <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel d-flex flex-wrap align-items-center gap-2">
+    <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
+      <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
+        CDR/RDR
+      </button>
+      <button type="button" class="btn btn-outline-secondary imggr-cdr-clear" disabled>
+        Clear
+      </button>
+    </div>
+    <div class="small text-muted imggr-cdr-status"></div>
+    <div class="small"><span class="text-muted">CDR:</span> <span class="imggr-cdr-value fw-semibold">—</span></div>
+    <div class="small"><span class="text-muted">RDR:</span> <span class="imggr-rdr-value fw-semibold">—</span></div>
+    <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>
+      Done
+    </button>
+    <div class="d-flex align-items-center gap-2 ms-lg-auto" style="min-width: 300px;">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-fgx-quick-pan title="Hand tool">
+        <i class="fa-solid fa-hand"></i>
+        <span class="visually-hidden">Hand</span>
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-fgx-quick-lock title="Lock image position">
+        <i class="fa-solid fa-lock"></i>
+        <span class="visually-hidden">Lock</span>
+      </button>
+      <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ uuid }}">Zoom:</label>
+      <input id="imggr-zoom-slider-{{ uuid }}"
+             class="form-range imggr-zoom-slider flex-grow-1"
+             type="range"
+             min="10"
+             max="400"
+             step="5"
+             value="100"
+             title="Adjust image zoom level">
+      <button type="button"
+              class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
+              title="Fit image to container">
+        Fit
+      </button>
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
               aria-pressed="false"
               aria-label="Toggle loupe magnifier">
         L
       </button>
-
-      <!-- CDR/RDR Tool -->
-      <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
-        <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
-          CDR/RDR
-        </button>
-        <button type="button" class="btn btn-outline-secondary imggr-cdr-clear" disabled>
-          Clear
-        </button>
-      </div>
-
-      <!-- Shortcut hint -->
       <button type="button"
-              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger align-self-end"
+              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
               data-bs-toggle="modal"
               data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
               aria-label="Keyboard shortcuts">
         <span aria-hidden="true">?</span>
-      </button>
-    </div>
-  </div>
-
-  <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <div class="fw-semibold">CDR/RDR Measurement</div>
-      <div class="small text-muted imggr-cdr-status">Inactive</div>
-    </div>
-    <div class="small text-muted mt-1">
-      Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
-    </div>
-    <div class="d-flex flex-wrap align-items-center gap-3 mt-2 small">
-      <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value fw-semibold">—</span></div>
-      <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value fw-semibold">—</span></div>
-      <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>
-        Done
       </button>
     </div>
   </div>
@@ -134,26 +148,30 @@
         class="imggr-viewer-root d-flex justify-content-center" 
         data-enc-id="{{ uuid }}">
       
-        <div class="imggr-stage position-relative d-flex justify-content-center">
+        <div class="imggr-stage position-relative">
+          <div class="imggr-annot-layout d-flex w-100 gap-2">
+            <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host></aside>
+            <div class="imggr-main-wrap flex-grow-1 d-flex justify-content-center">
+              <div class="imggr-main bg-black rounded position-relative">
+                <img       
+                  class="imggr-main-img" 
+                  style="width:100%; height:100%; object-fit:contain; display:block;"
+                  src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
+                  alt="Image" 
+                  data-index="0" 
+                />  
+                <button 
+                  class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" 
+                  type="button">
+                  Fullscreen
+                </button>
+              </div>
+            </div>
+          </div>
 
-          <div class="imggr-main bg-black rounded position-relative">
-            <img       
-              class="imggr-main-img" 
-              style="width:100%; height:100%; object-fit:contain; display:block;"
-              src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
-              alt="Image" 
-              data-index="0" 
-            />  
-            <button 
-              class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" 
-              type="button">
-              Fullscreen
-            </button>
+          <div class="imggr-loupe" aria-hidden="true"></div>
+
         </div>
-
-        <div class="imggr-loupe" aria-hidden="true"></div>
-
-      </div>
       
     </div>
   </div>
@@ -161,24 +179,6 @@
     <div class="mb-2">
 
    
-
-      <!-- Zoom Slider -->
-      <div class="d-flex align-items-center gap-2">
-        <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ uuid }}">Zoom:</label>
-        <input id="imggr-zoom-slider-{{ uuid }}"
-               class="form-range imggr-zoom-slider flex-grow-1"
-               type="range"
-               min="10"
-               max="400"
-               step="5"
-               value="100"
-               title="Adjust image zoom level">
-        <button type="button"
-                 class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
-                 title="Fit image to container">
-          Fit
-        </button>
-      </div>
 
          <!-- Zoom Info -->
       <div class="d-flex justify-content-between align-items-center mb-1">
@@ -205,20 +205,6 @@
         {% else %}
           <span>Metadata pending</span>
         {% endif %}
-      </div>
-
-      <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <div class="fw-semibold">CDR/RDR Measurement</div>
-          <div class="small text-muted imggr-cdr-status">Inactive</div>
-        </div>
-        <div class="small text-muted mt-1">
-          Step 1: Click two points to draw the disc diameter line. Step 2: Click two points on that line to mark the cup segment.
-        </div>
-        <div class="d-flex flex-wrap gap-3 mt-2 small">
-          <div><span class="text-muted">CDR:</span> <span class="imggr-cdr-value">—</span></div>
-          <div><span class="text-muted">RDR:</span> <span class="imggr-rdr-value">—</span></div>
-        </div>
       </div>
 
     </div>

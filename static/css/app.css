@@ -1292,6 +1292,33 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   overflow: visible;
 }
 
+.imggr-annot-layout {
+  min-height: 560px;
+}
+
+.imggr-annot-sidebar {
+  width: 220px;
+  min-width: 220px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.imggr-main-wrap {
+  min-width: 0;
+}
+
+@media (max-width: 992px) {
+  .imggr-annot-layout {
+    flex-direction: column;
+  }
+
+  .imggr-annot-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: none;
+  }
+}
+
 .imggr-loupe {
   position: fixed;
   left: 50%;

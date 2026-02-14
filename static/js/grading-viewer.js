@@ -252,10 +252,10 @@
       if (k === 'a') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
       if (k === 'd') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
       // Use Z and X keys for image zoom to avoid conflict with loupe zoom
-      if (k === 'z') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) + ZOOM_STEP); return; }
-      if (k === 'x') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) - ZOOM_STEP); return; }
-      if (k === '0') { e.preventDefault(); state?.setZoomLevel?.(100); return; }
-      if (k === 'home') { e.preventDefault(); state?.fitToContainer?.(); return; }
+      if (k === 'z') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) + ZOOM_STEP); return; }
+      if (k === 'x') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) - ZOOM_STEP); return; }
+      if (k === '0') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.(100); return; }
+      if (k === 'home') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.fitToContainer?.(); return; }
 
       if (rawKey === '<' || rawKey === ',') { e.preventDefault(); adjustRangeInput(bright, -1); return; }
       if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
@@ -347,6 +347,8 @@
     let cdrDrawPending = false;
     let cdrLastSize = { width: 0, height: 0 };
     let cdrRedrawTimer = null;
+    let cdrBubble = null;
+    let cdrBubbleTimer = null;
 
     function isPanLocked() {
       return root?.dataset?.imggrPanLocked === 'true';
@@ -875,6 +877,67 @@
       }
     }
 
+    function ensureCdrBubble() {
+      if (cdrBubble) return cdrBubble;
+      cdrBubble = document.createElement('div');
+      cdrBubble.className = 'imggr-cdr-bubble';
+      cdrBubble.setAttribute('aria-live', 'polite');
+      cdrBubble.style.position = 'fixed';
+      cdrBubble.style.zIndex = '1080';
+      cdrBubble.style.maxWidth = '420px';
+      cdrBubble.style.padding = '0.45rem 0.65rem';
+      cdrBubble.style.borderRadius = '0.5rem';
+      cdrBubble.style.background = 'rgba(33, 37, 41, 0.95)';
+      cdrBubble.style.color = '#fff';
+      cdrBubble.style.boxShadow = '0 0.4rem 1rem rgba(0,0,0,0.2)';
+      cdrBubble.style.fontSize = '0.82rem';
+      cdrBubble.style.lineHeight = '1.25';
+      cdrBubble.style.pointerEvents = 'none';
+      cdrBubble.style.display = 'none';
+      document.body.appendChild(cdrBubble);
+      return cdrBubble;
+    }
+
+    function positionCdrBubble() {
+      if (!cdrBubble || !main) return;
+      const rect = main.getBoundingClientRect();
+      const margin = 10;
+      const left = clamp(rect.left + margin, 8, Math.max(8, window.innerWidth - 440));
+      const top = clamp(rect.top + margin, 8, Math.max(8, window.innerHeight - 80));
+      cdrBubble.style.left = `${left}px`;
+      cdrBubble.style.top = `${top}px`;
+    }
+
+    function hideCdrBubble() {
+      if (cdrBubbleTimer) {
+        clearTimeout(cdrBubbleTimer);
+        cdrBubbleTimer = null;
+      }
+      if (cdrBubble) {
+        cdrBubble.style.display = 'none';
+      }
+    }
+
+    function showCdrBubble(text, persistent) {
+      if (!text) {
+        hideCdrBubble();
+        return;
+      }
+      const bubble = ensureCdrBubble();
+      bubble.textContent = text;
+      positionCdrBubble();
+      bubble.style.display = 'block';
+      if (cdrBubbleTimer) {
+        clearTimeout(cdrBubbleTimer);
+        cdrBubbleTimer = null;
+      }
+      if (!persistent) {
+        cdrBubbleTimer = setTimeout(() => {
+          hideCdrBubble();
+        }, 2400);
+      }
+    }
+
     function resetCdrValues(){
       if (cdrValue) cdrValue.textContent = '—';
       if (rdrValue) rdrValue.textContent = '—';
@@ -887,7 +950,8 @@
       resetCdrValues();
       setCdrDoneEnabled(false);
       scheduleCdrDraw();
-      updateCdrStatus('Inactive');
+      updateCdrStatus('');
+      hideCdrBubble();
       if (cdrClear) cdrClear.disabled = true;
     }
 
@@ -895,10 +959,16 @@
       if (!card) return;
       const disabled = !!flag;
       card.classList.toggle('imggr-cdr-locked', disabled);
+      updateZoomControlLocks();
+    }
+
+    function updateZoomControlLocks() {
+      if (!card) return;
       const zoomSlider = card.querySelector('.imggr-zoom-slider');
       const zoomFitButton = card.querySelector('.imggr-zoom-fit');
-      if (zoomSlider) zoomSlider.disabled = disabled;
-      if (zoomFitButton) zoomFitButton.disabled = disabled;
+      const locked = isPanLocked() || cdrActive;
+      if (zoomSlider) zoomSlider.disabled = locked;
+      if (zoomFitButton) zoomFitButton.disabled = locked;
     }
 
     function findCommentTargets(){
@@ -986,7 +1056,8 @@
         resizeCdrOverlay();
         setCdrOverlayVisible(true);
         cdrStep = 1;
-        updateCdrStatus('Select disc line: click 2 points');
+        updateCdrStatus('Active');
+        showCdrBubble('CDR/RDR: Step 1 of 2. Click two points to draw the disc diameter line.', true);
         if (cdrClear) cdrClear.disabled = false;
         setCdrDoneEnabled(cdrDiscPoints.length === 2 && cdrCupPoints.length === 2);
       } else {
@@ -1183,7 +1254,8 @@
       const rdr = Math.min(1, Math.max(0, 1 - cdr));
       if (cdrValue) cdrValue.textContent = cdr.toFixed(2);
       if (rdrValue) rdrValue.textContent = rdr.toFixed(2);
-      updateCdrStatus('Measurement ready');
+      updateCdrStatus('Ready');
+      showCdrBubble('CDR/RDR measurement ready. Click Done to insert into comments.', true);
       setCdrDoneEnabled(true);
     }
 
@@ -1204,7 +1276,8 @@
       if (cdrStep == 1) {
         cdrDiscPoints = [point];
         cdrCupPoints = [];
-        updateCdrStatus('Select disc line: click 2nd point');
+        updateCdrStatus('Active');
+        showCdrBubble('Step 1 of 2: click second point for disc diameter line.', true);
         cdrStep = 2;
         scheduleCdrDraw();
         return;
@@ -1212,7 +1285,8 @@
       if (cdrStep == 2) {
         cdrDiscPoints = [cdrDiscPoints[0], point];
         cdrCupPoints = [];
-        updateCdrStatus('Select cup segment: click 1st point');
+        updateCdrStatus('Active');
+        showCdrBubble('Step 2 of 2: click first point for cup segment (on disc line).', true);
         cdrStep = 3;
         scheduleCdrDraw();
         return;
@@ -1220,7 +1294,8 @@
       if (cdrStep == 3) {
         const projected = projectPointToLine(point, cdrDiscPoints[0], cdrDiscPoints[1]);
         cdrCupPoints = [{ x: projected.x, y: projected.y }];
-        updateCdrStatus('Select cup segment: click 2nd point');
+        updateCdrStatus('Active');
+        showCdrBubble('Step 2 of 2: click second point for cup segment.', true);
         cdrStep = 4;
         scheduleCdrDraw();
         return;
@@ -1394,12 +1469,14 @@
       cdrDone.addEventListener('click', () => {
         const tag = buildCdrTag();
         if (!tag) {
-          updateCdrStatus('Complete CDR steps first');
+          updateCdrStatus('Active');
+          showCdrBubble('Complete CDR/RDR steps first.', false);
           return;
         }
         const target = selectCommentTarget();
         if (!target) {
-          updateCdrStatus('No comment field found');
+          updateCdrStatus('');
+          showCdrBubble('No comments field found to store CDR/RDR text.', false);
           cdrActive = false;
           if (cdrToggle) {
             cdrToggle.setAttribute('aria-pressed', 'false');
@@ -1412,7 +1489,8 @@
         target.value = nextValue;
         target.dispatchEvent(new Event('input', { bubbles: true }));
         target.dispatchEvent(new Event('change', { bubbles: true }));
-        updateCdrStatus('Added to comments');
+        updateCdrStatus('Saved');
+        showCdrBubble('CDR/RDR added to comments.', false);
         cdrActive = false;
         if (cdrToggle) {
           cdrToggle.setAttribute('aria-pressed', 'false');
@@ -1569,6 +1647,10 @@
         // Save settings to localStorage for rapid loading
         saveViewerSettingsToStorage();
       } else if (e.touches.length === 2) {
+        if (isPanLocked()) {
+          e.preventDefault();
+          return;
+        }
         // Two touches - pinch zoom
         const currentDistance = getTouchDistance(e.touches);
         if (touchStartDistance > 0) {
@@ -1595,6 +1677,9 @@
     // Mouse wheel zoom for desktop
     main.addEventListener('wheel', (e) => {
       if (cdrActive) {
+        return;
+      }
+      if (isPanLocked()) {
         return;
       }
       if (e.ctrlKey || e.metaKey) {
@@ -1675,6 +1760,9 @@
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
+      if (cdrActive) {
+        positionCdrBubble();
+      }
     });
     
     // Save settings to localStorage when page is unloaded for rapid loading next time
@@ -1730,6 +1818,7 @@
       if (zoomSlider) {
         zoomSlider.value = currentZoom;
       }
+      updateZoomControlLocks();
     }
 
     // Zoom/pan are not persisted across images
@@ -1743,6 +1832,10 @@
     const zoomFitBtn = card ? card.querySelector('.imggr-zoom-fit') : null;
     
     function setZoomLevel(zoomPercent) {
+      if (isPanLocked()) {
+        updateZoomControlLocks();
+        return;
+      }
       currentZoom = clamp(zoomPercent, ZOOM_MIN, ZOOM_MAX);
       setCdrOverlayVisible(false);
       scheduleCdrRedrawAfterIdle();
@@ -1765,11 +1858,19 @@
     
     // Zoom slider event
     zoomSlider?.addEventListener('input', (e) => {
+      if (isPanLocked()) {
+        updateZoomControlLocks();
+        return;
+      }
       setZoomLevel(parseFloat(e.target.value));
     });
     
     // Fit button event
     zoomFitBtn?.addEventListener('click', () => {
+      if (isPanLocked()) {
+        updateZoomControlLocks();
+        return;
+      }
       fitToContainer();
     });
     
@@ -1798,6 +1899,9 @@
       },
       isCdrActive: () => cdrActive,
       isPanLocked,
+      refreshLockState: () => {
+        updateZoomControlLocks();
+      },
     });
     root.__imggrState = viewerStates.get(root);
 

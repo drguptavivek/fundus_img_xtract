@@ -113,3 +113,7 @@ security-audit/reports/
 
 # bv (beads viewer) local config and caches
 .bv/
+.last_full_check
+.mapping_last_update
+daemon-2026*.*
+

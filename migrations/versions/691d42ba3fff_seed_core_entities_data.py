@@ -44,7 +44,8 @@ CORE_AREAS = [
 CORE_DISEASES = {
     1: "Glaucoma",
     2: "DR",
-    3: "AMD",
+    3: "Dry AMD",
+    4: "DME",
 }
 
 STANDARD_GRADINGS = {
@@ -124,7 +125,7 @@ STANDARD_GRADINGS = {
             "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks.",
         },
     ],
-    "AMD": [
+    "Dry AMD": [
         {
             "impression": "No AMD",
             "display_order": 1,
@@ -135,19 +136,19 @@ STANDARD_GRADINGS = {
             "impression": "Early AMD",
             "display_order": 2,
             "is_active": True,
-            "guidelines": "Few small drusen, pigmentary changes in the macula.",
+            "guidelines": "<p>Medium drusen &gt;63 μm and ≤125 μm and No AMD pigmentary abnormalities within 2 disc diameters of fovea</p>",
         },
         {
             "impression": "Intermediate AMD",
             "display_order": 3,
             "is_active": True,
-            "guidelines": "Many medium-sized drusen, one or more large drusen, pigmentary changes.",
+            "guidelines": "<p>Large drusen &gt; 125 μm and/or Any AMD pigmentary abnormalities within 2 disc diameters of fovea</p>",
         },
         {
             "impression": "Late AMD",
             "display_order": 4,
             "is_active": True,
-            "guidelines": "Geographic atrophy (dry) or neovascular AMD (wet).",
+            "guidelines": "<p>Any geographic atrophy</p>",
         },
         {
             "impression": "Other Retinal",
@@ -160,6 +161,31 @@ STANDARD_GRADINGS = {
             "display_order": 6,
             "is_active": True,
             "guidelines": "<p>If cannot grade, mark as not gradable. Note reasons in remarks.</p>",
+        },
+    ],
+    "DME": [
+        {
+            "impression": "M0 No DME",
+            "display_order": 1,
+            "is_active": True,
+            "guidelines": "No diabetic macular edema.",
+        },
+        {
+            "impression": "M1 Referable Diabetic Maculopathy",
+            "display_order": 2,
+            "is_active": True,
+            "guidelines": (
+                "<ul>"
+                "<li>Exudate within 1 disc diameter (DD) of the centre of the fovea, OR</li>"
+                "<li>A group of exudates within the macula (area ≥ half the disc area) and this area is all within the macular area.</li>"
+                "</ul>"
+            ),
+        },
+        {
+            "impression": "Not Gradable",
+            "display_order": 3,
+            "is_active": True,
+            "guidelines": "If cannot grade, mark as not gradable. Note reasons in remarks.",
         },
     ],
 }
@@ -254,31 +280,41 @@ SAMPLE_FEATURES = {
             "remarks": "Cannot grade due to poor image quality or other factors",
         },
     },
-    "AMD": {
+    "DME": {
+        "M0 No DME": {
+            "features": [],
+            "remarks": "No diabetic macular edema",
+        },
+        "M1 Referable Diabetic Maculopathy": {
+            "features": [
+                {"sr_no": 1, "label": "Exudate within 1 disc diameter of the centre of the fovea"},
+                {"sr_no": 2, "label": "Group of exudates within macula (area ≥ half disc area) within macular area"},
+            ],
+            "remarks": "Referable diabetic maculopathy",
+        },
+        "Not Gradable": {
+            "features": [],
+            "remarks": "Cannot grade due to poor image quality or other factors",
+        },
+    },
+    "Dry AMD": {
         "No AMD": {
             "features": [],
             "remarks": "No signs of age-related macular degeneration",
         },
         "Early AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Few small drusen"},
-                {"sr_no": 2, "label": "Pigmentary changes"},
-            ],
+            "features": [],
             "remarks": "Early age-related macular degeneration",
         },
         "Intermediate AMD": {
             "features": [
-                {"sr_no": 1, "label": "Many medium-sized drusen"},
-                {"sr_no": 2, "label": "One or more large drusen"},
-                {"sr_no": 3, "label": "Pigmentary changes"},
+                {"sr_no": 1, "label": "Large drusen > 125 μm"},
+                {"sr_no": 2, "label": "Any AMD pigmentary abnormalities"},
             ],
             "remarks": "Intermediate age-related macular degeneration",
         },
         "Late AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Geographic atrophy"},
-                {"sr_no": 2, "label": "Neovascular AMD"},
-            ],
+            "features": [],
             "remarks": "Late age-related macular degeneration",
         },
         "Other Retinal": {
@@ -389,7 +425,8 @@ def upgrade() -> None:
                 INSERT INTO diseases (id, name) VALUES
                 (1, 'Glaucoma'),
                 (2, 'DR'),
-                (3, 'AMD')
+                (3, 'Dry AMD'),
+                (4, 'DME')
                 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
                 """
             )
@@ -502,7 +539,7 @@ def downgrade() -> None:
                 GradingsFeatures.disease_grading_id.in_(
                     db.execute(
                         sa.select(DiseaseGrading.id).where(
-                            DiseaseGrading.disease_id.in_([1, 2, 3])  # Core disease IDs
+                            DiseaseGrading.disease_id.in_([1, 2, 3, 4])  # Core disease IDs
                         )
                     ).scalars().all()
                 )
@@ -512,12 +549,12 @@ def downgrade() -> None:
         # Remove disease gradings for core diseases
         db.execute(
             delete(DiseaseGrading).where(
-                DiseaseGrading.disease_id.in_([1, 2, 3])  # Core disease IDs
+                DiseaseGrading.disease_id.in_([1, 2, 3, 4])  # Core disease IDs
             )
         )
         
         # Remove core diseases
-        db.execute(delete(Disease).where(Disease.id.in_([1, 2, 3])))
+        db.execute(delete(Disease).where(Disease.id.in_([1, 2, 3, 4])))
         
         # Remove core areas
         db.execute(delete(Area).where(Area.id.in_([1, 2, 3, 4])))

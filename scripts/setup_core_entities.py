@@ -140,7 +140,13 @@ SAMPLE_FEATURES = {
             "remarks": "No Glaucoma/Not Glaucoma suspect BUT Any other retinal or disc pathology. Note disease in remarks"
         },
         "Not Gradable": {
-            "features": [],
+            "features": [
+                {"sr_no": 1, "label": "Media opacity (cataract/hemorrhage)"},
+                {"sr_no": 2, "label": "Poor focus or defocus"},
+                {"sr_no": 3, "label": "Small pupil / inadequate dilation"},
+                {"sr_no": 4, "label": "Glare or reflection artifact"},
+                {"sr_no": 5, "label": "Incomplete optic disc capture"}
+            ],
             "remarks": "Cannot grade due to poor image quality or other factors"
         }
     },
@@ -184,7 +190,13 @@ SAMPLE_FEATURES = {
             "remarks": "No DR/DME BUT Any other retinal or disc pathology. Note disease in remarks"
         },
         "Not Gradable": {
-            "features": [],
+            "features": [
+                {"sr_no": 1, "label": "Media opacity (cataract/hemorrhage)"},
+                {"sr_no": 2, "label": "Poor focus or motion blur"},
+                {"sr_no": 3, "label": "Small pupil / inadequate dilation"},
+                {"sr_no": 4, "label": "Glare or reflection artifact"},
+                {"sr_no": 5, "label": "Inadequate field of view"}
+            ],
             "remarks": "Cannot grade due to poor image quality or other factors"
         }
     },

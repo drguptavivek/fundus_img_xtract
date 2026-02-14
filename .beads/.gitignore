@@ -43,3 +43,6 @@ export-state/
 # contributors to accidentally commit upstream issue databases.
 # The JSONL files (issues.jsonl, interactions.jsonl) and config files
 # are tracked by git by default since no pattern above ignores them.
+*.last_full_check*
+*.mapping_last_update*
+*daemon-2026*

@@ -189,6 +189,11 @@
         feature_id: featureId,
         feature_label: typeof item.feature_label === "string" ? item.feature_label : null,
         _locked: true,
+        _ellipseRotation: (() => {
+          const deg = Number(item?.ellipse?.rotation_deg);
+          if (Number.isFinite(deg)) return (deg * Math.PI) / 180;
+          return 0;
+        })(),
         roi: normalizeRoi(roiPixel),
         polygon: normalizePolygon(polygonPixel),
         mask: {
@@ -258,6 +263,10 @@
     return !item?._geometryType || item._geometryType === "box";
   }
 
+  function isEllipseItem(item) {
+    return item?._geometryType === "ellipse";
+  }
+
   function clearBoxResidualGeometry(item) {
     if (!item || !isBoxItem(item)) return;
     item.polygon = [];
@@ -300,6 +309,7 @@
       .filter((it) => selectedIds.has(it.feature_id) && isCompleteItem(it))
       .map((item) => {
         const roi = clampRoiToImage(item.roi);
+        const ellipseRotation = Number.isFinite(item._ellipseRotation) ? item._ellipseRotation : 0;
         const polygonRaw = isBoxItem(item)
           ? [
               [roi[0][0], roi[0][1]],
@@ -339,6 +349,11 @@
           dicom: {
             tracking_id: `feature-${item.feature_id}`,
           },
+          ellipse: isEllipseItem(item)
+            ? {
+                rotation_deg: Number(((ellipseRotation * 180) / Math.PI).toFixed(3)),
+              }
+            : undefined,
         };
       });
 
@@ -377,6 +392,7 @@
       feature_id: featureId,
       feature_label: getFeatureLabel(ctx, featureId),
       _geometryType: "box",
+      _ellipseRotation: 0,
       _locked: false,
       roi: null,
       polygon: [],
@@ -494,6 +510,9 @@
       <button type="button" class="btn btn-outline-primary btn-sm" data-fgx-box-dup title="Duplicate" aria-label="Duplicate">
         <i class="fa-solid fa-copy"></i>
       </button>
+      <button type="button" class="btn btn-outline-warning btn-sm" data-fgx-box-convert-poly title="Convert ellipse to polygon" aria-label="Convert ellipse to polygon">
+        <i class="fa-solid fa-draw-polygon"></i>
+      </button>
       <button type="button" class="btn btn-outline-danger btn-sm" data-fgx-box-del title="Delete" aria-label="Delete">
         <i class="fa-solid fa-trash"></i>
       </button>
@@ -511,8 +530,8 @@
       if (item._locked && state.drawing && state.drawing.itemAnnId === item._annId) {
         state.drawing = null;
       } else if (!item._locked) {
-        // Unlock implies editable: switch to move mode for immediate resize/move.
-        state.mode = MODES.MOVE;
+        // Unlock implies editable: polygon should return to point edit mode.
+        state.mode = item?._geometryType === "polygon" ? MODES.POLYGON : MODES.MOVE;
         setCanvasPointerMode();
         refreshToolbarStates();
       }
@@ -546,7 +565,13 @@
         [src[0][0] + dx, src[0][1] + dy],
         [src[1][0] + dx, src[1][1] + dy],
       ];
-      dup._geometryType = "box";
+      dup._geometryType = item._geometryType || "box";
+      dup._ellipseRotation = Number(item._ellipseRotation) || 0;
+      if (isEllipseItem(dup)) {
+        dup.polygon = polygonFromEllipse(dup.roi, dup._ellipseRotation);
+        ensureMask(dup, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+        refillMaskFromPolygon(dup);
+      }
       dup._locked = false;
       setSelectedBox(ctx, dup);
       updateAnnotationOptions(ctx);
@@ -567,6 +592,21 @@
       clearSelectedBox();
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
+      syncField(ctx);
+      redraw();
+    });
+
+    wrap.querySelector("[data-fgx-box-convert-poly]")?.addEventListener("click", () => {
+      const ctx = activeContext();
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
+      if (!ctx || !item || !item.roi || !isEllipseItem(item)) return;
+      item._geometryType = "polygon";
+      item.polygon = polygonFromEllipse(item.roi, Number(item._ellipseRotation) || 0, 48);
+      ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+      refillMaskFromPolygon(item);
+      state.mode = MODES.POLYGON;
+      setCanvasPointerMode();
+      refreshToolbarStates();
       syncField(ctx);
       redraw();
     });
@@ -603,6 +643,12 @@
       lockBtn.innerHTML = locked
         ? '<i class="fa-solid fa-lock"></i>'
         : '<i class="fa-solid fa-lock-open"></i>';
+    }
+    const convertBtn = state.boxActionsEl.querySelector("[data-fgx-box-convert-poly]");
+    if (convertBtn) {
+      const show = isEllipseItem(item);
+      convertBtn.style.display = show ? "inline-flex" : "none";
+      convertBtn.disabled = !show;
     }
     const roi = clampRoiToImage(item.roi);
     const boxW = Math.abs(roi[1][0] - roi[0][0]);
@@ -814,6 +860,7 @@
       <div class="fgx-block-label">Box</div>
       <div class="fgx-group">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box>+ Add Box</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse>+ Add Ellipse</button>
       </div>
     `;
     sidebarHost.appendChild(panel);
@@ -915,11 +962,28 @@
       if (state.activeFeatureId == null) return;
       const item = createAnnotationItem(ctx, state.activeFeatureId);
       item._geometryType = "box";
+      item._ellipseRotation = 0;
       setSelectedBox(ctx, item);
       setPanLock(true);
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       state.mode = MODES.ROI;
+      setCanvasPointerMode();
+      refreshToolbarStates();
+      syncField(ctx);
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-add-ellipse]")?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      const item = createAnnotationItem(ctx, state.activeFeatureId);
+      item._geometryType = "ellipse";
+      item._ellipseRotation = 0;
+      setSelectedBox(ctx, item);
+      setPanLock(true);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      state.mode = MODES.ELLIPSE;
       setCanvasPointerMode();
       refreshToolbarStates();
       syncField(ctx);
@@ -1082,17 +1146,39 @@
     if (preferredAnnId != null) {
       const preferred = items.find((it) => it._annId === preferredAnnId);
       if (preferred) {
-        const handle = getRoiResizeHandle(point, preferred.roi);
-        if (handle >= 0) return { item: preferred, handle };
-        if (pointInRoi(point, preferred.roi)) return { item: preferred, handle: -1 };
+        if (isEllipseItem(preferred)) {
+          const pCanvas = pixelToCanvas(point);
+          const rotH = ellipseRotateHandleCanvasPoint(preferred.roi, Number(preferred._ellipseRotation) || 0);
+          if (pCanvas && rotH) {
+            const dx = rotH[0] - pCanvas[0];
+            const dy = rotH[1] - pCanvas[1];
+            if (Math.sqrt(dx * dx + dy * dy) <= 12) return { item: preferred, action: "rotate" };
+          }
+        }
+        const handle = isEllipseItem(preferred)
+          ? getEllipseResizeHandle(point, preferred)
+          : getRoiResizeHandle(point, preferred.roi);
+        if (handle >= 0) return { item: preferred, action: "resize", handle };
+        if (pointInRoi(point, preferred.roi)) return { item: preferred, action: "move" };
       }
     }
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
       if (preferredAnnId != null && item._annId === preferredAnnId) continue;
-      const handle = getRoiResizeHandle(point, item.roi);
-      if (handle >= 0) return { item, handle };
-      if (pointInRoi(point, item.roi)) return { item, handle: -1 };
+      if (isEllipseItem(item)) {
+        const pCanvas = pixelToCanvas(point);
+        const rotH = ellipseRotateHandleCanvasPoint(item.roi, Number(item._ellipseRotation) || 0);
+        if (pCanvas && rotH) {
+          const dx = rotH[0] - pCanvas[0];
+          const dy = rotH[1] - pCanvas[1];
+          if (Math.sqrt(dx * dx + dy * dy) <= 12) return { item, action: "rotate" };
+        }
+      }
+      const handle = isEllipseItem(item)
+        ? getEllipseResizeHandle(point, item)
+        : getRoiResizeHandle(point, item.roi);
+      if (handle >= 0) return { item, action: "resize", handle };
+      if (pointInRoi(point, item.roi)) return { item, action: "move" };
     }
     return null;
   }
@@ -1160,18 +1246,111 @@
     if (!add && found >= 0) item.mask.cells.splice(found, 1);
   }
 
-  function polygonFromEllipse(roi) {
+  function polygonFromEllipse(roi, rotationRad = 0, segments = ELLIPSE_SEGMENTS) {
     const box = reorderRoi(roi);
     const cx = (box[0][0] + box[1][0]) / 2;
     const cy = (box[0][1] + box[1][1]) / 2;
     const rx = Math.max(1, (box[1][0] - box[0][0]) / 2);
     const ry = Math.max(1, (box[1][1] - box[0][1]) / 2);
+    const cosR = Math.cos(rotationRad);
+    const sinR = Math.sin(rotationRad);
+    const safeSegments = Math.max(8, toInt(segments, ELLIPSE_SEGMENTS));
     const pts = [];
-    for (let i = 0; i < ELLIPSE_SEGMENTS; i += 1) {
-      const t = (Math.PI * 2 * i) / ELLIPSE_SEGMENTS;
-      pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
+    for (let i = 0; i < safeSegments; i += 1) {
+      const t = (Math.PI * 2 * i) / safeSegments;
+      const ex = rx * Math.cos(t);
+      const ey = ry * Math.sin(t);
+      const x = cx + (ex * cosR - ey * sinR);
+      const y = cy + (ex * sinR + ey * cosR);
+      pts.push([x, y]);
     }
     return pts;
+  }
+
+  function ellipseResizeHandlePixelPoints(roi, rotationRad = 0) {
+    const box = reorderRoi(roi);
+    const cx = (box[0][0] + box[1][0]) / 2;
+    const cy = (box[0][1] + box[1][1]) / 2;
+    const rx = Math.max(1, (box[1][0] - box[0][0]) / 2);
+    const ry = Math.max(1, (box[1][1] - box[0][1]) / 2);
+    const cosR = Math.cos(rotationRad);
+    const sinR = Math.sin(rotationRad);
+    const localCorners = [
+      [-rx, -ry],
+      [rx, -ry],
+      [rx, ry],
+      [-rx, ry],
+    ];
+    return localCorners.map(([lx, ly]) => ([
+      cx + (lx * cosR - ly * sinR),
+      cy + (lx * sinR + ly * cosR),
+    ]));
+  }
+
+  function ellipseRotateHandleCanvasPoint(roi, rotationRad = 0) {
+    const box = reorderRoi(roi);
+    const cxPx = (box[0][0] + box[1][0]) / 2;
+    const cyPx = (box[0][1] + box[1][1]) / 2;
+    const ry = Math.max(1, (box[1][1] - box[0][1]) / 2);
+    const center = pixelToCanvas([cxPx, cyPx]);
+    if (!center) return null;
+    const ux = Math.sin(rotationRad);
+    const uy = -Math.cos(rotationRad);
+    const edge = pixelToCanvas([cxPx + ux * ry, cyPx + uy * ry]);
+    if (!edge) return null;
+    const edgeDx = edge[0] - center[0];
+    const edgeDy = edge[1] - center[1];
+    const edgeLen = Math.hypot(edgeDx, edgeDy) || 1;
+    const nx = edgeDx / edgeLen;
+    const ny = edgeDy / edgeLen;
+    return [edge[0] + nx * 18, edge[1] + ny * 18];
+  }
+
+  function getEllipseResizeHandle(point, item) {
+    if (!point || !item?.roi) return -1;
+    const pCanvas = pixelToCanvas(point);
+    if (!pCanvas) return -1;
+    const corners = ellipseResizeHandlePixelPoints(item.roi, Number(item._ellipseRotation) || 0);
+    for (let i = 0; i < corners.length; i += 1) {
+      const c = pixelToCanvas(corners[i]);
+      if (!c) continue;
+      const dx = c[0] - pCanvas[0];
+      const dy = c[1] - pCanvas[1];
+      if (Math.sqrt(dx * dx + dy * dy) <= BOX_HANDLE_RADIUS_PX) return i;
+    }
+    return -1;
+  }
+
+  function resizeEllipseByHandle(item, handle, point) {
+    if (!item?.roi || !point || handle < 0 || handle > 3) return item?.roi || null;
+    const m = getImageMetrics();
+    if (!m) return item.roi;
+    const box = reorderRoi(item.roi);
+    const cx = (box[0][0] + box[1][0]) / 2;
+    const cy = (box[0][1] + box[1][1]) / 2;
+    const rx = Math.max(1, (box[1][0] - box[0][0]) / 2);
+    const ry = Math.max(1, (box[1][1] - box[0][1]) / 2);
+    const rotation = Number(item._ellipseRotation) || 0;
+    const cosR = Math.cos(rotation);
+    const sinR = Math.sin(rotation);
+    const invRotate = (x, y) => {
+      const dx = x - cx;
+      const dy = y - cy;
+      return [dx * cosR + dy * sinR, -dx * sinR + dy * cosR];
+    };
+    const rotate = (lx, ly) => [cx + (lx * cosR - ly * sinR), cy + (lx * sinR + ly * cosR)];
+    const clamped = [clamp(point[0], 0, m.naturalWidth), clamp(point[1], 0, m.naturalHeight)];
+    const localPoint = invRotate(clamped[0], clamped[1]);
+    const localCorners = [[-rx, -ry], [rx, -ry], [rx, ry], [-rx, ry]];
+    const anchor = localCorners[(handle + 2) % 4];
+    const nextCenterLocal = [(localPoint[0] + anchor[0]) / 2, (localPoint[1] + anchor[1]) / 2];
+    const nextRx = Math.max(1, Math.abs(localPoint[0] - anchor[0]) / 2);
+    const nextRy = Math.max(1, Math.abs(localPoint[1] - anchor[1]) / 2);
+    const centerWorld = rotate(nextCenterLocal[0], nextCenterLocal[1]);
+    return reorderRoi([
+      [centerWorld[0] - nextRx, centerWorld[1] - nextRy],
+      [centerWorld[0] + nextRx, centerWorld[1] + nextRy],
+    ]);
   }
 
   function pointInPolygon(point, polygon) {
@@ -1190,6 +1369,12 @@
 
   function refillMaskFromPolygon(item) {
     if (!item || !item.roi || !Array.isArray(item.polygon) || item.polygon.length < 3) return;
+    if (item._geometryType === "polygon") {
+      const b = bboxFromPolygon(item.polygon);
+      if (b) {
+        item.roi = clampRoiToImage(b);
+      }
+    }
     ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
     const rows = item.mask.rows;
     const cols = item.mask.cols;
@@ -1289,7 +1474,19 @@
         return;
       }
       setPanLock(true);
-      if (hit.handle >= 0) {
+      if (hit.action === "rotate") {
+        const box = reorderRoi(item.roi);
+        const cx = (box[0][0] + box[1][0]) / 2;
+        const cy = (box[0][1] + box[1][1]) / 2;
+        const startAngle = Math.atan2(point[1] - cy, point[0] - cx);
+        state.drawing = {
+          kind: "rotate",
+          itemAnnId: item._annId,
+          center: [cx, cy],
+          startAngle,
+          initialRotation: Number(item._ellipseRotation) || 0,
+        };
+      } else if (hit.action === "resize" && hit.handle >= 0) {
         state.drawing = { kind: "resize", handle: hit.handle, itemAnnId: item._annId };
       } else {
         state.drawing = { kind: "move", start: point, last: point, itemAnnId: item._annId };
@@ -1349,12 +1546,12 @@
         }
       }
 
-      if (item.roi && !pointInRoi(point, item.roi)) {
+      if (item._geometryType !== "polygon" && item.roi && !pointInRoi(point, item.roi)) {
         setStatus(ctx, "Polygon points must stay inside ROI.");
         return;
       }
 
-      if (!item.roi) {
+      if (item._geometryType !== "polygon" && !item.roi) {
         setStatus(ctx, "Draw ROI first (U), or use Ellipse (J).");
         return;
       }
@@ -1438,8 +1635,31 @@
     }
 
     if (state.drawing && state.drawing.kind === "resize") {
-      item.roi = resizeRoiByHandle(item.roi, state.drawing.handle, point);
-      clearBoxResidualGeometry(item);
+      if (isEllipseItem(item)) {
+        item.roi = resizeEllipseByHandle(item, state.drawing.handle, point);
+        item.polygon = polygonFromEllipse(item.roi, Number(item._ellipseRotation) || 0);
+        ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+        refillMaskFromPolygon(item);
+      } else {
+        item.roi = resizeRoiByHandle(item.roi, state.drawing.handle, point);
+        clearBoxResidualGeometry(item);
+      }
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (state.drawing && state.drawing.kind === "rotate") {
+      const cx = state.drawing.center[0];
+      const cy = state.drawing.center[1];
+      const angleNow = Math.atan2(point[1] - cy, point[0] - cx);
+      const delta = angleNow - state.drawing.startAngle;
+      item._ellipseRotation = state.drawing.initialRotation + delta;
+      item.polygon = polygonFromEllipse(item.roi, item._ellipseRotation);
+      ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+      refillMaskFromPolygon(item);
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -1456,8 +1676,7 @@
     }
 
     if (state.pointDrag) {
-      if (item.roi && !pointInRoi(point, item.roi)) return;
-      item.polygon[state.pointDrag.index] = point;
+      item.polygon[state.pointDrag.index] = clampPointToImage(point);
       refillMaskFromPolygon(item);
       syncField(ctx);
       redraw();
@@ -1519,12 +1738,22 @@
       return;
     }
 
+    if (state.drawing && state.drawing.kind === "rotate") {
+      state.drawing = null;
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (state.drawing && state.drawing.kind === "ellipse") {
       const p = clientToPixel(event.clientX, event.clientY);
       const end = p || state.drawing.current;
       const roi = reorderRoi([state.drawing.start, end]);
       item.roi = roi;
-      item.polygon = polygonFromEllipse(roi);
+      item._ellipseRotation = Number(item._ellipseRotation) || 0;
+      item.polygon = polygonFromEllipse(roi, item._ellipseRotation);
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.drawing = null;
@@ -1769,9 +1998,13 @@
       );
     });
 
-    if (state.drawing && (state.drawing.kind === "roi" || state.drawing.kind === "ellipse")) {
+    if (state.drawing && state.drawing.kind === "roi") {
       const roi = reorderRoi([state.drawing.start, state.drawing.current]);
       drawRoiOutline(roi, "#ffffff", true);
+    }
+    if (state.drawing && state.drawing.kind === "ellipse") {
+      const roi = reorderRoi([state.drawing.start, state.drawing.current]);
+      drawEllipseOutline(roi, "#ffffff", true, false, 0);
     }
     drawHoverInfo(activeCtx);
     drawLoupeOverlay(activeCtx);
@@ -1971,6 +2204,12 @@
       ? window.FeatureGeometryColors.colorForFeature(item.feature_id)
       : "#ff6b6b";
 
+    if (item.roi && isEllipseItem(item)) {
+      const roi = clampRoiToImage(item.roi);
+      drawEllipseOutline(roi, color, active, selected, Number(item._ellipseRotation) || 0);
+      return;
+    }
+
     if (item.roi) {
       const roi = clampRoiToImage(item.roi);
       drawRoiOutline(roi, color, active, selected);
@@ -2013,6 +2252,67 @@
         state.ctx.fillRect(c[0] - half, c[1] - half, size, size);
         state.ctx.strokeRect(c[0] - half, c[1] - half, size, size);
       });
+    }
+    state.ctx.restore();
+  }
+
+  function drawEllipseOutline(roi, color, active, selected = false, rotation = 0) {
+    const p1 = pixelToCanvas(roi[0]);
+    const p2 = pixelToCanvas(roi[1]);
+    if (!p1 || !p2) return;
+    const x = Math.min(p1[0], p2[0]);
+    const y = Math.min(p1[1], p2[1]);
+    const w = Math.abs(p2[0] - p1[0]);
+    const h = Math.abs(p2[1] - p1[1]);
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rx = Math.max(1, w / 2);
+    const ry = Math.max(1, h / 2);
+
+    state.ctx.save();
+    state.ctx.strokeStyle = color;
+    state.ctx.lineWidth = active ? 2.5 : 1.5;
+    state.ctx.setLineDash(active ? [] : [4, 3]);
+    state.ctx.beginPath();
+    state.ctx.ellipse(cx, cy, rx, ry, rotation, 0, Math.PI * 2);
+    state.ctx.stroke();
+
+    if (selected) {
+      const size = 8;
+      const half = size / 2;
+      const corners = ellipseResizeHandlePixelPoints(roi, rotation);
+      state.ctx.setLineDash([]);
+      state.ctx.lineWidth = 1.5;
+      corners.forEach((corner) => {
+        const c = pixelToCanvas(corner);
+        if (!c) return;
+        state.ctx.fillStyle = "#f8fafc";
+        state.ctx.strokeStyle = color;
+        state.ctx.fillRect(c[0] - half, c[1] - half, size, size);
+        state.ctx.strokeRect(c[0] - half, c[1] - half, size, size);
+      });
+
+      const handle = ellipseRotateHandleCanvasPoint(roi, rotation);
+      if (handle) {
+        const topUx = Math.sin(rotation);
+        const topUy = -Math.cos(rotation);
+        const topPointPx = [
+          ((roi[0][0] + roi[1][0]) / 2) + topUx * (Math.max(1, (Math.abs(roi[1][1] - roi[0][1]) / 2))),
+          ((roi[0][1] + roi[1][1]) / 2) + topUy * (Math.max(1, (Math.abs(roi[1][1] - roi[0][1]) / 2))),
+        ];
+        const topPoint = pixelToCanvas(topPointPx);
+        if (topPoint) {
+          state.ctx.beginPath();
+          state.ctx.moveTo(topPoint[0], topPoint[1]);
+          state.ctx.lineTo(handle[0], handle[1]);
+          state.ctx.stroke();
+        }
+        state.ctx.beginPath();
+        state.ctx.fillStyle = "#f8fafc";
+        state.ctx.arc(handle[0], handle[1], 5, 0, Math.PI * 2);
+        state.ctx.fill();
+        state.ctx.stroke();
+      }
     }
     state.ctx.restore();
   }

@@ -6,12 +6,12 @@
 # Issue prefix for this repository (used by bd init)
 # If not set, bd init will auto-detect from directory name
 # Example: issue-prefix: "myproject" creates issues like "myproject-1", "myproject-2", etc.
-# issue-prefix: ""
+issue-prefix: "fundus_img_xtract"
 
 # Use no-db mode: load from JSONL, no SQLite, write back after each command
 # When true, bd will use .beads/issues.jsonl as the source of truth
 # instead of SQLite database
-# no-db: false
+# no-db: false  # JSONL-only mode, no SQLite database
 
 # Disable daemon for RPC communication (forces direct database access)
 # no-daemon: false
@@ -36,6 +36,11 @@
 
 # Debounce interval for auto-flush (can also use BEADS_FLUSH_DEBOUNCE)
 # flush-debounce: "5s"
+
+# Export events (audit trail) to .beads/events.jsonl on each flush/sync
+# When enabled, new events are appended incrementally using a high-water mark.
+# Use 'bd export --events' to trigger manually regardless of this setting.
+# events-export: false
 
 # Git branch for beads commits (bd sync will commit to this branch)
 # IMPORTANT: Set this for team projects so all clones use the same sync branch.

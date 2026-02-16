@@ -551,6 +551,9 @@
       setSelectedBox(ctx, dup);
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
+      state.mode = MODES.MOVE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
       syncField(ctx);
       redraw();
     });

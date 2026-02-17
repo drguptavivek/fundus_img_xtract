@@ -52,9 +52,8 @@
 </div>
 
 <div class="row g-2 grading-workspace" id="regrade_viewport" >
-  <div class="d-none d-lg-block col-lg-1"></div>
 
-  <div class="col-12 col-lg-8" id="image-card">
+  <div class="col-12 col-lg-9" id="image-card">
     {% if image_uuid %}
     {% include 'partials/_grading_card.html' %}
     {% else %}
@@ -66,7 +65,7 @@
     {% endif %}
   </div>
 
-  <div class="col-12 col-lg-2" id="image-grading-controls">
+  <div class="col-12 col-lg-3" id="image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
         {% if is_admin %}
@@ -181,8 +180,6 @@
       </div>
     </div>
   </div>
-
-  <div class="d-none d-lg-block col-lg-1"></div>
 </div>
 {% endblock %}
 

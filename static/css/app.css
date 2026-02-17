@@ -1329,6 +1329,18 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   }
 }
 
+@media (max-width: 1200px) {
+  .imggr-top-row {
+    flex-wrap: wrap !important;
+  }
+
+  .imggr-quick-controls {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: flex-start !important;
+  }
+}
+
 .imggr-main-wrap {
   min-width: 0;
 }
@@ -1352,24 +1364,41 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   overflow: visible;
 }
 
+.grading-workspace > [class*="col-"] {
+  min-width: 0;
+}
+
 @media (min-width: 992px) {
   main > #grading-content-shell.container {
-    width: min(96vw, 2200px);
-    max-width: min(96vw, 2200px);
+    width: min(96dvw, 2200px);
+    max-width: min(96dvw, 2200px);
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1200px) {
+  .imggr-annot-sidebar {
+    flex: 0 0 180px;
+    width: 180px;
+    min-width: 180px;
+  }
+
+  main > #grading-content-shell.container {
+    width: min(90dvw, 1100px);
+    max-width: min(90dvw, 1100px);
   }
 }
 
 @media (min-width: 3000px) {
   main > #grading-content-shell.container {
-    width: min(94vw, 2600px);
-    max-width: min(94vw, 2600px);
+    width: min(94dvw, 2600px);
+    max-width: min(94dvw, 2600px);
   }
 }
 
 @media (min-width: 2000px) and (min-aspect-ratio: 19/9) {
   main > #grading-content-shell.container {
-    width: min(70vw, 2200px);
-    max-width: min(70vw, 2200px);
+    width: min(70dvw, 2200px);
+    max-width: min(70dvw, 2200px);
   }
 }
 

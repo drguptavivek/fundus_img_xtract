@@ -11,14 +11,16 @@
   };
 
   const GRID_MIN = 3;
-  const GRID_MAX = 32;
+  const GRID_MAX = 256;
   const DEFAULT_GRID = 8;
   const AUTO_FOCUS_MARGIN = 0.15;
   const POLYGON_CLOSE_RADIUS_PX = 12;
   const ELLIPSE_SEGMENTS = 24;
   const BOX_HANDLE_RADIUS_PX = 10;
-  const BRUSH_TILE_MIN = 1;
-  const BRUSH_TILE_MAX = 8;
+  const SHOW_GRID = false;
+  const BRUSH_MASK_GRID = 192;
+  const BRUSH_DIAMETER_MIN = 6;
+  const BRUSH_DIAMETER_MAX = 200;
 
   const state = {
     viewerRoot: null,
@@ -46,7 +48,8 @@
     selectedBoxRef: null,
     mainPointerDown: false,
     hoverInfo: null,
-    brushTileSize: 1,
+    brushDiameterPx: 24,
+    brushCursorPoint: null,
   };
 
   function clamp(v, min, max) {
@@ -59,9 +62,17 @@
     return Math.trunc(n);
   }
 
-  function sanitizeBrushTile(value) {
-    const n = toInt(value, 1);
-    return clamp(n, BRUSH_TILE_MIN, BRUSH_TILE_MAX);
+  function sanitizeBrushDiameter(value) {
+    const n = toInt(value, 24);
+    return clamp(n, BRUSH_DIAMETER_MIN, BRUSH_DIAMETER_MAX);
+  }
+
+  function setBrushDiameterPx(value) {
+    state.brushDiameterPx = sanitizeBrushDiameter(value);
+    state.contexts.forEach((c) => {
+      if (c.brushDiameterEl) c.brushDiameterEl.value = String(state.brushDiameterPx);
+      if (c.brushDiameterValueEl) c.brushDiameterValueEl.textContent = `${state.brushDiameterPx}px`;
+    });
   }
 
   function safeParse(raw) {
@@ -928,17 +939,19 @@
           <i class="fa-solid fa-eraser"></i>
           <span class="ms-1">-</span>
         </button>
-        <label class="fgx-block-label mb-0 ms-1" for="fgx-brush-tile-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">Tile</label>
-        <select id="fgx-brush-tile-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}" class="form-select form-select-sm" data-fgx-brush-tile style="width:auto;min-width:5.2rem;">
-          <option value="1">1 x 1</option>
-          <option value="2">2 x 2</option>
-          <option value="3">3 x 3</option>
-          <option value="4">4 x 4</option>
-          <option value="5">5 x 5</option>
-          <option value="6">6 x 6</option>
-          <option value="7">7 x 7</option>
-          <option value="8">8 x 8</option>
-        </select>
+        <label class="fgx-block-label mb-0 ms-1" for="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">Diameter</label>
+        <input
+          id="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}"
+          type="range"
+          class="form-range"
+          data-fgx-brush-diameter
+          min="${BRUSH_DIAMETER_MIN}"
+          max="${BRUSH_DIAMETER_MAX}"
+          step="2"
+          value="${state.brushDiameterPx}"
+          style="width:8rem;"
+        />
+        <span class="fgx-block-label mb-0" data-fgx-brush-diameter-value>${state.brushDiameterPx}px</span>
       </div>
     `;
     sidebarHost.appendChild(panel);
@@ -962,7 +975,8 @@
     ctx.addPointBtn = null;
     ctx.subPointBtn = null;
     ctx.clearBtn = null;
-    ctx.brushTileEl = panel.querySelector("[data-fgx-brush-tile]");
+    ctx.brushDiameterEl = panel.querySelector("[data-fgx-brush-diameter]");
+    ctx.brushDiameterValueEl = panel.querySelector("[data-fgx-brush-diameter-value]");
 
     if (!state.quickBindingsDone) {
       const quickPanBtn = document.querySelector("[data-fgx-quick-pan]");
@@ -1097,12 +1111,16 @@
       refreshToolbarStates();
     });
 
-    if (ctx.brushTileEl) {
-      ctx.brushTileEl.value = String(state.brushTileSize);
-      ctx.brushTileEl.addEventListener("change", () => {
-        state.brushTileSize = sanitizeBrushTile(ctx.brushTileEl.value);
-        ctx.brushTileEl.value = String(state.brushTileSize);
-      });
+    if (ctx.brushDiameterEl) {
+      ctx.brushDiameterEl.value = String(state.brushDiameterPx);
+      const onBrushDiameterChange = () => {
+        state.brushDiameterPx = sanitizeBrushDiameter(ctx.brushDiameterEl.value);
+        ctx.brushDiameterEl.value = String(state.brushDiameterPx);
+        if (ctx.brushDiameterValueEl) ctx.brushDiameterValueEl.textContent = `${state.brushDiameterPx}px`;
+      };
+      ctx.brushDiameterEl.addEventListener("input", onBrushDiameterChange);
+      ctx.brushDiameterEl.addEventListener("change", onBrushDiameterChange);
+      if (ctx.brushDiameterValueEl) ctx.brushDiameterValueEl.textContent = `${state.brushDiameterPx}px`;
     }
 
     refreshAnnotationButtons(ctx);
@@ -1309,7 +1327,7 @@
     if (!ctx || !point) return null;
     const selectedIds = new Set(getSelectedFeatureIds(ctx));
     const items = (ctx.payload.items || []).filter((it) => (
-      it && it.roi && !it._hidden && selectedIds.has(it.feature_id)
+      it && it.roi && it._geometryType !== "region" && !it._hidden && selectedIds.has(it.feature_id)
     ));
     if (preferredAnnId != null) {
       const preferred = items.find((it) => it._annId === preferredAnnId);
@@ -1445,21 +1463,58 @@
     if (!add && found >= 0) item.mask.cells.splice(found, 1);
   }
 
-  function applyBrushCells(item, centerCell, add) {
-    if (!item || !centerCell) return;
+  function ensureBrushAnnotationItem(ctx, item) {
+    if (!ctx) return null;
+    const m = getImageMetrics();
+    if (!m) return item || null;
+    let target = item;
+    if (!target || target.feature_id !== state.activeFeatureId || target._geometryType !== "region") {
+      target = createAnnotationItem(ctx, state.activeFeatureId);
+      setSelectedBox(ctx, target);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+    }
+    target._geometryType = "region";
+    target._locked = false;
+    target.roi = [[0, 0], [m.naturalWidth, m.naturalHeight]];
+    target.polygon = [];
+    const prevRows = sanitizeGrid(target.mask?.rows ?? ctx.payload?.grid?.rows ?? DEFAULT_GRID);
+    const prevCols = sanitizeGrid(target.mask?.cols ?? ctx.payload?.grid?.cols ?? DEFAULT_GRID);
+    const fineGrid = clamp(BRUSH_MASK_GRID, GRID_MIN, 256);
+    ensureMask(target, fineGrid);
+    target.mask.cells = remapCells(target.mask.cells || [], prevRows, prevCols, fineGrid, fineGrid);
+    target.mask.rows = fineGrid;
+    target.mask.cols = fineGrid;
+    return target;
+  }
+
+  function applyBrushCells(item, centerCell, add, centerPoint = null) {
+    if (!item || !centerCell || !item.roi) return;
     ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
     const rows = sanitizeGrid(item.mask.rows ?? DEFAULT_GRID);
     const cols = sanitizeGrid(item.mask.cols ?? DEFAULT_GRID);
-    const size = sanitizeBrushTile(state.brushTileSize);
-    const half = Math.floor(size / 2);
-    const startR = centerCell[0] - half;
-    const startC = centerCell[1] - half;
-    for (let dr = 0; dr < size; dr += 1) {
-      for (let dc = 0; dc < size; dc += 1) {
-        const rr = startR + dr;
-        const cc = startC + dc;
+    const roi = clampRoiToImage(item.roi);
+    const roiW = Math.max(1e-6, roi[1][0] - roi[0][0]);
+    const roiH = Math.max(1e-6, roi[1][1] - roi[0][1]);
+    const cellW = roiW / cols;
+    const cellH = roiH / rows;
+    const radiusPx = sanitizeBrushDiameter(state.brushDiameterPx) / 2;
+    const cellRadR = Math.max(1, Math.ceil(radiusPx / cellH));
+    const cellRadC = Math.max(1, Math.ceil(radiusPx / cellW));
+    const cx = centerPoint ? centerPoint[0] : (roi[0][0] + (centerCell[1] + 0.5) * cellW);
+    const cy = centerPoint ? centerPoint[1] : (roi[0][1] + (centerCell[0] + 0.5) * cellH);
+    for (let dr = -cellRadR; dr <= cellRadR; dr += 1) {
+      for (let dc = -cellRadC; dc <= cellRadC; dc += 1) {
+        const rr = centerCell[0] + dr;
+        const cc = centerCell[1] + dc;
         if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        setCell(item, [rr, cc], add);
+        const px = roi[0][0] + (cc + 0.5) * cellW;
+        const py = roi[0][1] + (rr + 0.5) * cellH;
+        const dx = px - cx;
+        const dy = py - cy;
+        if ((dx * dx + dy * dy) <= (radiusPx * radiusPx)) {
+          setCell(item, [rr, cc], add);
+        }
       }
     }
   }
@@ -1839,12 +1894,15 @@
 
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
+    state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
 
     let item = getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, mode !== MODES.MOVE && mode !== MODES.POLYGON);
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
     if (item) ensureMask(item, grid);
 
-    const hit = mode === MODES.POLYGON ? null : findBoxHit(ctx, point);
+    const hit = (mode === MODES.POLYGON || mode === MODES.ADD || mode === MODES.SUBTRACT)
+      ? null
+      : findBoxHit(ctx, point);
     if (hit) {
       item = hit.item;
       selectItemInUi(ctx, item);
@@ -2015,16 +2073,12 @@
     }
 
     if (mode === MODES.ADD || mode === MODES.SUBTRACT) {
-      enforceGeometryType(item, "region");
-      if (item._locked !== false) return;
-      if (!item.roi) {
-        setStatus(ctx, "Draw ROI first.");
-        return;
-      }
+      item = ensureBrushAnnotationItem(ctx, item);
+      if (!item) return;
       const add = resolveBrushAddMode(mode, event);
       const cell = cellForPoint(item, point);
       if (!cell) return;
-      applyBrushCells(item, cell, add);
+      applyBrushCells(item, cell, add, point);
       state.painting = { add, last: `${cell[0]}:${cell[1]}` };
       syncField(ctx);
       redraw();
@@ -2036,6 +2090,7 @@
   function handlePointerMove(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
+    const mode = effectiveMode();
     const drawingItem = state.drawing?.itemAnnId != null
       ? (ctx.payload.items || []).find((it) => it._annId === state.drawing.itemAnnId) || null
       : null;
@@ -2043,6 +2098,7 @@
     if (!item) return;
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
+    state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
     updateHoverInfoFromPoint(ctx, point);
 
     if (state.drawing && state.drawing.kind === "roi") {
@@ -2172,7 +2228,7 @@
       const key = `${cell[0]}:${cell[1]}`;
       if (key === state.painting.last) return;
       state.painting.last = key;
-      applyBrushCells(item, cell, state.painting.add);
+      applyBrushCells(item, cell, state.painting.add, point);
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2183,6 +2239,9 @@
   function handlePointerUp(event) {
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
+    const mode = effectiveMode();
+    const upPoint = clientToPixel(event.clientX, event.clientY);
+    state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? upPoint : null;
     const drawingItem = state.drawing?.itemAnnId != null
       ? (ctx.payload.items || []).find((it) => it._annId === state.drawing.itemAnnId) || null
       : null;
@@ -2356,6 +2415,18 @@
       return;
     }
 
+    if ((key === "[" || key === "]") && (effectiveMode() === MODES.ADD || effectiveMode() === MODES.SUBTRACT)) {
+      const step = event.shiftKey ? 8 : 4;
+      const next = key === "]"
+        ? (state.brushDiameterPx + step)
+        : (state.brushDiameterPx - step);
+      setBrushDiameterPx(next);
+      setStatus(ctx, `Brush diameter: ${state.brushDiameterPx}px`);
+      redraw();
+      event.preventDefault();
+      return;
+    }
+
     if (key === "u") { state.mode = MODES.ROI; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
     if (key === "y") { state.mode = MODES.PYRAMID; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
     if (key === "i") { state.mode = MODES.POLYGON; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
@@ -2523,9 +2594,30 @@
       const roi = reorderRoi([state.drawing.start, state.drawing.current]);
       drawEllipseOutline(roi, "#ffffff", true, false, 0);
     }
+    drawBrushCursor();
     drawHoverInfo(activeCtx);
     drawLoupeOverlay(activeCtx);
     positionBoxActions();
+  }
+
+  function drawBrushCursor() {
+    const mode = effectiveMode();
+    if (mode !== MODES.ADD && mode !== MODES.SUBTRACT) return;
+    if (!state.brushCursorPoint) return;
+    const c = pixelToCanvas(state.brushCursorPoint);
+    if (!c) return;
+    const m = getImageMetrics();
+    if (!m || !m.naturalWidth) return;
+    const radiusPx = sanitizeBrushDiameter(state.brushDiameterPx) / 2;
+    const radiusCanvas = Math.max(2, radiusPx * (m.imgRect.width / m.naturalWidth));
+    state.ctx.save();
+    state.ctx.setLineDash([5, 5]);
+    state.ctx.lineWidth = 1.5;
+    state.ctx.strokeStyle = "rgba(248,250,252,0.95)";
+    state.ctx.beginPath();
+    state.ctx.arc(c[0], c[1], radiusCanvas, 0, Math.PI * 2);
+    state.ctx.stroke();
+    state.ctx.restore();
   }
 
   function getLoupeOverlayCanvas() {
@@ -2723,18 +2815,21 @@
     const color = (window.FeatureGeometryColors && window.FeatureGeometryColors.colorForFeature)
       ? window.FeatureGeometryColors.colorForFeature(item.feature_id)
       : "#ff6b6b";
+    const brushMode = effectiveMode() === MODES.ADD || effectiveMode() === MODES.SUBTRACT;
 
     if (item.roi && isEllipseItem(item)) {
       const roi = clampRoiToImage(item.roi);
       const rotation = Number(item._ellipseRotation) || 0;
-      drawEllipseGridAndCells(roi, item.mask, color, active ? 0.28 : 0.16, active ? 0.35 : 0.2, rotation);
+      drawEllipseGridAndCells(
+        roi, item.mask, color, active ? 0.28 : 0.16, active ? 0.35 : 0.2, rotation, SHOW_GRID && !brushMode,
+      );
       drawEllipseOutline(roi, color, active, selected, rotation);
       return;
     }
 
     if (item.roi) {
       const roi = clampRoiToImage(item.roi);
-      const showRoiOutline = isBoxItem(item) || selected;
+      const showRoiOutline = (isBoxItem(item) || selected) && item._geometryType !== "region";
       if (showRoiOutline) {
         if (item._geometryType === "pyramid") {
           drawRotatedRoiOutline(roi, color, active, selected, pyramidGridRotation(item));
@@ -2751,6 +2846,7 @@
           active ? 0.28 : 0.16,
           active ? 0.35 : 0.2,
           pyramidGridRotation(item),
+          SHOW_GRID && !brushMode,
         );
       } else if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length >= 3) {
         drawPolygonGridAndCells(
@@ -2760,9 +2856,12 @@
           color,
           active ? 0.28 : 0.16,
           active ? 0.35 : 0.2,
+          SHOW_GRID && !brushMode,
         );
       } else {
-        drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
+        if (SHOW_GRID && !brushMode) {
+          drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
+        }
         drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
       }
     }
@@ -2926,7 +3025,7 @@
     state.ctx.restore();
   }
 
-  function drawEllipseGridAndCells(roi, mask, color, gridAlpha, cellAlpha, rotation = 0) {
+  function drawEllipseGridAndCells(roi, mask, color, gridAlpha, cellAlpha, rotation = 0, showGrid = true) {
     const p1 = pixelToCanvas(roi[0]);
     const p2 = pixelToCanvas(roi[1]);
     if (!p1 || !p2) return;
@@ -2948,22 +3047,24 @@
     state.ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     state.ctx.clip();
 
-    state.ctx.strokeStyle = color;
-    state.ctx.globalAlpha = gridAlpha;
-    state.ctx.lineWidth = 1;
-    for (let r = 1; r < rows; r += 1) {
-      const gy = -ry + (r / rows) * (2 * ry);
-      state.ctx.beginPath();
-      state.ctx.moveTo(-rx, gy);
-      state.ctx.lineTo(rx, gy);
-      state.ctx.stroke();
-    }
-    for (let c = 1; c < cols; c += 1) {
-      const gx = -rx + (c / cols) * (2 * rx);
-      state.ctx.beginPath();
-      state.ctx.moveTo(gx, -ry);
-      state.ctx.lineTo(gx, ry);
-      state.ctx.stroke();
+    if (showGrid) {
+      state.ctx.strokeStyle = color;
+      state.ctx.globalAlpha = gridAlpha;
+      state.ctx.lineWidth = 1;
+      for (let r = 1; r < rows; r += 1) {
+        const gy = -ry + (r / rows) * (2 * ry);
+        state.ctx.beginPath();
+        state.ctx.moveTo(-rx, gy);
+        state.ctx.lineTo(rx, gy);
+        state.ctx.stroke();
+      }
+      for (let c = 1; c < cols; c += 1) {
+        const gx = -rx + (c / cols) * (2 * rx);
+        state.ctx.beginPath();
+        state.ctx.moveTo(gx, -ry);
+        state.ctx.lineTo(gx, ry);
+        state.ctx.stroke();
+      }
     }
 
     if (mask && Array.isArray(mask.cells)) {
@@ -2987,7 +3088,7 @@
     state.ctx.restore();
   }
 
-  function drawPolygonGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha) {
+  function drawPolygonGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha, showGrid = true) {
     if (!Array.isArray(polygon) || polygon.length < 3) {
       drawGrid(roi, mask?.rows ?? DEFAULT_GRID, mask?.cols ?? DEFAULT_GRID, color, gridAlpha);
       drawCells(roi, mask, color, cellAlpha);
@@ -3018,22 +3119,24 @@
     state.ctx.closePath();
     state.ctx.clip();
 
-    state.ctx.strokeStyle = color;
-    state.ctx.globalAlpha = gridAlpha;
-    state.ctx.lineWidth = 1;
-    for (let r = 1; r < rows; r += 1) {
-      const y = y1 + (r / rows) * (y2 - y1);
-      state.ctx.beginPath();
-      state.ctx.moveTo(x1, y);
-      state.ctx.lineTo(x2, y);
-      state.ctx.stroke();
-    }
-    for (let c = 1; c < cols; c += 1) {
-      const x = x1 + (c / cols) * (x2 - x1);
-      state.ctx.beginPath();
-      state.ctx.moveTo(x, y1);
-      state.ctx.lineTo(x, y2);
-      state.ctx.stroke();
+    if (showGrid) {
+      state.ctx.strokeStyle = color;
+      state.ctx.globalAlpha = gridAlpha;
+      state.ctx.lineWidth = 1;
+      for (let r = 1; r < rows; r += 1) {
+        const y = y1 + (r / rows) * (y2 - y1);
+        state.ctx.beginPath();
+        state.ctx.moveTo(x1, y);
+        state.ctx.lineTo(x2, y);
+        state.ctx.stroke();
+      }
+      for (let c = 1; c < cols; c += 1) {
+        const x = x1 + (c / cols) * (x2 - x1);
+        state.ctx.beginPath();
+        state.ctx.moveTo(x, y1);
+        state.ctx.lineTo(x, y2);
+        state.ctx.stroke();
+      }
     }
 
     if (mask && Array.isArray(mask.cells)) {
@@ -3052,7 +3155,7 @@
     state.ctx.restore();
   }
 
-  function drawPyramidGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha, rotation = 0) {
+  function drawPyramidGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha, rotation = 0, showGrid = true) {
     if (!Array.isArray(polygon) || polygon.length < 3) {
       drawGrid(roi, mask?.rows ?? DEFAULT_GRID, mask?.cols ?? DEFAULT_GRID, color, gridAlpha);
       drawCells(roi, mask, color, cellAlpha);
@@ -3095,22 +3198,24 @@
     state.ctx.closePath();
     state.ctx.clip();
 
-    state.ctx.strokeStyle = color;
-    state.ctx.globalAlpha = gridAlpha;
-    state.ctx.lineWidth = 1;
-    for (let r = 1; r < rows; r += 1) {
-      const y = -ry + (r / rows) * (2 * ry);
-      state.ctx.beginPath();
-      state.ctx.moveTo(-rx, y);
-      state.ctx.lineTo(rx, y);
-      state.ctx.stroke();
-    }
-    for (let c = 1; c < cols; c += 1) {
-      const x = -rx + (c / cols) * (2 * rx);
-      state.ctx.beginPath();
-      state.ctx.moveTo(x, -ry);
-      state.ctx.lineTo(x, ry);
-      state.ctx.stroke();
+    if (showGrid) {
+      state.ctx.strokeStyle = color;
+      state.ctx.globalAlpha = gridAlpha;
+      state.ctx.lineWidth = 1;
+      for (let r = 1; r < rows; r += 1) {
+        const y = -ry + (r / rows) * (2 * ry);
+        state.ctx.beginPath();
+        state.ctx.moveTo(-rx, y);
+        state.ctx.lineTo(rx, y);
+        state.ctx.stroke();
+      }
+      for (let c = 1; c < cols; c += 1) {
+        const x = -rx + (c / cols) * (2 * rx);
+        state.ctx.beginPath();
+        state.ctx.moveTo(x, -ry);
+        state.ctx.lineTo(x, ry);
+        state.ctx.stroke();
+      }
     }
 
     if (mask && Array.isArray(mask.cells)) {
@@ -3253,7 +3358,8 @@
       colorChipEl: null,
       gridInputEl: null,
       gridLabelEl: null,
-      brushTileEl: null,
+      brushDiameterEl: null,
+      brushDiameterValueEl: null,
       statusEl: null,
       toggleOverlayBtn: null,
       activeAnnotationByFeature: {},
@@ -3317,8 +3423,11 @@
     syncFeatureSelection(ctx);
     updatePanelFeatureOptions(ctx);
     updateGridLabel(ctx);
-    if (ctx.brushTileEl) {
-      ctx.brushTileEl.value = String(sanitizeBrushTile(state.brushTileSize));
+    if (ctx.brushDiameterEl) {
+      ctx.brushDiameterEl.value = String(sanitizeBrushDiameter(state.brushDiameterPx));
+    }
+    if (ctx.brushDiameterValueEl) {
+      ctx.brushDiameterValueEl.textContent = `${sanitizeBrushDiameter(state.brushDiameterPx)}px`;
     }
     refreshToolbarStates();
     setCanvasPointerMode();

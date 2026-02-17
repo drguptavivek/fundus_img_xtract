@@ -321,6 +321,19 @@
         },
       };
 
+      // Normalize brush-like legacy payloads: if it is a full-image box carrying mask cells,
+      // treat it as brush region so box move/resize paths do not clear mask cells.
+      if (
+        clean._geometryType === "box"
+        && clean.roi
+        && clean.roi[0][0] === 0
+        && clean.roi[0][1] === 0
+        && Array.isArray(clean.mask?.cells)
+        && clean.mask.cells.length > 0
+      ) {
+        clean._geometryType = "region";
+      }
+
       payload.items.push(clean);
     });
 
@@ -952,7 +965,7 @@
     items.forEach((item, idx) => {
       const option = document.createElement("option");
       option.value = String(item._annId);
-      option.textContent = `${item._hidden ? "○" : "●"} Ann ${idx + 1}`;
+      option.textContent = `${item._hidden ? "○" : "●"} ${annotationTypeLabel(item)} Ann ${idx + 1}`;
       ctx.annotationSelectEl.appendChild(option);
     });
 
@@ -970,6 +983,16 @@
     ctx.activeAnnotationByFeature[featureId] = current._annId;
     ctx.annotationSelectEl.value = String(current._annId);
     refreshAnnotationButtons(ctx);
+  }
+
+  function annotationTypeLabel(item) {
+    const t = (item?._geometryType || "box").toLowerCase();
+    if (t === "box") return "□";
+    if (t === "ellipse") return "◯";
+    if (t === "pyramid") return "△";
+    if (t === "polygon") return "⬠";
+    if (t === "region") return "✎";
+    return "•";
   }
 
   function refreshAnnotationButtons(ctx) {

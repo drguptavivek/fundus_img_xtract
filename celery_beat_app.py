@@ -26,6 +26,16 @@ def _env_bool(key: str, default: str = "false") -> bool:
     return str(os.getenv(key, default)).lower() in ("1", "true", "yes")
 
 
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _parse_times(value: str) -> list[str]:
     if not value:
         return []
@@ -91,6 +101,14 @@ def make_celery_beat_app() -> Celery:
                     "task": "celery_tasks.tasks.maintenance_tasks.run_thumbnail_maintenance_task",
                     "schedule": schedule,
                 }
+
+        tracker_stale_minutes = _env_int("TASK_TRACKER_STALE_MINUTES", 60)
+        tracker_reset_interval_minutes = _env_int("TASK_TRACKER_RESET_INTERVAL_MINUTES", 30)
+        beat_schedule["task-tracker-reset-stale-locks"] = {
+            "task": "celery_tasks.tasks.maintenance_tasks.reset_stuck_task_trackers_task",
+            "schedule": crontab(minute=f"*/{max(1, tracker_reset_interval_minutes)}", hour="*"),
+            "kwargs": {"stale_minutes": max(1, tracker_stale_minutes)},
+        }
 
         app.conf.beat_schedule = beat_schedule
 

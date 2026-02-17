@@ -17,6 +17,7 @@ from utils.thumbnail_maintenance_scheduler import (
     validate_thumbnail_integrity,
     run_maintenance_tasks,
 )
+from utils.dualGradingStuckTaskCleanup import reset_stuck_tasks
 # Lazy import to avoid loading S3/nacl in beat container
 # from utils.s3_url_signing import auto_rotate_peppers
 
@@ -142,3 +143,20 @@ def cleanup_stuck_jobs_task(
         sanitize_log_value(cutoff.isoformat()),
     )
     return results
+
+
+@celery_app.task(name="celery_tasks.tasks.maintenance_tasks.reset_stuck_task_trackers_task", bind=True, acks_late=True)
+def reset_stuck_task_trackers_task(
+    self,
+    stale_minutes: int = 60,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> dict:
+    _ = self, user_id, hospital_id
+    reset_count = int(reset_stuck_tasks(time_limit_minutes=stale_minutes))
+    _LOGGER.info(
+        "Reset stuck task trackers complete: stale_minutes=%s reset_count=%s",
+        sanitize_log_value(stale_minutes),
+        sanitize_log_value(reset_count),
+    )
+    return {"reset_count": reset_count, "stale_minutes": stale_minutes}

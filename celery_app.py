@@ -155,6 +155,15 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute=0, hour="4"),
         }
 
+        # Reset stale dual-grading task tracker locks (prevents queue starvation).
+        tracker_stale_minutes = _env_int("TASK_TRACKER_STALE_MINUTES", 60)
+        tracker_reset_interval_minutes = _env_int("TASK_TRACKER_RESET_INTERVAL_MINUTES", 30)
+        beat_schedule["task-tracker-reset-stale-locks"] = {
+            "task": "celery_tasks.tasks.maintenance_tasks.reset_stuck_task_trackers_task",
+            "schedule": crontab(minute=f"*/{max(1, tracker_reset_interval_minutes)}", hour="*"),
+            "kwargs": {"stale_minutes": max(1, tracker_stale_minutes)},
+        }
+
         app.conf.beat_schedule = beat_schedule
 
     return app

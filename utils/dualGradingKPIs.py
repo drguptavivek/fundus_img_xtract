@@ -8,7 +8,7 @@ This design allows for better transaction management and session reuse.
 
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, or_, func, exists
-from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading
+from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading, TaskTracker
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from typing import Dict, Optional, List, Tuple
@@ -147,11 +147,19 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         # Count resident pending tasks (skip linked diseases: graded with primary)
         if (has_resident_role or has_resident2_role) and info['can_grade_resident']:
+            resident_tracker_exists = (
+                db.query(TaskTracker.id)
+                .filter(
+                    TaskTracker.task_id == GradingTask.id,
+                    TaskTracker.role_slot == 'resident',
+                )
+            )
             # Exclude tasks that the user has already graded as a resident
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
+                ~resident_tracker_exists.exists(),
                 ~GradingTask.grades.any(
                     and_(
                         Grade.grader_user_id == user_id,
@@ -165,11 +173,19 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         # Count resident2 pending tasks (skip linked diseases: graded with primary)
         if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']):
+            resident2_tracker_exists = (
+                db.query(TaskTracker.id)
+                .filter(
+                    TaskTracker.task_id == GradingTask.id,
+                    TaskTracker.role_slot == 'resident2',
+                )
+            )
             # Exclude tasks that the user has already graded in either resident slot
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
+                ~resident2_tracker_exists.exists(),
                 ~GradingTask.grades.any(
                     and_(
                         Grade.grader_user_id == user_id,
@@ -183,10 +199,18 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
         if has_resident2_role and info['can_arbitrate']:
+            arbitration_tracker_exists = (
+                db.query(TaskTracker.id)
+                .filter(
+                    TaskTracker.task_id == GradingTask.id,
+                    TaskTracker.role_slot == 'arbitrator',
+                )
+            )
             # Base query for the current disease
             base_q = db.query(GradingTask).filter(
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
-                GradingTask.disease_id == disease_id
+                GradingTask.disease_id == disease_id,
+                ~arbitration_tracker_exists.exists(),
             )
 
             # Check if we should include linked tasks in arbitration
@@ -196,6 +220,20 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
 
             if linked_ids:
                 LinkedTask = aliased(GradingTask)
+                primary_tracker_exists = (
+                    db.query(TaskTracker.id)
+                    .filter(
+                        TaskTracker.task_id == GradingTask.id,
+                        TaskTracker.role_slot == 'arbitrator',
+                    )
+                )
+                linked_tracker_exists = (
+                    db.query(TaskTracker.id)
+                    .filter(
+                        TaskTracker.task_id == LinkedTask.id,
+                        TaskTracker.role_slot == 'arbitrator',
+                    )
+                )
                 # Outer join to find any linked task that is in arbitration
                 base_q = base_q.outerjoin(
                     LinkedTask,
@@ -208,8 +246,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     )
                 ).filter(
                     or_(
-                        GradingTask.state == 'arbitration',
-                        LinkedTask.state == 'arbitration'
+                        and_(GradingTask.state == 'arbitration', ~primary_tracker_exists.exists()),
+                        and_(LinkedTask.state == 'arbitration', ~linked_tracker_exists.exists()),
                     )
                 )
             else:

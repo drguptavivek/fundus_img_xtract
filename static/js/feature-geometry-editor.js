@@ -154,15 +154,20 @@
     style.id = "feature-geometry-editor-style";
     style.textContent = `
       .fgx-overlay-canvas { position:absolute; left:0; top:0; z-index:15; cursor:crosshair; }
-      .fgx-panel { display:flex; flex-direction:column; gap:.5rem; }
+      .fgx-panel { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
       .fgx-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+      .fgx-slider-row { display:flex; flex-wrap:nowrap; gap:.35rem; align-items:center; min-width:0; }
+      .fgx-slider-row .form-range { min-width:0; }
+      @media (min-width: 992px) {
+        .fgx-panel .fgx-slider-row { flex: 1 0 100%; }
+      }
       .fgx-toolbar .btn { min-width:2.4rem; }
       .fgx-feature-row { display:flex; gap:.35rem; align-items:center; }
       .fgx-color-dot { width:.75rem; height:.75rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.2); }
       .fgx-grid-row { display:flex; gap:.35rem; align-items:center; }
-      .fgx-feature-row select, .fgx-grid-row select { width:100%; min-width:0; }
+      .fgx-feature-row select, .fgx-grid-row select { width:auto; min-width:10rem; }
       .fgx-toolbar .btn.active { font-weight:600; }
-      .fgx-block-label { font-size:.73rem; color:var(--bs-secondary-color); text-transform:uppercase; letter-spacing:.03em; }
+      .fgx-block-label { font-size:.73rem; color:var(--bs-secondary-color); text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; }
       .fgx-ann-actions { display:flex; flex-wrap:nowrap; gap:.25rem; }
       .fgx-ann-actions .btn { width:2rem; min-width:2rem; padding:.2rem .25rem; display:inline-flex; align-items:center; justify-content:center; }
       .fgx-box-actions .btn { width:1.85rem; min-width:1.85rem; padding:.18rem .2rem; display:inline-flex; align-items:center; justify-content:center; }
@@ -1023,14 +1028,14 @@
     panel.className = "fgx-panel";
     panel.dataset.geometryContextKey = ctx.key;
     panel.innerHTML = `
-      <div class="fgx-block-label">Feature</div>
       <div class="fgx-group fgx-feature-row">
+        <span class="fgx-block-label mb-0">Feature</span>
         <span class="fgx-color-dot" data-fgx-color></span>
         <select class="form-select form-select-sm" data-fgx-feature></select>
       </div>
 
-      <div class="fgx-block-label">Annotation</div>
       <div class="fgx-group fgx-feature-row">
+        <span class="fgx-block-label mb-0">Annotation</span>
         <select class="form-select form-select-sm" data-fgx-annotation></select>
       </div>
       <div class="fgx-group fgx-ann-actions" aria-label="Annotation actions">
@@ -1045,19 +1050,19 @@
         </button>
       </div>
 
-      <div class="fgx-group">
+      <div class="fgx-group fgx-tools-row">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="move" title="Pointer / Select">
           <i class="fa-solid fa-arrow-pointer"></i>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box>+ Add Box</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse>+ Add Ellipse</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid>+ Add Pyramid</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
-          <i class="fa-solid fa-rotate-left"></i>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add box ROI" aria-label="Add box ROI">
+          <i class="fa-solid fa-square"></i>
         </button>
-      </div>
-
-      <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add ellipse ROI" aria-label="Add ellipse ROI">
+          <i class="fa-solid fa-circle"></i>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid title="Add pyramid ROI" aria-label="Add pyramid ROI">
+          <i class="fa-solid fa-caret-up"></i>
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Brush add">
           <i class="fa-solid fa-paintbrush"></i>
           <span class="ms-1">+</span>
@@ -1066,7 +1071,15 @@
           <i class="fa-solid fa-eraser"></i>
           <span class="ms-1">-</span>
         </button>
-        <label class="fgx-block-label mb-0 ms-1" for="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">Diameter</label>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      </div>
+
+      <div class="fgx-group fgx-slider-row">
+        <label class="fgx-block-label mb-0 ms-1 d-inline-flex align-items-center gap-1" for="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">
+          <i class="fa-solid fa-ruler-horizontal"></i>
+        </label>
         <input
           id="fgx-brush-diam-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}"
           type="range"
@@ -1081,8 +1094,10 @@
         <span class="fgx-block-label mb-0" data-fgx-brush-diameter-value>${state.brushDiameterPx}px</span>
       </div>
 
-      <div class="fgx-group">
-        <label class="fgx-block-label mb-0" for="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">Fill</label>
+      <div class="fgx-group fgx-slider-row">
+        <label class="fgx-block-label mb-0 d-inline-flex align-items-center gap-1" for="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">
+          <i class="fa-solid fa-droplet"></i>
+        </label>
         <input
           id="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}"
           type="range"

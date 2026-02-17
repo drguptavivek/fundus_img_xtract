@@ -7,7 +7,7 @@
 
 <div class="card shadow-sm">
 <div class="card-header">
-  <div class="d-flex align-items-center justify-content-start flex-wrap gap-2">
+  <div class="d-flex align-items-center justify-content-start flex-nowrap gap-2 imggr-top-row">
     <!-- Filter buttons -->
     <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
       <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-none-{{ uuid }}" value="none" checked>
@@ -33,7 +33,7 @@
     </div>
 
     <!-- Brightness / Contrast Controls -->
-    <div class="d-flex flex-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls">
+    <div class="d-flex flex-nowrap align-items-center justify-content-start gap-2 position-relative imggr-controls">
       <!-- Brightness -->
       <div class="d-flex align-items-center gap-1 imggr-slider-group">
         <label class="small mb-0 d-flex align-items-center" for="imggr-bright-{{ uuid }}" title="Brightness" aria-label="Brightness">
@@ -61,7 +61,7 @@
     </div>
 
     <!-- First-row quick controls -->
-    <div class="d-flex gap-2 align-items-sm-end justify-content-end ms-auto">
+    <div class="d-flex gap-2 align-items-sm-end justify-content-end imggr-quick-controls">
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
 

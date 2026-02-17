@@ -1186,6 +1186,21 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 .imggr-controls {
   position: relative;
   --imggr-tooltip-offset: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.imggr-top-row {
+  min-width: 0;
+}
+
+.imggr-top-row .imggr-filters {
+  flex: 0 0 auto;
+}
+
+.imggr-quick-controls {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 
@@ -1299,7 +1314,13 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 }
 
 .imggr-slider-group {
-  width: 210px;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.imggr-slider-group .imggr-range-wrap {
+  min-width: 0;
 }
 
 .grading-workspace {
@@ -1314,7 +1335,9 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 #image-card,
 #image-grading-controls {
   display: flex;
+  height: 100%;
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -1323,8 +1346,9 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
-  max-height: none;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -1333,7 +1357,9 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
+  max-height: 100%;
 }
 
 #image-card > .card > .card-body {
@@ -1354,7 +1380,7 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 }
 
 #image-grading-controls > .card > .card-body {
-  overflow-y: auto;
+  overflow-y: scroll;
   overflow-x: hidden;
 }
 

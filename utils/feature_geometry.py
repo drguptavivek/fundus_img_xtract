@@ -8,7 +8,7 @@ logger = logging.getLogger("feature_geometry")
 
 EXPECTED_VERSION = 1
 MIN_GRID_SIZE = 3
-MAX_GRID_SIZE = 32
+MAX_GRID_SIZE = 256
 DEFAULT_GRID_SIZE = 8
 
 

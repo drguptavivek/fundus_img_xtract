@@ -21,6 +21,8 @@
   const BRUSH_MASK_GRID = 192;
   const BRUSH_DIAMETER_MIN = 6;
   const BRUSH_DIAMETER_MAX = 200;
+  const FILL_ALPHA_MIN_PCT = 5;
+  const FILL_ALPHA_MAX_PCT = 100;
 
   const state = {
     viewerRoot: null,
@@ -49,7 +51,9 @@
     mainPointerDown: false,
     hoverInfo: null,
     brushDiameterPx: 24,
+    fillOpacity: 0.35,
     brushCursorPoint: null,
+    pendingCreateType: null,
   };
 
   function clamp(v, min, max) {
@@ -73,6 +77,66 @@
       if (c.brushDiameterEl) c.brushDiameterEl.value = String(state.brushDiameterPx);
       if (c.brushDiameterValueEl) c.brushDiameterValueEl.textContent = `${state.brushDiameterPx}px`;
     });
+  }
+
+  function sanitizeFillOpacityPct(value) {
+    const n = toInt(value, 35);
+    return clamp(n, FILL_ALPHA_MIN_PCT, FILL_ALPHA_MAX_PCT);
+  }
+
+  function setFillOpacityPct(value) {
+    const pct = sanitizeFillOpacityPct(value);
+    state.fillOpacity = pct / 100;
+    state.contexts.forEach((c) => {
+      if (c.fillOpacityEl) c.fillOpacityEl.value = String(pct);
+      if (c.fillOpacityValueEl) c.fillOpacityValueEl.textContent = `${pct}%`;
+    });
+    redraw();
+  }
+
+  function clonePayload(payload) {
+    return safeParse(JSON.stringify(payload || createEmptyPayload(DEFAULT_GRID))) || createEmptyPayload(DEFAULT_GRID);
+  }
+
+  function payloadSignature(payload) {
+    try {
+      return JSON.stringify(payload || {});
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function applyHistorySnapshot(ctx, snapshot) {
+    if (!ctx || !snapshot) return;
+    ctx._suspendHistory = true;
+    ctx.payload = clonePayload(snapshot);
+    const maxAnn = (ctx.payload.items || []).reduce((mx, it) => Math.max(mx, toInt(it?._annId, 0)), 0);
+    ctx.nextAnnotationId = Math.max(1, maxAnn + 1);
+    ctx._historyLastSnapshot = clonePayload(ctx.payload);
+    ctx._historyLastSig = payloadSignature(ctx.payload);
+    ctx._suspendHistory = false;
+    clearSelectedBox();
+    syncFeatureSelection(ctx);
+    updatePanelFeatureOptions(ctx);
+    updateAnnotationOptions(ctx);
+    refreshAnnotationButtons(ctx);
+    refreshFeatureDependentButtons(ctx);
+    syncField(ctx);
+    redraw();
+  }
+
+  function undoLastChange(ctx) {
+    if (!ctx || !Array.isArray(ctx.undoStack) || !ctx.undoStack.length) return;
+    const snapshot = ctx.undoStack.pop();
+    applyHistorySnapshot(ctx, snapshot);
+  }
+
+  function armCreateMode(type, mode) {
+    state.pendingCreateType = type;
+    state.mode = mode;
+    clearSelectedBox();
+    setCanvasPointerMode();
+    refreshToolbarStates();
   }
 
   function safeParse(raw) {
@@ -326,6 +390,18 @@
     return true;
   }
 
+  function ensureRoiContainsPolygon(roi, polygon) {
+    if (!roi) return roi;
+    if (!Array.isArray(polygon) || polygon.length < 3) return clampRoiToImage(roi);
+    const base = reorderRoi(clampRoiToImage(roi));
+    const b = bboxFromPolygon(polygon);
+    if (!b) return base;
+    return clampRoiToImage([
+      [Math.min(base[0][0], b[0][0]), Math.min(base[0][1], b[0][1])],
+      [Math.max(base[1][0], b[1][0]), Math.max(base[1][1], b[1][1])],
+    ]);
+  }
+
   function buildSerializablePayload(ctx) {
     const selectedIds = new Set(getSelectedFeatureIds(ctx));
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
@@ -333,7 +409,7 @@
     const items = (ctx.payload.items || [])
       .filter((it) => selectedIds.has(it.feature_id) && isCompleteItem(it))
       .map((item) => {
-        const roi = clampRoiToImage(item.roi);
+        let roi = clampRoiToImage(item.roi);
         const ellipseRotation = Number.isFinite(item._ellipseRotation) ? item._ellipseRotation : 0;
         const polygonRaw = isBoxItem(item)
           ? [
@@ -348,9 +424,10 @@
                 [roi[0][0], roi[0][1]],
                 [roi[1][0], roi[0][1]],
                 [roi[1][0], roi[1][1]],
-                [roi[0][0], roi[1][1]],
-              ]);
+              [roi[0][0], roi[1][1]],
+            ]);
         const polygon = polygonRaw.map((p) => [Number(p[0]), Number(p[1])]);
+        roi = ensureRoiContainsPolygon(roi, polygon);
         const rows = sanitizeGrid(item.mask.rows ?? grid);
         const cols = sanitizeGrid(item.mask.cols ?? grid);
         const cells = normalizeCells(item.mask.cells || [], rows, cols);
@@ -813,9 +890,11 @@
     });
 
     if (!selected.length) {
+      state.activeFeatureId = null;
       ctx.featureSelectEl.disabled = true;
       ctx.annotationSelectEl.disabled = true;
       if (ctx.removeAnnotationBtn) ctx.removeAnnotationBtn.disabled = true;
+      refreshFeatureDependentButtons(ctx);
       return;
     }
 
@@ -825,6 +904,7 @@
     ctx.featureSelectEl.value = String(next);
     updateFeatureColorChip(ctx, next);
     updateAnnotationOptions(ctx);
+    refreshFeatureDependentButtons(ctx);
   }
 
   function updateAnnotationOptions(ctx) {
@@ -885,6 +965,18 @@
     }
   }
 
+  function refreshFeatureDependentButtons(ctx) {
+    if (!ctx || !ctx.panelTopEl) return;
+    const hasFeature = state.activeFeatureId != null;
+    ctx.panelTopEl.querySelectorAll("[data-fgx-add-box], [data-fgx-add-ellipse], [data-fgx-add-pyramid], [data-fgx-mode=\"add\"], [data-fgx-mode=\"subtract\"]").forEach((btn) => {
+      btn.disabled = !hasFeature;
+    });
+    if (ctx.brushDiameterEl) ctx.brushDiameterEl.disabled = !hasFeature;
+    if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !hasFeature;
+    const undoBtn = ctx.panelTopEl.querySelector("[data-fgx-undo]");
+    if (undoBtn) undoBtn.disabled = !ctx.undoStack?.length;
+  }
+
   function updateFeatureColorChip(ctx, featureId) {
     if (!ctx || !ctx.colorChipEl) return;
     if (!window.FeatureGeometryColors || typeof window.FeatureGeometryColors.colorForFeature !== "function") return;
@@ -922,14 +1014,18 @@
         </button>
       </div>
 
-      <div class="fgx-block-label">Box</div>
       <div class="fgx-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="move" title="Pointer / Select">
+          <i class="fa-solid fa-arrow-pointer"></i>
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box>+ Add Box</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse>+ Add Ellipse</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid>+ Add Pyramid</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
       </div>
 
-      <div class="fgx-block-label">Brush</div>
       <div class="fgx-group">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Brush add">
           <i class="fa-solid fa-paintbrush"></i>
@@ -952,6 +1048,22 @@
           style="width:8rem;"
         />
         <span class="fgx-block-label mb-0" data-fgx-brush-diameter-value>${state.brushDiameterPx}px</span>
+      </div>
+
+      <div class="fgx-group">
+        <label class="fgx-block-label mb-0" for="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}">Fill</label>
+        <input
+          id="fgx-fill-alpha-${ctx.key.replace(/[^a-zA-Z0-9_-]/g, "_")}"
+          type="range"
+          class="form-range"
+          data-fgx-fill-opacity
+          min="${FILL_ALPHA_MIN_PCT}"
+          max="${FILL_ALPHA_MAX_PCT}"
+          step="5"
+          value="${Math.round(state.fillOpacity * 100)}"
+          style="width:8rem;"
+        />
+        <span class="fgx-block-label mb-0" data-fgx-fill-opacity-value>${Math.round(state.fillOpacity * 100)}%</span>
       </div>
     `;
     sidebarHost.appendChild(panel);
@@ -977,6 +1089,8 @@
     ctx.clearBtn = null;
     ctx.brushDiameterEl = panel.querySelector("[data-fgx-brush-diameter]");
     ctx.brushDiameterValueEl = panel.querySelector("[data-fgx-brush-diameter-value]");
+    ctx.fillOpacityEl = panel.querySelector("[data-fgx-fill-opacity]");
+    ctx.fillOpacityValueEl = panel.querySelector("[data-fgx-fill-opacity-value]");
 
     if (!state.quickBindingsDone) {
       const quickPanBtn = document.querySelector("[data-fgx-quick-pan]");
@@ -1005,6 +1119,7 @@
       clearSelectedBox();
       updateFeatureColorChip(ctx, id);
       updateAnnotationOptions(ctx);
+      refreshFeatureDependentButtons(ctx);
       redraw();
     });
 
@@ -1053,49 +1168,22 @@
 
     panel.querySelector("[data-fgx-add-box]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      const item = createAnnotationItem(ctx, state.activeFeatureId);
-      item._geometryType = "box";
-      item._ellipseRotation = 0;
-      setSelectedBox(ctx, item);
       setPanLock(true);
-      updateAnnotationOptions(ctx);
-      refreshAnnotationButtons(ctx);
-      state.mode = MODES.ROI;
-      setCanvasPointerMode();
-      refreshToolbarStates();
-      syncField(ctx);
+      armCreateMode("box", MODES.ROI);
       redraw();
     });
 
     panel.querySelector("[data-fgx-add-ellipse]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      const item = createAnnotationItem(ctx, state.activeFeatureId);
-      item._geometryType = "ellipse";
-      item._ellipseRotation = 0;
-      setSelectedBox(ctx, item);
       setPanLock(true);
-      updateAnnotationOptions(ctx);
-      refreshAnnotationButtons(ctx);
-      state.mode = MODES.ELLIPSE;
-      setCanvasPointerMode();
-      refreshToolbarStates();
-      syncField(ctx);
+      armCreateMode("ellipse", MODES.ELLIPSE);
       redraw();
     });
 
     panel.querySelector("[data-fgx-add-pyramid]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      const item = createAnnotationItem(ctx, state.activeFeatureId);
-      item._geometryType = "pyramid";
-      item._ellipseRotation = 0;
-      setSelectedBox(ctx, item);
       setPanLock(true);
-      updateAnnotationOptions(ctx);
-      refreshAnnotationButtons(ctx);
-      state.mode = MODES.PYRAMID;
-      setCanvasPointerMode();
-      refreshToolbarStates();
-      syncField(ctx);
+      armCreateMode("pyramid", MODES.PYRAMID);
       redraw();
     });
 
@@ -1111,6 +1199,18 @@
       refreshToolbarStates();
     });
 
+    panel.querySelector('[data-fgx-mode="move"]')?.addEventListener("click", () => {
+      state.pendingCreateType = null;
+      state.mode = MODES.MOVE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-undo]")?.addEventListener("click", () => {
+      undoLastChange(ctx);
+    });
+
     if (ctx.brushDiameterEl) {
       ctx.brushDiameterEl.value = String(state.brushDiameterPx);
       const onBrushDiameterChange = () => {
@@ -1122,8 +1222,19 @@
       ctx.brushDiameterEl.addEventListener("change", onBrushDiameterChange);
       if (ctx.brushDiameterValueEl) ctx.brushDiameterValueEl.textContent = `${state.brushDiameterPx}px`;
     }
+    if (ctx.fillOpacityEl) {
+      const onFillOpacityChange = () => {
+        setFillOpacityPct(ctx.fillOpacityEl.value);
+      };
+      ctx.fillOpacityEl.addEventListener("input", onFillOpacityChange);
+      ctx.fillOpacityEl.addEventListener("change", onFillOpacityChange);
+      const pct = Math.round(state.fillOpacity * 100);
+      ctx.fillOpacityEl.value = String(pct);
+      if (ctx.fillOpacityValueEl) ctx.fillOpacityValueEl.textContent = `${pct}%`;
+    }
 
     refreshAnnotationButtons(ctx);
+    refreshFeatureDependentButtons(ctx);
   }
 
   function refreshToolbarStates() {
@@ -1191,6 +1302,22 @@
 
   function syncField(ctx) {
     if (!ctx || !ctx.hiddenField) return;
+    if (!ctx._suspendHistory) {
+      const sig = payloadSignature(ctx.payload);
+      if (ctx._historyLastSig == null) {
+        ctx._historyLastSig = sig;
+        ctx._historyLastSnapshot = clonePayload(ctx.payload);
+      } else if (sig !== ctx._historyLastSig) {
+        ctx.undoStack = Array.isArray(ctx.undoStack) ? ctx.undoStack : [];
+        if (ctx._historyLastSnapshot) {
+          ctx.undoStack.push(clonePayload(ctx._historyLastSnapshot));
+          if (ctx.undoStack.length > 100) ctx.undoStack.shift();
+        }
+        ctx._historyLastSig = sig;
+        ctx._historyLastSnapshot = clonePayload(ctx.payload);
+      }
+      refreshFeatureDependentButtons(ctx);
+    }
     ctx.hiddenField.value = buildSerializablePayload(ctx);
     try {
       ctx.hiddenField.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1896,9 +2023,24 @@
     if (!point) return;
     state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
 
-    let item = getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, mode !== MODES.MOVE && mode !== MODES.POLYGON);
+    let item = getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false);
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
     if (item) ensureMask(item, grid);
+    const pendingByMode = (
+      (mode === MODES.ROI && state.pendingCreateType === "box")
+      || (mode === MODES.ELLIPSE && state.pendingCreateType === "ellipse")
+      || (mode === MODES.PYRAMID && state.pendingCreateType === "pyramid")
+    );
+    if (pendingByMode && state.activeFeatureId != null) {
+      item = createAnnotationItem(ctx, state.activeFeatureId);
+      item._geometryType = state.pendingCreateType;
+      item._ellipseRotation = 0;
+      ensureMask(item, grid);
+      setSelectedBox(ctx, item);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      state.pendingCreateType = null;
+    }
 
     const hit = (mode === MODES.POLYGON || mode === MODES.ADD || mode === MODES.SUBTRACT)
       ? null
@@ -1953,12 +2095,14 @@
     }
 
     if (mode === MODES.PAN) {
+      state.pendingCreateType = null;
       clearSelectedBox();
       redraw();
       return;
     }
 
     if (mode === MODES.MOVE) {
+      state.pendingCreateType = null;
       clearSelectedBox();
       redraw();
       return;
@@ -2438,8 +2582,15 @@
       state.drawing = null;
       state.pointDrag = null;
       state.painting = null;
+      state.pendingCreateType = null;
       setStatus(ctx, "Current action cancelled.");
       redraw();
+      event.preventDefault();
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && key === "z") {
+      undoLastChange(ctx);
       event.preventDefault();
       return;
     }
@@ -2816,12 +2967,14 @@
       ? window.FeatureGeometryColors.colorForFeature(item.feature_id)
       : "#ff6b6b";
     const brushMode = effectiveMode() === MODES.ADD || effectiveMode() === MODES.SUBTRACT;
+    const fillActiveAlpha = clamp(Number(state.fillOpacity) || 0.35, 0.05, 1);
+    const fillInactiveAlpha = clamp(fillActiveAlpha * 0.57, 0.03, fillActiveAlpha);
 
     if (item.roi && isEllipseItem(item)) {
       const roi = clampRoiToImage(item.roi);
       const rotation = Number(item._ellipseRotation) || 0;
       drawEllipseGridAndCells(
-        roi, item.mask, color, active ? 0.28 : 0.16, active ? 0.35 : 0.2, rotation, SHOW_GRID && !brushMode,
+        roi, item.mask, color, active ? 0.28 : 0.16, active ? fillActiveAlpha : fillInactiveAlpha, rotation, SHOW_GRID && !brushMode,
       );
       drawEllipseOutline(roi, color, active, selected, rotation);
       return;
@@ -2844,7 +2997,7 @@
           item.mask,
           color,
           active ? 0.28 : 0.16,
-          active ? 0.35 : 0.2,
+          active ? fillActiveAlpha : fillInactiveAlpha,
           pyramidGridRotation(item),
           SHOW_GRID && !brushMode,
         );
@@ -2855,14 +3008,14 @@
           item.mask,
           color,
           active ? 0.28 : 0.16,
-          active ? 0.35 : 0.2,
+          active ? fillActiveAlpha : fillInactiveAlpha,
           SHOW_GRID && !brushMode,
         );
       } else {
         if (SHOW_GRID && !brushMode) {
           drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
         }
-        drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
+        drawCells(roi, item.mask, color, active ? fillActiveAlpha : fillInactiveAlpha);
       }
     }
 
@@ -3360,10 +3513,16 @@
       gridLabelEl: null,
       brushDiameterEl: null,
       brushDiameterValueEl: null,
+      fillOpacityEl: null,
+      fillOpacityValueEl: null,
       statusEl: null,
       toggleOverlayBtn: null,
       activeAnnotationByFeature: {},
       nextAnnotationId,
+      undoStack: [],
+      _historyLastSig: null,
+      _historyLastSnapshot: clonePayload(initial),
+      _suspendHistory: false,
     };
 
     ensurePanel(ctx);
@@ -3372,6 +3531,9 @@
 
     if (!hiddenField.value) {
       syncField(ctx);
+    } else {
+      ctx._historyLastSig = payloadSignature(ctx.payload);
+      ctx._historyLastSnapshot = clonePayload(ctx.payload);
     }
   }
 
@@ -3429,6 +3591,13 @@
     if (ctx.brushDiameterValueEl) {
       ctx.brushDiameterValueEl.textContent = `${sanitizeBrushDiameter(state.brushDiameterPx)}px`;
     }
+    if (ctx.fillOpacityEl) {
+      ctx.fillOpacityEl.value = String(sanitizeFillOpacityPct(Math.round(state.fillOpacity * 100)));
+    }
+    if (ctx.fillOpacityValueEl) {
+      ctx.fillOpacityValueEl.textContent = `${sanitizeFillOpacityPct(Math.round(state.fillOpacity * 100))}%`;
+    }
+    refreshFeatureDependentButtons(ctx);
     refreshToolbarStates();
     setCanvasPointerMode();
 
@@ -3515,8 +3684,13 @@
       if (t.matches('input[type="checkbox"][name^="selected_features"]')) {
         const ctx = activeContext();
         if (ctx) {
-          const selected = new Set(getSelectedFeatureIds(ctx));
-          ctx.payload.items = (ctx.payload.items || []).filter((it) => selected.has(it.feature_id));
+          if (t.checked) {
+            const nextId = Number(t.value);
+            if (!Number.isNaN(nextId)) {
+              state.activeFeatureId = nextId;
+              clearSelectedBox();
+            }
+          }
           syncField(ctx);
         }
         queueRefresh();

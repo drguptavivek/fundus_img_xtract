@@ -152,3 +152,14 @@ def test_prepare_payload_preserves_mask_precision() -> None:
     assert prepared["grid"] == {"rows": 16, "cols": 16}
     assert prepared["items"][0]["mask"]["rows"] == 16
     assert prepared["items"][0]["mask"]["cols"] == 16
+
+
+def test_validate_accepts_high_resolution_mask_grid() -> None:
+    payload = _valid_payload()
+    payload["grid"] = {"rows": 192, "cols": 192}
+    payload["items"][0]["mask"]["rows"] = 192
+    payload["items"][0]["mask"]["cols"] = 192
+    payload["items"][0]["mask"]["cells"] = [[0, 0], [191, 191], [96, 96]]
+    is_valid, error = validate_feature_geometry_payload(payload, [101], SimpleNamespace(width=1000, height=1000))
+    assert is_valid is True
+    assert error == ""

@@ -1043,9 +1043,24 @@
     ctx.colorChipEl.style.backgroundColor = window.FeatureGeometryColors.colorForFeature(featureId);
   }
 
+  function resolveSidebarHost(ctx) {
+    if (!ctx) return null;
+    // Linked grading: mount controls inside this context's own panel.
+    const panelRoot = ctx.sectionEl?.closest(".linked-grading-panel");
+    if (panelRoot) {
+      const host = panelRoot.querySelector("[data-geometry-sidebar-host]");
+      if (host) return host;
+    }
+    // Single grading: mount within current viewer root when present.
+    const viewerHost = state.viewerRoot?.querySelector("[data-geometry-sidebar-host]");
+    if (viewerHost) return viewerHost;
+    // Final fallback.
+    return document.querySelector("[data-geometry-sidebar-host]");
+  }
+
   function ensurePanel(ctx) {
     if (ctx.panelTopEl && ctx.panelBottomEl) return;
-    const sidebarHost = document.querySelector("[data-geometry-sidebar-host]");
+    const sidebarHost = resolveSidebarHost(ctx);
     if (!sidebarHost) return;
 
     const panel = document.createElement("div");
@@ -3760,6 +3775,11 @@
   }
 
   function discoverContexts() {
+    // Prevent stacked duplicate tool panels when the viewer is re-initialized.
+    document.querySelectorAll(".fgx-panel[data-geometry-context-key]").forEach((el) => {
+      try { el.remove(); } catch (_) {}
+    });
+
     state.contexts.clear();
 
     const form = document.querySelector('form[data-grading-form="true"]');

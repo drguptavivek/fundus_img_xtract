@@ -1227,7 +1227,7 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 .imggr-shortcuts-trigger {
   anchor-name: --imggr-shortcuts-anchor;
   font-weight: 600;
-  width: 2rem;
+  width: 2.35rem;
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -1305,7 +1305,9 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   flex: 0 0 240px;
   width: 240px;
   min-width: 240px;
-  max-height: 72vh;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
 }
 

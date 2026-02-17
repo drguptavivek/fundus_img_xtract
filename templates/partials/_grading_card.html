@@ -84,6 +84,19 @@
         Save
         {{csrf_field()}}
       </button>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
+              aria-pressed="false"
+              aria-label="Toggle loupe magnifier">
+        L
+      </button>
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
+              data-bs-toggle="modal"
+              data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
+              aria-label="Keyboard shortcuts">
+        <span aria-hidden="true">?</span>
+      </button>
     </div>
   </div>
 
@@ -124,19 +137,6 @@
               class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
               title="Fit image to container">
         Fit
-      </button>
-      <button type="button"
-              class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
-              aria-pressed="false"
-              aria-label="Toggle loupe magnifier">
-        L
-      </button>
-      <button type="button"
-              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
-              data-bs-toggle="modal"
-              data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
-              aria-label="Keyboard shortcuts">
-        <span aria-hidden="true">?</span>
       </button>
     </div>
   </div>

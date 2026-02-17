@@ -50,6 +50,7 @@
     selectedBoxRef: null,
     mainPointerDown: false,
     hoverInfo: null,
+    cursorCanvasPoint: null,
     brushDiameterPx: 24,
     fillOpacity: 0.35,
     brushCursorPoint: null,
@@ -1606,6 +1607,50 @@
     return null;
   }
 
+  function isBrushLikeAnnotation(item) {
+    if (!item) return false;
+    if (item._geometryType === "region") return true;
+    if (item._geometryType !== "box") return false;
+    const m = getImageMetrics();
+    if (!m || !item.roi || !Array.isArray(item.mask?.cells) || !item.mask.cells.length) return false;
+    const roi = reorderRoi(item.roi);
+    const tol = 2;
+    return (
+      Math.abs(roi[0][0]) <= tol
+      && Math.abs(roi[0][1]) <= tol
+      && Math.abs(roi[1][0] - m.naturalWidth) <= tol
+      && Math.abs(roi[1][1] - m.naturalHeight) <= tol
+    );
+  }
+
+  function findRegionHit(ctx, point, preferredAnnId = null) {
+    if (!ctx || !point) return null;
+    const selectedIds = new Set(getSelectedFeatureIds(ctx));
+    const items = (ctx.payload.items || []).filter((it) => (
+      it && it.roi && isBrushLikeAnnotation(it) && !it._hidden && selectedIds.has(it.feature_id)
+    ));
+
+    const hasPaintAtPoint = (item) => {
+      const cell = cellForPoint(item, point);
+      if (!cell || !item?.mask || !Array.isArray(item.mask.cells)) return false;
+      const key = `${cell[0]}:${cell[1]}`;
+      return item.mask.cells.some((c) => `${c[0]}:${c[1]}` === key);
+    };
+
+    if (preferredAnnId != null) {
+      const preferred = items.find((it) => it._annId === preferredAnnId);
+      if (preferred && hasPaintAtPoint(preferred)) return { item: preferred };
+    }
+
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      const item = items[i];
+      if (preferredAnnId != null && item._annId === preferredAnnId) continue;
+      if (hasPaintAtPoint(item)) return { item };
+    }
+
+    return null;
+  }
+
   function buildHoverInfo(ctx, item) {
     if (!ctx || !item) return null;
     const anns = getItemsForFeature(ctx, item.feature_id);
@@ -1626,13 +1671,8 @@
       return;
     }
     const preferredAnnId = getSelectedBoxItem(ctx)?._annId ?? null;
-    const hit = findBoxHit(ctx, point, preferredAnnId);
+    const hit = findBoxHit(ctx, point, preferredAnnId) || findRegionHit(ctx, point, preferredAnnId);
     if (!hit) {
-      clearHoverInfo();
-      return;
-    }
-    const selected = getSelectedBoxItem(ctx);
-    if (selected && selected._annId === hit.item?._annId) {
       clearHoverInfo();
       return;
     }
@@ -2145,6 +2185,7 @@
 
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
+    state.cursorCanvasPoint = pixelToCanvas(point);
     state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
 
     let item = (mode === MODES.ADD || mode === MODES.SUBTRACT)
@@ -2175,10 +2216,17 @@
 
     const hit = (createdPendingItem || mode === MODES.POLYGON || mode === MODES.ADD || mode === MODES.SUBTRACT)
       ? null
-      : findBoxHit(ctx, point);
+      : (findBoxHit(ctx, point) || findRegionHit(ctx, point));
     if (hit) {
       item = hit.item;
       selectItemInUi(ctx, item);
+      if (isBrushLikeAnnotation(item)) {
+        setSelectedBox(ctx, item);
+        event.preventDefault();
+        event.stopPropagation();
+        redraw();
+        return;
+      }
       const locked = item._locked !== false;
       if (locked) {
         state.drawing = null;
@@ -2374,6 +2422,7 @@
     if (!item) return;
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
+    state.cursorCanvasPoint = pixelToCanvas(point);
     state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
     updateHoverInfoFromPoint(ctx, point);
 
@@ -2519,6 +2568,11 @@
     if (!ctx || state.activeFeatureId == null) return;
     const mode = effectiveMode();
     const upPoint = clientToPixel(event.clientX, event.clientY);
+    state.cursorCanvasPoint = upPoint ? pixelToCanvas(upPoint) : state.cursorCanvasPoint;
+    if (event?.type === "pointerleave") {
+      state.cursorCanvasPoint = null;
+      clearHoverInfo();
+    }
     state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? upPoint : null;
     const drawingItem = state.drawing?.itemAnnId != null
       ? (ctx.payload.items || []).find((it) => it._annId === state.drawing.itemAnnId) || null
@@ -2632,12 +2686,12 @@
   }
 
   function handleMainClickForSelection(event) {
-    if (effectiveMode() !== MODES.PAN) return;
+    if (effectiveMode() !== MODES.PAN && effectiveMode() !== MODES.MOVE) return;
     const ctx = activeContext();
     if (!ctx || state.activeFeatureId == null) return;
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
-    const hit = findBoxHit(ctx, point);
+    const hit = findBoxHit(ctx, point) || findRegionHit(ctx, point);
     if (!hit) {
       clearSelectedBox();
       redraw();
@@ -2654,13 +2708,19 @@
     state.mainPointerDown = true;
   }
 
-  function handleMainPointerUp() {
+  function handleMainPointerUp(event) {
     state.mainPointerDown = false;
+    if (event?.type === "pointerleave") {
+      state.cursorCanvasPoint = null;
+      clearHoverInfo();
+      redraw();
+    }
   }
 
   function handleMainPointerMoveForPanSync(event) {
     const ctx = activeContext();
     const point = clientToPixel(event.clientX, event.clientY);
+    state.cursorCanvasPoint = point ? pixelToCanvas(point) : null;
     updateHoverInfoFromPoint(ctx, point);
     if (effectiveMode() !== MODES.PAN) {
       redraw();
@@ -3056,21 +3116,30 @@
   }
 
   function drawHoverInfo(ctx) {
-    if (!ctx || !state.hoverInfo) return;
-    if (state.hoverInfo.ctxKey !== ctx.key) return;
+    if (!ctx) return;
     if (state.drawing) return;
-    const selected = getSelectedBoxItem(ctx);
-    if (selected && selected._annId === state.hoverInfo.annId) return;
-    const roi = state.hoverInfo.roi ? clampRoiToImage(state.hoverInfo.roi) : null;
+
+    let info = null;
+    if (state.hoverInfo && state.hoverInfo.ctxKey === ctx.key) {
+      info = state.hoverInfo;
+    } else {
+      const selected = getSelectedBoxItem(ctx);
+      if (selected) info = buildHoverInfo(ctx, selected);
+    }
+    if (!info) return;
+
+    const roi = info.roi ? clampRoiToImage(info.roi) : null;
     if (!roi) return;
     const p1 = pixelToCanvas(roi[0]);
     const p2 = pixelToCanvas(roi[1]);
     if (!p1 || !p2) return;
 
-    const text = state.hoverInfo.text || "";
+    const text = info.text || "";
     if (!text) return;
-    const x = (Math.min(p1[0], p2[0]) + Math.max(p1[0], p2[0])) / 2;
-    const y = Math.min(p1[1], p2[1]) - 10;
+    const anchor = state.cursorCanvasPoint;
+    if (!anchor || !Array.isArray(anchor) || anchor.length !== 2) return;
+    const x = anchor[0];
+    const y = anchor[1] - 10;
 
     state.ctx.save();
     state.ctx.font = "600 12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
@@ -3078,8 +3147,12 @@
     const textW = Math.ceil(state.ctx.measureText(text).width);
     const w = textW + padX * 2;
     const h = 22;
-    const bx = x - w / 2;
-    const by = y - h;
+    const canvasW = state.canvas?.clientWidth || 0;
+    const canvasH = state.canvas?.clientHeight || 0;
+    const rawBx = x - w / 2;
+    const rawBy = y - h;
+    const bx = clamp(rawBx, 2, Math.max(2, canvasW - w - 2));
+    const by = clamp(rawBy, 2, Math.max(2, canvasH - h - 2));
 
     state.ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
     state.ctx.strokeStyle = "rgba(148, 163, 184, 0.8)";

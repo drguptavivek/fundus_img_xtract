@@ -514,7 +514,7 @@
       <button type="button" class="btn btn-outline-primary btn-sm" data-fgx-box-dup title="Duplicate" aria-label="Duplicate">
         <i class="fa-solid fa-copy"></i>
       </button>
-      <button type="button" class="btn btn-outline-warning btn-sm" data-fgx-box-convert-poly title="Convert ellipse to polygon" aria-label="Convert ellipse to polygon">
+      <button type="button" class="btn btn-outline-warning btn-sm" data-fgx-box-convert-poly title="Convert to polygon" aria-label="Convert to polygon">
         <i class="fa-solid fa-draw-polygon"></i>
       </button>
       <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-flip-h title="Flip pyramid horizontally" aria-label="Flip pyramid horizontally">
@@ -540,6 +540,11 @@
       item._locked = !item._locked;
       if (item._locked && state.drawing && state.drawing.itemAnnId === item._annId) {
         state.drawing = null;
+      }
+      if (item._locked) {
+        state.mode = MODES.MOVE;
+        setCanvasPointerMode();
+        refreshToolbarStates();
       } else if (!item._locked) {
         // Unlock implies editable: polygon should return to point edit mode.
         state.mode = item?._geometryType === "polygon" ? MODES.POLYGON : MODES.MOVE;
@@ -600,9 +605,20 @@
     wrap.querySelector("[data-fgx-box-convert-poly]")?.addEventListener("click", () => {
       const ctx = activeContext();
       const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
-      if (!ctx || !item || !item.roi || !isEllipseItem(item)) return;
+      if (!ctx || !item || !item.roi) return;
+      const prevType = item._geometryType || "box";
+      const canConvert = prevType === "ellipse" || prevType === "box" || prevType === "pyramid";
+      if (!canConvert) return;
       item._geometryType = "polygon";
-      item.polygon = polygonFromEllipse(item.roi, Number(item._ellipseRotation) || 0, 48);
+      if (prevType === "ellipse") {
+        item.polygon = polygonFromEllipse(item.roi, Number(item._ellipseRotation) || 0, 48);
+      } else if (prevType === "pyramid" && Array.isArray(item.polygon) && item.polygon.length >= 3) {
+        item.polygon = item.polygon.map((p) => [p[0], p[1]]);
+      } else if (prevType === "pyramid") {
+        item.polygon = polygonFromPyramid(item.roi);
+      } else {
+        item.polygon = polygonFromBox(item.roi);
+      }
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.mode = MODES.POLYGON;
@@ -665,7 +681,7 @@
     }
     const convertBtn = state.boxActionsEl.querySelector("[data-fgx-box-convert-poly]");
     if (convertBtn) {
-      const show = isEllipseItem(item);
+      const show = isEllipseItem(item) || isBoxItem(item) || item._geometryType === "pyramid";
       convertBtn.style.display = show ? "inline-flex" : "none";
       convertBtn.disabled = !show;
     }
@@ -1239,6 +1255,15 @@
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
       if (preferredAnnId != null && item._annId === preferredAnnId) continue;
+      if (item._geometryType === "pyramid") {
+        const pCanvas = pixelToCanvas(point);
+        const rot = pyramidRotateHandleCanvasPoints(item);
+        if (pCanvas && rot) {
+          const dx = rot.handle[0] - pCanvas[0];
+          const dy = rot.handle[1] - pCanvas[1];
+          if (Math.sqrt(dx * dx + dy * dy) <= 12) return { item, action: "rotate-pyramid" };
+        }
+      }
       if (isEllipseItem(item)) {
         const pCanvas = pixelToCanvas(point);
         const rotH = ellipseRotateHandleCanvasPoint(item.roi, Number(item._ellipseRotation) || 0);
@@ -1279,6 +1304,11 @@
     const preferredAnnId = getSelectedBoxItem(ctx)?._annId ?? null;
     const hit = findBoxHit(ctx, point, preferredAnnId);
     if (!hit) {
+      clearHoverInfo();
+      return;
+    }
+    const selected = getSelectedBoxItem(ctx);
+    if (selected && selected._annId === hit.item?._annId) {
       clearHoverInfo();
       return;
     }
@@ -1341,6 +1371,16 @@
     return pts;
   }
 
+  function polygonFromBox(roi) {
+    const box = reorderRoi(roi);
+    return [
+      [box[0][0], box[0][1]],
+      [box[1][0], box[0][1]],
+      [box[1][0], box[1][1]],
+      [box[0][0], box[1][1]],
+    ];
+  }
+
   function polygonFromPyramid(roi) {
     const box = reorderRoi(roi);
     const midX = (box[0][0] + box[1][0]) / 2;
@@ -1362,6 +1402,15 @@
     ];
   }
 
+  function rotateOffset(dx, dy, angleRad) {
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    return [
+      (dx * cosA - dy * sinA),
+      (dx * sinA + dy * cosA),
+    ];
+  }
+
   function rotatePolygonAround(polygon, center, angleRad) {
     if (!Array.isArray(polygon) || !polygon.length) return polygon || [];
     return polygon.map((p) => clampPointToImage(rotatePointAround(p, center, angleRad)));
@@ -1380,20 +1429,8 @@
 
   function pyramidApexIndex(points) {
     if (!Array.isArray(points) || points.length < 3) return -1;
-    const centroid = polygonCentroid(points);
-    if (!centroid) return -1;
-    let bestIdx = -1;
-    let bestDist = Number.NEGATIVE_INFINITY;
-    points.forEach((p, idx) => {
-      const dx = p[0] - centroid[0];
-      const dy = p[1] - centroid[1];
-      const d2 = (dx * dx) + (dy * dy);
-      if (d2 > bestDist) {
-        bestDist = d2;
-        bestIdx = idx;
-      }
-    });
-    return bestIdx;
+    // Pyramid polygons are created as [apex, baseRight, baseLeft] and preserve point order.
+    return 0;
   }
 
   function pyramidRotateHandleCanvasPoints(item) {
@@ -1415,6 +1452,18 @@
       apex,
       handle: [apex[0] + ux * 18, apex[1] + uy * 18],
     };
+  }
+
+  function pyramidGridRotation(item) {
+    if (!item || !item.roi || !Array.isArray(item.polygon) || item.polygon.length < 3) return 0;
+    const apexIdx = pyramidApexIndex(item.polygon);
+    if (apexIdx < 0) return 0;
+    const box = reorderRoi(item.roi);
+    const cx = (box[0][0] + box[1][0]) / 2;
+    const cy = (box[0][1] + box[1][1]) / 2;
+    const apex = item.polygon[apexIdx];
+    const angle = Math.atan2(apex[1] - cy, apex[0] - cx);
+    return angle + (Math.PI / 2);
   }
 
   function flipPolygonInRoi(item, axis) {
@@ -1533,6 +1582,45 @@
 
   function refillMaskFromPolygon(item) {
     if (!item || !item.roi || !Array.isArray(item.polygon) || item.polygon.length < 3) return;
+    if (isEllipseItem(item)) {
+      ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
+      const rows = item.mask.rows;
+      const cols = item.mask.cols;
+      const cells = [];
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const nx = ((c + 0.5) / cols) * 2 - 1;
+          const ny = ((r + 0.5) / rows) * 2 - 1;
+          if ((nx * nx) + (ny * ny) <= 1) cells.push([r, c]);
+        }
+      }
+      item.mask.cells = cells;
+      return;
+    }
+    if (item._geometryType === "pyramid") {
+      ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
+      const rows = item.mask.rows;
+      const cols = item.mask.cols;
+      const roi = clampRoiToImage(item.roi);
+      const cx = (roi[0][0] + roi[1][0]) / 2;
+      const cy = (roi[0][1] + roi[1][1]) / 2;
+      const rx = Math.max(1e-6, (roi[1][0] - roi[0][0]) / 2);
+      const ry = Math.max(1e-6, (roi[1][1] - roi[0][1]) / 2);
+      const rot = pyramidGridRotation(item);
+      const cells = [];
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const lx = -rx + ((c + 0.5) / cols) * (2 * rx);
+          const ly = -ry + ((r + 0.5) / rows) * (2 * ry);
+          const off = rotateOffset(lx, ly, rot);
+          const wx = cx + off[0];
+          const wy = cy + off[1];
+          if (pointInPolygon([wx, wy], item.polygon)) cells.push([r, c]);
+        }
+      }
+      item.mask.cells = cells;
+      return;
+    }
     if (item._geometryType === "polygon") {
       const b = bboxFromPolygon(item.polygon);
       if (b) {
@@ -1729,6 +1817,13 @@
 
     if (mode === MODES.POLYGON) {
       enforceGeometryType(item, "polygon");
+      if (item._locked !== false) {
+        setSelectedBox(ctx, item);
+        event.preventDefault();
+        event.stopPropagation();
+        redraw();
+        return;
+      }
       if (item.polygon.length) {
         const nearest = findNearestPolygonPoint(item, point);
         if (nearest >= 0) {
@@ -1788,6 +1883,7 @@
 
     if (mode === MODES.ADD || mode === MODES.SUBTRACT) {
       enforceGeometryType(item, "region");
+      if (item._locked !== false) return;
       if (!item.roi) {
         setStatus(ctx, "Draw ROI first.");
         return;
@@ -2006,6 +2102,9 @@
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.drawing = null;
+      state.mode = MODES.MOVE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2433,6 +2532,9 @@
   function drawHoverInfo(ctx) {
     if (!ctx || !state.hoverInfo) return;
     if (state.hoverInfo.ctxKey !== ctx.key) return;
+    if (state.drawing) return;
+    const selected = getSelectedBoxItem(ctx);
+    if (selected && selected._annId === state.hoverInfo.annId) return;
     const roi = state.hoverInfo.roi ? clampRoiToImage(state.hoverInfo.roi) : null;
     if (!roi) return;
     const p1 = pixelToCanvas(roi[0]);
@@ -2479,9 +2581,9 @@
 
     if (item.roi && isEllipseItem(item)) {
       const roi = clampRoiToImage(item.roi);
-      drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
-      drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
-      drawEllipseOutline(roi, color, active, selected, Number(item._ellipseRotation) || 0);
+      const rotation = Number(item._ellipseRotation) || 0;
+      drawEllipseGridAndCells(roi, item.mask, color, active ? 0.28 : 0.16, active ? 0.35 : 0.2, rotation);
+      drawEllipseOutline(roi, color, active, selected, rotation);
       return;
     }
 
@@ -2491,8 +2593,29 @@
       if (showRoiOutline) {
         drawRoiOutline(roi, color, active, selected);
       }
-      drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
-      drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
+      if (item._geometryType === "pyramid" && Array.isArray(item.polygon) && item.polygon.length >= 3) {
+        drawPyramidGridAndCells(
+          roi,
+          clampPolygonToImage(item.polygon),
+          item.mask,
+          color,
+          active ? 0.28 : 0.16,
+          active ? 0.35 : 0.2,
+          pyramidGridRotation(item),
+        );
+      } else if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length >= 3) {
+        drawPolygonGridAndCells(
+          roi,
+          clampPolygonToImage(item.polygon),
+          item.mask,
+          color,
+          active ? 0.28 : 0.16,
+          active ? 0.35 : 0.2,
+        );
+      } else {
+        drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
+        drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
+      }
     }
 
     if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length > 0) {
@@ -2614,6 +2737,211 @@
     state.ctx.arc(rot.handle[0], rot.handle[1], 5, 0, Math.PI * 2);
     state.ctx.fill();
     state.ctx.stroke();
+    state.ctx.restore();
+  }
+
+  function drawEllipseGridAndCells(roi, mask, color, gridAlpha, cellAlpha, rotation = 0) {
+    const p1 = pixelToCanvas(roi[0]);
+    const p2 = pixelToCanvas(roi[1]);
+    if (!p1 || !p2) return;
+    const x = Math.min(p1[0], p2[0]);
+    const y = Math.min(p1[1], p2[1]);
+    const w = Math.abs(p2[0] - p1[0]);
+    const h = Math.abs(p2[1] - p1[1]);
+    const rx = Math.max(1, w / 2);
+    const ry = Math.max(1, h / 2);
+    const cx = x + rx;
+    const cy = y + ry;
+    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
+    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
+
+    state.ctx.save();
+    state.ctx.translate(cx, cy);
+    state.ctx.rotate(rotation);
+    state.ctx.beginPath();
+    state.ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    state.ctx.clip();
+
+    state.ctx.strokeStyle = color;
+    state.ctx.globalAlpha = gridAlpha;
+    state.ctx.lineWidth = 1;
+    for (let r = 1; r < rows; r += 1) {
+      const gy = -ry + (r / rows) * (2 * ry);
+      state.ctx.beginPath();
+      state.ctx.moveTo(-rx, gy);
+      state.ctx.lineTo(rx, gy);
+      state.ctx.stroke();
+    }
+    for (let c = 1; c < cols; c += 1) {
+      const gx = -rx + (c / cols) * (2 * rx);
+      state.ctx.beginPath();
+      state.ctx.moveTo(gx, -ry);
+      state.ctx.lineTo(gx, ry);
+      state.ctx.stroke();
+    }
+
+    if (mask && Array.isArray(mask.cells)) {
+      const cellW = (2 * rx) / cols;
+      const cellH = (2 * ry) / rows;
+      state.ctx.fillStyle = color;
+      state.ctx.globalAlpha = cellAlpha;
+      mask.cells.forEach((cell) => {
+        const rr = toInt(cell[0], -1);
+        const cc = toInt(cell[1], -1);
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
+        state.ctx.fillRect(
+          -rx + cc * cellW,
+          -ry + rr * cellH,
+          cellW,
+          cellH,
+        );
+      });
+    }
+
+    state.ctx.restore();
+  }
+
+  function drawPolygonGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha) {
+    if (!Array.isArray(polygon) || polygon.length < 3) {
+      drawGrid(roi, mask?.rows ?? DEFAULT_GRID, mask?.cols ?? DEFAULT_GRID, color, gridAlpha);
+      drawCells(roi, mask, color, cellAlpha);
+      return;
+    }
+    const box = reorderRoi(roi);
+    const p1 = pixelToCanvas(box[0]);
+    const p2 = pixelToCanvas(box[1]);
+    if (!p1 || !p2) return;
+    const x1 = Math.min(p1[0], p2[0]);
+    const y1 = Math.min(p1[1], p2[1]);
+    const x2 = Math.max(p1[0], p2[0]);
+    const y2 = Math.max(p1[1], p2[1]);
+    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
+    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
+
+    const first = pixelToCanvas(polygon[0]);
+    if (!first) return;
+
+    state.ctx.save();
+    state.ctx.beginPath();
+    state.ctx.moveTo(first[0], first[1]);
+    for (let i = 1; i < polygon.length; i += 1) {
+      const p = pixelToCanvas(polygon[i]);
+      if (!p) continue;
+      state.ctx.lineTo(p[0], p[1]);
+    }
+    state.ctx.closePath();
+    state.ctx.clip();
+
+    state.ctx.strokeStyle = color;
+    state.ctx.globalAlpha = gridAlpha;
+    state.ctx.lineWidth = 1;
+    for (let r = 1; r < rows; r += 1) {
+      const y = y1 + (r / rows) * (y2 - y1);
+      state.ctx.beginPath();
+      state.ctx.moveTo(x1, y);
+      state.ctx.lineTo(x2, y);
+      state.ctx.stroke();
+    }
+    for (let c = 1; c < cols; c += 1) {
+      const x = x1 + (c / cols) * (x2 - x1);
+      state.ctx.beginPath();
+      state.ctx.moveTo(x, y1);
+      state.ctx.lineTo(x, y2);
+      state.ctx.stroke();
+    }
+
+    if (mask && Array.isArray(mask.cells)) {
+      const cellW = (x2 - x1) / cols;
+      const cellH = (y2 - y1) / rows;
+      state.ctx.fillStyle = color;
+      state.ctx.globalAlpha = cellAlpha;
+      mask.cells.forEach((cell) => {
+        const rr = toInt(cell[0], -1);
+        const cc = toInt(cell[1], -1);
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
+        state.ctx.fillRect(x1 + cc * cellW, y1 + rr * cellH, cellW, cellH);
+      });
+    }
+
+    state.ctx.restore();
+  }
+
+  function drawPyramidGridAndCells(roi, polygon, mask, color, gridAlpha, cellAlpha, rotation = 0) {
+    if (!Array.isArray(polygon) || polygon.length < 3) {
+      drawGrid(roi, mask?.rows ?? DEFAULT_GRID, mask?.cols ?? DEFAULT_GRID, color, gridAlpha);
+      drawCells(roi, mask, color, cellAlpha);
+      return;
+    }
+    const box = reorderRoi(roi);
+    const cx = (box[0][0] + box[1][0]) / 2;
+    const cy = (box[0][1] + box[1][1]) / 2;
+    const rx = Math.max(1, (box[1][0] - box[0][0]) / 2);
+    const ry = Math.max(1, (box[1][1] - box[0][1]) / 2);
+    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
+    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
+
+    state.ctx.save();
+    const centerCanvas = pixelToCanvas([cx, cy]);
+    if (!centerCanvas) {
+      state.ctx.restore();
+      return;
+    }
+    state.ctx.translate(centerCanvas[0], centerCanvas[1]);
+    state.ctx.rotate(rotation);
+
+    // Clip by pyramid polygon expressed in local (unrotated) coordinates.
+    const first = polygon[0];
+    const dx0 = first[0] - cx;
+    const dy0 = first[1] - cy;
+    const local0 = rotateOffset(dx0, dy0, -rotation);
+    state.ctx.beginPath();
+    state.ctx.moveTo(local0[0], local0[1]);
+    for (let i = 1; i < polygon.length; i += 1) {
+      const p = polygon[i];
+      const dx = p[0] - cx;
+      const dy = p[1] - cy;
+      const local = rotateOffset(dx, dy, -rotation);
+      state.ctx.lineTo(local[0], local[1]);
+    }
+    state.ctx.closePath();
+    state.ctx.clip();
+
+    state.ctx.strokeStyle = color;
+    state.ctx.globalAlpha = gridAlpha;
+    state.ctx.lineWidth = 1;
+    for (let r = 1; r < rows; r += 1) {
+      const y = -ry + (r / rows) * (2 * ry);
+      state.ctx.beginPath();
+      state.ctx.moveTo(-rx, y);
+      state.ctx.lineTo(rx, y);
+      state.ctx.stroke();
+    }
+    for (let c = 1; c < cols; c += 1) {
+      const x = -rx + (c / cols) * (2 * rx);
+      state.ctx.beginPath();
+      state.ctx.moveTo(x, -ry);
+      state.ctx.lineTo(x, ry);
+      state.ctx.stroke();
+    }
+
+    if (mask && Array.isArray(mask.cells)) {
+      const cellW = (2 * rx) / cols;
+      const cellH = (2 * ry) / rows;
+      state.ctx.fillStyle = color;
+      state.ctx.globalAlpha = cellAlpha;
+      mask.cells.forEach((cell) => {
+        const rr = toInt(cell[0], -1);
+        const cc = toInt(cell[1], -1);
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
+        state.ctx.fillRect(
+          -rx + cc * cellW,
+          -ry + rr * cellH,
+          cellW,
+          cellH,
+        );
+      });
+    }
+
     state.ctx.restore();
   }
 

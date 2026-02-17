@@ -1309,6 +1309,24 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   overflow-y: auto;
 }
 
+@media (orientation: portrait) and (min-width: 992px) {
+  .imggr-annot-sidebar {
+    flex: 0 0 200px;
+    width: 200px;
+    min-width: 200px;
+  }
+
+  .imggr-top-row {
+    flex-wrap: wrap !important;
+  }
+
+  .imggr-quick-controls {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: flex-start !important;
+  }
+}
+
 .imggr-main-wrap {
   min-width: 0;
 }
@@ -1326,10 +1344,17 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 .grading-workspace {
   justify-content: center;
   align-items: stretch;
-  height: min(70vh, 70vw);
-  min-height: min(70vh, 70vw);
-  max-height: min(70vh, 70vw);
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
   overflow: visible;
+}
+
+@media (min-width: 992px) {
+  main > #grading-content-shell.container {
+    width: min(96vw, 1800px);
+    max-width: min(96vw, 1800px);
+  }
 }
 
 #image-card,

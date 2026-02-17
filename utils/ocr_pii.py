@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, List
 
 import cv2
@@ -17,6 +17,9 @@ class OcrPiiConfig:
     min_valid_detections: int = 1
     max_roi_dim: int = 1200
     tesseract_timeout_seconds: float = 20.0
+    max_preprocess_variants: int = 3
+    max_ocr_configs: int = 2
+    early_exit_on_pattern_match: bool = True
 
 
 def preprocess_roi_multi(roi: np.ndarray) -> List[np.ndarray]:
@@ -55,14 +58,10 @@ def preprocess_roi_multi(roi: np.ndarray) -> List[np.ndarray]:
 
 
 def detect_text_patterns(text: str) -> bool:
-    text = text.strip().upper()
-    pii_indicators = [
-        lambda t: any(c.isdigit() for c in t) and len(t) >= 4,
-        lambda t: any(word in t for word in ["OD", "OS", "NAME", "ID", "DATE", "DOB", "AGE"]),
-        lambda t: any(c.isdigit() for c in t) and any(c.isalpha() for c in t),
-        lambda t: sum(c.isdigit() for c in t) >= 4,
-    ]
-    return any(check(text) for check in pii_indicators)
+    text = text.strip()
+    # Ignore OCR-ambiguous glyphs unless other alphanumerics exist.
+    ignore_chars = {"0", "O", "1", "l", "L"}
+    return any(c.isalnum() and c not in ignore_chars for c in text)
 
 
 def _safe_int(value: Any) -> int:
@@ -77,13 +76,14 @@ def extract_text_multi_strategy(
     config: OcrPiiConfig,
 ) -> List[Dict[str, Any]]:
     all_detections: List[Dict[str, Any]] = []
-    processed_images = preprocess_roi_multi(roi)
+    processed_images = preprocess_roi_multi(roi)[: max(1, int(config.max_preprocess_variants))]
     configs = [
         "--psm 6 --oem 3",
         "--psm 11 --oem 3",
         "--psm 12 --oem 3",
         "--psm 7 --oem 3",
-    ]
+    ][: max(1, int(config.max_ocr_configs))]
+    seen: set[tuple[str, int, int, int, int]] = set()
 
     for proc_img in processed_images:
         for ocr_config in configs:
@@ -110,11 +110,22 @@ def extract_text_multi_strategy(
                 width = _safe_int(width_values[i]) if i < len(width_values) else 0
                 height = _safe_int(height_values[i]) if i < len(height_values) else 0
                 if len(txt_clean) >= config.min_text_length and conf > config.min_confidence:
+                    dedup_key = (
+                        txt_clean.upper(),
+                        max(0, left),
+                        max(0, top),
+                        max(0, width),
+                        max(0, height),
+                    )
+                    if dedup_key in seen:
+                        continue
+                    seen.add(dedup_key)
+                    matches_pattern = detect_text_patterns(txt_clean)
                     all_detections.append(
                         {
                             "text": txt_clean,
                             "conf": conf,
-                            "matches_pattern": detect_text_patterns(txt_clean),
+                            "matches_pattern": matches_pattern,
                             "box": {
                                 "x": max(0, left),
                                 "y": max(0, top),
@@ -123,6 +134,8 @@ def extract_text_multi_strategy(
                             },
                         }
                     )
+                    if config.early_exit_on_pattern_match and matches_pattern:
+                        return all_detections
 
     return all_detections
 
@@ -154,7 +167,11 @@ def detect_pii_for_image(img: np.ndarray, config: OcrPiiConfig | None = None) ->
         roi = cv2.resize(roi, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
     has_text_structure = analyze_roi_structure(roi)
-    detections = extract_text_multi_strategy(roi, config)
+    detect_cfg = config
+    if not has_text_structure:
+        # Fast path when ROI structure is weak: run a single OCR pass only.
+        detect_cfg = replace(config, max_preprocess_variants=1, max_ocr_configs=1)
+    detections = extract_text_multi_strategy(roi, detect_cfg)
     valid_detections = [
         d for d in detections if d["conf"] > config.min_confidence
     ]
@@ -191,7 +208,11 @@ def detect_pii_details_for_image(
         roi = cv2.resize(roi, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
     has_text_structure = analyze_roi_structure(roi)
-    detections = extract_text_multi_strategy(roi, config)
+    detect_cfg = config
+    if not has_text_structure:
+        # Fast path when ROI structure is weak: run a single OCR pass only.
+        detect_cfg = replace(config, max_preprocess_variants=1, max_ocr_configs=1)
+    detections = extract_text_multi_strategy(roi, detect_cfg)
     valid_detections = [
         d for d in detections if d["conf"] > config.min_confidence
     ]

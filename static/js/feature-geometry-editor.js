@@ -1,6 +1,7 @@
 (function () {
   const MODES = {
     ROI: "roi",
+    PYRAMID: "pyramid",
     POLYGON: "polygon",
     ELLIPSE: "ellipse",
     ADD: "add",
@@ -188,6 +189,11 @@
       const clean = {
         feature_id: featureId,
         feature_label: typeof item.feature_label === "string" ? item.feature_label : null,
+        _geometryType: (() => {
+          const gt = typeof item.geometry_type === "string" ? item.geometry_type.toLowerCase() : "";
+          if (["box", "ellipse", "polygon", "pyramid", "region"].includes(gt)) return gt;
+          return "box";
+        })(),
         _locked: true,
         _ellipseRotation: (() => {
           const deg = Number(item?.ellipse?.rotation_deg);
@@ -332,6 +338,7 @@
         return {
           feature_id: item.feature_id,
           feature_label: item.feature_label || getFeatureLabel(ctx, item.feature_id),
+          geometry_type: item._geometryType || "box",
           roi: {
             type: "box",
             pixel: roi,
@@ -504,14 +511,17 @@
       <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-lock title="Lock ROI" aria-label="Lock ROI">
         <i class="fa-solid fa-lock"></i>
       </button>
-      <button type="button" class="btn btn-outline-success btn-sm" data-fgx-box-done title="Done" aria-label="Done">
-        <i class="fa-solid fa-check"></i>
-      </button>
       <button type="button" class="btn btn-outline-primary btn-sm" data-fgx-box-dup title="Duplicate" aria-label="Duplicate">
         <i class="fa-solid fa-copy"></i>
       </button>
       <button type="button" class="btn btn-outline-warning btn-sm" data-fgx-box-convert-poly title="Convert ellipse to polygon" aria-label="Convert ellipse to polygon">
         <i class="fa-solid fa-draw-polygon"></i>
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-flip-h title="Flip pyramid horizontally" aria-label="Flip pyramid horizontally">
+        <i class="fa-solid fa-left-right"></i>
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-flip-v title="Flip pyramid vertically" aria-label="Flip pyramid vertically">
+        <i class="fa-solid fa-up-down"></i>
       </button>
       <button type="button" class="btn btn-outline-danger btn-sm" data-fgx-box-del title="Delete" aria-label="Delete">
         <i class="fa-solid fa-trash"></i>
@@ -524,6 +534,7 @@
       const ctx = activeContext();
       const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi) return;
+      setPanLock(false);
       ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
       setSelectedBox(ctx, item);
       item._locked = !item._locked;
@@ -536,20 +547,6 @@
         refreshToolbarStates();
       }
       syncField(ctx);
-      redraw();
-    });
-
-    wrap.querySelector("[data-fgx-box-done]")?.addEventListener("click", () => {
-      const ctx = activeContext();
-      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
-      if (!ctx || !item || !item.roi) return;
-      ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
-      setSelectedBox(ctx, item);
-      item._locked = true;
-      syncField(ctx);
-      state.mode = MODES.PAN;
-      setCanvasPointerMode();
-      refreshToolbarStates();
       redraw();
     });
 
@@ -569,6 +566,10 @@
       dup._ellipseRotation = Number(item._ellipseRotation) || 0;
       if (isEllipseItem(dup)) {
         dup.polygon = polygonFromEllipse(dup.roi, dup._ellipseRotation);
+        ensureMask(dup, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+        refillMaskFromPolygon(dup);
+      } else if (!isBoxItem(dup) && Array.isArray(item.polygon) && item.polygon.length) {
+        dup.polygon = item.polygon.map((p) => [p[0] + dx, p[1] + dy]);
         ensureMask(dup, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
         refillMaskFromPolygon(dup);
       }
@@ -607,6 +608,24 @@
       state.mode = MODES.POLYGON;
       setCanvasPointerMode();
       refreshToolbarStates();
+      syncField(ctx);
+      redraw();
+    });
+
+    wrap.querySelector("[data-fgx-box-flip-h]")?.addEventListener("click", () => {
+      const ctx = activeContext();
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
+      if (!ctx || !item || item._geometryType !== "pyramid" || item._locked !== false) return;
+      if (!flipPolygonInRoi(item, "h")) return;
+      syncField(ctx);
+      redraw();
+    });
+
+    wrap.querySelector("[data-fgx-box-flip-v]")?.addEventListener("click", () => {
+      const ctx = activeContext();
+      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
+      if (!ctx || !item || item._geometryType !== "pyramid" || item._locked !== false) return;
+      if (!flipPolygonInRoi(item, "v")) return;
       syncField(ctx);
       redraw();
     });
@@ -649,6 +668,17 @@
       const show = isEllipseItem(item);
       convertBtn.style.display = show ? "inline-flex" : "none";
       convertBtn.disabled = !show;
+    }
+    const flipHBtn = state.boxActionsEl.querySelector("[data-fgx-box-flip-h]");
+    const flipVBtn = state.boxActionsEl.querySelector("[data-fgx-box-flip-v]");
+    const showFlip = item._geometryType === "pyramid";
+    if (flipHBtn) {
+      flipHBtn.style.display = showFlip ? "inline-flex" : "none";
+      flipHBtn.disabled = !showFlip || item._locked !== false;
+    }
+    if (flipVBtn) {
+      flipVBtn.style.display = showFlip ? "inline-flex" : "none";
+      flipVBtn.disabled = !showFlip || item._locked !== false;
     }
     const roi = clampRoiToImage(item.roi);
     const boxW = Math.abs(roi[1][0] - roi[0][0]);
@@ -861,6 +891,7 @@
       <div class="fgx-group">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box>+ Add Box</button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse>+ Add Ellipse</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid>+ Add Pyramid</button>
       </div>
     `;
     sidebarHost.appendChild(panel);
@@ -984,6 +1015,22 @@
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       state.mode = MODES.ELLIPSE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
+      syncField(ctx);
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-add-pyramid]")?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      const item = createAnnotationItem(ctx, state.activeFeatureId);
+      item._geometryType = "pyramid";
+      item._ellipseRotation = 0;
+      setSelectedBox(ctx, item);
+      setPanLock(true);
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      state.mode = MODES.PYRAMID;
       setCanvasPointerMode();
       refreshToolbarStates();
       syncField(ctx);
@@ -1137,6 +1184,24 @@
     return reorderRoi([[px, py], anchor]);
   }
 
+  function remapPolygonBetweenRois(polygon, fromRoi, toRoi) {
+    if (!Array.isArray(polygon) || !polygon.length || !fromRoi || !toRoi) return polygon || [];
+    const src = reorderRoi(fromRoi);
+    const dst = reorderRoi(toRoi);
+    const srcW = Math.max(1e-6, src[1][0] - src[0][0]);
+    const srcH = Math.max(1e-6, src[1][1] - src[0][1]);
+    const dstW = Math.max(1e-6, dst[1][0] - dst[0][0]);
+    const dstH = Math.max(1e-6, dst[1][1] - dst[0][1]);
+    return polygon.map((p) => {
+      const nx = (p[0] - src[0][0]) / srcW;
+      const ny = (p[1] - src[0][1]) / srcH;
+      return clampPointToImage([
+        dst[0][0] + nx * dstW,
+        dst[0][1] + ny * dstH,
+      ]);
+    });
+  }
+
   function findBoxHit(ctx, point, preferredAnnId = null) {
     if (!ctx || !point) return null;
     const selectedIds = new Set(getSelectedFeatureIds(ctx));
@@ -1146,6 +1211,15 @@
     if (preferredAnnId != null) {
       const preferred = items.find((it) => it._annId === preferredAnnId);
       if (preferred) {
+        if (preferred._geometryType === "pyramid") {
+          const pCanvas = pixelToCanvas(point);
+          const rot = pyramidRotateHandleCanvasPoints(preferred);
+          if (pCanvas && rot) {
+            const dx = rot.handle[0] - pCanvas[0];
+            const dy = rot.handle[1] - pCanvas[1];
+            if (Math.sqrt(dx * dx + dy * dy) <= 12) return { item: preferred, action: "rotate-pyramid" };
+          }
+        }
         if (isEllipseItem(preferred)) {
           const pCanvas = pixelToCanvas(point);
           const rotH = ellipseRotateHandleCanvasPoint(preferred.roi, Number(preferred._ellipseRotation) || 0);
@@ -1265,6 +1339,96 @@
       pts.push([x, y]);
     }
     return pts;
+  }
+
+  function polygonFromPyramid(roi) {
+    const box = reorderRoi(roi);
+    const midX = (box[0][0] + box[1][0]) / 2;
+    return [
+      [midX, box[0][1]],
+      [box[1][0], box[1][1]],
+      [box[0][0], box[1][1]],
+    ];
+  }
+
+  function rotatePointAround(point, center, angleRad) {
+    const dx = point[0] - center[0];
+    const dy = point[1] - center[1];
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    return [
+      center[0] + (dx * cosA - dy * sinA),
+      center[1] + (dx * sinA + dy * cosA),
+    ];
+  }
+
+  function rotatePolygonAround(polygon, center, angleRad) {
+    if (!Array.isArray(polygon) || !polygon.length) return polygon || [];
+    return polygon.map((p) => clampPointToImage(rotatePointAround(p, center, angleRad)));
+  }
+
+  function polygonCentroid(points) {
+    if (!Array.isArray(points) || !points.length) return null;
+    let sx = 0;
+    let sy = 0;
+    points.forEach((p) => {
+      sx += p[0];
+      sy += p[1];
+    });
+    return [sx / points.length, sy / points.length];
+  }
+
+  function pyramidApexIndex(points) {
+    if (!Array.isArray(points) || points.length < 3) return -1;
+    const centroid = polygonCentroid(points);
+    if (!centroid) return -1;
+    let bestIdx = -1;
+    let bestDist = Number.NEGATIVE_INFINITY;
+    points.forEach((p, idx) => {
+      const dx = p[0] - centroid[0];
+      const dy = p[1] - centroid[1];
+      const d2 = (dx * dx) + (dy * dy);
+      if (d2 > bestDist) {
+        bestDist = d2;
+        bestIdx = idx;
+      }
+    });
+    return bestIdx;
+  }
+
+  function pyramidRotateHandleCanvasPoints(item) {
+    if (!item || item._geometryType !== "pyramid" || !Array.isArray(item.polygon) || item.polygon.length < 3) return null;
+    const apexIdx = pyramidApexIndex(item.polygon);
+    if (apexIdx < 0) return null;
+    const centroidPx = polygonCentroid(item.polygon);
+    if (!centroidPx) return null;
+    const apexPx = item.polygon[apexIdx];
+    const apex = pixelToCanvas(apexPx);
+    const center = pixelToCanvas(centroidPx);
+    if (!apex || !center) return null;
+    const vx = apex[0] - center[0];
+    const vy = apex[1] - center[1];
+    const len = Math.hypot(vx, vy) || 1;
+    const ux = vx / len;
+    const uy = vy / len;
+    return {
+      apex,
+      handle: [apex[0] + ux * 18, apex[1] + uy * 18],
+    };
+  }
+
+  function flipPolygonInRoi(item, axis) {
+    if (!item || !item.roi || !Array.isArray(item.polygon) || item.polygon.length < 3) return false;
+    const box = reorderRoi(item.roi);
+    const cx = (box[0][0] + box[1][0]) / 2;
+    const cy = (box[0][1] + box[1][1]) / 2;
+    item.polygon = item.polygon.map((p) => {
+      const x = axis === "h" ? (2 * cx - p[0]) : p[0];
+      const y = axis === "v" ? (2 * cy - p[1]) : p[1];
+      return clampPointToImage([x, y]);
+    });
+    refillMaskFromPolygon(item);
+    return true;
   }
 
   function ellipseResizeHandlePixelPoints(roi, rotationRad = 0) {
@@ -1457,11 +1621,11 @@
     const point = clientToPixel(event.clientX, event.clientY);
     if (!point) return;
 
-    let item = getActiveAnnotationItem(ctx, mode !== MODES.MOVE);
+    let item = getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, mode !== MODES.MOVE && mode !== MODES.POLYGON);
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
     if (item) ensureMask(item, grid);
 
-    const hit = findBoxHit(ctx, point);
+    const hit = mode === MODES.POLYGON ? null : findBoxHit(ctx, point);
     if (hit) {
       item = hit.item;
       selectItemInUi(ctx, item);
@@ -1474,7 +1638,19 @@
         return;
       }
       setPanLock(true);
-      if (hit.action === "rotate") {
+      if (hit.action === "rotate-pyramid") {
+        const box = reorderRoi(item.roi);
+        const cx = (box[0][0] + box[1][0]) / 2;
+        const cy = (box[0][1] + box[1][1]) / 2;
+        const startAngle = Math.atan2(point[1] - cy, point[0] - cx);
+        state.drawing = {
+          kind: "rotate-pyramid",
+          itemAnnId: item._annId,
+          center: [cx, cy],
+          startAngle,
+          initialPolygon: (item.polygon || []).map((p) => [p[0], p[1]]),
+        };
+      } else if (hit.action === "rotate") {
         const box = reorderRoi(item.roi);
         const cx = (box[0][0] + box[1][0]) / 2;
         const cy = (box[0][1] + box[1][1]) / 2;
@@ -1534,6 +1710,23 @@
       return;
     }
 
+    if (mode === MODES.PYRAMID) {
+      enforceGeometryType(item, "pyramid");
+      setSelectedBox(ctx, item);
+      setPanLock(true);
+      state.drawing = { kind: "pyramid", start: point, current: point, itemAnnId: item._annId };
+      item.roi = [point, point];
+      item.mask.rows = grid;
+      item.mask.cols = grid;
+      item.mask.cells = [];
+      item.polygon = [];
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (mode === MODES.POLYGON) {
       enforceGeometryType(item, "polygon");
       if (item.polygon.length) {
@@ -1544,6 +1737,16 @@
           event.stopPropagation();
           return;
         }
+      }
+
+      if (item.polygon.length >= 3 && pointInPolygon(point, item.polygon)) {
+        setSelectedBox(ctx, item);
+        setPanLock(true);
+        state.drawing = { kind: "move", start: point, last: point, itemAnnId: item._annId };
+        event.preventDefault();
+        event.stopPropagation();
+        redraw();
+        return;
       }
 
       if (item._geometryType !== "polygon" && item.roi && !pointInRoi(point, item.roi)) {
@@ -1641,8 +1844,16 @@
         ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
         refillMaskFromPolygon(item);
       } else {
-        item.roi = resizeRoiByHandle(item.roi, state.drawing.handle, point);
-        clearBoxResidualGeometry(item);
+        const prevRoi = item.roi ? reorderRoi(item.roi) : null;
+        const nextRoi = resizeRoiByHandle(item.roi, state.drawing.handle, point);
+        item.roi = nextRoi;
+        if (item._geometryType === "pyramid" && Array.isArray(item.polygon) && item.polygon.length >= 3 && prevRoi) {
+          item.polygon = remapPolygonBetweenRois(item.polygon, prevRoi, nextRoi);
+          ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+          refillMaskFromPolygon(item);
+        } else {
+          clearBoxResidualGeometry(item);
+        }
       }
       syncField(ctx);
       redraw();
@@ -1667,8 +1878,37 @@
       return;
     }
 
+    if (state.drawing && state.drawing.kind === "rotate-pyramid") {
+      const cx = state.drawing.center[0];
+      const cy = state.drawing.center[1];
+      const angleNow = Math.atan2(point[1] - cy, point[0] - cx);
+      const delta = angleNow - state.drawing.startAngle;
+      const base = Array.isArray(state.drawing.initialPolygon) ? state.drawing.initialPolygon : item.polygon;
+      item.polygon = rotatePolygonAround(base, [cx, cy], delta);
+      ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+      refillMaskFromPolygon(item);
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (state.drawing && state.drawing.kind === "ellipse") {
       state.drawing.current = point;
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (state.drawing && state.drawing.kind === "pyramid") {
+      state.drawing.current = point;
+      item.roi = reorderRoi([state.drawing.start, point]);
+      item.polygon = polygonFromPyramid(item.roi);
+      ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+      refillMaskFromPolygon(item);
+      syncField(ctx);
       redraw();
       event.preventDefault();
       event.stopPropagation();
@@ -1747,6 +1987,15 @@
       return;
     }
 
+    if (state.drawing && state.drawing.kind === "rotate-pyramid") {
+      state.drawing = null;
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (state.drawing && state.drawing.kind === "ellipse") {
       const p = clientToPixel(event.clientX, event.clientY);
       const end = p || state.drawing.current;
@@ -1757,6 +2006,25 @@
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.drawing = null;
+      syncField(ctx);
+      redraw();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (state.drawing && state.drawing.kind === "pyramid") {
+      const p = clientToPixel(event.clientX, event.clientY);
+      const end = p || state.drawing.current;
+      const roi = reorderRoi([state.drawing.start, end]);
+      item.roi = roi;
+      item.polygon = polygonFromPyramid(roi);
+      ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
+      refillMaskFromPolygon(item);
+      state.drawing = null;
+      state.mode = MODES.MOVE;
+      setCanvasPointerMode();
+      refreshToolbarStates();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -1845,6 +2113,7 @@
     }
 
     if (key === "u") { state.mode = MODES.ROI; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
+    if (key === "y") { state.mode = MODES.PYRAMID; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
     if (key === "i") { state.mode = MODES.POLYGON; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
     if (key === "j") { state.mode = MODES.ELLIPSE; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
     if (key === "o") { state.mode = MODES.ADD; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
@@ -2001,6 +2270,10 @@
     if (state.drawing && state.drawing.kind === "roi") {
       const roi = reorderRoi([state.drawing.start, state.drawing.current]);
       drawRoiOutline(roi, "#ffffff", true);
+    }
+    if (state.drawing && state.drawing.kind === "pyramid") {
+      const roi = reorderRoi([state.drawing.start, state.drawing.current]);
+      drawPolygon(polygonFromPyramid(roi), "#ffffff", true);
     }
     if (state.drawing && state.drawing.kind === "ellipse") {
       const roi = reorderRoi([state.drawing.start, state.drawing.current]);
@@ -2206,19 +2479,27 @@
 
     if (item.roi && isEllipseItem(item)) {
       const roi = clampRoiToImage(item.roi);
+      drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
+      drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
       drawEllipseOutline(roi, color, active, selected, Number(item._ellipseRotation) || 0);
       return;
     }
 
     if (item.roi) {
       const roi = clampRoiToImage(item.roi);
-      drawRoiOutline(roi, color, active, selected);
+      const showRoiOutline = isBoxItem(item) || selected;
+      if (showRoiOutline) {
+        drawRoiOutline(roi, color, active, selected);
+      }
       drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
       drawCells(roi, item.mask, color, active ? 0.35 : 0.2);
     }
 
     if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length > 0) {
       drawPolygon(clampPolygonToImage(item.polygon), color, active);
+      if (selected && item._geometryType === "pyramid") {
+        drawPyramidRotateHandle(item, color);
+      }
     }
   }
 
@@ -2314,6 +2595,25 @@
         state.ctx.stroke();
       }
     }
+    state.ctx.restore();
+  }
+
+  function drawPyramidRotateHandle(item, color) {
+    const rot = pyramidRotateHandleCanvasPoints(item);
+    if (!rot) return;
+    state.ctx.save();
+    state.ctx.setLineDash([]);
+    state.ctx.lineWidth = 1.5;
+    state.ctx.strokeStyle = color;
+    state.ctx.beginPath();
+    state.ctx.moveTo(rot.apex[0], rot.apex[1]);
+    state.ctx.lineTo(rot.handle[0], rot.handle[1]);
+    state.ctx.stroke();
+    state.ctx.beginPath();
+    state.ctx.fillStyle = "#f8fafc";
+    state.ctx.arc(rot.handle[0], rot.handle[1], 5, 0, Math.PI * 2);
+    state.ctx.fill();
+    state.ctx.stroke();
     state.ctx.restore();
   }
 

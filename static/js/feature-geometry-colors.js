@@ -1,21 +1,10 @@
 (function () {
   const PALETTE = [
-    "#e63946",
-    "#457b9d",
-    "#2a9d8f",
-    "#f4a261",
-    "#264653",
-    "#8ab17d",
-    "#ff006e",
-    "#3a86ff",
-    "#8338ec",
-    "#ff7f11",
-    "#06d6a0",
-    "#ef476f",
-    "#118ab2",
-    "#7f4f24",
-    "#4d908e",
-    "#6a4c93",
+    "#00B8D9", // deep cyan
+    "#2E7DFF", // deep azure
+    "#00C853", // deep green
+    "#B388FF", // deep violet
+    "#FFD600", // deep yellow
   ];
 
   function numericFeatureId(featureId) {

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Dual Grading Task{% endblock %}
-{% block content_container_attrs %}style="max-width: 98vw; width: 98vw; min-width: 1270px;"{% endblock %}
+{% block content_container_attrs %}id="grading-content-shell"{% endblock %}
 
 {% block content %}
 {% from "_forms.html" import csrf_field %}
@@ -54,7 +54,7 @@
   </div>
 </div>
 
-<div class="row g-3 align-items-start">
+<div class="row grading-workspace">
 
   <!-- Large image on left -->
   <div class="col-12 col-lg-9" id="image-card">
@@ -68,8 +68,6 @@
     </div>
     {% endif %}
   </div>
-
-
   <!-- Narrow right column with grading form -->
   <div class="col-12 col-lg-3" id="image-grading-controls">
     <div class="card shadow-sm">
@@ -369,6 +367,8 @@
       </div>
     </div>
   </div>
+
+  <div class="d-none d-lg-block col-lg-1"></div>
 </div>
 
 {% if linked_mode %}

@@ -35,7 +35,7 @@
     <!-- Brightness / Contrast Controls -->
     <div class="d-flex flex-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls">
       <!-- Brightness -->
-      <div class="d-flex align-items-center gap-1" style="width: 210px; min-width: 210px;">
+      <div class="d-flex align-items-center gap-1 imggr-slider-group">
         <label class="small mb-0 d-flex align-items-center" for="imggr-bright-{{ uuid }}" title="Brightness" aria-label="Brightness">
           <i class="fa-solid fa-sun"></i>
         </label>
@@ -47,7 +47,7 @@
       </div>
 
       <!-- Contrast -->
-      <div class="d-flex align-items-center gap-1" style="width: 210px; min-width: 210px;">
+      <div class="d-flex align-items-center gap-1 imggr-slider-group">
         <label class="small mb-0 d-flex align-items-center" for="imggr-contrast-{{ uuid }}" title="Contrast" aria-label="Contrast">
           <i class="fa-solid fa-circle-half-stroke"></i>
         </label>
@@ -102,7 +102,7 @@
     <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>
       Done
     </button>
-    <div class="d-flex align-items-center gap-2 ms-lg-auto" style="min-width: 300px;">
+    <div class="d-flex align-items-center gap-2 ms-lg-auto">
       <button type="button" class="btn btn-sm btn-outline-secondary" data-fgx-quick-pan title="Hand tool">
         <i class="fa-solid fa-hand"></i>
         <span class="visually-hidden">Hand</span>
@@ -149,13 +149,12 @@
         data-enc-id="{{ uuid }}">
       
         <div class="imggr-stage position-relative">
-          <div class="imggr-annot-layout d-flex w-100 gap-2">
+          <div class="imggr-annot-layout d-flex">
             <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host></aside>
-            <div class="imggr-main-wrap flex-grow-1 d-flex justify-content-center">
-              <div class="imggr-main bg-black rounded position-relative">
-                <img       
-                  class="imggr-main-img" 
-                  style="width:100%; height:100%; object-fit:contain; display:block;"
+            <div class="imggr-main-wrap d-flex justify-content-center">
+              <div class="imggr-main rounded position-relative">
+                <img
+                  class="imggr-main-img"
                   src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
                   alt="Image" 
                   data-index="0" 

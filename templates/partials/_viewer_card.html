@@ -84,14 +84,13 @@
 
   <div class="card-body p-0">
     <div id="imggr-view-{{ uuid }}" class="imggr-viewer-root" data-enc-id="{{ uuid }}">
-      <div class="imggr-main bg-black rounded position-relative"
+      <div class="imggr-main rounded position-relative"
       {% if viewer_height %}
-      style="width:100%; height:{{ viewer_height }}; display:flex; align-items:center; justify-content:center; overflow:hidden;"
+      style="width:100%; height:{{ viewer_height }}; display:flex; overflow:hidden;"
       {% else %}
-      style="aspect-ratio:1/1; width:100%; height:auto; display:flex; align-items:center; justify-content:center; overflow:hidden;"
+      style="aspect-ratio:1/1; width:100%; height:auto; display:flex; overflow:hidden;"
       {% endif %}>
-        <img         class="imggr-main-img" 
-        style="width:100%; height:100%; object-fit:contain; display:block;"
+        <img class="imggr-main-img"
         src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
         <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
       </div>

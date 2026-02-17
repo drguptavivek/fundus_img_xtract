@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Regrade Task{% endblock %}
-{% block content_container_attrs %}style="max-width: 98vw; width: 98vw; min-width: 1270px;"{% endblock %}
+{% block content_container_attrs %}id="grading-content-shell"{% endblock %}
 
 {% block content %}
 {% from "_forms.html" import csrf_field %}
@@ -51,8 +51,10 @@
   </div>
 </div>
 
-<div class="row g-3 align-items-start" id="regrade_viewport" >
-  <div class="col-12 col-lg-9" id="image-card">
+<div class="row g-2 grading-workspace" id="regrade_viewport" >
+  <div class="d-none d-lg-block col-lg-1"></div>
+
+  <div class="col-12 col-lg-8" id="image-card">
     {% if image_uuid %}
     {% include 'partials/_grading_card.html' %}
     {% else %}
@@ -64,7 +66,7 @@
     {% endif %}
   </div>
 
-  <div class="col-12 col-lg-3" id="image-grading-controls">
+  <div class="col-12 col-lg-2" id="image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
         {% if is_admin %}
@@ -179,6 +181,8 @@
       </div>
     </div>
   </div>
+
+  <div class="d-none d-lg-block col-lg-1"></div>
 </div>
 {% endblock %}
 

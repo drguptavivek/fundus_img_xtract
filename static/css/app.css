@@ -747,22 +747,21 @@ body {
   box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .25) !important;
 }
 
-/* Grading viewer: center the single image perfectly */
+/* Grading viewer: keep image anchored to top-left */
 .imggr-viewer-root .imggr-main {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #000;      /* ensure black background */
+  align-items: flex-start;
+  justify-content: flex-start;
+  /* background: #000;      ensure black background */
   padding: 2px;          /* small padding around the image */
   box-sizing: border-box;
 /* Grading viewer: responsive sizing for 1:1 medical images */
   overflow: hidden;
   
-  /* Default for larger screens - height-based */
-  height: 85vh;
+  /* Default for larger screens - container-driven sizing */
   width: auto;
-  max-width: 90vh; /* Maintain 1:1 aspect ratio */
-  max-height: 90vh; /* Ensure container doesn't exceed viewport height */
+  max-width: 100%;
+  max-height: 100%;
   aspect-ratio: 1/1;
 }
 
@@ -777,23 +776,14 @@ body {
 }
 
 .imggr-viewer-root .imggr-main-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  
-  display: block;
-  margin: auto;
-  transition: transform 0.12s ease;
-  will-change: transform;
-
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
-  object-position: center center;
+  object-position: left top;
   display: block;
-  margin: auto;
+  margin: 0;
   transition: transform 0.12s ease;
   will-change: transform;
 }
@@ -1293,12 +1283,13 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 }
 
 .imggr-annot-layout {
-  min-height: 560px;
+  gap: 0.4rem;
 }
 
 .imggr-annot-sidebar {
-  width: 220px;
-  min-width: 220px;
+  flex: 0 0 240px;
+  width: 240px;
+  min-width: 240px;
   max-height: 72vh;
   overflow-y: auto;
 }
@@ -1307,15 +1298,104 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   min-width: 0;
 }
 
+.imggr-slider-group {
+  width: 210px;
+}
+
+.grading-workspace {
+  justify-content: center;
+  align-items: stretch;
+  height: min(70vh, 70vw);
+  min-height: min(70vh, 70vw);
+  max-height: min(70vh, 70vw);
+  overflow: visible;
+}
+
+#image-card,
+#image-grading-controls {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#image-card > .card,
+#image-grading-controls > .card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+#image-card > .card > .card-body,
+#image-grading-controls > .card > .card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#image-card > .card > .card-body {
+  overflow: hidden;
+}
+
+#image-card .imggr-viewer-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#image-card .imggr-stage,
+#image-card .imggr-annot-layout,
+#image-card .imggr-main-wrap {
+  min-height: 0;
+  height: 100%;
+}
+
+#image-grading-controls > .card > .card-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 @media (max-width: 992px) {
+  .grading-workspace {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  #image-card,
+  #image-grading-controls {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
   .imggr-annot-layout {
     flex-direction: column;
   }
 
   .imggr-annot-sidebar {
+    flex: initial;
     width: 100%;
     min-width: 0;
     max-height: none;
+  }
+
+  #image-card > .card,
+  #image-grading-controls > .card {
+    min-height: 0;
+    flex: initial;
+    max-height: none;
+    overflow: visible;
+  }
+
+  #image-card > .card > .card-body,
+  #image-grading-controls > .card > .card-body {
+    flex: initial;
+    overflow-y: visible;
+    overflow-x: visible;
   }
 }
 

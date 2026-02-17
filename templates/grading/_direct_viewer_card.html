@@ -40,7 +40,7 @@
   </div>
   <div class="card-body p-0">
     <div id="imggr-view-{{ image.uuid }}" class="imggr-viewer-root" data-enc-id="{{ image.uuid }}">
-      <div class="imggr-main bg-black rounded position-relative" style="height: 90vh; display:flex; align-items:center; justify-content:center;">
+      <div class="imggr-main rounded position-relative" style="height: 90vh; display:flex;">
         <img class="imggr-main-img" src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=image.uuid) }}" alt="Image" data-index="0" />
         <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
       </div>

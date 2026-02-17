@@ -153,7 +153,7 @@
     const style = document.createElement("style");
     style.id = "feature-geometry-editor-style";
     style.textContent = `
-      .fgx-overlay-canvas { position:absolute; inset:0; width:100%; height:100%; z-index:15; cursor:crosshair; }
+      .fgx-overlay-canvas { position:absolute; left:0; top:0; z-index:15; cursor:crosshair; }
       .fgx-panel { display:flex; flex-direction:column; gap:.5rem; }
       .fgx-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
       .fgx-toolbar .btn { min-width:2.4rem; }
@@ -178,27 +178,51 @@
     if (!state.main || !state.mainImg) return null;
     const mainRect = state.main.getBoundingClientRect();
     const imgRect = state.mainImg.getBoundingClientRect();
+    const canvasRect = state.canvas ? state.canvas.getBoundingClientRect() : imgRect;
     const naturalWidth = state.mainImg.naturalWidth || 0;
     const naturalHeight = state.mainImg.naturalHeight || 0;
     if (!mainRect.width || !mainRect.height || !imgRect.width || !imgRect.height || !naturalWidth || !naturalHeight) {
       return null;
     }
-    return { mainRect, imgRect, naturalWidth, naturalHeight };
+    // object-fit: contain can letterbox inside the <img> element box.
+    // Use the real rendered image rect for all coordinate projections.
+    const imgAspect = naturalWidth / naturalHeight;
+    const boxAspect = imgRect.width / imgRect.height;
+    let drawWidth = imgRect.width;
+    let drawHeight = imgRect.height;
+    let drawLeft = imgRect.left;
+    let drawTop = imgRect.top;
+    if (boxAspect > imgAspect) {
+      drawHeight = imgRect.height;
+      drawWidth = drawHeight * imgAspect;
+      drawLeft = imgRect.left + ((imgRect.width - drawWidth) / 2);
+    } else if (boxAspect < imgAspect) {
+      drawWidth = imgRect.width;
+      drawHeight = drawWidth / imgAspect;
+      drawTop = imgRect.top + ((imgRect.height - drawHeight) / 2);
+    }
+    const drawRect = {
+      left: drawLeft,
+      top: drawTop,
+      width: drawWidth,
+      height: drawHeight,
+    };
+    return { mainRect, canvasRect, imgRect, drawRect, naturalWidth, naturalHeight };
   }
 
   function clientToPixel(clientX, clientY) {
     const m = getImageMetrics();
     if (!m) return null;
-    const x = ((clientX - m.imgRect.left) / m.imgRect.width) * m.naturalWidth;
-    const y = ((clientY - m.imgRect.top) / m.imgRect.height) * m.naturalHeight;
+    const x = ((clientX - m.drawRect.left) / m.drawRect.width) * m.naturalWidth;
+    const y = ((clientY - m.drawRect.top) / m.drawRect.height) * m.naturalHeight;
     return [clamp(x, 0, m.naturalWidth), clamp(y, 0, m.naturalHeight)];
   }
 
   function pixelToCanvas(point) {
     const m = getImageMetrics();
     if (!m || !point) return null;
-    const x = (point[0] / m.naturalWidth) * m.imgRect.width + (m.imgRect.left - m.mainRect.left);
-    const y = (point[1] / m.naturalHeight) * m.imgRect.height + (m.imgRect.top - m.mainRect.top);
+    const x = (point[0] / m.naturalWidth) * m.drawRect.width;
+    const y = (point[1] / m.naturalHeight) * m.drawRect.height;
     return [x, y];
   }
 
@@ -807,8 +831,15 @@
     }
     const x = (Math.min(p1[0], p2[0]) + Math.max(p1[0], p2[0])) / 2;
     const y = Math.max(p1[1], p2[1]) + 8;
-    state.boxActionsEl.style.left = `${x}px`;
-    state.boxActionsEl.style.top = `${y}px`;
+    const m = getImageMetrics();
+    if (!m) {
+      state.boxActionsEl.style.display = "none";
+      return;
+    }
+    const offsetX = m.drawRect.left - m.mainRect.left;
+    const offsetY = m.drawRect.top - m.mainRect.top;
+    state.boxActionsEl.style.left = `${x + offsetX}px`;
+    state.boxActionsEl.style.top = `${y + offsetY}px`;
     state.boxActionsEl.style.transform = "translateX(-50%)";
     state.boxActionsEl.style.display = "flex";
   }
@@ -2676,11 +2707,20 @@
   }
 
   function ensureCanvasSize() {
-    if (!state.canvas || !state.main) return;
-    const rect = state.main.getBoundingClientRect();
+    if (!state.canvas || !state.main || !state.mainImg) return;
+    const m = getImageMetrics();
+    if (!m) return;
+    const left = m.drawRect.left - m.mainRect.left;
+    const top = m.drawRect.top - m.mainRect.top;
+    const cssW = Math.max(1, m.drawRect.width);
+    const cssH = Math.max(1, m.drawRect.height);
+    state.canvas.style.left = `${left}px`;
+    state.canvas.style.top = `${top}px`;
+    state.canvas.style.width = `${cssW}px`;
+    state.canvas.style.height = `${cssH}px`;
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(rect.width * dpr));
-    const h = Math.max(1, Math.round(rect.height * dpr));
+    const w = Math.max(1, Math.round(cssW * dpr));
+    const h = Math.max(1, Math.round(cssH * dpr));
     if (state.canvas.width !== w || state.canvas.height !== h) {
       state.canvas.width = w;
       state.canvas.height = h;
@@ -2708,8 +2748,8 @@
   function drawNow() {
     if (!state.ctx || !state.canvas) return;
     ensureCanvasSize();
-    const rect = state.main.getBoundingClientRect();
-    state.ctx.clearRect(0, 0, rect.width, rect.height);
+    const canvasRect = state.canvas.getBoundingClientRect();
+    state.ctx.clearRect(0, 0, canvasRect.width, canvasRect.height);
     hideBoxActions();
     clearLoupeOverlay();
 
@@ -2760,7 +2800,7 @@
     const m = getImageMetrics();
     if (!m || !m.naturalWidth) return;
     const radiusPx = sanitizeBrushDiameter(state.brushDiameterPx) / 2;
-    const radiusCanvas = Math.max(2, radiusPx * (m.imgRect.width / m.naturalWidth));
+    const radiusCanvas = Math.max(2, radiusPx * (m.drawRect.width / m.naturalWidth));
     state.ctx.save();
     state.ctx.setLineDash([5, 5]);
     state.ctx.lineWidth = 1.5;
@@ -2845,7 +2885,7 @@
     if (!activeCtx) return;
 
     const m = getImageMetrics();
-    if (!m || !m.imgRect.width || !m.imgRect.height) return;
+    if (!m || !m.drawRect.width || !m.drawRect.height) return;
 
     const selectedIds = new Set(getSelectedFeatureIds(activeCtx));
     if (!selectedIds.size) return;
@@ -2859,8 +2899,8 @@
     const dsH = Number.parseFloat(loupe.dataset.imgH || "");
 
     let zoom = Number.isFinite(dsZoom) ? dsZoom : 1;
-    let centerX = Number.isFinite(dsX) ? dsX : (m.imgRect.width / 2);
-    let centerY = Number.isFinite(dsY) ? dsY : (m.imgRect.height / 2);
+    let centerX = Number.isFinite(dsX) ? dsX : (m.drawRect.width / 2);
+    let centerY = Number.isFinite(dsY) ? dsY : (m.drawRect.height / 2);
 
     // Fallback when loupe mapping dataset is not available yet.
     if (!Number.isFinite(dsZoom) || !Number.isFinite(dsX) || !Number.isFinite(dsY)) {
@@ -2869,26 +2909,21 @@
       const bgSize = parsePxPair(bgSizeRaw);
       const bgPosPct = parsePercentPair(bgPosRaw);
       const bgPosPx = parseNumericPair(bgPosRaw);
-      if (bgSize && bgSize[0] > 0) zoom = bgSize[0] / m.imgRect.width;
+      if (bgSize && bgSize[0] > 0) zoom = bgSize[0] / m.drawRect.width;
       if (bgPosPct) {
-        centerX = (bgPosPct[0] / 100) * (Number.isFinite(dsW) ? dsW : m.imgRect.width);
-        centerY = (bgPosPct[1] / 100) * (Number.isFinite(dsH) ? dsH : m.imgRect.height);
+        centerX = (bgPosPct[0] / 100) * (Number.isFinite(dsW) ? dsW : m.drawRect.width);
+        centerY = (bgPosPct[1] / 100) * (Number.isFinite(dsH) ? dsH : m.drawRect.height);
       } else if (bgPosPx) {
         centerX = ((lw / 2) - bgPosPx[0]) / Math.max(zoom, 1e-6);
         centerY = ((lh / 2) - bgPosPx[1]) / Math.max(zoom, 1e-6);
       }
     }
-    const imgOffsetX = m.imgRect.left - m.mainRect.left;
-    const imgOffsetY = m.imgRect.top - m.mainRect.top;
-
     function project(point) {
       const c = pixelToCanvas(point);
       if (!c) return null;
-      const ix = c[0] - imgOffsetX;
-      const iy = c[1] - imgOffsetY;
       return [
-        (lw / 2) + ((ix - centerX) * zoom),
-        (lh / 2) + ((iy - centerY) * zoom),
+        (lw / 2) + ((c[0] - centerX) * zoom),
+        (lh / 2) + ((c[1] - centerY) * zoom),
       ];
     }
 
@@ -3403,6 +3438,10 @@
     const y2 = Math.max(p1[1], p2[1]);
 
     state.ctx.save();
+    // Clip grid lines to ROI bounds so they never bleed outside when viewport resizes.
+    state.ctx.beginPath();
+    state.ctx.rect(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
+    state.ctx.clip();
     state.ctx.strokeStyle = color;
     state.ctx.globalAlpha = alpha;
     state.ctx.lineWidth = 1;
@@ -3442,6 +3481,10 @@
     const cellH = (y2 - y1) / rows;
 
     state.ctx.save();
+    // Clip cell fills to ROI bounds to avoid spill outside image during responsive resizes.
+    state.ctx.beginPath();
+    state.ctx.rect(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
+    state.ctx.clip();
     state.ctx.fillStyle = color;
     state.ctx.globalAlpha = alpha;
     mask.cells.forEach((cell) => {

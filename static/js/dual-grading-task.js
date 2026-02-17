@@ -58,9 +58,6 @@ function scrollToImageCard() {
     setTimeout(function() {
         const imageCard = document.getElementById('image-card');
         if (imageCard) {
-            // Ensure the element is visible before scrolling
-            imageCard.style.display = 'block';
-            
             // Scroll to the top of the image card
             const offsetTop = imageCard.getBoundingClientRect().top + window.pageYOffset;
             try {

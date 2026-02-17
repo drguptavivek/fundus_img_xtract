@@ -1048,6 +1048,9 @@
         <button type="button" class="btn btn-danger btn-sm" data-fgx-ann-remove title="Delete selected annotation" aria-label="Delete selected annotation">
           <i class="fa-solid fa-eraser"></i>
         </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-fgx-ann-clear-all title="Delete all annotations for selected feature" aria-label="Delete all annotations for selected feature">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
       </div>
 
       <div class="fgx-group fgx-tools-row">
@@ -1122,6 +1125,7 @@
     ctx.viewAnnotationBtn = panel.querySelector("[data-fgx-ann-view]");
     ctx.editAnnotationBtn = panel.querySelector("[data-fgx-ann-edit]");
     ctx.removeAnnotationBtn = panel.querySelector("[data-fgx-ann-remove]");
+    ctx.clearAllAnnotationsBtn = panel.querySelector("[data-fgx-ann-clear-all]");
     ctx.lockBtn = null;
     ctx.colorChipEl = panel.querySelector("[data-fgx-color]");
     ctx.gridInputEl = null;
@@ -1209,6 +1213,17 @@
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       syncField(ctx);
+      redraw();
+    });
+
+    ctx.clearAllAnnotationsBtn?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      if (!window.confirm("Delete all annotations for this feature?")) return;
+      ctx.payload.items = (ctx.payload.items || []).filter((it) => it.feature_id !== state.activeFeatureId);
+      delete ctx.activeAnnotationByFeature[state.activeFeatureId];
+      clearSelectedBox();
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
       redraw();
     });
 
@@ -1636,13 +1651,53 @@
     if (!add && found >= 0) item.mask.cells.splice(found, 1);
   }
 
-  function ensureBrushAnnotationItem(ctx, item) {
+  function ensureBrushAnnotationItem(ctx, item, allowCreate = true) {
     if (!ctx) return null;
     const m = getImageMetrics();
     if (!m) return item || null;
     let target = item;
-    if (!target || target.feature_id !== state.activeFeatureId || target._geometryType !== "region") {
-      target = createAnnotationItem(ctx, state.activeFeatureId);
+    const isFullImageRoi = (it) => {
+      if (!it?.roi) return false;
+      const roi = reorderRoi(it.roi);
+      const tol = 2;
+      return (
+        Math.abs(roi[0][0]) <= tol
+        && Math.abs(roi[0][1]) <= tol
+        && Math.abs(roi[1][0] - m.naturalWidth) <= tol
+        && Math.abs(roi[1][1] - m.naturalHeight) <= tol
+      );
+    };
+
+    const isBrushLike = (it) => (
+      !!it
+      && it.feature_id === state.activeFeatureId
+      && (
+        it._geometryType === "region"
+        || (
+          it._geometryType === "box"
+          && isFullImageRoi(it)
+          && Array.isArray(it.mask?.cells)
+          && it.mask.cells.length > 0
+        )
+      )
+    );
+
+    if (!isBrushLike(target)) {
+      if (!target) {
+        const existing = (ctx.payload.items || []).find((it) => isBrushLike(it) && !it._hidden);
+        if (existing) {
+          target = existing;
+        } else if (allowCreate) {
+          target = createAnnotationItem(ctx, state.activeFeatureId);
+        } else {
+          return null;
+        }
+      } else if (allowCreate) {
+        target = createAnnotationItem(ctx, state.activeFeatureId);
+      } else {
+        // In erase mode, never silently retarget another annotation.
+        return null;
+      }
       setSelectedBox(ctx, target);
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
@@ -2069,7 +2124,12 @@
     if (!point) return;
     state.brushCursorPoint = (mode === MODES.ADD || mode === MODES.SUBTRACT) ? point : null;
 
-    let item = getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false);
+    let item = (mode === MODES.ADD || mode === MODES.SUBTRACT)
+      ? getActiveAnnotationItem(ctx, false)
+      : (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false));
+    if (mode === MODES.ADD || mode === MODES.SUBTRACT) {
+      setSelectedBox(ctx, item || null);
+    }
     const grid = sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID);
     if (item) ensureMask(item, grid);
     const pendingByMode = (
@@ -2077,6 +2137,7 @@
       || (mode === MODES.ELLIPSE && state.pendingCreateType === "ellipse")
       || (mode === MODES.PYRAMID && state.pendingCreateType === "pyramid")
     );
+    let createdPendingItem = false;
     if (pendingByMode && state.activeFeatureId != null) {
       item = createAnnotationItem(ctx, state.activeFeatureId);
       item._geometryType = state.pendingCreateType;
@@ -2086,9 +2147,10 @@
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);
       state.pendingCreateType = null;
+      createdPendingItem = true;
     }
 
-    const hit = (mode === MODES.POLYGON || mode === MODES.ADD || mode === MODES.SUBTRACT)
+    const hit = (createdPendingItem || mode === MODES.POLYGON || mode === MODES.ADD || mode === MODES.SUBTRACT)
       ? null
       : findBoxHit(ctx, point);
     if (hit) {
@@ -2263,13 +2325,14 @@
     }
 
     if (mode === MODES.ADD || mode === MODES.SUBTRACT) {
-      item = ensureBrushAnnotationItem(ctx, item);
+      const allowCreate = mode === MODES.ADD;
+      item = ensureBrushAnnotationItem(ctx, item, allowCreate);
       if (!item) return;
       const add = resolveBrushAddMode(mode, event);
       const cell = cellForPoint(item, point);
       if (!cell) return;
       applyBrushCells(item, cell, add, point);
-      state.painting = { add, last: `${cell[0]}:${cell[1]}` };
+      state.painting = { add, last: `${cell[0]}:${cell[1]}`, itemAnnId: item._annId };
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2413,12 +2476,14 @@
     }
 
     if (state.painting) {
-      const cell = cellForPoint(item, point);
+      const paintItem = (ctx.payload.items || []).find((it) => it && it._annId === state.painting.itemAnnId) || item;
+      if (!paintItem) return;
+      const cell = cellForPoint(paintItem, point);
       if (!cell) return;
       const key = `${cell[0]}:${cell[1]}`;
       if (key === state.painting.last) return;
       state.painting.last = key;
-      applyBrushCells(item, cell, state.painting.add, point);
+      applyBrushCells(paintItem, cell, state.painting.add, point);
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -3061,6 +3126,9 @@
           active ? fillActiveAlpha : fillInactiveAlpha,
           SHOW_GRID && !brushMode,
         );
+      } else if (item._geometryType === "region") {
+        // Brush regions use full-image ROI; avoid drawing ROI/grid frame around the entire image.
+        drawCells(roi, item.mask, color, active ? fillActiveAlpha : fillInactiveAlpha);
       } else {
         if (SHOW_GRID && !brushMode) {
           drawGrid(roi, item.mask?.rows ?? DEFAULT_GRID, item.mask?.cols ?? DEFAULT_GRID, color, active ? 0.28 : 0.16);
@@ -3069,7 +3137,7 @@
       }
     }
 
-    if (!isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length > 0) {
+    if (item._geometryType !== "region" && !isBoxItem(item) && Array.isArray(item.polygon) && item.polygon.length > 0) {
       drawPolygon(clampPolygonToImage(item.polygon), color, active);
       if (selected && item._geometryType === "pyramid") {
         drawPyramidRotateHandle(item, color);
@@ -3735,6 +3803,7 @@
 
   function setupObservers() {
     if (state.observersReady) return;
+    const form = document.querySelector('form[data-grading-form="true"]');
 
     document.addEventListener("change", (event) => {
       const t = event.target;
@@ -3775,6 +3844,14 @@
       carousel.addEventListener("slid.bs.carousel", () => {
         queueRefresh();
       });
+    }
+
+    if (form) {
+      form.addEventListener("submit", () => {
+        state.contexts.forEach((ctx) => {
+          syncField(ctx);
+        });
+      }, { capture: true });
     }
 
     state.featuresObservers.forEach((obs) => {

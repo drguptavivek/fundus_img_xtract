@@ -137,6 +137,12 @@ def prepare_feature_geometry_for_storage(
         roi = item["roi"]
         polygon = item["polygon"]
         mask = item["mask"]
+        geometry_type = item.get("geometry_type")
+        if not isinstance(geometry_type, str):
+            geometry_type = "box"
+        geometry_type = geometry_type.strip().lower() or "box"
+        if geometry_type not in {"box", "ellipse", "polygon", "pyramid", "region"}:
+            geometry_type = "box"
 
         roi_pixel = _normalize_points(roi["pixel"])
         roi_norm = _normalize_points(roi["norm"])
@@ -161,6 +167,7 @@ def prepare_feature_geometry_for_storage(
             "feature_id": feature_id,
             "feature_label": feature_meta.get("label"),
             "feature_sr_no": feature_meta.get("sr_no"),
+            "geometry_type": geometry_type,
             "roi": {
                 "type": "box",
                 "pixel": roi_pixel,
@@ -188,6 +195,11 @@ def prepare_feature_geometry_for_storage(
                 "finding_site_code": dicom_payload.get("finding_site_code"),
             },
         }
+        if geometry_type == "ellipse":
+            ellipse_payload = item.get("ellipse") if isinstance(item.get("ellipse"), dict) else {}
+            rotation_deg = ellipse_payload.get("rotation_deg")
+            if isinstance(rotation_deg, (int, float)):
+                normalized_item["ellipse"] = {"rotation_deg": float(rotation_deg)}
         normalized_items.append(normalized_item)
 
     normalized_items.sort(key=lambda entry: (entry["feature_id"], entry["export"]["bbox_norm_xyxy"]))

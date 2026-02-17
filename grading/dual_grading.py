@@ -1065,8 +1065,12 @@ def dual_grading_submit():
 
                 existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
                 had_existing_grade = existing_grade is not None
-                if raw_feature_geometry is None or not raw_feature_geometry.strip():
+                if raw_feature_geometry is None:
+                    # Field missing entirely (legacy/non-JS submit): preserve prior geometry.
                     feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
+                elif not raw_feature_geometry.strip():
+                    # Field present but empty means user cleared annotations.
+                    feature_geometry = None
                 else:
                     feature_geometry = prepare_feature_geometry_for_storage(
                         parsed_feature_geometry,

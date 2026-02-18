@@ -79,6 +79,43 @@
   </div>
 
   <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>Encounter View</strong></div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Total Encounters</div>
+            <div id="hd-kpi-enc-total" class="h5 mb-0">-</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Encounter Verified</div>
+            <div id="hd-kpi-enc-verified" class="h5 mb-0">-</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Pending Direct Images</div>
+            <div id="hd-kpi-direct-pending" class="h5 mb-0">-</div>
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+          <thead>
+            <tr>
+              <th>Disease</th>
+              <th>AI Grades</th>
+            </tr>
+          </thead>
+          <tbody id="hd-table-ai-grades"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
     <div class="card-header"><strong>Disease View</strong></div>
     <div class="card-body table-responsive">
       <table class="table table-sm table-striped mb-0">

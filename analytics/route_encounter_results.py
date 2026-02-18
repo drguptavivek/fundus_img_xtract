@@ -9,8 +9,10 @@ from typing import Any
 from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
+import sqlalchemy as sa
 from sqlalchemy.orm import selectinload
 
+from app_cache import cache
 from . import bp
 from models import (
     Area,
@@ -42,6 +44,13 @@ def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
     return None
 
 
+_ENCOUNTER_RESULTS_CACHE_TIMEOUT_SECONDS = 10 * 60
+
+
+def _encounter_results_cache_key() -> str:
+    return f"analytics:encounters:u{current_user.id}:{request.query_string.decode('utf-8')}"
+
+
 @bp.route("/encounters", methods=["GET"])
 @roles_required(
     "admin",
@@ -52,6 +61,10 @@ def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
     "analytics_viewer",
     "resident",
     "optometrist",
+)
+@cache.cached(
+    timeout=_ENCOUNTER_RESULTS_CACHE_TIMEOUT_SECONDS,
+    key_prefix=_encounter_results_cache_key,
 )
 def encounter_results() -> str:
     """Render encounter-level grading summaries."""
@@ -69,51 +82,76 @@ def encounter_results() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 10
 
     with get_db_session() as db:
-        # Determine scoping context
-        query = db.query(PatientEncounters)
-        query = apply_scoping(query, PatientEncounters, current_user, 'analytics')
-
         # Check if user has any access at all
         if not current_user.is_master_admin and not current_user.hospital_id:
             flash("No hospital access.", "warning")
             return redirect(url_for("home.index"))
 
-        # Apply options for relationships
-        # NOTE: apply_scoping already joins LabUnit for non-master-admin users
-        # For master_admin, we need to explicitly join LabUnit before joining Hospital
-        if current_user.is_master_admin:
-            query = query.outerjoin(LabUnit, PatientEncounters.lab_unit_id == LabUnit.id)
+        # Build scoped lab-unit set once, then drive encounter list from MV.
+        scoped_lab_unit_ids = [
+            row[0]
+            for row in apply_scoping(
+                db.query(LabUnit.id),
+                LabUnit,
+                current_user,
+                "analytics",
+            ).all()
+        ]
+        if not scoped_lab_unit_ids:
+            total = 0
+            encounters = []
+        else:
+            mv_params: dict[str, Any] = {
+                "scoped_lab_unit_ids": scoped_lab_unit_ids,
+                "hospital_id": hospital_id,
+                "lab_unit_id": lab_unit_id,
+                "capture_date": capture_date,
+                "limit": per_page,
+                "offset": (page - 1) * per_page,
+            }
+            count_sql = sa.text(
+                """
+                SELECT COUNT(*)::int AS total
+                FROM mvw_encounter_pivot ep
+                WHERE ep.lab_unit_id IN :scoped_lab_unit_ids
+                  AND (:hospital_id IS NULL OR ep.hospital_id = :hospital_id)
+                  AND (:lab_unit_id IS NULL OR ep.lab_unit_id = :lab_unit_id)
+                  AND (:capture_date IS NULL OR ep.capture_date = :capture_date)
+                """
+            ).bindparams(sa.bindparam("scoped_lab_unit_ids", expanding=True))
+            total = int((db.execute(count_sql, mv_params).scalar() or 0))
 
-        query = query.outerjoin(Hospital, LabUnit.hospital).options(
-            selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
-            selectinload(PatientEncounters.encounter_files),
-            selectinload(PatientEncounters.glaucoma_results_cleaned),
-            selectinload(PatientEncounters.dr_reports),
-            selectinload(PatientEncounters.zip_file),
-        )
+            page_sql = sa.text(
+                """
+                SELECT ep.encounter_id
+                FROM mvw_encounter_pivot ep
+                WHERE ep.lab_unit_id IN :scoped_lab_unit_ids
+                  AND (:hospital_id IS NULL OR ep.hospital_id = :hospital_id)
+                  AND (:lab_unit_id IS NULL OR ep.lab_unit_id = :lab_unit_id)
+                  AND (:capture_date IS NULL OR ep.capture_date = :capture_date)
+                ORDER BY ep.capture_date DESC NULLS LAST, ep.encounter_id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ).bindparams(sa.bindparam("scoped_lab_unit_ids", expanding=True))
+            encounter_ids = [int(r[0]) for r in db.execute(page_sql, mv_params).all() if r and r[0] is not None]
 
-        if hospital_id:
-            # Re-apply scoping to hospital filter check?
-            # Actually apply_scoping already filters by hospital if user is scoped.
-            # If they pass a specific hospital_id, we just filter by it.
-            # If it's NOT their hospital, the previous scoping will result in empty set.
-            query = query.filter(LabUnit.hospital_id == hospital_id)
-
-        # Only allow filtering by lab_unit_id if the user has access to that lab unit
-        if lab_unit_id:
-            query = query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
-
-        if capture_date:
-            query = query.filter(PatientEncounters.capture_date_dt == capture_date)
-
-        total = query.count()
-
-        encounters = (
-            query.order_by(PatientEncounters.capture_date_dt.desc().nullslast(), PatientEncounters.id.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
+            if encounter_ids:
+                encounters = (
+                    db.query(PatientEncounters)
+                    .filter(PatientEncounters.id.in_(encounter_ids))
+                    .options(
+                        selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
+                        selectinload(PatientEncounters.encounter_files),
+                        selectinload(PatientEncounters.glaucoma_results_cleaned),
+                        selectinload(PatientEncounters.dr_reports),
+                        selectinload(PatientEncounters.zip_file),
+                    )
+                    .all()
+                )
+                order_map = {enc_id: idx for idx, enc_id in enumerate(encounter_ids)}
+                encounters.sort(key=lambda enc: order_map.get(enc.id, 10**9))
+            else:
+                encounters = []
 
         encounter_file_ids: list[int] = []
         for encounter in encounters:

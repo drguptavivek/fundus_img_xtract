@@ -535,3 +535,118 @@ def hospital_dashboard_roster_view():
             },
         }
     )
+
+
+@bp.route("/api/hospital-dashboard/encounter-view", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@cache.cached(
+    timeout=_API_CACHE_TIMEOUT_SECONDS,
+    key_prefix=lambda: _api_cache_key("encounter-view"),
+)
+def hospital_dashboard_encounter_view():
+    lab_unit_ids = _scoped_lab_unit_ids()
+    if not lab_unit_ids:
+        return jsonify(
+            {
+                "data": {
+                    "total_encounters": 0,
+                    "verified_encounters": 0,
+                    "verified_encounter_pct": 0.0,
+                    "pending_direct_images": 0,
+                    "ai_grades_by_disease": [],
+                },
+                "meta": {"lab_unit_scope_count": 0},
+            }
+        )
+
+    params: dict[str, Any] = {
+        "lab_unit_ids": lab_unit_ids,
+        "disease_id": _optional_int("disease_id"),
+        "lab_unit_id": _optional_int("lab_unit_id"),
+        "hospital_id": _optional_int("hospital_id"),
+    }
+
+    summary_sql = sa.text(
+        """
+        WITH encounter_scope AS (
+            SELECT pe.id, pe.encounter_verified_status
+            FROM patient_encounters pe
+            LEFT JOIN lab_units lu ON lu.id = pe.lab_unit_id
+            WHERE pe.lab_unit_id IN :lab_unit_ids
+              AND (:disease_id IS NULL OR pe.disease_id = :disease_id)
+              AND (:lab_unit_id IS NULL OR pe.lab_unit_id = :lab_unit_id)
+              AND (:hospital_id IS NULL OR lu.hospital_id = :hospital_id)
+        ),
+        direct_scope AS (
+            SELECT DISTINCT diu.id
+            FROM direct_image_uploads diu
+            LEFT JOIN direct_image_verifications div ON div.image_upload_id = diu.id
+            WHERE diu.lab_unit_id IN :lab_unit_ids
+              AND (:disease_id IS NULL OR diu.disease_id = :disease_id)
+              AND (:lab_unit_id IS NULL OR diu.lab_unit_id = :lab_unit_id)
+              AND (:hospital_id IS NULL OR diu.hospital_id = :hospital_id)
+              AND (div.id IS NULL OR lower(COALESCE(div.verified_status, '')) = 'pending')
+        )
+        SELECT
+            (SELECT COUNT(*)::int FROM encounter_scope) AS total_encounters,
+            (
+                SELECT COUNT(*)::int
+                FROM encounter_scope es
+                WHERE lower(COALESCE(es.encounter_verified_status, '')) = 'verified'
+            ) AS verified_encounters,
+            (SELECT COUNT(*)::int FROM direct_scope) AS pending_direct_images
+        """
+    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+
+    ai_grades_sql = sa.text(
+        """
+        SELECT
+            disease_id,
+            disease_name,
+            COUNT(*)::int AS ai_grade_count
+        FROM mvw_grading_data_all
+        WHERE lab_unit_id IN :lab_unit_ids
+          AND grade_id IS NOT NULL
+          AND grade_role_slot = 'ai'
+          AND (:disease_id IS NULL OR disease_id = :disease_id)
+          AND (:lab_unit_id IS NULL OR lab_unit_id = :lab_unit_id)
+          AND (:hospital_id IS NULL OR hospital_id = :hospital_id)
+        GROUP BY disease_id, disease_name
+        ORDER BY disease_name
+        """
+    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+
+    with get_db_session() as db:
+        summary_row = db.execute(summary_sql, params).mappings().first() or {}
+        ai_rows = db.execute(ai_grades_sql, params).mappings().all()
+
+    total_encounters = int(summary_row.get("total_encounters") or 0)
+    verified_encounters = int(summary_row.get("verified_encounters") or 0)
+    pending_direct_images = int(summary_row.get("pending_direct_images") or 0)
+
+    return jsonify(
+        {
+            "data": {
+                "total_encounters": total_encounters,
+                "verified_encounters": verified_encounters,
+                "verified_encounter_pct": _pct(verified_encounters, total_encounters),
+                "pending_direct_images": pending_direct_images,
+                "ai_grades_by_disease": [
+                    {
+                        "disease_id": row["disease_id"],
+                        "disease_name": row["disease_name"],
+                        "ai_grade_count": int(row["ai_grade_count"] or 0),
+                    }
+                    for row in ai_rows
+                ],
+            },
+            "meta": {
+                "lab_unit_scope_count": len(lab_unit_ids),
+                "filters": {
+                    "disease_id": params["disease_id"],
+                    "lab_unit_id": params["lab_unit_id"],
+                    "hospital_id": params["hospital_id"],
+                },
+            },
+        }
+    )

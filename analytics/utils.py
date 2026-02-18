@@ -365,24 +365,31 @@ def build_encounter_result_payload(
 
         images: List[Dict[str, Any]] = []
         for image in sorted(encounter.encounter_files, key=lambda ef: ((ef.eye_side or ""), ef.id)):
+            image_task_details = tasks_by_image.get(image.id, [])
             legacy_gradings: List[Dict[str, Any]] = []
-            # Get gradings through the new Grade model via GradingTask
-            from db_transaction_manager import transaction_scope
-            with transaction_scope() as db:
-                tasks = db.query(GradingTask).filter(
-                    GradingTask.encounter_file_id == image.id
-                ).all()
-
-                for task in tasks:
-                    for grade in sorted(task.grades, key=lambda g: g.updated_at or g.created_at):
-                        legacy_gradings.append(
-                            {
-                                "graded_for": task.disease.name if task.disease else 'unknown',
-                                "impression": grade.grade_name or grade.label.impression if grade.label else None,
-                                "grader": grade.grader.username if grade.grader else None,
-                                "updated_at": grade.updated_at,
-                            }
-                        )
+            for detail in image_task_details:
+                disease_name = detail.get("disease_name") or "unknown"
+                for slot_key in ("resident_grade", "resident2_grade", "arbitrator_grade"):
+                    slot_grade = detail.get(slot_key)
+                    if not slot_grade:
+                        continue
+                    legacy_gradings.append(
+                        {
+                            "graded_for": disease_name,
+                            "impression": slot_grade.impression,
+                            "grader": slot_grade.grader,
+                            "updated_at": slot_grade.updated_at,
+                        }
+                    )
+                for ai_grade in detail.get("ai_grades") or []:
+                    legacy_gradings.append(
+                        {
+                            "graded_for": disease_name,
+                            "impression": ai_grade.impression,
+                            "grader": f"{ai_grade.model_name} {ai_grade.model_version}",
+                            "updated_at": None,
+                        }
+                    )
 
             images.append(
                 {
@@ -390,7 +397,7 @@ def build_encounter_result_payload(
                     "uuid": image.uuid,
                     "eye_side": image.eye_side,
                     "file_type": image.file_type,
-                    "tasks": tasks_by_image.get(image.id, []),
+                    "tasks": image_task_details,
                     "legacy_gradings": legacy_gradings,
                 }
             )

@@ -131,13 +131,14 @@
                         (task.arbitrator_grade.impression if task.arbitrator_grade else (task.resident2_grade.impression
                         if task.resident2_grade else (task.resident_grade.impression if task.resident_grade else
                         'Pending'))) %}
+                        {% set is_final_grade = task.consensus or (task.graded_state|string|lower == 'final') %}
                         <div class="border rounded p-2">
                           <div class="d-flex justify-content-between align-items-center">
                             <div class="fw-semibold">{{ task.disease_name or 'Disease Unknown' }}</div>
                             <span class="badge bg-info text-dark text-uppercase">{{ task.graded_state }}</span>
                           </div>
                           <div class="mt-1">
-                            <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">Final Grade: {{
+                            <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">{{ 'Final Grade' if is_final_grade else 'Current Grade' }}: {{
                               final_label }}</span>
                           </div>
                           <div class="mt-2 d-flex flex-wrap gap-3 text-muted">

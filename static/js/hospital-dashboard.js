@@ -153,6 +153,31 @@
     byId("hd-kpi-non-gradable-pct").textContent = pctText(meta?.cumulative_non_gradable_pct);
   }
 
+  function renderEncounterView(data) {
+    byId("hd-kpi-enc-total").textContent = `${toNum(data?.total_encounters)}`;
+    byId("hd-kpi-enc-verified").textContent =
+      `${toNum(data?.verified_encounters)} (${pctText(data?.verified_encounter_pct)})`;
+    byId("hd-kpi-direct-pending").textContent = `${toNum(data?.pending_direct_images)}`;
+
+    const tbody = byId("hd-table-ai-grades");
+    if (!tbody) return;
+    const rows = data?.ai_grades_by_disease;
+    if (!Array.isArray(rows) || !rows.length) {
+      renderEmpty("hd-table-ai-grades", 2);
+      return;
+    }
+    tbody.innerHTML = rows
+      .map(
+        (row) => `
+        <tr>
+          <td>${escapeHtml(row.disease_name)}</td>
+          <td>${toNum(row.ai_grade_count)}</td>
+        </tr>
+      `
+      )
+      .join("");
+  }
+
   function filterLabsByHospital() {
     const hospitalId = byId("hd-filter-hospital")?.value || "";
     const labSelect = byId("hd-filter-lab");
@@ -171,11 +196,12 @@
     const query = buildQuery();
     const suffix = query ? `?${query}` : "";
     try {
-      const [diseaseRes, labDiseaseRes, userRes, rosterRes] = await Promise.all([
+      const [diseaseRes, labDiseaseRes, userRes, rosterRes, encounterRes] = await Promise.all([
         fetchJson(`/analytics/api/hospital-dashboard/disease-view${suffix}`),
         fetchJson(`/analytics/api/hospital-dashboard/lab-disease-view${suffix}`),
         fetchJson(`/analytics/api/hospital-dashboard/user-view${suffix}`),
         fetchJson(`/analytics/api/hospital-dashboard/roster-view${suffix}`),
+        fetchJson(`/analytics/api/hospital-dashboard/encounter-view${suffix}`),
       ]);
 
       renderDiseaseRows(diseaseRes.data);
@@ -183,14 +209,19 @@
       renderUserRows(userRes.data);
       renderRosterRows(rosterRes.data);
       renderKpis(diseaseRes.meta || {});
+      renderEncounterView(encounterRes.data || {});
     } catch (error) {
       renderEmpty("hd-table-disease", 6, "Failed to load data");
       renderEmpty("hd-table-lab-disease", 8, "Failed to load data");
-      renderEmpty("hd-table-user", 4, "Failed to load data");
+      renderEmpty("hd-table-user", 3, "Failed to load data");
       renderEmpty("hd-table-roster", 6, "Failed to load data");
+      renderEmpty("hd-table-ai-grades", 2, "Failed to load data");
       byId("hd-kpi-total").textContent = "-";
       byId("hd-kpi-non-gradable").textContent = "-";
       byId("hd-kpi-non-gradable-pct").textContent = "-";
+      byId("hd-kpi-enc-total").textContent = "-";
+      byId("hd-kpi-enc-verified").textContent = "-";
+      byId("hd-kpi-direct-pending").textContent = "-";
       console.error("Hospital dashboard fetch failed", error);
     } finally {
       setLoading(false);

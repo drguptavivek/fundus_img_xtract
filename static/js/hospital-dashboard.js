@@ -104,7 +104,7 @@
     const tbody = byId("hd-table-user");
     if (!tbody) return;
     if (!Array.isArray(data) || !data.length) {
-      renderEmpty("hd-table-user", 4);
+      renderEmpty("hd-table-user", 3);
       return;
     }
     tbody.innerHTML = data
@@ -112,7 +112,6 @@
         (row) => `
         <tr>
           <td>${escapeHtml(row.disease_name)}</td>
-          <td>${escapeHtml(row.role_slot)}</td>
           <td>${escapeHtml(row.user_name)}</td>
           <td>${toNum(row.completed_count)}</td>
         </tr>

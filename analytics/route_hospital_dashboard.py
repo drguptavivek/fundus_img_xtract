@@ -383,7 +383,6 @@ def hospital_dashboard_user_view():
         SELECT
             disease_id,
             disease_name,
-            grade_role_slot AS role_slot,
             grader_user_id AS user_id,
             COALESCE(grader_full_name, grader_username, 'Unknown') AS user_name,
             COUNT(*)::int AS completed_count
@@ -394,8 +393,8 @@ def hospital_dashboard_user_view():
           AND (:disease_id IS NULL OR disease_id = :disease_id)
           AND (:lab_unit_id IS NULL OR lab_unit_id = :lab_unit_id)
           AND (:hospital_id IS NULL OR hospital_id = :hospital_id)
-        GROUP BY disease_id, disease_name, grade_role_slot, grader_user_id, COALESCE(grader_full_name, grader_username, 'Unknown')
-        ORDER BY disease_name, role_slot, user_name
+        GROUP BY disease_id, disease_name, grader_user_id, COALESCE(grader_full_name, grader_username, 'Unknown')
+        ORDER BY disease_name, user_name
         """
     ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
 
@@ -406,7 +405,6 @@ def hospital_dashboard_user_view():
         {
             "disease_id": row["disease_id"],
             "disease_name": row["disease_name"],
-            "role_slot": row["role_slot"],
             "user_id": row["user_id"],
             "user_name": row["user_name"],
             "completed_count": int(row["completed_count"] or 0),

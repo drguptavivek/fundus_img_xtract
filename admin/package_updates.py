@@ -222,61 +222,40 @@ def api_package_updates_yaml():
     """
     Generate and download YAML file of packages with updates.
 
-    Maps packages to their requirements.txt source files.
+    Maps packages to pyproject.toml source entries only.
     """
     from pathlib import Path
+    import tomllib
     import yaml
     from flask import Response
 
-    # Map packages to their source requirements files
-    requirements_files = {
-        'requirements.txt': Path('/app/requirements.txt'),
-        'requirements-web.txt': Path('/app/requirements-web.txt'),
-        'requirements-general.txt': Path('/app/requirements-general.txt'),
-        'requirements-ocr.txt': Path('/app/requirements-ocr.txt'),
-        'requirements-beat.txt': Path('/app/requirements-beat.txt'),
-    }
-
-    # Also check pyproject.toml dependencies
+    # Build package map from pyproject only
     pyproject_path = Path('/app/pyproject.toml')
-
-    # Parse requirements files to find which packages belong to which file
-    package_to_files = {}
-
-    for filename, filepath in requirements_files.items():
-        if not filepath.exists():
-            continue
-        try:
-            content = filepath.read_text()
-            for line in content.splitlines():
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    # Parse package name (handle various formats)
-                    pkg_name = line.split('=')[0].split('==')[0].split('>=')[0].split('<=')[0].strip(' <>[]')
-                    if pkg_name:
-                        pkg_name = pkg_name.lower()
-                        if pkg_name not in package_to_files:
-                            package_to_files[pkg_name] = []
-                        package_to_files[pkg_name].append(filename)
-        except Exception:
-            pass
-
-    # Check pyproject.toml for dependencies
+    package_to_files: dict[str, list[str]] = {}
     if pyproject_path.exists():
         try:
-            content = pyproject_path.read_text()
-            in_deps = False
-            for line in content.splitlines():
-                line = line.strip()
-                if line.startswith('dependencies = ['):
-                    in_deps = True
-                    continue
-                if in_deps:
-                    if line == ']':
+            parsed = tomllib.loads(pyproject_path.read_text())
+            project = parsed.get('project', {})
+            deps = project.get('dependencies', []) or []
+            optional = project.get('optional-dependencies', {}) or {}
+
+            def _dep_name(spec: str) -> str:
+                token = (spec or "").split(';', 1)[0].strip()
+                for sep in ("==", ">=", "<=", "~=", "!=", ">", "<"):
+                    if sep in token:
+                        token = token.split(sep, 1)[0].strip()
                         break
-                    pkg_name = line.strip('"').strip("'")
-                    if pkg_name and pkg_name not in package_to_files:
-                        package_to_files[pkg_name.lower()] = ['pyproject.toml']
+                return token.lower().replace("_", "-")
+
+            for spec in deps:
+                name = _dep_name(spec)
+                if name:
+                    package_to_files[name] = ['pyproject.toml']
+            for _, specs in optional.items():
+                for spec in specs or []:
+                    name = _dep_name(spec)
+                    if name:
+                        package_to_files[name] = ['pyproject.toml']
         except Exception:
             pass
 
@@ -311,11 +290,11 @@ def api_package_updates_yaml():
     }
 
     for pkg in scan_data['packages']:
-        pkg_name = pkg.get('name', '').lower()
+        pkg_name = pkg.get('name', '').lower().replace("_", "-")
         yaml_data['packages'][pkg['name']] = {
             'current_version': pkg.get('current_version'),
             'latest_version': pkg.get('latest_version'),
-            'source_files': package_to_files.get(pkg_name, ['unknown']),
+            'source_files': package_to_files.get(pkg_name, ['pyproject.toml']),
             'url': pkg.get('url'),
             'is_prerelease': pkg.get('is_prerelease', False),
         }
@@ -336,21 +315,13 @@ def api_package_updates_yaml():
 @roles_required("admin", "local_admin")
 def api_package_updates_instructions():
     """
-    Generate update instructions for all requirements files.
+    Generate update instructions for pyproject.toml only.
 
     Shows full file contents with highlighted changes for easy copy-paste.
     """
     from pathlib import Path
 
-    # Map packages to their source requirements files
-    requirements_files = {
-        'pyproject.toml': Path('/app/pyproject.toml'),
-        'requirements.txt': Path('/app/requirements.txt'),
-        'requirements-web.txt': Path('/app/requirements-web.txt'),
-        'requirements-general.txt': Path('/app/requirements-general.txt'),
-        'requirements-ocr.txt': Path('/app/requirements-ocr.txt'),
-        'requirements-beat.txt': Path('/app/requirements-beat.txt'),
-    }
+    pyproject_file = {'pyproject.toml': Path('/app/pyproject.toml')}
 
     with get_db_session() as db:
         from models import PackageUpdateScan
@@ -375,7 +346,7 @@ def api_package_updates_instructions():
     # Build full file contents with highlighted changes
     file_contents = {}
 
-    for filename, filepath in requirements_files.items():
+    for filename, filepath in pyproject_file.items():
         if not filepath.exists():
             continue
 

@@ -199,7 +199,7 @@
     <div class="card mt-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
-                <i class="fas fa-box"></i> All Packages Scanned
+                <i class="fas fa-box"></i> All Packages Scanned (All Containers)
             </h5>
             <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#packagesScannedCollapse">
                 <i class="fas fa-chevron-down"></i> Show/Hide
@@ -207,7 +207,7 @@
         </div>
         <div class="collapse" id="packagesScannedCollapse">
             <div class="card-body"
-                 hx-get="{{ url_for('admin.htmx_cve_packages', scan_id=scan_result.scan_id) }}"
+                 hx-get="{{ url_for('admin.htmx_cve_packages', scan_id=scan_result.scan_id, all_sources='true') }}"
                  hx-trigger="load delay:100ms"
                  hx-swap="innerHTML">
                 <div class="text-muted">Loading packages...</div>

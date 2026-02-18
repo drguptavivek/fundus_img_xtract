@@ -5,6 +5,9 @@
             <tr>
                 <th>Package Name</th>
                 <th>Version</th>
+                {% if show_sources %}
+                <th>Sources</th>
+                {% endif %}
                 <th>Status</th>
             </tr>
         </thead>
@@ -13,6 +16,13 @@
             <tr>
                 <td><code>{{ pkg.name }}</code></td>
                 <td>{{ pkg.version }}</td>
+                {% if show_sources %}
+                <td>
+                    {% for source in pkg.sources|sort %}
+                    <span class="badge bg-secondary me-1">{{ source }}</span>
+                    {% endfor %}
+                </td>
+                {% endif %}
                 <td>
                     <span class="badge bg-success">Scanned</span>
                 </td>

@@ -1,4 +1,4 @@
-{# HTMX partial: Update instructions for all requirements files - full contents with highlighted changes #}
+{# HTMX partial: Update instructions for pyproject.toml - full contents with highlighted changes #}
 {% if file_contents %}
 <div class="card mt-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -55,13 +55,17 @@
                 </li>
                 <li><strong>Backup current state:</strong>
                     <ul class="mt-2">
-                        <li>Backup files: <code>cp pyproject.toml pyproject.toml.backup && cp requirements*.txt requirements*.txt.backup</code></li>
+                        <li>Backup file: <code>cp pyproject.toml pyproject.toml.backup</code></li>
                         <li>Backup database: <code>uv run scripts/backup_db.py</code> (reads .env, stores in <code>backups/</code>)</li>
                     </ul>
                 </li>
                 <li>Copy the updated file contents above and replace the entire file</li>
-                <li><strong>pyproject.toml:</strong> No rebuild needed (dependencies auto-synced)</li>
-                <li><strong>requirements files:</strong> Rebuild venvs:
+                <li><strong>Regenerate requirements from pyproject:</strong>
+                    <ul class="mt-2">
+                        <li><code>./scripts/export_requirements.sh</code></li>
+                    </ul>
+                </li>
+                <li><strong>Rebuild venv builders:</strong>
                     <ul class="mt-2">
                         <li><code>docker compose build web-venv-builder</code></li>
                         <li><code>docker compose build ocr-venv-builder</code></li>

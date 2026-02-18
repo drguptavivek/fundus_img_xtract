@@ -614,6 +614,31 @@ def get_latest_scan_results(db_session, limit: int = 10) -> list:
         .all()
 
 
+def get_latest_completed_scans_by_source(db_session) -> dict[str, object]:
+    """
+    Get latest completed scan row for each source profile.
+
+    Returns:
+        Dict keyed by source_profile ("web", "general", "ocr", "beat", ...)
+        with CVEScanResult ORM objects as values.
+    """
+    from models import CVEScanResult
+
+    rows = (
+        db_session.query(CVEScanResult)
+        .filter(CVEScanResult.status == "completed")
+        .order_by(CVEScanResult.scanned_at.desc())
+        .all()
+    )
+
+    per_source: dict[str, CVEScanResult] = {}
+    for row in rows:
+        source = _scan_source_from_type(row.scan_type)
+        if source not in per_source:
+            per_source[source] = row
+    return per_source
+
+
 def get_latest_vulnerability_summary(db_session) -> Dict:
     """
     Get vulnerability summary from the most recent successful scan.
@@ -626,13 +651,8 @@ def get_latest_vulnerability_summary(db_session) -> Dict:
     """
     from models import CVEScanResult
 
-    latest_completed = (
-        db_session.query(CVEScanResult)
-        .filter(CVEScanResult.status == "completed")
-        .order_by(CVEScanResult.scanned_at.desc())
-        .all()
-    )
-    if not latest_completed:
+    per_source = get_latest_completed_scans_by_source(db_session)
+    if not per_source:
         return {
             "total": 0,
             "critical": 0,
@@ -643,16 +663,19 @@ def get_latest_vulnerability_summary(db_session) -> Dict:
             "error": None,
             "sources": [],
         }
-    per_source: dict[str, CVEScanResult] = {}
-    for scan in latest_completed:
-        source = _scan_source_from_type(scan.scan_type)
-        if source not in per_source:
-            per_source[source] = scan
 
     aggregated_total = sum(item.total_count for item in per_source.values())
     aggregated_critical = sum(item.critical_count for item in per_source.values())
     aggregated_high = sum(item.high_count for item in per_source.values())
     latest_any = max(per_source.values(), key=lambda s: s.scanned_at)
+
+    # Prefer web scan as the canonical detailed report target because it
+    # typically has the broadest dependency coverage in this deployment.
+    preferred_scan = (
+        per_source.get("web")
+        or per_source.get("general")
+        or latest_any
+    )
 
     sources_payload = [
         {
@@ -673,7 +696,7 @@ def get_latest_vulnerability_summary(db_session) -> Dict:
         "high": aggregated_high,
         "has_critical_or_high": (aggregated_critical > 0 or aggregated_high > 0),
         "last_scan": latest_any.scanned_at.isoformat() if latest_any.scanned_at else None,
-        "scan_id": latest_any.id,
-        "error": latest_any.error_message,
+        "scan_id": preferred_scan.id,
+        "error": preferred_scan.error_message,
         "sources": sources_payload,
     }

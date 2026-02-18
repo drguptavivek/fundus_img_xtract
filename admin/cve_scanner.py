@@ -14,6 +14,7 @@ from db_transaction_manager import get_db_session
 from utils.cve_scanner import (
     filter_vulnerabilities_by_severity,
     format_cve_report,
+    get_latest_completed_scans_by_source,
     get_latest_scan_results,
     get_latest_vulnerability_summary,
     scan_vulnerabilities_and_save,
@@ -111,16 +112,19 @@ def cve_security_report():
             scan_result_db = db.query(CVEScanResult).get(scan_id)
             if not scan_result_db:
                 flash("Scan not found", "warning")
-                scan_result_db = db.query(CVEScanResult)\
-                    .filter(CVEScanResult.status == "completed")\
-                    .order_by(CVEScanResult.scanned_at.desc())\
-                    .first()
+                per_source = get_latest_completed_scans_by_source(db)
+                scan_result_db = (
+                    per_source.get("web")
+                    or per_source.get("general")
+                    or next(iter(per_source.values()), None)
+                )
         else:
-            from models import CVEScanResult
-            scan_result_db = db.query(CVEScanResult)\
-                .filter(CVEScanResult.status == "completed")\
-                .order_by(CVEScanResult.scanned_at.desc())\
-                .first()
+            per_source = get_latest_completed_scans_by_source(db)
+            scan_result_db = (
+                per_source.get("web")
+                or per_source.get("general")
+                or next(iter(per_source.values()), None)
+            )
 
         # Build scan result dict for template
         if scan_result_db:
@@ -294,22 +298,43 @@ def htmx_cve_packages():
 
     Query params:
     - scan_id: The scan result ID to fetch packages for
+    - all_sources: If true, merge package lists from latest completed scan per source
     """
     scan_id = request.args.get('scan_id', type=int)
-    if not scan_id:
-        return "<div class='alert alert-warning'>No scan ID provided</div>"
+    all_sources = request.args.get('all_sources', 'false').lower() == 'true'
 
     with get_db_session() as db:
-        from models import CVEScanResult
-        scan_result_db = db.query(CVEScanResult).get(scan_id)
-        if not scan_result_db:
-            return "<div class='alert alert-warning'>Scan not found</div>"
+        if all_sources:
+            merged: dict[tuple[str, str], dict] = {}
+            per_source = get_latest_completed_scans_by_source(db)
+            for source, source_scan in per_source.items():
+                for pkg in source_scan.get_packages_scanned():
+                    name = (pkg.get("name") or "unknown").strip()
+                    version = (pkg.get("version") or "unknown").strip()
+                    key = (name.lower(), version)
+                    if key not in merged:
+                        merged[key] = {"name": name, "version": version, "sources": []}
+                    if source not in merged[key]["sources"]:
+                        merged[key]["sources"].append(source)
+            packages = sorted(
+                merged.values(),
+                key=lambda p: (p["name"].lower(), p["version"])
+            )
+        else:
+            if not scan_id:
+                return "<div class='alert alert-warning'>No scan ID provided</div>"
+            from models import CVEScanResult
+            scan_result_db = db.query(CVEScanResult).get(scan_id)
+            if not scan_result_db:
+                return "<div class='alert alert-warning'>Scan not found</div>"
+            packages = scan_result_db.get_packages_scanned()
 
-        packages = scan_result_db.get_packages_scanned()
-
-    return render_template("admin/partials/cve_packages_list.html",
-                          packages=packages,
-                          scan_id=scan_id)
+    return render_template(
+        "admin/partials/cve_packages_list.html",
+        packages=packages,
+        scan_id=scan_id,
+        show_sources=all_sources,
+    )
 
 
 @login_required

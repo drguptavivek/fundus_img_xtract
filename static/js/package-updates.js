@@ -12,6 +12,10 @@ function getCsrfToken() {
 // Poll for scan completion and refresh package list
 let pollInterval = null;
 
+function getScannerRoot() {
+    return document.querySelector('.container.py-4[data-scan-id][data-show-all]');
+}
+
 function pollForScanCompletion() {
     if (pollInterval) clearInterval(pollInterval);
 
@@ -22,7 +26,9 @@ function pollForScanCompletion() {
         attempts++;
 
         // Get current scan ID from the page
-        const currentScanId = document.body.dataset.scanId || null;
+        const root = getScannerRoot();
+        const currentScanId = root ? (root.dataset.scanId || null) : null;
+        const showAll = root ? (root.dataset.showAll || 'false') : 'false';
 
         fetch('/admin/api/security/package-updates/summary')
             .then(r => r.json())
@@ -40,22 +46,9 @@ function pollForScanCompletion() {
 
                 if (newScanId && newScanId !== oldScanId) {
                     clearInterval(pollInterval);
-                    // Refresh the package list with new scan
-                    const showAll = document.body.dataset.showAll === 'true';
-                    const packageListUrl = `/admin/api/security/package-updates/packages?scan_id=${newScanId}&show_all=${showAll}`;
-                    fetch(packageListUrl)
-                        .then(r => r.text())
-                        .then(html => {
-                            document.getElementById('package-list-container').innerHTML = html;
-                            // Reset scan button
-                            const btn = document.getElementById('scanNowBtn');
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.innerHTML = '<i class="fas fa-play"></i> Scan Now';
-                            }
-                            // Show success message
-                            showFlashMessage(`Scan complete! Found ${data.updates_available} packages with updates.`, 'success');
-                        });
+                    const target = `${window.location.pathname}?scan_id=${encodeURIComponent(newScanId)}&show_all=${encodeURIComponent(showAll)}`;
+                    window.location.assign(target);
+                    return;
                 } else if (attempts >= maxAttempts) {
                     clearInterval(pollInterval);
                     const btn = document.getElementById('scanNowBtn');

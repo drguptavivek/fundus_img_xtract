@@ -347,7 +347,7 @@
           {% endif %}
 
           {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('data_exporter') or
-          current_user_has('local_admin') %}
+          current_user_has('local_admin') or current_user_has('analytics_viewer') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'analytics.hospital_dashboard_page'] else '' }}"
               href="#" id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">

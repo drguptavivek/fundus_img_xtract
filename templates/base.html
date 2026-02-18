@@ -349,7 +349,7 @@
           {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('data_exporter') or
           current_user_has('local_admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'analytics.hospital_dashboard_page'] else '' }}"
               href="#" id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Analytics
             </a>
@@ -375,6 +375,10 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}"
                   href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.hospital_dashboard_page' else '' }}"
+                  href="{{ url_for('analytics.hospital_dashboard_page') }}">Hospital Dashboard</a>
               </li>
               <li>
                 <hr class="dropdown-divider">

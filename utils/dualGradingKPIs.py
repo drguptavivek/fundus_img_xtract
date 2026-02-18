@@ -142,11 +142,10 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         }
         
         # Check if user has the required roles
-        has_resident_role = user.has_role('resident')
         has_resident2_role = user.has_role('ophthalmologist')
         
         # Count resident pending tasks (skip linked diseases: graded with primary)
-        if (has_resident_role or has_resident2_role) and info['can_grade_resident']:
+        if has_resident2_role and info['can_grade_resident']:
             resident_tracker_exists = (
                 db.query(TaskTracker.id)
                 .filter(
@@ -154,25 +153,49 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     TaskTracker.role_slot == 'resident',
                 )
             )
-            # Exclude tasks that the user has already graded as a resident
+            resident_conflict_exists = (
+                db.query(Grade.id)
+                .filter(
+                    Grade.task_id == GradingTask.id,
+                    Grade.grader_user_id == user_id,
+                    Grade.role_slot.in_(("resident2",)),
+                )
+            )
+            # Base resident queue (state=pending)
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
                 ~resident_tracker_exists.exists(),
-                ~GradingTask.grades.any(
-                    and_(
-                        Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'resident'
-                    )
-                )
+                ~resident_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             q = apply_scoping(q, GradingTask, user, 'grading')
-            counts['resident_pending'] = q.count()
+            resident_pending_count = q.count()
+
+            # Include inconsistent resident tasks that are assignable by resident slot
+            resident2_exists = (
+                db.query(Grade.id)
+                .filter(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident2"))
+            )
+            resident_missing = ~exists().where(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident"))
+
+            inconsistent_q = db.query(GradingTask).filter(
+                GradingTask.state == 'resident2_done',
+                GradingTask.lab_unit_id.in_(lab_unit_ids),
+                GradingTask.disease_id == disease_id,
+                resident_missing,
+                resident2_exists.exists(),
+                ~resident_tracker_exists.exists(),
+                ~resident_conflict_exists.exists(),
+            )
+            inconsistent_q = apply_scoping(inconsistent_q, GradingTask, user, 'grading')
+            inconsistent_count = inconsistent_q.count()
+
+            counts['resident_pending'] = resident_pending_count + inconsistent_count
         
         # Count resident2 pending tasks (skip linked diseases: graded with primary)
-        if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']):
+        if has_resident2_role and (info['can_grade_resident2'] or info['can_grade_resident']):
             resident2_tracker_exists = (
                 db.query(TaskTracker.id)
                 .filter(
@@ -180,18 +203,20 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                     TaskTracker.role_slot == 'resident2',
                 )
             )
-            # Exclude tasks that the user has already graded in either resident slot
+            resident2_conflict_exists = (
+                db.query(Grade.id)
+                .filter(
+                    Grade.task_id == GradingTask.id,
+                    Grade.grader_user_id == user_id,
+                    Grade.role_slot.in_(("resident",)),
+                )
+            )
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
                 ~resident2_tracker_exists.exists(),
-                ~GradingTask.grades.any(
-                    and_(
-                        Grade.grader_user_id == user_id,
-                        Grade.role_slot.in_(('resident', 'resident2'))
-                    )
-                )
+                ~resident2_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             q = apply_scoping(q, GradingTask, user, 'grading')
@@ -256,30 +281,32 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             q = apply_scoping(base_q, GradingTask, user, 'grading')
             
             # Use distinct because the join might produce multiple rows per primary task
-            arbitration_tasks = q.distinct().all()
-            
-            # Apply same filtering as in task assignment to exclude tasks user recently graded
-            from utils.dualGradingGetNextTasks import _has_user_graded_task_4weeks
-            eligible_arbitration_tasks = []
-            for task in arbitration_tasks:
-                if not _has_user_graded_task_4weeks(db, user_id, task.id):
-                    eligible_arbitration_tasks.append(task)
-            
-            counts['arbitration_pending'] = len(eligible_arbitration_tasks)
+            eligible_arbitration_rows = (
+                q.with_entities(
+                    GradingTask.id,
+                    GradingTask.state,
+                    GradingTask.encounter_file_id,
+                    GradingTask.direct_image_upload_id,
+                )
+                .distinct()
+                .all()
+            )
+
+            counts['arbitration_pending'] = len(eligible_arbitration_rows)
             counts['arbitration_breakdown'] = {}
 
             # Calculate breakdown of which diseases are actually in arbitration
-            if eligible_arbitration_tasks:
+            if eligible_arbitration_rows:
                 # 1. Primary Disease Counts
-                primary_count = sum(1 for t in eligible_arbitration_tasks if t.state == 'arbitration')
+                primary_count = sum(1 for t in eligible_arbitration_rows if t.state == 'arbitration')
                 if primary_count > 0:
                     counts['arbitration_breakdown'][disease_name] = primary_count
                 
                 # 2. Linked Disease Counts
                 if linked_ids:
                     # Collect file/upload IDs from eligible tasks to scope the query
-                    file_ids = [t.encounter_file_id for t in eligible_arbitration_tasks if t.encounter_file_id]
-                    upload_ids = [t.direct_image_upload_id for t in eligible_arbitration_tasks if t.direct_image_upload_id]
+                    file_ids = [t.encounter_file_id for t in eligible_arbitration_rows if t.encounter_file_id]
+                    upload_ids = [t.direct_image_upload_id for t in eligible_arbitration_rows if t.direct_image_upload_id]
                     
                     filters = []
                     if file_ids:

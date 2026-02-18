@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Hospital Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Hospital Dashboard</h1>
+      <p class="text-muted mb-0">Disease, lab-disease, user completion, and role-slot roster views scoped to your lab units.</p>
+    </div>
+    <div class="text-muted small">Scoped Lab Units: {{ lab_unit_scope_count }}</div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+          <label class="form-label mb-1" for="hd-filter-disease">Disease</label>
+          <select id="hd-filter-disease" class="form-select">
+            <option value="">All</option>
+            {% for disease in diseases %}
+            <option value="{{ disease.id }}">{{ disease.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label mb-1" for="hd-filter-hospital">Hospital</label>
+          <select id="hd-filter-hospital" class="form-select">
+            <option value="">All</option>
+            {% for hospital in hospitals %}
+            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label mb-1" for="hd-filter-lab">Lab Unit</label>
+          <select id="hd-filter-lab" class="form-select">
+            <option value="">All</option>
+            {% for lab in lab_units %}
+            <option value="{{ lab.id }}" data-hospital-id="{{ lab.hospital_id or '' }}">{{ lab.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 d-flex gap-2">
+          <button id="hd-apply-filters" class="btn btn-primary" type="button">Apply</button>
+          <button id="hd-clear-filters" class="btn btn-outline-secondary" type="button">Clear</button>
+          <span id="hd-loading" class="text-muted small align-self-center d-none">Loading...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Cumulative Tasks</div>
+          <div id="hd-kpi-total" class="h4 mb-0">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Cumulative Non-Gradable</div>
+          <div id="hd-kpi-non-gradable" class="h4 mb-0">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Non-Gradable %</div>
+          <div id="hd-kpi-non-gradable-pct" class="h4 mb-0">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>Disease View</strong></div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Disease</th>
+            <th>Total</th>
+            <th>Pending Resident</th>
+            <th>Pending Resident2</th>
+            <th>Pending Arbitration</th>
+            <th>Non-Gradable</th>
+          </tr>
+        </thead>
+        <tbody id="hd-table-disease"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>Lab-Disease View</strong></div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Hospital</th>
+            <th>Lab Unit</th>
+            <th>Disease</th>
+            <th>Total</th>
+            <th>Pending Resident</th>
+            <th>Pending Resident2</th>
+            <th>Pending Arbitration</th>
+            <th>Non-Gradable</th>
+          </tr>
+        </thead>
+        <tbody id="hd-table-lab-disease"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>User-wise Completed Gradings</strong></div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Disease</th>
+            <th>Role Slot</th>
+            <th>User</th>
+            <th>Completed</th>
+          </tr>
+        </thead>
+        <tbody id="hd-table-user"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header"><strong>Lab-wise User Roster by Disease (Role Slot)</strong></div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead>
+          <tr>
+            <th>Hospital</th>
+            <th>Lab Unit</th>
+            <th>Disease</th>
+            <th>Resident Users</th>
+            <th>Resident2 Users</th>
+            <th>Arbitrator Users</th>
+          </tr>
+        </thead>
+        <tbody id="hd-table-roster"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/hospital-dashboard.js') }}"></script>
+{% endblock %}

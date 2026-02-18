@@ -207,7 +207,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     # Get all matching tasks
     tasks = query.all()
     
-    # Filter out tasks that the user has graded in the past 4 weeks
+    # Filter out tasks that conflict with user's opposite resident slot on the same task
     filtered_tasks = []
     conflicting_slots: List[str] = []
     if role_slot == "resident":
@@ -216,11 +216,10 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         conflicting_slots = ["resident"]
 
     for task in tasks:
-        if not _has_user_graded_task_4weeks(db, user_id, task.id):
-            if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
-                continue
-            _ensure_task_uuid(db, task)
-            filtered_tasks.append(task)
+        if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
+            continue
+        _ensure_task_uuid(db, task)
+        filtered_tasks.append(task)
     
     return filtered_tasks
 
@@ -260,8 +259,6 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
 
     filtered_tasks = []
     for task in tasks:
-        if _has_user_graded_task_4weeks(db, user_id, task.id):
-            continue
         if has_user_graded_task(db, user_id, task.id, ["resident2"]):
             continue
         _ensure_task_uuid(db, task)
@@ -556,8 +553,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     # Order randomly and limit to 1 to get just one task locked
     task = query.with_for_update().order_by(func.random()).first()
     
-    # If a task was found, verify that the user hasn't graded it recently
-    if task and not _has_user_graded_task_4weeks(db, user_id, task.id):
+    if task and (role_slot in {"resident", "resident2"} or not _has_user_graded_task_4weeks(db, user_id, task.id)):
         _ensure_task_uuid(db, task)
         return task
 
@@ -737,7 +733,7 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         .first()
     )
 
-    if task and not _has_user_graded_task_4weeks(db, user_id, task.id):
+    if task:
         _ensure_task_uuid(db, task)
         return task
 

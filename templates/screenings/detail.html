@@ -253,7 +253,8 @@
                             <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
                                 data-index="{{ loop.index0 }}" title="Thumbnail">
                                 <img class="sv-thumb-img"
-                                    src="{{ url_for('media._encounterImageByUUID', uuid_str=img.uuid) }}"
+                                    src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=img.uuid) }}"
+                                    data-full-url="{{ url_for('media._encounterImageByUUID', uuid_str=img.uuid) }}"
                                     alt="Thumbnail" loading="lazy" />
                             </a>
                             {% endfor %}

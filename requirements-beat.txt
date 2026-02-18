@@ -6,10 +6,18 @@ billiard==4.2.4
     # via celery
 blinker==1.9.0
     # via flask
+boolean-py==5.0
+    # via license-expression
+cachecontrol==0.14.4
+    # via pip-audit
 cachelib==0.13.0
     # via flask-caching
 celery==5.6.2
     # via fundus-img-xtract
+certifi==2026.1.4
+    # via requests
+charset-normalizer==3.4.4
+    # via requests
 click==8.3.1
     # via
     #   celery
@@ -25,6 +33,12 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
+cyclonedx-python-lib==7.6.2
+    # via pip-audit
+defusedxml==0.7.1
+    # via py-serializable
+filelock==3.20.3
+    # via cachecontrol
 flask==3.1.2
     # via
     #   flask-caching
@@ -36,12 +50,18 @@ flask-login==0.6.3
     # via fundus-img-xtract
 greenlet==3.3.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
+idna==3.11
+    # via requests
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via flask
 kombu==5.6.2
     # via celery
+license-expression==30.4.4
+    # via cyclonedx-python-lib
+markdown-it-py==4.0.0
+    # via rich
 markupsafe==3.0.3
     # via
     #   flask
@@ -49,12 +69,37 @@ markupsafe==3.0.3
     #   werkzeug
 marshmallow==4.2.1
     # via fundus-img-xtract
+mdurl==0.1.2
+    # via markdown-it-py
+msgpack==1.1.2
+    # via cachecontrol
+packageurl-python==0.17.6
+    # via cyclonedx-python-lib
 packaging==26.0
-    # via kombu
+    # via
+    #   kombu
+    #   pip-audit
+    #   pip-requirements-parser
+pip==26.0
+    # via pip-api
+pip-api==0.0.34
+    # via pip-audit
+pip-audit==2.10.0
+    # via fundus-img-xtract
+pip-requirements-parser==32.0.1
+    # via pip-audit
+platformdirs==4.5.1
+    # via pip-audit
 prompt-toolkit==3.0.52
     # via click-repl
 psycopg2-binary==2.9.11
     # via fundus-img-xtract
+py-serializable==1.1.2
+    # via cyclonedx-python-lib
+pygments==2.19.2
+    # via rich
+pyparsing==3.3.2
+    # via pip-requirements-parser
 python-dateutil==2.9.0.post0
     # via celery
 python-dotenv==1.2.1
@@ -67,10 +112,22 @@ redis==6.4.0
     # via
     #   fundus-img-xtract
     #   kombu
+requests==2.32.5
+    # via
+    #   cachecontrol
+    #   pip-audit
+rich==14.3.1
+    # via pip-audit
 six==1.17.0
     # via python-dateutil
+sortedcontainers==2.4.0
+    # via cyclonedx-python-lib
 sqlalchemy==2.0.46
     # via fundus-img-xtract
+tomli==2.4.0
+    # via pip-audit
+tomli-w==1.2.0
+    # via pip-audit
 typing-extensions==4.15.0
     # via sqlalchemy
 tzdata==2025.3
@@ -79,6 +136,8 @@ tzdata==2025.3
     #   tzlocal
 tzlocal==5.3.1
     # via celery
+urllib3==2.6.3
+    # via requests
 vine==5.1.0
     # via
     #   amqp

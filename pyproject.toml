@@ -107,7 +107,8 @@ ocr = [
     "pytesseract==0.3.13",
     "pymupdf==1.26.7",
     "flask-caching>=2.3.1",
-    "matplotlib==3.10.8"
+    "matplotlib==3.10.8",
+    "pip-audit==2.10.0",
 ]
 
 # Celery Beat scheduler container (minimal dependencies)
@@ -117,6 +118,7 @@ beat = [
     "pyyaml>=6.0.3",
     "flask-login==0.6.3",
     "flask-caching>=2.3.1",
+    "pip-audit==2.10.0",
     # pandas, openpyxl, pillow, numpy removed - only needed by export tasks (which beat doesn't import)
     # pynacl and cryptography removed - lazy-imported in tasks
 ]
@@ -135,4 +137,5 @@ general = [
     "pyyaml>=6.0.3",
     "requests==2.32.5",  # Needed by package_update_scanner
     "PyJWT==2.11.0",
+    "pip-audit==2.10.0",
 ]

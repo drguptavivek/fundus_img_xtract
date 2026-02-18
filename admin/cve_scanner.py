@@ -16,11 +16,69 @@ from utils.cve_scanner import (
     format_cve_report,
     get_latest_scan_results,
     get_latest_vulnerability_summary,
+    scan_vulnerabilities_and_save,
     CVESeverity
 )
 from celery_tasks.tasks.cve_tasks import run_cve_scan_task
 
 logger = logging.getLogger('security')
+
+
+def _dispatch_cve_scans(scan_type: str, user_id: int | None) -> list[dict]:
+    """
+    Dispatch CVE scans to worker profiles that can execute tasks.
+
+    Current worker coverage:
+    - general worker (default queue)
+    - ocr worker (metadata queue)
+    """
+    targets = [
+        {"source_profile": "general", "queue": "default", "expected_profile": "general"},
+        {"source_profile": "ocr", "queue": "metadata", "expected_profile": "ocr"},
+    ]
+    dispatched: list[dict] = []
+    for target in targets:
+        task = run_cve_scan_task.apply_async(
+            args=(scan_type, user_id),
+            queue=target["queue"],
+        )
+        dispatched.append(
+            {
+                "task_id": task.id,
+                "source_profile": target["source_profile"],
+                "queue": target["queue"],
+            }
+        )
+    # Web container scan runs inline (web has no Celery worker profile).
+    try:
+        with get_db_session() as db:
+            web_result = scan_vulnerabilities_and_save(
+                db,
+                scan_type=scan_type,
+                triggered_by_user_id=user_id,
+                source_profile="web",
+                use_cache=(scan_type != "on_demand"),
+            )
+        dispatched.append(
+            {
+                "task_id": web_result.get("scan_id"),
+                "source_profile": "web",
+                "queue": "inline",
+                "status": web_result.get("status"),
+            }
+        )
+    except Exception as exc:
+        logger.exception("Inline web CVE scan failed: %s", exc)
+        dispatched.append(
+            {
+                "task_id": None,
+                "source_profile": "web",
+                "queue": "inline",
+                "status": "error",
+                "error": str(exc),
+            }
+        )
+    return dispatched
 
 
 @login_required
@@ -38,11 +96,12 @@ def cve_security_report():
     with get_db_session() as db:
         # Check for on-demand scan trigger
         if request.args.get('trigger_scan'):
-            # Trigger Celery task for on-demand scan
-            task = run_cve_scan_task.apply_async(
-                args=("on_demand", current_user.id)
+            dispatched = _dispatch_cve_scans("on_demand", current_user.id)
+            flash(
+                "CVE scans started: "
+                + ", ".join(f"{item['source_profile']} ({item['task_id']})" for item in dispatched),
+                "info",
             )
-            flash(f"CVE scan started. Task ID: {task.id}", "info")
             return redirect(url_for('admin.cve_security_report'))
 
         # Get specific scan or latest
@@ -159,10 +218,7 @@ def api_cve_refresh():
 
     Returns JSON with task info and current results.
     """
-    # Trigger Celery task for on-demand scan
-    task = run_cve_scan_task.apply_async(
-        args=("on_demand", current_user.id)
-    )
+    dispatched = _dispatch_cve_scans("on_demand", current_user.id)
 
     # Get current latest scan while task runs
     with get_db_session() as db:
@@ -170,9 +226,10 @@ def api_cve_refresh():
 
     return jsonify({
         "success": True,
-        "task_id": task.id,
+        "task_id": dispatched[0]["task_id"] if dispatched else None,
+        "tasks": dispatched,
         "current_results": current_summary,
-        "message": "CVE scan started in background"
+        "message": "CVE scans started in background"
     })
 
 

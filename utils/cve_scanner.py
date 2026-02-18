@@ -19,9 +19,11 @@ from pathlib import Path
 from typing import Dict, List
 
 from flask import request
-from app_cache import cache
+from app_cache import cache, init_cache
 
 logger = logging.getLogger('security')
+
+KNOWN_SCAN_SOURCES = {"general", "ocr", "web", "beat", "maintenance", "unknown"}
 
 
 class CVESeverity:
@@ -32,7 +34,7 @@ class CVESeverity:
     LOW = "low"
 
 
-def parse_pip_audit_json(output: str) -> tuple[List[Dict], int]:
+def parse_pip_audit_json(output: str) -> tuple[List[Dict], List[Dict]]:
     """
     Parse pip-audit JSON output into structured format.
 
@@ -166,12 +168,12 @@ def _get_cve_severity(cve_id: str) -> str:
     return KNOWN_CVES.get(cve_id, CVESeverity.MEDIUM)
 
 
-@cache.memoize(timeout=86400)  # Cache for 24 hours
-def scan_vulnerabilities() -> Dict:
+@cache.memoize(timeout=86400)  # Cache for 24 hours per source_profile
+def scan_vulnerabilities(source_profile: str | None = None) -> Dict:
     """
     Scan installed Python packages for security vulnerabilities using pip-audit.
 
-    Scans ALL containers (web, celery-ocr, celery-general, celery-beat) and merges results.
+    Runs inside the current container/runtime only (no Docker CLI dependency).
 
     Results are cached for 24 hours to avoid expensive repeated scans.
 
@@ -183,10 +185,15 @@ def scan_vulnerabilities() -> Dict:
         - vulnerabilities: List of vulnerability details (from parse_pip_audit_json)
         - raw_output: Raw pip-audit output for debugging
     """
-    logger.info("Starting CVE vulnerability scan with pip-audit across all containers")
+    resolved_profile = (source_profile or "unknown").strip().lower() or "unknown"
+    logger.info(
+        "Starting CVE vulnerability scan with pip-audit in current runtime (source=%s)",
+        resolved_profile,
+    )
 
     result = {
         "scanned_at": datetime.utcnow().isoformat() + "Z",
+        "source_profile": resolved_profile,
         "total_count": 0,
         "by_severity": {
             CVESeverity.CRITICAL: 0,
@@ -200,92 +207,68 @@ def scan_vulnerabilities() -> Dict:
         "error": None
     }
 
-    # Container names to scan
-    containers = [
-        ('fundus-img-xtract-web', 'web'),
-        ('fundus-img-xtract-celery-ocr', 'celery-ocr'),
-        ('fundus-img-xtract-celery-general', 'celery-general'),
-        ('fundus-img-xtract-celery-beat', 'celery-beat'),
+    commands = [
+        ["uv", "run", "pip-audit", "--format", "json", "--desc"],
+        ["python3", "-m", "pip_audit", "--format", "json", "--desc"],
+        ["pip-audit", "--format", "json", "--desc"],
     ]
 
-    # Track unique packages and vulnerabilities across all containers
-    all_packages_map = {}  # name -> {name, version, source}
-    all_vulnerabilities = []  # list of vulnerability dicts
-
-    for container_name, container_type in containers:
+    completed = None
+    last_error = None
+    for cmd in commands:
         try:
-            logger.info(f"Scanning container: {container_name}")
-
-            # Run pip-audit in the container via docker exec
             completed = subprocess.run(
-                ["docker", "exec", container_name, "uv", "run", "pip-audit", "--format", "json", "--desc"],
+                cmd,
                 capture_output=True,
                 text=True,
-                timeout=120,  # 2 minute timeout per container
-                check=False
+                timeout=180,
+                check=False,
             )
-
-            if completed.returncode not in (0, 1):  # 0 = no vulns, 1 = vulns found
-                logger.warning("pip-audit in %s returned code %d: %s", container_name, completed.returncode, completed.stderr)
-                # Continue anyway - might still have partial results
-
-            # Parse vulnerabilities and packages from this container
-            vulnerabilities, packages = parse_pip_audit_json(completed.stdout)
-
-            # Merge packages, tracking highest version if duplicates
-            for pkg in packages:
-                pkg_name = pkg.get('name', '').lower()
-                pkg_version = pkg.get('version', '0.0.0')
-
-                if not pkg_name:
-                    continue
-
-                # If package not seen before, or this version is higher
-                if pkg_name not in all_packages_map or _version_compare(pkg_version, all_packages_map[pkg_name]['version']) > 0:
-                    all_packages_map[pkg_name] = {
-                        'name': pkg.get('name'),  # Keep original case for display
-                        'version': pkg_version,
-                        'source': container_type,
-                    }
-
-            # Collect all vulnerabilities (dedupe later)
-            all_vulnerabilities.extend(vulnerabilities)
-
-            logger.info("Container %s: %d packages, %d vulnerabilities", container_name, len(packages), len(vulnerabilities))
-
-        except subprocess.TimeoutExpired:
-            logger.warning("pip-audit in %s timed out", container_name)
+            # pip-audit exits 0 (no vulns) or 1 (vulns found)
+            if completed.returncode in (0, 1):
+                logger.info("CVE scan command succeeded: %s", " ".join(cmd))
+                break
+            last_error = f"return code {completed.returncode}: {completed.stderr.strip()}"
+            logger.warning("CVE scan command failed (%s): %s", " ".join(cmd), last_error)
+            completed = None
         except FileNotFoundError:
-            logger.warning("docker command not found")
-            result["error"] = "docker command not found"
-            break
+            last_error = f"command not found: {cmd[0]}"
+            logger.warning(last_error)
+        except subprocess.TimeoutExpired:
+            last_error = f"command timed out: {' '.join(cmd)}"
+            logger.warning(last_error)
         except Exception as e:
-            logger.warning("Failed to scan %s: %s", container_name, e)
+            last_error = str(e)
+            logger.warning("CVE scan command error (%s): %s", " ".join(cmd), e)
 
-    # Convert packages map to list
-    result["packages_scanned"] = list(all_packages_map.values())
+    if completed is None:
+        result["error"] = f"pip-audit execution failed: {last_error or 'unknown error'}"
+        logger.error("CVE scan failed (source=%s): %s", resolved_profile, result["error"])
+        return result
 
-    # Deduplicate vulnerabilities by package name and CVE ID
-    # Keep the highest version's vulnerabilities
-    vuln_map = {}  # (pkg_name, cve_id) -> vulnerability dict
-    for pkg_vuln in all_vulnerabilities:
-        pkg_name = pkg_vuln.get("name", "").lower()
-        if not pkg_name:
-            continue
+    raw_stdout = (completed.stdout or "").strip()
+    raw_stderr = (completed.stderr or "").strip()
+    raw_json_candidate = raw_stdout
+    # Some pip-audit/runtime combinations can emit JSON on stderr.
+    if not raw_json_candidate and raw_stderr.startswith(("{", "[")):
+        raw_json_candidate = raw_stderr
 
-        for vuln in pkg_vuln.get("vulns", []):
-            cve_id = vuln.get("id", "")
-            key = (pkg_name, cve_id)
+    if not raw_json_candidate:
+        result["error"] = (
+            "pip-audit returned no JSON output"
+            + (f": {raw_stderr[:300]}" if raw_stderr else "")
+        )
+        logger.error("CVE scan failed (source=%s): %s", resolved_profile, result["error"])
+        return result
 
-            # Only add if we haven't seen this (package, CVE) combination
-            if key not in vuln_map:
-                vuln_map[key] = {
-                    "name": pkg_vuln.get("name"),
-                    "version": pkg_vuln.get("version"),
-                    "vulns": [vuln]
-                }
-
-    result["vulnerabilities"] = list(vuln_map.values())
+    result["raw_output"] = raw_json_candidate
+    vulnerabilities, packages = parse_pip_audit_json(raw_json_candidate)
+    if not packages and "dependencies" not in raw_json_candidate:
+        result["error"] = "pip-audit output was not parseable dependency JSON"
+        logger.error("CVE scan failed (source=%s): %s", resolved_profile, result["error"])
+        return result
+    result["packages_scanned"] = packages
+    result["vulnerabilities"] = vulnerabilities
 
     # Count by severity
     for pkg in result["vulnerabilities"]:
@@ -297,7 +280,8 @@ def scan_vulnerabilities() -> Dict:
     result["total_count"] = sum(result["by_severity"].values())
 
     logger.info(
-        "CVE scan complete: %d packages scanned, %d vulnerabilities found (%d critical, %d high, %d medium, %d low)",
+        "CVE scan complete (source=%s): %d packages scanned, %d vulnerabilities found (%d critical, %d high, %d medium, %d low)",
+        resolved_profile,
         len(result["packages_scanned"]),
         result["total_count"],
         result["by_severity"][CVESeverity.CRITICAL],
@@ -462,11 +446,40 @@ def format_cve_report(scan_result: Dict) -> str:
 
 def clear_cve_cache():
     """Clear the cached CVE scan results."""
+    # Support CLI usage outside Flask app context (e.g. docker compose exec ... python -c)
+    try:
+        init_cache()
+    except Exception:
+        # Best effort: if app context already exists or init fails, continue to delete attempt.
+        pass
     cache.delete_memoized(scan_vulnerabilities)
     logger.info("CVE scan cache cleared")
 
 
-def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", triggered_by_user_id: int = None) -> Dict:
+def _normalize_scan_type(scan_type: str, source_profile: str) -> str:
+    normalized = (scan_type or "scheduled").strip().lower() or "scheduled"
+    source = (source_profile or "unknown").strip().lower() or "unknown"
+    if normalized.endswith(f"_{source}"):
+        return normalized
+    return f"{normalized}_{source}"
+
+
+def _scan_source_from_type(scan_type: str | None) -> str:
+    raw = (scan_type or "").strip().lower()
+    if "_" in raw:
+        candidate = raw.rsplit("_", 1)[1]
+        if candidate in KNOWN_SCAN_SOURCES:
+            return candidate
+    return "unknown"
+
+
+def scan_vulnerabilities_and_save(
+    db_session,
+    scan_type: str = "scheduled",
+    triggered_by_user_id: int = None,
+    source_profile: str | None = None,
+    use_cache: bool = True,
+) -> Dict:
     """
     Run CVE vulnerability scan and save results to database.
 
@@ -474,6 +487,8 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         db_session: Database session
         scan_type: "scheduled" or "on_demand"
         triggered_by_user_id: User ID who triggered the scan (None for scheduled)
+        source_profile: Runtime source label (e.g. general, ocr)
+        use_cache: Whether to use cached scan results
 
     Returns:
         Dict with scan results
@@ -483,9 +498,11 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
 
     start_time = time.time()
 
+    source = (source_profile or "unknown").strip().lower() or "unknown"
+
     # Create scan result record
     scan_result_db = CVEScanResult(
-        scan_type=scan_type,
+        scan_type=_normalize_scan_type(scan_type, source),
         status="running",
         triggered_by_user_id=triggered_by_user_id
     )
@@ -494,12 +511,16 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
 
     try:
         # Run the actual scan
-        scan_result = scan_vulnerabilities()
+        if use_cache:
+            scan_result = scan_vulnerabilities(source)
+        else:
+            cache.delete_memoized(scan_vulnerabilities, source)
+            scan_result = scan_vulnerabilities(source)
 
         duration_seconds = int(time.time() - start_time)
 
         # Update scan result with findings
-        scan_result_db.status = "completed"
+        scan_result_db.status = "failed" if scan_result.get("error") else "completed"
         packages_list = scan_result.get("packages_scanned", [])
         scan_result_db.packages_scanned_count = len(packages_list)
         scan_result_db.total_count = scan_result["total_count"]
@@ -525,8 +546,9 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         db_session.commit()
 
         logger.info(
-            "CVE scan saved to DB: type=%s, scanned=%d packages, vulns=%d (critical=%d, high=%d), duration=%ds",
+            "CVE scan saved to DB: type=%s, status=%s, scanned=%d packages, vulns=%d (critical=%d, high=%d), duration=%ds",
             scan_type,
+            scan_result_db.status,
             scan_result_db.packages_scanned_count,
             scan_result_db.total_count,
             scan_result_db.critical_count,
@@ -535,8 +557,9 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         )
 
         return {
-            "status": "completed",
+            "status": scan_result_db.status,
             "scan_id": scan_result_db.id,
+            "source_profile": source,
             "scanned_at": scan_result_db.scanned_at.isoformat(),
             "packages_scanned": scan_result_db.packages_scanned_count,
             "packages": scan_result_db.get_packages_scanned(),
@@ -566,6 +589,7 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         return {
             "status": "error",
             "scan_id": scan_result_db.id,
+            "source_profile": source,
             "error": error_msg,
             "total_count": 0
         }
@@ -602,12 +626,13 @@ def get_latest_vulnerability_summary(db_session) -> Dict:
     """
     from models import CVEScanResult
 
-    latest = db_session.query(CVEScanResult)\
-        .filter(CVEScanResult.status == "completed")\
-        .order_by(CVEScanResult.scanned_at.desc())\
-        .first()
-
-    if not latest:
+    latest_completed = (
+        db_session.query(CVEScanResult)
+        .filter(CVEScanResult.status == "completed")
+        .order_by(CVEScanResult.scanned_at.desc())
+        .all()
+    )
+    if not latest_completed:
         return {
             "total": 0,
             "critical": 0,
@@ -615,15 +640,40 @@ def get_latest_vulnerability_summary(db_session) -> Dict:
             "has_critical_or_high": False,
             "last_scan": None,
             "scan_id": None,
-            "error": None
+            "error": None,
+            "sources": [],
         }
+    per_source: dict[str, CVEScanResult] = {}
+    for scan in latest_completed:
+        source = _scan_source_from_type(scan.scan_type)
+        if source not in per_source:
+            per_source[source] = scan
+
+    aggregated_total = sum(item.total_count for item in per_source.values())
+    aggregated_critical = sum(item.critical_count for item in per_source.values())
+    aggregated_high = sum(item.high_count for item in per_source.values())
+    latest_any = max(per_source.values(), key=lambda s: s.scanned_at)
+
+    sources_payload = [
+        {
+            "source": source,
+            "scan_id": scan.id,
+            "last_scan": scan.scanned_at.isoformat() if scan.scanned_at else None,
+            "total": scan.total_count,
+            "critical": scan.critical_count,
+            "high": scan.high_count,
+            "error": scan.error_message,
+        }
+        for source, scan in sorted(per_source.items(), key=lambda item: item[0])
+    ]
 
     return {
-        "total": latest.total_count,
-        "critical": latest.critical_count,
-        "high": latest.high_count,
-        "has_critical_or_high": latest.has_critical_or_high(),
-        "last_scan": latest.scanned_at.isoformat(),
-        "scan_id": latest.id,
-        "error": latest.error_message
+        "total": aggregated_total,
+        "critical": aggregated_critical,
+        "high": aggregated_high,
+        "has_critical_or_high": (aggregated_critical > 0 or aggregated_high > 0),
+        "last_scan": latest_any.scanned_at.isoformat() if latest_any.scanned_at else None,
+        "scan_id": latest_any.id,
+        "error": latest_any.error_message,
+        "sources": sources_payload,
     }

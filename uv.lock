@@ -660,6 +660,7 @@ dependencies = [
 beat = [
     { name = "flask-caching" },
     { name = "flask-login" },
+    { name = "pip-audit" },
     { name = "pytz" },
     { name = "pyyaml" },
 ]
@@ -671,6 +672,7 @@ general = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "pip-audit" },
     { name = "pyjwt" },
     { name = "pynacl" },
     { name = "pytz" },
@@ -683,6 +685,7 @@ ocr = [
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
+    { name = "pip-audit" },
     { name = "pymupdf" },
     { name = "pytesseract" },
 ]
@@ -831,6 +834,9 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'web'", specifier = "==12.1.1" },
     { name = "pip", marker = "extra == 'web'", specifier = "==26.0" },
     { name = "pip-api", marker = "extra == 'web'", specifier = "==0.0.34" },
+    { name = "pip-audit", marker = "extra == 'beat'", specifier = "==2.10.0" },
+    { name = "pip-audit", marker = "extra == 'general'", specifier = "==2.10.0" },
+    { name = "pip-audit", marker = "extra == 'ocr'", specifier = "==2.10.0" },
     { name = "pip-audit", marker = "extra == 'web'", specifier = "==2.10.0" },
     { name = "piper-tts", marker = "extra == 'web'", specifier = ">=1.3.0" },
     { name = "pluggy", marker = "extra == 'web'", specifier = "==1.6.0" },

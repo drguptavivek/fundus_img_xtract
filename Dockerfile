@@ -1,7 +1,9 @@
+# syntax=docker/dockerfile:1.6
+
 # ======================================================================
-# BASE — Debian 13 trixie (runtime)
+# COMMON BASE — shared runtime deps + uv
 # ======================================================================
-FROM python:3.13.9-slim AS base
+FROM python:3.13.9-slim AS common-base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,12 +13,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # ======================================================================
-# OS PACKAGES + Postgres repo + OCR libs
+# OS PACKAGES + Postgres repo
 # ======================================================================
 # ======================================================================
 # FIX APT MIRRORS → FORCE HTTPS (critical!)
 # ======================================================================
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists \
+    set -eux; \
     rm -f /etc/apt/sources.list.d/debian.sources;\
     \
     printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
@@ -30,9 +34,6 @@ deb https://deb.debian.org/debian-security trixie-security main contrib non-free
         gnupg \
         logrotate \
         cron \
-        tesseract-ocr \
-        libgl1 \
-        libglib2.0-0 \
         libmagic1 \
         libpq5; \
     \
@@ -51,6 +52,22 @@ deb https://deb.debian.org/debian-security trixie-security main contrib non-free
 # UV (dependencies are installed into the shared /app/.venv volume)
 # ======================================================================
 RUN pip install --no-cache-dir uv
+
+# ======================================================================
+# BASE — full runtime (includes OCR libs)
+# ======================================================================
+FROM common-base AS base
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists \
+    set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        libgl1 \
+        libglib2.0-0; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
 # ======================================================================
 # Application code
@@ -83,46 +100,19 @@ ENTRYPOINT ["/bin/bash", "docker/entrypoint.sh"]
 CMD ["uv", "run", "gunicorn", "-c", "gunicorn_config.py", "wsgi:application"]
 
 # ======================================================================
-# WEB BASE — runtime without OCR libs
+# REQUIREMENTS EXPORTER — lightweight uv-only image
 # ======================================================================
-FROM python:3.13.9-slim AS web-base
+FROM astral/uv:python3.12-bookworm-slim AS requirements-exporter
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN set -eux; \
-    rm -f /etc/apt/sources.list.d/debian.sources;\
-    \
-    printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
-    > /etc/apt/sources.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        gnupg \
-        logrotate \
-        cron \
-        libmagic1 \
-        libpq5; \
-    \
-    install -d /usr/share/postgresql-common/pgdg; \
-    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
-        https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
-    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-        https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
-        > /etc/apt/sources.list.d/pgdg.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends postgresql-client-18; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir uv
+# ======================================================================
+# WEB BASE — runtime without OCR libs
+# ======================================================================
+FROM common-base AS web-base
 
 COPY . .
 
@@ -151,9 +141,11 @@ CMD ["uv", "run", "gunicorn", "-c", "gunicorn_config.py", "wsgi:application"]
 # ======================================================================
 # VENV BUILDER — includes build tools for uv sync into shared volume
 # ======================================================================
-FROM base AS venv-builder
+FROM common-base AS venv-builder
 
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists \
+    set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -169,32 +161,18 @@ CMD ["uv", "sync", "--frozen", "--no-dev"]
 # ======================================================================
 # OCR BASE — minimal runtime for OCR worker
 # ======================================================================
-FROM python:3.13.9-slim AS ocr-base
+FROM common-base AS ocr-base
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
-
-WORKDIR /app
-
-RUN set -eux; \
-    rm -f /etc/apt/sources.list.d/debian.sources; \
-    printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
-    > /etc/apt/sources.list; \
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists \
+    set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates \
         tesseract-ocr \
         libgl1 \
-        libglib2.0-0 \
-        libpq5; \
+        libglib2.0-0; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir uv
 
 COPY . .
 
@@ -209,7 +187,7 @@ FROM ocr-base AS ocr-venv-builder
 COPY requirements-ocr.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install -r requirements-ocr.txt"]
+CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-ocr.txt"]
 
 # ======================================================================
 # WEB VENV BUILDER — installs web deps into web venv volume
@@ -219,34 +197,12 @@ FROM web-base AS web-venv-builder
 COPY requirements-web.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install -r requirements-web.txt"]
+CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-web.txt"]
 
 # ======================================================================
 # BEAT BASE — minimal runtime for celery beat
 # ======================================================================
-FROM python:3.13.9-slim AS beat-base
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
-
-WORKDIR /app
-
-RUN set -eux; \
-    rm -f /etc/apt/sources.list.d/debian.sources; \
-    printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
-    > /etc/apt/sources.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        libpq5; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir uv
+FROM common-base AS beat-base
 
 COPY . .
 
@@ -261,34 +217,12 @@ FROM beat-base AS beat-venv-builder
 COPY requirements-beat.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install -r requirements-beat.txt"]
+CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-beat.txt"]
 
 # ======================================================================
 # GENERAL BASE — minimal runtime for celery general worker
 # ======================================================================
-FROM python:3.13.9-slim AS general-base
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
-
-WORKDIR /app
-
-RUN set -eux; \
-    rm -f /etc/apt/sources.list.d/debian.sources; \
-    printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
-deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
-    > /etc/apt/sources.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        libpq5; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir uv
+FROM common-base AS general-base
 
 COPY . .
 
@@ -303,4 +237,4 @@ FROM general-base AS general-venv-builder
 COPY requirements-general.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "uv venv && uv pip install -r requirements-general.txt"]
+CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-general.txt"]

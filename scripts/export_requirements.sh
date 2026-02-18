@@ -12,33 +12,24 @@ DC="${DC:-docker compose}"
 echo "🔄 Exporting per-container requirements files..."
 echo ""
 
-# Check if web container is running
-if ! $DC ps web | grep -q "Up"; then
-    echo "❌ Web container is not running. Starting it..."
-    $DC up -d web
-    sleep 5
-fi
-
-# Export each dependency group to temporary files in the container
+# Export each dependency group using the lightweight exporter container
 echo "📦 Generating requirements files..."
-$DC exec web bash -c "
+$DC run --rm -u "$(id -u):$(id -g)" \
+    -e HOME=/tmp \
+    -e XDG_DATA_HOME=/tmp/.local/share \
+    -e XDG_CACHE_HOME=/tmp/.cache \
+    -e UV_CACHE_DIR=/tmp/.uv-cache \
+    -e UV_PYTHON_DIR=/tmp/.uv-python \
+    -e UV_NO_PROJECT_ENVIRONMENT=1 \
+    requirements-exporter sh -lc "
     set -e
-    uv export --extra web --format requirements-txt --no-hashes > /tmp/requirements-web.txt
-    uv export --extra ocr --format requirements-txt --no-hashes > /tmp/requirements-ocr.txt
-    uv export --extra beat --format requirements-txt --no-hashes > /tmp/requirements-beat.txt
-    uv export --extra general --format requirements-txt --no-hashes > /tmp/requirements-general.txt
-    uv export --format requirements-txt --no-hashes > /tmp/requirements.txt
+    uv export --extra web --format requirements-txt --no-hashes > requirements-web.txt
+    uv export --extra ocr --format requirements-txt --no-hashes > requirements-ocr.txt
+    uv export --extra beat --format requirements-txt --no-hashes > requirements-beat.txt
+    uv export --extra general --format requirements-txt --no-hashes > requirements-general.txt
+    uv export --format requirements-txt --no-hashes > requirements.txt
     echo '✅ Generated all requirement files in container'
 "
-
-# Copy files from container to host
-echo ""
-echo "📋 Copying files from container to host..."
-$DC exec web cat /tmp/requirements-web.txt > requirements-web.txt
-$DC exec web cat /tmp/requirements-ocr.txt > requirements-ocr.txt
-$DC exec web cat /tmp/requirements-beat.txt > requirements-beat.txt
-$DC exec web cat /tmp/requirements-general.txt > requirements-general.txt
-$DC exec web cat /tmp/requirements.txt > requirements.txt
 
 # Show summary
 echo ""

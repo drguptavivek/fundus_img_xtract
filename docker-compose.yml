@@ -1,12 +1,29 @@
 services:
+  requirements-exporter:
+    build:
+      context: .
+      target: requirements-exporter
+    image: fundus-img-xtract:requirements-exporter
+    container_name: fundus-img-xtract-requirements-exporter
+    working_dir: /app
+    environment:
+      UV_CACHE_DIR: /tmp/.uv-cache
+    volumes:
+      - .:/app
+      - uv_cache:/tmp/.uv-cache
+    restart: "no"
+
   ocr-venv-builder:
     build:
       context: .
       target: ocr-venv-builder
     image: fundus-img-xtract:ocr-venv-builder
     container_name: fundus-img-xtract-ocr-venv-builder
+    environment:
+      UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
       - ocr_venv:/app/.venv
+      - uv_cache:/tmp/.uv-cache
     restart: "no"
 
   web-venv-builder:
@@ -15,8 +32,11 @@ services:
       target: web-venv-builder
     image: fundus-img-xtract:web-venv-builder
     container_name: fundus-img-xtract-web-venv-builder
+    environment:
+      UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
       - web_venv:/app/.venv
+      - uv_cache:/tmp/.uv-cache
     restart: "no"
 
   beat-venv-builder:
@@ -25,8 +45,11 @@ services:
       target: beat-venv-builder
     image: fundus-img-xtract:beat-venv-builder
     container_name: fundus-img-xtract-beat-venv-builder
+    environment:
+      UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
       - beat_venv:/app/.venv
+      - uv_cache:/tmp/.uv-cache
     restart: "no"
 
   general-venv-builder:
@@ -35,8 +58,11 @@ services:
       target: general-venv-builder
     image: fundus-img-xtract:general-venv-builder
     container_name: fundus-img-xtract-general-venv-builder
+    environment:
+      UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
       - general_venv:/app/.venv
+      - uv_cache:/tmp/.uv-cache
     restart: "no"
 
   web:
@@ -285,3 +311,4 @@ volumes:
   beat_venv:
   general_venv:
   ocr_venv:
+  uv_cache:

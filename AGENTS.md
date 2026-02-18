@@ -349,7 +349,7 @@ gh issue create --title "Feature name [bead-xyz]" --label "p2,Enhancement"
 
 ```bash
 # 1. Write failing test
-$DC exec -u $(id -u):$(id -g) web uv run pytest tests/test_feature.py -v
+$DC exec  web uv run pytest tests/test_feature.py -v
 
 # 2. Write minimal code to pass test
 

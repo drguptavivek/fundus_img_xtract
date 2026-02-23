@@ -93,4 +93,13 @@ def all_tasks_viewer(image_uuid: str):
             abort(404, description="Task not found or access denied")
 
         image_object = task.encounter_file if task.encounter_file else task.direct_image
-        return render_template("partials/_grading_card.html", image=image_object, image_uuid=image_uuid)
+        return render_template(
+            "partials/_grading_card.html",
+            image=image_object,
+            image_uuid=image_uuid,
+            show_annotation_sidebar=False,
+            show_presets=False,
+            show_save_preset=False,
+            show_cdr_controls=False,
+            lite_viewer_mode=True,
+        )

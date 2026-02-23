@@ -180,6 +180,13 @@
     <div class="col-lg-7">
       {% if image_object %}
       {% set image = image_object %}
+      {% set show_annotation_sidebar = false %}
+      {% set show_presets = false %}
+      {% set show_save_preset = false %}
+      {% set show_cdr_controls = false %}
+      {% set show_loupe_toggle = false %}
+      {% set show_shortcuts_button = false %}
+      {% set lite_viewer_mode = true %}
       {% include 'partials/_grading_card.html' %}
       {% else %}
       <div class="alert alert-warning mb-0">No image found for this task.</div>

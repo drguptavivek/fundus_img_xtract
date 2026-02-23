@@ -202,7 +202,8 @@
   }
 
   function hardResetAllLoupes() {
-    viewerStates.forEach((st) => {
+    document.querySelectorAll('.imggr-viewer-root').forEach((root) => {
+      const st = viewerStates.get(root);
       st?.resetLoupe?.();
       st?.setLoupeEnabled?.(false);
     });
@@ -319,6 +320,7 @@
     if (!main || !mainImg) return;
     if (!defaultRoot) defaultRoot = root;
     if (!activeRoot) activeRoot = root;
+    const isLiteMode = root.dataset.imggrLiteMode === 'true';
 
     // Prevent document-level extension hover scanners from repeatedly
     // processing viewer image/canvas elements. Keep scope to this viewer only.
@@ -619,7 +621,9 @@
       }
     }
     
-    function saveViewerSettingsToStorage() {
+    let saveViewerSettingsTimer = null;
+    function writeViewerSettingsToStorage() {
+      if (isLiteMode) return;
       try {
         const settings = {
           loupeEnabled: loupeEnabled
@@ -628,6 +632,26 @@
       } catch(e) {
         console.error('Error saving viewer settings to localStorage:', e);
       }
+    }
+    
+    function saveViewerSettingsToStorage(options = {}) {
+      if (isLiteMode) return;
+      const immediate = options && options.immediate === true;
+      if (immediate) {
+        if (saveViewerSettingsTimer) {
+          clearTimeout(saveViewerSettingsTimer);
+          saveViewerSettingsTimer = null;
+        }
+        writeViewerSettingsToStorage();
+        return;
+      }
+      if (saveViewerSettingsTimer) {
+        clearTimeout(saveViewerSettingsTimer);
+      }
+      saveViewerSettingsTimer = setTimeout(() => {
+        saveViewerSettingsTimer = null;
+        writeViewerSettingsToStorage();
+      }, 150);
     }
     
     // Touch/gesture state
@@ -1766,6 +1790,9 @@
     function handleTouchEnd(e) {
       isDragging = false;
       touchStartDistance = 0;
+      if (isLiteMode) {
+        saveViewerSettingsToStorage();
+      }
       e.preventDefault();
     }
     
@@ -1841,6 +1868,9 @@
       if (isMouseDragging) {
         isMouseDragging = false;
         main.style.cursor = '';
+        if (isLiteMode) {
+          saveViewerSettingsToStorage();
+        }
         e.preventDefault();
       }
     }
@@ -1868,7 +1898,7 @@
     
     // Save settings to localStorage when page is unloaded for rapid loading next time
     const saveSettingsOnUnload = () => {
-      saveViewerSettingsToStorage();
+      saveViewerSettingsToStorage({ immediate: true });
     };
     
     window.addEventListener('beforeunload', saveSettingsOnUnload);

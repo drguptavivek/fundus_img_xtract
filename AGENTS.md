@@ -1,10 +1,5 @@
 # AGENT INSTRUCTIONS
 
-## MANDATORY: Use td for Task Management
-
-You must run td usage --new-session at conversation start (or after /clear) to see current work.
-Use td usage -q for subsequent reads.
-
 ## Project Overview
 
 Medical imaging system for fundus image management with multi-disease grading (Glaucoma, DR, AMD), three-tier dual grading workflow, and dataset curation for AI training. Features: multi-source ingestion (ZIP/PDF/Excel), RBAC+ABAC access control, audit trails, PostgreSQL materialized views.

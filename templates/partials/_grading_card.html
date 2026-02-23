@@ -3,6 +3,13 @@
             image_uuid (optional, for dual grading tasks)
 #}
 {% set uuid = image_uuid or image.uuid %}
+{% set show_annotation_sidebar = show_annotation_sidebar | default(true) %}
+{% set show_presets = show_presets | default(true) %}
+{% set show_save_preset = show_save_preset | default(true) %}
+{% set show_cdr_controls = show_cdr_controls | default(true) %}
+{% set show_loupe_toggle = show_loupe_toggle | default(true) %}
+{% set show_shortcuts_button = show_shortcuts_button | default(true) %}
+{% set lite_viewer_mode = lite_viewer_mode | default(false) %}
 {% from "_forms.html" import csrf_field %}
 
 <div class="card shadow-sm">
@@ -65,18 +72,19 @@
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
 
+      {% if show_presets %}
       <!-- Presets -->
       <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets" id="imggr-presets-section">
-        
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="1">1</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="2">2</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="3">3</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="4">4</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="5">5</button>
       </div>
-      
-      <!-- Save Preset -->
+      {% endif %}
 
+      {% if show_save_preset %}
+      <!-- Save Preset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" 
         data-bs-toggle="modal" 
         data-bs-target="#imggr-preset-modal-{{ uuid }}" 
@@ -84,12 +92,16 @@
         Save
         {{csrf_field()}}
       </button>
+      {% endif %}
+      {% if show_loupe_toggle %}
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
               aria-pressed="false"
               aria-label="Toggle loupe magnifier">
         L
       </button>
+      {% endif %}
+      {% if show_shortcuts_button %}
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
               data-bs-toggle="modal"
@@ -97,9 +109,11 @@
               aria-label="Keyboard shortcuts">
         <span aria-hidden="true">?</span>
       </button>
+      {% endif %}
     </div>
   </div>
 
+  {% if show_cdr_controls %}
   <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel d-flex flex-wrap align-items-center gap-2">
     <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
       <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
@@ -140,17 +154,21 @@
       </button>
     </div>
   </div>
+  {% endif %}
 </div>
 
   <div class="card-body flex p-0">
 
     <div id="imggr-view-{{ uuid }}" 
         class="imggr-viewer-root d-flex justify-content-center" 
-        data-enc-id="{{ uuid }}">
+        data-enc-id="{{ uuid }}"
+        data-imggr-lite-mode="{{ 'true' if lite_viewer_mode else 'false' }}">
       
         <div class="imggr-stage position-relative">
           <div class="imggr-annot-layout d-flex">
+            {% if show_annotation_sidebar %}
             <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host></aside>
+            {% endif %}
             <div class="imggr-main-wrap d-flex justify-content-center">
               <div class="imggr-main rounded position-relative">
                 <img
@@ -297,6 +315,7 @@
 </div>
 
 <!-- Preset Save Modal -->
+{% if show_save_preset %}
 <div class="modal fade" id="imggr-preset-modal-{{ uuid }}" tabindex="-1" aria-labelledby="presetModalLabel-{{ uuid }}" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -339,6 +358,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 {# ensure viewer script is loaded once and scroll into view #}
 {% if csp_script_nonce %}

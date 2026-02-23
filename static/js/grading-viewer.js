@@ -23,6 +23,7 @@
   // Ordered list of filter values for cycling
   const FILTER_ORDER = ['none','redfree','greenboost','bluemono','gray','contrast','enhance'];
   const viewerStates = new WeakMap();
+  const viewerMetadataCache = new Map();
   const DEFAULT_LOUPE_SIZE = 200;
   const LOUPE_SIZE_STEP = 20;
   const LOUPE_SIZE_MIN = 100;
@@ -382,6 +383,198 @@
     function isPanLocked() {
       return root?.dataset?.imggrPanLocked === 'true';
     }
+
+    function applyMetadataToCard(meta) {
+      const imageUuidEl = card ? card.querySelector('.imggr-meta-image-uuid') : null;
+      const variantEl = card ? card.querySelector('.imggr-meta-variant') : null;
+      const formatEl = card ? card.querySelector('.imggr-meta-format') : null;
+      const modeEl = card ? card.querySelector('.imggr-meta-mode') : null;
+      const bitDepthEl = card ? card.querySelector('.imggr-meta-bitdepth') : null;
+      const grayscaleEl = card ? card.querySelector('.imggr-meta-grayscale') : null;
+      const alphaEl = card ? card.querySelector('.imggr-meta-alpha') : null;
+      const lumEl = card ? card.querySelector('.imggr-meta-luminance') : null;
+      const lumStdEl = card ? card.querySelector('.imggr-meta-luminance-std') : null;
+      const lumMedianEl = card ? card.querySelector('.imggr-meta-luminance-median') : null;
+      const lumPeakEl = card ? card.querySelector('.imggr-meta-luminance-peak') : null;
+      const meanRgbEl = card ? card.querySelector('.imggr-meta-mean-rgb') : null;
+      const medianRgbEl = card ? card.querySelector('.imggr-meta-median-rgb') : null;
+      const dimEl = card ? card.querySelector('.imggr-meta-dimensions') : null;
+      const dpiEl = card ? card.querySelector('.imggr-meta-dpi') : null;
+      const fileSizeEl = card ? card.querySelector('.imggr-meta-filesize') : null;
+      const sizeOkEl = card ? card.querySelector('.imggr-meta-size-ok') : null;
+      const createdAtEl = card ? card.querySelector('.imggr-meta-created-at') : null;
+      const updatedAtEl = card ? card.querySelector('.imggr-meta-updated-at') : null;
+      const pendingEl = card ? card.querySelector('.imggr-meta-pending') : null;
+      if (!card || !meta) return;
+
+      const showMeta = (el, text, visible) => {
+        if (!el) return;
+        if (visible) {
+          el.textContent = text;
+          el.classList.remove('d-none');
+        } else {
+          el.classList.add('d-none');
+        }
+      };
+      const formatBytes = (bytes) => {
+        const b = Number(bytes);
+        if (!Number.isFinite(b) || b <= 0) return null;
+        return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+      };
+
+      showMeta(imageUuidEl, `Image UUID: ${meta.image_uuid || uuid}`, Boolean((meta.image_uuid || uuid)));
+      showMeta(variantEl, `Variant: ${meta.image_variant}`, Boolean(meta.image_variant && String(meta.image_variant).trim()));
+      showMeta(formatEl, `Format: ${meta.format}`, Boolean(meta.format && String(meta.format).trim()));
+      showMeta(
+        bitDepthEl,
+        `Bit Depth: ${meta.bit_depth}`,
+        meta.bit_depth !== null && meta.bit_depth !== undefined && Number.isFinite(Number(meta.bit_depth))
+      );
+      showMeta(
+        grayscaleEl,
+        `Grayscale: ${meta.is_grayscale ? 'Yes' : 'No'}`,
+        meta.is_grayscale !== null && meta.is_grayscale !== undefined
+      );
+      showMeta(
+        alphaEl,
+        `Alpha: ${meta.has_alpha ? 'Yes' : 'No'}`,
+        meta.has_alpha !== null && meta.has_alpha !== undefined
+      );
+      if (modeEl) {
+        if (meta.mode) {
+          modeEl.textContent = `Color: ${meta.mode}`;
+          modeEl.classList.remove('d-none');
+        } else {
+          modeEl.classList.add('d-none');
+        }
+      }
+      if (lumEl) {
+        if (meta.avg_luminance !== null && meta.avg_luminance !== undefined && Number.isFinite(Number(meta.avg_luminance))) {
+          lumEl.textContent = `Luminance: ${Number(meta.avg_luminance).toFixed(1)}`;
+          lumEl.classList.remove('d-none');
+        } else {
+          lumEl.classList.add('d-none');
+        }
+      }
+      showMeta(
+        lumStdEl,
+        `Lum Std: ${Number(meta.luminance_std).toFixed(1)}`,
+        meta.luminance_std !== null && meta.luminance_std !== undefined && Number.isFinite(Number(meta.luminance_std))
+      );
+      const hasMedianChannels = (
+        meta.median_r !== null && meta.median_r !== undefined &&
+        meta.median_g !== null && meta.median_g !== undefined &&
+        meta.median_b !== null && meta.median_b !== undefined &&
+        Number.isFinite(Number(meta.median_r)) &&
+        Number.isFinite(Number(meta.median_g)) &&
+        Number.isFinite(Number(meta.median_b))
+      );
+      showMeta(
+        lumMedianEl,
+        `Median Lum: ${(
+          (0.2126 * Number(meta.median_r)) +
+          (0.7152 * Number(meta.median_g)) +
+          (0.0722 * Number(meta.median_b))
+        ).toFixed(1)}`,
+        hasMedianChannels
+      );
+      showMeta(
+        lumPeakEl,
+        `Peak Lum: ${Number(meta.max_luminance).toFixed(1)}`,
+        meta.max_luminance !== null && meta.max_luminance !== undefined && Number.isFinite(Number(meta.max_luminance))
+      );
+      const hasMeanChannels = (
+        meta.mean_r !== null && meta.mean_r !== undefined &&
+        meta.mean_g !== null && meta.mean_g !== undefined &&
+        meta.mean_b !== null && meta.mean_b !== undefined &&
+        Number.isFinite(Number(meta.mean_r)) &&
+        Number.isFinite(Number(meta.mean_g)) &&
+        Number.isFinite(Number(meta.mean_b))
+      );
+      showMeta(
+        meanRgbEl,
+        `Mean RGB: ${Number(meta.mean_r).toFixed(1)},${Number(meta.mean_g).toFixed(1)},${Number(meta.mean_b).toFixed(1)}`,
+        hasMeanChannels
+      );
+      showMeta(
+        medianRgbEl,
+        `Median RGB: ${Number(meta.median_r).toFixed(1)},${Number(meta.median_g).toFixed(1)},${Number(meta.median_b).toFixed(1)}`,
+        hasMedianChannels
+      );
+      if (dimEl) {
+        if (meta.width && meta.height) {
+          dimEl.textContent = `Dimensions: ${meta.width}x${meta.height}`;
+          dimEl.classList.remove('d-none');
+        } else {
+          dimEl.classList.add('d-none');
+        }
+      }
+      showMeta(
+        dpiEl,
+        `DPI: ${meta.dpi_x}x${meta.dpi_y}`,
+        Number.isFinite(Number(meta.dpi_x)) && Number.isFinite(Number(meta.dpi_y)) && Number(meta.dpi_x) > 0 && Number(meta.dpi_y) > 0
+      );
+      const sizeText = formatBytes(meta.file_size_bytes);
+      showMeta(fileSizeEl, `Size: ${sizeText}`, Boolean(sizeText));
+      showMeta(
+        sizeOkEl,
+        `Size OK: ${meta.size_ok ? 'Yes' : 'No'}`,
+        meta.size_ok !== null && meta.size_ok !== undefined
+      );
+      showMeta(
+        createdAtEl,
+        `Meta Created: ${meta.created_at}`,
+        Boolean(meta.created_at && String(meta.created_at).trim())
+      );
+      showMeta(
+        updatedAtEl,
+        `Meta Updated: ${meta.updated_at}`,
+        Boolean(meta.updated_at && String(meta.updated_at).trim())
+      );
+      if (pendingEl) {
+        const hasAny = Boolean(
+          (meta.image_uuid && String(meta.image_uuid).trim()) ||
+          (meta.image_variant && String(meta.image_variant).trim()) ||
+          (meta.format && String(meta.format).trim()) ||
+          (meta.mode && String(meta.mode).trim()) ||
+          (meta.bit_depth !== null && meta.bit_depth !== undefined) ||
+          (meta.is_grayscale !== null && meta.is_grayscale !== undefined) ||
+          (meta.has_alpha !== null && meta.has_alpha !== undefined) ||
+          (meta.avg_luminance !== null && meta.avg_luminance !== undefined) ||
+          (meta.luminance_std !== null && meta.luminance_std !== undefined) ||
+          hasMeanChannels ||
+          hasMedianChannels ||
+          (meta.max_luminance !== null && meta.max_luminance !== undefined) ||
+          (meta.width && meta.height) ||
+          (Number.isFinite(Number(meta.dpi_x)) && Number.isFinite(Number(meta.dpi_y)) && Number(meta.dpi_x) > 0 && Number(meta.dpi_y) > 0) ||
+          Boolean(sizeText) ||
+          (meta.size_ok !== null && meta.size_ok !== undefined) ||
+          (meta.created_at && String(meta.created_at).trim()) ||
+          (meta.updated_at && String(meta.updated_at).trim())
+        );
+        pendingEl.classList.toggle('d-none', hasAny);
+      }
+    }
+
+    async function fetchAndHydrateMetadata() {
+      if (!uuid || !card) return;
+      const hasServerMetadata = root.dataset.imggrMetadataPresent === 'true';
+      if (hasServerMetadata) return;
+
+      if (viewerMetadataCache.has(uuid)) {
+        applyMetadataToCard(viewerMetadataCache.get(uuid));
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/image-metadata/${encodeURIComponent(uuid)}`, { credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const payload = await resp.json();
+        if (!payload || payload.success !== true || !payload.data) return;
+        viewerMetadataCache.set(uuid, payload.data);
+        applyMetadataToCard(payload.data);
+      } catch (_) {}
+    }
     
     // Load saved viewer settings from localStorage for rapid loading
     function loadViewerSettingsFromStorage() {
@@ -407,6 +600,8 @@
         loupeToggle.classList.toggle('active', loupeEnabled);
       }
     }
+
+    fetchAndHydrateMetadata();
     
     // Do not restore brightness/contrast/filters across images
     

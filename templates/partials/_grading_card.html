@@ -162,7 +162,8 @@
     <div id="imggr-view-{{ uuid }}" 
         class="imggr-viewer-root d-flex justify-content-center" 
         data-enc-id="{{ uuid }}"
-        data-imggr-lite-mode="{{ 'true' if lite_viewer_mode else 'false' }}">
+        data-imggr-lite-mode="{{ 'true' if lite_viewer_mode else 'false' }}"
+        data-imggr-metadata-present="{{ 'true' if image_metadata else 'false' }}">
       
         <div class="imggr-stage position-relative">
           <div class="imggr-annot-layout d-flex">
@@ -208,20 +209,75 @@
           Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
         </small>
       </div>
-      <div class="d-flex flex-wrap gap-2 small text-muted">
-        {% if image_metadata %}
-          {% if image_metadata.mode %}
-            <span class="me-2">Color: {{ image_metadata.mode }}</span>
+      <div class="d-flex flex-wrap gap-2 small text-muted imggr-metadata-row">
+        <span class="me-2 imggr-meta-image-uuid {% if not uuid %}d-none{% endif %}">
+          {% if uuid %}Image UUID: {{ uuid }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-variant {% if not (image_metadata and image_metadata.image_variant) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.image_variant %}Variant: {{ image_metadata.image_variant }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-format {% if not (image_metadata and image_metadata.format) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.format %}Format: {{ image_metadata.format }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-mode {% if not (image_metadata and image_metadata.mode) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.mode %}Color: {{ image_metadata.mode }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-bitdepth {% if not (image_metadata and image_metadata.bit_depth is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.bit_depth is not none %}Bit Depth: {{ image_metadata.bit_depth }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-grayscale {% if not (image_metadata and image_metadata.is_grayscale is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.is_grayscale is not none %}Grayscale: {{ 'Yes' if image_metadata.is_grayscale else 'No' }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-alpha {% if not (image_metadata and image_metadata.has_alpha is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.has_alpha is not none %}Alpha: {{ 'Yes' if image_metadata.has_alpha else 'No' }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-luminance {% if not (image_metadata and image_metadata.avg_luminance is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.avg_luminance is not none %}Luminance: {{ '%.1f'|format(image_metadata.avg_luminance) }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-luminance-std {% if not (image_metadata and image_metadata.luminance_std is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.luminance_std is not none %}Lum Std: {{ '%.1f'|format(image_metadata.luminance_std) }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-luminance-median {% if not (image_metadata and image_metadata.median_r is not none and image_metadata.median_g is not none and image_metadata.median_b is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.median_r is not none and image_metadata.median_g is not none and image_metadata.median_b is not none %}
+            Median Lum: {{ '%.1f'|format((0.2126 * image_metadata.median_r) + (0.7152 * image_metadata.median_g) + (0.0722 * image_metadata.median_b)) }}
           {% endif %}
-          {% if image_metadata.avg_luminance is not none %}
-            <span class="me-2">Luminance: {{ '%.1f'|format(image_metadata.avg_luminance) }}</span>
+        </span>
+        <span class="me-2 imggr-meta-luminance-peak {% if not (image_metadata and image_metadata.max_luminance is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.max_luminance is not none %}Peak Lum: {{ '%.1f'|format(image_metadata.max_luminance) }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-mean-rgb {% if not (image_metadata and image_metadata.mean_r is not none and image_metadata.mean_g is not none and image_metadata.mean_b is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.mean_r is not none and image_metadata.mean_g is not none and image_metadata.mean_b is not none %}
+            Mean RGB: {{ '%.1f'|format(image_metadata.mean_r) }},{{ '%.1f'|format(image_metadata.mean_g) }},{{ '%.1f'|format(image_metadata.mean_b) }}
           {% endif %}
-          {% if image_metadata.width and image_metadata.height %}
-            <span class="me-2">Dimensions: {{ image_metadata.width }}x{{ image_metadata.height }}</span>
+        </span>
+        <span class="me-2 imggr-meta-median-rgb {% if not (image_metadata and image_metadata.median_r is not none and image_metadata.median_g is not none and image_metadata.median_b is not none) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.median_r is not none and image_metadata.median_g is not none and image_metadata.median_b is not none %}
+            Median RGB: {{ '%.1f'|format(image_metadata.median_r) }},{{ '%.1f'|format(image_metadata.median_g) }},{{ '%.1f'|format(image_metadata.median_b) }}
           {% endif %}
-        {% else %}
-          <span>Metadata pending</span>
-        {% endif %}
+        </span>
+        <span class="me-2 imggr-meta-dimensions {% if not (image_metadata and image_metadata.width and image_metadata.height) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.width and image_metadata.height %}Dimensions: {{ image_metadata.width }}x{{ image_metadata.height }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-dpi {% if not (image_metadata and image_metadata.dpi_x and image_metadata.dpi_y) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.dpi_x and image_metadata.dpi_y %}DPI: {{ image_metadata.dpi_x }}x{{ image_metadata.dpi_y }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-filesize {% if not (image_metadata and image_metadata.file_size_bytes) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.file_size_bytes %}Size: {{ '%.2f'|format(image_metadata.file_size_bytes / (1024 * 1024)) }} MB{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-size-ok {% if not (image_metadata and image_metadata.width and image_metadata.height) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.width and image_metadata.height %}
+            Size OK: {{ 'Yes' if (image_metadata.width >= 1024 and image_metadata.height >= 768) else 'No' }}
+          {% endif %}
+        </span>
+        <span class="me-2 imggr-meta-created-at {% if not (image_metadata and image_metadata.created_at) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.created_at %}Meta Created: {{ image_metadata.created_at | user_datetime }}{% endif %}
+        </span>
+        <span class="me-2 imggr-meta-updated-at {% if not (image_metadata and image_metadata.updated_at) %}d-none{% endif %}">
+          {% if image_metadata and image_metadata.updated_at %}Meta Updated: {{ image_metadata.updated_at | user_datetime }}{% endif %}
+        </span>
+        <span class="imggr-meta-pending {% if image_metadata %}d-none{% endif %}">
+          Metadata pending
+        </span>
       </div>
 
     </div>

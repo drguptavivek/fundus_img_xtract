@@ -93,6 +93,7 @@ docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-ve
 docker compose logs web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder --tail=100
 
 # THIRD STEP: Main containers (app code uses the venvs)
+docker compose down web celery-ocr-worker celery-general-worker celery-beat
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 docker compose logs web-venv-builder web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
 

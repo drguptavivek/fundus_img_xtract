@@ -784,6 +784,8 @@ body {
   object-position: left top;
   display: block;
   margin: 0;
+  /* Prevent hover-targeted extension scans from binding directly to <img>. */
+  pointer-events: none;
   transition: transform 0.12s ease;
   will-change: transform;
 }

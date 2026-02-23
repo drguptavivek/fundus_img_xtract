@@ -530,30 +530,25 @@
 
                                 <!-- Edit Button -->
                                 <div class="mt-2">
-                                    <a href="{{ url_for('direct_uploads.edit_upload', upload_id=upload.id) }}"
-                                        class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-pencil"></i> Edit
+                                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=upload.uuid) }}"
+                                        class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener">
+                                        <i class="bi bi-eye"></i> View Image
                                     </a>
-                                    {% if not upload.is_pregraded %}
+                                    {% if not upload.is_pregraded and not upload_has_non_pending_task.get(upload.id, False) %}
                                     <a href="{{ url_for('direct_uploads.edit_image', upload_id=upload.id) }}"
                                         class="btn btn-sm btn-outline-secondary">
                                         <i class="bi bi-image"></i> Edit Image
                                     </a>
+                                    {% elif not upload.is_pregraded and upload_has_non_pending_task.get(upload.id, False) %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                        title="Image editing disabled: associated task state is {{ (upload_task_states.get(upload.id, [])|list|sort|join(', ')) or 'not pending' }}">
+                                        <i class="bi bi-image"></i> Edit Image
+                                    </button>
                                     {% else %}
                                     <button type="button" class="btn btn-sm btn-outline-secondary" disabled
                                         title="Image editing is disabled for pre-graded uploads">
                                         <i class="bi bi-image"></i> Edit Image
                                     </button>
-                                    {% endif %}
-                                    {% if not upload.is_pregraded %}
-                                    {% if gradings and gradings[upload.id] %}
-                                    {% for grade in gradings[upload.id] %}
-                                    <a href="{{ url_for('grading.revise_grading', grade_id=grade.id) }}"
-                                        class="btn btn-sm btn-outline-success me-1">
-                                        <i class="bi bi-arrow-repeat"></i> Revise
-                                    </a>
-                                    {% endfor %}
-                                    {% endif %}
                                     {% endif %}
                                 </div>
                             </div>

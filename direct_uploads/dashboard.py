@@ -770,6 +770,27 @@ def dashboard():
                     gradings[upload_id] = []
                 gradings[upload_id].append(grade)
 
+        # Compute task states for each upload to gate image-edit actions
+        upload_task_states: dict[int, set[str]] = {}
+        upload_has_non_pending_task: dict[int, bool] = {}
+        if upload_ids:
+            task_rows = db_session.execute(
+                select(GradingTask.direct_image_upload_id, GradingTask.state)
+                .where(
+                    GradingTask.direct_image_upload_id.in_(upload_ids),
+                    GradingTask.direct_image_upload_id.is_not(None),
+                )
+            ).all()
+            for upload_id, state in task_rows:
+                if upload_id is None:
+                    continue
+                states = upload_task_states.setdefault(upload_id, set())
+                if state:
+                    states.add(state)
+
+            for upload_id, states in upload_task_states.items():
+                upload_has_non_pending_task[upload_id] = any(state != "pending" for state in states)
+
         # Side lookups for the current page
         ids = lambda attr: {getattr(u, attr) for u in uploads}
         hospitals = {h.id: h for h in db_session.execute(select(Hospital).where(Hospital.id.in_(ids("hospital_id")))).scalars().all()} if uploads else {}
@@ -907,5 +928,7 @@ def dashboard():
             filter_hospital_id=f_hospital_id, filter_camera_id=f_camera_id,
             filter_disease_id=f_disease_id, filter_area_id=f_area_id, filter_pregraded=f_pregraded,
             verification_map=verification_map,
-            bulk_edit_result=bulk_edit_result
+            bulk_edit_result=bulk_edit_result,
+            upload_has_non_pending_task=upload_has_non_pending_task,
+            upload_task_states=upload_task_states,
         )

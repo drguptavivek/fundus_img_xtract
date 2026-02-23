@@ -319,6 +319,18 @@
     if (!main || !mainImg) return;
     if (!defaultRoot) defaultRoot = root;
     if (!activeRoot) activeRoot = root;
+
+    // Prevent document-level extension hover scanners from repeatedly
+    // processing viewer image/canvas elements. Keep scope to this viewer only.
+    if (!root.__imggrHoverShieldBound) {
+      root.addEventListener('mouseover', (e) => {
+        const t = e.target;
+        if (t && t.closest && t.closest('img,svg,canvas,a')) {
+          e.stopPropagation();
+        }
+      }, true);
+      root.__imggrHoverShieldBound = true;
+    }
     
     // Get UUID from root element's data-enc-id attribute
     const uuid = root.dataset.encId;

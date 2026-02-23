@@ -320,6 +320,10 @@
             const html = await resp.text();
             viewerWrapper.innerHTML = html;
             viewerWrapper.dataset.imageUuid = newUuid;
+            const newViewerRoot = viewerWrapper.querySelector('.imggr-viewer-root');
+            if (newViewerRoot && window.initImggrViewers) {
+              window.initImggrViewers(newViewerRoot);
+            }
             console.log('[inter-rater] viewer updated', newUuid);
           } catch (err) {
             console.error('[inter-rater] fetch error', err);

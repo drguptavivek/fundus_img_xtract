@@ -11,6 +11,7 @@ from sqlalchemy import and_, or_, func, exists
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading, TaskTracker
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
+from utils.dualGradingEligibility import _has_user_graded_task_4weeks
 from typing import Dict, Optional, List, Tuple
 
 

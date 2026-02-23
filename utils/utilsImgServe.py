@@ -95,8 +95,7 @@ def _serve_encounter_image(encounter_file: EncounterFile, zip_file: ZipFile, uui
         image_path_str,
         encounter_file.filename,
         uuid,
-        cache_control='no-cache, no-store, must-revalidate',
-        add_no_cache_headers=True,
+        cache_control='private, max-age=60',
     )
 
 
@@ -227,8 +226,7 @@ def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
         image_path_str,
         filename,
         uuid,
-        cache_control='no-cache, no-store, must-revalidate',
-        add_no_cache_headers=True,
+        cache_control='private, max-age=60',
     )
 
 

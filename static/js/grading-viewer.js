@@ -35,12 +35,11 @@
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
   const VIEWER_SETTINGS_KEY = 'imggrViewerSettings';
   const VIEWER_PRESETS_KEY = 'imggrViewerPresets';
-  const IMG_PAN_STEP = 5;
-  const IMG_PAN_MIN = -600;
-  const IMG_PAN_MAX = 600;
+  const IMG_PAN_STEP = 28;
   const ZOOM_MIN = 40;
   const ZOOM_MAX = 500;
   const ZOOM_STEP = 20;
+  const KEYBOARD_ZOOM_STEP = 5;
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
@@ -204,7 +203,7 @@
 
   function hardResetAllLoupes() {
     document.querySelectorAll('.imggr-viewer-root').forEach((root) => {
-      const st = viewerStates.get(root);
+      const st = viewerStates.get(root) || root.__imggrState;
       st?.resetLoupe?.();
       st?.setLoupeEnabled?.(false);
     });
@@ -233,6 +232,7 @@
     if (state && typeof state.isCdrActive === 'function' && state.isCdrActive()) return;
       const rawKey = e.key || '';
       const k = rawKey.toLowerCase();
+      const code = e.code || '';
       if (!k) return;
       const card = activeRoot.closest('.card');
 
@@ -249,6 +249,8 @@
       // Always allow global hard reset, even while typing in form fields.
       if (rawKey === '/' || rawKey === '?') {
         e.preventDefault();
+        state?.resetLoupe?.();
+        state?.setLoupeEnabled?.(false);
         resetBtn?.click();
         hardResetAllLoupes();
         return;
@@ -269,17 +271,29 @@
         }
         return;
       }
-      if (rawKey === '[' || rawKey === '{') { e.preventDefault(); state?.adjustLoupeSize?.(-1); return; }
-      if (rawKey === ']' || rawKey === '}') { e.preventDefault(); state?.adjustLoupeSize?.(+1); return; }
-      if (rawKey === '-' || rawKey === '_') { e.preventDefault(); state?.adjustLoupeZoom?.(-1); return; }
-      if (rawKey === '=' || rawKey === '+' ) { e.preventDefault(); state?.adjustLoupeZoom?.(+1); return; }
+      if (rawKey === '[' || rawKey === '{' || code === 'BracketLeft') { e.preventDefault(); state?.adjustLoupeSize?.(-1); return; }
+      if (rawKey === ']' || rawKey === '}' || code === 'BracketRight') { e.preventDefault(); state?.adjustLoupeSize?.(+1); return; }
+      if (rawKey === '-' || rawKey === '_' || code === 'Minus' || code === 'NumpadSubtract') { e.preventDefault(); state?.adjustLoupeZoom?.(-1); return; }
+      if (rawKey === '=' || rawKey === '+' || code === 'Equal' || code === 'NumpadAdd') { e.preventDefault(); state?.adjustLoupeZoom?.(+1); return; }
       if (k === 'w') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(0, -1); return; }
       if (k === 's') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(0, +1); return; }
       if (k === 'a') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
       if (k === 'd') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
       // Use Z and X keys for image zoom to avoid conflict with loupe zoom
-      if (k === 'z') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) + ZOOM_STEP); return; }
-      if (k === 'x') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) - ZOOM_STEP); return; }
+      if (k === 'z') {
+        if (state?.isPanLocked?.()) return;
+        e.preventDefault();
+        const baseZoom = state?.getCurrentZoom?.() ?? 100;
+        state?.setZoomLevel?.(baseZoom + KEYBOARD_ZOOM_STEP);
+        return;
+      }
+      if (k === 'x') {
+        if (state?.isPanLocked?.()) return;
+        e.preventDefault();
+        const baseZoom = state?.getCurrentZoom?.() ?? 100;
+        state?.setZoomLevel?.(baseZoom - KEYBOARD_ZOOM_STEP);
+        return;
+      }
       if (k === '0') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.setZoomLevel?.(100); return; }
       if (k === 'home') { if (state?.isPanLocked?.()) return; e.preventDefault(); state?.fitToContainer?.(); return; }
 
@@ -665,11 +679,12 @@
         currentZoom = clamp(preset.zoom, ZOOM_MIN, ZOOM_MAX);
       }
       if (preset.panX !== undefined) {
-        imgPanX = clamp(preset.panX, IMG_PAN_MIN, IMG_PAN_MAX);
+        imgPanX = Number(preset.panX) || 0;
       }
       if (preset.panY !== undefined) {
-        imgPanY = clamp(preset.panY, IMG_PAN_MIN, IMG_PAN_MAX);
+        imgPanY = Number(preset.panY) || 0;
       }
+      clampPanToBounds();
       
       // Apply loupe state
       if (preset.loupeEnabled !== undefined) {
@@ -1002,6 +1017,9 @@
     
     // Apply saved filter and brightness/contrast after image is loaded
     mainImg.addEventListener('load', () => {
+      updateViewportSize();
+      clampPanToBounds();
+      applyImagePan();
       applySavedSettings();
       if (loupeEnabled) updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
@@ -1014,6 +1032,9 @@
     
     // If image is already loaded, apply settings immediately
     if (mainImg.complete && mainImg.naturalWidth > 0) {
+      updateViewportSize();
+      clampPanToBounds();
+      applyImagePan();
       applySavedSettings();
     }
 
@@ -1049,9 +1070,70 @@
       loupe.style.height = `${loupeSize}px`;
     }
 
+    function updateViewportSize(){
+      if (!main || !root) return;
+      const wrap = main.closest('.imggr-main-wrap');
+      const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
+      const rootRect = root.getBoundingClientRect();
+      let availableW = (wrapRect && wrapRect.width) ? wrapRect.width : rootRect.width;
+      let availableH = (wrapRect && wrapRect.height) ? wrapRect.height : 0;
+
+      if (!Number.isFinite(availableW) || availableW <= 0) {
+        availableW = window.innerWidth * 0.92;
+      }
+      if (!Number.isFinite(availableH) || availableH <= 0) {
+        const approxBottomMargin = 180;
+        availableH = window.innerHeight - rootRect.top - approxBottomMargin;
+      }
+
+      const viewportCap = Math.max(260, window.innerHeight * 0.72);
+      const targetSize = Math.floor(Math.max(260, Math.min(availableW, availableH, viewportCap)));
+      main.style.width = `${targetSize}px`;
+      main.style.height = `${targetSize}px`;
+    }
+
+    function getPanRangePx(zoomPercent = currentZoom){
+      if (!main || !mainImg) {
+        return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+      }
+      const containerW = main.clientWidth || 0;
+      const containerH = main.clientHeight || 0;
+      const natW = mainImg.naturalWidth || 0;
+      const natH = mainImg.naturalHeight || 0;
+      if (!containerW || !containerH || !natW || !natH) {
+        return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+      }
+
+      const imgAspect = natW / natH;
+      const containerAspect = containerW / containerH;
+      let baseW = containerW;
+      let baseH = containerH;
+      if (imgAspect > containerAspect) {
+        baseW = containerW;
+        baseH = containerW / imgAspect;
+      } else {
+        baseH = containerH;
+        baseW = containerH * imgAspect;
+      }
+
+      const scale = Math.max(0.01, zoomPercent / 100);
+      const scaledW = baseW * scale;
+      const scaledH = baseH * scale;
+      const overflowX = Math.max(0, scaledW - containerW);
+      const overflowY = Math.max(0, scaledH - containerH);
+      return { minX: -overflowX, maxX: 0, minY: -overflowY, maxY: 0 };
+    }
+
+    function clampPanToBounds(){
+      const { minX, maxX, minY, maxY } = getPanRangePx(currentZoom);
+      imgPanX = clamp(imgPanX, minX, maxX);
+      imgPanY = clamp(imgPanY, minY, maxY);
+    }
+
     function applyImagePan(){
       if (!mainImg) return;
-      mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%) scale(${currentZoom / 100})`;
+      clampPanToBounds();
+      mainImg.style.transform = `translate3d(${imgPanX}px, ${imgPanY}px, 0) scale(${currentZoom / 100})`;
       if (cdrDiscPoints.length || cdrCupPoints.length || cdrActive) {
         setCdrOverlayVisible(false);
         scheduleCdrRedrawAfterIdle();
@@ -1596,8 +1678,9 @@
       if (isPanLocked()) {
         return;
       }
-      const nextX = clamp(imgPanX + stepX * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
-      const nextY = clamp(imgPanY + stepY * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
+      const { minX, maxX, minY, maxY } = getPanRangePx(currentZoom);
+      const nextX = clamp(imgPanX + stepX * IMG_PAN_STEP, minX, maxX);
+      const nextY = clamp(imgPanY + stepY * IMG_PAN_STEP, minY, maxY);
       if (Math.abs(nextX - imgPanX) < 0.01 && Math.abs(nextY - imgPanY) < 0.01) return;
       imgPanX = nextX;
       imgPanY = nextY;
@@ -1716,32 +1799,30 @@
       if (!loupeEnabled || !loupe || !main || !e) return;
       const metrics = getDisplayedImageMetrics();
       if (!metrics) return;
-      const { rect: mainRect, displayWidth, displayHeight, offsetX, offsetY } = metrics;
-      if (!mainRect.width || !mainRect.height) return;
-      const pointerXRaw = e.clientX - mainRect.left;
-      const pointerYRaw = e.clientY - mainRect.top;
-      const constrainedX = clamp(pointerXRaw, 0, mainRect.width);
-      const constrainedY = clamp(pointerYRaw, 0, mainRect.height);
+      const { displayWidth, displayHeight, offsetX, offsetY } = metrics;
+      const containerRect = main.getBoundingClientRect();
+      if (!containerRect.width || !containerRect.height || !displayWidth || !displayHeight) return;
+      const pointerXRaw = e.clientX - containerRect.left;
+      const pointerYRaw = e.clientY - containerRect.top;
+      const constrainedX = clamp(pointerXRaw, 0, containerRect.width);
+      const constrainedY = clamp(pointerYRaw, 0, containerRect.height);
       loupe.style.left = `${e.clientX}px`;
       loupe.style.top = `${e.clientY}px`;
 
-      const imgRect = mainImg.getBoundingClientRect();
-      if (imgRect.width && imgRect.height) {
-        const imageX = clamp(constrainedX - offsetX, 0, displayWidth);
-        const imageY = clamp(constrainedY - offsetY, 0, displayHeight);
-        const loupeW = loupe.clientWidth || 0;
-        const loupeH = loupe.clientHeight || 0;
-        const bgPosX = (loupeW / 2) - (imageX * loupeZoom);
-        const bgPosY = (loupeH / 2) - (imageY * loupeZoom);
-        loupe.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
-        // Expose exact loupe mapping for overlay renderers (e.g., ROI overlay in feature geometry editor).
-        loupe.dataset.imgX = String(imageX);
-        loupe.dataset.imgY = String(imageY);
-        loupe.dataset.imgW = String(displayWidth);
-        loupe.dataset.imgH = String(displayHeight);
-        loupe.dataset.imgZoom = String(loupeZoom);
-        renderLoupeBase(imageX, imageY, displayWidth, displayHeight);
-      }
+      const imageX = clamp(constrainedX - offsetX, 0, displayWidth);
+      const imageY = clamp(constrainedY - offsetY, 0, displayHeight);
+      const loupeW = loupe.clientWidth || 0;
+      const loupeH = loupe.clientHeight || 0;
+      const bgPosX = (loupeW / 2) - (imageX * loupeZoom);
+      const bgPosY = (loupeH / 2) - (imageY * loupeZoom);
+      loupe.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+      // Expose exact loupe mapping for overlay renderers (e.g., ROI overlay in feature geometry editor).
+      loupe.dataset.imgX = String(imageX);
+      loupe.dataset.imgY = String(imageY);
+      loupe.dataset.imgW = String(displayWidth);
+      loupe.dataset.imgH = String(displayHeight);
+      loupe.dataset.imgZoom = String(loupeZoom);
+      renderLoupeBase(imageX, imageY, displayWidth, displayHeight);
       loupe.classList.add('is-active');
     }
 
@@ -1953,14 +2034,9 @@
         // Single touch drag - pan the image
         const deltaX = e.touches[0].clientX - dragStartX;
         const deltaY = e.touches[0].clientY - dragStartY;
-        
-        // Convert pixel movement to percentage-based pan
-        const containerRect = main.getBoundingClientRect();
-        const panStepX = (deltaX / containerRect.width) * 100;
-        const panStepY = (deltaY / containerRect.height) * 100;
-        
-        imgPanX = clamp(touchStartPanX + panStepX, IMG_PAN_MIN, IMG_PAN_MAX);
-        imgPanY = clamp(touchStartPanY + panStepY, IMG_PAN_MIN, IMG_PAN_MAX);
+        const { minX, maxX, minY, maxY } = getPanRangePx(currentZoom);
+        imgPanX = clamp(touchStartPanX + deltaX, minX, maxX);
+        imgPanY = clamp(touchStartPanY + deltaY, minY, maxY);
         
         applyImagePan();
         updateZoomDisplay();
@@ -2042,14 +2118,9 @@
       if (isMouseDragging) {
         const deltaX = e.clientX - mouseDragStartX;
         const deltaY = e.clientY - mouseDragStartY;
-        
-        // Convert pixel movement to percentage-based pan
-        const containerRect = main.getBoundingClientRect();
-        const panStepX = (deltaX / containerRect.width) * 150; // Use same sensitivity as touch
-        const panStepY = (deltaY / containerRect.height) * 150;
-        
-        imgPanX = clamp(mouseDragStartPanX + panStepX, IMG_PAN_MIN, IMG_PAN_MAX);
-        imgPanY = clamp(mouseDragStartPanY + panStepY, IMG_PAN_MIN, IMG_PAN_MAX);
+        const { minX, maxX, minY, maxY } = getPanRangePx(currentZoom);
+        imgPanX = clamp(mouseDragStartPanX + deltaX, minX, maxX);
+        imgPanY = clamp(mouseDragStartPanY + deltaY, minY, maxY);
         
         applyImagePan();
         updateZoomDisplay();
@@ -2083,6 +2154,9 @@
       }
     });
     window.addEventListener('resize', () => {
+      updateViewportSize();
+      clampPanToBounds();
+      applyImagePan();
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
@@ -2113,7 +2187,7 @@
       
       if (dimInfo && metrics.natW && metrics.natH) {
         // Calculate actual display dimensions based on zoom level
-        const mainDiv = main.querySelector('.imggr-main');
+        const mainDiv = main;
         if (mainDiv) {
           const containerRect = mainDiv.getBoundingClientRect();
           const aspectRatio = metrics.natW / metrics.natH;
@@ -2149,6 +2223,7 @@
 
     // Zoom/pan are not persisted across images
 
+    updateViewportSize();
     applyImagePan();
     applyLoupeDimensions();
     updateZoomDisplay();
@@ -2163,6 +2238,7 @@
         return;
       }
       currentZoom = clamp(zoomPercent, ZOOM_MIN, ZOOM_MAX);
+      clampPanToBounds();
       setCdrOverlayVisible(false);
       scheduleCdrRedrawAfterIdle();
       applyImagePan();
@@ -2178,6 +2254,19 @@
     function fitToContainer() {
       // Set zoom to 100% to fit the image to its container
       setZoomLevel(100);
+    }
+
+    function setPanPercent(nextPanX, nextPanY) {
+      imgPanX = Number(nextPanX) || 0;
+      imgPanY = Number(nextPanY) || 0;
+      clampPanToBounds();
+      applyImagePan();
+      updateZoomDisplay();
+      if (loupeEnabled) {
+        updateLoupeAssets();
+        if (lastPointerPos) updateLoupePosition(lastPointerPos);
+      }
+      saveViewerSettingsToStorage();
     }
     
     // The saveSettingsOnUnload function is already defined above
@@ -2214,7 +2303,7 @@
       resetImagePan,
       setZoomLevel,
       fitToContainer,
-      currentZoom, // Expose current zoom level for keyboard shortcuts
+      getCurrentZoom: () => currentZoom,
       getCurrentLoupeEnabled: () => loupeEnabled, // Expose current loupe state as getter
       applyPreset: async (presetNum) => {
         const presets = await loadViewerPresets();
@@ -2248,14 +2337,3 @@
   // Mark as loaded so partial can avoid double-loading
   try { window.__imggrViewerLoaded = true; } catch(_) {}
 })();
-    function setPanPercent(nextPanX, nextPanY) {
-      imgPanX = clamp(Number(nextPanX) || 0, IMG_PAN_MIN, IMG_PAN_MAX);
-      imgPanY = clamp(Number(nextPanY) || 0, IMG_PAN_MIN, IMG_PAN_MAX);
-      applyImagePan();
-      updateZoomDisplay();
-      if (loupeEnabled) {
-        updateLoupeAssets();
-        if (lastPointerPos) updateLoupePosition(lastPointerPos);
-      }
-      saveViewerSettingsToStorage();
-    }

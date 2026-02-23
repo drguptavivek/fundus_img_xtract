@@ -747,31 +747,32 @@ body {
   box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .25) !important;
 }
 
-/* Grading viewer: keep image anchored to top-left */
+/* Grading viewer: bounded square viewport (JS refines per layout) */
 .imggr-viewer-root .imggr-main {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  /* background: #000;      ensure black background */
-  padding: 2px;          /* small padding around the image */
+  background: #000;
+  padding: 2px;
   box-sizing: border-box;
-/* Grading viewer: responsive sizing for 1:1 medical images */
   overflow: hidden;
-  
-  /* Default for larger screens - container-driven sizing */
-  width: auto;
+  width: min(86vw, 72dvh);
+  height: min(86vw, 72dvh);
   max-width: 100%;
-  max-height: 100%;
+  max-height: min(72dvh, 100%);
+  min-width: 260px;
+  min-height: 260px;
   aspect-ratio: 1/1;
 }
 
-/* Small screens - width-based */
 @media (max-width: 768px) {
   .imggr-viewer-root .imggr-main {
-    width: 95vw;
-    height: auto;
-    max-height: 95vw; /* Maintain 1:1 aspect ratio */
-    max-width: 95vw; /* Ensure container doesn't exceed viewport width */
+    width: min(96vw, 64dvh);
+    height: min(96vw, 64dvh);
+    max-width: 96vw;
+    max-height: 64dvh;
+    min-width: 220px;
+    min-height: 220px;
   }
 }
 
@@ -787,6 +788,7 @@ body {
   /* Prevent hover-targeted extension scans from binding directly to <img>. */
   pointer-events: none;
   transition: transform 0.12s ease;
+  transform-origin: left top;
   will-change: transform;
 }
 
@@ -1444,6 +1446,14 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   overflow: hidden;
 }
 
+/* Hard clamp for grading task routes so viewer never expands to native image size. */
+#image-card .imggr-main {
+  width: min(86vw, 72dvh) !important;
+  height: min(86vw, 72dvh) !important;
+  max-width: 100% !important;
+  max-height: 72dvh !important;
+}
+
 #image-card .imggr-stage,
 #image-card .imggr-annot-layout,
 #image-card .imggr-main-wrap {
@@ -1494,6 +1504,13 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
     flex: initial;
     overflow-y: visible;
     overflow-x: visible;
+  }
+
+  #image-card .imggr-main {
+    width: min(96vw, 64dvh) !important;
+    height: min(96vw, 64dvh) !important;
+    max-width: 96vw !important;
+    max-height: 64dvh !important;
   }
 }
 

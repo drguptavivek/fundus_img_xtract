@@ -135,6 +135,8 @@
                                 {% if verification %}
                                     {% if verification.verified_status == 'unverified' %}
                                         <span class="badge bg-danger">Unverified</span>
+                                    {% elif verification.verified_status == 'not_gradable' %}
+                                        <span class="badge bg-warning text-dark">Not Gradable</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ verification.verified_status }}</span>
                                     {% endif %}
@@ -256,6 +258,7 @@
                         <select name="status" id="status" class="form-select">
                             <option value="">All</option>
                             <option value="verified" {% if filters.status == 'verified' %}selected{% endif %}>Anonymized</option>
+                            <option value="not_gradable" {% if filters.status == 'not_gradable' %}selected{% endif %}>Not Gradable</option>
                             <option value="unverified" {% if filters.status == 'unverified' %}selected{% endif %}>Unverified</option>
                             <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
                         </select>
@@ -365,6 +368,8 @@
                             <td>
                                 {% if verification.verified_status == 'verified' %}
                                     <span class="badge bg-success">Anonymized</span>
+                                {% elif verification.verified_status == 'not_gradable' %}
+                                    <span class="badge bg-warning text-dark">Not Gradable</span>
                                 {% elif verification.verified_status == 'unverified' %}
                                     <span class="badge bg-danger">Unverified</span>
                                 {% else %}

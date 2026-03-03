@@ -44,6 +44,8 @@ from services.taskCreationServices import ensure_task
 # Helpers
 # ---------------------------
 
+_DIRECT_VERIFICATION_COMPLETE_STATUSES = {"verified", "not_gradable"}
+
 def _uuid_str(u: UUID | str) -> str:
     """Return string form regardless of whether path converter gave UUID or str."""
     return str(u)
@@ -87,10 +89,10 @@ def _base_candidate_query(require_unverified: bool, db_session, restrict_to_user
     ).select_from(DirectImageUpload)
 
     if require_unverified:
-        # Find all image_upload_ids that are verified
+        # Find all image_upload_ids that are already resolved at verification stage
         verified_subquery = (
             select(DirectImageVerify.image_upload_id)
-            .where(DirectImageVerify.verified_status == 'verified')
+            .where(DirectImageVerify.verified_status.in_(_DIRECT_VERIFICATION_COMPLETE_STATUSES))
             .distinct()
         ).subquery()
         
@@ -117,14 +119,14 @@ def _get_next_unverified_uuid(db_session, allowed_lab_unit_ids: set[int] | None 
     if not allowed_lab_unit_ids:
         return None
 
-    # Subquery to find all image_upload_ids that are verified
+    # Subquery to find all image_upload_ids already resolved at verification stage
     verified_subquery = (
         select(DirectImageVerify.image_upload_id)
-        .where(DirectImageVerify.verified_status == 'verified')
+        .where(DirectImageVerify.verified_status.in_(_DIRECT_VERIFICATION_COMPLETE_STATUSES))
         .distinct()
     ).subquery()
 
-    # Base: uploads that are NOT in the 'verified' status
+    # Base: uploads that are NOT already resolved at verification stage
     stmt = select(DirectImageUpload.uuid).where(
         ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
     )
@@ -184,7 +186,7 @@ def anonymization_dashboard():
         verified_subquery = (
             select(DirectImageVerify.image_upload_id)
             .where(
-                DirectImageVerify.verified_status == "verified"
+                DirectImageVerify.verified_status.in_(_DIRECT_VERIFICATION_COMPLETE_STATUSES)
             )
             .distinct()
         ).subquery()
@@ -439,7 +441,7 @@ def anonymization_dashboard():
                 )
 
         pending_query = pending_query.where(
-            (DirectImageVerify.id.is_(None)) | (DirectImageVerify.verified_status != 'verified')
+            (DirectImageVerify.id.is_(None)) | (~DirectImageVerify.verified_status.in_(_DIRECT_VERIFICATION_COMPLETE_STATUSES))
         )
         if f_status and f_status in {'unverified', 'pending'}:
             pending_query = pending_query.where(DirectImageVerify.verified_status == f_status)
@@ -502,7 +504,7 @@ def anonymization_dashboard():
                         ~exists(select(1).where(
                             and_(
                                 DirectImageVerify.image_upload_id == DirectImageUpload.id,
-                                DirectImageVerify.verified_status == 'verified'
+                                DirectImageVerify.verified_status.in_(_DIRECT_VERIFICATION_COMPLETE_STATUSES)
                             )
                         ))
                     )
@@ -702,11 +704,25 @@ def anonymize_image(uuid: UUID):
                 dict(request.form)
             )
             
+            status_override = request.form.get("status_override", "").strip().lower()
+            not_gradable_reason = request.form.get("not_gradable_reason", "").strip()
+            remarks = (request.form.get("remarks") or "").strip()
+
             # Handle the toggle switch - if checked, it will be "verified", otherwise it won't be in form data
             verified_status = request.form.get("verified_status", "unverified")
-            remarks = request.form.get("remarks")
+            if status_override in {"verified", "unverified", "not_gradable"}:
+                verified_status = status_override
+            elif current_verification and current_verification.verified_status == "not_gradable":
+                verified_status = "not_gradable"
+
+            if verified_status == "not_gradable" and not remarks:
+                remarks = not_gradable_reason
             requested_verified_status = verified_status
             blocked_verified_attempt = False
+
+            if verified_status == "not_gradable" and not remarks:
+                flash("A reason is required when marking an image as not gradable.", "danger")
+                return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
 
             if verified_status == "verified" and pii_blocks_anonymization:
                 blocked_verified_attempt = True
@@ -776,26 +792,26 @@ def anonymize_image(uuid: UUID):
                         )
                         # Don't fail the verification if task creation fails, just log it
                 
-                elif verified_status != "verified":
-                    # If the image is being unverified, check if we can unverify
+                elif verified_status in {"unverified", "not_gradable"}:
+                    # If the image is being unverified or marked not gradable, check if we can clear grading eligibility
                     try:
                         from services.taskCreationServices import can_unverify_image
-                        # Check if we can unverify the image (all tasks must be pending)
+                        # Check if we can move the image back behind the verification gate (all tasks must be pending)
                         if not can_unverify_image(db_session, kind="direct", image_id=upload.id):
-                            # Prevent unverification if tasks are not pending
-                            flash("Cannot unverify image - some tasks are in progress.", "danger")
+                            action_label = "mark image as not gradable" if verified_status == "not_gradable" else "unverify image"
+                            flash(f"Cannot {action_label} - some tasks are in progress.", "danger")
                             return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
                         
                         # The verification record has already been created/updated above, so we don't need to do it again
                         # Just commit the verification
-                        editing_logger.debug("Attempting to commit verification for unverified status, upload ID: %s", upload.id)
+                        editing_logger.debug("Attempting to commit verification for status '%s', upload ID: %s", verified_status, upload.id)
                         try:
                             db_session.commit()
-                            editing_logger.debug("Successfully committed verification for unverified status, upload ID: %s", upload.id)
+                            editing_logger.debug("Successfully committed verification for status '%s', upload ID: %s", verified_status, upload.id)
                         except Exception as commit_error:
                             editing_logger.exception(
-                                "Failed to commit verification for unverified status, upload ID: %s - Error: %s", 
-                                upload.id, commit_error
+                                "Failed to commit verification for status '%s', upload ID: %s - Error: %s", 
+                                verified_status, upload.id, commit_error
                             )
                             raise
                         
@@ -805,22 +821,22 @@ def anonymize_image(uuid: UUID):
                             removed_count = remove_pending_tasks(db_session, kind="direct", image_id=upload.id)
                             if removed_count > 0:
                                 editing_logger.info(
-                                    "Removed %d pending grading task(s) for unverified direct image UUID %s", 
-                                    removed_count, upload.uuid
+                                    "Removed %d pending grading task(s) for direct image UUID %s after status '%s'", 
+                                    removed_count, upload.uuid, verified_status
                                 )
                         except Exception as task_error:
                             editing_logger.exception(
-                                "Failed to remove grading tasks for unverified direct image UUID %s: %s", 
-                                upload.uuid, task_error
+                                "Failed to remove grading tasks for direct image UUID %s after status '%s': %s", 
+                                upload.uuid, verified_status, task_error
                             )
                             # Don't fail the unverification if task removal fails, just log it
                     
                     except Exception as task_error:
                         editing_logger.exception(
-                            "Failed to check if direct image UUID %s can be unverified: %s", 
-                            upload.uuid, task_error
+                            "Failed to check if direct image UUID %s can be moved to status '%s': %s", 
+                            upload.uuid, verified_status, task_error
                         )
-                        flash("Failed to verify unverification conditions.", "danger")
+                        flash("Failed to verify grading gate conditions.", "danger")
                         return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
                 
                 else:
@@ -838,7 +854,10 @@ def anonymize_image(uuid: UUID):
                         raise
                 
                 if not blocked_verified_attempt:
-                    flash(f"Image {upload.filename} marked as {verified_status}.", "success")
+                    if verified_status == "not_gradable":
+                        flash(f"Image {upload.filename} marked as not gradable.", "warning")
+                    else:
+                        flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 
                 # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
                 next_uuid = _get_next_unverified_uuid(db_session)
@@ -903,6 +922,9 @@ def anonymize_image(uuid: UUID):
             current_verification=current_verification,
             active_pii_verification=active_pii_verification,
             pii_blocks_anonymization=pii_blocks_anonymization,
+            is_not_gradable=bool(
+                current_verification and current_verification.verified_status == "not_gradable"
+            ),
             uuid=uuid_val,
             has_edited_version=bool(upload.edited_filename),
             is_verified=is_verified,

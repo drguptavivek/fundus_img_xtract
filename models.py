@@ -923,7 +923,7 @@ class DirectImageVerify(Base):
 
     __table_args__ = (
         UniqueConstraint("image_upload_id", name="uq_direct_image_verify_upload_id"),
-        CheckConstraint("verified_status IN ('verified', 'unverified', 'pending')", name="ck_di_verify_status",),
+        CheckConstraint("verified_status IN ('verified', 'unverified', 'pending', 'not_gradable')", name="ck_di_verify_status",),
     )
 
 

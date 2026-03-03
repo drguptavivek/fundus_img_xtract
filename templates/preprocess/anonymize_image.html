@@ -119,6 +119,20 @@
                   <i class="bi bi-arrow-clockwise"></i> OCR Redetect
                 </button>
                 <span id="ocr-status-badge" class="badge text-bg-secondary">OCR: pending</span>
+                <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="pii_status" value="clear">
+                  <button type="submit" class="btn btn-outline-success btn-sm">
+                    Mark PII Clear (Manual)
+                  </button>
+                </form>
+                <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="pii_status" value="detected">
+                  <button type="submit" class="btn btn-outline-danger btn-sm">
+                    Mark PII Detected (Manual)
+                  </button>
+                </form>
                 {% if has_edited_version %}
                   <button id="restore-original" class="btn btn-danger btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}
                           data-restore-url="{{ url_for('preprocess.restore_original_anonymized_image', uuid=uuid) }}">
@@ -226,22 +240,6 @@
               </div>
             </div>
           </form>
-          <div class="mt-3 d-flex align-items-center gap-2">
-            <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="pii_status" value="clear">
-              <button type="submit" class="btn btn-outline-success btn-sm">
-                Mark PII Clear (Manual)
-              </button>
-            </form>
-            <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="pii_status" value="detected">
-              <button type="submit" class="btn btn-outline-danger btn-sm">
-                Mark PII Detected (Manual)
-              </button>
-            </form>
-          </div>
         </div>
       </div>
 

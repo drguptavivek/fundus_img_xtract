@@ -43,6 +43,7 @@
             <th scope="col">Source</th>
             <th scope="col">Hospital</th>
             <th scope="col">Lab Unit</th>
+            <th scope="col">Verification</th>
             <th scope="col">Capture / Created</th>
             <th scope="col">Actions</th>
           </tr>
@@ -54,6 +55,19 @@
             <td class="text-capitalize">{{ row.source }}</td>
             <td>{{ row.hospital_name or '—' }}</td>
             <td>{{ row.lab_unit_name or '—' }}</td>
+            <td>
+              {% if row.verification_status == 'verified' %}
+                <span class="badge bg-success">Verified</span>
+              {% elif row.verification_status == 'not_gradable' %}
+                <span class="badge bg-warning text-dark">Not Gradable</span>
+              {% elif row.verification_status == 'unverified' %}
+                <span class="badge bg-danger">Unverified</span>
+              {% elif row.verification_status == 'pending' %}
+                <span class="badge bg-secondary">Pending</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
             <td>
               {% if row.record_date %}
                 {{ row.record_date|user_datetime('%Y-%m-%d %H:%M') }}

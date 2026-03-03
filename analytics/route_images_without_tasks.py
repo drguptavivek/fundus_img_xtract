@@ -17,6 +17,7 @@ from models import (
     Disease,
     DirectImageUpload,
     DiabeticRetinopathyReport,
+    DirectImageVerify,
     EncounterFile,
     GlaucomaResultsCleaned,
     GradingTask,
@@ -117,6 +118,18 @@ def images_without_tasks() -> str:
             direct_query = direct_query.options(selectinload(DirectImageUpload.lab_unit).selectinload(LabUnit.hospital))
             
             direct_rows = direct_query.all()
+            direct_ids = [upload.id for upload in direct_rows]
+            verification_by_upload_id: dict[int, str] = {}
+            if direct_ids:
+                verification_rows = (
+                    db.query(DirectImageVerify.image_upload_id, DirectImageVerify.verified_status)
+                    .filter(DirectImageVerify.image_upload_id.in_(direct_ids))
+                    .all()
+                )
+                verification_by_upload_id = {
+                    image_upload_id: verified_status
+                    for image_upload_id, verified_status in verification_rows
+                }
 
             for upload in direct_rows:
                 lab_unit = upload.lab_unit
@@ -133,6 +146,7 @@ def images_without_tasks() -> str:
                         "hospital_name": lab_unit.hospital.name if lab_unit and lab_unit.hospital else None,
                         "record_date": upload.created_at,
                         "date_display": upload.created_at.date() if upload.created_at else None,
+                        "verification_status": verification_by_upload_id.get(upload.id),
                         "encounter_id": None,
                         "view_url": url_for("analytics.view_direct_image", uuid_str=upload.uuid),
                     }

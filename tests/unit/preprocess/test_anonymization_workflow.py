@@ -5,7 +5,7 @@ from sqlalchemy import select, func
 from auth.security import hash_password
 
 from models import (
-    User, Role, DirectImageUpload, DirectImageVerify, GradingTask, 
+    User, Role, DirectImageUpload, DirectImageVerify, GradingTask, ImagePiiVerification,
     LabUnit, Hospital, Camera, Disease, Area
 )
 from tests.helpers.test_factories import TestDataFactory
@@ -187,6 +187,64 @@ class TestAnonymizationWorkflow:
         ).scalar_one()
         assert verification.verified_status == 'unverified'
         
+        task_check = db_session.execute(
+            select(GradingTask).where(GradingTask.direct_image_upload_id == upload.id)
+        ).scalar_one_or_none()
+        assert task_check is None
+
+    def test_detected_pii_blocks_marking_image_verified(self, auth_client, db_session):
+        upload = self.create_upload(db_session, "pii_detected.jpg", verified=False)
+        db_session.add(
+            ImagePiiVerification(
+                image_uuid=str(upload.uuid),
+                image_variant="orig",
+                pii_status="detected",
+                source="manual",
+            )
+        )
+        db_session.commit()
+
+        client = auth_client(db_session.merge(self.optometrist))
+        resp = client.post(
+            f'/preprocess/anonymize_image/{upload.uuid}',
+            data={'verified_status': 'verified', 'remarks': 'Attempt verify'},
+            follow_redirects=True,
+        )
+
+        assert resp.status_code == 200
+        assert "Cannot mark this image as anonymized" in resp.text
+
+        verification = db_session.execute(
+            select(DirectImageVerify).where(DirectImageVerify.image_upload_id == upload.id)
+        ).scalar_one()
+        assert verification.verified_status == 'unverified'
+
+    def test_manual_detected_pii_unverifies_image(self, auth_client, db_session):
+        upload = self.create_upload(db_session, "manual_detected.jpg", verified=True)
+        task = GradingTask(
+            direct_image_upload_id=upload.id,
+            disease_id=self.disease.id,
+            lab_unit_id=self.lab_unit_a.id,
+            state='pending'
+        )
+        db_session.add(task)
+        db_session.commit()
+
+        client = auth_client(db_session.merge(self.optometrist))
+        resp = client.post(
+            f'/preprocess/anonymize_image/{upload.uuid}/pii_override',
+            data={'pii_status': 'detected'},
+            follow_redirects=True,
+        )
+
+        assert resp.status_code == 200
+        assert "PII detected. The image was moved back to unverified." in resp.text
+
+        verification = db_session.execute(
+            select(DirectImageVerify).where(DirectImageVerify.image_upload_id == upload.id)
+        ).scalar_one()
+        assert verification.verified_status == 'unverified'
+
         task_check = db_session.execute(
             select(GradingTask).where(GradingTask.direct_image_upload_id == upload.id)
         ).scalar_one_or_none()

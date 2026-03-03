@@ -134,6 +134,22 @@ def _get_next_unverified_uuid(db_session, allowed_lab_unit_ids: set[int] | None 
     stmt = stmt.order_by(DirectImageUpload.created_at.asc(), DirectImageUpload.id.asc()).limit(1)
     return db_session.execute(stmt).scalars().first()
 
+
+def _get_active_image_variant(upload: DirectImageUpload) -> str:
+    return "edited" if upload.edited_filename else "orig"
+
+
+def _get_active_pii_verification(
+    db_session,
+    upload: DirectImageUpload,
+) -> ImagePiiVerification | None:
+    return db_session.execute(
+        select(ImagePiiVerification).where(
+            ImagePiiVerification.image_uuid == upload.uuid,
+            ImagePiiVerification.image_variant == _get_active_image_variant(upload),
+        )
+    ).scalar_one_or_none()
+
 # ---------------------------
 # Dashboard
 # ---------------------------
@@ -672,6 +688,10 @@ def anonymize_image(uuid: UUID):
             current_verification is not None,
             current_verification.verified_status if current_verification else "None"
         )
+        active_pii_verification = _get_active_pii_verification(db_session, upload)
+        pii_blocks_anonymization = bool(
+            active_pii_verification and active_pii_verification.pii_status == "detected"
+        )
 
         if request.method == "POST":
             # Log request details for debugging
@@ -685,10 +705,21 @@ def anonymize_image(uuid: UUID):
             # Handle the toggle switch - if checked, it will be "verified", otherwise it won't be in form data
             verified_status = request.form.get("verified_status", "unverified")
             remarks = request.form.get("remarks")
+            requested_verified_status = verified_status
+            blocked_verified_attempt = False
+
+            if verified_status == "verified" and pii_blocks_anonymization:
+                blocked_verified_attempt = True
+                verified_status = "unverified"
+                flash(
+                    "Cannot mark this image as anonymized while the current PII status is detected. "
+                    "Clear the PII status first or save an edited image and re-run OCR.",
+                    "danger",
+                )
             
             editing_logger.debug(
-                "Form processing - Verified status: %s, Remarks: %s, Upload ID: %s",
-                verified_status, remarks, upload.id if upload else "Unknown"
+                "Form processing - Requested status: %s, Effective status: %s, Remarks: %s, Upload ID: %s",
+                requested_verified_status, verified_status, remarks, upload.id if upload else "Unknown"
             )
 
             if current_verification:
@@ -806,7 +837,8 @@ def anonymize_image(uuid: UUID):
                         )
                         raise
                 
-                flash(f"Image {upload.filename} marked as {verified_status}.", "success")
+                if not blocked_verified_attempt:
+                    flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 
                 # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
                 next_uuid = _get_next_unverified_uuid(db_session)
@@ -869,6 +901,8 @@ def anonymize_image(uuid: UUID):
             image_url=image_url,
             edited_image_url=edited_image_url,
             current_verification=current_verification,
+            active_pii_verification=active_pii_verification,
+            pii_blocks_anonymization=pii_blocks_anonymization,
             uuid=uuid_val,
             has_edited_version=bool(upload.edited_filename),
             is_verified=is_verified,
@@ -931,6 +965,34 @@ def pii_override(uuid: UUID):
                     checked_at=utcnow(),
                 )
             )
+
+        if pii_status == "detected":
+            current_verification = db_session.execute(
+                select(DirectImageVerify).where(DirectImageVerify.image_upload_id == upload.id)
+            ).scalar_one_or_none()
+            if current_verification and current_verification.verified_status == "verified":
+                from services.taskCreationServices import can_unverify_image, remove_pending_tasks
+
+                if can_unverify_image(db_session, kind="direct", image_id=upload.id):
+                    current_verification.verified_status = "unverified"
+                    current_verification.verified_by_id = current_user.id
+                    current_verification.verified_at = func.now()
+                    try:
+                        remove_pending_tasks(db_session, kind="direct", image_id=upload.id)
+                    except Exception:
+                        editing_logger.exception(
+                            "Failed removing pending tasks while reverting verification for uuid=%s",
+                            sanitize_log_value(uuid_val),
+                        )
+                    flash(
+                        "PII detected. The image was moved back to unverified.",
+                        "warning",
+                    )
+                else:
+                    flash(
+                        "PII detected, but anonymization status could not be reset because grading tasks are in progress.",
+                        "warning",
+                    )
 
         try:
             from analytics.route_dataset_curation import _clear_dataset_screen_cache

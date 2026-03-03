@@ -43,6 +43,12 @@
       This image is already graded ({{ blocking_task_states | join(', ') }}). Edits are allowed here and will be audited.
     </div>
   {% endif %}
+  {% if pii_blocks_anonymization %}
+    <div class="alert alert-danger py-2">
+      The current OCR/manual PII status is <strong>detected</strong>{% if active_pii_verification and active_pii_verification.source %} ({{ active_pii_verification.source }}){% endif %}.
+      This image cannot be marked anonymized until the active PII status is cleared.
+    </div>
+  {% endif %}
 
   <div class="row" style="padding: 1rem 0rem;">
     <div class="col-10">
@@ -170,11 +176,15 @@
                 <label for="verified_status" class="form-label mb-1">Anonymization Status</label>
                 <div class="form-check form-switch mb-2">
                   <input class="form-check-input" type="checkbox" id="verified_status" name="verified_status" value="verified" 
-                         {% if current_verification and current_verification.verified_status == 'verified' %}checked{% endif %}>
+                         {% if current_verification and current_verification.verified_status == 'verified' %}checked{% endif %}
+                         {% if pii_blocks_anonymization %}disabled{% endif %}>
                   <label class="form-check-label" for="verified_status">
                     {% if current_verification and current_verification.verified_status == 'verified' %}Anonymized{% else %}Unverified{% endif %}
                   </label>
                 </div>
+                {% if pii_blocks_anonymization %}
+                  <div class="form-text text-danger">Clear the active PII status before anonymizing this image.</div>
+                {% endif %}
                 {% if next_unverified_uuid %}
                   <a class="btn btn-outline-secondary"
                      href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) }}">

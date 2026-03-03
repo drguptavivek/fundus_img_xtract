@@ -318,6 +318,26 @@
     const otherReasonText = document.getElementById('not-gradable-other-text');
     const notGradableOptionInputs = document.querySelectorAll('input[name="not_gradable_option"]');
     const notGradableModal = notGradableModalEl ? new bootstrap.Modal(notGradableModalEl) : null;
+    const ocrStatusBadge = document.getElementById('ocr-status-badge');
+
+    function updateOcrStatusBadge(status, label, source) {
+      if (!ocrStatusBadge) {
+        return;
+      }
+      const sourceTag = source ? ` (${source})` : '';
+      const text = label ? `OCR: ${label}${sourceTag}` : `OCR: ${status || 'pending'}${sourceTag}`;
+      ocrStatusBadge.textContent = text;
+      ocrStatusBadge.className = 'badge';
+      if (status === 'detected') {
+        ocrStatusBadge.classList.add('text-bg-danger');
+      } else if (status === 'clear') {
+        ocrStatusBadge.classList.add('text-bg-success');
+      } else if (status === 'error') {
+        ocrStatusBadge.classList.add('text-bg-warning');
+      } else {
+        ocrStatusBadge.classList.add('text-bg-secondary');
+      }
+    }
 
     // Submit form when remarks change (with debounce)
     let remarksTimeout;
@@ -384,7 +404,7 @@
           }
 
           if (payload.data) {
-            setOcrStatusBadge(
+            updateOcrStatusBadge(
               payload.data.status,
               payload.data.status === 'detected' ? 'PII detected' : 'No PII',
               payload.data.source || 'manual'

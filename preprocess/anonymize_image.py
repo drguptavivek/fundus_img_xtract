@@ -708,12 +708,10 @@ def anonymize_image(uuid: UUID):
             not_gradable_reason = request.form.get("not_gradable_reason", "").strip()
             remarks = (request.form.get("remarks") or "").strip()
 
-            # Handle the toggle switch - if checked, it will be "verified", otherwise it won't be in form data
-            verified_status = request.form.get("verified_status", "unverified")
+            current_status = current_verification.verified_status if current_verification else "unverified"
+            verified_status = current_status
             if status_override in {"verified", "unverified", "not_gradable"}:
                 verified_status = status_override
-            elif current_verification and current_verification.verified_status == "not_gradable":
-                verified_status = "not_gradable"
 
             if verified_status == "not_gradable" and not remarks:
                 remarks = not_gradable_reason

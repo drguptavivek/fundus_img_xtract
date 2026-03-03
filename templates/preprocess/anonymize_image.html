@@ -178,21 +178,28 @@
             <input type="hidden" name="status_override" id="status_override" value="">
             <input type="hidden" name="not_gradable_reason" id="not_gradable_reason" value="">
             <div class="row g-3 align-items-end">
-              <!-- First panel: toggle switch -->
+              <!-- First panel: explicit verification actions -->
               <div class="col-12 col-md-6">
-                <label for="verified_status" class="form-label mb-1">Anonymization Status</label>
-                <div class="form-check form-switch mb-2">
-                  <input class="form-check-input" type="checkbox" id="verified_status" name="verified_status" value="verified" 
-                         {% if current_verification and current_verification.verified_status == 'verified' %}checked{% endif %}
-                         {% if pii_blocks_anonymization %}disabled{% endif %}>
-                  <label class="form-check-label" for="verified_status">
-                    {% if current_verification and current_verification.verified_status == 'verified' %}Anonymized{% elif is_not_gradable %}Not Gradable{% else %}Unverified{% endif %}
-                  </label>
+                <label class="form-label mb-1">Verification Decision</label>
+                <div class="mb-2">
+                  {% if current_verification and current_verification.verified_status == 'verified' %}
+                    <span class="badge bg-success">Verified</span>
+                  {% elif is_not_gradable %}
+                    <span class="badge bg-warning text-dark">Not Gradable</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Unverified</span>
+                  {% endif %}
                 </div>
                 {% if pii_blocks_anonymization %}
-                  <div class="form-text text-danger">Clear the active PII status before anonymizing this image.</div>
+                  <div class="form-text text-danger mb-2">Clear the active PII status before marking this image verified.</div>
                 {% endif %}
                 <div class="d-flex gap-2 mt-2">
+                  <button type="button"
+                          class="btn btn-outline-success btn-sm"
+                          id="mark-verified"
+                          {% if pii_blocks_anonymization or (current_verification and current_verification.verified_status == 'verified') %}disabled{% endif %}>
+                    Mark Verified
+                  </button>
                   {% if is_not_gradable %}
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-not-gradable">
                       Clear Not Gradable
@@ -259,32 +266,13 @@
 <script>
 {% endif %}
   document.addEventListener('DOMContentLoaded', function() {
-    const toggle = document.getElementById('verified_status');
-    const label = toggle.nextElementSibling;
     const form = document.getElementById('anonymization-form');
     const remarks = document.getElementById('remarks');
     const statusOverride = document.getElementById('status_override');
     const notGradableReason = document.getElementById('not_gradable_reason');
+    const markVerifiedBtn = document.getElementById('mark-verified');
     const markNotGradableBtn = document.getElementById('mark-not-gradable');
     const clearNotGradableBtn = document.getElementById('clear-not-gradable');
-    
-    // Update label text when toggle changes
-    if (toggle) {
-      toggle.addEventListener('change', function() {
-        if (statusOverride) {
-          statusOverride.value = '';
-        }
-        if (notGradableReason) {
-          notGradableReason.value = '';
-        }
-        label.textContent = this.checked ? 'Anonymized' : 'Unverified';
-        
-        // Automatically submit the form after a short delay to allow UI to update
-        setTimeout(function() {
-          form.submit();
-        }, 300);
-      });
-    }
 
     // Submit form when remarks change (with debounce)
     let remarksTimeout;
@@ -295,6 +283,14 @@
         form.submit();
       }, 1000);
     });
+
+    if (markVerifiedBtn) {
+      markVerifiedBtn.addEventListener('click', function() {
+        statusOverride.value = 'verified';
+        notGradableReason.value = '';
+        form.submit();
+      });
+    }
 
     if (markNotGradableBtn) {
       markNotGradableBtn.addEventListener('click', function() {

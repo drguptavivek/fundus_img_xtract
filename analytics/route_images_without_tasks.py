@@ -149,6 +149,7 @@ def images_without_tasks() -> str:
                         "verification_status": verification_by_upload_id.get(upload.id),
                         "encounter_id": None,
                         "view_url": url_for("analytics.view_direct_image", uuid_str=upload.uuid),
+                        "edit_url": url_for("preprocess.anonymize_image", uuid=upload.uuid),
                     }
                 )
 

@@ -80,6 +80,9 @@
             <td>
               {% if row.view_url %}
               <a class="btn btn-sm btn-outline-primary" href="{{ row.view_url }}">Open</a>
+              {% if row.edit_url %}
+              <a class="btn btn-sm btn-outline-secondary" href="{{ row.edit_url }}">Edit</a>
+              {% endif %}
               {% else %}
               <span class="text-muted">—</span>
               {% endif %}

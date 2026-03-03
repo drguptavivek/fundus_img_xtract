@@ -245,6 +245,54 @@
         </div>
       </div>
 
+      <div class="modal fade" id="notGradableModal" tabindex="-1" aria-labelledby="notGradableModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="notGradableModalLabel">Mark Image as Not Gradable</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-2 fw-semibold">Select a reason</div>
+              <div class="d-flex flex-column gap-2" id="not-gradable-options">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-media-opacity" value="Media Opacity">
+                  <label class="form-check-label" for="ng-media-opacity">Media Opacity</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-inadequate-fov" value="Inadequate Field of View">
+                  <label class="form-check-label" for="ng-inadequate-fov">Inadequate Field of View</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-glare" value="Glare or Reflection Artifact">
+                  <label class="form-check-label" for="ng-glare">Glare or Reflection Artifact</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-poor-focus" value="Poor Focus or Motion Blur">
+                  <label class="form-check-label" for="ng-poor-focus">Poor Focus or Motion Blur</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-small-pupil" value="Small Pupil / Inadequate Dilation">
+                  <label class="form-check-label" for="ng-small-pupil">Small Pupil / Inadequate Dilation</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="not_gradable_option" id="ng-other" value="Other">
+                  <label class="form-check-label" for="ng-other">Other</label>
+                </div>
+              </div>
+              <div class="mt-3 d-none" id="not-gradable-other-wrap">
+                <label for="not-gradable-other-text" class="form-label">Other reason</label>
+                <textarea class="form-control" id="not-gradable-other-text" rows="3" placeholder="Enter reason"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-danger" id="confirm-not-gradable">Mark Not Gradable</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Canvas Container (90% width) -->
       <div class="canvas-container">
         <canvas id="imageCanvas"
@@ -273,6 +321,12 @@
     const markVerifiedBtn = document.getElementById('mark-verified');
     const markNotGradableBtn = document.getElementById('mark-not-gradable');
     const clearNotGradableBtn = document.getElementById('clear-not-gradable');
+    const notGradableModalEl = document.getElementById('notGradableModal');
+    const confirmNotGradableBtn = document.getElementById('confirm-not-gradable');
+    const otherReasonWrap = document.getElementById('not-gradable-other-wrap');
+    const otherReasonText = document.getElementById('not-gradable-other-text');
+    const notGradableOptionInputs = document.querySelectorAll('input[name="not_gradable_option"]');
+    const notGradableModal = notGradableModalEl ? new bootstrap.Modal(notGradableModalEl) : null;
 
     // Submit form when remarks change (with debounce)
     let remarksTimeout;
@@ -294,13 +348,9 @@
 
     if (markNotGradableBtn) {
       markNotGradableBtn.addEventListener('click', function() {
-        const reason = window.prompt('Reason for marking this image as not gradable:');
-        if (!reason || !reason.trim()) {
-          return;
+        if (notGradableModal) {
+          notGradableModal.show();
         }
-        statusOverride.value = 'not_gradable';
-        notGradableReason.value = reason.trim();
-        form.submit();
       });
     }
 
@@ -309,6 +359,51 @@
         statusOverride.value = 'unverified';
         notGradableReason.value = '';
         form.submit();
+      });
+    }
+
+    notGradableOptionInputs.forEach(function(input) {
+      input.addEventListener('change', function() {
+        const isOther = this.value === 'Other';
+        otherReasonWrap.classList.toggle('d-none', !isOther);
+        if (!isOther) {
+          otherReasonText.value = '';
+        }
+      });
+    });
+
+    if (confirmNotGradableBtn) {
+      confirmNotGradableBtn.addEventListener('click', function() {
+        const selected = document.querySelector('input[name="not_gradable_option"]:checked');
+        if (!selected) {
+          return;
+        }
+
+        let reason = selected.value;
+        if (reason === 'Other') {
+          reason = otherReasonText.value.trim();
+          if (!reason) {
+            otherReasonText.focus();
+            return;
+          }
+        }
+
+        statusOverride.value = 'not_gradable';
+        notGradableReason.value = reason;
+        if (notGradableModal) {
+          notGradableModal.hide();
+        }
+        form.submit();
+      });
+    }
+
+    if (notGradableModalEl) {
+      notGradableModalEl.addEventListener('hidden.bs.modal', function() {
+        notGradableOptionInputs.forEach(function(input) {
+          input.checked = false;
+        });
+        otherReasonWrap.classList.add('d-none');
+        otherReasonText.value = '';
       });
     }
   });

@@ -138,6 +138,7 @@ class TestAnonymizationWorkflow:
         resp = client.get('/preprocess/dashboard')
         assert resp.status_code == 200
         assert "unverified.jpg" in resp.text or "Anonymize" in resp.text
+        assert f"/media/direct_upload/fn_img/{u1.uuid}/thumbnail" in resp.text
         
     @pytest.mark.xfail(reason="Task creation logic issue: form submission or ensure_task may need investigation")
     def test_verify_action_creates_task(self, auth_client, db_session):

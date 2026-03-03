@@ -99,7 +99,7 @@
                         <tr>
                             <td>
                                 <a href="{{ url_for('preprocess.anonymize_image', uuid=upload.uuid) }}" class="text-decoration-none">
-                                    <img src="{{ url_for('direct_uploads.get_thumbnail', uuid=upload.uuid) }}" alt="{{ upload.filename }}"
+                                    <img src="{{ url_for('media._directImgFinalThumbnailByUUID', uuid_str=upload.uuid) }}" alt="{{ upload.filename }}"
                                          style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"
                                          onerror="this.style.display='none'">
                                 </a>

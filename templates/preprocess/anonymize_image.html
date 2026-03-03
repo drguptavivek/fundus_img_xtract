@@ -119,20 +119,12 @@
                   <i class="bi bi-arrow-clockwise"></i> OCR Redetect
                 </button>
                 <span id="ocr-status-badge" class="badge text-bg-secondary">OCR: pending</span>
-                <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="pii_status" value="clear">
-                  <button type="submit" class="btn btn-outline-success btn-sm">
-                    Mark PII Clear (Manual)
-                  </button>
-                </form>
-                <form method="POST" action="{{ url_for('preprocess.pii_override', uuid=uuid) }}" class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="pii_status" value="detected">
-                  <button type="submit" class="btn btn-outline-danger btn-sm">
-                    Mark PII Detected (Manual)
-                  </button>
-                </form>
+                <button type="button" class="btn btn-outline-success btn-sm js-pii-override" data-pii-status="clear">
+                  Mark PII Clear (Manual)
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm js-pii-override" data-pii-status="detected">
+                  Mark PII Detected (Manual)
+                </button>
                 {% if has_edited_version %}
                   <button id="restore-original" class="btn btn-danger btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}
                           data-restore-url="{{ url_for('preprocess.restore_original_anonymized_image', uuid=uuid) }}">
@@ -319,6 +311,7 @@
     const markVerifiedBtn = document.getElementById('mark-verified');
     const markNotGradableBtn = document.getElementById('mark-not-gradable');
     const clearNotGradableBtn = document.getElementById('clear-not-gradable');
+    const piiOverrideButtons = document.querySelectorAll('.js-pii-override');
     const notGradableModalEl = document.getElementById('notGradableModal');
     const confirmNotGradableBtn = document.getElementById('confirm-not-gradable');
     const otherReasonWrap = document.getElementById('not-gradable-other-wrap');
@@ -359,6 +352,57 @@
         form.submit();
       });
     }
+
+    piiOverrideButtons.forEach(function(button) {
+      button.addEventListener('click', async function() {
+        const piiStatus = button.dataset.piiStatus;
+        if (!piiStatus) {
+          return;
+        }
+
+        const originalText = button.textContent;
+        piiOverrideButtons.forEach(function(btn) { btn.disabled = true; });
+        button.textContent = 'Saving...';
+
+        try {
+          const response = await fetch('/api/ocr/pii/override', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCSRFToken(),
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              image_uuid: '{{ upload.uuid }}',
+              pii_status: piiStatus,
+            }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok || !payload.success) {
+            throw new Error((payload && payload.error) || 'Failed to update PII status');
+          }
+
+          if (payload.data) {
+            setOcrStatusBadge(
+              payload.data.status,
+              payload.data.status === 'detected' ? 'PII detected' : 'No PII',
+              payload.data.source || 'manual'
+            );
+          }
+
+          if (piiStatus === 'detected') {
+            window.location.reload();
+            return;
+          }
+        } catch (error) {
+          window.alert(error.message || 'Failed to update PII status');
+        } finally {
+          piiOverrideButtons.forEach(function(btn) { btn.disabled = false; });
+          button.textContent = originalText;
+        }
+      });
+    });
 
     notGradableOptionInputs.forEach(function(input) {
       input.addEventListener('change', function() {

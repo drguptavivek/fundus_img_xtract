@@ -134,7 +134,7 @@ def images_without_tasks() -> str:
                         "record_date": upload.created_at,
                         "date_display": upload.created_at.date() if upload.created_at else None,
                         "encounter_id": None,
-                        "view_url": url_for("analytics.view_upload", uuid_str=upload.uuid),
+                        "view_url": url_for("analytics.view_direct_image", uuid_str=upload.uuid),
                     }
                 )
 

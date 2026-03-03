@@ -43,12 +43,10 @@
       This image is already graded ({{ blocking_task_states | join(', ') }}). Edits are allowed here and will be audited.
     </div>
   {% endif %}
-  {% if pii_blocks_anonymization %}
-    <div class="alert alert-danger py-2">
+  <div id="pii-block-alert" class="alert alert-danger py-2 {% if not pii_blocks_anonymization %}d-none{% endif %}">
       The current OCR/manual PII status is <strong>detected</strong>{% if active_pii_verification and active_pii_verification.source %} ({{ active_pii_verification.source }}){% endif %}.
       This image cannot be marked anonymized until the active PII status is cleared.
-    </div>
-  {% endif %}
+  </div>
   {% if is_not_gradable %}
     <div class="alert alert-warning py-2">
       This image is currently marked <strong>not gradable</strong>. It will not create grading tasks unless you clear that status and verify it again.
@@ -196,13 +194,12 @@
                     <span class="badge bg-secondary">Unverified</span>
                   {% endif %}
                 </div>
-                {% if pii_blocks_anonymization %}
-                  <div class="form-text text-danger mb-2">Clear the active PII status before marking this image verified.</div>
-                {% endif %}
+                <div id="pii-block-hint" class="form-text text-danger mb-2 {% if not pii_blocks_anonymization %}d-none{% endif %}">Clear the active PII status before marking this image verified.</div>
                 <div class="d-flex gap-2 mt-2">
                   <button type="button"
                           class="btn btn-outline-success btn-sm"
                           id="mark-verified"
+                          data-current-status="{% if current_verification and current_verification.verified_status == 'verified' %}verified{% elif is_not_gradable %}not_gradable{% else %}unverified{% endif %}"
                           {% if pii_blocks_anonymization or (current_verification and current_verification.verified_status == 'verified') %}disabled{% endif %}>
                     Mark Verified
                   </button>
@@ -319,6 +316,8 @@
     const notGradableOptionInputs = document.querySelectorAll('input[name="not_gradable_option"]');
     const notGradableModal = notGradableModalEl ? new bootstrap.Modal(notGradableModalEl) : null;
     const ocrStatusBadge = document.getElementById('ocr-status-badge');
+    const piiBlockAlert = document.getElementById('pii-block-alert');
+    const piiBlockHint = document.getElementById('pii-block-hint');
 
     function updateOcrStatusBadge(status, label, source) {
       if (!ocrStatusBadge) {
@@ -336,6 +335,22 @@
         ocrStatusBadge.classList.add('text-bg-warning');
       } else {
         ocrStatusBadge.classList.add('text-bg-secondary');
+      }
+    }
+
+    function syncPiiDependentUi(status, source) {
+      const piiDetected = status === 'detected';
+      if (piiBlockAlert) {
+        piiBlockAlert.classList.toggle('d-none', !piiDetected);
+        if (piiDetected) {
+          piiBlockAlert.innerHTML = `The current OCR/manual PII status is <strong>detected</strong>${source ? ` (${source})` : ''}. This image cannot be marked anonymized until the active PII status is cleared.`;
+        }
+      }
+      if (piiBlockHint) {
+        piiBlockHint.classList.toggle('d-none', !piiDetected);
+      }
+      if (markVerifiedBtn && markVerifiedBtn.dataset.currentStatus !== 'verified') {
+        markVerifiedBtn.disabled = piiDetected;
       }
     }
 
@@ -409,6 +424,7 @@
               payload.data.status === 'detected' ? 'PII detected' : 'No PII',
               payload.data.source || 'manual'
             );
+            syncPiiDependentUi(payload.data.status, payload.data.source || 'manual');
           }
 
           if (piiStatus === 'detected') {

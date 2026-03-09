@@ -1,4 +1,10 @@
 (function(){
+  if (window.__imggrViewerBootstrapped) {
+    try { window.__imggrViewerLoaded = true; } catch(_) {}
+    return;
+  }
+  window.__imggrViewerBootstrapped = true;
+
   // TODO: add UI + JS support for new filters:
   // greenchannel, blueonly, redgreenfree, greenfree
   // NOTE: DB/model ranges are wider than UI/JS controls:
@@ -204,8 +210,7 @@
   function hardResetAllLoupes() {
     document.querySelectorAll('.imggr-viewer-root').forEach((root) => {
       const st = viewerStates.get(root) || root.__imggrState;
-      st?.resetLoupe?.();
-      st?.setLoupeEnabled?.(false);
+      st?.turnLoupeOff?.();
     });
     // Defensive DOM cleanup in case a viewer state is stale/missing.
     document.querySelectorAll('.imggr-loupe').forEach((el) => el.classList.remove('is-active'));
@@ -219,6 +224,15 @@
   if (!window.__imggrKeysBound) {
     window.__imggrKeysBound = true;
     window.addEventListener('keydown', (e) => {
+      try {
+        const t = e.target;
+        const targetRoot = (t && t.closest)
+          ? (t.closest('.imggr-viewer-root') || t.closest('.card')?.querySelector('.imggr-viewer-root'))
+          : null;
+        if (targetRoot) {
+          activeRoot = targetRoot;
+        }
+      } catch(_) {}
       if (!activeRoot) {
         activeRoot = defaultRoot || document.querySelector('.imggr-viewer-root');
         if (!activeRoot) return;
@@ -249,8 +263,7 @@
       // Always allow global hard reset, even while typing in form fields.
       if (rawKey === '/' || rawKey === '?') {
         e.preventDefault();
-        state?.resetLoupe?.();
-        state?.setLoupeEnabled?.(false);
+        state?.turnLoupeOff?.();
         resetBtn?.click();
         hardResetAllLoupes();
         return;
@@ -260,14 +273,10 @@
 
       if (k === 'l') {
         e.preventDefault();
+        state?.toggleLoupe?.();
         const loupeBtn = activeRoot?.closest('.card')?.querySelector('.imggr-loupe-toggle');
-        if (loupeBtn) {
-          loupeBtn.click();
-        } else if (state?.toggleLoupe) {
-          state.toggleLoupe();
-        } else {
-          const next = !(state?.getCurrentLoupeEnabled?.() ?? false);
-          state?.setLoupeEnabled?.(next);
+        if (loupeBtn && document.activeElement === loupeBtn) {
+          loupeBtn.blur();
         }
         return;
       }
@@ -329,6 +338,16 @@
   }
 
   function initGradingViewer(root){
+    if (!root) return;
+    if (root.__imggrInitialized) {
+      const existingState = viewerStates.get(root) || root.__imggrState;
+      if (existingState) {
+        root.__imggrState = existingState;
+      }
+      return;
+    }
+    root.__imggrInitialized = true;
+
     const main = root.querySelector('.imggr-main');
     const mainImg = root.querySelector('.imggr-main-img');
     const fullBtn = root.querySelector('.imggr-full');
@@ -983,6 +1002,7 @@
       }
       // Reset both zoom and pan
       resetImagePan();
+      turnLoupeOff();
       hardResetAllLoupes();
       applyFilter();
       // Settings are saved by applyFilter()
@@ -1795,6 +1815,16 @@
       }
     }
 
+    function toggleLoupe() {
+      setLoupeEnabled(!loupeEnabled);
+      saveViewerSettingsToStorage({ immediate: true });
+    }
+
+    function turnLoupeOff() {
+      setLoupeEnabled(false);
+      saveViewerSettingsToStorage({ immediate: true });
+    }
+
     function updateLoupePosition(e){
       if (!loupeEnabled || !loupe || !main || !e) return;
       const metrics = getDisplayedImageMetrics();
@@ -1931,10 +1961,8 @@
 
     loupeToggle?.addEventListener('click', () => {
       activeRoot = root;
-      const newState = !loupeEnabled;
-      setLoupeEnabled(newState);
-      // Save loupe state to localStorage for rapid loading
-      saveViewerSettingsToStorage();
+      toggleLoupe();
+      loupeToggle.blur();
     });
     
     // Preset button handlers
@@ -2290,10 +2318,8 @@
     });
     
     viewerStates.set(root, {
-      toggleLoupe: () => {
-        const currentState = loupeEnabled;
-        setLoupeEnabled(!currentState);
-      },
+      toggleLoupe,
+      turnLoupeOff,
       setLoupeEnabled,
       adjustLoupeSize,
       adjustLoupeZoom,

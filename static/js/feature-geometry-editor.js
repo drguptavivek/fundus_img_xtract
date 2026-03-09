@@ -15,6 +15,7 @@
   const DEFAULT_GRID = 8;
   const AUTO_FOCUS_MARGIN = 0.15;
   const POLYGON_CLOSE_RADIUS_PX = 12;
+  const POLYGON_INSERT_RADIUS_PX = 10;
   const ELLIPSE_SEGMENTS = 24;
   const BOX_HANDLE_RADIUS_PX = 10;
   const SHOW_GRID = false;
@@ -23,6 +24,7 @@
   const BRUSH_DIAMETER_MAX = 200;
   const FILL_ALPHA_MIN_PCT = 5;
   const FILL_ALPHA_MAX_PCT = 100;
+  const BOX_ACTIONS_REVEAL_DELAY_MS = 200;
 
   const state = {
     viewerRoot: null,
@@ -55,6 +57,7 @@
     fillOpacity: 0.35,
     brushCursorPoint: null,
     pendingCreateType: null,
+    boxActionsRevealAtMs: 0,
   };
 
   function clamp(v, min, max) {
@@ -159,6 +162,7 @@
       .fgx-group { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
       .fgx-slider-row { display:flex; flex-wrap:nowrap; gap:.35rem; align-items:center; min-width:0; }
       .fgx-slider-row .form-range { min-width:0; }
+      .fgx-tools-row--brush { flex: 1 0 100%; }
       @media (min-width: 992px) {
         .fgx-panel .fgx-slider-row { flex: 1 0 100%; }
       }
@@ -230,6 +234,14 @@
     const x = (point[0] / m.naturalWidth) * m.drawRect.width;
     const y = (point[1] / m.naturalHeight) * m.drawRect.height;
     return [x, y];
+  }
+
+  function canvasToPixel(canvasX, canvasY) {
+    const m = getImageMetrics();
+    if (!m) return null;
+    const x = (canvasX / m.drawRect.width) * m.naturalWidth;
+    const y = (canvasY / m.drawRect.height) * m.naturalHeight;
+    return [clamp(x, 0, m.naturalWidth), clamp(y, 0, m.naturalHeight)];
   }
 
   function normPoint(point) {
@@ -402,9 +414,27 @@
   function clearBoxResidualGeometry(item) {
     if (!item || !isBoxItem(item)) return;
     item.polygon = [];
-    if (item.mask && Array.isArray(item.mask.cells)) {
+    ensureMask(item, sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID));
+    if (!item.roi) {
       item.mask.cells = [];
+      return;
     }
+    const roi = reorderRoi(item.roi);
+    const w = roi[1][0] - roi[0][0];
+    const h = roi[1][1] - roi[0][1];
+    if (w < 1 || h < 1) {
+      item.mask.cells = [];
+      return;
+    }
+    const rows = sanitizeGrid(item.mask?.rows ?? DEFAULT_GRID);
+    const cols = sanitizeGrid(item.mask?.cols ?? DEFAULT_GRID);
+    const cells = [];
+    for (let r = 0; r < rows; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        cells.push([r, c]);
+      }
+    }
+    item.mask.cells = cells;
   }
 
   function clampPointToImage(point) {
@@ -591,6 +621,17 @@
     return;
   }
 
+  function enterPolygonEditMode(ctx) {
+    state.mode = MODES.POLYGON;
+    setCanvasPointerMode();
+    refreshToolbarStates();
+    const item = ctx ? getActiveAnnotationItem(ctx, false) : null;
+    if (item && item._geometryType === "polygon" && item._locked !== false) {
+      item._locked = false;
+      syncField(ctx);
+    }
+  }
+
   function clearSelectedBox() {
     state.selectedBoxRef = null;
   }
@@ -656,11 +697,8 @@
       <button type="button" class="btn btn-outline-warning btn-sm" data-fgx-box-convert-poly title="Convert to polygon" aria-label="Convert to polygon">
         <i class="fa-solid fa-draw-polygon"></i>
       </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-flip-h title="Flip pyramid horizontally" aria-label="Flip pyramid horizontally">
-        <i class="fa-solid fa-left-right"></i>
-      </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-box-flip-v title="Flip pyramid vertically" aria-label="Flip pyramid vertically">
-        <i class="fa-solid fa-up-down"></i>
+      <button type="button" class="btn btn-outline-info btn-sm" data-fgx-box-edit-points title="Edit points" aria-label="Edit points">
+        <i class="fa-solid fa-pen-to-square"></i>
       </button>
       <button type="button" class="btn btn-outline-danger btn-sm" data-fgx-box-del title="Delete" aria-label="Delete">
         <i class="fa-solid fa-trash"></i>
@@ -760,30 +798,22 @@
       }
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
-      state.mode = MODES.POLYGON;
-      setCanvasPointerMode();
-      refreshToolbarStates();
+      item._locked = false;
+      enterPolygonEditMode(ctx);
       syncField(ctx);
       redraw();
     });
 
-    wrap.querySelector("[data-fgx-box-flip-h]")?.addEventListener("click", () => {
+    wrap.querySelector("[data-fgx-box-edit-points]")?.addEventListener("click", () => {
       const ctx = activeContext();
       const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
-      if (!ctx || !item || item._geometryType !== "pyramid" || item._locked !== false) return;
-      if (!flipPolygonInRoi(item, "h")) return;
-      syncField(ctx);
+      if (!ctx || !item || item._geometryType !== "polygon") return;
+      ctx.activeAnnotationByFeature[item.feature_id] = item._annId;
+      setSelectedBox(ctx, item);
+      enterPolygonEditMode(ctx);
       redraw();
     });
 
-    wrap.querySelector("[data-fgx-box-flip-v]")?.addEventListener("click", () => {
-      const ctx = activeContext();
-      const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
-      if (!ctx || !item || item._geometryType !== "pyramid" || item._locked !== false) return;
-      if (!flipPolygonInRoi(item, "v")) return;
-      syncField(ctx);
-      redraw();
-    });
   }
 
   function positionBoxActions() {
@@ -800,6 +830,10 @@
       !state.overlayVisible ||
       !selectedFeatures.includes(item.feature_id)
     ) {
+      state.boxActionsEl.style.display = "none";
+      return;
+    }
+    if (Date.now() < (state.boxActionsRevealAtMs || 0)) {
       state.boxActionsEl.style.display = "none";
       return;
     }
@@ -824,16 +858,11 @@
       convertBtn.style.display = show ? "inline-flex" : "none";
       convertBtn.disabled = !show;
     }
-    const flipHBtn = state.boxActionsEl.querySelector("[data-fgx-box-flip-h]");
-    const flipVBtn = state.boxActionsEl.querySelector("[data-fgx-box-flip-v]");
-    const showFlip = item._geometryType === "pyramid";
-    if (flipHBtn) {
-      flipHBtn.style.display = showFlip ? "inline-flex" : "none";
-      flipHBtn.disabled = !showFlip || item._locked !== false;
-    }
-    if (flipVBtn) {
-      flipVBtn.style.display = showFlip ? "inline-flex" : "none";
-      flipVBtn.disabled = !showFlip || item._locked !== false;
+    const editPointsBtn = state.boxActionsEl.querySelector("[data-fgx-box-edit-points]");
+    if (editPointsBtn) {
+      const show = item._geometryType === "polygon";
+      editPointsBtn.style.display = show ? "inline-flex" : "none";
+      editPointsBtn.disabled = !show;
     }
     const roi = clampRoiToImage(item.roi);
     const boxW = Math.abs(roi[1][0] - roi[0][0]);
@@ -842,24 +871,33 @@
       state.boxActionsEl.style.display = "none";
       return;
     }
-    const p1 = pixelToCanvas(roi[0]);
-    const p2 = pixelToCanvas(roi[1]);
-    if (!p1 || !p2) {
-      state.boxActionsEl.style.display = "none";
-      return;
-    }
-    const x = (Math.min(p1[0], p2[0]) + Math.max(p1[0], p2[0])) / 2;
-    const y = Math.max(p1[1], p2[1]) + 8;
     const m = getImageMetrics();
     if (!m) {
       state.boxActionsEl.style.display = "none";
       return;
     }
-    const offsetX = m.drawRect.left - m.mainRect.left;
-    const offsetY = m.drawRect.top - m.mainRect.top;
-    state.boxActionsEl.style.left = `${x + offsetX}px`;
-    state.boxActionsEl.style.top = `${y + offsetY}px`;
-    state.boxActionsEl.style.transform = "translateX(-50%)";
+    if (isBrushLikeAnnotation(item)) {
+      // Brush annotations: keep toolbar fixed at bottom-center of viewport.
+      const bottomY = Math.max(8, m.mainRect.height - 12);
+      state.boxActionsEl.style.left = "50%";
+      state.boxActionsEl.style.top = `${bottomY}px`;
+      state.boxActionsEl.style.transform = "translateX(-50%)";
+    } else {
+      // ROI annotations: anchor toolbar near the selected ROI.
+      const p1 = pixelToCanvas(roi[0]);
+      const p2 = pixelToCanvas(roi[1]);
+      if (!p1 || !p2) {
+        state.boxActionsEl.style.display = "none";
+        return;
+      }
+      const x = (Math.min(p1[0], p2[0]) + Math.max(p1[0], p2[0])) / 2;
+      const y = Math.max(p1[1], p2[1]) + 8;
+      const offsetX = m.drawRect.left - m.mainRect.left;
+      const offsetY = m.drawRect.top - m.mainRect.top;
+      state.boxActionsEl.style.left = `${x + offsetX}px`;
+      state.boxActionsEl.style.top = `${y + offsetY}px`;
+      state.boxActionsEl.style.transform = "translateX(-50%)";
+    }
     state.boxActionsEl.style.display = "flex";
   }
 
@@ -867,6 +905,10 @@
     if (state.boxActionsEl) {
       state.boxActionsEl.style.display = "none";
     }
+  }
+
+  function deferBoxActionsReveal(delayMs = BOX_ACTIONS_REVEAL_DELAY_MS) {
+    state.boxActionsRevealAtMs = Date.now() + Math.max(0, Number(delayMs) || 0);
   }
 
   function setPanLock(flag) {
@@ -1043,6 +1085,22 @@
     ctx.colorChipEl.style.backgroundColor = window.FeatureGeometryColors.colorForFeature(featureId);
   }
 
+  function resolveContextDiseaseName(ctx) {
+    if (!ctx) return "";
+    const linkedPanel = ctx.sectionEl?.closest(".linked-grading-panel");
+    const linkedHeading = linkedPanel?.querySelector("h6");
+    const linkedName = linkedHeading?.textContent?.trim();
+    if (linkedName) return linkedName;
+
+    const mainDisease = document.querySelector('form[data-grading-form="true"] label.form-label strong');
+    return mainDisease?.textContent?.trim() || "";
+  }
+
+  function refreshDiseaseLabel(ctx) {
+    if (!ctx?.diseaseLabelEl) return;
+    ctx.diseaseLabelEl.textContent = resolveContextDiseaseName(ctx) || "—";
+  }
+
   function resolveSidebarHost(ctx) {
     if (!ctx) return null;
     // Linked grading: mount controls inside this context's own panel.
@@ -1067,6 +1125,11 @@
     panel.className = "fgx-panel";
     panel.dataset.geometryContextKey = ctx.key;
     panel.innerHTML = `
+      <div class="fgx-group fgx-feature-row">
+        <span class="fgx-block-label mb-0">Current Disease</span>
+        <span class="fw-semibold" data-fgx-disease-label>—</span>
+      </div>
+
       <div class="fgx-group fgx-feature-row">
         <span class="fgx-block-label mb-0">Feature</span>
         <span class="fgx-color-dot" data-fgx-color></span>
@@ -1096,7 +1159,7 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="move" title="Pointer / Select">
           <i class="fa-solid fa-arrow-pointer"></i>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add box ROI" aria-label="Add box ROI">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add bounding box (outline ROI)" aria-label="Add bounding box (outline ROI)">
           <i class="fa-solid fa-square"></i>
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add ellipse ROI" aria-label="Add ellipse ROI">
@@ -1105,16 +1168,18 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid title="Add pyramid ROI" aria-label="Add pyramid ROI">
           <i class="fa-solid fa-caret-up"></i>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Brush add">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      </div>
+      <div class="fgx-group fgx-tools-row fgx-tools-row--brush">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Paint filled region (+)">
           <i class="fa-solid fa-paintbrush"></i>
           <span class="ms-1">+</span>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract" title="Brush subtract">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract" title="Erase filled region (-)">
           <i class="fa-solid fa-eraser"></i>
           <span class="ms-1">-</span>
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
-          <i class="fa-solid fa-rotate-left"></i>
         </button>
       </div>
 
@@ -1153,11 +1218,19 @@
         />
         <span class="fgx-block-label mb-0" data-fgx-fill-opacity-value>${Math.round(state.fillOpacity * 100)}%</span>
       </div>
+      <div class="fgx-group w-100">
+        <small class="text-muted">
+          Use Rect./Ellipse/Cone/Polygon for identifying regions of interest for that feature.
+          Use Brush tools for marking <strong>exact</strong> lesion.
+        </small>
+      </div>
     `;
     sidebarHost.appendChild(panel);
+    panel.style.display = "none";
 
     ctx.panelTopEl = panel;
     ctx.panelBottomEl = panel;
+    ctx.diseaseLabelEl = panel.querySelector("[data-fgx-disease-label]");
     ctx.featureSelectEl = panel.querySelector("[data-fgx-feature]");
     ctx.annotationSelectEl = panel.querySelector("[data-fgx-annotation]");
     ctx.addAnnotationBtn = null;
@@ -1268,21 +1341,19 @@
 
     panel.querySelector("[data-fgx-add-box]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      setPanLock(true);
       armCreateMode("box", MODES.ROI);
+      setStatus(ctx, "Bounding box mode: draw outline ROI.");
       redraw();
     });
 
     panel.querySelector("[data-fgx-add-ellipse]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      setPanLock(true);
       armCreateMode("ellipse", MODES.ELLIPSE);
       redraw();
     });
 
     panel.querySelector("[data-fgx-add-pyramid]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
-      setPanLock(true);
       armCreateMode("pyramid", MODES.PYRAMID);
       redraw();
     });
@@ -1291,12 +1362,14 @@
       state.mode = MODES.ADD;
       setCanvasPointerMode();
       refreshToolbarStates();
+      setStatus(ctx, "Paint mode: filled region add.");
     });
 
     panel.querySelector('[data-fgx-mode="subtract"]')?.addEventListener("click", () => {
       state.mode = MODES.SUBTRACT;
       setCanvasPointerMode();
       refreshToolbarStates();
+      setStatus(ctx, "Paint mode: filled region erase.");
     });
 
     panel.querySelector('[data-fgx-mode="move"]')?.addEventListener("click", () => {
@@ -1332,6 +1405,8 @@
       ctx.fillOpacityEl.value = String(pct);
       if (ctx.fillOpacityValueEl) ctx.fillOpacityValueEl.textContent = `${pct}%`;
     }
+
+    refreshDiseaseLabel(ctx);
 
     refreshAnnotationButtons(ctx);
     refreshFeatureDependentButtons(ctx);
@@ -1452,6 +1527,48 @@
       }
     });
     return best <= POLYGON_CLOSE_RADIUS_PX ? nearest : -1;
+  }
+
+  function distancePointToSegmentCanvas(pointCanvas, aCanvas, bCanvas) {
+    const abx = bCanvas[0] - aCanvas[0];
+    const aby = bCanvas[1] - aCanvas[1];
+    const apx = pointCanvas[0] - aCanvas[0];
+    const apy = pointCanvas[1] - aCanvas[1];
+    const abLenSq = (abx * abx) + (aby * aby);
+    if (abLenSq <= 1e-6) {
+      const dx = pointCanvas[0] - aCanvas[0];
+      const dy = pointCanvas[1] - aCanvas[1];
+      return Math.sqrt((dx * dx) + (dy * dy));
+    }
+    const t = clamp(((apx * abx) + (apy * aby)) / abLenSq, 0, 1);
+    const projX = aCanvas[0] + (t * abx);
+    const projY = aCanvas[1] + (t * aby);
+    const dx = pointCanvas[0] - projX;
+    const dy = pointCanvas[1] - projY;
+    return Math.sqrt((dx * dx) + (dy * dy));
+  }
+
+  function findPolygonInsertionIndex(item, point) {
+    if (!item || !Array.isArray(item.polygon) || item.polygon.length < 2) return -1;
+    const pointCanvas = pixelToCanvas(point);
+    if (!pointCanvas) return -1;
+
+    const pointsCanvas = item.polygon.map((p) => pixelToCanvas(p));
+    if (pointsCanvas.some((p) => !p)) return -1;
+
+    let bestDist = Number.POSITIVE_INFINITY;
+    let bestInsertIndex = -1;
+
+    for (let i = 0; i < pointsCanvas.length; i += 1) {
+      const j = (i + 1) % pointsCanvas.length;
+      const dist = distancePointToSegmentCanvas(pointCanvas, pointsCanvas[i], pointsCanvas[j]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestInsertIndex = j === 0 ? 0 : (i + 1);
+      }
+    }
+
+    return bestDist <= POLYGON_INSERT_RADIUS_PX ? bestInsertIndex : -1;
   }
 
   function pointInRoi(point, roi) {
@@ -2250,7 +2367,6 @@
         redraw();
         return;
       }
-      setPanLock(true);
       if (hit.action === "rotate-pyramid") {
         const box = reorderRoi(item.roi);
         const cx = (box[0][0] + box[1][0]) / 2;
@@ -2304,7 +2420,6 @@
 
     if (mode === MODES.ROI) {
       setSelectedBox(ctx, item);
-      setPanLock(true);
       state.drawing = { kind: "roi", start: point, current: point };
       item.roi = [point, point];
       clearBoxResidualGeometry(item);
@@ -2330,7 +2445,6 @@
     if (mode === MODES.PYRAMID) {
       enforceGeometryType(item, "pyramid");
       setSelectedBox(ctx, item);
-      setPanLock(true);
       state.drawing = { kind: "pyramid", start: point, current: point, itemAnnId: item._annId };
       item.roi = [point, point];
       item.mask.rows = grid;
@@ -2356,7 +2470,31 @@
       if (item.polygon.length) {
         const nearest = findNearestPolygonPoint(item, point);
         if (nearest >= 0) {
+          if ((event.altKey || event.ctrlKey || event.metaKey) && item.polygon.length > 3) {
+            item.polygon.splice(nearest, 1);
+            refillMaskFromPolygon(item);
+            syncField(ctx);
+            redraw();
+            setStatus(ctx, "Polygon point deleted.");
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           state.pointDrag = { index: nearest };
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }
+
+      if (item.polygon.length >= 3) {
+        const insertIndex = findPolygonInsertionIndex(item, point);
+        if (insertIndex >= 0) {
+          item.polygon.splice(insertIndex, 0, clampPointToImage(point));
+          refillMaskFromPolygon(item);
+          syncField(ctx);
+          redraw();
+          setStatus(ctx, "Polygon point inserted.");
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -2365,7 +2503,6 @@
 
       if (item.polygon.length >= 3 && pointInPolygon(point, item.polygon)) {
         setSelectedBox(ctx, item);
-        setPanLock(true);
         state.drawing = { kind: "move", start: point, last: point, itemAnnId: item._annId };
         event.preventDefault();
         event.stopPropagation();
@@ -2596,7 +2733,9 @@
     if (!item) return;
 
     if (state.drawing && state.drawing.kind === "roi") {
+      clearBoxResidualGeometry(item);
       state.drawing = null;
+      deferBoxActionsReveal();
       state.mode = MODES.MOVE;
       setCanvasPointerMode();
       refreshToolbarStates();
@@ -2609,6 +2748,7 @@
 
     if (state.drawing && state.drawing.kind === "move") {
       state.drawing = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2618,6 +2758,7 @@
 
     if (state.drawing && state.drawing.kind === "resize") {
       state.drawing = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2627,6 +2768,7 @@
 
     if (state.drawing && state.drawing.kind === "rotate") {
       state.drawing = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2636,6 +2778,7 @@
 
     if (state.drawing && state.drawing.kind === "rotate-pyramid") {
       state.drawing = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2653,6 +2796,7 @@
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.drawing = null;
+      deferBoxActionsReveal();
       state.mode = MODES.MOVE;
       setCanvasPointerMode();
       refreshToolbarStates();
@@ -2672,6 +2816,7 @@
       ensureMask(item, sanitizeGrid(ctx.payload?.grid?.rows ?? DEFAULT_GRID));
       refillMaskFromPolygon(item);
       state.drawing = null;
+      deferBoxActionsReveal();
       state.mode = MODES.MOVE;
       setCanvasPointerMode();
       refreshToolbarStates();
@@ -2684,6 +2829,7 @@
 
     if (state.pointDrag) {
       state.pointDrag = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2693,6 +2839,7 @@
 
     if (state.painting) {
       state.painting = null;
+      deferBoxActionsReveal();
       syncField(ctx);
       redraw();
       event.preventDefault();
@@ -2780,12 +2927,12 @@
       return;
     }
 
-    if (key === "u") { state.mode = MODES.ROI; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
-    if (key === "y") { state.mode = MODES.PYRAMID; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
-    if (key === "i") { state.mode = MODES.POLYGON; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
-    if (key === "j") { state.mode = MODES.ELLIPSE; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
-    if (key === "o") { state.mode = MODES.ADD; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
-    if (key === "p") { state.mode = MODES.SUBTRACT; refreshToolbarStates(); setCanvasPointerMode(); event.preventDefault(); return; }
+    if (key === "u") { state.mode = MODES.ROI; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Bounding box mode: draw outline ROI."); event.preventDefault(); return; }
+    if (key === "y") { state.mode = MODES.PYRAMID; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Pyramid mode."); event.preventDefault(); return; }
+    if (key === "i") { enterPolygonEditMode(ctx); setStatus(ctx, "Polygon mode."); event.preventDefault(); return; }
+    if (key === "j") { state.mode = MODES.ELLIPSE; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Ellipse mode."); event.preventDefault(); return; }
+    if (key === "o") { state.mode = MODES.ADD; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Paint mode: filled region add."); event.preventDefault(); return; }
+    if (key === "p") { state.mode = MODES.SUBTRACT; refreshToolbarStates(); setCanvasPointerMode(); setStatus(ctx, "Paint mode: filled region erase."); event.preventDefault(); return; }
 
     if (key === "escape") {
       state.drawing = null;
@@ -2813,6 +2960,22 @@
         setStatus(ctx, "Polygon complete.");
         event.preventDefault();
       }
+      return;
+    }
+
+    if ((key === "delete" || key === "backspace") && state.activeFeatureId != null) {
+      const item = getActiveAnnotationItem(ctx, false);
+      if (!item || item._geometryType !== "polygon" || item._locked !== false || item.polygon.length <= 3) return;
+      const cursorPoint = state.cursorCanvasPoint ? canvasToPixel(state.cursorCanvasPoint[0], state.cursorCanvasPoint[1]) : null;
+      if (!cursorPoint) return;
+      const nearest = findNearestPolygonPoint(item, cursorPoint);
+      if (nearest < 0) return;
+      item.polygon.splice(nearest, 1);
+      refillMaskFromPolygon(item);
+      syncField(ctx);
+      redraw();
+      setStatus(ctx, "Polygon point deleted.");
+      event.preventDefault();
     }
   }
 
@@ -3208,7 +3371,8 @@
 
     if (item.roi) {
       const roi = clampRoiToImage(item.roi);
-      const showRoiOutline = (isBoxItem(item) || selected) && item._geometryType !== "region";
+      const showRoiOutline = item._geometryType !== "region"
+        && (isBoxItem(item) || (selected && item._geometryType !== "polygon"));
       if (showRoiOutline) {
         if (item._geometryType === "pyramid") {
           drawRotatedRoiOutline(roi, color, active, selected, pyramidGridRotation(item));
@@ -3419,53 +3583,16 @@
     const ry = Math.max(1, h / 2);
     const cx = x + rx;
     const cy = y + ry;
-    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
-    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
-
     state.ctx.save();
     state.ctx.translate(cx, cy);
     state.ctx.rotate(rotation);
     state.ctx.beginPath();
     state.ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
     state.ctx.clip();
-
-    if (showGrid) {
-      state.ctx.strokeStyle = color;
-      state.ctx.globalAlpha = gridAlpha;
-      state.ctx.lineWidth = 1;
-      for (let r = 1; r < rows; r += 1) {
-        const gy = -ry + (r / rows) * (2 * ry);
-        state.ctx.beginPath();
-        state.ctx.moveTo(-rx, gy);
-        state.ctx.lineTo(rx, gy);
-        state.ctx.stroke();
-      }
-      for (let c = 1; c < cols; c += 1) {
-        const gx = -rx + (c / cols) * (2 * rx);
-        state.ctx.beginPath();
-        state.ctx.moveTo(gx, -ry);
-        state.ctx.lineTo(gx, ry);
-        state.ctx.stroke();
-      }
-    }
-
-    if (mask && Array.isArray(mask.cells)) {
-      const cellW = (2 * rx) / cols;
-      const cellH = (2 * ry) / rows;
-      state.ctx.fillStyle = color;
-      state.ctx.globalAlpha = cellAlpha;
-      mask.cells.forEach((cell) => {
-        const rr = toInt(cell[0], -1);
-        const cc = toInt(cell[1], -1);
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
-        state.ctx.fillRect(
-          -rx + cc * cellW,
-          -ry + rr * cellH,
-          cellW,
-          cellH,
-        );
-      });
-    }
+    // Ellipse marks represent full-area findings, so render a smooth fill without internal grid/cells.
+    state.ctx.globalAlpha = cellAlpha;
+    state.ctx.fillStyle = color;
+    state.ctx.fillRect(-rx, -ry, 2 * rx, 2 * ry);
 
     state.ctx.restore();
   }
@@ -3484,9 +3611,6 @@
     const y1 = Math.min(p1[1], p2[1]);
     const x2 = Math.max(p1[0], p2[0]);
     const y2 = Math.max(p1[1], p2[1]);
-    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
-    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
-
     const first = pixelToCanvas(polygon[0]);
     if (!first) return;
 
@@ -3501,38 +3625,10 @@
     state.ctx.closePath();
     state.ctx.clip();
 
-    if (showGrid) {
-      state.ctx.strokeStyle = color;
-      state.ctx.globalAlpha = gridAlpha;
-      state.ctx.lineWidth = 1;
-      for (let r = 1; r < rows; r += 1) {
-        const y = y1 + (r / rows) * (y2 - y1);
-        state.ctx.beginPath();
-        state.ctx.moveTo(x1, y);
-        state.ctx.lineTo(x2, y);
-        state.ctx.stroke();
-      }
-      for (let c = 1; c < cols; c += 1) {
-        const x = x1 + (c / cols) * (x2 - x1);
-        state.ctx.beginPath();
-        state.ctx.moveTo(x, y1);
-        state.ctx.lineTo(x, y2);
-        state.ctx.stroke();
-      }
-    }
-
-    if (mask && Array.isArray(mask.cells)) {
-      const cellW = (x2 - x1) / cols;
-      const cellH = (y2 - y1) / rows;
-      state.ctx.fillStyle = color;
-      state.ctx.globalAlpha = cellAlpha;
-      mask.cells.forEach((cell) => {
-        const rr = toInt(cell[0], -1);
-        const cc = toInt(cell[1], -1);
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
-        state.ctx.fillRect(x1 + cc * cellW, y1 + rr * cellH, cellW, cellH);
-      });
-    }
+    // Polygon marks represent full-area findings, so render a smooth fill without internal grid/cells.
+    state.ctx.globalAlpha = cellAlpha;
+    state.ctx.fillStyle = color;
+    state.ctx.fillRect(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
 
     state.ctx.restore();
   }
@@ -3551,9 +3647,6 @@
     const cy = (c1[1] + c2[1]) / 2;
     const rx = Math.max(1, Math.abs(c2[0] - c1[0]) / 2);
     const ry = Math.max(1, Math.abs(c2[1] - c1[1]) / 2);
-    const rows = sanitizeGrid(mask?.rows ?? DEFAULT_GRID);
-    const cols = sanitizeGrid(mask?.cols ?? DEFAULT_GRID);
-
     state.ctx.save();
     state.ctx.translate(cx, cy);
     state.ctx.rotate(rotation);
@@ -3580,43 +3673,10 @@
     state.ctx.closePath();
     state.ctx.clip();
 
-    if (showGrid) {
-      state.ctx.strokeStyle = color;
-      state.ctx.globalAlpha = gridAlpha;
-      state.ctx.lineWidth = 1;
-      for (let r = 1; r < rows; r += 1) {
-        const y = -ry + (r / rows) * (2 * ry);
-        state.ctx.beginPath();
-        state.ctx.moveTo(-rx, y);
-        state.ctx.lineTo(rx, y);
-        state.ctx.stroke();
-      }
-      for (let c = 1; c < cols; c += 1) {
-        const x = -rx + (c / cols) * (2 * rx);
-        state.ctx.beginPath();
-        state.ctx.moveTo(x, -ry);
-        state.ctx.lineTo(x, ry);
-        state.ctx.stroke();
-      }
-    }
-
-    if (mask && Array.isArray(mask.cells)) {
-      const cellW = (2 * rx) / cols;
-      const cellH = (2 * ry) / rows;
-      state.ctx.fillStyle = color;
-      state.ctx.globalAlpha = cellAlpha;
-      mask.cells.forEach((cell) => {
-        const rr = toInt(cell[0], -1);
-        const cc = toInt(cell[1], -1);
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return;
-        state.ctx.fillRect(
-          -rx + cc * cellW,
-          -ry + rr * cellH,
-          cellW,
-          cellH,
-        );
-      });
-    }
+    // Pyramid/cone marks represent full-area findings, so render a smooth fill without internal grid/cells.
+    state.ctx.globalAlpha = cellAlpha;
+    state.ctx.fillStyle = color;
+    state.ctx.fillRect(-rx, -ry, 2 * rx, 2 * ry);
 
     state.ctx.restore();
   }
@@ -3787,9 +3847,12 @@
 
     const linkedFields = form.querySelectorAll('input[type="hidden"][data-feature-geometry-field]');
     if (linkedFields.length) {
+      const seenTaskUuids = new Set();
       linkedFields.forEach((hiddenField) => {
         const taskUuid = hiddenField.getAttribute("data-feature-geometry-field");
         if (!taskUuid) return;
+        if (seenTaskUuids.has(taskUuid)) return;
+        seenTaskUuids.add(taskUuid);
 
         const panel = document.querySelector(`.linked-grading-panel[data-task-uuid="${taskUuid}"]`);
         const sectionEl = panel ? panel.querySelector("[data-features-section]") : null;
@@ -3820,6 +3883,10 @@
     pickActiveContext();
     const ctx = activeContext();
     if (!ctx) {
+      state.contexts.forEach((c) => {
+        if (c.panelTopEl) c.panelTopEl.style.display = "none";
+        if (c.panelBottomEl) c.panelBottomEl.style.display = "none";
+      });
       redraw();
       return;
     }
@@ -3827,6 +3894,7 @@
     syncFeatureSelection(ctx);
     updatePanelFeatureOptions(ctx);
     updateGridLabel(ctx);
+    refreshDiseaseLabel(ctx);
     if (ctx.brushDiameterEl) {
       ctx.brushDiameterEl.value = String(sanitizeBrushDiameter(state.brushDiameterPx));
     }

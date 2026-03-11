@@ -102,7 +102,9 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
     # Group eligible lab units by disease, including linked diseases from primary permissions
     disease_lab_units = {}
     for role in eligible_roles:
-        primary_id = role.disease_id
+        primary_id = get_primary_disease_id(db, role.disease_id)
+        if role.disease_id != primary_id:
+            continue
         linked_ids = get_linked_disease_ids(db, primary_id)
         all_ids = [primary_id] + linked_ids
         for disease_id in all_ids:
@@ -459,7 +461,9 @@ def get_user_kpi_linked_followup_counts(db, user_id: int) -> Dict[str, List[Dict
 
     disease_lab_units = {}
     for role in eligible_roles:
-        primary_id = role.disease_id
+        primary_id = get_primary_disease_id(db, role.disease_id)
+        if role.disease_id != primary_id:
+            continue
         linked_ids = get_linked_disease_ids(db, primary_id)
         all_ids = [primary_id] + linked_ids
         for disease_id in all_ids:

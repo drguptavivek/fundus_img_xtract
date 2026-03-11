@@ -45,7 +45,9 @@ def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
     for r in rows:
         if r.can_grade_resident or r.can_grade_resident2 or r.can_arbitrate:
             lab_unit_id = r.lab_unit_id
-            disease_id = r.disease_id
+            disease_id = get_primary_disease_id(db, r.disease_id)
+            if disease_id != r.disease_id:
+                continue
             
             # Get hospital info
             hospital_id = lab_units[lab_unit_id]['hospital_id']
@@ -70,11 +72,11 @@ def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
                 grouped[hospital_name][lab_unit_name][disease_name] = []
             
             # Add roles
-            if r.can_grade_resident:
+            if r.can_grade_resident and 'Resident' not in grouped[hospital_name][lab_unit_name][disease_name]:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Resident')
-            if r.can_grade_resident2:
+            if r.can_grade_resident2 and 'Resident2' not in grouped[hospital_name][lab_unit_name][disease_name]:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Resident2')
-            if r.can_arbitrate:
+            if r.can_arbitrate and 'Arbitrator' not in grouped[hospital_name][lab_unit_name][disease_name]:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Arbitrator')
     
     return grouped

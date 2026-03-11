@@ -4,6 +4,67 @@ from sqlalchemy import select
 from models import User, Disease, LabUnit, UserDiseaseUnitRole
 from db_transaction_manager import transaction_scope, get_db_session
 from auth.roles import roles_required
+from utils.linkedGradingUtils import get_primary_disease_id
+
+
+def _validate_linked_primary_eligibility(db, items: list[dict]) -> list[str]:
+    """
+    Reject linked-disease eligibility when the primary disease is missing the
+    corresponding slot in the same lab unit.
+    """
+    normalized_items: dict[tuple[int, int], dict] = {}
+    for item in items:
+        disease_id = int(item.get("disease_id"))
+        lab_unit_id = int(item.get("lab_unit_id"))
+        normalized_items[(disease_id, lab_unit_id)] = {
+            "can_grade_resident": bool(item.get("can_grade_resident", False)),
+            "can_grade_resident2": bool(item.get("can_grade_resident2", False)),
+            "can_arbitrate": bool(item.get("can_arbitrate", False)),
+            "active": bool(item.get("active", False)),
+        }
+
+    disease_names = {
+        disease.id: disease.name
+        for disease in db.execute(select(Disease)).scalars().all()
+    }
+    lab_unit_names = {
+        lab_unit.id: lab_unit.name
+        for lab_unit in db.execute(select(LabUnit)).scalars().all()
+    }
+
+    errors: list[str] = []
+    for (disease_id, lab_unit_id), item in normalized_items.items():
+        primary_disease_id = get_primary_disease_id(db, disease_id)
+        if primary_disease_id == disease_id:
+            continue
+
+        primary_item = normalized_items.get((primary_disease_id, lab_unit_id))
+        primary_disease_name = disease_names.get(primary_disease_id, f"Disease {primary_disease_id}")
+        linked_disease_name = disease_names.get(disease_id, f"Disease {disease_id}")
+        lab_unit_name = lab_unit_names.get(lab_unit_id, f"Lab Unit {lab_unit_id}")
+
+        needs_resident = item["active"] and (item["can_grade_resident"] or item["can_grade_resident2"])
+        needs_arbitrator = item["active"] and item["can_arbitrate"]
+
+        if needs_resident and not (
+            primary_item
+            and primary_item["active"]
+            and (primary_item["can_grade_resident"] or primary_item["can_grade_resident2"])
+        ):
+            errors.append(
+                f"{lab_unit_name}: {linked_disease_name} resident grading requires active {primary_disease_name} resident eligibility."
+            )
+
+        if needs_arbitrator and not (
+            primary_item
+            and primary_item["active"]
+            and primary_item["can_arbitrate"]
+        ):
+            errors.append(
+                f"{lab_unit_name}: {linked_disease_name} arbitrator grading requires active {primary_disease_name} arbitrator eligibility."
+            )
+
+    return errors
 
 @roles_required('admin', 'local_admin')
 def manage_eligibility_users():
@@ -85,6 +146,12 @@ def edit_eligibility(user_id):
                 
                 if not isinstance(items, list):
                     flash("Invalid data format.", "danger")
+                    return redirect(url_for("admin.edit_eligibility", user_id=user_id))
+
+                validation_errors = _validate_linked_primary_eligibility(db, items)
+                if validation_errors:
+                    for error in validation_errors:
+                        flash(error, "danger")
                     return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                 
                 updated = []

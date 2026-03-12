@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from flask import render_template
 from flask.typing import ResponseReturnValue
@@ -68,6 +68,33 @@ def _build_v2_union_sql(disease_rows: List[Tuple[int, str]]) -> str:
             WHERE 1=0
         """
     return " UNION ALL ".join(selects)
+
+
+def _get_existing_v2_mv_names(db: Any) -> Set[str]:
+    """Return existing per-disease image-listing materialized view names."""
+    rows = db.execute(
+        text(
+            """
+            SELECT matviewname
+            FROM pg_matviews
+            WHERE schemaname = current_schema()
+              AND matviewname LIKE 'mvw_image_listing\\_%\\_v2' ESCAPE '\\'
+            """
+        )
+    ).all()
+    return {str(row[0]) for row in rows}
+
+
+def _filter_disease_rows_with_existing_v2_views(
+    disease_rows: List[Tuple[int, str]], existing_mv_names: Set[str]
+) -> List[Tuple[int, str]]:
+    """Keep only diseases whose per-disease v2 view exists."""
+    filtered_rows: List[Tuple[int, str]] = []
+    for disease_id, disease_name in disease_rows:
+        mv_name = get_mv_name_for_disease_name(str(disease_name), int(disease_id))
+        if mv_name in existing_mv_names:
+            filtered_rows.append((disease_id, disease_name))
+    return filtered_rows
 
 
 @cache.cached(timeout=_CACHE_TTL_SECONDS, key_prefix=_CACHE_KEY)
@@ -210,7 +237,11 @@ def _compute_home_payload() -> Dict[str, Any]:
         )
 
         disease_rows = db.execute(select(Disease.id, Disease.name).order_by(Disease.id)).all()
-        v2_union = _build_v2_union_sql(disease_rows)
+        existing_mv_names = _get_existing_v2_mv_names(db)
+        v2_disease_rows = _filter_disease_rows_with_existing_v2_views(
+            disease_rows, existing_mv_names
+        )
+        v2_union = _build_v2_union_sql(v2_disease_rows)
         has_grade_expr = (
             "has_resident OR has_resident2 OR has_arbitrator OR has_review OR has_regrade_adj"
         )

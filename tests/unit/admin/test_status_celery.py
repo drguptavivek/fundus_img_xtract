@@ -66,3 +66,29 @@ def test_build_celery_task_status_payload_marks_disabled_rows_and_preserves_expl
     assert db_entry["status"] == "disabled"
     assert db_entry["queue"] == "maintenance"
     assert db_entry["queue_explicit"] is True
+
+
+def test_build_celery_task_status_payload_coerces_iso_datetime_strings():
+    now = datetime(2026, 3, 23, 6, 0, tzinfo=pytz.UTC)
+    db_row = {
+        "name": "cleanup-stuck-jobs",
+        "task_name": "celery_tasks.tasks.maintenance_tasks.cleanup_stuck_jobs_task",
+        "queue": "maintenance",
+        "enabled": True,
+        "schedule_type": "interval",
+        "interval_seconds": 1800,
+        "crontab_minute": None,
+        "crontab_hour": None,
+        "crontab_day_of_week": None,
+        "crontab_day_of_month": None,
+        "crontab_month_of_year": None,
+        "last_run_at": "2026-03-23T05:30:00+00:00",
+        "next_run_at": "2026-03-23T06:00:00+00:00",
+    }
+
+    payload = admin_status._build_celery_task_status_payload([db_row], {}, now)
+
+    entry = payload["rows"][0]
+    assert entry["last_run_at"].isoformat() == "2026-03-23T05:30:00+00:00"
+    assert entry["next_run_at"].isoformat() == "2026-03-23T06:00:00+00:00"
+    assert entry["issues"] == []

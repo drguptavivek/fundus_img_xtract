@@ -5,11 +5,11 @@ including system health, maintenance operations, and monitoring tools.
 """
 
 from collections import Counter
+from datetime import datetime, timedelta
 
 from flask import render_template, jsonify, current_app, flash, redirect, url_for
 from auth.roles import roles_required
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
 import pytz
 import sqlalchemy as sa
 
@@ -462,6 +462,21 @@ def _serialize_code_schedule_expression(entry: dict) -> str:
     return str(schedule_obj)
 
 
+def _coerce_datetime(value):
+    if value is None or isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            normalized = value.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                return pytz.UTC.localize(parsed)
+            return parsed
+        except ValueError:
+            return None
+    return None
+
+
 def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> dict:
     def _value(row, key):
         return row[key] if isinstance(row, dict) else getattr(row, key)
@@ -484,7 +499,10 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
             issues.append("No queue configured or inferred")
         if task_counts[task_name] > 1:
             issues.append(f"Duplicate schedule definition ({task_counts[task_name]} total)")
-        if _value(row, "enabled") and _value(row, "last_run_at") is None and _value(row, "next_run_at") is None:
+        last_run_at = _coerce_datetime(_value(row, "last_run_at"))
+        next_run_at = _coerce_datetime(_value(row, "next_run_at"))
+
+        if _value(row, "enabled") and last_run_at is None and next_run_at is None:
             issues.append("No persisted run telemetry")
 
         if not _value(row, "enabled"):
@@ -503,8 +521,8 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
             "enabled": _value(row, "enabled"),
             "schedule_type": _value(row, "schedule_type"),
             "schedule": _serialize_schedule_expression(row),
-            "last_run_at": _value(row, "last_run_at").isoformat() if _value(row, "last_run_at") else None,
-            "next_run_at": _value(row, "next_run_at").isoformat() if _value(row, "next_run_at") else None,
+            "last_run_at": last_run_at,
+            "next_run_at": next_run_at,
             "status": status,
             "issues": issues,
         })

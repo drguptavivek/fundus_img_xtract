@@ -145,18 +145,12 @@ def revise_grading(grade_id: int):
             # Check if user is eligible for revision using utility function
             eligibility_result = is_user_eligible_for_revision(db, current_user.id, task.id, grade.role_slot, grade)
             
-            if not eligibility_result["eligible"]:
-                flash(eligibility_result["message"], "danger")
-                return redirect(url_for("grading.index"))
-
             state_eligible, state_message = check_revision_eligibility_by_task_state(
                 task.state,
                 grade.role_slot,
                 grade.created_at,
             )
-            if not state_eligible:
-                flash(state_message, "danger")
-                return redirect(url_for("grading.index"))
+            revision_editable = eligibility_result["eligible"] and state_eligible
             
             # For revision, we need to verify they still have the appropriate role
             # For resident grading, allow both resident and ophthalmologist roles
@@ -171,8 +165,12 @@ def revise_grading(grade_id: int):
                 flash(f"You no longer have the required role ({slot_type}) to revise this grade.", "danger")
                 return redirect(url_for("grading.index"))
             
-            # Check if this is an arbitrator revising their recent grade on a final task
-            is_arbitrator_revising_recent = eligibility_result.get("is_recent", False) and task.state == 'final'
+            # Keep the revise page viewable after the edit window, but read-only.
+            is_arbitrator_revising_recent = (
+                revision_editable
+                and grade.role_slot == 'arbitrator'
+                and task.state == 'final'
+            )
             
             # Fetch disease gradings for this disease using utility function
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
@@ -270,6 +268,10 @@ def revise_grading(grade_id: int):
                 grades=task.grades,
                 existing_grade_in_header=True,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
+                revision_read_only=not revision_editable,
+                revision_status_message=None if revision_editable else (
+                    eligibility_result["message"] if not eligibility_result["eligible"] else state_message
+                ),
                 current_user_id=getattr(current_user, "id", None)
             ))
             

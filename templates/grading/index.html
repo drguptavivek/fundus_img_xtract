@@ -39,6 +39,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 20;
 }
 
 .info-tooltip__trigger {
@@ -75,6 +76,11 @@
   pointer-events: none;
   transition: opacity 140ms ease, transform 140ms ease;
   z-index: 30;
+}
+
+.kpi-card,
+.kpi-card .card-body {
+  overflow: visible;
 }
 
 .info-tooltip__panel::after {

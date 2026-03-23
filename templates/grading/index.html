@@ -34,6 +34,66 @@
 {% endif %}
 {% endmacro %}
 
+<style>
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.info-tooltip__trigger {
+  width: 1.45rem;
+  height: 1.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6fb 100%);
+  color: #36506c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  box-shadow: 0 10px 24px rgba(24, 39, 75, 0.08);
+}
+
+.info-tooltip__panel {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.6rem);
+  transform: translateX(-50%) translateY(6px);
+  width: min(19rem, 80vw);
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.9rem;
+  background: rgba(24, 31, 42, 0.96);
+  color: #f7f9fc;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 30;
+}
+
+.info-tooltip__panel::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-width: 0.45rem 0.4rem 0;
+  border-style: solid;
+  border-color: rgba(24, 31, 42, 0.96) transparent transparent;
+}
+
+.info-tooltip:hover .info-tooltip__panel,
+.info-tooltip:focus-within .info-tooltip__panel {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Image Grading</h3>
@@ -180,14 +240,16 @@
       <div class="card-body">
         <h5 class="card-title d-flex align-items-center gap-2">
           <span>In Progress / Locked By You</span>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary rounded-circle py-0 px-2"
-            data-bs-toggle="tooltip"
-            data-bs-placement="top"
-            title="These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. There is currently no resume queue on this dashboard. If you do not submit them, stale locks are cleared automatically after 60 minutes."
-            aria-label="Explain in-progress locked tasks"
-          >?</button>
+          <span class="info-tooltip">
+            <button
+              type="button"
+              class="info-tooltip__trigger"
+              aria-label="Explain in-progress locked tasks"
+            >?</button>
+            <span class="info-tooltip__panel" role="tooltip">
+              These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. There is currently no resume queue on this dashboard. If you do not submit them, stale locks are cleared automatically after 60 minutes.
+            </span>
+          </span>
         </h5>
         <h2 class="card-text">{{ task_tracker_kpi.total }}</h2>
         <p class="text-muted">

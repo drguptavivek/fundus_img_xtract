@@ -1,0 +1,234 @@
+{% macro badge_for_for(val) %}
+{% set v = (val or '')|lower %}
+{% if v == 'glaucoma' %}
+<span class="badge rounded-pill badge-soft-primary">Glaucoma</span>
+{% elif v == 'dr' %}
+<span class="badge rounded-pill badge-soft-info">DR</span>
+{% elif v == 'amd' %}
+<span class="badge rounded-pill badge-soft-purple">AMD</span>
+{% else %}
+<span class="badge rounded-pill badge-soft-secondary">{{ val or '-' }}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro badge_for_impression(val) %}
+{% set t = (val or '') %}
+{% if t|lower == 'normal' %}
+<span class="badge rounded-pill badge-soft-success">Normal</span>
+{% elif t|lower in ['glaucoma suspect','suspect'] %}
+<span class="badge rounded-pill badge-soft-warning">Glaucoma Suspect</span>
+{% elif t|lower == 'glaucoma' %}
+<span class="badge rounded-pill badge-soft-danger">Glaucoma</span>
+{% elif t|lower in ['other retinal','other'] %}
+<span class="badge rounded-pill badge-soft-info">Other Retinal</span>
+{% elif t|lower in ['not gradable','notgradable','ungradable'] %}
+<span class="badge rounded-pill badge-soft-secondary">Not gradable</span>
+{% else %}
+<span class="badge rounded-pill badge-soft-secondary">{{ val or '-' }}</span>
+{% endif %}
+{% endmacro %}
+
+<!-- History of My Gradings -->
+<div class="card card-aurora shadow-sm" id="gradingHistoryPanel">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-3">
+      <strong>My Gradings and AI Grade Uploads</strong>
+      <div class="d-flex align-items-center gap-2 mb-0">
+        <label for="grading-date-filter" class="small mb-0">Filter by date:</label>
+        <input
+          type="date"
+          id="grading-date-filter"
+          name="date"
+          class="form-control form-control-sm"
+          style="width: auto;"
+          value="{{ filter_date or '' }}"
+          hx-trigger="change"
+          hx-get="{{ url_for('grading.index') }}"
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >
+        <a
+          id="clear-date-filter"
+          class="btn btn-sm btn-outline-secondary {% if not filter_date %}d-none{% endif %}"
+          href="{{ url_for('grading.index') }}"
+          hx-get="{{ url_for('grading.index') }}"
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Clear</a>
+      </div>
+      <div class="btn-group btn-group-sm" role="group">
+        <a
+          class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
+          href="{{ my_prev_url or '#' }}"
+          {% if my_prev_url %}hx-get="{{ my_prev_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Previous Date</a>
+        <a
+          class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
+          href="{{ my_next_url or '#' }}"
+          {% if my_next_url %}hx-get="{{ my_next_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Next Date</a>
+      </div>
+    </div>
+    <span class="small text-muted">{{ my_total or 0 }} total</span>
+  </div>
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
+      {% if type_counts %}
+      <span class="ms-auto small text-muted">
+        {% for k,v in type_counts.items() %}
+        <span class="me-2">{{ k }}: <strong>{{ v }}</strong></span>
+        {% endfor %}
+      </span>
+      {% endif %}
+    </div>
+
+    {% if my_items %}
+    <div class="theme-contrast p-3 rounded">
+      <div class="row g-3">
+        {% for g in my_items %}
+        <div class="col-md-6 col-lg-4">
+          <div class="card border h-100 shadow-sm">
+            <div class="card-body py-2 px-3">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                    {% set display_ts = g.updated_at if g.updated_at and g.created_at and g.updated_at > g.created_at else g.created_at %}
+                    {% set is_updated = g.updated_at and g.created_at and (g.updated_at - g.created_at).total_seconds() > 1 %}
+                    {% if is_updated %}
+                    {% set display_ts = g.updated_at %}
+                    {% else %}
+                    {% set display_ts = g.created_at %}
+                    {% endif %}
+                    <span class="small text-muted">{{ display_ts|user_datetime('%Y-%m-%d %H:%M') if display_ts else '-' }}</span>
+                    {% if is_updated %}
+                    <span class="badge bg-warning text-dark">Updated</span>
+                    {% else %}
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Graded</span>
+                    {% endif %}
+                    <span class="badge bg-secondary">{{ g.role_slot|title }}</span> {{ badge_for_for(g.disease_name)|safe }}
+                  </div>
+                  {% if g.task_id %}
+                  <div class="mb-1">
+                    Task:  <code class="small text-muted"> {{ g.task_id }} &nbsp; </code>
+                    {% if g.role_slot == 'ai' %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                      {% if g.ai_probability is not none %}
+                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
+                      {% endif %}
+                      {% if g.ai_model_name %}
+                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
+                      {% endif %}
+                    {% else %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% endif %}
+                  </div>
+                  {% else %}
+                  <div class="mb-1">
+                    {{ badge_for_for(g.disease_name)|safe }} Grade =  &nbsp;
+                    {% if g.role_slot == 'ai' %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                      {% if g.ai_probability is not none %}
+                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
+                      {% endif %}
+                      {% if g.ai_model_name %}
+                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
+                      {% endif %}
+                    {% else %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% endif %}
+                  </div>
+                  {% endif %}
+                  <div class="small text-muted mb-1">
+                    <code class="small">{{ g.image_uuid or '&#8212;' }}</code>
+                  </div>
+                  <div class="small text-muted">
+                    {{ g.lab_unit_name }} - {{ g.hospital_name }}
+                  </div>
+                  {% if g.comment and g.role_slot != 'ai' %}
+                  <div class="small mt-1">
+                    {{ g.comment }}
+                  </div>
+                  {% endif %}
+                </div>
+                <div>
+                  {% if g.image_uuid and g.role_slot != 'ai' and g.can_revise %}
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">Revise</a>
+                  {% elif g.image_uuid and g.role_slot != 'ai' %}
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">View</a>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-3">No gradings found.</div>
+    {% endif %}
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <div class="small text-muted">
+      {% if filter_date %}
+        Showing gradings for {{ filter_date }}
+        {% if my_total_pages > 1 %}
+          - Page {{ my_page }} of {{ my_total_pages }}
+        {% endif %}
+      {% else %}
+        Showing all gradings
+        {% if my_total_pages > 1 %}
+          - Page {{ my_page }} of {{ my_total_pages }}
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <div class="btn-group btn-group-sm" role="group">
+        <a
+          class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
+          href="{{ my_prev_url or '#' }}"
+          {% if my_prev_url %}hx-get="{{ my_prev_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Previous Date</a>
+        <a
+          class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
+          href="{{ my_next_url or '#' }}"
+          {% if my_next_url %}hx-get="{{ my_next_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Next Date</a>
+      </div>
+      {% if my_total_pages > 1 %}
+      <div class="btn-group btn-group-sm" role="group">
+        <a
+          class="btn btn-outline-primary {% if not page_prev_url %}disabled{% endif %}"
+          href="{{ page_prev_url or '#' }}"
+          {% if page_prev_url %}hx-get="{{ page_prev_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Prev Page</a>
+        <a
+          class="btn btn-outline-primary {% if not page_next_url %}disabled{% endif %}"
+          href="{{ page_next_url or '#' }}"
+          {% if page_next_url %}hx-get="{{ page_next_url }}"{% endif %}
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true"
+        >Next Page</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

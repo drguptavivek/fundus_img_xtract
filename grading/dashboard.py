@@ -15,6 +15,83 @@ from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
  
+def _build_history_panel_context(
+    db,
+    *,
+    user_id: int | None,
+    page: int,
+    per_page: int,
+    filter_date: str | None,
+):
+    my_items, total_mine = get_user_gradings_with_details(
+        db,
+        user_id=user_id,
+        page=page,
+        per_page=per_page,
+        filter_date=filter_date,
+        exclude_role_slots={'review'}
+    )
+
+    available_dates = db.query(
+        func.date(Grade.created_at).label('grading_date')
+    ).filter(
+        Grade.grader_user_id == user_id
+    ).group_by(
+        func.date(Grade.created_at)
+    ).order_by(
+        desc(func.date(Grade.created_at))
+    ).all()
+
+    date_list = [date[0] for date in available_dates]
+
+    prev_date = None
+    next_date = None
+
+    if filter_date and filter_date in date_list:
+        current_index = date_list.index(filter_date)
+        if current_index < len(date_list) - 1:
+            prev_date = date_list[current_index + 1]
+        if current_index > 0:
+            next_date = date_list[current_index - 1]
+
+    mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
+    mine_next_url = url_for('grading.index', date=next_date) if next_date else None
+
+    total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
+
+    page_prev_url = None
+    page_next_url = None
+    if total_pages_mine > 1:
+        if page > 1:
+            page_params = {'p': page - 1}
+            if filter_date:
+                page_params['date'] = filter_date
+            page_prev_url = url_for('grading.index', **page_params)
+
+        if page < total_pages_mine:
+            page_params = {'p': page + 1}
+            if filter_date:
+                page_params['date'] = filter_date
+            page_next_url = url_for('grading.index', **page_params)
+
+    type_counts = {}
+    for item in my_items:
+        grade_for = item.get('disease_name', 'Unknown')
+        type_counts[grade_for] = type_counts.get(grade_for, 0) + 1
+
+    return {
+        'my_items': my_items,
+        'my_total': total_mine,
+        'my_page': page,
+        'my_total_pages': total_pages_mine,
+        'my_prev_url': mine_prev_url,
+        'my_next_url': mine_next_url,
+        'page_prev_url': page_prev_url,
+        'page_next_url': page_next_url,
+        'filter_date': filter_date,
+        'type_counts': type_counts,
+    }
+
 
 @roles_required("resident", "ophthalmologist")
 def index():
@@ -25,70 +102,16 @@ def index():
         page = max(1, page)
         per_page = 50
         filter_date = request.args.get('date', default=None, type=str)
-        
-        # Get user's gradings with details using pagination
-        my_items, total_mine = get_user_gradings_with_details(
+        history_panel_context = _build_history_panel_context(
             db,
             user_id=getattr(current_user, 'id', None),
             page=page,
             per_page=per_page,
             filter_date=filter_date,
-            exclude_role_slots={'review'}
         )
-        
-        # Get all available grading dates for this user
-        available_dates = db.query(
-            func.date(Grade.created_at).label('grading_date')
-        ).filter(
-            Grade.grader_user_id == getattr(current_user, 'id', None)
-        ).group_by(
-            func.date(Grade.created_at)
-        ).order_by(
-            desc(func.date(Grade.created_at))
-        ).all()
-        
-        # Convert to list of date strings
-        date_list = [date[0] for date in available_dates]
-        
-        # Find previous and next dates
-        prev_date = None
-        next_date = None
-        
-        if filter_date and filter_date in date_list:
-            current_index = date_list.index(filter_date)
-            if current_index < len(date_list) - 1:
-                prev_date = date_list[current_index + 1]
-            if current_index > 0:
-                next_date = date_list[current_index - 1]
-        # Build navigation URLs
-        mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
-        mine_next_url = url_for('grading.index', date=next_date) if next_date else None
-        
-        # Calculate total pages for pagination within the selected date
-        total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
-        
-        # Build page navigation URLs that preserve the date filter
-        page_prev_url = None
-        page_next_url = None
-        
-        if total_pages_mine > 1:
-            if page > 1:
-                page_params = {'p': page - 1}
-                if filter_date:
-                    page_params['date'] = filter_date
-                page_prev_url = url_for('grading.index', **page_params)
-            
-            if page < total_pages_mine:
-                page_params = {'p': page + 1}
-                if filter_date:
-                    page_params['date'] = filter_date
-                page_next_url = url_for('grading.index', **page_params)
-        
-        # Get impression counts for display from the gradings data
-        type_counts = {}
-        for item in my_items:
-            grade_for = item.get('disease_name', 'Unknown')
-            type_counts[grade_for] = type_counts.get(grade_for, 0) + 1
+
+        if request.headers.get("HX-Request") == "true":
+            return render_template("grading/_history_panel.html", **history_panel_context)
 
         # Get dual grading tasks for the current user, separated by disease
         # and role (resident vs resident2) and arbitration tasks
@@ -237,16 +260,6 @@ def index():
 
     return render_template(
         "grading/index.html",
-        type_counts=type_counts,
-        my_items=my_items,
-        my_total=total_mine,
-        my_page=page,
-        my_total_pages=total_pages_mine,
-        my_prev_url=mine_prev_url,
-        my_next_url=mine_next_url,
-        page_prev_url=page_prev_url,
-        page_next_url=page_next_url,
-        filter_date=filter_date,
         is_resident=is_resident,
         is_resident2=is_resident2,
         kpi_resident_pending=kpi_resident_pending,
@@ -265,4 +278,5 @@ def index():
         user_eligibility=user_eligibility,
         diseases=diseases_data,
         linked_followup_counts_by_disease=linked_followup_counts_by_disease,
+        **history_panel_context,
     )

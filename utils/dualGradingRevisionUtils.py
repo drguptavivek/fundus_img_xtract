@@ -1,6 +1,4 @@
-"""
-Utility functions for dual grading system, specifically for revision eligibility checks. 
-"""
+"""Utility functions for dual grading revision eligibility checks."""
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from typing import Optional, TYPE_CHECKING
@@ -10,6 +8,25 @@ if TYPE_CHECKING:
 
 from models import Grade, GradingTask
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
+
+
+REVISION_WINDOW_HOURS = 24
+
+
+def _normalize_grade_timestamp(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _is_within_revision_window(grade_created_at: Optional[datetime]) -> bool:
+    normalized_created_at = _normalize_grade_timestamp(grade_created_at)
+    if normalized_created_at is None:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=REVISION_WINDOW_HOURS)
+    return normalized_created_at >= cutoff
 
 
 def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_type: str, grade: Grade = None) -> dict:
@@ -58,33 +75,14 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
         result["message"] = "You are not authorized to revise this grade."
         return result
     
-    # For resident and resident2, revision is allowed if the task is not yet finalized
-    if slot_type in ['resident', 'resident2']:
-        # These users can revise their grades at any point before finalization
+    is_recent = _is_within_revision_window(grade.created_at)
+    result["is_recent"] = is_recent
+
+    if is_recent:
         result["eligible"] = True
-        result["message"] = "Eligible for revision"
-        return result
-    
-    # For arbitrator, revision is only allowed within 6 hours of submission
-    if slot_type == 'arbitrator':
-        # Check if grade was submitted within the last 6 hours
-        six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
-        
-        # Make sure we handle timezone-naive datetime properly
-        created_at = grade.created_at
-        if created_at.tzinfo is None:
-            # Model datetimes are likely stored as timezone-naive in UTC
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        
-        is_recent = created_at >= six_hours_ago
-        result["is_recent"] = is_recent
-        
-        if is_recent:
-            result["eligible"] = True
-            result["message"] = "Eligible for revision (submitted within 6 hours)"
-        else:
-            result["message"] = "Cannot revise arbitrator grade after 6 hours have passed."
-    
+        result["message"] = f"Eligible for revision (submitted within {REVISION_WINDOW_HOURS} hours)"
+    else:
+        result["message"] = f"Cannot revise after {REVISION_WINDOW_HOURS} hours have passed."
     return result
 
 
@@ -126,7 +124,7 @@ def is_arbitrator_eligible_for_revision(db: Session, user_id: int, task_id: int,
             "grade": None
         }
     
-    # Check if the grade was made recently (within 6 hours)
+    # Check if the grade was made recently within the global revision window.
     eligibility_result = is_user_eligible_for_revision(db, user_id, task_id, 'arbitrator', arbitrator_grade)
     
     # Add the grade to the result for further use
@@ -149,19 +147,12 @@ def check_arbitrator_revision_eligibility(db: Session, user_id: int, task: Gradi
         A tuple of (is_eligible: bool, message: str)
     """
     if task.state == 'final':
-        # Check if this user is the arbitrator who made the decision and if it was recent
+        # Check if this user is the arbitrator who made the decision within the revision window.
         arbitrator_grade = next((g for g in task.grades if g.role_slot == 'arbitrator' and g.grader_user_id == user_id), None)
         if arbitrator_grade:
-            six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
-            created_at = arbitrator_grade.created_at
-            if created_at and created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            
-            if created_at and created_at >= six_hours_ago:
-                # Allow arbitrator to revise their recent decision
-                return True, "Eligible for revision (submitted within 6 hours)"
-            else:
-                return False, "Cannot revise arbitrator grade after 6 hours have passed."
+            if _is_within_revision_window(arbitrator_grade.created_at):
+                return True, f"Eligible for revision (submitted within {REVISION_WINDOW_HOURS} hours)"
+            return False, f"Cannot revise after {REVISION_WINDOW_HOURS} hours have passed."
         else:
             return False, "Arbitrator slot is not available for this task."
     
@@ -200,28 +191,20 @@ def is_arbitrator_revision_allowed(db: Session, user_id: int, task_id: int, slot
         result["message"] = "This function is only for arbitrator revisions."
         return result
 
-    # We need to fetch the existing grade to verify if it was created within 6 hours
+    # We need to fetch the existing grade to verify if it was created within the revision window.
     from models import User
     user = db.query(User).filter_by(id=user_id).first()
     existing_grade_for_check = fetch_existing_grade_for_user(db, task_id, user_id, slot, user=user)
     
     if existing_grade_for_check:
-        # Use timezone-aware datetime consistently
-        six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
-        
-        # Make the grade's created_at timezone-aware if it's naive for proper comparison
-        created_at = existing_grade_for_check.created_at
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        
-        is_recent = created_at >= six_hours_ago
+        is_recent = _is_within_revision_window(existing_grade_for_check.created_at)
         result["is_recent"] = is_recent
-        
+
         if is_recent:
             result["allowed"] = True
-            result["message"] = "Arbitrator revision allowed (submitted within 6 hours)"
+            result["message"] = f"Arbitrator revision allowed (submitted within {REVISION_WINDOW_HOURS} hours)"
         else:
-            result["message"] = "Arbitrator revision not allowed after 6 hours have passed."
+            result["message"] = f"Arbitrator revision not allowed after {REVISION_WINDOW_HOURS} hours have passed."
     else:
         # If there's no existing grade for this arbitrator, it's not a revision
         result["message"] = "No existing grade found for this arbitrator - this is not a revision."
@@ -236,53 +219,18 @@ def check_revision_eligibility_by_task_state(task_state: str, role_slot: str, gr
     Args:
         task_state: Current state of the task
         role_slot: Role slot ('resident', 'resident2', 'arbitrator')
-        grade_created_at: When the grade was created (needed for arbitrator revisions)
+        grade_created_at: When the grade was created
     
     Returns:
         A tuple of (is_eligible: bool, message: str)
     """
-    # If task is finalized, only arbitrators can make revisions under specific conditions
-    if task_state == "final":
-        if role_slot == "arbitrator":
-            if grade_created_at:
-                # Check if the grade was submitted within the last 6 hours
-                six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
-                # Handle timezone-naive datetime
-                if grade_created_at.tzinfo is None:
-                    grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
-                
-                if grade_created_at >= six_hours_ago:
-                    return True, "Eligible for revision (arbitrator grade submitted within 6 hours)"
-                else:
-                    return False, "Cannot revise arbitrator grade after 6 hours have passed."
-            else:
-                return False, "Cannot revise arbitrator grade: grade creation time not available."
-        else:
-            return False, "This task is finalized and cannot be revised."
-    
-    # For non-final tasks, eligibility depends on the role and task state
-    if role_slot == "resident":
-        # Resident can revise their grade at any point before finalization
-        return True, "Eligible for revision (resident)"
-    elif role_slot == "resident2":
-        # Resident2 can revise their grade at any point before finalization
-        return True, "Eligible for revision (resident2)"
-    elif role_slot == "arbitrator":
-        # Arbitrator can revise if task is in arbitration state OR if their grade was submitted in the last 6 hours
-        if task_state == "arbitration":
-            return True, "Eligible for revision (arbitration state)"
-        elif grade_created_at:
-            # Check if the grade was submitted within the last 6 hours
-            six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
-            # Handle timezone-naive datetime
-            if grade_created_at.tzinfo is None:
-                grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
-            
-            if grade_created_at >= six_hours_ago:
-                return True, "Eligible for revision (arbitrator grade submitted within 6 hours)"
-            else:
-                return False, "Cannot revise arbitrator grade after 6 hours have passed."
-        else:
-            return False, "Cannot revise arbitrator grade: grade creation time not available."
-    
-    return False, f"Unknown role slot: {role_slot}"
+    if role_slot not in {"resident", "resident2", "arbitrator"}:
+        return False, f"Unknown role slot: {role_slot}"
+
+    if not grade_created_at:
+        return False, "Cannot revise grade: grade creation time not available."
+
+    if _is_within_revision_window(grade_created_at):
+        return True, f"Eligible for revision (submitted within {REVISION_WINDOW_HOURS} hours)"
+
+    return False, f"Cannot revise after {REVISION_WINDOW_HOURS} hours have passed."

@@ -67,12 +67,8 @@ def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Conse
         resident2_grade = next((g for g in all_grades if g.role_slot == "resident2"), None)
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
-        # Check if consensus already exists
+        # Existing consensus may need to be updated or removed after a revision.
         existing_consensus = db.query(Consensus).filter(Consensus.task_id == task.id).first()
-        
-        if existing_consensus:
-            # Consensus already exists, return it
-            return existing_consensus
             
         # Determine if consensus can be established
         consensus = None
@@ -116,6 +112,18 @@ def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Conse
             # If they don't match, no consensus is created yet - needs arbitration
         
         if consensus:
+            if existing_consensus:
+                existing_consensus.final_disease_grading_id = consensus.final_disease_grading_id
+                existing_consensus.method = consensus.method
+                existing_consensus.decided_by_user_id = consensus.decided_by_user_id
+                existing_consensus.final_disease_name = consensus.final_disease_name
+                existing_consensus.final_grade_name = consensus.final_grade_name
+                existing_consensus.final_grade_description = consensus.final_grade_description
+                consensus = existing_consensus
+            else:
+                db.add(consensus)
+                db.flush()  # Ensure the consensus gets an ID without committing transaction
+
             # Log consensus creation with task details
             consensus_logger.info(
                 "Consensus created [Task ID: %s] [Method: %s] [Disease ID: %s] [Final Grade ID: %s]",
@@ -150,13 +158,13 @@ def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Conse
                     sanitize_log_value(arbitrator_grade.grader_user_id),
                 )
             
-            db.add(consensus)
-            db.flush()  # Ensure the consensus gets an ID without committing transaction
             # Refresh to get fresh data
             db.refresh(consensus)
         else:
-            # If no consensus was created, still return None
-            pass
+            if existing_consensus:
+                db.delete(existing_consensus)
+                db.flush()
+            return None
             
         return consensus
     except Exception as e:

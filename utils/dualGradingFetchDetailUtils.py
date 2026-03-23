@@ -216,6 +216,7 @@ def get_user_gradings_with_details(
     query = (
         db.query(
             Grade,
+            GradingTask.state.label('task_state'),
             Disease.name.label('disease_name'),
             DiseaseGrading.impression.label('grade_impression'),
             LabUnit.name.label('lab_unit_name'),
@@ -311,6 +312,7 @@ def get_user_gradings_with_details(
         grade_dict = {
             'id': result.Grade.id,
             'task_id': result.Grade.task_id,
+            'task_state': result.task_state,
             'grader_user_id': result.Grade.grader_user_id,
             'role_slot': result.Grade.role_slot,
             'disease_grading_id': result.Grade.disease_grading_id,
@@ -326,6 +328,14 @@ def get_user_gradings_with_details(
             'ai_model_name': result.Grade.ai_model_name,
             'ai_model_version': result.Grade.ai_model_version
         }
+        from utils.dualGradingRevisionUtils import check_revision_eligibility_by_task_state
+
+        can_revise, _ = check_revision_eligibility_by_task_state(
+            result.task_state,
+            result.Grade.role_slot,
+            result.Grade.created_at,
+        )
+        grade_dict["can_revise"] = bool(image_uuid) and result.Grade.role_slot != "ai" and can_revise
         gradings_with_details.append(grade_dict)
     
     return gradings_with_details, total_count

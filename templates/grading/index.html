@@ -320,7 +320,7 @@
                   {% endif %}
                 </div>
                 <div>
-                  {% if g.image_uuid and g.role_slot != 'ai' %}
+                  {% if g.can_revise %}
                   <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">Revise</a>
                   {% endif %}
                 </div>

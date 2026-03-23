@@ -92,14 +92,15 @@ This workflow describes the complete lifecycle of grading tasks from creation th
 
 ### Phase 5: Revisions (Optional)
 18. **Revision Eligibility**: Users can revise their own grades under specific conditions:
-    -   **Residents**: Can revise until Resident2 completes grading
-    -   **Resident2**: Can revise until Arbitration begins
-    -   **Arbitrators**: Can revise within 6 hours of decision (configurable via `ARBITRATOR_REVISION_HOURS`)
+    -   **Residents**: Can revise their own grade for up to 24 hours from submission
+    -   **Resident2**: Can revise their own grade for up to 24 hours from submission
+    -   **Arbitrators**: Can revise their own grade for up to 24 hours from submission
 19. **Revision Process**: User accesses revision interface:
     -   System validates eligibility (original grader, time constraints, task state)
     -   Updates existing `Grade` record
     -   Recalculates consensus if necessary
     -   Updates task state based on new grade relationships
+    -   If a revision changes resident/resident2 agreement, the task state is recalculated and can move between `resident_done`, `arbitration`, and `final`
 20. **Audit Trail**: All revisions are logged with timestamps and user IDs
 
 ## Mermaid Workflow Diagram

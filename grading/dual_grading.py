@@ -57,7 +57,7 @@ from utils.feature_geometry import (
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
-from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
+from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, check_revision_eligibility_by_task_state
 from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
 from utils.notifications import send_notification_to_admins
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
@@ -147,6 +147,15 @@ def revise_grading(grade_id: int):
             
             if not eligibility_result["eligible"]:
                 flash(eligibility_result["message"], "danger")
+                return redirect(url_for("grading.index"))
+
+            state_eligible, state_message = check_revision_eligibility_by_task_state(
+                task.state,
+                grade.role_slot,
+                grade.created_at,
+            )
+            if not state_eligible:
+                flash(state_message, "danger")
                 return redirect(url_for("grading.index"))
             
             # For revision, we need to verify they still have the appropriate role
@@ -358,19 +367,44 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 flash(f"You are not eligible to grade this task as {slot_type}.", "danger")
                 return redirect(url_for("grading.index"))
             
-            # Check if the slot is available for this task state using utility function
-            is_available, message = check_revision_eligibility_by_task_state(task.state, slot_type)
-            
-            # Special handling for arbitrator in final state (revision case)
-            if slot_type == 'arbitrator' and task.state == 'final':
-                # Check if this user is the arbitrator who made the decision and if it was recent
-                arbitrator_eligibility = is_arbitrator_eligible_for_revision(db, current_user.id, task_id, task)
-                if arbitrator_eligibility["eligible"]:
-                    is_available = True
-                    message = "Eligible for revision"
+            existing_grade_for_availability = fetch_existing_grade_for_user(
+                db, task_id, current_user.id, slot_type, user=current_user
+            )
+            if existing_grade_for_availability is not None:
+                revision_eligibility = is_user_eligible_for_revision(
+                    db,
+                    current_user.id,
+                    task_id,
+                    slot_type,
+                    existing_grade_for_availability,
+                )
+                state_eligible, state_message = check_revision_eligibility_by_task_state(
+                    task.state,
+                    slot_type,
+                    existing_grade_for_availability.created_at,
+                )
+                is_available = revision_eligibility["eligible"] and state_eligible
+                message = (
+                    revision_eligibility["message"]
+                    if not revision_eligibility["eligible"]
+                    else state_message
+                )
+            else:
+                if slot_type == "resident":
+                    is_available = task.state in {"pending", "resident_done", "resident2_done"}
+                    message = "Eligible for grading" if is_available else (
+                        f"Task is no longer available for resident grading (current state: {task.state})."
+                    )
+                elif slot_type == "resident2":
+                    is_available = task.state in {"resident_done", "resident2_done", "arbitration"}
+                    message = "Eligible for grading" if is_available else (
+                        f"Task is no longer available for resident2 grading (current state: {task.state})."
+                    )
                 else:
-                    is_available = False
-                    message = arbitrator_eligibility["message"]
+                    is_available = task.state == "arbitration"
+                    message = "Eligible for grading" if is_available else (
+                        f"Task is no longer available for arbitration (current state: {task.state})."
+                    )
                     
             if not is_available:
                 flash(message, "danger")
@@ -618,21 +652,24 @@ def dual_grading_task(task_uuid: str, slot_type: str):
 
                         # Determine read_only status for this panel
                         panel_read_only = eligibility_error is not None
-                        if slot_type == 'arbitrator':
-                            # Arbitrator can grade 'arbitration' tasks
-                            # For 'final' tasks, check if eligible for revision
-                            if panel_task.state == 'final':
-                                # Check if arbitrator is revising this specific panel task
-                                panel_arbitrator_revision = is_arbitrator_revision_allowed(
-                                    db, current_user.id, panel_task_id, slot_type
-                                )
-                                panel_read_only = not panel_arbitrator_revision.get('allowed', False)
-                            elif panel_task.state != 'arbitration':
-                                # Not ready for arbitration, show read-only for context
+                        if panel_existing_grade is not None:
+                            panel_revision_eligibility = is_user_eligible_for_revision(
+                                db, current_user.id, panel_task_id, slot_type, panel_existing_grade
+                            )
+                            panel_state_eligible, _ = check_revision_eligibility_by_task_state(
+                                panel_task.state,
+                                slot_type,
+                                panel_existing_grade.created_at,
+                            )
+                            panel_revision_allowed = (
+                                panel_revision_eligibility.get("eligible", False) and panel_state_eligible
+                            )
+                            panel_read_only = panel_read_only or not panel_revision_allowed
+                        elif slot_type == 'arbitrator':
+                            if panel_task.state != 'arbitration':
                                 panel_read_only = True
-                        else:
-                            # For resident/resident2, only final is read-only
-                            panel_read_only = panel_read_only or (panel_task.state == "final")
+                        elif panel_task.state == "final":
+                            panel_read_only = True
 
                         linked_panels.append(
                             {
@@ -676,12 +713,6 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                     elif grade.role_slot == 'resident2':
                         resident2_grade = grade
         
-            # Check if this is an arbitrator revising their recent grade on a final task
-            is_arbitrator_revising_recent = False
-            if slot_type == 'arbitrator' and task.state == 'final' and existing_grade:
-                arbitrator_eligibility = is_user_eligible_for_revision(db, current_user.id, task_id, slot_type, existing_grade)
-                is_arbitrator_revising_recent = arbitrator_eligibility.get("is_recent", False)
-
             # Check if this is a revision by checking if the user already has a grade for this task and slot
             existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type, user=current_user)
             is_revision = existing_grade_for_slot is not None
@@ -906,41 +937,57 @@ def dual_grading_submit():
                 has_resident_grade = any(grade.role_slot == "resident" for grade in task.grades)
                 has_resident2_grade = any(grade.role_slot == "resident2" for grade in task.grades)
 
-                arbitrator_revision_allowed = False
-                if slot == "arbitrator":
-                    from utils.dualGradingRevisionUtils import is_arbitrator_revision_allowed
-                    revision_check = is_arbitrator_revision_allowed(db, current_user.id, task_id, slot)
-                    arbitrator_revision_allowed = revision_check["allowed"]
+                existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
+                is_revision = existing_grade is not None
+                revision_allowed = False
+                revision_denial_message = None
 
-                if task.state == "final" and not arbitrator_revision_allowed:
+                if is_revision:
+                    revision_check = is_user_eligible_for_revision(
+                        db, current_user.id, task_id, slot, existing_grade
+                    )
+                    state_eligible, state_message = check_revision_eligibility_by_task_state(
+                        task.state,
+                        slot,
+                        existing_grade.created_at,
+                    )
+                    revision_allowed = revision_check["eligible"] and state_eligible
+                    revision_denial_message = revision_check["message"] if not revision_check["eligible"] else state_message
+
+                if task.state == "final" and not revision_allowed:
                     flash("This task is already finalized.", "danger")
                     return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
 
+                if is_revision and not revision_allowed:
+                    flash(revision_denial_message or "This grade is no longer eligible for revision.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
                 state_validity = True
-                if slot == 'resident':
-                    resident_allowed_states = ['pending', 'resident_done']
-                    if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
-                        resident_allowed_states.append('resident2_done')
-                    if task.state not in resident_allowed_states:
-                        flash(
-                            f"Task state has changed and is no longer available for resident grading (current state: {task.state}).",
-                            "danger",
-                        )
-                        state_validity = False
-                elif slot == 'resident2':
-                    if task.state not in ['resident_done', 'resident2_done', 'arbitration']:
-                        flash(
-                            f"Task state has changed and is no longer available for resident2 grading (current state: {task.state}).",
-                            "danger",
-                        )
-                        state_validity = False
-                elif slot == 'arbitrator':
-                    if task.state not in ['arbitration', 'final']:
-                        flash(
-                            f"Task state has changed and is no longer available for arbitration (current state: {task.state}).",
-                            "danger",
-                        )
-                        state_validity = False
+                if not revision_allowed:
+                    if slot == 'resident':
+                        resident_allowed_states = ['pending', 'resident_done']
+                        if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
+                            resident_allowed_states.append('resident2_done')
+                        if task.state not in resident_allowed_states:
+                            flash(
+                                f"Task state has changed and is no longer available for resident grading (current state: {task.state}).",
+                                "danger",
+                            )
+                            state_validity = False
+                    elif slot == 'resident2':
+                        if task.state not in ['resident_done', 'resident2_done', 'arbitration']:
+                            flash(
+                                f"Task state has changed and is no longer available for resident2 grading (current state: {task.state}).",
+                                "danger",
+                            )
+                            state_validity = False
+                    elif slot == 'arbitrator':
+                        if task.state not in ['arbitration', 'final']:
+                            flash(
+                                f"Task state has changed and is no longer available for arbitration (current state: {task.state}).",
+                                "danger",
+                            )
+                            state_validity = False
 
                 if not state_validity:
                     return redirect(url_for("grading.index"))
@@ -1063,7 +1110,6 @@ def dual_grading_submit():
                     flash(conflict_message or "You already graded this task in the paired slot.", "warning")
                     return redirect(url_for("grading.index"))
 
-                existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
                 had_existing_grade = existing_grade is not None
                 if raw_feature_geometry is None:
                     # Field missing entirely (legacy/non-JS submit): preserve prior geometry.

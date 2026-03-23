@@ -571,7 +571,7 @@
                         </tr>
                     </thead>
                     <tbody id="celery-status-body">
-                        {% for row in celery_status.rows[:12] %}
+                        {% for row in celery_status.rows[:20] %}
                         <tr>
                             <td>
                                 {% if row.status == 'healthy' %}
@@ -596,8 +596,13 @@
                     </tbody>
                 </table>
             </div>
-            {% if celery_status.rows|length > 12 %}
-            <div class="text-muted small">Showing first 12 entries. Full payload is available from the API.</div>
+            {% if celery_status.rows|length > 20 %}
+            <div class="d-flex align-items-center gap-2">
+                <div class="text-muted small" id="celery-status-footer">Showing first 20 entries.</div>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="celery-show-all-btn" onclick="toggleCeleryStatusRows()">
+                    Show all
+                </button>
+            </div>
             {% endif %}
         </div>
     </div>
@@ -881,6 +886,8 @@ async function refreshCeleryStatus() {
     const warningCount = document.getElementById('celery-warning-count');
     const summaryText = document.getElementById('celery-summary-text');
     const timestamp = document.getElementById('celery-status-timestamp');
+    const footer = document.getElementById('celery-status-footer');
+    const showAllButton = document.getElementById('celery-show-all-btn');
 
     if (!body) {
         return;
@@ -900,33 +907,79 @@ async function refreshCeleryStatus() {
         warningCount.textContent = String(data.summary.warning_count);
         summaryText.textContent = `${data.summary.total} schedules tracked (${data.summary.db_entries} DB, ${data.summary.code_entries} code)`;
         timestamp.textContent = data.timestamp;
+        body.dataset.rows = JSON.stringify(data.rows);
+        body.dataset.showAll = 'false';
 
-        const rows = data.rows.slice(0, 12);
-        body.innerHTML = rows.map((row) => {
-            let badgeClass = 'text-bg-warning';
-            if (row.status === 'healthy') {
-                badgeClass = 'text-bg-success';
-            } else if (row.status === 'disabled') {
-                badgeClass = 'text-bg-secondary';
+        renderCeleryStatusRows();
+
+        if (footer && showAllButton) {
+            if (data.rows.length > 20) {
+                footer.textContent = 'Showing first 20 entries.';
+                showAllButton.hidden = false;
+                showAllButton.textContent = 'Show all';
+            } else {
+                footer.textContent = '';
+                showAllButton.hidden = true;
             }
-
-            const issues = row.issues && row.issues.length ? row.issues.join('; ') : 'OK';
-            const lastRun = row.last_run_at || 'n/a';
-            return `
-                <tr>
-                    <td><span class="badge ${badgeClass}">${row.status}</span></td>
-                    <td><div>${row.name}</div><code>${row.task_name}</code></td>
-                    <td>${row.source}</td>
-                    <td>${row.queue || 'unrouted'}</td>
-                    <td>${row.schedule}</td>
-                    <td>${lastRun}</td>
-                    <td>${issues}</td>
-                </tr>
-            `;
-        }).join('');
+        }
     } catch (error) {
         body.innerHTML = `<tr><td colspan="7" class="text-danger">${error.message}</td></tr>`;
     }
+}
+
+function renderCeleryStatusRows() {
+    const body = document.getElementById('celery-status-body');
+    if (!body || !body.dataset.rows) {
+        return;
+    }
+
+    const allRows = JSON.parse(body.dataset.rows);
+    const showAll = body.dataset.showAll === 'true';
+    const rows = showAll ? allRows : allRows.slice(0, 20);
+
+    body.innerHTML = rows.map((row) => {
+        let badgeClass = 'text-bg-warning';
+        if (row.status === 'healthy') {
+            badgeClass = 'text-bg-success';
+        } else if (row.status === 'disabled') {
+            badgeClass = 'text-bg-secondary';
+        }
+
+        const issues = row.issues && row.issues.length ? row.issues.join('; ') : 'OK';
+        const lastRun = row.last_run_at || 'n/a';
+        return `
+            <tr>
+                <td><span class="badge ${badgeClass}">${row.status}</span></td>
+                <td><div>${row.name}</div><code>${row.task_name}</code></td>
+                <td>${row.source}</td>
+                <td>${row.queue || 'unrouted'}</td>
+                <td>${row.schedule}</td>
+                <td>${lastRun}</td>
+                <td>${issues}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function toggleCeleryStatusRows() {
+    const body = document.getElementById('celery-status-body');
+    const footer = document.getElementById('celery-status-footer');
+    const button = document.getElementById('celery-show-all-btn');
+    if (!body || !body.dataset.rows || !button) {
+        return;
+    }
+
+    const allRows = JSON.parse(body.dataset.rows);
+    const showAll = body.dataset.showAll === 'true';
+    body.dataset.showAll = showAll ? 'false' : 'true';
+    renderCeleryStatusRows();
+
+    if (footer) {
+        footer.textContent = body.dataset.showAll === 'true'
+            ? `Showing all ${allRows.length} entries.`
+            : 'Showing first 20 entries.';
+    }
+    button.textContent = body.dataset.showAll === 'true' ? 'Show first 20' : 'Show all';
 }
 
 // Auto-refresh every 5 minutes

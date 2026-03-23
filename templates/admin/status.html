@@ -159,6 +159,14 @@
     box-shadow: var(--bs-box-shadow);
 }
 
+.monitor-table {
+    font-size: 0.9rem;
+}
+
+.monitor-table code {
+    font-size: 0.8rem;
+}
+
 .tool-card h6 {
     color: var(--bs-body-color);
     font-weight: 600;
@@ -330,6 +338,38 @@
 
     <!-- Status Overview Cards -->
     <div class="status-overview">
+        <!-- Celery Schedule Status -->
+        <div class="status-card {% if celery_status.summary.warning_count > 0 %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if celery_status.summary.warning_count > 0 %}warning{% else %}healthy{% endif %}">
+                    {% if celery_status.summary.warning_count > 0 %}
+                        <i class="fas fa-bolt"></i>
+                    {% else %}
+                        <i class="fas fa-check"></i>
+                    {% endif %}
+                </span>
+                Celery Schedules
+            </h5>
+            <div class="status-value" id="celery-warning-count">
+                {{ celery_status.summary.warning_count }}
+            </div>
+            <p class="status-details">
+                <span id="celery-summary-text">
+                    {{ celery_status.summary.total }} schedules tracked
+                    ({{ celery_status.summary.db_entries }} DB, {{ celery_status.summary.code_entries }} code)
+                </span><br>
+                Duplicate definitions and unrouted schedules are flagged
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.celery_schedule_list') }}" class="btn-management btn-sm">
+                    <i class="fas fa-stream"></i> Manage Schedules
+                </a>
+                <button class="btn btn-outline-primary btn-sm" type="button" onclick="refreshCeleryStatus()">
+                    <i class="fas fa-sync-alt"></i> Refresh Celery
+                </button>
+            </div>
+        </div>
+
         <!-- Thumbnail Status -->
         <div class="status-card {% if thumbnail_stats.direct_uploads.missing_thumbnails > 10 or thumbnail_stats.encounter_files.missing_thumbnails > 10 %}health-warning{% else %}health-healthy{% endif %}">
             <h5>
@@ -503,6 +543,62 @@
                     <i class="fas fa-hdd"></i> Disk Usage
                 </a>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h3 class="h5 mb-1">Celery Task Firing Status</h3>
+                    <p class="text-muted small mb-0">Shows code and DB schedules, queue routing, and scheduling conflicts.</p>
+                </div>
+                <span class="badge text-bg-secondary" id="celery-status-timestamp">
+                    {{ celery_status.timestamp|user_datetime('%Y-%m-%d %H:%M:%S') }}
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle monitor-table">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Name</th>
+                            <th>Source</th>
+                            <th>Queue</th>
+                            <th>Schedule</th>
+                            <th>Last Run</th>
+                            <th>Issues</th>
+                        </tr>
+                    </thead>
+                    <tbody id="celery-status-body">
+                        {% for row in celery_status.rows[:12] %}
+                        <tr>
+                            <td>
+                                {% if row.status == 'healthy' %}
+                                <span class="badge text-bg-success">healthy</span>
+                                {% elif row.status == 'disabled' %}
+                                <span class="badge text-bg-secondary">disabled</span>
+                                {% else %}
+                                <span class="badge text-bg-warning">warning</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div>{{ row.name }}</div>
+                                <code>{{ row.task_name }}</code>
+                            </td>
+                            <td>{{ row.source }}</td>
+                            <td>{{ row.queue or 'unrouted' }}</td>
+                            <td>{{ row.schedule }}</td>
+                            <td>{{ row.last_run_at|user_datetime('%Y-%m-%d %H:%M:%S') if row.last_run_at else 'n/a' }}</td>
+                            <td>{{ row.issues|join('; ') if row.issues else 'OK' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if celery_status.rows|length > 12 %}
+            <div class="text-muted small">Showing first 12 entries. Full payload is available from the API.</div>
+            {% endif %}
         </div>
     </div>
 
@@ -778,6 +874,59 @@ function refreshStatus() {
     setTimeout(() => {
         window.location.reload();
     }, 500);
+}
+
+async function refreshCeleryStatus() {
+    const body = document.getElementById('celery-status-body');
+    const warningCount = document.getElementById('celery-warning-count');
+    const summaryText = document.getElementById('celery-summary-text');
+    const timestamp = document.getElementById('celery-status-timestamp');
+
+    if (!body) {
+        return;
+    }
+
+    body.innerHTML = '<tr><td colspan="7" class="text-muted">Loading Celery status...</td></tr>';
+
+    try {
+        const response = await fetch('{{ url_for("admin.api_celery_task_status") }}', { credentials: 'same-origin' });
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.error || 'Failed to load Celery status');
+        }
+
+        const data = payload.data;
+        warningCount.textContent = String(data.summary.warning_count);
+        summaryText.textContent = `${data.summary.total} schedules tracked (${data.summary.db_entries} DB, ${data.summary.code_entries} code)`;
+        timestamp.textContent = data.timestamp;
+
+        const rows = data.rows.slice(0, 12);
+        body.innerHTML = rows.map((row) => {
+            let badgeClass = 'text-bg-warning';
+            if (row.status === 'healthy') {
+                badgeClass = 'text-bg-success';
+            } else if (row.status === 'disabled') {
+                badgeClass = 'text-bg-secondary';
+            }
+
+            const issues = row.issues && row.issues.length ? row.issues.join('; ') : 'OK';
+            const lastRun = row.last_run_at || 'n/a';
+            return `
+                <tr>
+                    <td><span class="badge ${badgeClass}">${row.status}</span></td>
+                    <td><div>${row.name}</div><code>${row.task_name}</code></td>
+                    <td>${row.source}</td>
+                    <td>${row.queue || 'unrouted'}</td>
+                    <td>${row.schedule}</td>
+                    <td>${lastRun}</td>
+                    <td>${issues}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="7" class="text-danger">${error.message}</td></tr>`;
+    }
 }
 
 // Auto-refresh every 5 minutes

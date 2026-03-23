@@ -7,6 +7,16 @@ from celery.schedules import crontab, schedule
 
 from db_transaction_manager import transaction_scope
 from models import CeleryBeatSchedule
+from utils.celery_queue_config import infer_celery_queue
+
+
+def _build_task_kwargs(row: CeleryBeatSchedule) -> Dict[str, int]:
+    task_kwargs: Dict[str, int] = {}
+    if row.user_id is not None:
+        task_kwargs["user_id"] = row.user_id
+    if row.hospital_id is not None:
+        task_kwargs["hospital_id"] = row.hospital_id
+    return task_kwargs
 
 
 def load_db_celery_schedules() -> Dict[str, Dict[str, Any]]:
@@ -19,7 +29,7 @@ def load_db_celery_schedules() -> Dict[str, Dict[str, Any]]:
             .all()
         )
         for row in rows:
-            task_kwargs = {"user_id": row.user_id, "hospital_id": row.hospital_id}
+            task_kwargs = _build_task_kwargs(row)
             if row.schedule_type == "interval":
                 if not row.interval_seconds:
                     continue
@@ -36,10 +46,13 @@ def load_db_celery_schedules() -> Dict[str, Dict[str, Any]]:
             entry = {
                 "task": row.task_name,
                 "schedule": schedule_obj,
-                "kwargs": task_kwargs,
             }
-            if row.queue:
-                entry["options"] = {"queue": row.queue}
+            if task_kwargs:
+                entry["kwargs"] = task_kwargs
+
+            queue_name = row.queue or infer_celery_queue(row.task_name)
+            if queue_name:
+                entry["options"] = {"queue": queue_name}
 
             schedules[row.name] = entry
 

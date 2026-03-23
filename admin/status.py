@@ -4,6 +4,8 @@ Comprehensive admin dashboard providing overview and access to all management ta
 including system health, maintenance operations, and monitoring tools.
 """
 
+from collections import Counter
+
 from flask import render_template, jsonify, current_app, flash, redirect, url_for
 from auth.roles import roles_required
 from flask_login import login_required, current_user
@@ -11,6 +13,7 @@ from datetime import datetime, timedelta
 import pytz
 import sqlalchemy as sa
 
+from celery_beat_app import celery_app as celery_beat_app
 from utils.thumbnail_maintenance_scheduler import (
     get_maintenance_status
 )
@@ -22,7 +25,8 @@ from admin.thumbnail_management import (
 )
 from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
-from models import Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit, LinkedDiseaseGrading
+from models import CeleryBeatSchedule, Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit, LinkedDiseaseGrading
+from utils.celery_queue_config import infer_celery_queue
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
 
@@ -166,6 +170,8 @@ def admin_status():
     # Get sequence diagnostics
     sequence_report = get_sequence_report()
 
+    celery_status = get_celery_task_status()
+
     # Scoped users for filters (based on current user's lab units)
     scoped_users = []
     try:
@@ -197,6 +203,7 @@ def admin_status():
         system_stats=system_stats,
         recent_activity=recent_activity,
         sequence_report=sequence_report,
+        celery_status=celery_status,
         scoped_users=scoped_users,
         grading_inconsistency_count=grading_inconsistency_count,
         linked_task_inconsistency_count=linked_task_inconsistency_count,
@@ -217,7 +224,8 @@ def api_admin_status():
             'maintenance': get_maintenance_status(),
             'health': get_system_health(),
             'system': get_system_statistics(),
-            'recent_activity': get_recent_activity()
+            'recent_activity': get_recent_activity(),
+            'celery': get_celery_task_status(),
         }
 
         return jsonify({
@@ -263,6 +271,23 @@ def api_sequences_status():
     except Exception as exc:
         current_app.logger.exception("Failed to get sequence diagnostics")
     return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@roles_required('admin', 'data_manager')
+def api_celery_task_status():
+    """API endpoint for Celery schedule/task monitoring on admin status page."""
+    try:
+        return jsonify({
+            "success": True,
+            "data": get_celery_task_status(),
+        })
+    except Exception as exc:
+        current_app.logger.exception("Failed to get celery task status")
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+            "timestamp": datetime.now(pytz.UTC).isoformat(),
+        }), 500
 
 
 def get_system_statistics():
@@ -389,6 +414,141 @@ def get_recent_activity(limit=10):
     # Sort by timestamp and limit
     recent_activity.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
     return recent_activity[:limit]
+
+
+def _serialize_schedule_expression(row: CeleryBeatSchedule) -> str:
+    if row.schedule_type == "interval":
+        if row.interval_seconds:
+            return f"every {row.interval_seconds}s"
+        return "interval"
+    return " ".join([
+        row.crontab_minute or "*",
+        row.crontab_hour or "*",
+        row.crontab_day_of_month or "*",
+        row.crontab_month_of_year or "*",
+        row.crontab_day_of_week or "*",
+    ])
+
+
+def _serialize_code_schedule_expression(entry: dict) -> str:
+    schedule_obj = entry.get("schedule")
+    if schedule_obj is None:
+        return "unknown"
+    run_every = getattr(schedule_obj, "run_every", None)
+    if run_every is not None:
+        seconds = int(run_every.total_seconds())
+        return f"every {seconds}s"
+    minute = getattr(schedule_obj, "_orig_minute", None)
+    hour = getattr(schedule_obj, "_orig_hour", None)
+    day_of_month = getattr(schedule_obj, "_orig_day_of_month", None)
+    month_of_year = getattr(schedule_obj, "_orig_month_of_year", None)
+    day_of_week = getattr(schedule_obj, "_orig_day_of_week", None)
+    if any(value is not None for value in [minute, hour, day_of_month, month_of_year, day_of_week]):
+        return " ".join([
+            str(minute or "*"),
+            str(hour or "*"),
+            str(day_of_month or "*"),
+            str(month_of_year or "*"),
+            str(day_of_week or "*"),
+        ])
+    return str(schedule_obj)
+
+
+def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> dict:
+    task_counts = Counter()
+    rows: list[dict] = []
+
+    for row in db_rows:
+        task_counts[row.task_name] += 1
+    for _, entry in code_entries.items():
+        task_name = entry.get("task")
+        if task_name:
+            task_counts[task_name] += 1
+
+    for row in db_rows:
+        inferred_queue = row.queue or infer_celery_queue(row.task_name)
+        issues: list[str] = []
+        if not inferred_queue:
+            issues.append("No queue configured or inferred")
+        if task_counts[row.task_name] > 1:
+            issues.append(f"Duplicate schedule definition ({task_counts[row.task_name]} total)")
+        if row.enabled and row.last_run_at is None and row.next_run_at is None:
+            issues.append("No persisted run telemetry")
+
+        if not row.enabled:
+            status = "disabled"
+        elif issues:
+            status = "warning"
+        else:
+            status = "healthy"
+
+        rows.append({
+            "name": row.name,
+            "task_name": row.task_name,
+            "source": "db",
+            "queue": inferred_queue,
+            "queue_explicit": bool(row.queue),
+            "enabled": row.enabled,
+            "schedule_type": row.schedule_type,
+            "schedule": _serialize_schedule_expression(row),
+            "last_run_at": row.last_run_at.isoformat() if row.last_run_at else None,
+            "next_run_at": row.next_run_at.isoformat() if row.next_run_at else None,
+            "status": status,
+            "issues": issues,
+        })
+
+    for name, entry in sorted(code_entries.items()):
+        task_name = entry.get("task")
+        options = entry.get("options") or {}
+        queue_name = options.get("queue") or infer_celery_queue(task_name or "")
+        issues: list[str] = []
+        if task_counts[task_name] > 1:
+            issues.append(f"Duplicate schedule definition ({task_counts[task_name]} total)")
+
+        rows.append({
+            "name": name,
+            "task_name": task_name,
+            "source": "code",
+            "queue": queue_name,
+            "queue_explicit": "queue" in options,
+            "enabled": True,
+            "schedule_type": "code",
+            "schedule": _serialize_code_schedule_expression(entry),
+            "last_run_at": None,
+            "next_run_at": None,
+            "status": "warning" if issues else "healthy",
+            "issues": issues,
+        })
+
+    rows.sort(key=lambda item: (item["status"] != "warning", item["source"], item["name"]))
+
+    warning_count = sum(1 for row in rows if row["status"] == "warning")
+    disabled_count = sum(1 for row in rows if row["status"] == "disabled")
+
+    return {
+        "timestamp": now.isoformat(),
+        "summary": {
+            "total": len(rows),
+            "db_entries": len(db_rows),
+            "code_entries": len(code_entries),
+            "warning_count": warning_count,
+            "disabled_count": disabled_count,
+        },
+        "rows": rows,
+    }
+
+
+def get_celery_task_status() -> dict:
+    """Collect Celery schedule/task status for the admin dashboard."""
+    now = datetime.now(pytz.UTC)
+    code_entries = dict(celery_beat_app.conf.beat_schedule or {})
+    with transaction_scope() as db:
+        db_rows = (
+            db.query(CeleryBeatSchedule)
+            .order_by(CeleryBeatSchedule.enabled.desc(), CeleryBeatSchedule.name.asc())
+            .all()
+        )
+    return _build_celery_task_status_payload(db_rows, code_entries, now)
 
 
 def get_management_tools_status():
@@ -586,5 +746,11 @@ def register_status_routes(bp):
     bp.add_url_rule(
         '/api/admin/status',
         view_func=api_admin_status,
+        methods=['GET']
+    )
+
+    bp.add_url_rule(
+        '/api/celery/tasks/status',
+        view_func=api_celery_task_status,
         methods=['GET']
     )

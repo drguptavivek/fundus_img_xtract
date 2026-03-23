@@ -13,6 +13,12 @@ from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab, schedule as celery_schedule
 
+from utils.celery_queue_config import (
+    CELERY_TASK_DEFAULT_EXCHANGE,
+    CELERY_TASK_DEFAULT_QUEUE,
+    CELERY_TASK_DEFAULT_ROUTING_KEY,
+    CELERY_TASK_ROUTES,
+)
 from utils.env_loader import load_environment
 
 # Ensure project root is on sys.path for task discovery in containers
@@ -65,9 +71,9 @@ def make_celery_app() -> Celery:
     )
 
     app.conf.update(
-        task_default_queue="default",
-        task_default_exchange="default",
-        task_default_routing_key="default",
+        task_default_queue=CELERY_TASK_DEFAULT_QUEUE,
+        task_default_exchange=CELERY_TASK_DEFAULT_EXCHANGE,
+        task_default_routing_key=CELERY_TASK_DEFAULT_ROUTING_KEY,
         task_track_started=_env_bool("CELERY_TASK_TRACK_STARTED", "true"),
         task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600")),
         task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "3300")),
@@ -79,30 +85,7 @@ def make_celery_app() -> Celery:
         accept_content=["json"],
         timezone=os.getenv("CELERY_TIMEZONE", "UTC"),
         enable_utc=True,
-        task_routes={
-            "celery_tasks.tasks.pii_tasks.*": {"queue": "pii_detection"},
-            "celery_tasks.tasks.ocr_tasks.*": {"queue": "zip_ocr"},
-            "celery_tasks.tasks.zip_tasks.*": {"queue": "zip_ocr"},
-            "celery_tasks.tasks.thumbnail_tasks.*": {"queue": "thumbnails"},
-            "celery_tasks.tasks.metadata_tasks.*": {"queue": "metadata"},
-            "celery_tasks.tasks.task_backfill_tasks.*": {"queue": "maintenance"},
-            "celery_tasks.tasks.export_tasks.*": {"queue": "exports"},
-            "celery_tasks.tasks.maintenance_tasks.*": {"queue": "maintenance"},
-            "celery_tasks.tasks.mv_tasks.*": {"queue": "maintenance"},
-            "celery_tasks.tasks.s3_tasks.*": {"queue": "s3_sync"},
-            # New Async Upload Routes
-            "celery_tasks.tasks.zip_upload_tasks.process_zip_coordinator_task": {"queue": "zip_ocr"},
-            "celery_tasks.tasks.zip_upload_tasks.process_image_thumbnail_task": {"queue": "thumbnails"},
-            "celery_tasks.tasks.zip_upload_tasks.process_pdf_ocr_task": {"queue": "zip_ocr"},
-            "celery_tasks.tasks.zip_upload_tasks.process_zip_data_combined_task": {"queue": "pii_detection"},
-            # Direct Upload Routes
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_upload_thumbnail_task": {"queue": "thumbnails"},
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_data_combined_task": {"queue": "pii_detection"},
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_metadata_only_task": {"queue": "metadata"},
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_pii_only_task": {"queue": "pii_detection"},
-            # Encounter Set Image Routes
-            "celery_tasks.tasks.metadata_tasks.extract_exif_task": {"queue": "metadata"},
-        },
+        task_routes=CELERY_TASK_ROUTES,
     )
 
     app.autodiscover_tasks(["celery_tasks"], related_name="tasks")

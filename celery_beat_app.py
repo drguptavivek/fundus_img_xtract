@@ -14,6 +14,12 @@ from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab
 
+from utils.celery_queue_config import (
+    CELERY_TASK_DEFAULT_EXCHANGE,
+    CELERY_TASK_DEFAULT_QUEUE,
+    CELERY_TASK_DEFAULT_ROUTING_KEY,
+    CELERY_TASK_ROUTES,
+)
 from utils.env_loader import load_environment
 
 # Ensure project root is on sys.path for config modules
@@ -66,6 +72,9 @@ def make_celery_beat_app() -> Celery:
     )
 
     app.conf.update(
+        task_default_queue=CELERY_TASK_DEFAULT_QUEUE,
+        task_default_exchange=CELERY_TASK_DEFAULT_EXCHANGE,
+        task_default_routing_key=CELERY_TASK_DEFAULT_ROUTING_KEY,
         task_track_started=_env_bool("CELERY_TASK_TRACK_STARTED", "true"),
         task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600")),
         task_soft_time_limit=int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "3300")),
@@ -74,6 +83,7 @@ def make_celery_beat_app() -> Celery:
         accept_content=["json"],
         timezone=os.getenv("CELERY_TIMEZONE", "UTC"),
         enable_utc=True,
+        task_routes=CELERY_TASK_ROUTES,
     )
 
     if _env_bool("CELERY_BEAT_USE_DB_SCHEDULES", "true"):

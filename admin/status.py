@@ -417,16 +417,24 @@ def get_recent_activity(limit=10):
 
 
 def _serialize_schedule_expression(row: CeleryBeatSchedule) -> str:
-    if row.schedule_type == "interval":
-        if row.interval_seconds:
-            return f"every {row.interval_seconds}s"
+    schedule_type = row["schedule_type"] if isinstance(row, dict) else row.schedule_type
+    interval_seconds = row["interval_seconds"] if isinstance(row, dict) else row.interval_seconds
+    crontab_minute = row["crontab_minute"] if isinstance(row, dict) else row.crontab_minute
+    crontab_hour = row["crontab_hour"] if isinstance(row, dict) else row.crontab_hour
+    crontab_day_of_month = row["crontab_day_of_month"] if isinstance(row, dict) else row.crontab_day_of_month
+    crontab_month_of_year = row["crontab_month_of_year"] if isinstance(row, dict) else row.crontab_month_of_year
+    crontab_day_of_week = row["crontab_day_of_week"] if isinstance(row, dict) else row.crontab_day_of_week
+
+    if schedule_type == "interval":
+        if interval_seconds:
+            return f"every {interval_seconds}s"
         return "interval"
     return " ".join([
-        row.crontab_minute or "*",
-        row.crontab_hour or "*",
-        row.crontab_day_of_month or "*",
-        row.crontab_month_of_year or "*",
-        row.crontab_day_of_week or "*",
+        crontab_minute or "*",
+        crontab_hour or "*",
+        crontab_day_of_month or "*",
+        crontab_month_of_year or "*",
+        crontab_day_of_week or "*",
     ])
 
 
@@ -455,27 +463,31 @@ def _serialize_code_schedule_expression(entry: dict) -> str:
 
 
 def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> dict:
+    def _value(row, key):
+        return row[key] if isinstance(row, dict) else getattr(row, key)
+
     task_counts = Counter()
     rows: list[dict] = []
 
     for row in db_rows:
-        task_counts[row.task_name] += 1
+        task_counts[_value(row, "task_name")] += 1
     for _, entry in code_entries.items():
         task_name = entry.get("task")
         if task_name:
             task_counts[task_name] += 1
 
     for row in db_rows:
-        inferred_queue = row.queue or infer_celery_queue(row.task_name)
+        task_name = _value(row, "task_name")
+        inferred_queue = _value(row, "queue") or infer_celery_queue(task_name)
         issues: list[str] = []
         if not inferred_queue:
             issues.append("No queue configured or inferred")
-        if task_counts[row.task_name] > 1:
-            issues.append(f"Duplicate schedule definition ({task_counts[row.task_name]} total)")
-        if row.enabled and row.last_run_at is None and row.next_run_at is None:
+        if task_counts[task_name] > 1:
+            issues.append(f"Duplicate schedule definition ({task_counts[task_name]} total)")
+        if _value(row, "enabled") and _value(row, "last_run_at") is None and _value(row, "next_run_at") is None:
             issues.append("No persisted run telemetry")
 
-        if not row.enabled:
+        if not _value(row, "enabled"):
             status = "disabled"
         elif issues:
             status = "warning"
@@ -483,16 +495,16 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
             status = "healthy"
 
         rows.append({
-            "name": row.name,
-            "task_name": row.task_name,
+            "name": _value(row, "name"),
+            "task_name": task_name,
             "source": "db",
             "queue": inferred_queue,
-            "queue_explicit": bool(row.queue),
-            "enabled": row.enabled,
-            "schedule_type": row.schedule_type,
+            "queue_explicit": bool(_value(row, "queue")),
+            "enabled": _value(row, "enabled"),
+            "schedule_type": _value(row, "schedule_type"),
             "schedule": _serialize_schedule_expression(row),
-            "last_run_at": row.last_run_at.isoformat() if row.last_run_at else None,
-            "next_run_at": row.next_run_at.isoformat() if row.next_run_at else None,
+            "last_run_at": _value(row, "last_run_at").isoformat() if _value(row, "last_run_at") else None,
+            "next_run_at": _value(row, "next_run_at").isoformat() if _value(row, "next_run_at") else None,
             "status": status,
             "issues": issues,
         })
@@ -543,11 +555,28 @@ def get_celery_task_status() -> dict:
     now = datetime.now(pytz.UTC)
     code_entries = dict(celery_beat_app.conf.beat_schedule or {})
     with transaction_scope() as db:
-        db_rows = (
+        db_rows = [
+            {
+                "name": row.name,
+                "task_name": row.task_name,
+                "queue": row.queue,
+                "enabled": row.enabled,
+                "schedule_type": row.schedule_type,
+                "interval_seconds": row.interval_seconds,
+                "crontab_minute": row.crontab_minute,
+                "crontab_hour": row.crontab_hour,
+                "crontab_day_of_week": row.crontab_day_of_week,
+                "crontab_day_of_month": row.crontab_day_of_month,
+                "crontab_month_of_year": row.crontab_month_of_year,
+                "last_run_at": row.last_run_at,
+                "next_run_at": row.next_run_at,
+            }
+            for row in (
             db.query(CeleryBeatSchedule)
             .order_by(CeleryBeatSchedule.enabled.desc(), CeleryBeatSchedule.name.asc())
             .all()
-        )
+            )
+        ]
     return _build_celery_task_status_payload(db_rows, code_entries, now)
 
 

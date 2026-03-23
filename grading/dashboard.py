@@ -11,6 +11,7 @@ from models import Session, PatientEncounters, EncounterFile, DirectImageUpload,
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_linked_followup_counts
+from utils.dualGradingKPIs import get_user_task_tracker_kpi_data
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
@@ -232,6 +233,7 @@ def index():
         
         # Calculate completed KPIs using the utility function
         kpi_completed_data = get_user_kpi_completed_task_count_data(db, current_user.id)
+        task_tracker_kpi = get_user_task_tracker_kpi_data(db, current_user.id)
 
         linked_followup_counts_by_disease = get_user_kpi_linked_followup_counts(db, current_user.id)
         
@@ -275,6 +277,7 @@ def index():
         kpi_resident_completed_by_disease=kpi_resident_completed_by_disease,
         kpi_resident2_completed_by_disease=kpi_resident2_completed_by_disease,
         kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
+        task_tracker_kpi=task_tracker_kpi,
         user_eligibility=user_eligibility,
         diseases=diseases_data,
         linked_followup_counts_by_disease=linked_followup_counts_by_disease,

@@ -6,6 +6,8 @@ The caller is responsible for managing the session lifecycle (opening and closin
 This design allows for better transaction management and session reuse.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, or_, func, exists
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading, TaskTracker
@@ -433,6 +435,62 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         kpi_data[disease_name] = counts
     
     return kpi_data
+
+
+def get_user_task_tracker_kpi_data(
+    db,
+    user_id: int,
+    *,
+    stuck_after_minutes: int = 60,
+) -> Dict[str, object]:
+    """Summarize task_tracker rows currently owned by a user."""
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=stuck_after_minutes)
+
+    trackers = (
+        db.query(TaskTracker)
+        .filter(TaskTracker.user_id == user_id)
+        .all()
+    )
+
+    by_role = {
+        "resident": 0,
+        "resident2": 0,
+        "arbitrator": 0,
+    }
+    stale_by_role = {
+        "resident": 0,
+        "resident2": 0,
+        "arbitrator": 0,
+    }
+
+    active_count = 0
+    stale_count = 0
+
+    for tracker in trackers:
+        role = tracker.role_slot if tracker.role_slot in by_role else tracker.role_slot
+        if role in by_role:
+            by_role[role] += 1
+
+        started_at = tracker.started_at
+        if started_at and started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+
+        is_stale = bool(started_at and started_at < threshold)
+        if is_stale:
+            stale_count += 1
+            if role in stale_by_role:
+                stale_by_role[role] += 1
+        else:
+            active_count += 1
+
+    return {
+        "total": len(trackers),
+        "active": active_count,
+        "stale": stale_count,
+        "by_role": by_role,
+        "stale_by_role": stale_by_role,
+        "stuck_after_minutes": stuck_after_minutes,
+    }
 
 
 def get_user_kpi_linked_followup_counts(db, user_id: int) -> Dict[str, List[Dict[str, int | str]]]:

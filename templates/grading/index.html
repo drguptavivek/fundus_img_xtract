@@ -178,7 +178,17 @@
   <div class="col-md-4">
     <div class="card kpi-card kpi--warning shadow-sm h-100">
       <div class="card-body">
-        <h5 class="card-title">In Progress / Locked By You</h5>
+        <h5 class="card-title d-flex align-items-center gap-2">
+          <span>In Progress / Locked By You</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary rounded-circle py-0 px-2"
+            data-bs-toggle="tooltip"
+            data-bs-placement="top"
+            title="These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. There is currently no resume queue on this dashboard. If you do not submit them, stale locks are cleared automatically after 60 minutes."
+            aria-label="Explain in-progress locked tasks"
+          >?</button>
+        </h5>
         <h2 class="card-text">{{ task_tracker_kpi.total }}</h2>
         <p class="text-muted">
           {{ task_tracker_kpi.active }} active
@@ -203,7 +213,7 @@
           {% endfor %}
         </div>
         <div class="small text-muted mt-2">
-          Tasks older than {{ task_tracker_kpi.stuck_after_minutes }} minutes are treated as stuck until cleanup runs.
+          There is no resume action here. Tasks older than {{ task_tracker_kpi.stuck_after_minutes }} minutes are treated as stuck and are cleared automatically by cleanup.
         </div>
         {% endif %}
       </div>

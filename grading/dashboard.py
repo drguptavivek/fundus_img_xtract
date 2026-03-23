@@ -26,20 +26,6 @@ def index():
         per_page = 200
         filter_date = request.args.get('date', default=None, type=str)
         
-        # If no date filter is provided, get the most recent grading date
-        if not filter_date:
-            # Get the most recent grading date for this user
-            most_recent_date = db.query(
-                func.date(Grade.created_at)
-            ).filter(
-                Grade.grader_user_id == getattr(current_user, 'id', None)
-            ).order_by(
-                desc(Grade.created_at)
-            ).limit(1).scalar()
-            
-            if most_recent_date:
-                filter_date = most_recent_date.strftime('%Y-%m-%d')  # Convert datetime.date to string
-        
         # Get user's gradings with details using pagination
         my_items, total_mine = get_user_gradings_with_details(
             db,
@@ -74,12 +60,6 @@ def index():
                 prev_date = date_list[current_index + 1]
             if current_index > 0:
                 next_date = date_list[current_index - 1]
-        elif date_list and not filter_date:
-            # If no filter date but we have dates, the first one is the most recent
-            # and there's no next date (we're already at the most recent)
-            if len(date_list) > 1:
-                prev_date = date_list[1]
-        
         # Build navigation URLs
         mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
         mine_next_url = url_for('grading.index', date=next_date) if next_date else None

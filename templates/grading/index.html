@@ -273,7 +273,11 @@
               <div class="d-flex justify-content-between align-items-start">
                 <div>
                   <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                    <span class="small text-muted">{{ g.created_at|user_datetime('%Y-%m-%d %H:%M') if g.created_at else '-' }}</span>
+                    {% set display_ts = g.updated_at if g.updated_at and g.created_at and g.updated_at > g.created_at else g.created_at %}
+                    <span class="small text-muted">{{ display_ts|user_datetime('%Y-%m-%d %H:%M') if display_ts else '-' }}</span>
+                    {% if g.updated_at and g.created_at and g.updated_at > g.created_at %}
+                    <span class="badge bg-warning text-dark">Updated</span>
+                    {% endif %}
                     <span class="badge bg-secondary">{{ g.role_slot|title }}</span> {{ badge_for_for(g.disease_name)|safe }}
                   </div>
                   {% if g.task_id %}

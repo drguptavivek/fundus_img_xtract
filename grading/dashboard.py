@@ -23,7 +23,7 @@ def index():
     try:
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
-        per_page = 200
+        per_page = 50
         filter_date = request.args.get('date', default=None, type=str)
         
         # Get user's gradings with details using pagination

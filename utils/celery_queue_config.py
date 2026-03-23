@@ -7,11 +7,13 @@ CELERY_TASK_DEFAULT_EXCHANGE = "default"
 CELERY_TASK_DEFAULT_ROUTING_KEY = "default"
 
 CELERY_TASK_ROUTES = {
+    "celery_tasks.tasks.cve_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.pii_tasks.*": {"queue": "pii_detection"},
     "celery_tasks.tasks.ocr_tasks.*": {"queue": "zip_ocr"},
     "celery_tasks.tasks.zip_tasks.*": {"queue": "zip_ocr"},
     "celery_tasks.tasks.thumbnail_tasks.*": {"queue": "thumbnails"},
     "celery_tasks.tasks.metadata_tasks.*": {"queue": "metadata"},
+    "celery_tasks.tasks.package_update_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.task_backfill_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.export_tasks.*": {"queue": "exports"},
     "celery_tasks.tasks.maintenance_tasks.*": {"queue": "maintenance"},

@@ -46,6 +46,7 @@ def load_db_celery_schedules() -> Dict[str, Dict[str, Any]]:
             entry = {
                 "task": row.task_name,
                 "schedule": schedule_obj,
+                "last_run_at": row.last_run_at,
             }
             if task_kwargs:
                 entry["kwargs"] = task_kwargs

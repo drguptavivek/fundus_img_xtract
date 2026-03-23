@@ -299,7 +299,19 @@
     <div class="card  kpi-card shadow-sm h-100">
       <div class="card-body">
         {% set combined_resident_completed = kpi_resident_completed + kpi_resident2_completed %}
-        <h5 class="card-title">Resident Grading Completed</h5>
+        <h5 class="card-title d-flex align-items-center gap-2">
+          <span>Resident Grading Completed</span>
+          <span class="info-tooltip">
+            <button
+              type="button"
+              class="info-tooltip__trigger"
+              aria-label="Explain resident revision policy"
+            >?</button>
+            <span class="info-tooltip__panel" role="tooltip">
+              Resident and Resident2 grades can be revised by the original grader for up to 24 hours after submission. After that, the grading remains viewable from history but becomes read-only.
+            </span>
+          </span>
+        </h5>
         <h2 class="card-text">{{ combined_resident_completed }}</h2>
         <p class="text-muted">Completed Resident &amp; Resident2 Tasks</p>
         {% if kpi_resident_completed_by_disease %} <div class="mt-3">
@@ -320,7 +332,19 @@
 <div class="col-md-4">
     <div class="card  kpi-card  shadow-sm h-100">
       <div class="card-body">
-        <h5 class="card-title">Arbitration Completed</h5>
+        <h5 class="card-title d-flex align-items-center gap-2">
+          <span>Arbitration Completed</span>
+          <span class="info-tooltip">
+            <button
+              type="button"
+              class="info-tooltip__trigger"
+              aria-label="Explain arbitrator revision policy"
+            >?</button>
+            <span class="info-tooltip__panel" role="tooltip">
+              Arbitrator decisions can be revised by the same arbitrator for up to 24 hours after submission. After that, the grading remains viewable from history but becomes read-only.
+            </span>
+          </span>
+        </h5>
         <h2 class="card-text">{{ kpi_arbitration_completed }}</h2>
         <p class="text-muted">Completed Arbitration Tasks</p> {% if kpi_arbitration_completed_by_disease %} <div
           class="mt-3">

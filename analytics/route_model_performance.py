@@ -618,7 +618,7 @@ def model_performance() -> str:
             performance=None,
             error_message="scikit-learn is required for this page. Please install scikit-learn in the environment.",
             labels_for_disease=[],
-            reference_source="consensus",
+            reference_source="final",
             positive_class=None,
             threshold=0.5,
             bootstrap_samples=2000,
@@ -633,7 +633,7 @@ def model_performance() -> str:
     disease_id = request.args.get("disease_id", type=int)
     ai_model_id = request.args.get("ai_model_id", type=int)
     selected_lab_units = request.args.getlist("lab_unit_id", type=int)
-    reference_source = request.args.get("reference_source", default="consensus")
+    reference_source = request.args.get("reference_source", default="final")
     threshold = request.args.get("threshold", default=0.5, type=float)
     bootstrap_samples = request.args.get("bootstrap_samples", default=2000, type=int)
     upload_type = (request.args.get("upload_type") or "").strip().lower() or None
@@ -757,6 +757,7 @@ def model_performance() -> str:
                         disease_name,
                         task_state,
                         final_grade_name,
+                        final_impression,
                         resident_grade_name,
                         resident2_grade_name,
                         arbitrator_grade_name,
@@ -817,6 +818,7 @@ def model_performance() -> str:
                         "disease_id": row["disease_id"],
                         "disease_name": row["disease_name"],
                         "task_state": row["task_state"],
+                        "final_label": row["final_impression"],
                         "consensus_label": row["final_grade_name"],
                         "ai_grades": [
                             {
@@ -856,7 +858,9 @@ def model_performance() -> str:
 
                     # Reference label selection
                     ref_label = None
-                    if reference_source == "consensus":
+                    if reference_source == "final":
+                        ref_label = data["final_label"]
+                    elif reference_source == "consensus":
                         ref_label = data["consensus_label"]
                     else:
                         ref_obj = data["ref_grades"].get(reference_source)
@@ -1151,7 +1155,7 @@ def threshold_explorer() -> object:
     payload = request.get_json(silent=True) or {}
     disease_id = payload.get("disease_id")
     ai_model_id = payload.get("ai_model_id")
-    reference_source = payload.get("reference_source", "consensus") or "consensus"
+    reference_source = payload.get("reference_source", "final") or "final"
     upload_type = (payload.get("upload_type") or "").strip().lower() or None
     camera_id_raw = payload.get("camera_id")
     class_map_raw = payload.get("class_map") or {}
@@ -1227,6 +1231,7 @@ def threshold_explorer() -> object:
                 disease_name,
                 task_state,
                 final_grade_name,
+                final_impression,
                 resident_grade_name,
                 resident2_grade_name,
                 arbitrator_grade_name,
@@ -1293,6 +1298,7 @@ def threshold_explorer() -> object:
                 "disease_id": row["disease_id"],
                 "disease_name": row["disease_name"],
                 "task_state": row["task_state"],
+                "final_label": row["final_impression"],
                 "consensus_label": row["final_grade_name"],
                 "ai_grades": [
                     {
@@ -1325,7 +1331,9 @@ def threshold_explorer() -> object:
             _, data = task_entries[0]
 
             ref_label = None
-            if reference_source == "consensus":
+            if reference_source == "final":
+                ref_label = data["final_label"]
+            elif reference_source == "consensus":
                 ref_label = data["consensus_label"]
             else:
                 ref_obj = data["ref_grades"].get(reference_source)

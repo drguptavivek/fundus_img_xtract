@@ -79,7 +79,8 @@
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-reference">Reference</label>
         <select class="form-select" id="filter-reference" name="reference_source">
-          <option value="consensus" {% if reference_source == 'consensus' %}selected{% endif %}>Consensus (default)</option>
+          <option value="final" {% if reference_source == 'final' %}selected{% endif %}>Final Grade (default)</option>
+          <option value="consensus" {% if reference_source == 'consensus' %}selected{% endif %}>Consensus Row</option>
           <option value="arbitrator" {% if reference_source == 'arbitrator' %}selected{% endif %}>Arbitrator</option>
           <option value="resident2" {% if reference_source == 'resident2' %}selected{% endif %}>Resident2</option>
           <option value="resident" {% if reference_source == 'resident' %}selected{% endif %}>Resident</option>

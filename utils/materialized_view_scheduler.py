@@ -21,9 +21,77 @@ from datetime import datetime, timedelta
 
 import pytz
 from sqlalchemy import text
+from db_transaction_manager import transaction_scope
 from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger("materialized_view")
+
+
+def _create_refresh_log_entry(app, schedule_time, start_time):
+    with app.app_context():
+        with transaction_scope() as db:
+            result = db.execute(
+                text(
+                    """
+                    INSERT INTO materialized_view_refresh_log
+                    (refresh_type, refresh_started_at, success)
+                    VALUES (:refresh_type, :started_at, FALSE)
+                    RETURNING id
+                """
+                ),
+                {
+                    "refresh_type": schedule_time,
+                    "started_at": start_time,
+                },
+            )
+            return result.scalar()
+
+
+def _update_refresh_log_entry(app, log_id, completed_at, duration, success, error_message):
+    with app.app_context():
+        with transaction_scope() as db:
+            db.execute(
+                text(
+                    """
+                    UPDATE materialized_view_refresh_log
+                    SET refresh_completed_at = :completed_at,
+                        refresh_duration_seconds = :duration,
+                        success = :success,
+                        error_message = :error_message,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :log_id
+                """
+                ),
+                {
+                    "completed_at": completed_at,
+                    "duration": duration,
+                    "success": success,
+                    "error_message": error_message,
+                    "log_id": log_id,
+                },
+            )
+
+
+def _load_per_disease_views(app):
+    with app.app_context():
+        with transaction_scope() as db:
+            return db.execute(
+                text(
+                    """
+                    SELECT matviewname
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                      AND matviewname LIKE 'mvw_image_listing_%_v2'
+                    ORDER BY matviewname
+                    """
+                )
+            ).scalars().all()
+
+
+def _refresh_single_view(app, view_name):
+    with app.app_context():
+        with transaction_scope() as db:
+            db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
 
 
 def refresh_materialized_view(app, schedule_time="manual"):
@@ -51,145 +119,99 @@ def refresh_materialized_view(app, schedule_time="manual"):
     start_time = datetime.now(pytz.UTC)
     ist_time = datetime.now(tz)
 
-    # Create log entry for refresh start
     log_id = None
     try:
-        from db_transaction_manager import transaction_scope
+        logger.info(
+            "Starting materialized view refresh - Schedule: %s",
+            sanitize_log_value(schedule_time),
+        )
+        logger.info(
+            "IST Time: %s",
+            sanitize_log_value(ist_time.strftime('%Y-%m-%d %H:%M:%S %Z')),
+        )
+        logger.info(
+            "UTC Time: %s",
+            sanitize_log_value(start_time.strftime('%Y-%m-%d %H:%M:%S UTC')),
+        )
 
-        with app.app_context():
-            with transaction_scope() as db:
+        log_id = _create_refresh_log_entry(app, schedule_time, start_time)
+
+        views_to_refresh = [
+            ("mvw_grading_data_all", "General Grading Data"),
+            ("mvw_diabetic_retinopathy_grading_pivot", "Diabetic Retinopathy Pivot"),
+            ("mvw_glaucoma_grading_pivot", "Glaucoma Pivot"),
+            ("mvw_amd_grading_pivot", "AMD Pivot"),
+            ("mvw_encounter_pivot", "Encounter Pivot"),
+            ("mvw_image_listing_all", "Image Listing All"),
+        ]
+        per_disease_views = _load_per_disease_views(app)
+
+        total_duration = 0
+        successful_refreshes = 0
+
+        for view_name, view_description in views_to_refresh:
+            view_start_time = datetime.now(pytz.UTC)
+            try:
                 logger.info(
-                    "Starting materialized view refresh - Schedule: %s",
-                    sanitize_log_value(schedule_time),
+                    "Refreshing %s (%s)",
+                    sanitize_log_value(view_description),
+                    sanitize_log_value(view_name),
                 )
+                _refresh_single_view(app, view_name)
+                view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
+                total_duration += view_duration
+                successful_refreshes += 1
                 logger.info(
-                    "IST Time: %s",
-                    sanitize_log_value(ist_time.strftime('%Y-%m-%d %H:%M:%S %Z')),
+                    "Successfully refreshed %s in %s seconds",
+                    sanitize_log_value(view_description),
+                    sanitize_log_value(f"{view_duration:.2f}"),
                 )
+            except Exception:
+                logger.exception("Failed to refresh %s (%s)", view_description, view_name)
+
+        for view_name in per_disease_views:
+            view_start_time = datetime.now(pytz.UTC)
+            try:
                 logger.info(
-                    "UTC Time: %s",
-                    sanitize_log_value(start_time.strftime('%Y-%m-%d %H:%M:%S UTC')),
+                    "Refreshing Per-Disease Image Listing (%s)",
+                    sanitize_log_value(view_name),
                 )
-
-                # Insert log entry for refresh start
-                result = db.execute(
-                    text("""
-                        INSERT INTO materialized_view_refresh_log
-                        (refresh_type, refresh_started_at, success)
-                        VALUES (:refresh_type, :started_at, FALSE)
-                        RETURNING id
-                    """),
-                    {
-                        "refresh_type": schedule_time,
-                        "started_at": start_time
-                    }
-                )
-                log_id = result.scalar()
-
-                # Refresh all materialized views in order
-                views_to_refresh = [
-                    ("mvw_grading_data_all", "General Grading Data"),
-                    ("mvw_diabetic_retinopathy_grading_pivot", "Diabetic Retinopathy Pivot"),
-                    ("mvw_glaucoma_grading_pivot", "Glaucoma Pivot"),
-                    ("mvw_amd_grading_pivot", "AMD Pivot"),
-                    ("mvw_encounter_pivot", "Encounter Pivot"),
-                    ("mvw_image_listing_all", "Image Listing All"),
-                ]
-
-                total_duration = 0
-                successful_refreshes = 0
-
-                for view_name, view_description in views_to_refresh:
-                    view_start_time = datetime.now(pytz.UTC)
-
-                    try:
-                        logger.info(
-                            "Refreshing %s (%s)",
-                            sanitize_log_value(view_description),
-                            sanitize_log_value(view_name),
-                        )
-                        db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
-
-                        view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
-                        total_duration += view_duration
-                        successful_refreshes += 1
-
-                        logger.info(
-                            "Successfully refreshed %s in %s seconds",
-                            sanitize_log_value(view_description),
-                            sanitize_log_value(f"{view_duration:.2f}"),
-                        )
-
-                    except Exception as view_error:
-                        logger.exception("Failed to refresh %s (%s)", view_description, view_name)
-                        # Continue with other views even if one fails
-
-                # Refresh per-disease image listing v2 MVs
-                per_disease_views = db.execute(
-                    text(
-                        """
-                        SELECT matviewname
-                        FROM pg_matviews
-                        WHERE schemaname = 'public'
-                          AND matviewname LIKE 'mvw_image_listing_%_v2'
-                        ORDER BY matviewname
-                        """
-                    )
-                ).scalars().all()
-
-                for view_name in per_disease_views:
-                    view_start_time = datetime.now(pytz.UTC)
-                    try:
-                        logger.info(
-                            "Refreshing Per-Disease Image Listing (%s)",
-                            sanitize_log_value(view_name),
-                        )
-                        db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
-
-                        view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
-                        total_duration += view_duration
-                        successful_refreshes += 1
-
-                        logger.info(
-                            "Successfully refreshed %s in %s seconds",
-                            sanitize_log_value(view_name),
-                            sanitize_log_value(f"{view_duration:.2f}"),
-                        )
-                    except Exception:
-                        logger.exception("Failed to refresh per-disease MV %s", sanitize_log_value(view_name))
-                        # Continue with other views even if one fails
-
-                overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
-
-                # Update log entry with overall success
-                success = successful_refreshes == (len(views_to_refresh) + len(per_disease_views))
-                db.execute(
-                    text("""
-                        UPDATE materialized_view_refresh_log
-                        SET refresh_completed_at = :completed_at,
-                            refresh_duration_seconds = :duration,
-                            success = :success,
-                            error_message = :error_message,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE id = :log_id
-                    """),
-                    {
-                        "completed_at": datetime.now(pytz.UTC),
-                        "duration": overall_duration,
-                        "success": success,
-                        "error_message": None if success else f"Failed {len(views_to_refresh) - successful_refreshes}/{len(views_to_refresh)} views",
-                        "log_id": log_id
-                    }
-                )
-
+                _refresh_single_view(app, view_name)
+                view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
+                total_duration += view_duration
+                successful_refreshes += 1
                 logger.info(
-                    "Materialized view refresh completed: %s/%s views successful in %s seconds - Schedule: %s",
-                    sanitize_log_value(successful_refreshes),
-                    sanitize_log_value(len(views_to_refresh)),
-                    sanitize_log_value(f"{overall_duration:.2f}"),
-                    sanitize_log_value(schedule_time),
+                    "Successfully refreshed %s in %s seconds",
+                    sanitize_log_value(view_name),
+                    sanitize_log_value(f"{view_duration:.2f}"),
                 )
-                return success
+            except Exception:
+                logger.exception(
+                    "Failed to refresh per-disease MV %s",
+                    sanitize_log_value(view_name),
+                )
+
+        overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
+        total_views = len(views_to_refresh) + len(per_disease_views)
+        failed_refreshes = total_views - successful_refreshes
+        success = failed_refreshes == 0
+        _update_refresh_log_entry(
+            app,
+            log_id,
+            datetime.now(pytz.UTC),
+            overall_duration,
+            success,
+            None if success else f"Failed {failed_refreshes}/{total_views} views",
+        )
+
+        logger.info(
+            "Materialized view refresh completed: %s/%s views successful in %s seconds - Schedule: %s",
+            sanitize_log_value(successful_refreshes),
+            sanitize_log_value(total_views),
+            sanitize_log_value(f"{overall_duration:.2f}"),
+            sanitize_log_value(schedule_time),
+        )
+        return success
 
     except Exception as e:
         logger.exception("Failed to refresh materialized views - Schedule: %s", schedule_time)
@@ -197,27 +219,14 @@ def refresh_materialized_view(app, schedule_time="manual"):
         # Update log entry with failure if we have a log_id
         if log_id:
             try:
-                from db_transaction_manager import transaction_scope
-
-                with app.app_context():
-                    with transaction_scope() as db:
-                        db.execute(
-                            text("""
-                                UPDATE materialized_view_refresh_log
-                                SET refresh_completed_at = :completed_at,
-                                    refresh_duration_seconds = :duration,
-                                    success = FALSE,
-                                    error_message = :error_message,
-                                    updated_at = CURRENT_TIMESTAMP
-                                WHERE id = :log_id
-                            """),
-                            {
-                                "completed_at": datetime.now(pytz.UTC),
-                                "duration": (datetime.now(pytz.UTC) - start_time).total_seconds(),
-                                "error_message": str(e),
-                                "log_id": log_id
-                            }
-                        )
+                _update_refresh_log_entry(
+                    app,
+                    log_id,
+                    datetime.now(pytz.UTC),
+                    (datetime.now(pytz.UTC) - start_time).total_seconds(),
+                    False,
+                    str(e),
+                )
             except Exception as log_error:
                 logger.exception("Failed to update refresh log")
 

@@ -404,202 +404,25 @@ bd vc commit -m "Update beads state"
 
 ## Beads Workflow
 
-### Valid Issue Types
-
-**🚨 IMPORTANT**: The beads tool has **hardcoded valid issue types**. You cannot create custom types.
-
-| Valid Types | Usage |
-|-------------|-------|
-| `bug` | Bug reports, security vulnerabilities, defects |
-| `feature` | New features, enhancements |
-| `task` | Tasks, chores, refactoring |
-| `epic` | Large features spanning multiple issues |
-| `chore` | Maintenance tasks, dependencies |
-| `merge-request` | Git merge requests |
-| `molecule` | Multi-issue coordination (swarm, patrol) |
-| `gate` | Async coordination gates |
-| `agent` | Agent-related issues |
-| `role` | Agent role definitions |
-| `rig` | Beads rig configuration |
-| `convoy` | Multi-rig coordination |
-| `event` | Event tracking |
-
-**For security-related issues**: Use `type: "bug"` with `label: "security"` - do NOT attempt to use `type: "security"` as it will cause sync errors.
+Use only the minimal Beads commands needed for this repo:
 
 ```bash
-# CORRECT - Security bug with proper type and label
-bd create --title="Fix XSS vulnerability" --type=bug --priority=1 --labels=security
-
-# WRONG - Will cause sync errors (invalid type)
-bd create --title="Fix XSS vulnerability" --type=security --priority=1
+bd ready
+bd show <id>
+bd create --title="..." --type=task|bug|feature --priority=2
+bd update <id> --status=in_progress
+bd update <id> --description="## Implementation\n...\n## Verification\n..."
+bd close <id>
+bd vc status
+bd vc commit -m "Update beads state"
 ```
 
----
-
-### Core Commands
-
-**Create**: `bd create --title="..." --type=task|bug|feature --priority=2` (0=critical, 2=medium, 4=backlog)
-**Start work**: `bd ready` → `bd show <id>` → `bd update <id> --status=in_progress`
-**Update**: **CRITICAL** - Always update beads with implementation and verification details using `bd update <id> --description="..."`:
-  - **Implementation section**: What was built/changed (files, features, configs)
-  - **Verification section**: How it was tested (test results, commands run, validation)
-  - Use Markdown format with clear headings
-  - Include specific file paths, test counts, command outputs
-  - Example format:
-    ```markdown
-    ## Implementation
-    - Created X files: file1.py, file2.py
-    - Updated Y with Z features
-    - Config changes: ...
-
-    ## Verification
-    - Tests: X/Y passed
-    - Manual verification: ...
-    - Commands run: ...
-    - Docker web Container has not errors:
-
-    ## GIT Commit Deatils
-     - Date, Time:
-     - Commit ID:
-     - Files Modified:
-    ```
-**Complete**: `bd close <id1> <id2> ...` → `bd sync`
-**Dependencies**: `bd dep add <issue> <depends-on>`
-**Rules**: Track multi-session/strategic work in beads. Use TodoWrite for single-session execution. Always add detailed descriptions (Markdown) and create corresponding GitHub issues with `gh issue create`.
-
-## Beads ↔ GitHub Sync
-
-### ⚠️ Beads is the PRIMARY Source of Truth
-
-**Golden Rule**: If a Bead exists, GitHub issue is derived from it. Always update from Bead → GitHub, never the reverse.
-
----
-
-### BD Troubleshooting
-
-**Symptom**: Beads points at the wrong workspace, the Dolt server is up but the `beads` database is missing, or older issues still live only in `.beads/issues.jsonl`.  
-**Fix**: Verify Dolt health first, then use JSONL-backed rebuild if needed:
-
-```bash
-bd context
-bd dolt status
-bd doctor
-
-# Rebuild the Dolt database from the tracked JSONL snapshot if needed
-bd init --force --destroy-token DESTROY-fundus_img_xtract \
-  --database beads --from-jsonl --skip-agents --skip-hooks
-```
-
-**Notes**:
-- `bd 0.62.0` uses Dolt as the active backend. `.beads/beads.db` may still exist as a legacy/workspace artifact, but issue storage is in `.beads/dolt/`.
-- Use `bd export -o .beads/issues.jsonl` to refresh the portable JSONL snapshot after major Beads changes.
-- Use `bd vc commit -m "..."` to commit Beads/Dolt changes. `bd sync` is obsolete in this version.
-- `bd where` and `bd context` should show the active repo path and Dolt backend state.
-- If `bd` is not on PATH, use the full path or add it in `.bashrc`.
-
----
-
-### Creation Workflow (Beads-First)
-
-**Standard workflow - always create Bead first:**
-
-```bash
-# 1. Create the bead (source of truth)
-bd create --title="Fix login bug" --type=bug --priority=1
-
-# 2. Get the bead ID (e.g., beads-abc)
-bd show beads-abc
-
-# 3. Create corresponding GitHub issue (bead code at end of title)
-gh issue create \
-  --title "Fix login bug [bead-abc]" \
-  --label "p1,Bug" \
-  --body "Beads tracker: beads-abc"
-```
-
-**If GitHub issue exists first (rare edge case):**
-
-```bash
-# 1. Create corresponding bead to establish source of truth
-bd create --title="Fix login bug" --type=bug --priority=1
-
-# 2. Update GitHub title to include bead code
-gh issue edit 123 --title "Fix login bug [bead-abc]"
-```
-
----
-
-### Closure Workflow (Beads-First)
-
-**Always close Bead first, then GitHub:**
-
-```bash
-# 1. Complete the work, commit, push code
-git add . && git commit -m "Fix login bug" && git push
-
-# 2. Close the Bead (source of truth)
-bd close beads-abc
-
-# 3. Close the GitHub issue (derived from bead)
-gh issue close 123 --comment "Fixed via beads-abc. Commit: <sha>"
-```
-
-**Batch closing multiple beads:**
-
-```bash
-# 1. Close beads (source of truth)
-bd close beads-abc beads-def beads-xyz
-
-# 2. Close corresponding GitHub issues
-gh issue close 123 124 125 --comment "Completed via beads. Commit: <sha>"
-```
-
----
-
-### Status Change Sync (Beads-First)
-
-| Beads Command (Source) | GitHub Action (Derived) |
-|---------------|---------------|
-| `bd update <id> --status=in_progress` | Add comment: "Started work on beads-<id>" |
-| `bd close <id>` | `gh issue close <number>` |
-| `bd reopen <id>` | `gh issue reopen <number>` |
-| `bd update <id> --description="..."` | Add comment with summary |
-
----
-
-### Quick Reference: Label Mapping
-
-| Beads Priority | GitHub Label |
-|----------------|--------------|
-| `--priority=0` | `p0` |
-| `--priority=1` | `p1` |
-| `--priority=2` | `p2` |
-| `--priority=3` | `p3` |
-| `--priority=4` | `p4` |
-
-| Beads Type | GitHub Label |
-|------------|--------------|
-| `--type=bug` | `Bug` |
-| `--type=feature` | `Enhancement` |
-| `--type=task` | `Task` |
-| `--type=chore` | `Chore` |
-| `--type=epic` | `Epic` |
-
----
-
-### Verification Checklist
-
-After creating work:
-- [ ] Bead exists (`bd show <id>`)
-- [ ] GitHub issue exists with matching title (includes `[bead-<id>]` at end)
-- [ ] Priority label matches (p0-p4)
-- [ ] Type label matches (Bug/Enhancement/Tests/Documentation/Duplicate/Wontfix/Dependencies/Chore/Task/Epic)
-
-After closing work:
-- [ ] Bead is closed (`bd show <id>` shows closed)
-- [ ] GitHub issue is closed
-- [ ] Commit pushed to remote
-- [ ] `bd vc commit -m "..."` run if Beads state changed
+Backend notes:
+- `bd 0.62.0` uses Dolt as the active backend.
+- Use `bd context`, `bd dolt status`, and `bd doctor` only for troubleshooting.
+- If the Dolt database is missing but `.beads/issues.jsonl` exists, rebuild with:
+  `bd init --force --destroy-token DESTROY-fundus_img_xtract --database beads --from-jsonl --skip-agents --skip-hooks`
+- `bd sync` is obsolete in this version.
 
 ## GitHub Labels
 

@@ -112,8 +112,6 @@ def refresh_materialized_view(app, schedule_time="manual"):
     Returns:
         bool: True if all refreshes successful, False otherwise
     """
-    from datetime import datetime as dt
-
     timezone_str = app.config.get("MATERIALIZED_VIEW_TIMEZONE", app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata"))
     tz = pytz.timezone(timezone_str)
     start_time = datetime.now(pytz.UTC)

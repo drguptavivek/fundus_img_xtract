@@ -122,3 +122,8 @@ bd.sock.*
 .beads/open_issues_cache.txt
 .todos/
 daemon.lock
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

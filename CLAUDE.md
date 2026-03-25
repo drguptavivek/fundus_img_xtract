@@ -259,9 +259,9 @@ def downgrade():
 ```bash
 git status                    # Check changes
 git add <files>              # Stage code
-bd sync                      # Sync beads
+bd vc status                 # Check Beads/Dolt working set
+bd vc commit -m "Update beads state"   # Commit Beads changes if any
 git commit -m "message"      # Commit
-bd sync                      # Sync beads again
 git push                     # PUSH (work NOT done until this succeeds)
 ```
 
@@ -381,8 +381,8 @@ bd close <id>
 # 4. Close GitHub issue
 gh issue close <number> --comment "Completed via beads-<id>"
 
-# 5. Sync beads
-bd sync
+# 5. Commit Beads/Dolt state
+bd vc commit -m "Update beads state"
 ```
 
 **Deliverable**: Closed bead, closed GitHub issue, pushed code
@@ -477,18 +477,24 @@ bd create --title="Fix XSS vulnerability" --type=security --priority=1
 
 ### BD Troubleshooting
 
-**Symptom**: `bd create` fails with permission errors for `/home/eyeimg/.beads-planning/.beads/beads.db`  
-**Fix**: Force bd to use the repo-local DB in `.beads/beads.db`:
+**Symptom**: Beads points at the wrong workspace, the Dolt server is up but the `beads` database is missing, or older issues still live only in `.beads/issues.jsonl`.  
+**Fix**: Verify Dolt health first, then use JSONL-backed rebuild if needed:
 
 ```bash
-bd --no-daemon --db /home/eyeimg/fundus_img_xtract/.beads/beads.db create \
-  --repo /home/eyeimg/fundus_img_xtract \
-  --title="..." --type=feature --priority=2 \
-  --description="..."
+bd context
+bd dolt status
+bd doctor
+
+# Rebuild the Dolt database from the tracked JSONL snapshot if needed
+bd init --force --destroy-token DESTROY-fundus_img_xtract \
+  --database beads --from-jsonl --skip-agents --skip-hooks
 ```
 
 **Notes**:
-- `bd where` should show the active repo path and DB location.
+- `bd 0.62.0` uses Dolt as the active backend. `.beads/beads.db` may still exist as a legacy/workspace artifact, but issue storage is in `.beads/dolt/`.
+- Use `bd export -o .beads/issues.jsonl` to refresh the portable JSONL snapshot after major Beads changes.
+- Use `bd vc commit -m "..."` to commit Beads/Dolt changes. `bd sync` is obsolete in this version.
+- `bd where` and `bd context` should show the active repo path and Dolt backend state.
 - If `bd` is not on PATH, use the full path or add it in `.bashrc`.
 
 ---
@@ -593,7 +599,7 @@ After closing work:
 - [ ] Bead is closed (`bd show <id>` shows closed)
 - [ ] GitHub issue is closed
 - [ ] Commit pushed to remote
-- [ ] `bd sync` run successfully
+- [ ] `bd vc commit -m "..."` run if Beads state changed
 
 ## GitHub Labels
 
@@ -634,7 +640,8 @@ After closing work:
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd vc status
+   bd vc commit -m "Update beads state"
    git push
    git status  # MUST show "up to date with origin"
    ```

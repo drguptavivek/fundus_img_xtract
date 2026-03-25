@@ -193,7 +193,8 @@ Capturing  Artificial Intelligence (AI) models grades for core diseases Glaucoma
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd vc status
+   bd vc commit -m "Update beads state"
    git push
    git status  # MUST show "up to date with origin"
    ```

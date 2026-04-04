@@ -407,6 +407,14 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                     message = "Eligible for grading" if is_available else (
                         f"Task is no longer available for arbitration (current state: {task.state})."
                     )
+
+            # Allow final-state editing only for arbitrators revising within the recent-edit window.
+            is_arbitrator_revising_recent = (
+                slot_type == "arbitrator"
+                and task.state == "final"
+                and existing_grade_for_availability is not None
+                and is_available
+            )
                     
             if not is_available:
                 flash(message, "danger")

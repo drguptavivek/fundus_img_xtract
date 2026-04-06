@@ -9,7 +9,7 @@ This design allows for better transaction management and session reuse.
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import selectinload, aliased
-from sqlalchemy import and_, or_, func, exists
+from sqlalchemy import and_, or_, func, exists, case
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading, TaskTracker
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
@@ -483,6 +483,32 @@ def get_user_task_tracker_kpi_data(
         else:
             active_count += 1
 
+    latest_resume_row = (
+        db.query(TaskTracker, GradingTask.uuid, Disease.name)
+        .join(GradingTask, GradingTask.id == TaskTracker.task_id)
+        .join(Disease, Disease.id == GradingTask.disease_id)
+        .filter(TaskTracker.user_id == user_id)
+        .order_by(
+            case((TaskTracker.started_at < threshold, 1), else_=0),
+            TaskTracker.started_at.desc(),
+            TaskTracker.id.desc(),
+        )
+        .first()
+    )
+
+    resume_task = None
+    if latest_resume_row:
+        tracker, task_uuid, disease_name = latest_resume_row
+        started_at = tracker.started_at
+        if started_at and started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        resume_task = {
+            "task_uuid": task_uuid,
+            "slot_type": tracker.role_slot,
+            "disease_name": disease_name,
+            "is_stale": bool(started_at and started_at < threshold),
+        }
+
     return {
         "total": len(trackers),
         "active": active_count,
@@ -490,6 +516,7 @@ def get_user_task_tracker_kpi_data(
         "by_role": by_role,
         "stale_by_role": stale_by_role,
         "stuck_after_minutes": stuck_after_minutes,
+        "resume_task": resume_task,
     }
 
 

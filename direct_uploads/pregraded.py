@@ -76,7 +76,7 @@ def pregraded_upload():
                 db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
             )
             MAX_FILE_SIZE_MB = _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 15
             )
             MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
             ALLOWED_MIMETYPES = _get_csv_setting(
@@ -462,7 +462,7 @@ def pregraded_upload():
                 db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
             ),
             "per_file_mb_limit": _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 15
             ),
             "lifetime_quota": _get_lifetime_quota(
                 db_session, current_user

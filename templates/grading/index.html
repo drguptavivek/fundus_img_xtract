@@ -253,7 +253,7 @@
               aria-label="Explain in-progress locked tasks"
             >?</button>
             <span class="info-tooltip__panel" role="tooltip">
-              These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. There is currently no resume queue on this dashboard. If you do not submit them, stale locks are cleared automatically after 60 minutes.
+              These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. Use Resume to continue your latest locked task. If you do not submit them, stale locks are cleared automatically after 60 minutes.
             </span>
           </span>
         </h5>
@@ -280,8 +280,23 @@
           {% endif %}
           {% endfor %}
         </div>
+        {% if task_tracker_kpi.resume_task %}
+        <div class="mt-3">
+          <a
+            href="{{ url_for('grading.dual_grading_task', task_uuid=task_tracker_kpi.resume_task.task_uuid, slot_type=task_tracker_kpi.resume_task.slot_type) }}"
+            class="btn btn-warning btn-sm"
+          >
+            Resume {{ task_tracker_kpi.resume_task.disease_name }} ({{ task_tracker_kpi.resume_task.slot_type|capitalize }})
+          </a>
+          {% if task_tracker_kpi.resume_task.is_stale %}
+          <div class="small text-muted mt-2">
+            This lock is marked stale and may be auto-cleared soon.
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
         <div class="small text-muted mt-2">
-          There is no resume action here. Tasks older than {{ task_tracker_kpi.stuck_after_minutes }} minutes are treated as stuck and are cleared automatically by cleanup.
+          Tasks older than {{ task_tracker_kpi.stuck_after_minutes }} minutes are treated as stuck and are cleared automatically by cleanup.
         </div>
         {% endif %}
       </div>

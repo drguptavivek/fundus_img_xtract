@@ -67,39 +67,6 @@ def _validate_linked_primary_eligibility(db, items: list[dict]) -> list[str]:
     return errors
 
 
-def _validate_slot_exclusivity(db, items: list[dict]) -> list[str]:
-    """
-    Reject combinations where the same user is both resident and arbitrator for
-    the same disease in the same lab unit.
-    """
-    disease_names = {
-        disease.id: disease.name
-        for disease in db.execute(select(Disease)).scalars().all()
-    }
-    lab_unit_names = {
-        lab_unit.id: lab_unit.name
-        for lab_unit in db.execute(select(LabUnit)).scalars().all()
-    }
-
-    errors: list[str] = []
-    for item in items:
-        disease_id = int(item.get("disease_id"))
-        lab_unit_id = int(item.get("lab_unit_id"))
-        is_active = bool(item.get("active", False))
-        has_resident_role = bool(item.get("can_grade_resident", False)) or bool(item.get("can_grade_resident2", False))
-        has_arbitrator_role = bool(item.get("can_arbitrate", False))
-
-        if not is_active or not (has_resident_role and has_arbitrator_role):
-            continue
-
-        disease_name = disease_names.get(disease_id, f"Disease {disease_id}")
-        lab_unit_name = lab_unit_names.get(lab_unit_id, f"Lab Unit {lab_unit_id}")
-        errors.append(
-            f"{lab_unit_name}: {disease_name} cannot assign both resident and arbitrator eligibility to the same user."
-        )
-
-    return errors
-
 @roles_required('admin', 'local_admin')
 def manage_eligibility_users():
     """List all users to manage their grading eligibility."""
@@ -182,10 +149,7 @@ def edit_eligibility(user_id):
                     flash("Invalid data format.", "danger")
                     return redirect(url_for("admin.edit_eligibility", user_id=user_id))
 
-                validation_errors = (
-                    _validate_slot_exclusivity(db, items)
-                    + _validate_linked_primary_eligibility(db, items)
-                )
+                validation_errors = _validate_linked_primary_eligibility(db, items)
                 if validation_errors:
                     for error in validation_errors:
                         flash(error, "danger")

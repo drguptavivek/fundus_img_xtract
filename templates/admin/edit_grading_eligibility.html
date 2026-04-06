@@ -125,6 +125,11 @@
         const resCheckbox = document.getElementById(`res-${diseaseId}-${labUnitId}`);
         const arbCheckbox = document.getElementById(`arb-${diseaseId}-${labUnitId}`);
         const activeToggle = document.getElementById(`active-${diseaseId}-${labUnitId}`);
+
+        // Explicitly allow combining Resident and Arbitrator for the same disease/lab unit.
+        // Keep both controls enabled to avoid any accidental mutual-exclusion behavior.
+        if (resCheckbox) resCheckbox.disabled = false;
+        if (arbCheckbox) arbCheckbox.disabled = false;
         
         // Check if any role is selected for this disease/lab unit
         const hasRoleSelected = (resCheckbox && resCheckbox.checked) || (arbCheckbox && arbCheckbox.checked);

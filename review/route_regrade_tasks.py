@@ -66,6 +66,18 @@ def create_regrade_tasks():
             flash("You are not allowed to create regrades for this lab unit.", "error")
             return redirect(request.referrer or url_for("review.discrepancy_review", disease_id=disease_id))
 
+        has_arbitrator = request.form.get("has_arbitrator", type=str)
+        if has_arbitrator is None:
+            has_arbitrator = "yes"
+
+        resident_compare = request.form.get("resident_compare", type=str)
+        if resident_compare is None:
+            resident_compare = "mismatch"
+
+        has_regrade = request.form.get("has_regrade", type=str)
+        if has_regrade is None:
+            has_regrade = "no"
+
         filters = {
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
@@ -75,11 +87,11 @@ def create_regrade_tasks():
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
             "has_review": request.form.get("has_review", type=str),
-            "has_arbitrator": "yes",
+            "has_arbitrator": has_arbitrator,
             "review_grade": request.form.getlist("review_grade"),
             "has_consensus": request.form.get("has_consensus", type=str),
             "consensus_method": request.form.get("consensus_method", type=str),
-            "resident_compare": "mismatch",
+            "resident_compare": resident_compare,
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": [
@@ -87,8 +99,8 @@ def create_regrade_tasks():
                 for status in request.form.getlist("ai_review_status")
                 if status in AI_REVIEW_STATUS_LABELS
             ],
-            "has_regrade": "no",
-            "regrade_grade": [],
+            "has_regrade": has_regrade,
+            "regrade_grade": request.form.getlist("regrade_grade"),
             "allowed_lab_units": list(allowed_lab_unit_ids),
         }
 

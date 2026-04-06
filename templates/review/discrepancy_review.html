@@ -64,6 +64,7 @@
 
 {% block content %}
 {% set regrade_creator_mode = regrade_creator_mode|default(false) %}
+{% set review_route = review_route|default('review.discrepancy_review') %}
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
     <h3>{{ page_title or 'Discrepancy Review' }}</h3>
@@ -161,25 +162,25 @@
 
           <div class="col-md-3">
             <label for="residentCompareSelect" class="form-label">Resident vs Resident2</label>
-            <select class="form-select" id="residentCompareSelect" name="resident_compare" {% if regrade_creator_mode %}disabled{% endif %}>
+            <select class="form-select" id="residentCompareSelect" name="resident_compare">
               <option value="">All Tasks</option>
               <option value="match" {% if filters.resident_compare=='match' %}selected{% endif %}>Match</option>
               <option value="mismatch" {% if filters.resident_compare=='mismatch' %}selected{% endif %}>Mismatch</option>
             </select>
             {% if regrade_creator_mode %}
-              <div class="form-text">Enforced: Mismatch</div>
+              <div class="form-text">Default: Mismatch</div>
             {% endif %}
           </div>
 
           <div class="col-md-3">
             <label for="hasArbitratorSelect" class="form-label">Has Arbitrator Grade</label>
-            <select class="form-select" id="hasArbitratorSelect" name="has_arbitrator" {% if regrade_creator_mode %}disabled{% endif %}>
+            <select class="form-select" id="hasArbitratorSelect" name="has_arbitrator">
               <option value="">All Tasks</option>
               <option value="yes" {% if filters.has_arbitrator=='yes' %}selected{% endif %}>Has Arbitrator</option>
               <option value="no" {% if filters.has_arbitrator=='no' %}selected{% endif %}>No Arbitrator</option>
             </select>
             {% if regrade_creator_mode %}
-              <div class="form-text">Enforced: Has Arbitrator</div>
+              <div class="form-text">Default: Has Arbitrator</div>
             {% endif %}
           </div>
 
@@ -211,13 +212,13 @@
 
           <div class="col-md-3">
             <label for="hasRegradeSelect" class="form-label">Has Arbitrator Regrade</label>
-            <select class="form-select" id="hasRegradeSelect" name="has_regrade" {% if regrade_creator_mode %}disabled{% endif %}>
+            <select class="form-select" id="hasRegradeSelect" name="has_regrade">
               <option value="">All Tasks</option>
               <option value="yes" {% if filters.has_regrade=='yes' %}selected{% endif %}>Has Regrade</option>
               <option value="no" {% if filters.has_regrade=='no' %}selected{% endif %}>No Regrade</option>
             </select>
             {% if regrade_creator_mode %}
-              <div class="form-text">Enforced: No Regrade</div>
+              <div class="form-text">Default: No Regrade</div>
             {% endif %}
           </div>
 
@@ -232,7 +233,7 @@
             </label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
-                id="regradeGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false" {% if regrade_creator_mode %}disabled{% endif %}>
+                id="regradeGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="regradeGradeText" data-default-label="All Regrade Grades">All Regrade Grades</span>
               </button>
               <ul class="dropdown-menu w-100" id="regradeGradeList">
@@ -241,7 +242,6 @@
                   <div class="form-check ms-4 px-3 py-1">
                     <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}"
                       id="regrade_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="regrade_grade"
-                      {% if regrade_creator_mode %}disabled{% endif %}
                       {% if grade.impression in (filters.regrade_grade if filters.regrade_grade else [])
                       %}checked{% endif %}>
                     <label class="form-check-label"
@@ -254,7 +254,7 @@
               </ul>
             </div>
             {% if regrade_creator_mode %}
-              <div class="form-text">Enforced: No Regrade</div>
+              <div class="form-text">Default: No Regrade</div>
             {% endif %}
           </div>
 
@@ -524,7 +524,7 @@
       toggleRegradeGradeControls();
   }
 
-    window.location = "{{ url_for('review.discrepancy_review') }}";
+    window.location = "{{ url_for(review_route) }}";
 }
 
     // Load all diseases with their gradings on page load

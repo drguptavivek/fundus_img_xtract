@@ -55,7 +55,7 @@
         {% endif %}
       </form>
       <!-- Pagination -->
-      {% if request.endpoint == 'review.regrade_task_creator' %}
+      {% if regrade_creator_mode %}
       <form method="POST" action="{{ url_for('review.create_regrade_tasks') }}"
         class="d-flex flex-wrap gap-2 align-items-end">
         {{ csrf_field() }}
@@ -70,17 +70,13 @@
         endfor %}
         {% for g in filters.review_grade or [] %}<input type="hidden" name="review_grade" value="{{ g }}">{% endfor %}
         {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
-        {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{%
-        endif %}
-        {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
-        {% if filters.has_arbitrator %}<input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator }}">{%
-        endif %}
-        {% if filters.has_consensus %}<input type="hidden" name="has_consensus" value="{{ filters.has_consensus }}">{%
-        endif %}
-        {% if filters.consensus_method %}<input type="hidden" name="consensus_method"
-          value="{{ filters.consensus_method }}">{% endif %}
-        {% if filters.resident_compare %}<input type="hidden" name="resident_compare"
-          value="{{ filters.resident_compare }}">{% endif %}
+        <input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade or '' }}">
+        <input type="hidden" name="has_review" value="{{ filters.has_review or '' }}">
+        <input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator or '' }}">
+        <input type="hidden" name="has_regrade" value="{{ filters.has_regrade or '' }}">
+        <input type="hidden" name="has_consensus" value="{{ filters.has_consensus or '' }}">
+        <input type="hidden" name="consensus_method" value="{{ filters.consensus_method or '' }}">
+        <input type="hidden" name="resident_compare" value="{{ filters.resident_compare or '' }}">
         {% for mid in filters.ai_model_id or [] %}<input type="hidden" name="ai_model_id" value="{{ mid }}">{% endfor
         %}
         {% for g in filters.ai_grade or [] %}<input type="hidden" name="ai_grade" value="{{ g }}">{% endfor %}
@@ -111,7 +107,7 @@
       <nav aria-label="Tasks pagination">
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item {% if not has_prev %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('review.discrepancy_review',
+            <a class="page-link" href="{{ url_for(review_route,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                 resident_grade=filters.resident_grade or [],
@@ -128,7 +124,7 @@
                 ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
                 page=page-1) if has_prev else '#' }}"
-              {% if has_prev %}hx-get="{{ url_for('review.discrepancy_review',
+              {% if has_prev %}hx-get="{{ url_for(review_route,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                 resident_grade=filters.resident_grade or [],
@@ -154,7 +150,7 @@
           {% if total_pages <= 7 %} <!-- If total pages <=7, show all pages -->
             {% for p in range(1, total_pages + 1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
-              <a class="page-link" href="{{ url_for('review.discrepancy_review',
+              <a class="page-link" href="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -171,7 +167,7 @@
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
                     page=p) }}"
-                hx-get="{{ url_for('review.discrepancy_review',
+                hx-get="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -201,7 +197,7 @@
               = total_pages - 1 %}{% endif %}
 
               <li class="page-item {% if 1 == page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                <a class="page-link" href="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -220,7 +216,7 @@
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=1) }}"
-                  hx-get="{{ url_for('review.discrepancy_review',
+                  hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -252,7 +248,7 @@
 
               {% for p in range(start_page, end_page + 1) %}
               <li class="page-item {% if p == page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                <a class="page-link" href="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -269,7 +265,7 @@
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
                     page=p) }}"
-                  hx-get="{{ url_for('review.discrepancy_review',
+                  hx-get="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -298,7 +294,7 @@
                 {% endif %}
 
                 <li class="page-item {% if total_pages == page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                  <a class="page-link" href="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -317,7 +313,7 @@
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=total_pages) }}"
-                    hx-get="{{ url_for('review.discrepancy_review',
+                    hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -343,7 +339,7 @@
                 {% endif %}
 
                 <li class="page-item {% if not has_next %}disabled{% endif %}">
-                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                  <a class="page-link" href="{{ url_for(review_route,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -360,7 +356,7 @@
                     ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
                 page=page+1) if has_next else '#' }}"
-                    {% if has_next %}hx-get="{{ url_for('review.discrepancy_review',
+                    {% if has_next %}hx-get="{{ url_for(review_route,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -560,7 +556,7 @@
       <nav aria-label="Tasks pagination (mobile)">
         <ul class="pagination pagination-sm justify-content-center">
           <li class="page-item {% if not has_prev %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('review.discrepancy_review',
+            <a class="page-link" href="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -579,7 +575,7 @@
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=page-1) if has_prev else '#' }}"
-              {% if has_prev %}hx-get="{{ url_for('review.discrepancy_review',
+              {% if has_prev %}hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -606,7 +602,7 @@
             %}{% set end_page_mobile = total_pages %}{% endif %}
             {% for p in range(start_page_mobile, end_page_mobile + 1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
-              <a class="page-link" href="{{ url_for('review.discrepancy_review',
+              <a class="page-link" href="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -623,7 +619,7 @@
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=p) }}"
-                hx-get="{{ url_for('review.discrepancy_review',
+                hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -646,7 +642,7 @@
             </li>
             {% endfor %}
             <li class="page-item {% if not has_next %}disabled{% endif %}">
-              <a class="page-link" href="{{ url_for('review.discrepancy_review',
+              <a class="page-link" href="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -663,7 +659,7 @@
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=page+1) if has_next else '#' }}"
-                {% if has_next %}hx-get="{{ url_for('review.discrepancy_review',
+                {% if has_next %}hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],

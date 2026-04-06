@@ -77,6 +77,9 @@ def render_discrepancy_review(
         from flask import flash, redirect, url_for, request, session
         disease_id = request.args.get("disease_id", type=int)
         
+        regrade_creator_mode = bool(enforced_filters)
+        review_route = "review.regrade_task_creator" if regrade_creator_mode else "review.discrepancy_review"
+
         # Check if we're already being redirected (no disease_id but error message in session)
         if not disease_id and not session.get('_disease_error_shown'):
             # Mark that we've shown the error to prevent infinite redirects
@@ -85,9 +88,7 @@ def render_discrepancy_review(
             # Preserve other query parameters when redirecting
             query_params = request.args.to_dict()
             query_params = {k: v for k, v in query_params.items() if k != 'disease_id'}
-            return redirect(url_for('review.discrepancy_review', **query_params))
-        
-        regrade_creator_mode = bool(enforced_filters)
+            return redirect(url_for(review_route, **query_params))
 
         # Clear the error flag if disease is selected
         if disease_id and session.get('_disease_error_shown'):
@@ -111,6 +112,7 @@ def render_discrepancy_review(
                 filters={},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
+                review_route=review_route,
             )
         
         # Apply lab unit filter
@@ -151,9 +153,15 @@ def render_discrepancy_review(
 
         enforced = enforced_filters or {}
         if enforced:
-            resident_compare = enforced.get("resident_compare", resident_compare)
-            has_arbitrator = enforced.get("has_arbitrator", has_arbitrator)
-            has_regrade = enforced.get("has_regrade", has_regrade)
+            # Apply defaults only when filter keys are absent from the query.
+            # If a key is present with an empty value (e.g. has_arbitrator=),
+            # treat it as "All Tasks" and preserve it.
+            if "resident_compare" not in request.args:
+                resident_compare = enforced.get("resident_compare", resident_compare)
+            if "has_arbitrator" not in request.args:
+                has_arbitrator = enforced.get("has_arbitrator", has_arbitrator)
+            if "has_regrade" not in request.args:
+                has_regrade = enforced.get("has_regrade", has_regrade)
         
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
@@ -185,6 +193,7 @@ def render_discrepancy_review(
                 filters={},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
+                review_route=review_route,
             )
 
         filters = {
@@ -228,6 +237,7 @@ def render_discrepancy_review(
                 filters=filters,
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
+                review_route=review_route,
             )
 
         base_query = f"""
@@ -360,6 +370,7 @@ def render_discrepancy_review(
             },
             page_title=page_title,
             regrade_creator_mode=regrade_creator_mode,
+            review_route=review_route,
         )
 
 

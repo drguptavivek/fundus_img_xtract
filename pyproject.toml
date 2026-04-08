@@ -44,7 +44,7 @@ web = [
     "wtforms==3.2.1",
     "beautifulsoup4==4.14.3",
     "openpyxl==3.1.5",
-    "requests==2.32.5",
+    "requests==2.33.0",
     "psutil==7.2.2",
     "alembic==1.18.3",
     "argon2-cffi-bindings==25.1.0",
@@ -135,7 +135,7 @@ general = [
     "flask-login==0.6.3",
     "pytz==2025.2",
     "pyyaml>=6.0.3",
-    "requests==2.32.5",  # Needed by package_update_scanner
+    "requests==2.33.0",  # Needed by package_update_scanner
     "PyJWT==2.11.0",
     "pip-audit==2.10.0",
 ]

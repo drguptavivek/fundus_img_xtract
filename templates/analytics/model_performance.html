@@ -75,17 +75,6 @@
           </div>
         </div>
       </div>
-      <div class="w-100 d-block d-lg-none"></div>
-      <div class="col-12 col-sm-6 col-lg-auto">
-        <label class="form-label mb-1" for="filter-reference">Reference</label>
-        <select class="form-select" id="filter-reference" name="reference_source">
-          <option value="final" {% if reference_source == 'final' %}selected{% endif %}>Final Grade (default)</option>
-          <option value="consensus" {% if reference_source == 'consensus' %}selected{% endif %}>Consensus Row</option>
-          <option value="arbitrator" {% if reference_source == 'arbitrator' %}selected{% endif %}>Arbitrator</option>
-          <option value="resident2" {% if reference_source == 'resident2' %}selected{% endif %}>Resident2</option>
-          <option value="resident" {% if reference_source == 'resident' %}selected{% endif %}>Resident</option>
-        </select>
-      </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-final-grade-basis">Final Grade Basis</label>
         <select class="form-select" id="filter-final-grade-basis" name="final_grade_basis">
@@ -163,7 +152,7 @@
     <div class="alert alert-secondary small">
       Filters applied: Disease = {{ selected_disease_name or '-' }}, Model = {{ selected_model_name or '-' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
       {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
-      Reference: {{ reference_source }}. Final grade basis: {{ final_grade_basis_label }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
+      Reference: Final grade. Final grade basis: {{ final_grade_basis_label }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
       
     </div>
     {% if performance.unresolved_excluded_count %}

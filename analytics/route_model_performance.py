@@ -615,6 +615,7 @@ def _build_binary_with_ci(
 def model_performance() -> str:
     """Show AI model performance against human reference grades using per-disease v2 MVs."""
     final_grade_basis = normalize_final_grade_basis(request.args.get("final_grade_basis"))
+    reference_source = "final"
     if not _ensure_sklearn():
         return render_template(
             "analytics/model_performance.html",
@@ -645,7 +646,6 @@ def model_performance() -> str:
     disease_id = request.args.get("disease_id", type=int)
     ai_model_id = request.args.get("ai_model_id", type=int)
     selected_lab_units = request.args.getlist("lab_unit_id", type=int)
-    reference_source = request.args.get("reference_source", default="final")
     threshold = request.args.get("threshold", default=0.5, type=float)
     bootstrap_samples = request.args.get("bootstrap_samples", default=2000, type=int)
     upload_type = (request.args.get("upload_type") or "").strip().lower() or None
@@ -844,11 +844,6 @@ def model_performance() -> str:
                                 "probability": ai_entry.get("ai_probability"),
                             }
                         ],
-                        "ref_grades": {
-                            "resident": {"label": row["resident_grade_name"]} if row["resident_grade_name"] else None,
-                            "resident2": {"label": row["resident2_grade_name"]} if row["resident2_grade_name"] else None,
-                            "arbitrator": {"label": row["arbitrator_grade_name"]} if row["arbitrator_grade_name"] else None,
-                        },
                     }
 
                 # Group by image_uuid + disease to choose the latest task per image
@@ -873,18 +868,10 @@ def model_performance() -> str:
                     _, data = task_entries[0]
 
                     # Reference label selection
-                    ref_label = None
-                    if reference_source == "final":
-                        ref_label = data["final_label"]
-                    elif reference_source == "consensus":
-                        ref_label = data["consensus_label"]
-                    else:
-                        ref_obj = data["ref_grades"].get(reference_source)
-                        ref_label = ref_obj["label"] if ref_obj else None
-
+                    ref_label = data["final_label"]
                     if not ref_label:
                         continue
-                    if reference_source == "final" and ref_label == FINAL_GRADE_UNRESOLVED:
+                    if ref_label == FINAL_GRADE_UNRESOLVED:
                         unresolved_excluded_count += 1
                         continue
 
@@ -1178,7 +1165,6 @@ def threshold_explorer() -> object:
     payload = request.get_json(silent=True) or {}
     disease_id = payload.get("disease_id")
     ai_model_id = payload.get("ai_model_id")
-    reference_source = payload.get("reference_source", "final") or "final"
     final_grade_basis = normalize_final_grade_basis(payload.get("final_grade_basis"))
     upload_type = (payload.get("upload_type") or "").strip().lower() or None
     camera_id_raw = payload.get("camera_id")
@@ -1332,11 +1318,6 @@ def threshold_explorer() -> object:
                         "probability": ai_entry.get("ai_probability"),
                     }
                 ],
-                "ref_grades": {
-                    "resident": {"label": row["resident_grade_name"]} if row["resident_grade_name"] else None,
-                    "resident2": {"label": row["resident2_grade_name"]} if row["resident2_grade_name"] else None,
-                    "arbitrator": {"label": row["arbitrator_grade_name"]} if row["arbitrator_grade_name"] else None,
-                },
             }
 
         grouped: Dict[Tuple[str, int], List[Tuple[int, Dict[str, object]]]] = {}
@@ -1354,18 +1335,10 @@ def threshold_explorer() -> object:
             )
             _, data = task_entries[0]
 
-            ref_label = None
-            if reference_source == "final":
-                ref_label = data["final_label"]
-            elif reference_source == "consensus":
-                ref_label = data["consensus_label"]
-            else:
-                ref_obj = data["ref_grades"].get(reference_source)
-                ref_label = ref_obj["label"] if ref_obj else None
-
+            ref_label = data["final_label"]
             if not ref_label:
                 continue
-            if reference_source == "final" and ref_label == FINAL_GRADE_UNRESOLVED:
+            if ref_label == FINAL_GRADE_UNRESOLVED:
                 continue
 
             ref_class = label_to_class.get(ref_label)
@@ -1461,3 +1434,4 @@ def threshold_explorer() -> object:
             cache.set(cache_key, response_payload, timeout=60 * 60)  # 1 hour
 
         return jsonify(response_payload)
+    reference_source = "final"

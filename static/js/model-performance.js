@@ -401,7 +401,6 @@
     const spinner = document.getElementById('threshold-explorer-spinner');
     const diseaseEl = document.getElementById('filter-disease');
     const modelEl = document.getElementById('filter-model');
-    const referenceEl = document.getElementById('filter-reference');
     const finalGradeBasisEl = document.getElementById('filter-final-grade-basis');
     const uploadTypeEl = document.getElementById('filter-upload-type');
     const cameraEl = document.getElementById('filter-camera');
@@ -564,7 +563,6 @@
       const payload = {
         disease_id: diseaseEl ? Number(diseaseEl.value) : null,
         ai_model_id: modelEl ? Number(modelEl.value) : null,
-        reference_source: referenceEl ? referenceEl.value : 'consensus',
         final_grade_basis: finalGradeBasisEl ? finalGradeBasisEl.value : 'preference',
         upload_type: uploadTypeEl ? uploadTypeEl.value : '',
         camera_id: cameraEl && cameraEl.value ? Number(cameraEl.value) : null,

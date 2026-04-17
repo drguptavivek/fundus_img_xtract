@@ -124,7 +124,7 @@ class User(Base):
     mobile_auth_sessions: Mapped[List["MobileAuthSession"]] = relationship(
         "MobileAuthSession",
         back_populates="user",
-        lazy="selectin",
+        lazy="noload",
         cascade="all, delete-orphan",
     )
 

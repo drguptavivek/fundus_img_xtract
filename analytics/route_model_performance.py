@@ -12,6 +12,12 @@ from app_cache import cache
 
 from . import bp
 from models import AIModel, Camera, Disease, DiseaseGrading, LabUnit
+from utils.final_grade_basis import (
+    FINAL_GRADE_UNRESOLVED,
+    final_grade_basis_label,
+    normalize_final_grade_basis,
+    sql_final_grade_expression,
+)
 from utils.hospital_scoping import apply_scoping
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
@@ -307,6 +313,7 @@ def _build_performance_cache_key(
     disease_id: int,
     ai_model_id: int,
     reference_source: str,
+    final_grade_basis: str,
     upload_type: Optional[str],
     camera_id: Optional[int],
     class_definitions: Dict[str, List[str]],
@@ -322,6 +329,7 @@ def _build_performance_cache_key(
         "disease_id": disease_id,
         "ai_model_id": ai_model_id,
         "reference_source": reference_source,
+        "final_grade_basis": final_grade_basis,
         "upload_type": upload_type,
         "camera_id": camera_id,
         "class_definitions": normalized_classes,
@@ -413,6 +421,7 @@ class ModelPerformance:
     fp_count: int
     fn_count: int
     multi_class: bool
+    unresolved_excluded_count: int
 
 
 def _safe_div(numerator: float, denominator: float) -> Optional[float]:
@@ -605,6 +614,7 @@ def _build_binary_with_ci(
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def model_performance() -> str:
     """Show AI model performance against human reference grades using per-disease v2 MVs."""
+    final_grade_basis = normalize_final_grade_basis(request.args.get("final_grade_basis"))
     if not _ensure_sklearn():
         return render_template(
             "analytics/model_performance.html",
@@ -619,6 +629,8 @@ def model_performance() -> str:
             error_message="scikit-learn is required for this page. Please install scikit-learn in the environment.",
             labels_for_disease=[],
             reference_source="final",
+            final_grade_basis=final_grade_basis,
+            final_grade_basis_label=final_grade_basis_label(final_grade_basis),
             positive_class=None,
             threshold=0.5,
             bootstrap_samples=2000,
@@ -655,6 +667,7 @@ def model_performance() -> str:
     selected_disease_name: Optional[str] = None
     selected_model_name: Optional[str] = None
     selected_model_version: Optional[str] = None
+    unresolved_excluded_count = 0
 
     download = request.args.get("download") == "xlsx"
 
@@ -703,6 +716,7 @@ def model_performance() -> str:
                         disease_id=disease_id,
                         ai_model_id=ai_model_id,
                         reference_source=reference_source,
+                        final_grade_basis=final_grade_basis,
                         upload_type=upload_type,
                         camera_id=camera_id,
                         class_definitions=class_definitions,
@@ -728,6 +742,8 @@ def model_performance() -> str:
                             error_message=error_message,
                             labels_for_disease=labels_for_disease or [],
                             reference_source=reference_source,
+                            final_grade_basis=final_grade_basis,
+                            final_grade_basis_label=final_grade_basis_label(final_grade_basis),
                             positive_class=positive_class,
                             threshold=threshold,
                             bootstrap_samples=bootstrap_samples,
@@ -757,7 +773,7 @@ def model_performance() -> str:
                         disease_name,
                         task_state,
                         final_grade_name,
-                        final_impression,
+                        {sql_final_grade_expression(final_grade_basis)} AS final_impression,
                         resident_grade_name,
                         resident2_grade_name,
                         arbitrator_grade_name,
@@ -867,6 +883,9 @@ def model_performance() -> str:
                         ref_label = ref_obj["label"] if ref_obj else None
 
                     if not ref_label:
+                        continue
+                    if reference_source == "final" and ref_label == FINAL_GRADE_UNRESOLVED:
+                        unresolved_excluded_count += 1
                         continue
 
                     # Map to classes; drop if not assigned
@@ -1100,6 +1119,7 @@ def model_performance() -> str:
                         fp_count=fp_count,
                         fn_count=fn_count,
                         multi_class=is_multi_class,
+                        unresolved_excluded_count=unresolved_excluded_count,
                     )
 
                     if cache_key:
@@ -1132,6 +1152,8 @@ def model_performance() -> str:
         error_message=error_message,
         labels_for_disease=labels_for_disease or [],
         reference_source=reference_source,
+        final_grade_basis=final_grade_basis,
+        final_grade_basis_label=final_grade_basis_label(final_grade_basis),
         positive_class=positive_class,
         threshold=threshold,
         bootstrap_samples=bootstrap_samples,
@@ -1142,6 +1164,7 @@ def model_performance() -> str:
         selected_camera_id=camera_id,
         roc_points_json=json.dumps(performance.roc_points) if performance and performance.roc_points else "[]",
         class_map_json=json.dumps(class_definitions),
+        unresolved_excluded_count=unresolved_excluded_count,
     )
 
 
@@ -1156,6 +1179,7 @@ def threshold_explorer() -> object:
     disease_id = payload.get("disease_id")
     ai_model_id = payload.get("ai_model_id")
     reference_source = payload.get("reference_source", "final") or "final"
+    final_grade_basis = normalize_final_grade_basis(payload.get("final_grade_basis"))
     upload_type = (payload.get("upload_type") or "").strip().lower() or None
     camera_id_raw = payload.get("camera_id")
     class_map_raw = payload.get("class_map") or {}
@@ -1231,7 +1255,7 @@ def threshold_explorer() -> object:
                 disease_name,
                 task_state,
                 final_grade_name,
-                final_impression,
+                {sql_final_grade_expression(final_grade_basis)} AS final_impression,
                 resident_grade_name,
                 resident2_grade_name,
                 arbitrator_grade_name,
@@ -1340,6 +1364,8 @@ def threshold_explorer() -> object:
                 ref_label = ref_obj["label"] if ref_obj else None
 
             if not ref_label:
+                continue
+            if reference_source == "final" and ref_label == FINAL_GRADE_UNRESOLVED:
                 continue
 
             ref_class = label_to_class.get(ref_label)

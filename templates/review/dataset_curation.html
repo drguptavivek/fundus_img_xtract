@@ -147,6 +147,10 @@
                 i
               </button>
             </label>
+            <select class="form-select mb-2" id="finalGradeBasisSelect" name="final_grade_basis">
+              <option value="preference" selected>Preference Based</option>
+              <option value="double_match">Double-Match Based</option>
+            </select>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="finalGradeText">All Grades</span>
@@ -160,6 +164,12 @@
                   </div>
                 </li>
                 {% endfor %}
+                <li id="finalGradeUnresolvedOption" class="d-none">
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="Unresolved" id="final_Unresolved" name="final_grade">
+                    <label class="form-check-label" for="final_Unresolved">Unresolved</label>
+                  </div>
+                </li>
               </ul>
             </div>
           </div>
@@ -378,6 +388,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/final-grade-basis.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
 {% else %}
@@ -428,6 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const resident2GradeList = document.getElementById('resident2GradeList');
   const arbitratorGradeList = document.getElementById('arbitratorGradeList');
   const finalGradeList = document.getElementById('finalGradeList');
+  const finalGradeBasisSelect = document.getElementById('finalGradeBasisSelect');
   const aiGradeList = document.getElementById('aiGradeList');
 
   const allGradeOptions = {
@@ -475,7 +487,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
         updateGradeCheckboxes(resident2GradeList, selectedDisease.gradings, allGradeOptions.resident2);
         updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
-        updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
+        updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final, 'All Grades', window.FinalGradeBasis && window.FinalGradeBasis.basisUsesUnresolved(finalGradeBasisSelect.value));
         updateGradeCheckboxes(aiGradeList, selectedDisease.gradings, allGradeOptions.ai, 'AI Grades');
       }
     } else {
@@ -486,13 +498,14 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   diseaseSelect.addEventListener('change', updateGradeOptions);
+  window.FinalGradeBasis.initSelect(finalGradeBasisSelect, updateGradeOptions);
   window.datasetCurationUpdateGradeOptions = updateGradeOptions;
   if (diseaseSelect.value) {
     setTimeout(updateGradeOptions, 100);
   }
 });
 
-function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All Grades') {
+function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All Grades', includeUnresolved=false) {
   const checkedValues = Array.from(gradeList.querySelectorAll('input:checked')).map(input => input.value);
   gradeList.innerHTML = '';
   const gradeImpressions = new Set((grades || []).map(g => g.impression));
@@ -506,6 +519,15 @@ function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All 
       added.add(gradeValue);
     }
   });
+  if (includeUnresolved && !added.has('Unresolved')) {
+    const unresolvedLi = document.createElement('li');
+    unresolvedLi.innerHTML = '<div class="form-check ms-4 px-3 py-1"><input class="form-check-input grade-checkbox" type="checkbox" value="Unresolved" id="final_Unresolved_dynamic" name="final_grade"><label class="form-check-label" for="final_Unresolved_dynamic">Unresolved</label></div>';
+    const unresolvedInput = unresolvedLi.querySelector('input');
+    if (checkedValues.includes('Unresolved')) {
+      unresolvedInput.checked = true;
+    }
+    gradeList.appendChild(unresolvedLi);
+  }
   updateDropdownText(gradeList, defaultLabel);
 }
 

@@ -86,6 +86,13 @@
           <option value="resident" {% if reference_source == 'resident' %}selected{% endif %}>Resident</option>
         </select>
       </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-final-grade-basis">Final Grade Basis</label>
+        <select class="form-select" id="filter-final-grade-basis" name="final_grade_basis">
+          <option value="preference" {% if final_grade_basis != 'double_match' %}selected{% endif %}>Preference Based</option>
+          <option value="double_match" {% if final_grade_basis == 'double_match' %}selected{% endif %}>Double-Match Based</option>
+        </select>
+      </div>
       <div class="col-12">
         <label class="form-label mb-1">Class Builder</label>
         <div class="card border shadow-sm">
@@ -156,9 +163,14 @@
     <div class="alert alert-secondary small">
       Filters applied: Disease = {{ selected_disease_name or '-' }}, Model = {{ selected_model_name or '-' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
       {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
-      Reference: {{ reference_source }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
+      Reference: {{ reference_source }}. Final grade basis: {{ final_grade_basis_label }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
       
     </div>
+    {% if performance.unresolved_excluded_count %}
+    <div class="alert alert-warning small">
+      Unresolved excluded: {{ performance.unresolved_excluded_count }}.
+    </div>
+    {% endif %}
 
     {% if performance.class_definitions %}
     <div class="alert alert-info small">
@@ -683,6 +695,7 @@
 
 {% block page_scripts %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='js/final-grade-basis.js') }}?v={{ v }}"></script>
   <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ v }}"></script>
   <script src="{{ url_for('static', filename='js/model-performance.js') }}?v={{ v }}"></script>
 {% endblock %}

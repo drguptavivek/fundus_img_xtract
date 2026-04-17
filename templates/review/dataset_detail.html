@@ -190,6 +190,10 @@
           <div class="small text-muted">Final Grades</div>
           <div class="fw-semibold">{{ filters_display.final_grade | join(', ') if filters_display.final_grade else 'All' }}</div>
         </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Final Grade Basis</div>
+          <div class="fw-semibold">{{ 'Double-Match Based' if filters_display.final_grade_basis == 'double_match' else 'Preference Based' }}</div>
+        </div>
       </div>
       <div class="row g-3 mt-3">
         <div class="col-md-4">

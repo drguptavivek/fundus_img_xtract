@@ -11,6 +11,7 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import LabUnit, RegradeTask, Role, User, user_lab_units
 from utils.discrepancy_filters import build_discrepancy_filter_query
+from utils.final_grade_basis import normalize_final_grade_basis
 from utils.hospital_scoping import apply_scoping
 from . import bp
 from .route_discrepancy_review import render_discrepancy_review
@@ -99,6 +100,7 @@ def create_regrade_tasks():
                 for status in request.form.getlist("ai_review_status")
                 if status in AI_REVIEW_STATUS_LABELS
             ],
+            "final_grade_basis": normalize_final_grade_basis(request.form.get("final_grade_basis")),
             "has_regrade": has_regrade,
             "regrade_grade": request.form.getlist("regrade_grade"),
             "allowed_lab_units": list(allowed_lab_unit_ids),

@@ -23,6 +23,7 @@ from utils.taskUtils import get_task_detail
 from utils.date_utils import parse_date_yyyy_mm_dd
 from utils.log_sanitize import sanitize_log_value, mask_text_emails
 from review.task_review import AI_REVIEW_STATUS_LABELS
+from utils.final_grade_basis import normalize_final_grade_basis
 
 
 @bp.route("/images", methods=["GET"])
@@ -55,6 +56,7 @@ def search_images_route() -> str:
     resident2_grades = request.args.getlist("resident2_grade")
     arbitrator_grades = request.args.getlist("arbitrator_grade")
     final_grades = request.args.getlist("final_grade")
+    final_grade_basis = normalize_final_grade_basis(request.args.get("final_grade_basis"))
     has_ai_grade = request.args.get("has_ai_grade", type=str)
     ai_model_ids = request.args.getlist("ai_model_id")
     ai_grades = request.args.getlist("ai_grade")
@@ -133,6 +135,7 @@ def search_images_route() -> str:
                     "resident2_grade": resident2_grades,
                     "arbitrator_grade": arbitrator_grades,
                     "final_grade": final_grades,
+                    "final_grade_basis": final_grade_basis,
                     "has_ai_grade": has_ai_grade,
                     "ai_model_id": ai_model_ids,
                     "ai_grade": ai_grades,
@@ -163,6 +166,7 @@ def search_images_route() -> str:
             arbitrator_grades=arbitrator_grades,
             review_grades=review_grades,
             final_grades=final_grades,
+            final_grade_basis=final_grade_basis,
             has_ai_grade=has_ai_grade,
             has_review=has_review,
             has_consensus=has_consensus,
@@ -239,6 +243,7 @@ def search_images_route() -> str:
                     "lab_unit_id": lab_unit_id,
                     "has_consensus": has_consensus,
                     "has_review": has_review,
+                    "final_grade_basis": final_grade_basis,
                     "has_ai_grade": has_ai_grade,
                     "image_uuid": image_uuid or "",
                     "upload_after": request.args.get("upload_after", ""),
@@ -279,6 +284,7 @@ def search_images_route() -> str:
                 "resident2_grade": resident2_grades,
                 "arbitrator_grade": arbitrator_grades,
                 "final_grade": final_grades,
+                "final_grade_basis": final_grade_basis,
                 "has_ai_grade": has_ai_grade,
                 "ai_model_id": ai_model_ids,
                 "ai_grade": ai_grades,

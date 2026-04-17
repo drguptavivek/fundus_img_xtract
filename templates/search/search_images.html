@@ -145,6 +145,11 @@
               i
             </button>
           </label>
+          <label class="form-label mt-2 mb-1" for="finalGradeBasisSelect">Final Grade Basis</label>
+          <select class="form-select mb-2" name="final_grade_basis" id="finalGradeBasisSelect">
+            <option value="preference" {% if filters.final_grade_basis != 'double_match' %}selected{% endif %}>Preference Based</option>
+            <option value="double_match" {% if filters.final_grade_basis == 'double_match' %}selected{% endif %}>Double-Match Based</option>
+          </select>
           <div id="finalGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
             {% for grade in grade_options %}
               <div class="form-check">
@@ -152,6 +157,12 @@
                 <label class="form-check-label" for="final_{{ loop.index }}">{{ grade.impression }}</label>
               </div>
             {% endfor %}
+            {% if filters.final_grade_basis == 'double_match' %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="final_unresolved" name="final_grade" value="Unresolved" {% if 'Unresolved' in (filters.final_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="final_unresolved">Unresolved</label>
+              </div>
+            {% endif %}
             {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
           </div>
         </div>
@@ -373,6 +384,7 @@
 
 {% block page_scripts %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='js/final-grade-basis.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
   <script src="{{ url_for('static', filename='js/search-images-filters.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
   {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
@@ -384,6 +396,7 @@
         diseaseSelectId: "diseaseSelect",
         hasReviewSelectId: "hasReviewSelect",
         hasAiSelectId: "hasAiGradeSelect",
+        finalGradeBasisSelectId: "finalGradeBasisSelect",
         gradeMapElementId: "disease-grade-map",
         apiUrl: "{{ url_for('fundus_api.diseases_with_gradings') if fundus_api_disease_endpoint else '/api/diseases-with-gradings' }}",
         containers: {

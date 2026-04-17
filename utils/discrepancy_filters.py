@@ -5,6 +5,12 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlalchemy import text
 
 from models import DiseaseGrading
+from utils.final_grade_basis import (
+    FINAL_GRADE_UNRESOLVED,
+    basis_uses_unresolved,
+    normalize_final_grade_basis,
+    sql_final_grade_expression,
+)
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 
@@ -19,6 +25,7 @@ def build_discrepancy_filter_query(
     arbitrator_grades = filters.get("arbitrator_grade", [])
     regrade_grades = filters.get("regrade_grade", [])
     final_grades = filters.get("final_grade", [])
+    final_grade_basis = normalize_final_grade_basis(filters.get("final_grade_basis"))
     has_ai_grade = filters.get("has_ai_grade")
     has_review = filters.get("has_review")
     has_regrade = filters.get("has_regrade")
@@ -60,7 +67,10 @@ def build_discrepancy_filter_query(
         resident2_grades = [g for g in resident2_grades if g in valid_grade_impressions]
         arbitrator_grades = [g for g in arbitrator_grades if g in valid_grade_impressions]
         regrade_grades = [g for g in regrade_grades if g in valid_grade_impressions]
-        final_grades = [g for g in final_grades if g in valid_grade_impressions]
+        allowed_final_grades = set(valid_grade_impressions)
+        if basis_uses_unresolved(final_grade_basis):
+            allowed_final_grades.add(FINAL_GRADE_UNRESOLVED)
+        final_grades = [g for g in final_grades if g in allowed_final_grades]
         review_grades = [g for g in review_grades if g in valid_grade_impressions]
         ai_grades = [g for g in ai_grades if g in valid_grade_impressions]
 
@@ -70,7 +80,11 @@ def build_discrepancy_filter_query(
         "v.disease_id = :disease_id",
         "v.task_lab_unit_id = ANY(:allowed_lab_units)",
     ]
-    params: Dict[str, Any] = {"disease_id": disease_id, "allowed_lab_units": allowed_lab_units}
+    params: Dict[str, Any] = {
+        "disease_id": disease_id,
+        "allowed_lab_units": allowed_lab_units,
+        "final_grade_basis": final_grade_basis,
+    }
 
     if lab_unit_id and lab_unit_id in allowed_lab_units:
         where_clauses.append("v.task_lab_unit_id = :lab_unit_id")
@@ -180,7 +194,7 @@ def build_discrepancy_filter_query(
     if final_grades:
         valid_final_grades = [g for g in final_grades if g]
         if valid_final_grades:
-            where_clauses.append("v.final_impression = ANY(:final_grades)")
+            where_clauses.append(f"{sql_final_grade_expression(final_grade_basis)} = ANY(:final_grades)")
             params["final_grades"] = valid_final_grades
 
     excluded_dataset_ids = filters.get("excluded_dataset_ids", [])

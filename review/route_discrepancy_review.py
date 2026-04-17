@@ -27,6 +27,11 @@ from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
 from utils.discrepancy_filters import build_discrepancy_filter_query
+from utils.final_grade_basis import (
+    derive_final_grade_source,
+    normalize_final_grade_basis,
+    sql_final_grade_expression,
+)
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
@@ -165,6 +170,7 @@ def render_discrepancy_review(
         
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
+        final_grade_basis = normalize_final_grade_basis(request.args.get("final_grade_basis"))
 
         # AI grade filter (multi-select, optional)
         ai_grades = request.args.getlist("ai_grade")
@@ -215,6 +221,7 @@ def render_discrepancy_review(
             "ai_model_id": ai_model_ids,
             "ai_grade": ai_grades,
             "ai_review_status": ai_review_statuses,
+            "final_grade_basis": final_grade_basis,
             "allowed_lab_units": allowed_lab_units,
         }
 
@@ -268,8 +275,7 @@ def render_discrepancy_review(
                 v.has_consensus,
                 v.consensus_type,
                 v.final_grade_name,
-                v.final_impression,
-                v.final_plus_review,
+                {sql_final_grade_expression(final_grade_basis)} AS final_impression,
                 v.resident_grade_name,
                 v.resident_comment,
                 v.resident_selected_features_json,
@@ -313,7 +319,13 @@ def render_discrepancy_review(
                 "grades": grades_by_role,
                 "consensus": None,
                 "final_impression": row.final_impression,
-                "final_plus_review": row.final_plus_review,
+                "final_basis": derive_final_grade_source(
+                    final_grade_basis,
+                    resident_grade=row.resident_grade_name,
+                    resident2_grade=row.resident2_grade_name,
+                    arbitrator_grade=row.arbitrator_grade_name,
+                    regrade_adj_grade=row.regrade_adj_grade_name,
+                ),
                 "next_task_id": next_task_id,
                 "next_after_task_id": next_after_task_id,
             }
@@ -367,6 +379,7 @@ def render_discrepancy_review(
                 "ai_model_id": ai_model_ids,
                 "ai_grade": ai_grades,
                 "ai_review_status": ai_review_statuses,
+                "final_grade_basis": final_grade_basis,
             },
             page_title=page_title,
             regrade_creator_mode=regrade_creator_mode,
@@ -421,6 +434,7 @@ def discrepancy_export():
         ai_review_statuses = [
             status for status in request.form.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
         ]
+        final_grade_basis = normalize_final_grade_basis(request.form.get("final_grade_basis"))
         # ... (rest of filtering logic) ...
 
         include_original_filename = request.form.get("include_original_filename") == "1"
@@ -447,6 +461,7 @@ def discrepancy_export():
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": ai_review_statuses,
+            "final_grade_basis": final_grade_basis,
             "allowed_lab_units": list(allowed_lab_unit_ids),
             "include_original_filename": include_original_filename,
             "skip_image_zips": skip_image_zips,

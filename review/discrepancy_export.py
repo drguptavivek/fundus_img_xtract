@@ -29,6 +29,12 @@ from models import (
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
 from utils.discrepancy_filters import build_discrepancy_filter_query
+from utils.final_grade_basis import (
+    final_grade_basis_label,
+    normalize_final_grade_basis,
+    sql_final_grade_expression,
+    sql_final_plus_review_expression,
+)
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 EXPORT_DIR = BASE_DIR / "files" / "exports"
@@ -228,6 +234,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
         if not mv_name:
             return []
+        final_grade_basis = normalize_final_grade_basis(filters.get("final_grade_basis"))
 
         # Handle random ordering
         randomize_selection = filters.get("randomize_selection", False)
@@ -277,8 +284,8 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 v.regrade_adj_comment,
                 v.regrade_adj_selected_features_json,
                 v.ai_models_json,
-                v.final_impression,
-                v.final_plus_review,
+                {sql_final_grade_expression(final_grade_basis)} AS final_impression,
+                {sql_final_plus_review_expression(final_grade_basis)} AS final_plus_review,
                 v.image_uuid,
                 v.encounter_file_id,
                 v.encounter_file_uuid,
@@ -583,11 +590,16 @@ def _build_task_payload(
     return data
 
 
-def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] = None) -> List[ExportTaskRow]:
+def _fetch_rows_by_task_ids(
+    task_ids: Sequence[int],
+    disease_id: Optional[int] = None,
+    final_grade_basis: Optional[str] = None,
+) -> List[ExportTaskRow]:
     """Fetch tasks by explicit ids for dataset export."""
     with get_db_session() as db:
         if not task_ids:
             return []
+        final_grade_basis = normalize_final_grade_basis(final_grade_basis)
 
         # Use provided disease_id to pick MV columns; dataset is disease-specific
         if disease_id is None:
@@ -630,8 +642,8 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                 v.regrade_adj_comment,
                 v.regrade_adj_selected_features_json,
                 v.ai_models_json,
-                v.final_impression,
-                v.final_plus_review,
+                {sql_final_grade_expression(final_grade_basis)} AS final_impression,
+                {sql_final_plus_review_expression(final_grade_basis)} AS final_plus_review,
                 v.image_uuid,
                 v.encounter_file_id,
                 v.encounter_file_uuid,
@@ -759,6 +771,10 @@ def _write_excel(
             for k, v in filters.items()
         ]
     )
+    basis_row = pd.DataFrame(
+        [{"filter": "final_grade_basis_label", "value": final_grade_basis_label(filters.get("final_grade_basis"))}]
+    )
+    filters_df = pd.concat([filters_df, basis_row], ignore_index=True)
     excel_path = export_dir / "data.xlsx"
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Discrepancy Tasks", index=False)

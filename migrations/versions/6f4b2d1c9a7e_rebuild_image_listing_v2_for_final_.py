@@ -1,67 +1,27 @@
+"""rebuild image listing v2 for final grade basis
+
+Revision ID: 6f4b2d1c9a7e
+Revises: 5b7d4c2a1e90
+Create Date: 2026-03-18 10:30:00.000000
+
+"""
+
 from __future__ import annotations
 
-import logging
 import re
-from typing import Iterable, Optional
+from typing import Sequence, Union
 
+from alembic import op
 from sqlalchemy import text
 
-from db_transaction_manager import transaction_scope
-from models import Disease
-from utils.final_grade_basis import (
-    sql_double_match_final_grade,
-    sql_preference_final_grade,
-)
-from utils.log_sanitize import sanitize_log_value
-
-_LOGGER = logging.getLogger("materialized_view_v2")
-
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
-_VALID_IDENT_RE = re.compile(r"^[a-z0-9_]+$")
-_MAX_IDENT_LEN = 63
+from utils.mvw_image_listing_v2 import _build_mv_sql, _create_indexes_sql, _index_name, _mv_name
 
 
-def _slugify(name: str) -> str:
-    slug = _SLUG_RE.sub("_", (name or "").lower()).strip("_")
-    if not slug:
-        slug = "disease"
-    return slug
-
-
-def _mv_name(name: str, disease_id: int) -> str:
-    safe_slug = _slugify(name)
-    max_slug_len = 30
-    safe_slug = safe_slug[:max_slug_len].strip("_")
-    mv_name = f"mvw_image_listing_{safe_slug}_{disease_id}_v2"
-    if not _VALID_IDENT_RE.match(mv_name):
-        raise ValueError(f"Unsafe MV name derived: {mv_name}")
-    return mv_name
-
-
-def get_mv_name_for_disease(db, disease_id: int) -> str:
-    """Return the per-disease MV v2 name for a disease id."""
-    disease = db.get(Disease, disease_id)
-    if not disease:
-        raise ValueError(f"Unknown disease id: {disease_id}")
-    return _mv_name(str(disease.name), int(disease.id))
-
-
-def get_mv_name_for_disease_name(disease_name: str, disease_id: int) -> str:
-    """Return the per-disease MV v2 name for a known disease name/id pair."""
-    if not disease_name:
-        raise ValueError("Disease name is required")
-    return _mv_name(str(disease_name), int(disease_id))
-
-
-def _index_name(mv_name: str, suffix: str) -> str:
-    suffix = suffix.strip("_")
-    max_base_len = _MAX_IDENT_LEN - len(suffix) - 1
-    if max_base_len < 1:
-        raise ValueError("Index name suffix too long")
-    base = mv_name
-    if len(base) > max_base_len:
-        base = base[:max_base_len].rstrip("_")
-    return f"{base}_{suffix}"
+# revision identifiers, used by Alembic.
+revision: str = "6f4b2d1c9a7e"
+down_revision: Union[str, Sequence[str], None] = "5b7d4c2a1e90"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
 
 
 def _escape_literal(value: str) -> str:
@@ -72,10 +32,8 @@ def _ai_probability_expr() -> str:
     return "SUBSTRING(g.comment FROM 'AI probability:\\\\s*([0-9.]+)')"
 
 
-def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
+def _legacy_build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
     disease_name_literal = _escape_literal(disease_name)
-    final_preference_expr = sql_preference_final_grade("rg")
-    final_double_match_expr = sql_double_match_final_grade("rg")
     return f"""
     CREATE MATERIALIZED VIEW {mv_name} AS
     WITH base_images AS (
@@ -249,7 +207,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             g.ai_review_comment,
             g.ai_reviewed_by_user_id,
             g.ai_reviewed_at,
-            { _ai_probability_expr() } AS ai_probability
+            {_ai_probability_expr()} AS ai_probability
         FROM grades g
         JOIN disease_tasks t ON t.task_id = g.task_id
         WHERE g.role_slot = 'ai' AND g.ai_model_id IS NOT NULL
@@ -339,12 +297,24 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         COALESCE(rg.has_regrade_adj, 0) > 0 AS has_regrade_adj,
         COALESCE(am.has_ai, FALSE) AS has_ai,
         COALESCE(am.ai_models_json, '{{}}'::jsonb) AS ai_models_json,
-        {final_preference_expr} AS final_impression_preference,
-        {final_double_match_expr} AS final_impression_double_match,
-        {final_preference_expr} AS final_impression,
+        COALESCE(
+            rg.regrade_adj_grade_name,
+            rg.arbitrator_grade_name,
+            CASE
+                WHEN rg.resident_grade_name = rg.resident2_grade_name THEN rg.resident_grade_name
+                ELSE NULL
+            END
+        ) AS final_impression,
         COALESCE(
             rg.review_grade_name,
-            {final_preference_expr}
+            COALESCE(
+                rg.regrade_adj_grade_name,
+                rg.arbitrator_grade_name,
+                CASE
+                    WHEN rg.resident_grade_name = rg.resident2_grade_name THEN rg.resident_grade_name
+                    ELSE NULL
+                END
+            )
         ) AS final_plus_review,
         CASE
             WHEN rg.resident_grade_name IS NULL OR rg.resident2_grade_name IS NULL THEN NULL
@@ -365,7 +335,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
     """
 
 
-def _create_indexes_sql(mv_name: str) -> Iterable[str]:
+def _legacy_create_indexes_sql(mv_name: str) -> list[str]:
     return [
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_id')} ON {mv_name}(task_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_lab_unit_id')} ON {mv_name}(task_lab_unit_id);",
@@ -385,8 +355,6 @@ def _create_indexes_sql(mv_name: str) -> Iterable[str]:
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'has_resident2')} ON {mv_name}(has_resident2);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'consensus_type')} ON {mv_name}(consensus_type);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'final_grade_name')} ON {mv_name}(final_grade_name);",
-        f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'final_impression_preference')} ON {mv_name}(final_impression_preference);",
-        f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'final_impression_double_match')} ON {mv_name}(final_impression_double_match);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'resident_grade_name')} ON {mv_name}(resident_grade_name);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'resident2_grade_name')} ON {mv_name}(resident2_grade_name);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'arbitrator_grade_name')} ON {mv_name}(arbitrator_grade_name);",
@@ -395,47 +363,40 @@ def _create_indexes_sql(mv_name: str) -> Iterable[str]:
     ]
 
 
-def ensure_per_disease_image_listing_mvs(
-    schedule_time: Optional[str] = None,
-    *,
-    create_missing: bool = True,
-    refresh_existing: bool = True,
-) -> dict:
-    schedule_label = schedule_time or "manual"
-    results = {"created": 0, "refreshed": 0, "skipped": 0, "errors": 0}
-    with transaction_scope() as db:
-        diseases = db.query(Disease.id, Disease.name).order_by(Disease.id).all()
+def _drop_existing_v2_views() -> None:
+    conn = op.get_bind()
+    rows = conn.execute(
+        text("SELECT matviewname FROM pg_matviews WHERE matviewname LIKE :pattern ORDER BY matviewname"),
+        {"pattern": "mvw_image_listing_%_v2"},
+    ).all()
+    for (name,) in rows:
+        if not re.fullmatch(r"[a-z0-9_]+", name):
+            raise ValueError(f"Unsafe materialized view name: {name}")
+        conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {name}"))
 
-    for disease_id, disease_name in diseases:
-        mv_name = _mv_name(str(disease_name), int(disease_id))
-        try:
-            _LOGGER.info(
-                "Ensuring MV %s for disease %s", 
-                sanitize_log_value(mv_name),
-                sanitize_log_value(disease_name),
-            )
-            with transaction_scope() as db:
-                exists = db.execute(
-                    text("SELECT 1 FROM pg_matviews WHERE matviewname = :name"),
-                    {"name": mv_name},
-                ).scalar()
-                if not exists and create_missing:
-                    db.execute(text(_build_mv_sql(mv_name, int(disease_id), str(disease_name))))
-                    results["created"] += 1
-                    for idx_sql in _create_indexes_sql(mv_name):
-                        db.execute(text(idx_sql))
-                elif not exists:
-                    results["skipped"] += 1
-                elif refresh_existing:
-                    db.execute(text(f"REFRESH MATERIALIZED VIEW {mv_name}"))
-                    results["refreshed"] += 1
-        except Exception as exc:
-            results["errors"] += 1
-            _LOGGER.exception(
-                "Failed MV ensure/refresh for %s (%s) schedule=%s: %s",
-                sanitize_log_value(mv_name),
-                sanitize_log_value(disease_name),
-                sanitize_log_value(schedule_label),
-                sanitize_log_value(str(exc)),
-            )
-    return results
+
+def _iter_diseases() -> list[tuple[int, str]]:
+    conn = op.get_bind()
+    rows = conn.execute(text("SELECT id, name FROM diseases ORDER BY id")).all()
+    return [(int(row[0]), str(row[1])) for row in rows]
+
+
+def _recreate_all(build_sql, build_indexes) -> None:
+    conn = op.get_bind()
+    for disease_id, disease_name in _iter_diseases():
+        mv_name = _mv_name(disease_name, disease_id)
+        conn.execute(text(build_sql(mv_name, disease_id, disease_name)))
+        for idx_sql in build_indexes(mv_name):
+            conn.execute(text(idx_sql))
+
+
+def upgrade() -> None:
+    """Rebuild per-disease image listing v2 materialized views with basis columns."""
+    _drop_existing_v2_views()
+    _recreate_all(_build_mv_sql, _create_indexes_sql)
+
+
+def downgrade() -> None:
+    """Rebuild per-disease image listing v2 materialized views without basis columns."""
+    _drop_existing_v2_views()
+    _recreate_all(_legacy_build_mv_sql, _legacy_create_indexes_sql)

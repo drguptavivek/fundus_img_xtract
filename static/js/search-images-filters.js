@@ -41,15 +41,19 @@
       .map((el) => el.value);
   }
 
-  function rebuildGradeOptions(containerId, nameAttr, selectedValues, grades) {
+  function rebuildGradeOptions(containerId, nameAttr, selectedValues, grades, options = {}) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = "";
-    if (!grades || !grades.length) {
+    const values = Array.isArray(grades) ? [...grades] : [];
+    if (options.includeUnresolved && !values.includes("Unresolved")) {
+      values.push("Unresolved");
+    }
+    if (!values.length) {
       container.innerHTML = '<div class="text-muted small">Select a disease to load grades.</div>';
       return;
     }
-    grades.forEach((grade, idx) => {
+    values.forEach((grade, idx) => {
       const wrapper = document.createElement("div");
       wrapper.className = "form-check";
       const input = document.createElement("input");
@@ -99,11 +103,15 @@
 
   function refreshGradeBlocks(cfg, diseaseId, gradeMap) {
     const grades = gradeMap[String(diseaseId)] || [];
+    const finalBasisSelect = document.getElementById(cfg.finalGradeBasisSelectId);
+    const includeUnresolved = finalBasisSelect && window.FinalGradeBasis
+      ? window.FinalGradeBasis.basisUsesUnresolved(finalBasisSelect.value)
+      : false;
     rebuildGradeOptions(cfg.containers.resident, "resident_grade", selectedValues('input[name="resident_grade"]:checked'), grades);
     rebuildGradeOptions(cfg.containers.resident2, "resident2_grade", selectedValues('input[name="resident2_grade"]:checked'), grades);
     rebuildGradeOptions(cfg.containers.arbitrator, "arbitrator_grade", selectedValues('input[name="arbitrator_grade"]:checked'), grades);
     rebuildGradeOptions(cfg.containers.review, "review_grade", selectedValues('input[name="review_grade"]:checked'), grades);
-    rebuildGradeOptions(cfg.containers.final, "final_grade", selectedValues('input[name="final_grade"]:checked'), grades);
+    rebuildGradeOptions(cfg.containers.final, "final_grade", selectedValues('input[name="final_grade"]:checked'), grades, { includeUnresolved });
     rebuildGradeOptions(cfg.containers.ai, "ai_grade", selectedValues('input[name="ai_grade"]:checked'), grades);
   }
 
@@ -116,6 +124,17 @@
       });
       if (diseaseSelect.value) {
         refreshGradeBlocks(config, diseaseSelect.value, gradeMap);
+      }
+    }
+
+    if (config.finalGradeBasisSelectId) {
+      const basisSelect = document.getElementById(config.finalGradeBasisSelectId);
+      if (basisSelect) {
+        window.FinalGradeBasis.initSelect(basisSelect, () => {
+          if (diseaseSelect && diseaseSelect.value) {
+            refreshGradeBlocks(config, diseaseSelect.value, gradeMap);
+          }
+        });
       }
     }
 

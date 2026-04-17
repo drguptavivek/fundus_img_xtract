@@ -10,6 +10,7 @@ import logging
 from time import perf_counter
 
 from models import Disease
+from utils.final_grade_basis import normalize_final_grade_basis, sql_json_final_grade_expression
 from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class MVImageFilters:
     has_ai_grade: Optional[str] = None
     has_review: Optional[str] = None
     has_consensus: Optional[str] = None
+    final_grade_basis: Optional[str] = None
     ai_model_ids: List[str] = None
     ai_grades: List[str] = None
     ai_review_statuses: List[str] = None
@@ -44,6 +46,7 @@ class MVImageFilters:
         self.arbitrator_grades = self.arbitrator_grades or []
         self.review_grades = self.review_grades or []
         self.final_grades = self.final_grades or []
+        self.final_grade_basis = normalize_final_grade_basis(self.final_grade_basis)
         self.ai_model_ids = self.ai_model_ids or []
         self.ai_grades = self.ai_grades or []
         self.ai_review_statuses = self.ai_review_statuses or []
@@ -89,6 +92,7 @@ def build_where_clause(db: Session, filters: MVImageFilters) -> Tuple[str, Dict[
     mv_detail_col = f"{disease_key}_grading_details_json"
     mv_ai_count_col = f"{disease_key}_ai_grading_count"
     mv_consensus_col = f"{disease_key}_consensus_status"
+    final_grade_expr = sql_json_final_grade_expression(filters.final_grade_basis, mv_detail_col)
 
     where_clauses: List[str] = [
         "gt.disease_id = :disease_id",
@@ -170,7 +174,7 @@ def build_where_clause(db: Session, filters: MVImageFilters) -> Tuple[str, Dict[
         params["ai_review_statuses"] = filters.ai_review_statuses
 
     if filters.final_grades:
-        where_clauses.append("dg.impression = ANY(:final_grades)")
+        where_clauses.append(f"{final_grade_expr} = ANY(:final_grades)")
         params["final_grades"] = filters.final_grades
 
     if filters.image_uuid:
@@ -212,6 +216,7 @@ def search_mvw_images(
     mv_detail_col = f"{disease_key}_grading_details_json"
     mv_ai_count_col = f"{disease_key}_ai_grading_count"
     mv_consensus_col = f"{disease_key}_consensus_status"
+    final_grade_expr = sql_json_final_grade_expression(filters.final_grade_basis, mv_detail_col)
 
     base_query = f"""
         FROM mvw_image_listing_all v
@@ -245,7 +250,7 @@ def search_mvw_images(
             {mv_consensus_col} AS consensus_status,
             {mv_ai_count_col} AS ai_grading_count,
             c.id AS consensus_id,
-            dg.impression AS final_impression,
+            {final_grade_expr} AS final_impression,
             c.method AS consensus_method,
             COALESCE(diu.created_at::date, zf.upload_date) AS upload_date,
             pe.capture_date_dt AS capture_date

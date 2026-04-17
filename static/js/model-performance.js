@@ -45,6 +45,7 @@
     const addBtn = document.getElementById('add-class-row');
     const autoFillBtn = document.getElementById('auto-fill-classes');
     const diseaseEl = document.getElementById('filter-disease');
+    const finalGradeBasisEl = document.getElementById('filter-final-grade-basis');
     const submitHint = document.getElementById('submit-hint');
     const submitBtn = document.getElementById('submit-btn');
     const submitSpinner = document.getElementById('submit-spinner');
@@ -59,6 +60,10 @@
     let classMap = parseJSONSafe(builderEl.dataset.classMap || '{}', {});
     let positiveClass = builderEl.dataset.positiveClass || '';
     let classOrder = [];
+
+    if (finalGradeBasisEl && window.FinalGradeBasis) {
+      window.FinalGradeBasis.initSelect(finalGradeBasisEl);
+    }
 
     function setSubmitState(running) {
       if (!submitBtn || !submitSpinner) return;
@@ -397,6 +402,7 @@
     const diseaseEl = document.getElementById('filter-disease');
     const modelEl = document.getElementById('filter-model');
     const referenceEl = document.getElementById('filter-reference');
+    const finalGradeBasisEl = document.getElementById('filter-final-grade-basis');
     const uploadTypeEl = document.getElementById('filter-upload-type');
     const cameraEl = document.getElementById('filter-camera');
     const chartWrapper = document.getElementById('threshold-explorer-chart-wrapper');
@@ -559,6 +565,7 @@
         disease_id: diseaseEl ? Number(diseaseEl.value) : null,
         ai_model_id: modelEl ? Number(modelEl.value) : null,
         reference_source: referenceEl ? referenceEl.value : 'consensus',
+        final_grade_basis: finalGradeBasisEl ? finalGradeBasisEl.value : 'preference',
         upload_type: uploadTypeEl ? uploadTypeEl.value : '',
         camera_id: cameraEl && cameraEl.value ? Number(cameraEl.value) : null,
         threshold_min: thresholdMin,

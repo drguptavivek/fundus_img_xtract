@@ -36,6 +36,7 @@ from models import (
     Job,
 )
 from db_transaction_manager import get_db_session
+from utils.final_grade_basis import final_grade_basis_label, normalize_final_grade_basis
 from utils.hospital_scoping import apply_scoping
 from utils.dataset_share import generate_share_otp, generate_share_token, hash_share_otp, hash_share_token
 from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
@@ -64,6 +65,7 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
     has_ai_grade = req.get("has_ai_grade", type=str)
     has_review = req.get("has_review", type=str)
     has_consensus = req.get("has_consensus", default="has_consensus", type=str)
+    final_grade_basis = normalize_final_grade_basis(req.get("final_grade_basis", type=str))
     ai_model_ids = req.getlist("ai_model_id")
     ai_grades = req.getlist("ai_grade")
     ai_review_status = [
@@ -113,6 +115,7 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
         "has_ai_grade": has_ai_grade,
         "has_review": has_review,
         "has_consensus": has_consensus,
+        "final_grade_basis": final_grade_basis,
         "ai_model_id": ai_model_ids,
         "ai_grade": ai_grades,
         "ai_review_status": ai_review_status,
@@ -126,6 +129,7 @@ def _filters_with_allowed(filters: Dict[str, Any], allowed_lab_units: Iterable[i
     """Apply allowed lab units to stored filters."""
     merged = dict(filters)
     merged["allowed_lab_units"] = list(allowed_lab_units)
+    merged["final_grade_basis"] = normalize_final_grade_basis(merged.get("final_grade_basis"))
     return merged
 
 
@@ -159,6 +163,7 @@ def _fetch_options(db: Session, user: Any) -> Tuple[List[Disease], List[LabUnit]
 def _build_screen_rows(
     items: Sequence[CuratedDatasetItem],
     disease_id: int,
+    final_grade_basis: str,
     sort_by: str,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     if sort_by == "added_desc":
@@ -171,7 +176,7 @@ def _build_screen_rows(
     if not task_ids:
         return [], [], []
 
-    rows = _fetch_rows_by_task_ids(task_ids, disease_id)
+    rows = _fetch_rows_by_task_ids(task_ids, disease_id, final_grade_basis)
     row_by_id = {row.task_id: row for row in rows}
     include_map = {item.task_id: item.include_in_export for item in items}
     selected_map = {item.task_id: item.selected_at for item in items}
@@ -210,6 +215,7 @@ def _build_screen_page_rows(
     db: Session,
     items: Sequence[Any],
     disease_id: int,
+    final_grade_basis: str,
     offset: int,
 ) -> list[dict]:
     """Return paginated screen rows for the current page."""
@@ -217,7 +223,7 @@ def _build_screen_page_rows(
     if not task_ids:
         return []
 
-    rows = _fetch_rows_by_task_ids(task_ids, disease_id)
+    rows = _fetch_rows_by_task_ids(task_ids, disease_id, final_grade_basis)
     row_by_id = {row.task_id: row for row in rows}
     include_map = {item.task_id: item.include_in_export for item in items}
     selected_map = {item.task_id: item.selected_at for item in items}
@@ -342,6 +348,7 @@ def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str) -> int:
 def _get_dataset_screen_page_cached(
     dataset_id: int,
     disease_id: int,
+    final_grade_basis: str,
     screen_sort: str,
     page: int,
     per_page: int,
@@ -372,7 +379,7 @@ def _get_dataset_screen_page_cached(
         )
         query = _apply_pii_filter(query, pii_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
-    return _build_screen_page_rows(db, items, disease_id, offset)
+    return _build_screen_page_rows(db, items, disease_id, final_grade_basis, offset)
 
 
 def _clear_dataset_screen_cache() -> None:
@@ -621,6 +628,7 @@ def dataset_detail(dataset_uuid: str):
         screen_rows = _get_dataset_screen_page_cached(
             dataset.id,
             dataset.disease_id,
+            normalize_final_grade_basis(filters.get("final_grade_basis")),
             screen_sort,
             page,
             per_page,
@@ -688,7 +696,11 @@ def dataset_detail(dataset_uuid: str):
                 selected_task = task_query.first()
                 if selected_task:
                     selected_image = selected_task.encounter_file or selected_task.direct_image
-                    selected_rows = _fetch_rows_by_task_ids([selected_task_id], dataset.disease_id)
+                    selected_rows = _fetch_rows_by_task_ids(
+                        [selected_task_id],
+                        dataset.disease_id,
+                        normalize_final_grade_basis(filters.get("final_grade_basis")),
+                    )
                     selected_row = selected_rows[0] if selected_rows else None
 
         next_row = None if dataset.is_finalized else _get_next_pending_row(filters, decided_task_ids)
@@ -853,7 +865,11 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
                 index = ordered_ids.index(task.id) + 1
 
         image_obj = task.encounter_file or task.direct_image
-        display_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
+        display_rows = _fetch_rows_by_task_ids(
+            [task.id],
+            dataset.disease_id,
+            normalize_final_grade_basis(stored_filters.get("final_grade_basis")),
+        )
         display_row = display_rows[0] if display_rows else None
         variant = "orig"
         if task.direct_image and task.direct_image.edited_filename:
@@ -1010,6 +1026,7 @@ def dataset_screen_list(dataset_uuid: str):
         screen_rows = _get_dataset_screen_page_cached(
             dataset.id,
             dataset.disease_id,
+            normalize_final_grade_basis(stored_filters.get("final_grade_basis")),
             screen_sort,
             page,
             per_page,
@@ -1085,7 +1102,11 @@ def dataset_toggle_item(dataset_uuid: str):
             return ("Not found", 404)
 
         image_uuid = task.encounter_file.uuid if task.encounter_file else task.direct_image.uuid
-        display_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
+        display_rows = _fetch_rows_by_task_ids(
+            [task.id],
+            dataset.disease_id,
+            normalize_final_grade_basis(stored_filters.get("final_grade_basis")),
+        )
         display_row = display_rows[0] if display_rows else None
         all_items = (
             db.query(CuratedDatasetItem.task_id)
@@ -1256,7 +1277,11 @@ def dataset_add_more(dataset_uuid: str):
                 next_task_id = ordered_ids[index]
             next_image_uuid = None
             if next_task_id:
-                next_rows = _fetch_rows_by_task_ids([next_task_id], dataset.disease_id)
+                next_rows = _fetch_rows_by_task_ids(
+                    [next_task_id],
+                    dataset.disease_id,
+                    normalize_final_grade_basis(filters.get("final_grade_basis")),
+                )
                 if next_rows:
                     next_image_uuid = next_rows[0].encounter_file_uuid or next_rows[0].direct_image_uuid
             image_uuid = picked.encounter_file_uuid or picked.direct_image_uuid

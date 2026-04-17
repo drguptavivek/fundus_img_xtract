@@ -24,6 +24,7 @@
         endfor %}
         {% for g in filters.review_grade or [] %}<input type="hidden" name="review_grade" value="{{ g }}">{% endfor %}
         {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
+        <input type="hidden" name="final_grade_basis" value="{{ filters.final_grade_basis or "preference" }}">
         {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{%
         endif %}
         {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
@@ -70,6 +71,7 @@
         endfor %}
         {% for g in filters.review_grade or [] %}<input type="hidden" name="review_grade" value="{{ g }}">{% endfor %}
         {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
+        <input type="hidden" name="final_grade_basis" value="{{ filters.final_grade_basis or "preference" }}">
         <input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade or '' }}">
         <input type="hidden" name="has_review" value="{{ filters.has_review or '' }}">
         <input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator or '' }}">
@@ -115,6 +117,7 @@
                 arbitrator_grade=filters.arbitrator_grade or [],
                 review_grade=filters.review_grade or [],
                 final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                 has_ai_grade=filters.has_ai_grade,
                 has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -132,6 +135,7 @@
                 arbitrator_grade=filters.arbitrator_grade or [],
                 review_grade=filters.review_grade or [],
                 final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                 has_ai_grade=filters.has_ai_grade,
                 has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -158,6 +162,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -175,6 +180,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -206,6 +212,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
@@ -225,6 +232,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
@@ -256,6 +264,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -273,6 +282,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -303,6 +313,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
@@ -322,6 +333,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
@@ -347,6 +359,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -364,6 +377,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -394,8 +408,7 @@
             <th>Arbitrator Grade</th>
             <th>Arbitrator Regrade</th>
             <th>Final</th>
-            <th>Review</th>
-            <th>Final Plus Review</th>
+            <th>Final Basis</th>
             <th>AI Grade</th>
             <th>Status</th>
             <th>Actions</th>
@@ -453,31 +466,7 @@
               {% endif %}
             </td>
             <td>
-              {% set review_grade = task.grades.get('review') %}
-              {% if review_grade %}
-              <span class="badge bg-info">{{ review_grade.impression or '-' }}</span>
-              {% if review_grade.comment %}<small class="text-muted d-block">Review comment: {{ review_grade.comment |
-                mask_text_emails }}</small>{% endif %}
-              {% else %}
-              <span class="text-muted">No review</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if task.final_plus_review %}
-              <span class="badge bg-info text-dark">{{ task.final_plus_review }}</span>
-              {% else %}
-              <span class="text-muted">No final</span>
-              {% endif %}
-            </td>
-            <td>
-              <span class="badge 
-                  {% if task.state == 'resident_done' %}bg-warning text-dark
-                  {% elif task.state == 'resident2_done' %}bg-info
-                  {% elif task.state == 'arbitration' %}bg-danger
-                  {% elif task.state == 'final' %}bg-success
-                  {% else %}bg-secondary{% endif %}">
-                {{ task.state }}
-              </span>
+              <span class="text-muted">{{ task.final_basis or 'No final' }}</span>
             </td>
             <td>
               {% set ai_grade = task.grades.get('ai') %}
@@ -500,6 +489,16 @@
               {% else %}
               <span class="text-muted">No AI grade</span>
               {% endif %}
+            </td>
+            <td>
+              <span class="badge 
+                  {% if task.state == 'resident_done' %}bg-warning text-dark
+                  {% elif task.state == 'resident2_done' %}bg-info
+                  {% elif task.state == 'arbitration' %}bg-danger
+                  {% elif task.state == 'final' %}bg-success
+                  {% else %}bg-secondary{% endif %}">
+                {{ task.state }}
+              </span>
             </td>
             <td>
               {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None)
@@ -525,6 +524,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   ai_grade=filters.ai_grade or []
                 ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
               {% elif task.consensus %}
@@ -565,6 +565,7 @@
                   regrade_grade=filters.regrade_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
@@ -583,6 +584,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -610,6 +612,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -627,6 +630,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -650,6 +654,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
@@ -667,6 +672,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
+                final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,

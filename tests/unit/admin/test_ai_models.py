@@ -62,3 +62,54 @@ def test_only_one_ai_model_can_be_linked_to_wadhwani(client, login_user, db_sess
 
     second_model = db_session.query(AIModel).filter_by(name="linked_model_two", version="1.0").one_or_none()
     assert second_model is None
+
+
+def test_ai_model_health_returns_upstream_status(client, login_user, db_session, monkeypatch):
+    login_user("test_admin", "Test@2026")
+
+    model = AIModel(name="health_model", version="1.0", description="health")
+    db_session.add(model)
+    db_session.flush()
+    db_session.add(
+        AIModelIntegration(
+            ai_model_id=model.id,
+            provider="wadhwani_glaucoma",
+            client_id="client-123",
+            bearer_token="secret-token",
+        )
+    )
+    db_session.flush()
+
+    class MockResponse:
+        status_code = 200
+        ok = True
+        content = b'{"status":"healthy","model_loaded":true}'
+
+        @staticmethod
+        def json():
+            return {"status": "healthy", "model_loaded": True}
+
+    monkeypatch.setattr("admin.ai_models.requests.get", lambda *args, **kwargs: MockResponse())
+
+    response = client.post(f"/admin/ai-models/{model.id}/health")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["provider"] == "wadhwani_glaucoma"
+    assert payload["payload"]["status"] == "healthy"
+
+
+def test_ai_model_health_rejects_unlinked_model(client, login_user, db_session):
+    login_user("test_admin", "Test@2026")
+
+    model = AIModel(name="plain_model", version="1.0", description="plain")
+    db_session.add(model)
+    db_session.flush()
+
+    response = client.post(f"/admin/ai-models/{model.id}/health")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert "not linked" in payload["message"]

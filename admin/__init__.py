@@ -20,7 +20,7 @@ from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
 from .logs import log_viewer
 from .disk_usage import disk_usage, delete_duplicates, delete_old_processed_zips
-from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
+from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model, test_ai_model_health
 from .database_dump import database_dump, get_database_info
 from .database_excel_export import database_excel_export, get_database_tables
 from .database_restore import bp as database_restore_bp
@@ -269,6 +269,7 @@ admin_bp.add_url_rule("/disk-usage/delete-old-zips", view_func=delete_old_proces
 admin_bp.add_url_rule("/ai-models", view_func=list_and_create_ai_model, methods=["GET", "POST"])
 admin_bp.add_url_rule("/ai-models/<int:item_id>/edit", view_func=edit_ai_model, methods=["GET", "POST"])
 admin_bp.add_url_rule("/ai-models/<int:item_id>/delete", view_func=delete_ai_model, methods=["POST"])
+admin_bp.add_url_rule("/ai-models/<int:item_id>/health", view_func=test_ai_model_health, methods=["POST"])
 
 # Database dump routes
 admin_bp.add_url_rule("/database-dump", view_func=database_dump, methods=["GET", "POST"])

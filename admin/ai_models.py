@@ -1,15 +1,21 @@
 import secrets
+import logging
 
-from flask import render_template, request, redirect, url_for, flash
+import requests
+from flask import render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from auth.roles import roles_required
 from auth.security import hash_password
 from models import AIModel, AIModelIntegration, Grade, User
 from db_transaction_manager import transaction_scope, get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 AI_MODEL_LIST_ROUTE = "admin.list_and_create_ai_model"
 WADHWANI_PROVIDER = "wadhwani_glaucoma"
+WADHWANI_HEALTH_URL = "https://api-glaucoma.wadhwaniai.org/api/health/live"
+
+logger = logging.getLogger("admin.ai_models")
 
 
 def _create_ai_model_user(db_session: Session, model: AIModel) -> User:
@@ -270,3 +276,47 @@ def delete_ai_model(item_id):
             flash(f"Error deleting AI Model: {str(e)}", "danger")
 
     return redirect(url_for(AI_MODEL_LIST_ROUTE))
+
+
+@roles_required("admin")
+def test_ai_model_health(item_id: int):
+    """Check the health of the linked Wadhwani Glaucoma API."""
+    with get_db_session() as db:
+        item = db.execute(
+            select(AIModel)
+            .options(selectinload(AIModel.integration))
+            .where(AIModel.id == item_id)
+        ).scalar_one_or_none()
+        if not item:
+            return jsonify({"success": False, "message": "AI Model not found"}), 404
+
+        integration = item.integration
+        if not integration or integration.provider != WADHWANI_PROVIDER:
+            return jsonify({"success": False, "message": "AI Model is not linked to the Wadhwani Glaucoma API"}), 400
+        provider = integration.provider
+
+    try:
+        response = requests.get(WADHWANI_HEALTH_URL, timeout=10)
+        payload = response.json() if response.content else {}
+    except requests.RequestException as exc:
+        logger.warning(
+            "Wadhwani health check failed for ai_model_id=%s: %s",
+            sanitize_log_value(item_id),
+            sanitize_log_value(str(exc)),
+        )
+        return jsonify({"success": False, "message": f"Health check failed: {exc}"}), 502
+    except ValueError:
+        payload = {}
+
+    success = response.ok
+    message = "Health check succeeded" if success else f"Health check failed with status {response.status_code}"
+    return jsonify(
+        {
+            "success": success,
+            "message": message,
+            "status_code": response.status_code,
+            "provider": provider,
+            "health_url": WADHWANI_HEALTH_URL,
+            "payload": payload,
+        }
+    ), (200 if success else 502)

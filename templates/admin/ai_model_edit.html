@@ -49,6 +49,7 @@
                             id="wadhwani_client_id"
                             name="wadhwani_client_id"
                             value="{{ request.form.get('wadhwani_client_id', integration.client_id if integration else '') }}"
+                            autocomplete="username"
                         >
                     </div>
                     <div class="col-md-6">
@@ -63,6 +64,20 @@
                         >
                     </div>
                 </div>
+                {% if integration and integration.provider == 'wadhwani_glaucoma' %}
+                <div class="mb-3">
+                    <div
+                        class="js-ai-health-widget d-inline-flex flex-column align-items-start gap-2"
+                        data-url="{{ url_for('admin.test_ai_model_health', item_id=item.id) }}"
+                    >
+                        <div class="d-inline-flex align-items-center gap-2">
+                            <span class="badge text-bg-secondary js-ai-health-badge">Checking</span>
+                            <button type="button" class="btn btn-sm btn-link p-0 js-ai-health-refresh text-decoration-none">Refresh</button>
+                        </div>
+                        <small class="text-muted js-ai-health-text">Queued for health check...</small>
+                    </div>
+                </div>
+                {% endif %}
                 <button type="submit" class="btn btn-primary">Save Changes</button>
                 <a href="{{ url_for('admin.list_and_create_ai_model') }}" class="btn btn-secondary">Cancel</a>
             </form>
@@ -71,20 +86,7 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-{{ super() }}
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    const toggle = document.querySelector('.js-wadhwani-toggle');
-    const fields = document.querySelector('.js-wadhwani-fields');
-    if (!toggle || !fields) return;
-
-    const sync = function () {
-      fields.classList.toggle('d-none', !toggle.checked);
-    };
-
-    toggle.addEventListener('change', sync);
-    sync();
-  });
-</script>
+{% block page_scripts %}
+{% set v = (config.get('ASSETS_VERSION') or '') %}
+<script src="{{ url_for('static', filename='js/admin-ai-models.js') }}?v={{ v }}"></script>
 {% endblock %}

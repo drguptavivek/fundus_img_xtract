@@ -33,7 +33,8 @@ CORE_LAB_UNITS = [
 
 # Core cameras
 CORE_CAMERAS = [
-    {"id": 1, "name": "Remedio FOP"},
+    {"id": 1, "name": "Remedio FOP", "is_zip_upload_enabled": True},
+    {"id": 10, "name": "Remedio Pristine", "is_zip_upload_enabled": True},
     {"id": 2, "name": "Zeiss Cirrus HD-OCT"},
     {"id": 3, "name": "Heidelberg Spectralis"},
     {"id": 4, "name": "Optos Daytona"},
@@ -301,11 +302,16 @@ def setup_core_cameras(db):
             # If it exists but has a different name, update it
             if existing.name != camera_data["name"]:
                 existing.name = camera_data["name"]
-                db.add(existing)
-                print(f"  Updated camera ID {camera_data['id']} to '{camera_data['name']}'")
+            existing.is_zip_upload_enabled = bool(camera_data.get("is_zip_upload_enabled", False))
+            db.add(existing)
+            print(f"  Updated camera ID {camera_data['id']} to '{camera_data['name']}'")
         else:
             # Create the camera with the specific ID
-            camera = Camera(id=camera_data["id"], name=camera_data["name"])
+            camera = Camera(
+                id=camera_data["id"],
+                name=camera_data["name"],
+                is_zip_upload_enabled=bool(camera_data.get("is_zip_upload_enabled", False)),
+            )
             db.add(camera)
             print(f"  Created camera ID {camera_data['id']}: '{camera_data['name']}'")
 

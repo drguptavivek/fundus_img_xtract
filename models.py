@@ -396,6 +396,13 @@ class Camera(Base):
     __tablename__ = 'cameras'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    is_zip_upload_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+        server_default="false",
+    )
 
 class Disease(Base):
     __tablename__ = 'diseases'
@@ -551,6 +558,7 @@ class EncounterFile(Base):
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     centering: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+    camera_id: Mapped[int | None] = mapped_column(ForeignKey('cameras.id'), nullable=True, index=True)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
 
     # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
@@ -561,6 +569,7 @@ class EncounterFile(Base):
 
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     lab_unit: Mapped["LabUnit"] = relationship()
+    camera: Mapped["Camera | None"] = relationship()
     s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
     # Note: ImageGrading relationship removed - now using Grade model through GradingTask
     # Add a check constraint to ensure only image files are stored in this table

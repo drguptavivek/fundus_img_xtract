@@ -8,7 +8,7 @@ from flask import (
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import selectinload
-from models import Hospital, LabUnit, UPLOAD_DIR, AppSetting
+from models import Hospital, LabUnit, UPLOAD_DIR, AppSetting, Camera
 import json
 from job_store import db_create_job
 from worker import queue_job
@@ -115,6 +115,12 @@ def upload_form():
             .order_by(LabUnit.name)
             .all()
         )
+        zip_cameras = (
+            db.query(Camera)
+            .filter(Camera.is_zip_upload_enabled.is_(True))
+            .order_by(Camera.name)
+            .all()
+        )
         hospital_ids = sorted({lu.hospital_id for lu in lab_units if lu.hospital_id is not None})
         if hospital_ids:
             hospitals = (
@@ -148,6 +154,12 @@ def upload_form():
                 'lab_units_count': len(h.lab_units) if hasattr(h, 'lab_units') else 0
             } for h in hospitals
         ]
+        zip_cameras_data = [
+            {
+                'id': camera.id,
+                'name': camera.name,
+            } for camera in zip_cameras
+        ]
 
     # Get recent ZIP uploads for display
     recent_uploads = get_recent_zip_uploads(limit=5, job_type="zip upload")
@@ -174,6 +186,7 @@ def upload_form():
         max_files=max_files,
         hospitals=hospitals_data,  # Use extracted data instead of objects
         lab_units=lab_units_data,   # Use extracted data instead of objects
+        zip_cameras=zip_cameras_data,
         recent_uploads=recent_uploads
     )
 
@@ -199,12 +212,13 @@ def upload_files():
     try:
         hospital_id = int(request.form.get("hospital_id", 0))
         lab_unit_id = int(request.form.get("lab_unit_id", 0))
+        camera_id = int(request.form.get("camera_id", 0))
     except (ValueError, TypeError):
-        flash("Invalid hospital or lab unit selection.", "danger")
+        flash("Invalid hospital, lab unit, or camera selection.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
-    if hospital_id <= 0 or lab_unit_id <= 0:
-        flash("Please select both a hospital and a lab unit.", "danger")
+    if hospital_id <= 0 or lab_unit_id <= 0 or camera_id <= 0:
+        flash("Please select a hospital, a lab unit, and a ZIP-enabled camera.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
     allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
@@ -218,9 +232,16 @@ def upload_files():
             LabUnit.id == lab_unit_id,
             LabUnit.hospital_id == hospital_id
         ).first()
+        camera = db.query(Camera).filter(
+            Camera.id == camera_id,
+            Camera.is_zip_upload_enabled.is_(True),
+        ).first()
         
         if not lab_unit:
             flash("Invalid hospital/lab unit combination.", "danger")
+            return redirect(url_for("remedio_zip_uploads.upload_form"))
+        if not camera:
+            flash("Please select a ZIP-enabled camera.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
             
         # Validate that the current user has access to this lab unit
@@ -285,6 +306,7 @@ def upload_files():
                     "user_agent": request.headers.get("User-Agent", "-"),
                     "hospital_id": hospital_id,
                     "lab_unit_id": lab_unit_id,
+                    "camera_id": camera_id,
                 }
                 with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
                     json.dump(meta, mf, ensure_ascii=False)

@@ -22,6 +22,7 @@ from models import (
     PatientEncounters,
     EncounterFile,
     EncounterFilePDF,
+    Camera,
     Session,
     BASE_DIR, 
     UPLOAD_DIR,
@@ -423,6 +424,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
             
             # Read metadata to get lab unit information
             lab_unit_id = None
+            camera_id = None
             try:
                 meta_dir = UPLOAD_DIR.parent / "upload_meta"
                 meta_path = meta_dir / f"{zip_path.name}.json"
@@ -431,8 +433,19 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                     with open(meta_path, "r", encoding="utf-8") as mf:
                         meta = json.load(mf)
                         lab_unit_id = meta.get("lab_unit_id")
+                        camera_id = meta.get("camera_id")
             except Exception:
                 pass  # If metadata is not available or invalid, continue without lab_unit_id
+
+            if not camera_id:
+                raise ValueError("ZIP upload metadata is missing camera_id")
+
+            camera = session.query(Camera).filter(
+                Camera.id == camera_id,
+                Camera.is_zip_upload_enabled.is_(True),
+            ).first()
+            if not camera:
+                raise ValueError(f"Invalid ZIP-enabled camera_id in metadata: {camera_id}")
             
             new_patient_encounter = PatientEncounters(
                 name=name,
@@ -546,6 +559,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                         file_type=file_type,
                         uuid=str(uuid4()),
                         lab_unit_id=lab_unit_id,
+                        camera_id=camera_id,
                         thumbnail_filename=thumbnail_filename,
                     )
                     session.add(encounter_file)
@@ -671,6 +685,7 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
     
     # Get metadata for Lab Unit
     lab_unit_id = None
+    camera_id = None
     try:
         meta_dir = UPLOAD_DIR.parent / "upload_meta"
         meta_path = meta_dir / f"{zip_path.name}.json"
@@ -679,8 +694,19 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
             with open(meta_path, "r", encoding="utf-8") as mf:
                 meta = json.load(mf)
                 lab_unit_id = meta.get("lab_unit_id")
+                camera_id = meta.get("camera_id")
     except Exception:
         pass
+
+    if not camera_id:
+        raise ValueError("ZIP upload metadata is missing camera_id")
+
+    camera = session.query(Camera).filter(
+        Camera.id == camera_id,
+        Camera.is_zip_upload_enabled.is_(True),
+    ).first()
+    if not camera:
+        raise ValueError(f"Invalid ZIP-enabled camera_id in metadata: {camera_id}")
 
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -778,6 +804,7 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                         file_type='image',
                         uuid=file_uuid,
                         lab_unit_id=lab_unit_id,
+                        camera_id=camera_id,
                         thumbnail_filename=None # Will be set by async task
                     )
                     files_to_add.append(ef)

@@ -15,6 +15,7 @@ DELETE_ENDPOINT = "admin.delete_camera"
 def list_cameras() -> ResponseReturnValue:
     if request.method == "POST":
         name = request.form.get("name", "").strip()
+        is_zip_upload_enabled = request.form.get("is_zip_upload_enabled") == "on"
         if not name:
             flash("Name is required.", "danger")
             return redirect(url_for(LIST_ENDPOINT))
@@ -26,7 +27,7 @@ def list_cameras() -> ResponseReturnValue:
             if exists:
                 flash(f"{TITLE} '{name}' already exists.", "warning")
             else:
-                db.add(Camera(name=name))
+                db.add(Camera(name=name, is_zip_upload_enabled=is_zip_upload_enabled))
                 flash(f"{TITLE} '{name}' added successfully.", "success")
 
         return redirect(url_for(LIST_ENDPOINT))
@@ -39,6 +40,7 @@ def list_cameras() -> ResponseReturnValue:
             model_name=MODEL_NAME,
             title=TITLE,
             hospitals=None,
+            show_zip_upload_flag=True,
             list_endpoint=LIST_ENDPOINT,
             edit_endpoint=EDIT_ENDPOINT,
             delete_endpoint=DELETE_ENDPOINT,
@@ -59,12 +61,14 @@ def edit_camera(item_id: int) -> ResponseReturnValue:
                 model_name=MODEL_NAME,
                 title=f"Edit {TITLE}",
                 hospitals=None,
+                show_zip_upload_flag=True,
                 list_endpoint=LIST_ENDPOINT,
                 edit_endpoint=EDIT_ENDPOINT,
             )
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
+        is_zip_upload_enabled = request.form.get("is_zip_upload_enabled") == "on"
         if not name:
             flash("Name is required.", "danger")
             return redirect(url_for(EDIT_ENDPOINT, item_id=item_id))
@@ -76,6 +80,7 @@ def edit_camera(item_id: int) -> ResponseReturnValue:
                 return redirect(url_for(LIST_ENDPOINT))
 
             item.name = name
+            item.is_zip_upload_enabled = is_zip_upload_enabled
             flash(f"{TITLE} updated.", "success")
             return redirect(url_for(LIST_ENDPOINT))
 

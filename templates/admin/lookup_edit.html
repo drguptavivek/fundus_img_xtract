@@ -22,6 +22,18 @@
                     <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" 
                            {% if model_name == 'disease' and item.id in core_ids %}readonly{% endif %} required>
                 </div>
+                {% if show_zip_upload_flag %}
+                <div class="mb-3 form-check">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        id="is_zip_upload_enabled"
+                        name="is_zip_upload_enabled"
+                        {% if item.is_zip_upload_enabled %}checked{% endif %}
+                    >
+                    <label class="form-check-label" for="is_zip_upload_enabled">Enable ZIP uploads</label>
+                </div>
+                {% endif %}
                 {% if model_name == 'lab_unit' and hospitals %}
                 <div class="mb-3">
                     <label for="hospital_id" class="form-label">Hospital</label>

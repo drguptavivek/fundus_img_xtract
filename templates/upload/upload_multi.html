@@ -47,6 +47,17 @@
               {% endfor %}
             </div>
           </div>
+
+          <div class="mb-3">
+            <label for="camera_id" class="form-label">Camera <span class="text-danger">*</span></label>
+            <select class="form-select" id="camera_id" name="camera_id" required>
+              <option value="">Select ZIP-enabled camera</option>
+              {% for camera in zip_cameras %}
+              <option value="{{ camera.id }}">{{ camera.name }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Only cameras enabled for ZIP uploads are shown here.</div>
+          </div>
           
           <!-- File Upload -->
           <div class="mb-3">

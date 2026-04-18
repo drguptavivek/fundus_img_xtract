@@ -1015,6 +1015,49 @@ class AIModel(Base):
     )
 
     grades: Mapped[List["Grade"]] = relationship("Grade", back_populates="ai_model")
+    integration: Mapped["AIModelIntegration | None"] = relationship(
+        "AIModelIntegration",
+        back_populates="ai_model",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    inference_runs: Mapped[List["AIInferenceRun"]] = relationship(
+        "AIInferenceRun",
+        back_populates="ai_model",
+        cascade="all, delete-orphan",
+    )
+
+
+class AIModelIntegration(Base):
+    __tablename__ = "ai_model_integrations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ai_model_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_models.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    client_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    bearer_token: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    ai_model: Mapped["AIModel"] = relationship("AIModel", back_populates="integration")
+    inference_runs: Mapped[List["AIInferenceRun"]] = relationship(
+        "AIInferenceRun",
+        back_populates="integration",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("provider", name="uq_ai_model_integrations_provider"),
+        CheckConstraint(
+            "provider IN ('wadhwani_glaucoma')",
+            name="ck_ai_model_integration_provider_valid",
+        ),
+    )
 
 
 class GradingTask(Base):
@@ -1056,6 +1099,11 @@ class GradingTask(Base):
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
     )
+    inference_runs: Mapped[list["AIInferenceRun"]] = relationship(
+        "AIInferenceRun",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
 
     # Relationship added after class AdHocTaskCreation definition
     ad_hoc: Mapped['AdHocTaskCreation | None'] = relationship(
@@ -1079,6 +1127,58 @@ class GradingTask(Base):
             name='ck_task_state_valid'
         ),
         Index('ix_task_disease_lab_state', 'disease_id', 'lab_unit_id', 'state'),
+    )
+
+
+class AIInferenceRun(Base):
+    __tablename__ = "ai_inference_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("grading_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    ai_model_id: Mapped[int] = mapped_column(ForeignKey("ai_models.id", ondelete="CASCADE"), nullable=False, index=True)
+    integration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ai_model_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    requested_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="internal", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
+    external_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    prediction_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    remote_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    remote_content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    request_manifest_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    initialize_response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    execute_response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    task: Mapped["GradingTask"] = relationship("GradingTask", back_populates="inference_runs")
+    ai_model: Mapped["AIModel"] = relationship("AIModel", back_populates="inference_runs")
+    integration: Mapped["AIModelIntegration | None"] = relationship("AIModelIntegration", back_populates="inference_runs")
+    requested_by: Mapped["User | None"] = relationship("User", foreign_keys=[requested_by_user_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('internal','mobile','backfill')",
+            name="ck_ai_inference_run_source_valid",
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','success','failed')",
+            name="ck_ai_inference_run_status_valid",
+        ),
+        Index("ix_ai_inference_runs_task_model_created", "task_id", "ai_model_id", "created_at"),
     )
 
 

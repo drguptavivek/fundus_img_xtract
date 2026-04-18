@@ -23,10 +23,38 @@
                     <div class="col-md-4 align-self-end">
                         <button type="submit" class="btn btn-primary w-100">Add</button>
                     </div>
+                </div>
                 <div class="row mt-3">
                     <div class="col-md-12">
                         <label for="description" class="form-label">Description</label>
                         <textarea class="form-control" id="description" name="description"></textarea>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="form-check">
+                            <input
+                                class="form-check-input js-wadhwani-toggle"
+                                type="checkbox"
+                                value="on"
+                                id="link_to_wadhwani_glaucoma_api"
+                                name="link_to_wadhwani_glaucoma_api"
+                            >
+                            <label class="form-check-label" for="link_to_wadhwani_glaucoma_api">
+                                Link to Wadhwani Glaucoma API
+                            </label>
+                        </div>
+                        <div class="text-muted small mt-1">Only one AI Model can be linked to the Wadhwani Glaucoma API.</div>
+                    </div>
+                </div>
+                <div class="row mt-3 d-none js-wadhwani-fields">
+                    <div class="col-md-6">
+                        <label for="wadhwani_client_id" class="form-label">Client ID</label>
+                        <input type="text" class="form-control" id="wadhwani_client_id" name="wadhwani_client_id">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="wadhwani_bearer_token" class="form-label">Bearer Token</label>
+                        <input type="password" class="form-control" id="wadhwani_bearer_token" name="wadhwani_bearer_token" autocomplete="new-password">
                     </div>
                 </div>
             </form>
@@ -42,6 +70,7 @@
                         <th>Name</th>
                         <th>Version</th>
                         <th>Description</th>
+                        <th>Integration</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -51,6 +80,13 @@
                         <td>{{ item.name }}</td>
                         <td>{{ item.version }}</td>
                         <td>{{ item.description }}</td>
+                        <td>
+                            {% if item.integration and item.integration.provider == 'wadhwani_glaucoma' %}
+                                <span class="badge text-bg-success">Wadhwani Glaucoma API</span>
+                            {% else %}
+                                <span class="text-muted">None</span>
+                            {% endif %}
+                        </td>
                         <td class="text-end">
                             <a href="{{ url_for('admin.edit_ai_model', item_id=item.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                             <form method="POST" action="{{ url_for('admin.delete_ai_model', item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure?');">
@@ -65,4 +101,22 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.js-wadhwani-toggle').forEach(function (toggle) {
+      const form = toggle.closest('form');
+      const fields = form ? form.querySelector('.js-wadhwani-fields') : null;
+      const sync = function () {
+        if (!fields) return;
+        fields.classList.toggle('d-none', !toggle.checked);
+      };
+      toggle.addEventListener('change', sync);
+      sync();
+    });
+  });
+</script>
 {% endblock %}

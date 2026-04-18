@@ -5,10 +5,11 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from auth.roles import roles_required
 from auth.security import hash_password
-from models import AIModel, User
+from models import AIModel, AIModelIntegration, Grade, User
 from db_transaction_manager import transaction_scope, get_db_session
 
 AI_MODEL_LIST_ROUTE = "admin.list_and_create_ai_model"
+WADHWANI_PROVIDER = "wadhwani_glaucoma"
 
 
 def _create_ai_model_user(db_session: Session, model: AIModel) -> User:
@@ -35,6 +36,72 @@ def _create_ai_model_user(db_session: Session, model: AIModel) -> User:
     return user
 
 
+def _integration_form_payload() -> tuple[bool, str, str]:
+    link_enabled = request.form.get("link_to_wadhwani_glaucoma_api") == "on"
+    client_id = request.form.get("wadhwani_client_id", "").strip()
+    bearer_token = request.form.get("wadhwani_bearer_token", "").strip()
+    return link_enabled, client_id, bearer_token
+
+
+def _validate_wadhwani_binding(
+    db_session: Session,
+    *,
+    item_id: int | None,
+    link_enabled: bool,
+    client_id: str,
+    bearer_token: str,
+) -> str | None:
+    if not link_enabled:
+        return None
+
+    if not client_id or not bearer_token:
+        return "Client ID and Bearer Token are required when linking to the Wadhwani Glaucoma API."
+
+    existing_link = db_session.execute(
+        select(AIModelIntegration).where(AIModelIntegration.provider == WADHWANI_PROVIDER)
+    ).scalar_one_or_none()
+    if existing_link and existing_link.ai_model_id != item_id:
+        linked_model = db_session.get(AIModel, existing_link.ai_model_id)
+        linked_name = linked_model.name if linked_model else f"ID {existing_link.ai_model_id}"
+        return f"Only one AI Model can be linked to the Wadhwani Glaucoma API. Currently linked: {linked_name}."
+
+    return None
+
+
+def _sync_wadhwani_integration(
+    db_session: Session,
+    *,
+    model: AIModel,
+    link_enabled: bool,
+    client_id: str,
+    bearer_token: str,
+) -> None:
+    integration = db_session.execute(
+        select(AIModelIntegration).where(AIModelIntegration.ai_model_id == model.id)
+    ).scalar_one_or_none()
+
+    if not link_enabled:
+        if integration:
+            db_session.delete(integration)
+        return
+
+    if integration is None:
+        integration = AIModelIntegration(
+            ai_model_id=model.id,
+            provider=WADHWANI_PROVIDER,
+            is_enabled=True,
+            client_id=client_id,
+            bearer_token=bearer_token,
+        )
+        db_session.add(integration)
+        return
+
+    integration.provider = WADHWANI_PROVIDER
+    integration.is_enabled = True
+    integration.client_id = client_id
+    integration.bearer_token = bearer_token
+
+
 @roles_required("admin")
 def list_and_create_ai_model():
     """List all AI models and handle creation."""
@@ -43,11 +110,23 @@ def list_and_create_ai_model():
         name = request.form.get("name", "").strip()
         version = request.form.get("version", "").strip()
         description = request.form.get("description", "").strip()
+        link_enabled, client_id, bearer_token = _integration_form_payload()
 
         if not name or not version:
             flash("Name and version are required.", "danger")
         else:
             with transaction_scope() as db:
+                validation_error = _validate_wadhwani_binding(
+                    db,
+                    item_id=None,
+                    link_enabled=link_enabled,
+                    client_id=client_id,
+                    bearer_token=bearer_token,
+                )
+                if validation_error:
+                    flash(validation_error, "danger")
+                    return redirect(url_for(AI_MODEL_LIST_ROUTE))
+
                 # Check for duplicate name and version
                 exists = db.execute(
                     select(AIModel)
@@ -62,13 +141,20 @@ def list_and_create_ai_model():
                     db.add(model)
                     db.flush()
                     _create_ai_model_user(db, model)
+                    _sync_wadhwani_integration(
+                        db,
+                        model=model,
+                        link_enabled=link_enabled,
+                        client_id=client_id,
+                        bearer_token=bearer_token,
+                    )
                     flash(f"AI Model '{name}' version '{version}' added successfully.", "success")
 
         return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
     # --- Handle listing ---
     with get_db_session() as db:
-        stmt = select(AIModel).order_by(AIModel.id)
+        stmt = select(AIModel).options(selectinload(AIModel.integration)).order_by(AIModel.id)
         items = db.scalars(stmt).all()
         
         return render_template(
@@ -82,7 +168,11 @@ def list_and_create_ai_model():
 def edit_ai_model(item_id):
     """Edit an existing AI model."""
     with get_db_session() as db:
-        item = db.get(AIModel, item_id)
+        item = db.execute(
+            select(AIModel)
+            .options(selectinload(AIModel.integration))
+            .where(AIModel.id == item_id)
+        ).scalar_one_or_none()
         if not item:
             flash("AI Model not found.", "danger")
             return redirect(url_for(AI_MODEL_LIST_ROUTE))
@@ -91,10 +181,26 @@ def edit_ai_model(item_id):
             name = request.form.get("name", "").strip()
             version = request.form.get("version", "").strip()
             description = request.form.get("description", "").strip()
+            link_enabled, client_id, bearer_token = _integration_form_payload()
 
             if not name or not version:
                 flash("Name and version are required.", "danger")
             else:
+                validation_error = _validate_wadhwani_binding(
+                    db,
+                    item_id=item_id,
+                    link_enabled=link_enabled,
+                    client_id=client_id,
+                    bearer_token=bearer_token,
+                )
+                if validation_error:
+                    flash(validation_error, "danger")
+                    return render_template(
+                        "admin/ai_model_edit.html",
+                        item=item,
+                        title="Edit AI Model",
+                    )
+
                 # Check for duplicate name and version (excluding current item)
                 exists = db.execute(
                     select(AIModel)
@@ -108,10 +214,21 @@ def edit_ai_model(item_id):
                 else:
                     # Use transaction_scope for write operations
                     with transaction_scope() as write_db:
-                        item_to_update = write_db.get(AIModel, item_id)
+                        item_to_update = write_db.execute(
+                            select(AIModel)
+                            .options(selectinload(AIModel.integration))
+                            .where(AIModel.id == item_id)
+                        ).scalar_one()
                         item_to_update.name = name
                         item_to_update.version = version
                         item_to_update.description = description
+                        _sync_wadhwani_integration(
+                            write_db,
+                            model=item_to_update,
+                            link_enabled=link_enabled,
+                            client_id=client_id,
+                            bearer_token=bearer_token,
+                        )
                     flash(f"AI Model '{name}' updated.", "success")
                     return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
@@ -134,7 +251,6 @@ def delete_ai_model(item_id):
 
         # Check if the item has related records that would prevent deletion
         # (Example: Check if any Grade records reference this AI model)
-        from models import Grade
         related_grades = db.execute(
             select(Grade).where(Grade.ai_model_id == item_id)
         ).scalars().all()

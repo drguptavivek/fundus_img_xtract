@@ -892,8 +892,8 @@
   });
 
   const filterInputs = document.querySelectorAll('input[name="screenFilter"]');
-  const screenList = document.getElementById('datasetScreenList');
   const applyScreenFilter = function() {
+    const screenList = document.getElementById('datasetScreenList');
     if (!screenList) {
       return;
     }

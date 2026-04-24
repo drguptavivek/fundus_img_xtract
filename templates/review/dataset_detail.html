@@ -223,6 +223,14 @@
        data-default-color-filter="{{ color_filter }}">
     <div class="card-header d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#screenImagesCollapse"
+                aria-expanded="false"
+                aria-controls="screenImagesCollapse">
+          Toggle
+        </button>
         <h5 class="card-title mb-0">Screen Images</h5>
         <span class="small text-muted">PII detected:</span>
         <span class="badge text-bg-danger" id="ocrDetectedCount">0</span>
@@ -280,7 +288,7 @@
         {% endif %}
       </div>
     </div>
-    <div class="card-body">
+    <div class="card-body collapse" id="screenImagesCollapse">
       {% if screen_rows %}
       <div class="row g-3">
         <div class="col-lg-4" id="datasetScreenListColumn">

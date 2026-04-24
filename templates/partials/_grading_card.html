@@ -174,7 +174,7 @@
               <div class="imggr-main rounded position-relative">
                 <img
                   class="imggr-main-img"
-                  src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
+                  src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid, v=media_cache_version(uuid)) }}" 
                   alt="Image" 
                   data-index="0" 
                 />  

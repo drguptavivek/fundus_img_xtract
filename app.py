@@ -33,6 +33,7 @@ from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
 from app_cache import cache, init_cache
 from utils.db_query_logger import init_db_query_logger
+from utils.media_cache import get_media_cache_version
 
 
 csrf = CSRFProtect()
@@ -354,6 +355,10 @@ def _register_acl_context(app: Flask) -> None:
             if user_id is not None:
                 unread_count = get_unread_notifications_count_cached(user_id)
         return dict(current_user_has=current_user_has, unread_notification_count=unread_count)
+
+    @app.context_processor
+    def inject_media_cache_helpers():
+        return {"media_cache_version": get_media_cache_version}
 
 
 def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> None:

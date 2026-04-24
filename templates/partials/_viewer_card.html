@@ -91,7 +91,7 @@
       style="aspect-ratio:1/1; width:100%; height:auto; display:flex; overflow:hidden;"
       {% endif %}>
         <img class="imggr-main-img"
-        src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
+        src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid, v=media_cache_version(uuid)) }}" alt="Image" data-index="0" />
         <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
       </div>
       {# No thumbnails in grading view #}

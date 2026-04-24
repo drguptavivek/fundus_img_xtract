@@ -15,7 +15,7 @@
             class="badge text-bg-light"
             data-exif-info="true"
             data-image-uuid="{{ image_uuid }}"
-            data-image-url="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid) }}"
+            data-image-url="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid, v=media_cache_version(image_uuid)) }}"
           >
             Loading...
           </span>

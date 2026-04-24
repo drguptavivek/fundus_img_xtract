@@ -537,7 +537,7 @@
               {% set image_uuid = task.encounter_file_uuid or task.direct_image_uuid %}
               {% set gallery_id = 'discrepancy-gallery-' ~ task.id %}
               <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid) }}" data-pswp-type="image"
+                <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid, v=media_cache_version(image_uuid)) }}" data-pswp-type="image"
                   title="{{ task.disease_name or 'Image' }}"></a>
               </div>
               <a href="#" class="btn btn-sm btn-outline-primary"

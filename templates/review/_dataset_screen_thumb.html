@@ -13,9 +13,9 @@
      data-gallery-open="true"
      style="text-decoration: none;">
     {% if row.image_kind == 'encounter' %}
-      {% set thumb_url = url_for('media._encounterImageThumbnailByUUID', uuid_str=row.image_uuid) %}
+      {% set thumb_url = url_for('media._encounterImageThumbnailByUUID', uuid_str=row.image_uuid, v=media_cache_version(row.image_uuid)) %}
     {% else %}
-      {% set thumb_url = url_for('media._directImgFinalThumbnailByUUID', uuid_str=row.image_uuid) %}
+      {% set thumb_url = url_for('media._directImgFinalThumbnailByUUID', uuid_str=row.image_uuid, v=media_cache_version(row.image_uuid)) %}
     {% endif %}
     <img
       src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="

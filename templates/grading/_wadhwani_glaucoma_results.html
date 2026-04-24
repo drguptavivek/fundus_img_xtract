@@ -1,0 +1,98 @@
+{% from "_forms.html" import csrf_field %}
+<div id="wadhwaniResults" class="card shadow-sm">
+  <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+    <div>
+      <h5 class="card-title mb-0">Eligible Tasks</h5>
+      <div class="text-muted small">
+        {% if filters.source_type %}
+        Showing up to {{ filters.limit or 20 }} {{ filters.source_type|upper }} glaucoma tasks without a Wadhwani AI grade.
+        {% else %}
+        Choose a source type and preview eligible tasks.
+        {% endif %}
+      </div>
+    </div>
+    {% if tasks %}
+    <div class="text-muted small">{{ tasks|length }} task{{ '' if tasks|length == 1 else 's' }} ready for selection</div>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if not linked_integration %}
+    <div class="alert alert-warning mb-0">Link an AI model to the Wadhwani Glaucoma API before running inference.</div>
+    {% elif not filters.source_type %}
+    <div class="text-muted">No preview yet.</div>
+    {% elif not tasks %}
+    <div class="text-muted">No eligible tasks match the current filters.</div>
+    {% else %}
+    <form method="POST" action="{{ url_for('grading.wadhwani_glaucoma_inference_run') }}" id="wadhwaniRunForm">
+      {{ csrf_field() }}
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="" id="wadhwaniSelectAll">
+          <label class="form-check-label" for="wadhwaniSelectAll">Select all visible tasks</label>
+        </div>
+        <button type="submit" class="btn btn-danger" id="wadhwaniRunButton">Run Wadhwani Inference</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="width: 48px;"></th>
+              <th>Task</th>
+              <th>Image</th>
+              <th>Hospital / Lab</th>
+              <th>Camera</th>
+              <th>Final Grade</th>
+              {% if filters.source_type == 'zip' %}
+              <th>Laterality</th>
+              <th>Centering</th>
+              <th>Remedio</th>
+              <th>VCDR</th>
+              {% else %}
+              <th>Uploaded</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for task in tasks %}
+            <tr>
+              <td>
+                <input class="form-check-input wadhwani-task-checkbox" type="checkbox" name="selected_task_ids" value="{{ task.task_id }}" id="task-{{ task.task_id }}">
+              </td>
+              <td>
+                <label class="fw-semibold mb-0" for="task-{{ task.task_id }}">{{ task.task_id }}</label>
+                <div class="small text-muted">{{ task.task_uuid }}</div>
+              </td>
+              <td>
+                <div>{{ task.image_filename or '—' }}</div>
+                <div class="small text-muted">{{ task.source_type|upper }}</div>
+              </td>
+              <td>
+                <div>{{ task.hospital_name or '—' }}</div>
+                <div class="small text-muted">{{ task.lab_unit_name or '—' }}</div>
+              </td>
+              <td>{{ task.camera_name or '—' }}</td>
+              <td>{{ task.final_grade_name or '—' }}</td>
+              {% if filters.source_type == 'zip' %}
+              <td>{{ task.laterality or '—' }}</td>
+              <td>{{ task.centering or '—' }}</td>
+              <td>{{ task.remedio_result or '—' }}</td>
+              <td>
+                {% if task.vcdr_right_num is not none or task.vcdr_left_num is not none %}
+                R {{ '%.2f'|format(task.vcdr_right_num) if task.vcdr_right_num is not none else '—' }} /
+                L {{ '%.2f'|format(task.vcdr_left_num) if task.vcdr_left_num is not none else '—' }}
+                {% else %}
+                —
+                {% endif %}
+              </td>
+              {% else %}
+              <td>{{ task.upload_date or task.created_at or '—' }}</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>

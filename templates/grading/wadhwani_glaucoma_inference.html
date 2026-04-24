@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+    <div>
+      <h3 class="mb-1">{{ page_title }}</h3>
+      <div class="text-muted">
+        {% if linked_model_id %}
+        Linked model ID {{ linked_model_id }} is active for Wadhwani glaucoma inference.
+        {% else %}
+        No linked Wadhwani glaucoma model is configured.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filters</h5>
+    </div>
+    <div class="card-body">
+      <form
+        method="GET"
+        id="wadhwaniFilterForm"
+        hx-get="{{ url_for('grading.wadhwani_glaucoma_inference_page') }}"
+        hx-target="#wadhwaniResults"
+        hx-swap="outerHTML"
+        hx-push-url="true">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label for="sourceTypeSelect" class="form-label">Source Type <span class="text-danger">*</span></label>
+            <select class="form-select" id="sourceTypeSelect" name="source_type" required>
+              <option value="">Select Source</option>
+              <option value="zip" {% if filters.source_type == 'zip' %}selected{% endif %}>ZIP</option>
+              <option value="direct" {% if filters.source_type == 'direct' %}selected{% endif %}>Direct</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="labUnitSelect" class="form-label">Lab Unit</label>
+            <select class="form-select" id="labUnitSelect" name="lab_unit_id">
+              <option value="">All Lab Units</option>
+              {% for lab_unit in lab_units %}
+              <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id|string == lab_unit.id|string %}selected{% endif %}>
+                {{ lab_unit.hospital_name }} - {{ lab_unit.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="finalGradeSelect" class="form-label">Final Grade</label>
+            <select class="form-select" id="finalGradeSelect" name="final_grade_name">
+              <option value="">All Final Grades</option>
+              {% for grade_name in final_grade_options %}
+              <option value="{{ grade_name }}" {% if filters.final_grade_name == grade_name %}selected{% endif %}>{{ grade_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="finalGradeBasisSelect" class="form-label">Final Grade Basis</label>
+            <select class="form-select" id="finalGradeBasisSelect" name="final_grade_basis">
+              <option value="preference" {% if filters.final_grade_basis != 'double_match' %}selected{% endif %}>Preference Based</option>
+              <option value="double_match" {% if filters.final_grade_basis == 'double_match' %}selected{% endif %}>Double-Match Based</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="limitInput" class="form-label">Limit</label>
+            <input class="form-control" id="limitInput" name="limit" type="number" min="1" max="{{ max_batch_size }}" value="{{ filters.limit or 20 }}">
+            <div class="form-text">Maximum {{ max_batch_size }} tasks per manual batch.</div>
+          </div>
+        </div>
+
+        <div id="wadhwaniZipFilters" class="row g-3 mt-1" {% if filters.source_type != 'zip' %}hidden{% endif %}>
+          <div class="col-md-3">
+            <label for="zipCameraSelect" class="form-label">Camera</label>
+            <select class="form-select" id="zipCameraSelect" name="zip_camera_id">
+              <option value="">All Cameras</option>
+              {% for camera in cameras %}
+              <option value="{{ camera.id }}" {% if filters.zip_camera_id|string == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="lateralitySelect" class="form-label">Laterality</label>
+            <select class="form-select" id="lateralitySelect" name="laterality">
+              <option value="">All</option>
+              <option value="left" {% if filters.laterality == 'left' %}selected{% endif %}>Left</option>
+              <option value="right" {% if filters.laterality == 'right' %}selected{% endif %}>Right</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="centeringSelect" class="form-label">Centering</label>
+            <select class="form-select" id="centeringSelect" name="centering">
+              <option value="">All</option>
+              <option value="disc" {% if filters.centering == 'disc' %}selected{% endif %}>Disc</option>
+              <option value="macula" {% if filters.centering == 'macula' %}selected{% endif %}>Macula</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="remedioResultSelect" class="form-label">Remedio Result</label>
+            <select class="form-select" id="remedioResultSelect" name="remedio_result">
+              <option value="">All Results</option>
+              {% for result in zip_result_options %}
+              <option value="{{ result }}" {% if filters.remedio_result == result %}selected{% endif %}>{{ result }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="vcdrMinInput" class="form-label">VCDR Min</label>
+            <input class="form-control" id="vcdrMinInput" name="vcdr_min" type="number" min="0" max="1.5" step="0.01" value="{{ filters.vcdr_min }}">
+          </div>
+          <div class="col-md-3">
+            <label for="vcdrMaxInput" class="form-label">VCDR Max</label>
+            <input class="form-control" id="vcdrMaxInput" name="vcdr_max" type="number" min="0" max="1.5" step="0.01" value="{{ filters.vcdr_max }}">
+          </div>
+          <div class="col-md-3">
+            <label for="captureDateFromInput" class="form-label">Capture Date From</label>
+            <input class="form-control" id="captureDateFromInput" name="capture_date_from" type="date" value="{{ filters.capture_date_from }}">
+          </div>
+          <div class="col-md-3">
+            <label for="captureDateToInput" class="form-label">Capture Date To</label>
+            <input class="form-control" id="captureDateToInput" name="capture_date_to" type="date" value="{{ filters.capture_date_to }}">
+          </div>
+        </div>
+
+        <div id="wadhwaniDirectFilters" class="row g-3 mt-1" {% if filters.source_type != 'direct' %}hidden{% endif %}>
+          <div class="col-md-4">
+            <label for="hospitalSelect" class="form-label">Hospital</label>
+            <select class="form-select" id="hospitalSelect" name="hospital_id">
+              <option value="">All Hospitals</option>
+              {% for hospital in hospitals %}
+              <option value="{{ hospital.id }}" {% if filters.hospital_id|string == hospital.id|string %}selected{% endif %}>{{ hospital.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="directCameraSelect" class="form-label">Camera</label>
+            <select class="form-select" id="directCameraSelect" name="direct_camera_id">
+              <option value="">All Cameras</option>
+              {% for camera in cameras %}
+              <option value="{{ camera.id }}" {% if filters.direct_camera_id|string == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label for="uploadDateFromInput" class="form-label">Upload From</label>
+            <input class="form-control" id="uploadDateFromInput" name="upload_date_from" type="date" value="{{ filters.upload_date_from }}">
+          </div>
+          <div class="col-md-2">
+            <label for="uploadDateToInput" class="form-label">Upload To</label>
+            <input class="form-control" id="uploadDateToInput" name="upload_date_to" type="date" value="{{ filters.upload_date_to }}">
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-primary" {% if not linked_integration %}disabled{% endif %}>Preview Eligible Tasks</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('grading.wadhwani_glaucoma_inference_page') }}">Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% include "grading/_wadhwani_glaucoma_results.html" %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.ASSETS_VERSION|default('') }}" defer></script>
+<script src="{{ url_for('static', filename='js/wadhwani_glaucoma_inference.js') }}?v={{ config.ASSETS_VERSION|default('') }}" defer></script>
+{% endblock %}

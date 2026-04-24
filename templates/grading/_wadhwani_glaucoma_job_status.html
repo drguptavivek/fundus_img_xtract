@@ -1,0 +1,77 @@
+<div class="card shadow-sm" data-job-done="{{ 'true' if job['done'] else 'false' }}">
+  <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+    <div>
+      <h5 class="card-title mb-0">Batch Status</h5>
+      <div class="text-muted small">Updated {{ job["updated_at"]|user_datetime if job["updated_at"] else '—' }}</div>
+    </div>
+    <span class="badge text-bg-{{ 'success' if job['status'] == 'done' else 'danger' if job['status'] == 'error' else 'warning' if job['status'] == 'processing' else 'secondary' }}">
+      {{ job["status"] }}
+    </span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted small">Queued</div><div class="fs-4">{{ job["summary"]["queued"] }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted small">Processing</div><div class="fs-4">{{ job["summary"]["processing"] }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted small">Success / Skipped</div><div class="fs-4">{{ job["summary"]["ok"] }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted small">Failed</div><div class="fs-4">{{ job["summary"]["error"] }}</div></div></div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Source</th>
+            <th>Image</th>
+            <th>Hospital / Lab</th>
+            <th>Status</th>
+            <th>Inference</th>
+            <th>Saved Grade</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in job["items"] %}
+          <tr>
+            <td>{{ item["task_id"] or '—' }}</td>
+            <td>{{ item["source_type"] or '—' }}</td>
+            <td>{{ item["image_filename"] or '—' }}</td>
+            <td>
+              <div>{{ item["hospital_name"] or '—' }}</div>
+              <div class="small text-muted">{{ item["lab_unit_name"] or '—' }}</div>
+            </td>
+            <td>
+              <span class="badge text-bg-{{ 'success' if item['state'] == 'ok' else 'danger' if item['state'] == 'error' else 'warning' if item['state'] == 'processing' else 'secondary' }}">
+                {{ item["state"] }}
+              </span>
+            </td>
+            <td>
+              {% if item["prediction"] or item["predicted_class_name"] or item["probability"] %}
+              <div>{{ item["prediction"] or '—' }}</div>
+              <div class="small text-muted">{{ item["predicted_class_name"] or '—' }}</div>
+              <div class="small">P={{ item["probability"] or item["model_score"] or item["confidence"] or '—' }}</div>
+              {% if item["predicted_class"] is not none %}
+              <div class="small text-muted">Class {{ item["predicted_class"] }}</div>
+              {% endif %}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>
+              <div>{{ item["grade_name"] or '—' }}</div>
+              <div class="small text-muted">Grade ID {{ item["grade_id"] or '—' }}</div>
+              <div class="small text-muted">Run ID {{ item["inference_run_id"] or '—' }}</div>
+            </td>
+            <td>
+              <div>{{ item["message"] or '—' }}</div>
+              {% if item["error_code"] %}
+              <div class="small text-danger">{{ item["error_code"] }}</div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

@@ -344,6 +344,28 @@ def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str) -> int:
     return int(total or 0)
 
 
+def _count_dataset_items_by_export_state(
+    db: Session,
+    dataset_id: int,
+    pii_filter: str,
+    include_in_export: bool,
+) -> int:
+    """Return count of dataset items for one export state under the active screen filter."""
+    base_query = (
+        db.query(sa.func.count(sa.distinct(CuratedDatasetItem.id)))
+        .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
+        .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+        .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
+        .filter(
+            CuratedDatasetItem.dataset_id == dataset_id,
+            CuratedDatasetItem.include_in_export.is_(include_in_export),
+        )
+    )
+    base_query = _apply_pii_filter(base_query, pii_filter)
+    total = base_query.scalar()
+    return int(total or 0)
+
+
 @cache.memoize(timeout=_SCREEN_CACHE_TIMEOUT)
 def _get_dataset_screen_page_cached(
     dataset_id: int,
@@ -611,16 +633,8 @@ def dataset_detail(dataset_uuid: str):
 
         total_screen = _count_dataset_items(db, dataset.id, pii_filter)
 
-        include_count = (
-            db.query(sa.func.count(CuratedDatasetItem.id))
-            .filter(
-                CuratedDatasetItem.dataset_id == dataset.id,
-                CuratedDatasetItem.include_in_export.is_(True),
-            )
-            .scalar()
-        )
-        include_count = int(include_count or 0)
-        exclude_count = total_screen - include_count
+        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, True)
+        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, False)
 
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
@@ -1039,16 +1053,8 @@ def dataset_screen_list(dataset_uuid: str):
             per_page,
             pii_filter,
         )
-        include_count = (
-            db.query(sa.func.count(CuratedDatasetItem.id))
-            .filter(
-                CuratedDatasetItem.dataset_id == dataset.id,
-                CuratedDatasetItem.include_in_export.is_(True),
-            )
-            .scalar()
-        )
-        include_count = int(include_count or 0)
-        exclude_count = total_screen - include_count
+        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, True)
+        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, False)
 
         return render_template(
             "review/_dataset_screen_list.html",

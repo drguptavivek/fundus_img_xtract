@@ -219,7 +219,8 @@
        data-list-url="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid) }}"
        data-detail-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}"
        data-default-sort="{{ screen_sort }}"
-       data-default-pii-filter="{{ pii_filter }}">
+       data-default-pii-filter="{{ pii_filter }}"
+       data-default-color-filter="{{ color_filter }}">
     <div class="card-header d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center gap-2">
         <h5 class="card-title mb-0">Screen Images</h5>
@@ -227,12 +228,20 @@
         <span class="badge text-bg-danger" id="ocrDetectedCount">0</span>
       </div>
       <div class="d-flex align-items-center gap-2">
-        <small class="text-muted">Included images for screening.</small>
+        <small class="text-muted">Filters</small>
         <div class="d-flex align-items-center gap-2">
-          <span class="small text-muted">PII Filter</span>
+          <span class="small text-muted">PII </span>
           <select class="form-select form-select-sm" id="piiFilterSelect" style="width: 140px;">
             <option value="all" {% if pii_filter == 'all' %}selected{% endif %}>All</option>
             <option value="detected" {% if pii_filter == 'detected' %}selected{% endif %}>Detected</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Color </span>
+          <select class="form-select form-select-sm" id="colorFilterSelect" style="width: 150px;">
+            <option value="all" {% if color_filter == 'all' %}selected{% endif %}>All</option>
+            <option value="color" {% if color_filter == 'color' %}selected{% endif %}>Color</option>
+            <option value="grayscale" {% if color_filter == 'grayscale' %}selected{% endif %}>Grayscale</option>
           </select>
         </div>
         <button type="button" class="btn btn-sm btn-outline-info" id="refreshPiiStatusBtn">
@@ -249,10 +258,10 @@
         <div class="btn-group btn-group-sm" role="group" aria-label="Screen view toggle">
           <button type="button" class="btn btn-outline-secondary" id="screenViewList">List</button>
           <button type="button" class="btn btn-outline-secondary" id="screenViewGallery"
-                  hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=1, view='gallery', sort=screen_sort) }}"
+                  hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=1, view='gallery', sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}"
                   hx-target="#datasetScreenGalleryView"
                   hx-swap="innerHTML"
-                  hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=1, sort=screen_sort) }}#screen-images">
+                  hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=1, sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}#screen-images">
             Gallery
           </button>
         </div>
@@ -265,6 +274,7 @@
           {{ csrf_field() }}
           <input type="hidden" name="sort" value="{{ screen_sort }}">
           <input type="hidden" name="pii_filter" value="{{ pii_filter }}">
+          <input type="hidden" name="color_filter" value="{{ color_filter }}">
           <button type="submit" class="btn btn-sm btn-outline-primary">Add More</button>
         </form>
         {% endif %}

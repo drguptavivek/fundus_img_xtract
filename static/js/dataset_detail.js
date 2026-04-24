@@ -12,6 +12,7 @@
   const detailUrl = root.dataset.detailUrl || '';
   const defaultSort = root.dataset.defaultSort || 'task_asc';
   const defaultPiiFilter = root.dataset.defaultPiiFilter || 'all';
+  const defaultColorFilter = root.dataset.defaultColorFilter || 'all';
 
   const listView = document.getElementById('datasetScreenListView');
   const galleryView = document.getElementById('datasetScreenGalleryView');
@@ -24,6 +25,7 @@
   const refreshPiiBtn = document.getElementById('refreshPiiStatusBtn');
   const ocrCountBadge = document.getElementById('ocrDetectedCount');
   const piiFilterSelect = document.getElementById('piiFilterSelect');
+  const colorFilterSelect = document.getElementById('colorFilterSelect');
 
   let pendingGalleryImageUuid = null;
   let lastGalleryThumb = null;
@@ -623,8 +625,12 @@
       const url = new URL(window.location);
       url.searchParams.set('sort', value);
       const currentPii = (piiFilterSelect && piiFilterSelect.value) ? piiFilterSelect.value : defaultPiiFilter;
+      const currentColor = (colorFilterSelect && colorFilterSelect.value) ? colorFilterSelect.value : defaultColorFilter;
       if (currentPii) {
         url.searchParams.set('pii_filter', currentPii);
+      }
+      if (currentColor) {
+        url.searchParams.set('color_filter', currentColor);
       }
       const view = url.searchParams.get('view') || 'list';
       if (view === 'gallery') {
@@ -633,7 +639,7 @@
         url.hash = '#screen-images';
         window.history.replaceState({ view: 'gallery' }, '', url.toString());
         if (window.htmx && galleryUrl) {
-          window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + value + '&pii_filter=' + currentPii, '#datasetScreenGalleryView');
+          window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + value + '&pii_filter=' + currentPii + '&color_filter=' + currentColor, '#datasetScreenGalleryView');
         }
         return;
       }
@@ -642,11 +648,12 @@
     });
   }
 
-  if (piiFilterSelect) {
-    piiFilterSelect.addEventListener('change', function() {
-      const value = piiFilterSelect.value || 'all';
+  const refreshScreenView = function() {
+      const piiValue = (piiFilterSelect && piiFilterSelect.value) ? piiFilterSelect.value : defaultPiiFilter;
+      const colorValue = (colorFilterSelect && colorFilterSelect.value) ? colorFilterSelect.value : defaultColorFilter;
       const url = new URL(window.location);
-      url.searchParams.set('pii_filter', value);
+      url.searchParams.set('pii_filter', piiValue);
+      url.searchParams.set('color_filter', colorValue);
       url.searchParams.set('page', '1');
       const view = url.searchParams.get('view') || 'list';
       const sort = url.searchParams.get('sort') || defaultSort;
@@ -654,17 +661,24 @@
       if (view === 'gallery') {
         window.history.replaceState({ view: 'gallery' }, '', url.toString());
         if (window.htmx && galleryUrl) {
-          window.htmx.ajax('GET', galleryUrl + '?page=1&view=gallery&sort=' + sort + '&pii_filter=' + value, '#datasetScreenGalleryView');
+          window.htmx.ajax('GET', galleryUrl + '?page=1&view=gallery&sort=' + sort + '&pii_filter=' + piiValue + '&color_filter=' + colorValue, '#datasetScreenGalleryView');
         }
         return;
       }
       window.history.replaceState({ view: 'list' }, '', url.toString());
       if (window.htmx && listUrl) {
-        window.htmx.ajax('GET', listUrl + '?page=1&view=list&sort=' + sort + '&pii_filter=' + value, '#datasetScreenListView');
+        window.htmx.ajax('GET', listUrl + '?page=1&view=list&sort=' + sort + '&pii_filter=' + piiValue + '&color_filter=' + colorValue, '#datasetScreenListView');
       } else {
         window.location.href = url.toString();
       }
-    });
+  };
+
+  if (piiFilterSelect) {
+    piiFilterSelect.addEventListener('change', refreshScreenView);
+  }
+
+  if (colorFilterSelect) {
+    colorFilterSelect.addEventListener('change', refreshScreenView);
   }
 
   if (refreshPiiBtn) {
@@ -920,16 +934,20 @@
     const page = params.get('page') || '1';
     const sort = params.get('sort') || defaultSort;
     const piiFilter = params.get('pii_filter') || defaultPiiFilter;
+    const colorFilter = params.get('color_filter') || defaultColorFilter;
     if (sortSelect) {
       sortSelect.value = sort;
     }
     if (piiFilterSelect) {
       piiFilterSelect.value = piiFilter;
     }
+    if (colorFilterSelect) {
+      colorFilterSelect.value = colorFilter;
+    }
     if (view === 'gallery') {
       showGalleryView();
       if (galleryButton && window.htmx && galleryUrl) {
-        window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + sort + '&pii_filter=' + piiFilter, '#datasetScreenGalleryView');
+        window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + sort + '&pii_filter=' + piiFilter + '&color_filter=' + colorFilter, '#datasetScreenGalleryView');
       }
       const imageUuid = params.get('image_uuid');
       if (imageUuid) {

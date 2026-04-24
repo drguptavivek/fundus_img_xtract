@@ -331,7 +331,34 @@ def _apply_pii_filter(query, pii_filter: str):
     return query.join(ImagePiiVerification, join_clause).filter(ImagePiiVerification.pii_status == "detected")
 
 
-def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str) -> int:
+def _apply_color_filter(query, color_filter: str):
+    if color_filter == "all":
+        return query
+    variant_case = sa.case(
+        (DirectImageUpload.edited_filename.isnot(None), "edited"),
+        else_="orig",
+    )
+    join_clause = sa.or_(
+        sa.and_(
+            EncounterFile.uuid.isnot(None),
+            ImageMetadata.image_uuid == EncounterFile.uuid,
+            ImageMetadata.image_variant == "orig",
+        ),
+        sa.and_(
+            DirectImageUpload.uuid.isnot(None),
+            ImageMetadata.image_uuid == DirectImageUpload.uuid,
+            ImageMetadata.image_variant == variant_case,
+        ),
+    )
+    query = query.join(ImageMetadata, join_clause)
+    if color_filter == "grayscale":
+        return query.filter(ImageMetadata.is_grayscale.is_(True))
+    if color_filter == "color":
+        return query.filter(ImageMetadata.is_grayscale.is_(False))
+    return query
+
+
+def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str, color_filter: str) -> int:
     base_query = (
         db.query(sa.func.count(sa.distinct(CuratedDatasetItem.id)))
         .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
@@ -340,6 +367,7 @@ def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str) -> int:
         .filter(CuratedDatasetItem.dataset_id == dataset_id)
     )
     base_query = _apply_pii_filter(base_query, pii_filter)
+    base_query = _apply_color_filter(base_query, color_filter)
     total = base_query.scalar()
     return int(total or 0)
 
@@ -348,6 +376,7 @@ def _count_dataset_items_by_export_state(
     db: Session,
     dataset_id: int,
     pii_filter: str,
+    color_filter: str,
     include_in_export: bool,
 ) -> int:
     """Return count of dataset items for one export state under the active screen filter."""
@@ -362,6 +391,7 @@ def _count_dataset_items_by_export_state(
         )
     )
     base_query = _apply_pii_filter(base_query, pii_filter)
+    base_query = _apply_color_filter(base_query, color_filter)
     total = base_query.scalar()
     return int(total or 0)
 
@@ -375,6 +405,7 @@ def _get_dataset_screen_page_cached(
     page: int,
     per_page: int,
     pii_filter: str,
+    color_filter: str,
 ) -> list[dict]:
     """Return paginated screen rows cached in Redis."""
     if screen_sort == "added_desc":
@@ -400,6 +431,7 @@ def _get_dataset_screen_page_cached(
             .filter(CuratedDatasetItem.dataset_id == dataset_id)
         )
         query = _apply_pii_filter(query, pii_filter)
+        query = _apply_color_filter(query, color_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
     return _build_screen_page_rows(db, items, disease_id, final_grade_basis, offset)
 
@@ -619,6 +651,9 @@ def dataset_detail(dataset_uuid: str):
         pii_filter = request.args.get("pii_filter", "all")
         if pii_filter not in {"all", "detected"}:
             pii_filter = "all"
+        color_filter = request.args.get("color_filter", "all")
+        if color_filter not in {"all", "color", "grayscale"}:
+            color_filter = "all"
         per_page = 50
 
         decided_task_ids = {
@@ -631,10 +666,10 @@ def dataset_detail(dataset_uuid: str):
         matching_rows = _fetch_filtered_rows(filters)
         total_matching = len(matching_rows)
 
-        total_screen = _count_dataset_items(db, dataset.id, pii_filter)
+        total_screen = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
 
-        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, True)
-        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, False)
+        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, True)
+        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, False)
 
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
@@ -647,6 +682,7 @@ def dataset_detail(dataset_uuid: str):
             page,
             per_page,
             pii_filter,
+            color_filter,
         )
         included_display = [row for row in screen_rows if not row["is_excluded"]]
         excluded_display = [row for row in screen_rows if row["is_excluded"]]
@@ -796,6 +832,7 @@ def dataset_detail(dataset_uuid: str):
             screen_rows=screen_rows,
             screen_sort=screen_sort,
             pii_filter=pii_filter,
+            color_filter=color_filter,
             screen_total=total_screen,
             screen_page=page,
             screen_total_pages=total_pages,
@@ -947,6 +984,9 @@ def dataset_screen_gallery(dataset_uuid: str):
     pii_filter = request.args.get("pii_filter", "all")
     if pii_filter not in {"all", "detected"}:
         pii_filter = "all"
+    color_filter = request.args.get("color_filter", "all")
+    if color_filter not in {"all", "color", "grayscale"}:
+        color_filter = "all"
     per_page = 25
     with get_db_session() as db:
         dataset = (
@@ -964,7 +1004,7 @@ def dataset_screen_gallery(dataset_uuid: str):
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
             return ("Forbidden", 403)
 
-        total = _count_dataset_items(db, dataset.id, pii_filter)
+        total = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
         offset = (page - 1) * per_page
@@ -990,6 +1030,7 @@ def dataset_screen_gallery(dataset_uuid: str):
             .filter(CuratedDatasetItem.dataset_id == dataset.id)
         )
         query = _apply_pii_filter(query, pii_filter)
+        query = _apply_color_filter(query, color_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
         page_rows = _build_screen_page_rows(
             db,
@@ -1007,6 +1048,7 @@ def dataset_screen_gallery(dataset_uuid: str):
             total_pages=total_pages,
             screen_sort=screen_sort,
             pii_filter=pii_filter,
+            color_filter=color_filter,
             has_prev=page > 1,
             has_next=page < total_pages,
         )
@@ -1023,6 +1065,9 @@ def dataset_screen_list(dataset_uuid: str):
     pii_filter = request.args.get("pii_filter", "all")
     if pii_filter not in {"all", "detected"}:
         pii_filter = "all"
+    color_filter = request.args.get("color_filter", "all")
+    if color_filter not in {"all", "color", "grayscale"}:
+        color_filter = "all"
     per_page = 50
     with get_db_session() as db:
         dataset = (
@@ -1040,7 +1085,7 @@ def dataset_screen_list(dataset_uuid: str):
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
             return ("Forbidden", 403)
 
-        total_screen = _count_dataset_items(db, dataset.id, pii_filter)
+        total_screen = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
 
@@ -1052,9 +1097,10 @@ def dataset_screen_list(dataset_uuid: str):
             page,
             per_page,
             pii_filter,
+            color_filter,
         )
-        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, True)
-        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, False)
+        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, True)
+        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, False)
 
         return render_template(
             "review/_dataset_screen_list.html",
@@ -1062,6 +1108,7 @@ def dataset_screen_list(dataset_uuid: str):
             screen_rows=screen_rows,
             screen_sort=screen_sort,
             pii_filter=pii_filter,
+            color_filter=color_filter,
             screen_total=total_screen,
             screen_page=page,
             screen_total_pages=total_pages,

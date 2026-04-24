@@ -222,11 +222,13 @@ def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
     image_path_str, filename = path_info
     if not os.path.exists(image_path_str):
         return None
+    is_final = kind == "final"
     return _build_image_response(
         image_path_str,
         filename,
         uuid,
-        cache_control='private, max-age=60',
+        cache_control='no-cache, no-store, must-revalidate' if is_final else 'private, max-age=60',
+        add_no_cache_headers=is_final,
     )
 
 
@@ -723,13 +725,15 @@ def _serve_direct_final_thumbnail(db, direct_image: DirectImageUpload, uuid: str
             thumbnail_path = thumbnail_dir / thumbnail_filename
             if not thumbnail_path.exists():
                 return None
+            is_final = kind == "final"
 
             return _build_image_response(
                 str(thumbnail_path),
                 thumbnail_filename,
                 uuid,
-                cache_control='private, max-age=60',
+                cache_control='no-cache, no-store, must-revalidate' if is_final else 'private, max-age=60',
                 extra_headers={'X-Thumbnail': 'true'},
+                add_no_cache_headers=is_final,
                 download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
             )
         except Exception as e:

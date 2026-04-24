@@ -18,6 +18,7 @@ from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
 from utils.sensitive_operations import _log_sensitive_operation
+from utils.media_cache import bump_media_cache_version, get_media_cache_version
 from auth.utils import utcnow
 
 
@@ -650,6 +651,7 @@ def anonymize_image(uuid: UUID):
             "media._directImgFinalByUUID",
             uuid_str=str(upload.uuid),
             _external=False,
+            v=get_media_cache_version(str(upload.uuid)),
         )
 
         edited_image_url = None
@@ -1094,6 +1096,7 @@ def restore_original_anonymized_image(uuid: UUID):
 
         try:
             db_session.commit()
+            bump_media_cache_version(str(upload.uuid))
             if has_non_pending and override_allowed:
                 _log_sensitive_operation(
                     operation="direct_upload_anonymize_override",

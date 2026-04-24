@@ -1080,6 +1080,7 @@ def dataset_toggle_item(dataset_uuid: str):
             abort(404)
         if dataset.is_finalized:
             return ("Dataset is finalized.", 409)
+        stored_filters = json.loads(dataset.filters_json or "{}")
 
         task_id = request.form.get("task_id", type=int)
         if not task_id:

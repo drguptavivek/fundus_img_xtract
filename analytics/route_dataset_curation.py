@@ -968,6 +968,7 @@ def dataset_screen_gallery(dataset_uuid: str):
                 CuratedDatasetItem.include_in_export.label("include_in_export"),
                 CuratedDatasetItem.selected_at.label("selected_at"),
                 CuratedDatasetItem.selection_method.label("selection_method"),
+                DirectImageUpload.edited_filename.label("edited_filename"),
             )
             .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
             .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
@@ -976,7 +977,13 @@ def dataset_screen_gallery(dataset_uuid: str):
         )
         query = _apply_pii_filter(query, pii_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
-        page_rows = _build_screen_page_rows(db, items, dataset.disease_id, offset)
+        page_rows = _build_screen_page_rows(
+            db,
+            items,
+            dataset.disease_id,
+            normalize_final_grade_basis(stored_filters.get("final_grade_basis")),
+            offset,
+        )
 
         return render_template(
             "review/_dataset_screen_gallery.html",

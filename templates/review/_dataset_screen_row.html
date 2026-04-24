@@ -5,7 +5,7 @@
   data-image-uuid="{{ row.image_uuid }}"
   data-excluded="{{ 'true' if row.is_excluded else 'false' }}"
   {% if oob_swap %}hx-swap-oob="{{ oob_swap }}"{% endif %}
-  hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort) }}"
+  hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}"
   hx-target="#datasetScreenViewer"
   hx-swap="innerHTML"
 >

@@ -530,7 +530,15 @@
     });
   };
 
+  const resetColumnClasses = function(el) {
+    if (!el) {
+      return;
+    }
+    el.classList.remove('col-12', 'col-lg-2', 'col-lg-4', 'col-lg-5', 'col-lg-6', 'col-lg-7', 'col-lg-8', 'col-lg-9');
+  };
+
   const showListView = function() {
+
     if (listView) {
       listView.classList.remove('d-none');
     }
@@ -541,16 +549,13 @@
       filterGroup.classList.remove('d-none');
     }
     if (viewerColumn) {
+      resetColumnClasses(viewerColumn);
       viewerColumn.classList.remove('d-none');
-      viewerColumn.classList.remove('col-lg-5');
       viewerColumn.classList.add('col-lg-8');
     }
     if (listColumn) {
-      listColumn.classList.remove('col-12');
+      resetColumnClasses(listColumn);
       listColumn.classList.add('col-lg-4');
-      listColumn.classList.remove('col-lg-7');
-      listColumn.classList.remove('col-lg-6');
-      listColumn.classList.remove('col-lg-5');
     }
   };
 
@@ -565,16 +570,13 @@
       filterGroup.classList.add('d-none');
     }
     if (viewerColumn) {
+      resetColumnClasses(viewerColumn);
       viewerColumn.classList.add('d-none');
-      viewerColumn.classList.remove('col-lg-5');
       viewerColumn.classList.add('col-lg-8');
     }
     if (listColumn) {
-      listColumn.classList.remove('col-lg-4');
+      resetColumnClasses(listColumn);
       listColumn.classList.add('col-12');
-      listColumn.classList.remove('col-lg-7');
-      listColumn.classList.remove('col-lg-6');
-      listColumn.classList.remove('col-lg-5');
     }
   };
 
@@ -589,16 +591,13 @@
       filterGroup.classList.add('d-none');
     }
     if (viewerColumn) {
+      resetColumnClasses(viewerColumn);
       viewerColumn.classList.remove('d-none');
-      viewerColumn.classList.remove('col-lg-8');
-      viewerColumn.classList.add('col-lg-7');
+      viewerColumn.classList.add('col-lg-8');
     }
     if (listColumn) {
-      listColumn.classList.remove('col-12');
-      listColumn.classList.remove('col-lg-4');
-      listColumn.classList.add('col-lg-5');
-      listColumn.classList.remove('col-lg-7');
-      listColumn.classList.remove('col-lg-6');
+      resetColumnClasses(listColumn);
+      listColumn.classList.add('col-lg-4');
     }
   };
 
@@ -1017,6 +1016,9 @@
       applyScreenFilter();
       pruneOcrCache(target);
       saveCacheToStorage();
+    }
+    if (target.id === 'datasetScreenViewer') {
+      applyScreenFilter();
     }
     if (target.id === 'datasetScreenGalleryView' && pendingGalleryImageUuid) {
       const pending = pendingGalleryImageUuid;

@@ -5,11 +5,11 @@
   style="width: 300px;"
 >
   <a class="ratio ratio-1x1 bg-body"
-     href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
-     hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort) }}"
+     href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}#screen-images"
+     hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}"
      hx-target="#datasetScreenViewer"
      hx-swap="innerHTML"
-     hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+     hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort, pii_filter=pii_filter, color_filter=color_filter) }}#screen-images"
      data-gallery-open="true"
      style="text-decoration: none;">
     {% if row.image_kind == 'encounter' %}
@@ -50,6 +50,8 @@
       <input type="hidden" name="task_id" value="{{ row.task_id }}">
       <input type="hidden" name="page" value="{{ page|default(1) }}">
       <input type="hidden" name="sort" value="{{ screen_sort }}">
+      <input type="hidden" name="pii_filter" value="{{ pii_filter or 'all' }}">
+      <input type="hidden" name="color_filter" value="{{ color_filter or 'all' }}">
       <button type="submit" class="btn btn-sm {% if row.is_excluded %}btn-outline-success{% else %}btn-outline-danger{% endif %}">
         {% if row.is_excluded %}Include{% else %}Exclude{% endif %}
       </button>

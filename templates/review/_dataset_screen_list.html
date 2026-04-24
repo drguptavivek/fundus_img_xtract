@@ -1,3 +1,13 @@
+{% if screen_total is defined %}
+<span id="screenCountAll" hx-swap-oob="outerHTML">{{ screen_total }}</span>
+{% endif %}
+{% if include_count is defined %}
+<span id="screenCountIncluded" hx-swap-oob="outerHTML">{{ include_count }}</span>
+{% endif %}
+{% if exclude_count is defined %}
+<span id="screenCountExcluded" hx-swap-oob="outerHTML">{{ exclude_count }}</span>
+{% endif %}
+
 <div class="list-group list-group-flush border rounded" id="datasetScreenList" style="max-height: 80vh; overflow: auto;">
   {% for row in screen_rows %}
     {% include "review/_dataset_screen_row.html" with context %}

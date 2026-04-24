@@ -1,91 +1,94 @@
 <div class="mb-3">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-    <div>
-      <div class="small text-muted">Image UUID</div>
-      <div class="d-flex flex-wrap align-items-center gap-2">
-        <div class="fw-semibold">
-          {% if browse_index %}
-            <span class="text-muted">#{{ browse_index }}</span>
-          {% endif %}
-          {{ row.encounter_file_uuid or row.direct_image_uuid if row else image_uuid }}
-        </div>
-        <span class="badge rounded-pill bg-secondary ocr-viewer-badge" data-image-uuid="{{ image_uuid }}">
-          OCR...
-        </span>
-        <button type="button"
-                class="btn btn-sm btn-outline-primary metadata-extract-btn"
-                data-image-uuid="{{ image_uuid }}"
-                data-variant="{{ image_variant or 'orig' }}">
-          Extract Metadata
-        </button>
-        <span class="small text-muted" id="metadataStatus"></span>
-        <button type="button" class="btn btn-sm btn-outline-info ocr-refresh-btn" data-image-uuid="{{ image_uuid }}">
-          Refresh
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-danger ocr-redetect-btn" data-image-uuid="{{ image_uuid }}">
-          Redetect
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-success ocr-manual-clear-btn" data-image-uuid="{{ image_uuid }}">
-          Mark PII Clear (manual)
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-warning ocr-manual-detected-btn" data-image-uuid="{{ image_uuid }}">
-          Mark PII Detected (manual)
-        </button>
-        <div class="d-flex align-items-center gap-2">
-          <form method="POST" action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-target="#datasetScreenViewer" hx-swap="innerHTML">
-          {% from "_forms.html" import csrf_field %}
-          {{ csrf_field() }}
-          <input type="hidden" name="task_id" value="{{ row.task_id if row else '' }}">
-          <input type="hidden" name="sort" value="{{ screen_sort }}">
-          <button type="submit" class="btn btn-sm {% if is_excluded %}btn-outline-success{% else %}btn-outline-danger{% endif %}" {% if dataset.is_finalized or not row %}disabled{% endif %}>
-            {% if is_excluded %}Include{% else %}Exclude{% endif %}
-          </button>
-          </form>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-warning"
-            data-bs-toggle="modal"
-            data-bs-target="#datasetEditConfirmModal"
-            data-edit-url="{{ url_for('preprocess.anonymize_image', uuid=image_uuid) }}"
-            {% if not row %}disabled{% endif %}
-          >
-            Edit Image
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary" data-gallery-close="true">
-            Close
-          </button>
-        </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <div class="fw-semibold">
+        Image UUID
+        {% if browse_index %}
+          <span class="text-muted">#{{ browse_index }}</span>
+        {% endif %}
+        {{ row.encounter_file_uuid or row.direct_image_uuid if row else image_uuid }}
       </div>
+      <span class="badge rounded-pill bg-secondary ocr-viewer-badge" data-image-uuid="{{ image_uuid }}">
+        OCR...
+      </span>
+      <span class="small text-muted" id="metadataStatus"></span>
     </div>
-    <div>
-      <div class="small text-muted">Final impression</div>
-      <div class="fw-semibold">{{ row.final_impression if row else '—' }}</div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <button type="button" class="btn btn-sm btn-outline-info ocr-refresh-btn" data-image-uuid="{{ image_uuid }}">
+        Refresh
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-danger ocr-redetect-btn" data-image-uuid="{{ image_uuid }}">
+        Redetect
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-success ocr-manual-clear-btn" data-image-uuid="{{ image_uuid }}">
+        Mark PII Clear
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-warning ocr-manual-detected-btn" data-image-uuid="{{ image_uuid }}">
+        Mark PII Detected
+      </button>
+      <form method="POST" action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-target="#datasetScreenViewer" hx-swap="innerHTML">
+      {% from "_forms.html" import csrf_field %}
+      {{ csrf_field() }}
+      <input type="hidden" name="task_id" value="{{ row.task_id if row else '' }}">
+      <input type="hidden" name="sort" value="{{ screen_sort }}">
+      <input type="hidden" name="pii_filter" value="{{ pii_filter or 'all' }}">
+      <input type="hidden" name="color_filter" value="{{ color_filter or 'all' }}">
+      <button type="submit" class="btn btn-sm {% if is_excluded %}btn-outline-success{% else %}btn-outline-danger{% endif %}" {% if dataset.is_finalized or not row %}disabled{% endif %}>
+        {% if is_excluded %}Include{% else %}Exclude{% endif %}
+      </button>
+      </form>
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-warning"
+        data-bs-toggle="modal"
+        data-bs-target="#datasetEditConfirmModal"
+        data-edit-url="{{ url_for('preprocess.anonymize_image', uuid=image_uuid) }}"
+        {% if not row %}disabled{% endif %}
+      >
+        Edit Image
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-gallery-close="true">
+        Close
+      </button>
     </div>
-  </div>
-  <div class="small text-muted mt-2" id="metadataSummary">
-    {% if metadata %}
-      {% if metadata.width and metadata.height %}{{ metadata.width }}x{{ metadata.height }}{% endif %}
-      {% if metadata.is_grayscale is not none %}
-        • {{ 'Grayscale' if metadata.is_grayscale else 'Color' }}
-      {% endif %}
-      {% if metadata.avg_luminance is not none %}
-        • Avg {{ '%.1f'|format(metadata.avg_luminance) }}
-      {% endif %}
-      {% if metadata.max_luminance is not none %}
-        • Max {{ '%.1f'|format(metadata.max_luminance) }}
-      {% endif %}
-      {% if metadata.exif_present %} • EXIF{% endif %}
-      {% if metadata.iptc_present %} • IPTC{% endif %}
-      {% if metadata.size_ok is not none and not metadata.size_ok %}
-        • <span class="text-danger">Below 1024×768</span>
-      {% endif %}
-    {% else %}
-      Metadata pending
-    {% endif %}
   </div>
 </div>
 
+{% if screen_total is defined %}
+<span id="screenCountAll" hx-swap-oob="outerHTML">{{ screen_total }}</span>
+{% endif %}
+{% if include_count is defined %}
+<span id="screenCountIncluded" hx-swap-oob="outerHTML">{{ include_count }}</span>
+{% endif %}
+{% if exclude_count is defined %}
+<span id="screenCountExcluded" hx-swap-oob="outerHTML">{{ exclude_count }}</span>
+{% endif %}
+
+{% set viewer_height = '800px' %}
+{% set enable_cdr_tool = false %}
 {% include "partials/_viewer_card.html" %}
+
+<div class="small text-muted mt-2" id="metadataSummary">
+  {% if metadata %}
+    {% if metadata.width and metadata.height %}{{ metadata.width }}x{{ metadata.height }}{% endif %}
+    {% if metadata.is_grayscale is not none %}
+      • {{ 'Grayscale' if metadata.is_grayscale else 'Color' }}
+    {% endif %}
+    {% if metadata.avg_luminance is not none %}
+      • Avg {{ '%.1f'|format(metadata.avg_luminance) }}
+    {% endif %}
+    {% if metadata.max_luminance is not none %}
+      • Max {{ '%.1f'|format(metadata.max_luminance) }}
+    {% endif %}
+    {% if metadata.exif_present %} • EXIF{% endif %}
+    {% if metadata.iptc_present %} • IPTC{% endif %}
+    {% if metadata.size_ok is not none and not metadata.size_ok %}
+      • <span class="text-danger">Below 1024×768</span>
+    {% endif %}
+  {% else %}
+    Metadata pending
+  {% endif %}
+</div>
 
 {% if row_update %}
   <div hx-swap-oob="true" id="datasetScreenRow-{{ row_update.image_uuid }}">

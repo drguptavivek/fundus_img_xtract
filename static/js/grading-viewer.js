@@ -1092,6 +1092,9 @@
 
     function updateViewportSize(){
       if (!main || !root) return;
+      if (main.dataset.fixedViewport === 'true') {
+        return;
+      }
       const wrap = main.closest('.imggr-main-wrap');
       const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
       const rootRect = root.getBoundingClientRect();

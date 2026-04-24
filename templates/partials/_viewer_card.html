@@ -52,7 +52,7 @@
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
 
-      <!-- CDR/RDR Tool -->
+      {% if enable_cdr_tool is not defined or enable_cdr_tool %}
       <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR measurement tools">
         <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">
           CDR/RDR
@@ -61,9 +61,11 @@
           Clear
         </button>
       </div>
+      {% endif %}
     </div>
   </div>
 
+  {% if enable_cdr_tool is not defined or enable_cdr_tool %}
   <div class="mt-2 p-2 border rounded bg-body-tertiary imggr-cdr-panel">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
       <div class="fw-semibold">CDR/RDR Measurement</div>
@@ -80,12 +82,14 @@
       </button>
     </div>
   </div>
+  {% endif %}
 </div>
 
   <div class="card-body p-0">
     <div id="imggr-view-{{ uuid }}" class="imggr-viewer-root" data-enc-id="{{ uuid }}">
       <div class="imggr-main rounded position-relative"
       {% if viewer_height %}
+      data-fixed-viewport="true"
       style="width:100%; height:{{ viewer_height }}; display:flex; overflow:hidden;"
       {% else %}
       style="aspect-ratio:1/1; width:100%; height:auto; display:flex; overflow:hidden;"

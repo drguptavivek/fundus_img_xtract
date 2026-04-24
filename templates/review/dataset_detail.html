@@ -63,6 +63,28 @@
     position: sticky;
     top: 1rem;
   }
+  .dataset-summary-card .card-body {
+    padding: 0.75rem 0.9rem;
+  }
+  .dataset-summary-line {
+    align-items: baseline;
+    display: flex;
+    gap: 0.45rem;
+    line-height: 1.25;
+  }
+  .dataset-summary-line + .dataset-summary-line {
+    margin-top: 0.35rem;
+  }
+  .dataset-summary-label {
+    color: var(--bs-secondary-color);
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    min-width: 5.5rem;
+  }
+  .dataset-summary-value {
+    font-weight: 600;
+    min-width: 0;
+  }
 </style>
 {% endblock %}
 
@@ -100,59 +122,71 @@
   </div>
 
   <div class="row g-3 mb-3">
-    <div class="col-md-3">
-      <div class="card shadow-sm h-100">
+    <div class="col-md-5">
+      <div class="card shadow-sm h-100 dataset-summary-card">
         <div class="card-body">
-          <div class="small text-muted">Disease</div>
-          <div class="fw-semibold">{{ dataset.disease.name }}</div>
+          <div class="dataset-summary-line">
+            <span class="dataset-summary-label">Disease</span>
+            <span class="dataset-summary-value">{{ dataset.disease.name }}</span>
+          </div>
           {% if next_meta.hospital or next_meta.lab_unit %}
-          <div class="small text-muted mt-2">Location</div>
-          <div class="fw-semibold">{{ next_meta.hospital or '—' }}{% if next_meta.lab_unit %} / {{ next_meta.lab_unit }}{% endif %}</div>
+          <div class="dataset-summary-line">
+            <span class="dataset-summary-label">Location</span>
+            <span class="dataset-summary-value">{{ next_meta.hospital or '—' }}{% if next_meta.lab_unit %} / {{ next_meta.lab_unit }}{% endif %}</span>
+          </div>
           {% endif %}
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm h-100">
+    <div class="col-md-2">
+      <div class="card shadow-sm h-100 dataset-summary-card">
         <div class="card-body">
-          <div class="small text-muted">Included</div>
-          <div class="fw-semibold text-success">{{ include_count }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <div class="small text-muted">Excluded</div>
-          <div class="fw-semibold text-danger">{{ exclude_count }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <div class="small text-muted">Created</div>
-          <div class="fw-semibold">{{ dataset.created_at | user_datetime }}</div>
-          <div class="small text-muted mt-2">Status</div>
-          <div class="fw-semibold">
-            {% if dataset.is_finalized %}
-              Finalized{% if dataset.finalized_at %} ({{ dataset.finalized_at | user_datetime }}){% endif %}
-            {% else %}
-              Draft
-            {% endif %}
+          <div class="dataset-summary-line">
+            <span class="dataset-summary-label">Included</span>
+            <span class="dataset-summary-value text-success">{{ include_count }}</span>
           </div>
-          <div class="small text-muted mt-2">Matches current filters</div>
-          <div class="fw-semibold">{{ total_matching }}</div>
+          <div class="dataset-summary-line">
+            <span class="dataset-summary-label">Excluded</span>
+            <span class="dataset-summary-value text-danger">{{ exclude_count }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-5">
+      <div class="card shadow-sm h-100 dataset-summary-card">
+        <div class="card-body">
+          <div class="dataset-summary-line flex-wrap">
+            <span class="dataset-summary-label">Created</span>
+            <span class="dataset-summary-value">{{ dataset.created_at | user_datetime }}</span>
+            <span class="dataset-summary-label ms-3">Status</span>
+            <span class="dataset-summary-value">
+              {% if dataset.is_finalized %}
+                Finalized{% if dataset.finalized_at %} ({{ dataset.finalized_at | user_datetime }}){% endif %}
+              {% else %}
+                Draft
+              {% endif %}
+            </span>
+            <span class="dataset-summary-label ms-3">Matches current filters</span>
+            <span class="dataset-summary-value">{{ total_matching }}</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <div class="card shadow-sm mb-4" id="screen-images">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
       <h5 class="card-title mb-0">Filters</h5>
+      <button class="btn btn-sm btn-outline-secondary"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#datasetFiltersCollapse"
+              aria-expanded="false"
+              aria-controls="datasetFiltersCollapse">
+        Toggle
+      </button>
     </div>
-    <div class="card-body">
+    <div class="card-body collapse" id="datasetFiltersCollapse">
       <div class="row g-3">
         <div class="col-md-3">
           <div class="small text-muted">Lab Unit</div>
@@ -223,14 +257,6 @@
        data-default-color-filter="{{ color_filter }}">
     <div class="card-header d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#screenImagesCollapse"
-                aria-expanded="false"
-                aria-controls="screenImagesCollapse">
-          Toggle
-        </button>
         <h5 class="card-title mb-0">Screen Images</h5>
         <span class="small text-muted">PII detected:</span>
         <span class="badge text-bg-danger" id="ocrDetectedCount">0</span>
@@ -288,7 +314,7 @@
         {% endif %}
       </div>
     </div>
-    <div class="card-body collapse" id="screenImagesCollapse">
+    <div class="card-body">
       {% if screen_rows %}
       <div class="row g-3">
         <div class="col-lg-4" id="datasetScreenListColumn">

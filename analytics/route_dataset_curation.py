@@ -858,6 +858,12 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
     screen_sort = request.args.get("sort", "task_asc")
     if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
         screen_sort = "task_asc"
+    pii_filter = request.args.get("pii_filter", "all")
+    if pii_filter not in {"all", "detected"}:
+        pii_filter = "all"
+    color_filter = request.args.get("color_filter", "all")
+    if color_filter not in {"all", "color", "grayscale"}:
+        color_filter = "all"
     with get_db_session() as db:
         dataset = (
             db.query(CuratedDataset)
@@ -970,6 +976,8 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
             is_excluded=is_excluded,
             browse_index=index,
             screen_sort=screen_sort,
+            pii_filter=pii_filter,
+            color_filter=color_filter,
         )
 
 
@@ -1247,16 +1255,32 @@ def dataset_toggle_item(dataset_uuid: str):
         screen_sort = request.form.get("sort") or "task_asc"
         if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
             screen_sort = "task_asc"
+        pii_filter = request.form.get("pii_filter") or "all"
+        if pii_filter not in {"all", "detected"}:
+            pii_filter = "all"
+        color_filter = request.form.get("color_filter") or "all"
+        if color_filter not in {"all", "color", "grayscale"}:
+            color_filter = "all"
+        total_screen = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
+        include_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, True)
+        exclude_count = _count_dataset_items_by_export_state(db, dataset.id, pii_filter, color_filter, False)
         return render_template(
             "review/_dataset_screen_viewer.html",
             dataset=dataset,
             image=task.encounter_file or task.direct_image,
             image_uuid=image_uuid,
             row=display_row,
+            metadata=metadata_payload,
+            image_variant=variant,
             is_excluded=not item.include_in_export,
             row_update=row_update,
             browse_index=index,
             screen_sort=screen_sort,
+            pii_filter=pii_filter,
+            color_filter=color_filter,
+            screen_total=total_screen,
+            include_count=include_count,
+            exclude_count=exclude_count,
         )
 
 

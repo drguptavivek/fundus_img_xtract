@@ -98,17 +98,9 @@ def generate_thumbnail(
                     background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
                     img = background
 
-            # Generate thumbnail with center crop to maintain aspect ratio
-            # First, create thumbnail that fits within the size bounds
+            # Generate thumbnail while preserving original aspect ratio.
+            # The larger dimension is constrained to the requested size.
             img.thumbnail(size, Image.Resampling.LANCZOS)
-
-            # If image is not square, create square thumbnail with black background
-            if img.size != size:
-                thumbnail = Image.new('RGB', size, (0, 0, 0))
-                x = (size[0] - img.size[0]) // 2
-                y = (size[1] - img.size[1]) // 2
-                thumbnail.paste(img, (x, y))
-                img = thumbnail
 
             # Determine output format
             if format_override:

@@ -208,6 +208,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Database Models](docs/00-Core/models.md) - Updated with dual grading system models
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
+- [Project-Scoped Upload Mappings](docs/01-Adding_Images/project_upload_mapping.md) - Project provenance, upload mapping source of truth, upload-scope module interfaces, and rollout/backfill plan
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
@@ -226,6 +227,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
     - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
 - [Comprehensive Direct Upload Workflow](docs/01-Adding_Images/comprehensive_direct_upload_workflow.md) - Complete individual image upload system
+- [Project-Scoped Upload Mappings](docs/01-Adding_Images/project_upload_mapping.md) - Completed upload project and mapping design for direct, pregraded, Remedio ZIP, and encounter-set intake
 - [Pre-Graded Uploads](docs/01-Adding_Images/pre_graded.md)
 - [AI Grades Import Workflow (Excel Consumption)](docs/01-Adding_Images/comprehensive_ai_grades_import_workflow.md) - Excel file import for AI grades (consumption only)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)
@@ -293,6 +295,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
+- [Project Upload Scope Module](docs/01-Adding_Images/project_upload_mapping.md#dedicated-upload-scope-module) - Dedicated `utils/upload_scope.py` interface for project-scoped upload eligibility and validation
 
 #### Master Data Utilities
 - [Master Utilities](docs/10-DEVELOP/Utilities/utils_masterUtils.md) - Functions for retrieving core entities like diseases, hospitals, etc.

@@ -127,3 +127,4 @@ daemon.lock
 .dolt/
 *.db
 .beads-credential-key
+.codex

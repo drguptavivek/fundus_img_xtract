@@ -22,19 +22,26 @@ Medical imaging system for fundus image management with multi-disease grading (G
 Use `make` for common operations such as `logs`, `logs-tail`, `logs-web`, `logs-web-tail`, `logs-celery`, `logs-celery-tail`, `logs-workers`, `logs-workers-tail`, `logs-db`, `logs-db-tail`, `alembic-current`, `start`, `stop`, `restart`, `restart-all`, `restart-celery`, `backup`, `test`, `script`/`scripts`, and `shell`; only `*-tail` log targets follow logs.
 
 ```bash
-# Docker compose prefix (use for all commands below)
-DC="docker compose "
-
 # Start services
-$DC up web -d
+make up
 
 # Run tests
-$DC exec web uv run pytest tests/
+make test
 
-# Database migrations (NOTE: use -u flag to avoid root-owned files)
-docker compose exec web uv run alembic heads
+# Database migrations
+make alembic-heads
+make alembic-current
+make alembic-upgrade
+
+# Create a new migration (not wrapped by Makefile because the message varies; use -u to avoid root-owned files)
 docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run alembic revision  --autogenerate -m  "description"
-docker compose exec web uv run alembic upgrade head
+
+# Logs and shell
+make logs-web
+make logs-web-tail
+make logs-celery
+make logs-celery-tail
+make shell
 
 ```
 ## MANDATORY Patterns
@@ -224,6 +231,9 @@ def downgrade():
 - Use `@with_session()` for DB (never manual sessions)
 - Efficient queries (selectinload/joinedload, avoid N+1)
 - Bootstrap 5.3 for UI, flash toasts for feedback
+- Add menu links in `templates/base.html` as needed for new user-facing pages.
+- Update relevant module documentation under `docs/` when module behavior, workflows, or public interfaces change.
+- Update the docs index in `README.md` when adding, moving, or materially changing docs.
 - Commit only after the work scope is complete and verified; do not commit after each small change
 - Do not commit documentation-only changes unless explicitly requested or bundled into a completed, verified work session
 - Do not duplicate code. Create reusable utilities and functions.  

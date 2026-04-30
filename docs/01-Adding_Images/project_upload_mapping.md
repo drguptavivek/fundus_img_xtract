@@ -137,9 +137,11 @@ Rules:
 
 ## Dedicated Upload Scope Module
 
-Create a dedicated upload-scoping module instead of adding more behavior to existing route files or the current lab-unit eligibility helper.
+`utils/upload_scope.py` is the dedicated upload-scoping module. It replaces scattered route-local upload permission checks with one stable interface for project-scoped upload eligibility.
 
-Recommended module:
+The old `utils/upload_eligibility.py` module is retained only as a compatibility shim for legacy imports. New code should import from `utils.upload_scope`.
+
+Module boundary:
 
 - `utils/upload_scope.py`
 
@@ -148,11 +150,11 @@ Responsibilities:
 - Own all `Project` + `UploadMapping` query and validation behavior.
 - Expose route-safe interfaces for direct, pregraded, Remedio ZIP, and encounter-set uploads.
 - Keep role/lab-unit scoping consistent and centralized.
-- Keep existing `utils/upload_eligibility.py` focused on legacy/current lab-unit eligibility until callers are migrated.
 - Provide typed exceptions and structured return objects so routes do not duplicate selection logic.
 - Avoid lazy-loading/detached-instance bugs by returning plain DTOs/dicts from public interfaces, not live SQLAlchemy model instances.
+- Preserve legacy lab-unit eligibility functions only where older callers still need them.
 
-Recommended data contracts:
+Implemented data contracts:
 
 - `UploadScopeError`: base exception with safe `message` and optional machine-readable `code`.
 - `UploadScopeSelection`: normalized selected `project_id`, `lab_unit_id`, `disease_id`, `camera_id`, `area_id`, and `is_mydriatic`.
@@ -161,7 +163,7 @@ Recommended data contracts:
 
 Public interfaces:
 
-- `get_user_upload_mappings(db, user_id) -> list[UploadMapping]`
+- `get_user_upload_mappings(db, user_id) -> list[UploadScopeMapping]`
 - `get_user_upload_options(db, user_id) -> UploadOptions`
 - `validate_direct_upload_scope(db, user_id, selection: UploadScopeSelection) -> UploadScopeMapping`
 - `validate_pregraded_upload_scope(db, user_id, selection: UploadScopeSelection) -> UploadScopeMapping`
@@ -169,6 +171,9 @@ Public interfaces:
 - `validate_encounter_set_upload_scope(db, user_id, project_id, lab_unit_id, disease_id | None) -> UploadScopeMapping`
 - `resolve_default_upload_disease(mapping: UploadScopeMapping) -> int`
 - `get_scoped_mapping_admin_lab_unit_ids(user_id) -> set[int]`
+- `get_user_lab_unit_ids_no_admin_override(user_id) -> set[int>`
+- `get_user_lab_unit_ids(user_id) -> set[int]`, legacy compatibility with admin expansion
+- `get_user_uploadVerify_eligibility(user_id) -> dict`, legacy compatibility for older upload pages
 
 Validation should return the matching route-facing mapping object or raise `UploadScopeError` with safe user-facing messages.
 
@@ -179,9 +184,27 @@ Design constraints:
 - All new upload routes should call the dedicated module before creating `Job`, `DirectImageUpload`, `PatientEncounters`, `EncounterFile`, `EncounterFilePDF`, or `EncounterSetImage` rows.
 - Test this module directly; route tests should mostly assert that routes call/enforce its outputs.
 
+Current callers:
+
+- `direct_uploads/upload.py`: calls `get_user_upload_options()` on GET and `validate_direct_upload_scope()` on POST.
+- `direct_uploads/pregraded.py`: calls `get_user_upload_options()` on GET and `validate_pregraded_upload_scope()` on POST.
+- `remedio_zip_uploads/routes.py`: calls `get_user_upload_options()` on GET and `validate_remedio_upload_scope()` on POST.
+- `api/encounter_set.py`: calls `validate_encounter_set_upload_scope()` before creating/updating encounter-set records.
+- `admin/upload_mappings.py`: uses `get_scoped_mapping_admin_lab_unit_ids()` so managers have no role-based lab-unit override.
+- `utils/upload_eligibility.py`: imports compatibility functions from `utils.upload_scope`.
+
+Error codes currently emitted by validation include:
+
+- `lab_unit_not_allowed`
+- `mapping_not_found`
+- `mydriatic_not_allowed`
+- `non_mydriatic_not_allowed`
+- `default_disease_missing`
+- `default_disease_ambiguous`
+
 ### Docstring Requirements
 
-The dedicated upload scope module must have explicit docstrings because it will become the stable interface for multiple upload paths.
+The dedicated upload scope module must keep explicit docstrings because it is the stable interface for multiple upload paths.
 
 Required docstrings:
 
@@ -192,6 +215,8 @@ Required docstrings:
 - Non-obvious invariant comments/docstrings for mydriatic defaults, default disease resolution, and why investigators do not grant upload permission.
 
 Docstrings should state explicitly that public helpers return DTOs/dicts, not ORM instances, to avoid lazy-loading/detached-instance bugs.
+
+When changing `utils/upload_scope.py`, update both the function docstring and this README if the public interface or emitted error codes change.
 
 ### Lazy-Loading And Session Safety
 

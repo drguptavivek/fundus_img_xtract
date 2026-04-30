@@ -17,6 +17,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Dataset APIs](datasets/README.md)
 - [Job APIs](jobs/README.md)
 - [KPI APIs](kpis/README.md)
+- [Remidio API Integration](remidio-integration/README.md)
 
 ## Contract Rules
 

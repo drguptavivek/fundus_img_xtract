@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import quote, urlparse
-from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
+from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, BigInteger, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
@@ -573,6 +573,226 @@ class UploadMappingArea(Base):
 
     __table_args__ = (
         UniqueConstraint("upload_mapping_id", "area_id", name="uq_upload_mapping_area"),
+    )
+
+
+class RemidioConnection(Base):
+    """Encrypted Remidio API account configuration."""
+
+    __tablename__ = "remidio_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    client_identification_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    email_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_salt: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_auth_token_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project: Mapped["Project | None"] = relationship("Project")
+    sites: Mapped[List["RemidioSite"]] = relationship(
+        "RemidioSite",
+        back_populates="connection",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    routing_rules: Mapped[List["RemidioRoutingRule"]] = relationship(
+        "RemidioRoutingRule",
+        back_populates="connection",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_remidio_connections_name"),
+        Index("ix_remidio_connections_project_active", "project_id", "active"),
+    )
+
+
+class RemidioSite(Base):
+    """Remidio geographic/screening site synced from getSites plus manual custom id."""
+
+    __tablename__ = "remidio_sites"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remidio_connection_id: Mapped[int] = mapped_column(ForeignKey("remidio_connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    remidio_site_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    site_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    site_custom_identifier: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    connection: Mapped["RemidioConnection"] = relationship("RemidioConnection", back_populates="sites")
+    routing_rules: Mapped[List["RemidioRoutingRule"]] = relationship("RemidioRoutingRule", back_populates="site", lazy="selectin")
+    exams: Mapped[List["RemidioExam"]] = relationship("RemidioExam", back_populates="site", lazy="noload")
+
+    __table_args__ = (
+        UniqueConstraint("remidio_connection_id", "remidio_site_id", name="uq_remidio_site_connection_site_id"),
+        UniqueConstraint("remidio_connection_id", "site_custom_identifier", name="uq_remidio_site_connection_custom_identifier"),
+        Index("ix_remidio_sites_connection_active", "remidio_connection_id", "active"),
+    )
+
+
+class RemidioRoutingRule(Base):
+    """Maps Remidio site/device feeds into EyeImageManager project intake metadata."""
+
+    __tablename__ = "remidio_routing_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remidio_connection_id: Mapped[int] = mapped_column(ForeignKey("remidio_connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    remidio_site_id: Mapped[int | None] = mapped_column(ForeignKey("remidio_sites.id", ondelete="SET NULL"), nullable=True, index=True)
+    site_custom_identifier: Mapped[str] = mapped_column(String(255), nullable=False)
+    remidio_device_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False, index=True)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id", ondelete="RESTRICT"), nullable=False, index=True)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="RESTRICT"), nullable=False, index=True)
+    default_disease_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    connection: Mapped["RemidioConnection"] = relationship("RemidioConnection", back_populates="routing_rules")
+    site: Mapped["RemidioSite | None"] = relationship("RemidioSite", back_populates="routing_rules")
+    project: Mapped["Project"] = relationship("Project")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+    camera: Mapped["Camera"] = relationship("Camera")
+    default_disease: Mapped["Disease | None"] = relationship("Disease")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "remidio_connection_id",
+            "site_custom_identifier",
+            "remidio_device_type",
+            "project_id",
+            "lab_unit_id",
+            "camera_id",
+            name="uq_remidio_routing_rule_target",
+        ),
+        Index("ix_remidio_routing_connection_site_device", "remidio_connection_id", "site_custom_identifier", "remidio_device_type"),
+        Index("ix_remidio_routing_project_active", "project_id", "active"),
+    )
+
+
+class RemidioExam(Base):
+    """Remidio exam metadata pulled from gateway endpoints."""
+
+    __tablename__ = "remidio_exams"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remidio_connection_id: Mapped[int] = mapped_column(ForeignKey("remidio_connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    remidio_site_id: Mapped[int | None] = mapped_column(ForeignKey("remidio_sites.id", ondelete="SET NULL"), nullable=True, index=True)
+    patient_encounter_id: Mapped[int | None] = mapped_column(ForeignKey("patient_encounters.id", ondelete="SET NULL"), nullable=True, index=True)
+    remidio_exam_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    site_custom_identifier: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    remidio_numeric_site_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    remidio_patient_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    remidio_patient_mrn: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    exam_local_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    exam_custom_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_types: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    exam_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    exam_date_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    exam_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    pull_source: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    pulled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    connection: Mapped["RemidioConnection"] = relationship("RemidioConnection")
+    site: Mapped["RemidioSite | None"] = relationship("RemidioSite", back_populates="exams")
+    patient_encounter: Mapped["PatientEncounters | None"] = relationship("PatientEncounters")
+    images: Mapped[List["RemidioImage"]] = relationship(
+        "RemidioImage",
+        back_populates="exam",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    reports: Mapped[List["RemidioReport"]] = relationship(
+        "RemidioReport",
+        back_populates="exam",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("remidio_connection_id", "remidio_exam_id", name="uq_remidio_exam_connection_exam_id"),
+        UniqueConstraint("patient_encounter_id", name="uq_remidio_exam_patient_encounter_id"),
+        Index("ix_remidio_exams_connection_date", "remidio_connection_id", "exam_date"),
+        Index("ix_remidio_exams_connection_patient", "remidio_connection_id", "remidio_patient_mrn"),
+    )
+
+
+class RemidioImage(Base):
+    """Image/file metadata scoped to one local RemidioExam row."""
+
+    __tablename__ = "remidio_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remidio_exam_id: Mapped[int] = mapped_column(ForeignKey("remidio_exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    remidio_image_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    device_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    image_bucket: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    image_variant: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    laterality: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    field: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    quality: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remidio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    remidio_thumbnail_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    download_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    exam: Mapped["RemidioExam"] = relationship("RemidioExam", back_populates="images")
+    encounter_file: Mapped["EncounterFile | None"] = relationship("EncounterFile")
+
+    __table_args__ = (
+        UniqueConstraint("remidio_exam_id", "remidio_image_id", name="uq_remidio_image_exam_image_id"),
+        Index("ix_remidio_images_exam_device", "remidio_exam_id", "device_type"),
+    )
+
+
+class RemidioReport(Base):
+    """Report/PDF/AI report metadata scoped to one local RemidioExam row."""
+
+    __tablename__ = "remidio_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    remidio_exam_id: Mapped[int] = mapped_column(ForeignKey("remidio_exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    encounter_file_pdf_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_file_pdfs.id", ondelete="SET NULL"), nullable=True, index=True)
+    remidio_report_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    report_local_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    generated_date_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remidio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    download_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    exam: Mapped["RemidioExam"] = relationship("RemidioExam", back_populates="reports")
+    encounter_file_pdf: Mapped["EncounterFilePDF | None"] = relationship("EncounterFilePDF")
+
+    __table_args__ = (
+        UniqueConstraint("remidio_exam_id", "remidio_report_id", "report_type", name="uq_remidio_report_exam_report_type"),
+        Index("ix_remidio_reports_exam_type", "remidio_exam_id", "report_type"),
     )
 
 

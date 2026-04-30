@@ -132,9 +132,9 @@
 
           {% endif %}
 
-          {% if current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('local_admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint == 'admin.upload_mappings_admin') else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Upload
             </a>
@@ -170,6 +170,15 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>
+              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'admin.upload_mappings_admin' %}active{% endif %}"
+                  href="{{ url_for('admin.upload_mappings_admin') }}">Project Upload Mappings</a>
+              </li>
+              {% endif %}
               {% if current_user_has('pregarded_uploader') or current_user_has('admin') %}
               <li>
                 <hr class="dropdown-divider">

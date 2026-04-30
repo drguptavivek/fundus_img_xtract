@@ -209,6 +209,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
 - [Project-Scoped Upload Mappings](docs/01-Adding_Images/project_upload_mapping.md) - Project provenance, upload mapping source of truth, upload-scope module interfaces, and rollout/backfill plan
+- [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation

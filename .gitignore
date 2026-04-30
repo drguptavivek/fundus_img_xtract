@@ -128,3 +128,5 @@ daemon.lock
 *.db
 .beads-credential-key
 .codex
+docs/16-NewFeature/Remedio_dashboard_integration/postman_remedio.json
+docs/16-NewFeature/Remedio_dashboard_integration/mail_text.txt

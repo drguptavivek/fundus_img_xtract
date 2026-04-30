@@ -351,28 +351,28 @@ def serve_media_thumbnail_with_hmac(uuid_str: str):
 # ============================================================================
 
 @bp.route("/encounter/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterImageByUUID(uuid_str: str):
     return encounterImageByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit("2000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgOrigByUUID(uuid_str: str):
     return directImgOrigByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgEdByUUID(uuid_str: str):
     return directImgEdByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgFinalByUUID(uuid_str: str):
     return directImgFinalByUUID(uuid_str)
@@ -408,7 +408,7 @@ def _encounterImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -421,7 +421,7 @@ def _directImgOrigThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -434,7 +434,7 @@ def _directImgEdThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],

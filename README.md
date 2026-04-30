@@ -84,6 +84,7 @@ Core workflows include:
 - **Real-Time KPIs**: Live performance metrics and quality indicators
 - **Export Capabilities**: Comprehensive data export for research and reporting. Including Excel Exports
 - **Model Performance (New)**: Interactive `/analytics/model-performance` page to compare AI grades vs human references. Supports class recoding with drag-and-drop, single positive-class selection, user-scoped lab-unit filtering, ROC/AUC with bootstrap CIs (scikit-learn), confusion matrices (table + matplotlib plot), per-label metrics, mismatch review with PhotoSwipe, and Excel downloads of analyzed rows.
+- **Glaucoma AI Upload**: `/glaucoma-ai/` lets authorized users upload 1-10 fundus images, creates verified glaucoma tasks, runs the linked Wadhwani model, and displays image-level inference. API details are documented in [docs/API/glaucoma-ai/README.md](docs/API/glaucoma-ai/README.md).
 
 ### 🛡️ Enterprise Security & Comprehensive Auditing
 - **CSRF Protection**: Comprehensive Cross-Site Request Forgery prevention across all forms

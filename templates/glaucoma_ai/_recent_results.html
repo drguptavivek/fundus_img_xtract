@@ -1,0 +1,69 @@
+{% set ns = namespace(poll_active=false) %}
+{% for item in recent_uploads %}
+  {% set inference = item.inference or {} %}
+  {% if (inference.status or 'pending') in ['pending', 'queued', 'running'] %}
+    {% set ns.poll_active = true %}
+  {% endif %}
+{% endfor %}
+<div id="glaucoma-ai-results"
+     class="pswp-gallery"
+     data-results-url="{{ url_for('glaucoma_ai.recent_results_partial') }}"
+     data-results-json-url="{{ url_for('glaucoma_ai.recent_results_json') }}"
+     data-poll-active="{{ '1' if ns.poll_active else '0' }}">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="h5 mb-0">Recent AI Results</h2>
+    <span class="small text-muted" data-last-updated>Auto-refreshes while pending</span>
+  </div>
+
+  {% if recent_uploads %}
+  <div class="row g-2">
+    {% for item in recent_uploads %}
+    {% set inference = item.inference or {} %}
+    {% set status = inference.status or 'pending' %}
+    {% set caption = item.filename ~ ' | Impression: ' ~ (inference.grade_impression or 'Pending') ~ ' | Prediction: ' ~ (inference.predicted_class_name or inference.prediction or inference.predicted_class or 'Pending') ~ ' | Confidence: ' ~ ('%.2f'|format(inference.confidence * 100) ~ '%' if inference.confidence is not none else 'Pending') %}
+    <div class="col-12" data-result-card data-image-uuid="{{ item.image_uuid }}">
+      <div class="card">
+        <div class="card-body p-2">
+          <div class="d-flex gap-2 align-items-start">
+            <a class="flex-shrink-0 bg-black rounded overflow-hidden glaucoma-ai-thumb"
+               href="{{ item.image_url }}"
+               data-pswp-type="image"
+               data-result-viewer-link
+               title="{{ caption }}"
+               onclick="openPswpGallery('glaucoma-ai-results', {{ loop.index0 }}); return false;"
+               aria-label="Open image">
+              <img src="{{ item.thumbnail_url or item.image_url }}"
+                   class="object-fit-contain w-100 h-100"
+                   alt="Uploaded retina image thumbnail">
+            </a>
+            <div class="min-w-0 flex-grow-1">
+              <div class="d-flex align-items-start justify-content-between gap-2 mb-1">
+                <h3 class="small fw-semibold mb-0 text-break">{{ item.filename }}</h3>
+                <span class="badge text-bg-{{ 'success' if status == 'success' else ('danger' if status == 'failed' else 'warning') }} flex-shrink-0" data-result-status>{{ status }}</span>
+              </div>
+              <div class="small text-muted text-break mb-1">{{ item.task_uuid or '-' }}</div>
+              <div class="glaucoma-ai-result-grid small">
+                <span class="text-muted">Impression</span>
+                <span data-result-impression>{{ inference.grade_impression or 'Pending' }}</span>
+                <span class="text-muted">Prediction</span>
+                <span data-result-prediction>{{ inference.predicted_class_name or inference.prediction or inference.predicted_class or 'Pending' }}</span>
+                <span class="text-muted">Confidence</span>
+                <span data-result-confidence>{{ '%.2f'|format(inference.confidence * 100) ~ '%' if inference.confidence is not none else 'Pending' }}</span>
+                <span class="text-muted{% if not inference.error_code %} d-none{% endif %}" data-result-error-label>Error</span>
+                <span class="text-break{% if not inference.error_code %} d-none{% endif %}" data-result-error>{{ inference.error_code or '' }}</span>
+                <span class="text-muted{% if not inference.message %} d-none{% endif %}" data-result-message-label>Message</span>
+                <span class="text-break{% if not inference.message %} d-none{% endif %}" data-result-message>{{ inference.message or '' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="border rounded p-4 text-muted">
+    No glaucoma AI uploads yet.
+  </div>
+  {% endif %}
+</div>

@@ -1,17 +1,6 @@
-"""Celery task root package."""
+"""Celery task root package.
 
-# Import CVE scanner tasks
-from .tasks.cve_tasks import (
-    run_cve_scan_task,
-)
-
-# Import package update scanner tasks
-from .tasks.package_update_tasks import (
-    run_package_update_scan_task,
-    cleanup_old_package_scans_task,
-)
-
-# Import Wadhwani glaucoma batch task
-from .tasks.wadhwani_tasks import (
-    run_wadhwani_glaucoma_batch_task,
-)
+Task modules are imported by ``celery_tasks.tasks`` according to the configured
+worker profile. Keep this package import-light so Celery Beat can start with its
+minimal dependency set.
+"""

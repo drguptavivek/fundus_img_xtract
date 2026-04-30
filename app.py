@@ -539,6 +539,7 @@ def _register_blueprints(app: Flask) -> None:
     from api.mobile import mobile_api_bp
     from docs import docs_bp
     from datasets import bp as datasets_bp
+    from glaucoma_ai import bp as glaucoma_ai_bp
 
     app.register_blueprint(jobs_bp)
     app.register_blueprint(uploaded_zips_bp)
@@ -571,6 +572,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(mobile_api_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(datasets_bp)
+    app.register_blueprint(glaucoma_ai_bp)
 
 
 def _register_auth(app: Flask) -> None:

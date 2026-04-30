@@ -208,6 +208,12 @@
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
               </li>
               {% endif %}
+              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('optometrist') or current_user_has('fileUploader') %}
+              <li>
+                <a class="dropdown-item {% if request.blueprint == 'glaucoma_ai' %}active{% endif %}"
+                  href="{{ url_for('glaucoma_ai.index') }}">Glaucoma AI Upload</a>
+              </li>
+              {% endif %}
               {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
               <li>
                 <hr class="dropdown-divider">

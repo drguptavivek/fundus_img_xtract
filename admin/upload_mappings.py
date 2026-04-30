@@ -48,6 +48,17 @@ def _manager_lab_unit_ids() -> set[int]:
     return get_scoped_mapping_admin_lab_unit_ids(current_user.id)
 
 
+def _validate_mydriatic_flags(*, allow_mydriatic: bool, allow_non_mydriatic: bool, default_is_mydriatic: bool) -> str | None:
+    """Return a user-facing validation error for invalid mydriatic flag combinations."""
+    if not allow_mydriatic and not allow_non_mydriatic:
+        return "Select at least one mydriatic scope."
+    if default_is_mydriatic and not allow_mydriatic:
+        return "Default cannot be mydriatic unless mydriatic uploads are allowed."
+    if not default_is_mydriatic and not allow_non_mydriatic:
+        return "Default cannot be non-mydriatic unless non-mydriatic uploads are allowed."
+    return None
+
+
 def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
     """Build detached-safe context for upload mapping management templates."""
     lab_units = (
@@ -174,11 +185,21 @@ def upload_mappings_admin():
                     default_disease_id = _to_int(request.form.get("default_disease_id"))
                     camera_ids = _to_int_list(request.form.getlist("camera_ids"))
                     area_ids = _to_int_list(request.form.getlist("area_ids"))
+                    allow_mydriatic = request.form.get("allow_mydriatic") == "on"
+                    allow_non_mydriatic = request.form.get("allow_non_mydriatic") == "on"
+                    default_is_mydriatic = request.form.get("default_is_mydriatic") == "on"
+                    mydriatic_error = _validate_mydriatic_flags(
+                        allow_mydriatic=allow_mydriatic,
+                        allow_non_mydriatic=allow_non_mydriatic,
+                        default_is_mydriatic=default_is_mydriatic,
+                    )
 
                     if not all([user_id, lab_unit_id, project_id, disease_id]) or not camera_ids or not area_ids:
                         flash("Uploader, lab unit, project, disease, cameras, and sites are required.", "danger")
                     elif lab_unit_id not in scoped_lab_ids:
                         flash("You cannot create mappings outside your assigned lab units.", "danger")
+                    elif mydriatic_error:
+                        flash(mydriatic_error, "danger")
                     else:
                         user_lab_ids = {
                             row[0]
@@ -195,9 +216,9 @@ def upload_mappings_admin():
                                 project_id=project_id,
                                 disease_id=disease_id,
                                 default_disease_id=default_disease_id,
-                                allow_mydriatic=request.form.get("allow_mydriatic") == "on",
-                                allow_non_mydriatic=request.form.get("allow_non_mydriatic") == "on",
-                                default_is_mydriatic=request.form.get("default_is_mydriatic") == "on",
+                                allow_mydriatic=allow_mydriatic,
+                                allow_non_mydriatic=allow_non_mydriatic,
+                                default_is_mydriatic=default_is_mydriatic,
                                 active=True,
                             )
                             mapping.cameras = [UploadMappingCamera(camera_id=camera_id) for camera_id in camera_ids]

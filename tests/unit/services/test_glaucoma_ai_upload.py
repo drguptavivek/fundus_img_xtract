@@ -1,0 +1,90 @@
+from werkzeug.datastructures import FileStorage
+
+from services.glaucoma_ai_upload import (
+    GlaucomaAIUploadItem,
+    GlaucomaAIUploadSelection,
+    MAX_GLAUCOMA_AI_UPLOAD_FILES,
+    _enqueue_wadhwani_inference,
+    process_glaucoma_ai_uploads,
+)
+
+
+def _selection() -> GlaucomaAIUploadSelection:
+    return GlaucomaAIUploadSelection(project_id=1, lab_unit_id=1, camera_id=1, area_id=1)
+
+
+def test_glaucoma_ai_upload_rejects_missing_files():
+    result = process_glaucoma_ai_uploads(
+        files=[],
+        user_id=1,
+        username="uploader",
+        remote_addr="127.0.0.1",
+        selection=_selection(),
+    )
+
+    assert result.success_count == 0
+    assert result.error_count == 1
+    assert result.items[0].message == "No files selected."
+
+
+def test_glaucoma_ai_upload_rejects_more_than_ten_files():
+    files = [FileStorage(filename=f"image-{idx}.jpg") for idx in range(MAX_GLAUCOMA_AI_UPLOAD_FILES + 1)]
+
+    result = process_glaucoma_ai_uploads(
+        files=files,
+        user_id=1,
+        username="uploader",
+        remote_addr="127.0.0.1",
+        selection=_selection(),
+    )
+
+    assert result.success_count == 0
+    assert result.error_count == 1
+    assert "Upload at most 10 images" in result.items[0].message
+
+
+def test_glaucoma_ai_upload_enqueue_uses_existing_wadhwani_batch_task(monkeypatch):
+    captured = {}
+
+    def fake_create_job(filenames, rejected, **kwargs):
+        captured["filenames"] = filenames
+        captured["rejected"] = rejected
+        captured["job_kwargs"] = kwargs
+        return "job-token"
+
+    def fake_enqueue(task_name, *args, **kwargs):
+        captured["task_name"] = task_name
+        captured["args"] = args
+        captured["enqueue_kwargs"] = kwargs
+
+    monkeypatch.setattr("services.glaucoma_ai_upload.db_create_job", fake_create_job)
+    monkeypatch.setattr("services.glaucoma_ai_upload.enqueue_task", fake_enqueue)
+
+    items = [
+        GlaucomaAIUploadItem(
+            filename="disc.jpg",
+            status="success",
+            message="created",
+            upload_id=10,
+            image_uuid="image-uuid",
+            task_id=20,
+            task_uuid="task-uuid",
+        )
+    ]
+
+    queued = _enqueue_wadhwani_inference(
+        items,
+        user_id=1,
+        username="uploader",
+        remote_addr="127.0.0.1",
+        lab_unit_id=2,
+        project_id=3,
+    )
+
+    assert captured["filenames"] == ["task:20"]
+    assert captured["job_kwargs"]["upload_type"] == "glaucoma_ai_upload_inference"
+    assert captured["task_name"] == "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task"
+    assert captured["args"] == ("job-token", [20])
+    assert captured["enqueue_kwargs"]["user_id"] == 1
+    assert queued[0].status == "queued"
+    assert queued[0].job_token == "job-token"

@@ -1,0 +1,57 @@
+{% from "_forms.html" import csrf_field %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h2 class="h5 mb-0">Mobile Sessions</h2>
+    <span class="small text-muted">Device-scoped auth sessions</span>
+  </div>
+  <div class="card-body">
+    {% if mobile_sessions %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Session ID</th>
+              <th>Last used</th>
+              <th>Expires</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in mobile_sessions %}
+              <tr>
+                <td>
+                  <div>{{ session.device_name }}</div>
+                  <div class="text-muted small">{{ session.device_id }}</div>
+                </td>
+                <td class="small text-muted">{{ session.id }}</td>
+                <td>{{ session.last_used_at | user_datetime }}</td>
+                <td>{{ session.refresh_token_expires_at | user_datetime }}</td>
+                <td>
+                  {% if session.is_revoked %}
+                    <span class="badge text-bg-secondary">Revoked</span>
+                  {% else %}
+                    <span class="badge text-bg-success">Active</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if not session.is_revoked %}
+                    <form method="post" action="{{ url_for('admin.revoke_mobile_session', user_id=user.id, session_id=session.id) }}" class="d-inline" hx-post="{{ url_for('admin.revoke_mobile_session', user_id=user.id, session_id=session.id) }}" hx-target="#admin-users-workspace" hx-swap="outerHTML">
+                      {{ csrf_field() }}
+                      <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Revoke this mobile session?')">Revoke</button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted small">No action</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No mobile sessions found.</div>
+    {% endif %}
+  </div>
+</div>

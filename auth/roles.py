@@ -60,7 +60,7 @@ def roles_required(*required: str, require_all: bool = False):
       @roles_required(ROLE_ADMIN)
       @roles_required(ROLE_OPHTHALMOLOGIST, ROLE_DATA_MANAGER)
 
-    Note: Master admins (is_master_admin=True) bypass all role checks.
+    Note: Role checks are always enforced. Master admins still need explicit roles.
     """
     def decorator(fn):
         @wraps(fn)
@@ -68,9 +68,6 @@ def roles_required(*required: str, require_all: bool = False):
         def wrapper(*args, **kwargs):
             if not current_user.is_authenticated:
                 return redirect(url_for("auth.login"))
-            # Master admins bypass all role checks
-            if current_user.is_master_admin:
-                return fn(*args, **kwargs)
             ok = (current_user.has_all_roles(*required) if require_all
                   else current_user.has_role(*required))
             if not ok:

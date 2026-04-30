@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from flask_login import current_user
 from auth.roles import roles_required
+from auth.utils import utcnow
 from auth.security import (
     hash_password,
     check_password_strength,
@@ -15,7 +16,19 @@ from auth.security import (
 )
 from utils.emails import send_email_sync
 from utils.log_sanitize import sanitize_log_value
-from models import User, Role, Hospital, LabUnit
+from models import (
+    User,
+    Role,
+    Hospital,
+    LabUnit,
+    UserDiseaseUnitRole,
+    ProjectInvestigator,
+    UploadMapping,
+    UploadMappingCamera,
+    UploadMappingArea,
+    MobileAuthSession,
+    LoginAttempt,
+)
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.timezone_choices import (
     TIMEZONE_CHOICES,
@@ -24,6 +37,126 @@ from utils.timezone_choices import (
     DEFAULT_TIMEZONE,
 )
 from app_cache import cache
+
+
+def _can_access_user_detail(target_user: User) -> bool:
+    """Return whether the current user may view this user's admin detail hub."""
+    user_roles = {r.name for r in (current_user.roles or [])}
+    if "admin" in user_roles:
+        return True
+
+    current_hospital_id = getattr(current_user, "hospital_id", None)
+    target_hospital_id = getattr(target_user, "hospital_id", None)
+    return bool(current_hospital_id) and target_hospital_id == current_hospital_id
+
+
+def _group_lab_units_by_hospital(lab_units: list[LabUnit]) -> list[dict]:
+    grouped: dict[str, list[str]] = {}
+    for lab_unit in lab_units:
+        hospital_name = lab_unit.hospital.name if lab_unit.hospital else "Unknown Hospital"
+        grouped.setdefault(hospital_name, []).append(lab_unit.name)
+    return [
+        {"hospital_name": hospital_name, "lab_units": sorted(unit_names)}
+        for hospital_name, unit_names in sorted(grouped.items(), key=lambda item: item[0].lower())
+    ]
+
+
+def _build_user_detail_context(db, user_id: int) -> dict | None:
+    """Load the canonical user detail hub payload."""
+    user = db.execute(
+        select(User)
+        .options(
+            selectinload(User.roles),
+            selectinload(User.hospital),
+            selectinload(User.lab_units).selectinload(LabUnit.hospital),
+            selectinload(User.mobile_auth_sessions),
+        )
+        .where(User.id == user_id)
+    ).scalar_one_or_none()
+    if not user or not _can_access_user_detail(user):
+        return None
+
+    grading_rows = db.execute(
+        select(UserDiseaseUnitRole)
+        .options(
+            selectinload(UserDiseaseUnitRole.disease),
+            selectinload(UserDiseaseUnitRole.lab_unit).selectinload(LabUnit.hospital),
+        )
+        .where(UserDiseaseUnitRole.user_id == user_id)
+        .order_by(UserDiseaseUnitRole.active.desc(), UserDiseaseUnitRole.lab_unit_id.asc(), UserDiseaseUnitRole.disease_id.asc())
+    ).scalars().all()
+
+    investigator_rows = db.execute(
+        select(ProjectInvestigator)
+        .options(selectinload(ProjectInvestigator.project))
+        .where(ProjectInvestigator.user_id == user_id)
+        .order_by(ProjectInvestigator.active.desc(), ProjectInvestigator.project_id.asc())
+    ).scalars().all()
+
+    mapping_rows = db.execute(
+        select(UploadMapping)
+        .options(
+            selectinload(UploadMapping.project),
+            selectinload(UploadMapping.lab_unit).selectinload(LabUnit.hospital),
+            selectinload(UploadMapping.disease),
+            selectinload(UploadMapping.default_disease),
+            selectinload(UploadMapping.cameras).selectinload(UploadMappingCamera.camera),
+            selectinload(UploadMapping.areas).selectinload(UploadMappingArea.area),
+        )
+        .where(UploadMapping.user_id == user_id)
+        .order_by(UploadMapping.active.desc(), UploadMapping.project_id.asc(), UploadMapping.lab_unit_id.asc(), UploadMapping.disease_id.asc())
+    ).scalars().all()
+
+    login_attempts = db.execute(
+        select(LoginAttempt)
+        .where(func.lower(LoginAttempt.username_input) == user.username.lower())
+        .order_by(LoginAttempt.created_at.desc())
+        .limit(10)
+    ).scalars().all()
+
+    mobile_sessions = sorted(
+        list(user.mobile_auth_sessions or []),
+        key=lambda item: item.created_at,
+        reverse=True,
+    )
+
+    return {
+        "user": user,
+        "roles": [role.name for role in (user.roles or [])],
+        "grouped_lab_units": _group_lab_units_by_hospital(list(user.lab_units or [])),
+        "grading_rows": grading_rows,
+        "investigator_rows": investigator_rows,
+        "mapping_rows": mapping_rows,
+        "login_attempts": login_attempts,
+        "mobile_sessions": mobile_sessions,
+    }
+
+
+def _render_user_hub_section(context: dict, tab: str):
+    """Render a specific user-hub section or editor fragment."""
+    render_context = dict(context)
+    render_context.pop("tab", None)
+    normalized_tab = (tab or "overview").strip().lower()
+    if normalized_tab not in {
+        "overview",
+        "access",
+        "grading",
+        "uploads",
+        "sessions",
+        "activity",
+        "profile-edit",
+        "grading-edit",
+        "password-edit",
+    }:
+        normalized_tab = "overview"
+
+    if normalized_tab == "profile-edit":
+        return render_template("admin/partials/user_profile_edit.html", **render_context)
+    if normalized_tab == "grading-edit":
+        return render_template("admin/partials/user_grading_edit.html", **render_context)
+    if normalized_tab == "password-edit":
+        return render_template("admin/partials/user_password_edit.html", **render_context)
+    return render_template("admin/partials/user_hub_section.html", tab=normalized_tab, **render_context)
 
 
 def users_list():
@@ -35,14 +168,31 @@ def users_list():
             selectinload(User.lab_units).selectinload(LabUnit.hospital)
         ).order_by(User.username.asc())
         
-        # Site Admin Enforcement: Only show users in own hospital
-        if not getattr(current_user, 'is_master_admin', False) and getattr(current_user, 'hospital_id', None):
+        # Keep local admins scoped to their hospital, but let admins see the full list.
+        if current_user.has_role("local_admin") and not current_user.has_role("admin") and getattr(current_user, "hospital_id", None):
             query = query.where(User.hospital_id == current_user.hospital_id)
             
         users = db.execute(query).scalars().all()
-        
+        template_name = "admin/partials/user_list_workspace.html" if request.headers.get("HX-Request") or request.args.get("format") == "partial" else "admin/users.html"
+
         # Render template within the same session to avoid detached instance errors
-        return render_template("admin/users.html", users=users)
+        return render_template(template_name, users=users)
+
+
+def user_detail(user_id: int):
+    """Canonical admin user hub with all assignments and activity in one place."""
+    with get_db_session() as db:
+        context = _build_user_detail_context(db, user_id)
+        if context is None:
+            flash("User not found or not accessible.", "danger")
+            return redirect(url_for("admin.users_list"))
+        tab = request.args.get("tab") or "overview"
+        render_mode = request.args.get("format")
+        if render_mode == "shell":
+            return render_template("admin/partials/user_hub_shell.html", tab=tab, **context)
+        if request.headers.get("HX-Request") or render_mode == "partial":
+            return _render_user_hub_section(context, tab)
+        return render_template("admin/user_detail.html", tab=tab, **context)
 
 def _default_last_date_of_service(created_on: date) -> date:
     """
@@ -148,26 +298,24 @@ def add_user():
                 last_date_of_service=ldos_date,
                 file_upload_quota=pre_file_upload_quota,
                 timezone=pre_timezone or default_tz,
-                hospital_id=None if getattr(current_user, 'is_master_admin', False) else current_user.hospital_id
+                hospital_id=current_user.hospital_id
             )
             
             # Site Admin Enforcement: Prevent creating Master Admin
-            if not getattr(current_user, 'is_master_admin', False):
-                if "admin" in pre_roles:
-                     # This validation happens deep inside transaction, so rolling back is automatic if we raise or return error.
-                     # But we are in a 'with transaction_scope' block which auto-commits on exit.
-                     # We should return error before db.add(user).
-                     pass # handled below before adding roles
+            if "admin" in pre_roles and not current_user.has_role("admin"):
+                 # This validation happens deep inside transaction, so rolling back is automatic if we raise or return error.
+                 # But we are in a 'with transaction_scope' block which auto-commits on exit.
+                 # We should return error before db.add(user).
+                 pass # handled below before adding roles
             
             db.add(user)
 
             if pre_roles:
                 # Site Admin Enforcement: Check restricted roles
-                if not getattr(current_user, 'is_master_admin', False):
-                    if "admin" in pre_roles:
-                         return _add_user_err("You cannot assign the Master Admin role.", None, None, None, username, pre_active, pre_roles,
-                                      pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
-                                      pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+                if "admin" in pre_roles and not current_user.has_role("admin"):
+                     return _add_user_err("You cannot assign the admin role.", None, None, None, username, pre_active, pre_roles,
+                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
+                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
                 role_objs = db.execute(select(Role).where(Role.name.in_(pre_roles))).scalars().all()
                 for r in role_objs: user.roles.append(r)
@@ -207,7 +355,7 @@ Please keep this information secure.
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
-        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+        if 'admin' in user_roles:
             hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         else:
             hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
@@ -236,7 +384,7 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
-        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+        if 'admin' in user_roles:
             hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         else:
             hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
@@ -279,7 +427,7 @@ def edit_user(user_id: int):
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
         # Site Admin Enforcement: Cannot edit users from other hospitals (or system users like AI models)
-        if not getattr(current_user, 'is_master_admin', False):
+        if not current_user.has_role("admin"):
              if getattr(user, 'hospital_id', None) != current_user.hospital_id:
                  flash("You do not have permission to edit this user.", "danger")
                  return redirect(url_for("admin.users_list"))
@@ -288,7 +436,7 @@ def edit_user(user_id: int):
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
-        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+        if 'admin' in user_roles:
             hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         else:
             # local_admin or other roles only see their hospital
@@ -301,6 +449,19 @@ def edit_user(user_id: int):
 
         if request.method == "GET":
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            if request.headers.get("HX-Request") or request.args.get("format") == "partial":
+                return render_template(
+                    "admin/partials/user_profile_edit.html",
+                    user=user,
+                    roles=roles,
+                    hospitals=hospitals,
+                    lab_units=lab_units_dict,
+                    selected_lab_units=list(lu.id for lu in user.lab_units),
+                    timezone_choices=TIMEZONE_CHOICES,
+                    timezone_labels=TIMEZONE_LABELS,
+                    selected_timezone=user.timezone or default_tz,
+                    default_timezone=default_tz,
+                )
             return render_template(
                 "admin/edit_user.html",
                 user=user,
@@ -325,7 +486,7 @@ def edit_user(user_id: int):
 
             # Hospital isolation: admin sees all hospitals, local_admin sees only their own
             user_roles = {r.name for r in (current_user.roles or [])}
-            if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+            if 'admin' in user_roles:
                 hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
             else:
                 # local_admin or other roles only see their hospital
@@ -341,36 +502,7 @@ def edit_user(user_id: int):
                 selected_roles &= valid_role_names
 
                 existing = {r.name for r in (user.roles or [])}
-                will_remove = existing - selected_roles
                 will_add = selected_roles - existing
-
-                # Ensure at least one ACTIVE admin remains after this change
-                if "admin" in existing and "admin" not in selected_roles and user.is_active:
-                    active_admins = db.execute(
-                        select(func.count(User.id))
-                        .join(User.roles)
-                        .where(Role.name == "admin", User.is_active.is_(True), User.id != user.id)
-                    ).scalar_one() or 0
-                    
-                    if active_admins < 1:
-                        flash("There must be at least one active admin user.", "warning")
-                        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
-                        return render_template(
-                            "admin/edit_user.html",
-                            user=user,
-                            roles=roles,
-                            hospitals=hospitals,
-                            lab_units=lab_units_dict,
-                            selected_lab_units=list(lu.id for lu in user.lab_units),
-                            timezone_choices=TIMEZONE_CHOICES,
-                            timezone_labels=TIMEZONE_LABELS,
-                            selected_timezone=user.timezone or default_tz,
-                            default_timezone=default_tz,
-                        )
-
-                # remove roles
-                if user.roles:
-                    user.roles[:] = [r for r in user.roles if r.name not in will_remove]
 
                 # add roles
                 if will_add:
@@ -378,10 +510,15 @@ def edit_user(user_id: int):
                     for r in add_objs:
                         user.roles.append(r)
 
+                if existing - selected_roles:
+                    flash("Existing roles were preserved. This screen only adds roles.", "info")
+
                 db.add(user)
                 cache_key = f"auth:user:{user.id}"
                 cache.delete(cache_key)
                 flash("Roles updated.", "success")
+                if request.headers.get("HX-Request") or request.args.get("format") == "partial":
+                    return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
                 return redirect(url_for("admin.edit_user", user_id=user_id))
 
             # Handle profile updates (including is_active)
@@ -401,12 +538,17 @@ def edit_user(user_id: int):
             def render_profile_error(message: str | None = None):
                 if message:
                     flash(message, "danger")
+                template_name = (
+                    "admin/partials/user_profile_edit.html"
+                    if request.headers.get("HX-Request") or request.args.get("format") == "partial"
+                    else "admin/edit_user.html"
+                )
                 return render_template(
-                    "admin/edit_user.html",
+                    template_name,
                     user=user,
                     roles=roles,
                     hospitals=hospitals,
-                    lab_units=lab_units,
+                    lab_units=lab_units_dict,
                     selected_lab_units=list(lu.id for lu in user.lab_units),
                     timezone_choices=TIMEZONE_CHOICES,
                     timezone_labels=TIMEZONE_LABELS,
@@ -461,7 +603,7 @@ def edit_user(user_id: int):
 
             # Hospital isolation: admin can assign to any hospital, local_admin only to their own
             user_roles = {r.name for r in (current_user.roles or [])}
-            if 'admin' not in user_roles and not getattr(current_user, 'is_master_admin', False):
+            if 'admin' not in user_roles:
                 if hospital_id != current_user.hospital_id:
                     return render_profile_error("You can only assign users to your hospital.")
 
@@ -497,6 +639,8 @@ def edit_user(user_id: int):
 
             db.add(user)
             flash("Profile updated.", "success")
+            if request.headers.get("HX-Request") or request.args.get("format") == "partial":
+                return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
             return redirect(url_for("admin.users_list"))
 
 
@@ -550,3 +694,37 @@ def users_update(user_id: int):
 
     flash("User updated.", "success")
     return redirect(url_for("admin.users_list"))
+
+
+def revoke_mobile_session(user_id: int, session_id: str):
+    """Revoke a mobile session from the admin user hub."""
+    with transaction_scope() as db:
+        user = db.get(User, user_id)
+        if not user or not _can_access_user_detail(user):
+            flash("User not found or not accessible.", "danger")
+            return redirect(url_for("admin.users_list"))
+
+        mobile_session = db.execute(
+            select(MobileAuthSession)
+            .where(MobileAuthSession.id == session_id)
+            .where(MobileAuthSession.user_id == user_id)
+        ).scalar_one_or_none()
+        if mobile_session is None:
+            flash("Mobile session not found.", "warning")
+            return redirect(url_for("admin.user_detail", user_id=user_id))
+
+        mobile_session.is_revoked = True
+        mobile_session.revoked_at = utcnow()
+        db.add(mobile_session)
+
+    flash("Mobile session revoked.", "success")
+
+    if request.headers.get("HX-Request") or request.args.get("format") == "shell":
+        with get_db_session() as db:
+            context = _build_user_detail_context(db, user_id)
+            if context is None:
+                flash("User not found or not accessible.", "danger")
+                return redirect(url_for("admin.users_list"))
+            return render_template("admin/partials/user_hub_shell.html", **context)
+
+    return redirect(url_for("admin.user_detail", user_id=user_id))

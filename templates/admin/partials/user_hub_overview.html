@@ -1,0 +1,31 @@
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h2 class="h5 mb-0">Overview</h2>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="small text-muted">User ID {{ user.id }}</span>
+      <a class="btn btn-sm btn-primary"
+         href="{{ url_for('admin.edit_user', user_id=user.id) }}"
+         hx-get="{{ url_for('admin.edit_user', user_id=user.id) }}?format=partial"
+         hx-target="#admin-users-workspace"
+         hx-swap="outerHTML">Edit user info</a>
+      <a class="btn btn-sm btn-secondary"
+         href="{{ url_for('admin.change_password', username=user.username) }}"
+         hx-get="{{ url_for('admin.change_password', username=user.username) }}?format=partial"
+         hx-target="#admin-users-workspace"
+         hx-swap="outerHTML">Reset password</a>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4"><div class="text-muted small">Email</div><div>{{ user.email or 'Not set' }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Phone</div><div>{{ user.phone or 'Not set' }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Timezone</div><div>{{ user.timezone or 'Default' }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Year of joining</div><div>{{ user.year_of_joining or 'Not set' }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Last date of service</div><div>{{ user.last_date_of_service or 'Not set' }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Upload quota</div><div>{{ user.file_upload_quota }} used / {{ user.file_upload_count }} count</div></div>
+      <div class="col-md-4"><div class="text-muted small">Created</div><div>{{ user.created_at | user_datetime }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Updated</div><div>{{ user.updated_at | user_datetime }}</div></div>
+      <div class="col-md-4"><div class="text-muted small">Lock status</div><div>{{ user.is_locked_until | user_datetime if user.is_locked_until else 'Not locked' }}</div></div>
+    </div>
+  </div>
+</div>

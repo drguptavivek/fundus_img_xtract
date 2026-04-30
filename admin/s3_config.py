@@ -40,8 +40,8 @@ def _check_s3_config_access(s3_config: S3Config, user_hospitals: list[int]) -> b
     Check if user can access S3 config.
 
     Access rules:
-    - Master admin: Can access any config
-    - Local admin: Can only access configs from their hospitals
+    - Admin: Can access any config
+    - Local admin: Can only access configs from their hospital
 
     Args:
         s3_config: S3Config instance
@@ -53,10 +53,6 @@ def _check_s3_config_access(s3_config: S3Config, user_hospitals: list[int]) -> b
     if not user_hospitals:
         return False
 
-    # Master admin check (all hospitals accessible)
-    # This is based on the assumption that master admins have all hospitals
-    # For now, we'll check if the user's hospitals include the config's hospital
-
     return s3_config.hospital_id in user_hospitals
 
 
@@ -64,14 +60,16 @@ def _get_user_hospitals() -> list[int]:
     """
     Get list of hospital IDs for current user for S3 config management.
 
-    Hospital isolation: users can only manage S3 configs for their assigned hospital.
-    Lab units from other hospitals allow data access but NOT config creation.
+    Admins can manage configs across all hospitals.
+    Local admins can only manage configs for their assigned hospital.
     """
     if not current_user or not current_user.is_authenticated:
         return []
 
-    # Only return the user's assigned hospital (for isolation)
-    # Lab units from other hospitals don't grant S3 config creation rights
+    if current_user.has_role("admin"):
+        with get_db_session() as db:
+            return [hospital_id for (hospital_id,) in db.query(Hospital.id).order_by(Hospital.id).all()]
+
     if hasattr(current_user, 'hospital_id') and current_user.hospital_id:
         return [current_user.hospital_id]
 
@@ -82,12 +80,11 @@ def _is_master_admin() -> bool:
     """
     Check if current user is master admin.
 
-    Master admin has access to all hospitals and can set fallback policy.
+    Master admin is reported for UI metadata only.
     """
     if not current_user or not current_user.is_authenticated:
         return False
 
-    # Check for master_admin role or access to all hospitals
     if hasattr(current_user, 'roles'):
         return "master_admin" in current_user.roles
 

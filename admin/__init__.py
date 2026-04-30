@@ -1,7 +1,7 @@
 from flask import Blueprint
 
 # Import all route handlers
-from .users import users_list, add_user, edit_user, users_update, user_created
+from .users import users_list, user_detail, add_user, edit_user, users_update, user_created, revoke_mobile_session
 from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups.hospital import list_hospitals, edit_hospital, delete_hospital
 from .lookups.lab_unit import list_lab_units, edit_lab_unit, delete_lab_unit
@@ -102,8 +102,10 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="te
 admin_bp.add_url_rule("/users", view_func=users_list, methods=["GET"])
 admin_bp.add_url_rule("/users/new", view_func=add_user, methods=["GET", "POST"])
 admin_bp.add_url_rule("/users/created", view_func=user_created, methods=["GET"])
+admin_bp.add_url_rule("/users/<int:user_id>", view_func=user_detail, methods=["GET"])
 admin_bp.add_url_rule("/users/<int:user_id>/edit", view_func=edit_user, methods=["GET", "POST"])
 admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, methods=["POST"])
+admin_bp.add_url_rule("/users/<int:user_id>/mobile-sessions/<string:session_id>/revoke", view_func=revoke_mobile_session, methods=["POST"])
 admin_bp.add_url_rule("/upload-mappings", view_func=upload_mappings_admin, methods=["GET", "POST"])
 admin_bp.add_url_rule(
     "/upload-mappings/<int:mapping_id>/deactivate",

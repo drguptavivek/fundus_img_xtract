@@ -91,13 +91,7 @@ def get_daily_upload_dir():
 
 @bp.route("/upload_files", methods=["GET"])
 @roles_required(
-    "admin",
-    "local_admin",
     "fileUploader",
-    "ophthalmologist",
-    "data_manager",
-    "resident",
-    "optometrist",
 )
 def upload_form():
     # Get available hospitals and lab units for the current user via shared eligibility helper
@@ -196,13 +190,7 @@ def upload_form():
 
 @bp.route("/upload", methods=["POST"])
 @roles_required(
-    "admin",
-    "local_admin",
     "fileUploader",
-    "ophthalmologist",
-    "data_manager",
-    "resident",
-    "optometrist",
 )
 def upload_files():
     per_file_default = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))

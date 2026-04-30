@@ -10,9 +10,11 @@
         <div class="d-flex gap-2 flex-wrap">
 
           <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
+          {% if current_user_has('fileUploader') %}
           <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
           <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+          {% endif %}
                <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
 
   </div>
@@ -53,9 +55,11 @@
         <div class="d-flex gap-2 mt-3 flex-wrap">
           <button id="refreshBtn" class="btn btn-outline-primary">Refresh now</button>
           <a class="btn btn-success" href="{{ url_for('jobs.upload_results', job_token=job_id) }}">View Results</a>
+          {% if current_user_has('fileUploader') %}
           <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
           <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+          {% endif %}
         </div>
       </div>
     </div>

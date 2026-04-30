@@ -278,7 +278,7 @@ def _direct_pregraded_by_disease(
 
 
 @api_bp.route("/upload-stats/today", methods=["GET"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 @cache.cached(timeout=120, key_prefix=lambda: _cache_key("upload-stats:today", include_day=True))
 def upload_stats_today():
     tz = _resolve_user_timezone()
@@ -308,7 +308,7 @@ def upload_stats_today():
 
 
 @api_bp.route("/upload-stats/last-7-days", methods=["GET"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 @cache.cached(timeout=20 * 60 * 60, key_prefix=lambda: _cache_key("upload-stats:last-7-days", include_day=True))
 def upload_stats_last_7_days():
     tz = _resolve_user_timezone()

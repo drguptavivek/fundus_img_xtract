@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}User Hub — {{ user.username }}{% endblock %}
+
+{% block content %}
+{% include "admin/partials/user_hub_shell.html" %}
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+{% endblock %}

@@ -21,7 +21,7 @@ from utils.hospital_scoping import apply_scoping
 
 @api_bp.route('/users/<int:user_id>/lab-units', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required("fileUploader")
 def get_lab_units(user_id):
     """Get lab units for a user."""
     with get_db_session() as db:
@@ -40,7 +40,7 @@ def get_lab_units(user_id):
 
 @api_bp.route('/lab-units/<int:lab_unit_id>/hospital', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required("fileUploader")
 def get_hospital(lab_unit_id):
     """Get hospital for a lab unit."""
     with get_db_session() as db:
@@ -55,7 +55,7 @@ def get_hospital(lab_unit_id):
 
 @api_bp.route('/upload-jobs/<job_token>/status', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required("fileUploader")
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with get_db_session() as db:

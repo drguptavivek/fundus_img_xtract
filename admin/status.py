@@ -27,7 +27,7 @@ from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
 from models import CeleryBeatSchedule, Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit, LinkedDiseaseGrading
 from utils.celery_queue_config import infer_celery_queue
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.log_sanitize import sanitize_log_value
 
 
@@ -176,7 +176,7 @@ def admin_status():
     scoped_users = []
     try:
         with transaction_scope() as db:
-            lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id))
+            lab_unit_ids = list(get_user_lab_unit_ids(current_user.id))
             if lab_unit_ids:
                 scoped_users = [
                     {"id": user.id, "username": user.username}

@@ -1,0 +1,47 @@
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="d-flex flex-column">
+      <h2 class="h5 mb-0">Grading Eligibility</h2>
+      <span class="small text-muted">Hospital / lab unit / disease slot</span>
+    </div>
+    <a class="btn btn-sm btn-primary"
+       href="{{ url_for('admin.edit_eligibility', user_id=user.id) }}"
+       hx-get="{{ url_for('admin.edit_eligibility', user_id=user.id) }}?format=partial"
+       hx-target="#admin-users-workspace"
+       hx-swap="outerHTML">Edit</a>
+  </div>
+  <div class="card-body">
+    {% if grading_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Hospital</th>
+              <th>Lab unit</th>
+              <th>Disease</th>
+              <th>Roles</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in grading_rows %}
+              <tr>
+                <td>{{ row.lab_unit.hospital.name if row.lab_unit and row.lab_unit.hospital else 'Unknown' }}</td>
+                <td>{{ row.lab_unit.name if row.lab_unit else 'Unknown' }}</td>
+                <td>{{ row.disease.name if row.disease else 'Unknown' }}</td>
+                <td>
+                  {% if row.can_grade_resident %}<span class="badge text-bg-success">Resident</span>{% endif %}
+                  {% if row.can_grade_resident2 %}<span class="badge text-bg-info">Resident 2</span>{% endif %}
+                  {% if row.can_arbitrate %}<span class="badge text-bg-warning">Arbitrator</span>{% endif %}
+                </td>
+                <td>{% if row.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No grading eligibility configured.</div>
+    {% endif %}
+  </div>
+</div>

@@ -296,6 +296,8 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
+- [Upload Policy](docs/policy/upload_policy.md) - Dashboard access vs upload-form access and fileUploader-only eligibility rules
+- [Admin Access Policy](docs/policy/admin_access_policy.md) - Admin vs local_admin hospital/lab-unit scope rules
 - [Project Upload Scope Module](docs/01-Adding_Images/project_upload_mapping.md#dedicated-upload-scope-module) - Dedicated `utils/upload_scope.py` interface for project-scoped upload eligibility and validation
 
 #### Master Data Utilities

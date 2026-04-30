@@ -484,7 +484,7 @@ def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None
         params = {}
         
         # Manual scoping for Approach 3 (Raw SQL)
-        if user and not user.is_master_admin:
+        if user:
             if not user.hospital_id:
                 # No hospital = no access
                 where_conditions.append("1=0")

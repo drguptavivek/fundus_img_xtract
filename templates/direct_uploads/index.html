@@ -10,9 +10,9 @@
     <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
       <div class="flex-fill">
         <h1 class="h4 mb-2">Welcome to Eye Image Extractor</h1>
-        <h2 class="h4 mb-2">Dashboard for Optometrists and Image Uploaders</h2>
+        <h2 class="h4 mb-2">Uploads dashboard and monitoring</h2>
         <p class="mb-0 opacity-75">
-          Upload ZIPs of fundus images, extract reports, and review screenings — all in one place.
+          View upload status, stats, and eligibility. Upload forms are restricted to fileUploader role.
         </p>
       </div>
     </div>
@@ -21,7 +21,20 @@
   <!-- Quick Actions -->
   {% if current_user.is_authenticated %}
     <div class="row g-3 p-2 row-cols-1 row-cols-sm-2 row-cols-lg-4 row-cols-xxl-4 mb-4">
-          {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('direct_uploads.dashboard') }}">
+                <div class="card card-forest h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Uploaded Images Dashboard</div>
+                    <div class="small opacity-75">Browse submitted uploads</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+          {% endif %}
+
+          {% if current_user_has('fileUploader') %}
             <div class="col">
               <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
                 <div class="card card-forest h-100">
@@ -42,19 +55,9 @@
                 </div>
               </a>
             </div>
-            <div class="col">
-              <a class="text-decoration-none" href="{{ url_for('direct_uploads.pregraded_upload') }}">
-                <div class="card card-warning h-100">
-                  <div class="card-body">
-                    <div class="fw-semibold">Pregrade Image Upload</div>
-                    <div class="small opacity-75">Upload pre-graded images</div>
-                  </div>
-                </div>
-              </a>
-            </div>
           {% endif %}
 
-          {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('resident') %}
             <div class="col">
               <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
                 <div class="card card-violet h-100">
@@ -89,7 +92,7 @@
 
     </div>
 
-  {% if eligibility.hospitals %}
+  {% if current_user_has('fileUploader') and eligibility.hospitals %}
   <div class="card shadow-sm mb-4">
     <div class="card-header">
       <strong>Upload / Verify Eligibility</strong>
@@ -119,8 +122,10 @@
       </div>
     </div>
   </div>
-  {% else %}
+  {% elif current_user_has('fileUploader') %}
   <div class="alert alert-warning">No upload eligibility configured for your account. Please contact an administrator.</div>
+  {% else %}
+  <div class="alert alert-info">Upload eligibility details are restricted to the fileUploader role. You can still use this page as a dashboard.</div>
   {% endif %}
 
   <div class="card shadow-sm mb-4">

@@ -8,7 +8,7 @@
   
   <div class="list-group">
     {% for user in users %}
-      <a href="{{ url_for('admin.edit_eligibility', user_id=user.id) }}" class="list-group-item list-group-item-action">
+      <a href="{{ url_for('admin.user_detail', user_id=user.id) }}#grading" class="list-group-item list-group-item-action">
         {{ user.username }} ({{ user.full_name or 'No name' }})
       </a>
     {% endfor %}

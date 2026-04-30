@@ -153,8 +153,10 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/email-settings/<int:settings_id>/delete` | POST | admin.delete_email_settings | Delete email settings |
 | `/users` | GET | admin.users_list | User management list |
 | `/users/new` | GET, POST | admin.add_user | Add new user |
+| `/users/<int:user_id>` | GET | admin.user_detail | Canonical user hub with profile, access, grading, upload, sessions, and activity |
 | `/users/<int:user_id>/edit` | GET, POST | admin.edit_user | Edit user |
 | `/users/<int:user_id>/update` | POST | admin.users_update | Update user |
+| `/users/<int:user_id>/mobile-sessions/<string:session_id>/revoke` | POST | admin.revoke_mobile_session | Revoke one mobile session for a user |
 | `/roles` | GET, POST | admin.manage_roles | Role management |
 | `/role-usage` | GET | admin.role_usage | Role usage statistics |
 | `/routes-by-role/<string:role_name>` | GET | admin.routes_by_role | View routes by role |

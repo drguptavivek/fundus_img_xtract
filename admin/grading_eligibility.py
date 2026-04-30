@@ -112,6 +112,14 @@ def edit_eligibility(user_id):
             else:
                 lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
             
+            if request.headers.get("HX-Request") or request.args.get("format") == "partial":
+                return render_template(
+                    "admin/partials/user_grading_edit.html",
+                    user=user,
+                    diseases=diseases,
+                    lab_units=lab_units,
+                )
+
             # Render template within the same session to avoid detached instance errors
             return render_template(
                 "admin/edit_grading_eligibility.html",
@@ -236,6 +244,8 @@ def edit_eligibility(user_id):
                         deleted.append(row.id)
                 
                 flash(f"Grading eligibility updated successfully. {len(created)} created, {len(updated)} updated, {len(deleted)} deleted.", "success")
+                if request.headers.get("HX-Request") or request.args.get("format") == "partial":
+                    return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
                 return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                 
             except json.JSONDecodeError as e:

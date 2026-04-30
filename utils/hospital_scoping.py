@@ -59,19 +59,12 @@ def get_user_lab_units_in_hospital(
         user = db.query(User).filter_by(id=user_id).first()
         if not user:
             return set()
-        
-        # Master admin sees all
-        if user.is_master_admin:
-            if hospital_id:
-                # Get all lab units in specified hospital
-                lab_units = db.query(LabUnit.id).filter_by(hospital_id=hospital_id).all()
-                return {lu[0] for lu in lab_units}
-            else:
-                # Get all lab units
-                lab_units = db.query(LabUnit.id).all()
-                return {lu[0] for lu in lab_units}
-        
-        # Regular user - filter by hospital
+
+        # Admins see all assigned lab units across hospitals.
+        if user.has_role("admin"):
+            return {lu.id for lu in user.lab_units}
+
+        # Local admins and regular users are filtered by hospital.
         target_hospital_id = hospital_id or user.hospital_id
         if not target_hospital_id:
             return set()
@@ -99,8 +92,8 @@ def validate_lab_unit_hospital_match(
         lab_unit_id: Lab unit ID to validate
         db: Optional database session (for testing)
         
-    Returns:
-        True if lab unit belongs to user's hospital (or user is master admin)
+        Returns:
+        True if lab unit belongs to user's hospital
     
     Raises:
         ValueError: If user not found or has no hospital
@@ -115,9 +108,8 @@ def validate_lab_unit_hospital_match(
         user = db.query(User).filter_by(id=user_id).first()
         if not user:
             raise ValueError(f"User {user_id} not found")
-        
-        # Master admin can access any lab unit
-        if user.is_master_admin:
+
+        if user.has_role("admin"):
             return True
         
         if not user.hospital_id:
@@ -161,12 +153,10 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
         tasks = db.query(GradingTask)
         tasks = apply_scoping(tasks, GradingTask, current_user, 'grading')
     """
-    # Master admin bypasses all filtering
-    if user.is_master_admin:
+    # Admins can see all hospitals and lab units.
+    if user.has_role('admin'):
         return query
-    
-        return query
-    
+
     # Dataset Creator: cross-hospital access for creation, research, training
     if user.has_role('dataset_creator') and operation in {'dataset_creation', 'research', 'training'}:
         return query
@@ -187,8 +177,8 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
     if not user.hospital_id:
         # No hospital assignment = no access
         return apply_filter(query, model_class.id == None)  # Empty result
-    
-    # Apply hospital filter (if model has hospital_id)
+
+    # Apply hospital filter for non-admin users (if model has hospital_id)
     if hasattr(model_class, 'hospital_id'):
         query = apply_filter(query, model_class.hospital_id == user.hospital_id)
     elif model_class == Hospital:
@@ -204,7 +194,7 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
         
         # Site admins see ALL lab units in their hospital (no further restriction)
         # Regular users are restricted to their assigned lab units
-        if not user.is_master_admin and not user.has_role('local_admin'):
+        if not user.has_role('local_admin'):
             # Regular user - restrict to assigned lab units
             if user.lab_units:
                 # Only include lab units from user's hospital

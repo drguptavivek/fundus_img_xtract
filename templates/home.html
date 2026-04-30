@@ -25,7 +25,20 @@
   <!-- Quick Actions -->
   {% if current_user.is_authenticated %}
     <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 mb-4">
-      {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+      {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload_index') }}">
+          <div class="card card-forest h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Uploads Dashboard</div>
+              <div class="small opacity-75">View upload stats and eligibility</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endif %}
+
+      {% if current_user_has('fileUploader') %}
       <div class="col">
         <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
           <div class="card card-forest h-100">
@@ -48,7 +61,7 @@
       </div>
       {% endif %}
 
-      {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+      {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('resident') %}
       <div class="col">
         <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
           <div class="card card-violet h-100">

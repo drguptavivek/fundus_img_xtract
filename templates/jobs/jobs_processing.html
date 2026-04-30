@@ -8,8 +8,10 @@
         <div class="d-flex gap-2">
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload_index') }}">Upload Index</a>
             <a class="btn btn-outline-primary btn-sm" href="{{ url_for('direct_uploads.dashboard') }}">Upload Dashboard</a>
+            {% if current_user_has('fileUploader') %}
             <a class="btn btn-success btn-sm" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
             <a class="btn btn-warning btn-sm" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+            {% endif %}
                  <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
         </div>
     </div>

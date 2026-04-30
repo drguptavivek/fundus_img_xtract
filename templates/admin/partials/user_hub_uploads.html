@@ -1,0 +1,72 @@
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center gap-2">
+    <div class="d-flex flex-column">
+      <h2 class="h5 mb-0">Project Roles</h2>
+      <span class="small text-muted">PI, Co-PI, Co-Investigator</span>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if investigator_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Role</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in investigator_rows %}
+              <tr>
+                <td>{{ row.project.title if row.project else 'Unknown project' }}</td>
+                <td>{{ row.role }}</td>
+                <td>{% if row.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No project roles assigned.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="d-flex flex-column">
+      <h2 class="h5 mb-0">Upload Access</h2>
+      <span class="small text-muted">Hospital, lab unit, project, disease, camera</span>
+    </div>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('admin.upload_mappings_admin') }}">Open dashboard</a>
+  </div>
+  <div class="card-body">
+    {% if mapping_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Lab unit</th>
+              <th>Disease</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in mapping_rows %}
+              <tr>
+                <td>{{ row.project.title if row.project else 'Unknown project' }}</td>
+                <td>{{ row.lab_unit.name if row.lab_unit else 'Unknown lab unit' }}</td>
+                <td>{{ row.disease.name if row.disease else 'Unknown disease' }}</td>
+                <td>{% if row.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No upload access configured for this user.</div>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,48 @@
+<div id="admin-users-workspace" class="container-fluid py-4">
+  {% include "admin/partials/_flash_messages.html" %}
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <h1 class="h3 mb-0">{{ user.username }}</h1>
+        {% if user.is_active %}
+          <span class="badge text-bg-success">Active</span>
+        {% else %}
+          <span class="badge text-bg-secondary">Inactive</span>
+        {% endif %}
+        {% if user.is_locked_until %}
+          <span class="badge text-bg-warning">Locked</span>
+        {% endif %}
+        {% if user.is_master_admin %}
+          <span class="badge text-bg-dark">Master Admin</span>
+        {% endif %}
+      </div>
+      <div class="text-muted">
+        {{ user.full_name or 'No full name' }}
+        {% if user.hospital %}
+          <span class="mx-1">·</span>{{ user.hospital.name }}
+        {% endif %}
+        {% if user.designation %}
+          <span class="mx-1">·</span>{{ user.designation }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('admin.users_list') }}"
+         hx-get="{{ url_for('admin.users_list') }}?format=partial"
+         hx-target="#admin-users-workspace"
+         hx-swap="outerHTML"
+         hx-push-url="{{ url_for('admin.users_list') }}">Back to users</a>
+      <a class="btn btn-outline-primary" href="{{ url_for('admin.add_user') }}">Add user</a>
+    </div>
+  </div>
+
+  <div class="vstack gap-3">
+    {% include "admin/partials/user_hub_overview.html" %}
+    {% include "admin/partials/user_hub_access.html" %}
+    {% include "admin/partials/user_hub_grading.html" %}
+    {% include "admin/partials/user_hub_uploads.html" %}
+    {% include "admin/partials/user_hub_sessions.html" %}
+    {% include "admin/partials/user_hub_activity.html" %}
+  </div>
+</div>

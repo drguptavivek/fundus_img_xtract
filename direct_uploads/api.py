@@ -10,7 +10,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 @bp.route("/api/lab-units/<int:user_id>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("fileUploader")
 @api_rate_limit("120 per minute")
 def get_lab_units(user_id):
     with get_db_session() as db:
@@ -38,7 +38,7 @@ def get_lab_units(user_id):
 
 @bp.route("/api/hospital/<int:lab_unit_id>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("fileUploader")
 @api_rate_limit("120 per minute")
 def get_hospital(lab_unit_id):
     with get_db_session() as db:

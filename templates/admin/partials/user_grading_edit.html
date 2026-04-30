@@ -1,0 +1,198 @@
+{% from "_forms.html" import csrf_field %}
+<div id="admin-users-workspace" class="container-fluid py-4">
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <h2 class="h5 mb-0">Edit Grading Eligibility</h2>
+        <div class="small text-muted">Username: {{ user.username }}</div>
+      </div>
+      <a class="btn btn-sm btn-outline-secondary"
+         href="{{ url_for('admin.user_detail', user_id=user.id, format='shell') }}"
+         hx-get="{{ url_for('admin.user_detail', user_id=user.id, format='shell') }}"
+         hx-target="#admin-users-workspace"
+         hx-swap="outerHTML"
+         hx-push-url="{{ url_for('admin.user_detail', user_id=user.id) }}">Back</a>
+    </div>
+    <div class="card-body">
+      {% include "admin/partials/_flash_messages.html" %}
+      <form id="eligibility-form" method="post" action="{{ url_for('admin.edit_eligibility', user_id=user.id) }}" hx-post="{{ url_for('admin.edit_eligibility', user_id=user.id) }}" hx-target="#admin-users-workspace" hx-swap="outerHTML" hx-push-url="{{ url_for('admin.user_detail', user_id=user.id) }}">
+        {{ csrf_field() }}
+        {% set hospitals = {} %}
+        {% for lab_unit in lab_units %}
+          {% if lab_unit.hospital.id not in hospitals %}
+            {% set _ = hospitals.update({lab_unit.hospital.id: {'name': lab_unit.hospital.name, 'lab_units': []}}) %}
+          {% endif %}
+          {% set _ = hospitals[lab_unit.hospital.id].lab_units.append(lab_unit) %}
+        {% endfor %}
+
+        {% for hospital_id, hospital_data in hospitals|dictsort %}
+        <div class="mb-5">
+          <h3>{{ hospital_data.name }}</h3>
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm">
+              <thead>
+                <tr>
+                  <th scope="col">Disease</th>
+                  {% for lab_unit in hospital_data.lab_units %}
+                    <th scope="col">{{ lab_unit.name }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for disease in diseases %}
+                  <tr>
+                    <td>{{ disease.name }}</td>
+                    {% for lab_unit in hospital_data.lab_units %}
+                      <td>
+                        <div class="form-check">
+                          <input class="form-check-input role-checkbox" type="checkbox" id="res-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident">
+                          <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
+                        </div>
+                        <div class="form-check">
+                          <input class="form-check-input role-checkbox" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
+                          <label class="form-check-label" for="arb-{{ disease.id }}-{{ lab_unit.id }}">Arbitrator</label>
+                        </div>
+                        <hr class="my-1">
+                        <div class="form-check">
+                          <input class="form-check-input active-toggle" type="checkbox" id="active-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="active" disabled>
+                          <label class="form-check-label fw-bold text-success" for="active-{{ disease.id }}-{{ lab_unit.id }}">Active</label>
+                        </div>
+                      </td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+
+        <input type="hidden" name="items" id="items-data">
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('admin.user_detail', user_id=user.id, format='shell') }}"
+             hx-get="{{ url_for('admin.user_detail', user_id=user.id, format='shell') }}"
+             hx-target="#admin-users-workspace"
+             hx-swap="outerHTML"
+             hx-push-url="{{ url_for('admin.user_detail', user_id=user.id) }}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if csp_script_nonce %}
+  <script nonce="{{ csp_script_nonce() }}">
+  {% else %}
+  <script>
+  {% endif %}
+  (() => {
+    const userId = {{ user.id }};
+    const form = document.getElementById('eligibility-form');
+    const itemsDataInput = document.getElementById('items-data');
+
+    if (!form || !itemsDataInput) {
+      return;
+    }
+
+    fetch(`/api/grading-eligibility/users/${userId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.eligibility) {
+          data.eligibility.forEach(rule => {
+            const residentEl = document.getElementById(`res-${rule.disease_id}-${rule.lab_unit_id}`);
+            if (residentEl && (rule.can_grade_resident || rule.can_grade_resident2)) {
+              residentEl.checked = true;
+            }
+            if (rule.can_arbitrate) {
+              const el = document.getElementById(`arb-${rule.disease_id}-${rule.lab_unit_id}`);
+              if (el) el.checked = true;
+            }
+
+            const activeEl = document.getElementById(`active-${rule.disease_id}-${rule.lab_unit_id}`);
+            if (activeEl) {
+              activeEl.checked = rule.active;
+              if ((residentEl && residentEl.checked) || rule.can_arbitrate) {
+                activeEl.disabled = false;
+              }
+            }
+          });
+        }
+      });
+
+    form.addEventListener('change', function (event) {
+      if (event.target.classList.contains('role-checkbox')) {
+        const diseaseId = event.target.dataset.diseaseId;
+        const labUnitId = event.target.dataset.labUnitId;
+        const resCheckbox = document.getElementById(`res-${diseaseId}-${labUnitId}`);
+        const arbCheckbox = document.getElementById(`arb-${diseaseId}-${labUnitId}`);
+        const activeToggle = document.getElementById(`active-${diseaseId}-${labUnitId}`);
+
+        if (resCheckbox) resCheckbox.disabled = false;
+        if (arbCheckbox) arbCheckbox.disabled = false;
+
+        const hasRoleSelected = (resCheckbox && resCheckbox.checked) || (arbCheckbox && arbCheckbox.checked);
+        if (hasRoleSelected) {
+          activeToggle.disabled = false;
+        } else {
+          activeToggle.disabled = true;
+          activeToggle.checked = false;
+        }
+      }
+    });
+
+    form.addEventListener('submit', function () {
+      const payload = { items: [] };
+      const itemsMap = new Map();
+
+      form.querySelectorAll('input[type="checkbox"].role-checkbox').forEach(checkbox => {
+        const diseaseId = parseInt(checkbox.dataset.diseaseId);
+        const labUnitId = parseInt(checkbox.dataset.labUnitId);
+        const role = checkbox.dataset.role;
+        const key = `${diseaseId}-${labUnitId}`;
+
+        if (!itemsMap.has(key)) {
+          const activeEl = document.getElementById(`active-${diseaseId}-${labUnitId}`);
+          const isActive = activeEl && !activeEl.disabled ? activeEl.checked : false;
+          itemsMap.set(key, {
+            disease_id: diseaseId,
+            lab_unit_id: labUnitId,
+            can_grade_resident: false,
+            can_grade_resident2: false,
+            can_arbitrate: false,
+            active: isActive
+          });
+        }
+
+        if (checkbox.checked) {
+          const item = itemsMap.get(key);
+          item[role] = true;
+        }
+      });
+
+      itemsMap.forEach(item => {
+        if (item.can_grade_resident) {
+          item.can_grade_resident2 = true;
+        }
+      });
+
+      form.querySelectorAll('input[type="checkbox"].active-toggle:not(:disabled)').forEach(checkbox => {
+        const diseaseId = parseInt(checkbox.dataset.diseaseId);
+        const labUnitId = parseInt(checkbox.dataset.labUnitId);
+        const key = `${diseaseId}-${labUnitId}`;
+        if (itemsMap.has(key)) {
+          const item = itemsMap.get(key);
+          item.active = checkbox.checked;
+        }
+      });
+
+      payload.items = Array.from(itemsMap.values()).filter(item =>
+        item.can_grade_resident || item.can_grade_resident2 || item.can_arbitrate
+      );
+
+      itemsDataInput.value = JSON.stringify(payload.items);
+    });
+  })();
+  </script>
+</div>

@@ -111,7 +111,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
         )
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 @rate_limit("10000 per hour, 500 per minute", methods=["GET"])  # More permissive for pagination/browsing
 @rate_limit("3000 per hour, 60 per minute", methods=["POST"])   # More restrictive for operations
 def dashboard():
@@ -123,22 +123,21 @@ def dashboard():
         )
         
         # Check access: Master admin always allowed, Site admin needs hospital_id, others need lab units
-        if not current_user.is_master_admin:
-            if current_user.has_role("local_admin"):
-                # Site admin needs hospital assignment
-                if not current_user.hospital_id:
-                    flash("You do not have a hospital assignment.", "warning")
-                    if request.method == "POST":
-                        return redirect(url_for("direct_uploads.dashboard"), code=303)
-                    return redirect(url_for("home.index"))
-            else:
-                # Regular users need lab unit assignments
-                allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-                if not allowed_lab_unit_ids:
-                    flash("You do not have access to any lab units.", "warning")
-                    if request.method == "POST":
-                        return redirect(url_for("direct_uploads.dashboard"), code=303)
-                    return redirect(url_for("home.index"))
+        if current_user.has_role("local_admin"):
+            # Site admin needs hospital assignment
+            if not current_user.hospital_id:
+                flash("You do not have a hospital assignment.", "warning")
+                if request.method == "POST":
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+                return redirect(url_for("home.index"))
+        else:
+            # Regular users need lab unit assignments
+            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+            if not allowed_lab_unit_ids:
+                flash("You do not have access to any lab units.", "warning")
+                if request.method == "POST":
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+                return redirect(url_for("home.index"))
         
         # Get lab units for filter dropdowns (still needed for UI)
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
@@ -215,7 +214,7 @@ def dashboard():
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
                     
                     # Validate hospital - check if user has access to this hospital
-                    if not current_user.is_master_admin and new_hospital_id_int != current_user.hospital_id:
+                    if current_user.has_role("local_admin") and new_hospital_id_int != current_user.hospital_id:
                         flash("You cannot assign uploads to that hospital.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
 

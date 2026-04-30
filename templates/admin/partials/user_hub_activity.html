@@ -1,0 +1,40 @@
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h2 class="h5 mb-0">Activity</h2>
+    <span class="small text-muted">Recent login attempts</span>
+  </div>
+  <div class="card-body">
+    {% if login_attempts %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Username input</th>
+              <th>IP</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for attempt in login_attempts %}
+              <tr>
+                <td>{{ attempt.created_at | user_datetime }}</td>
+                <td>{{ attempt.username_input }}</td>
+                <td>{{ attempt.ip_address or 'Unknown' }}</td>
+                <td>
+                  {% if attempt.success %}
+                    <span class="badge text-bg-success">Success</span>
+                  {% else %}
+                    <span class="badge text-bg-danger">Failed</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No recent login attempts found.</div>
+    {% endif %}
+  </div>
+</div>

@@ -15,11 +15,12 @@ def get_eligible_lab_units():
     
     with get_db_session() as db:
         user_id = current_user.id
+        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
 
-        # Use hospital-aware function - filters by user's hospital_id
+        # Admins get all assigned lab units; local_admin stays hospital-scoped.
         lab_unit_ids = get_user_lab_units_in_hospital(
             user_id=user_id,
-            hospital_id=current_user.hospital_id,  # Filter by user's hospital
+            hospital_id=hospital_id,
             db=db
         )
         
@@ -39,7 +40,7 @@ def get_eligible_lab_units():
         
         return jsonify({
             'user_id': user_id,
-            'hospital_id': current_user.hospital_id,  # Include hospital context
+            'hospital_id': current_user.hospital_id if hospital_id is not None else None,
             'is_master_admin': current_user.is_master_admin,
             'eligible_lab_units': eligible_lab_units
         })
@@ -55,11 +56,12 @@ def get_eligible_lab_units_currentUser():
     with get_db_session() as db:
         # Always use the current user's ID, regardless of admin status
         user_id = current_user.id
+        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
         
-        # Use hospital-aware function - filters by user's hospital_id
+        # Admins get all assigned lab units; local_admin stays hospital-scoped.
         lab_unit_ids = get_user_lab_units_in_hospital(
             user_id=user_id,
-            hospital_id=current_user.hospital_id,  # Filter by user's hospital
+            hospital_id=hospital_id,
             db=db
         )
         
@@ -68,7 +70,7 @@ def get_eligible_lab_units_currentUser():
         
         # Get hospital details
         # Master admin sees all hospitals, regular users see only their hospital
-        if current_user.is_master_admin:
+        if current_user.has_role("admin"):
             hospitals = db.query(Hospital).order_by(Hospital.name).all()
         else:
             if current_user.hospital_id:
@@ -98,7 +100,7 @@ def get_eligible_lab_units_currentUser():
         
         return jsonify({
             'user_id': user_id,
-            'hospital_id': current_user.hospital_id,
+            'hospital_id': current_user.hospital_id if hospital_id is not None else None,
             'is_master_admin': current_user.is_master_admin,
             'eligible_lab_units': eligible_lab_units,
             'eligible_hospitals': eligible_hospitals

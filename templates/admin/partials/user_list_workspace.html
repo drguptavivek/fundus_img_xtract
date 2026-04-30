@@ -1,0 +1,140 @@
+<div id="admin-users-workspace" class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">Users</h1>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('admin.list_upload_quotas') }}">Upload Quotas</a>
+      <a class="btn btn-success" href="{{ url_for('admin.add_user') }}">Add User</a>
+    </div>
+  </div>
+
+  <div class="row g-4 align-items-start">
+    <div class="col-12">
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label for="user-filter" class="form-label">Filter by username</label>
+          <input
+            type="search"
+            class="form-control"
+            id="user-filter"
+            placeholder="Type a username..."
+            autocomplete="off"
+          >
+        </div>
+      </div>
+
+      {% if not users %}
+        <div class="alert alert-info">No users yet.</div>
+      {% else %}
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">
+          {% for u in users %}
+          <div class="col"
+               data-username="{{ u.username|lower }}"
+               data-user-id="{{ u.id }}"
+               data-full-name="{{ (u.full_name or '')|lower }}"
+               data-email="{{ (u.email or '')|lower }}">
+            <div class="card h-100 shadow-sm user-card"
+                 role="button"
+                 tabindex="0"
+                 hx-get="{{ url_for('admin.user_detail', user_id=u.id, format='shell') }}"
+                 hx-target="#admin-users-workspace"
+                 hx-swap="outerHTML"
+                 hx-push-url="{{ url_for('admin.user_detail', user_id=u.id) }}">
+              <div class="card-header bg-white py-2">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h6 class="mb-0 text-truncate">{{ u.username }}</h6>
+                    {% if u.full_name %}
+                      <small class="text-muted">{{ u.full_name }}</small>
+                    {% endif %}
+                    {% if u.email %}
+                      <div class="small text-muted text-truncate">{{ u.email }}</div>
+                    {% endif %}
+                  </div>
+                  <div>
+                    {% if u.is_active %}
+                      <span class="badge bg-success">Active</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              <div class="card-body py-2">
+                <div class="mb-2">
+                  <h6 class="text-muted small mb-1">Roles</h6>
+                  <div>
+                    {% if u.roles %}
+                      {% for r in u.roles %}
+                        <span class="badge text-bg-secondary me-1">{{ r.name }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <span class="text-muted small">No roles assigned</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <h6 class="text-muted small mb-1">Lab Unit Associations</h6>
+                  <div class="small">
+                    {% if u.lab_units %}
+                      {% set grouped_units = {} %}
+                      {% for lu in u.lab_units %}
+                        {% if lu.hospital.name not in grouped_units %}
+                          {% set _ = grouped_units.update({lu.hospital.name: []}) %}
+                        {% endif %}
+                        {% set _ = grouped_units[lu.hospital.name].append(lu.name) %}
+                      {% endfor %}
+
+                      {% for hospital_name, unit_names in grouped_units.items() %}
+                        <div class="mb-1">
+                          <strong>{{ hospital_name }}:</strong>
+                          <div class="ms-2">
+                            {% for unit_name in unit_names %}
+                              <span class="badge bg-primary-subtle text-primary-emphasis me-1">{{ unit_name }}</span>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <span class="text-muted">No lab units assigned</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                {% if u.has_role("ophthalmologist") or u.has_role("resident") %}
+                <div class="mb-2">
+                  <h6 class="text-muted small mb-1">Grading Eligibility</h6>
+                  <div class="small grading-eligibility" data-user-id="{{ u.id }}">
+                    <span class="text-muted">Loading...</span>
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+              <div class="card-footer bg-white py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="small text-muted">
+                    {% if u.created_at %}
+                      Created: {{ u.created_at|user_datetime('%Y-%m-%d') }}
+                    {% endif %}
+                  </div>
+                  <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="{{ url_for('admin.user_detail', user_id=u.id) }}"
+                       hx-get="{{ url_for('admin.user_detail', user_id=u.id, format='shell') }}"
+                       hx-target="#admin-users-workspace"
+                       hx-swap="outerHTML"
+                       hx-push-url="{{ url_for('admin.user_detail', user_id=u.id) }}"
+                       onclick="event.stopPropagation();">
+                      View
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

@@ -32,9 +32,10 @@ from utils.pii_detection_queue import run_pii_detection_queue
 @roles_required("admin", "local_admin")
 def image_metadata_admin():
     with get_db_session() as db:
+        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
         allowed_lab_unit_ids = get_user_lab_units_in_hospital(
             current_user.id,
-            hospital_id=current_user.hospital_id,
+            hospital_id=hospital_id,
             db=db,
         )
         if not allowed_lab_unit_ids:
@@ -69,9 +70,10 @@ def image_metadata_backfill():
         return redirect(url_for("admin.image_metadata_admin"))
     cache.delete("image_metadata_backfill_stop:global")
     with get_db_session() as db:
+        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
         allowed_lab_unit_ids = get_user_lab_units_in_hospital(
             current_user.id,
-            hospital_id=current_user.hospital_id,
+            hospital_id=hospital_id,
             db=db,
         )
         if not allowed_lab_unit_ids:
@@ -94,7 +96,7 @@ def image_metadata_backfill():
             run_pii=run_pii,
             created_by_id=current_user.id,
             created_by_username=getattr(current_user, "username", None),
-            hospital_id=current_user.hospital_id,
+            hospital_id=hospital_id,
             allowed_lab_unit_ids=json.dumps(sorted(allowed_lab_unit_ids)),
         )
         db.add(job)
@@ -105,7 +107,7 @@ def image_metadata_backfill():
         current_app._get_current_object(),
         job_id,
         user_id=current_user.id,
-        hospital_id=current_user.hospital_id,
+        hospital_id=hospital_id,
     )
     mode_label = "metadata" if run_metadata and not run_pii else "PII" if run_pii and not run_metadata else "metadata + PII"
     flash(f"Image backfill queued ({mode_label}).", "info")
@@ -115,15 +117,17 @@ def image_metadata_backfill():
 @login_required
 @roles_required("admin", "local_admin")
 def image_metadata_status():
-    cache_key = f"image_metadata_status:{current_user.hospital_id}:{current_user.id}"
+    scope_hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else "all"
+    cache_key = f"image_metadata_status:{scope_hospital_id}:{current_user.id}"
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
         return jsonify(cached)
 
     with get_db_session() as db:
+        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
         allowed_lab_unit_ids = get_user_lab_units_in_hospital(
             current_user.id,
-            hospital_id=current_user.hospital_id,
+            hospital_id=hospital_id,
             db=db,
         )
         allowed_lab_unit_ids_tuple = tuple(sorted(allowed_lab_unit_ids))
@@ -279,11 +283,10 @@ def image_metadata_stop_all():
 def image_metadata_clear_queued():
     with get_db_session() as db:
         jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "queued")
-        if not current_user.is_master_admin:
-            if current_user.hospital_id:
-                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
-            else:
-                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
+        if current_user.has_role("local_admin") and not current_user.has_role("admin") and current_user.hospital_id:
+            jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
+        else:
+            jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
         cleared = 0
         for job in jobs_query.all():
             job.status = "failed"
@@ -303,11 +306,10 @@ def image_metadata_clear_queued():
 def image_metadata_clear_running():
     with get_db_session() as db:
         jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "running")
-        if not current_user.is_master_admin:
-            if current_user.hospital_id:
-                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
-            else:
-                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
+        if current_user.has_role("local_admin") and not current_user.has_role("admin") and current_user.hospital_id:
+            jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
+        else:
+            jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
         cleared = 0
         for job in jobs_query.all():
             job.status = "failed"

@@ -35,7 +35,7 @@ def get_user_hospital_context():
         'is_master_admin': current_user.is_master_admin,
         'hospital_id': current_user.hospital_id,
         'hospital_name': hospital_name,
-        'can_access_multiple_hospitals': current_user.is_master_admin,
+        'can_access_multiple_hospitals': current_user.has_role('admin', 'local_admin'),
     })
 
 
@@ -64,7 +64,7 @@ def check_operation_scope(operation_name):
     
     # Hospital filter should only show for master admin
     # OR for cross-hospital operations where user needs to filter
-    show_filter = current_user.is_master_admin
+    show_filter = current_user.has_role('admin', 'local_admin')
     
     return jsonify({
         'operation': operation_name,

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from . import api_bp
 from db_transaction_manager import transaction_scope
-from models import PatientEncounters, EncounterSetImage
+from models import PatientEncounters, EncounterSetImage, User
 from auth.utils import utcnow
 from auth.decorators import token_auth_required
 from utils.rate_limiter import api_rate_limit
@@ -412,6 +412,11 @@ def upload_encounter_set_image():
 
     if not uploader_user_id:
         return jsonify({"error": "Upload token is not associated with a user"}), 403
+    uploader_user = db.execute(
+        select(User).where(User.id == uploader_user_id).options(selectinload(User.roles))
+    ).scalar_one_or_none()
+    if uploader_user is None or not uploader_user.has_role("fileUploader"):
+        return jsonify({"error": "Forbidden", "message": "Encounter set uploads require the fileUploader role"}), 403
     if not project_id:
         return jsonify({"error": "Missing project_id"}), 400
     

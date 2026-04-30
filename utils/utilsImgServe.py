@@ -170,8 +170,6 @@ def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | 
     """Check if the user has any grading slot for the lab unit + disease."""
     if not user or not getattr(user, "is_authenticated", False):
         return False
-    if getattr(user, "is_master_admin", False):
-        return True
     if not lab_unit_id or not disease_id:
         return False
 
@@ -197,7 +195,7 @@ def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | 
 
 def _apply_lab_unit_scoping(query, model_class, user):
     """Restrict query to user's lab units (non-grading access)."""
-    if not user or getattr(user, "is_master_admin", False):
+    if not user:
         return query
 
     def apply_filter(q, *args):

@@ -1,0 +1,51 @@
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h2 class="h5 mb-0">Roles and Scope</h2>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Hospital</th>
+            <th scope="col">Lab units</th>
+            <th scope="col">Roles</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set hospital_rows = grouped_lab_units or [] %}
+          {% set role_names = user.roles | map(attribute='name') | list %}
+          {% if hospital_rows %}
+            {% for group in hospital_rows %}
+              <tr>
+                <td>{{ group.hospital_name }}</td>
+                <td>{{ group.lab_units | join(', ') }}</td>
+                {% if loop.first %}
+                  <td rowspan="{{ hospital_rows|length }}">
+                    {% if role_names %}
+                      {{ role_names | join(', ') }}
+                    {% else %}
+                      No roles assigned
+                    {% endif %}
+                  </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td class="text-muted">Not assigned</td>
+              <td class="text-muted">No lab units assigned</td>
+              <td>
+                {% if role_names %}
+                  {{ role_names | join(', ') }}
+                {% else %}
+                  No roles assigned
+                {% endif %}
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

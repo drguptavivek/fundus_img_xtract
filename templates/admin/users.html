@@ -2,138 +2,7 @@
 {% block title %}Users & Roles{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">Users</h1>
-    <div class="d-flex gap-2">
-      <a class="btn btn-outline-primary" href="{{ url_for('admin.list_upload_quotas') }}">Upload Quotas</a>
-      <a class="btn btn-success" href="{{ url_for('admin.add_user') }}">Add User</a>
-    </div>
-  </div>
-
-  <div class="row mb-3">
-    <div class="col-md-6">
-      <label for="user-filter" class="form-label">Filter by username</label>
-      <input
-        type="search"
-        class="form-control"
-        id="user-filter"
-        placeholder="Type a username..."
-        autocomplete="off"
-      >
-    </div>
-  </div>
-
-  {% if not users %}
-    <div class="alert alert-info">No users yet.</div>
-  {% else %}
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-      {% for u in users %}
-      <div class="col"
-           data-username="{{ u.username|lower }}"
-           data-user-id="{{ u.id }}"
-           data-full-name="{{ (u.full_name or '')|lower }}"
-           data-email="{{ (u.email or '')|lower }}">
-        <div class="card h-100 shadow-sm">
-          <div class="card-header bg-white py-2">
-            <div class="d-flex justify-content-between align-items-start">
-              <div>
-                <h6 class="mb-0 text-truncate">{{ u.username }}</h6>
-                {% if u.full_name %}
-                  <small class="text-muted">{{ u.full_name }}</small>
-                {% endif %}
-                {% if u.email %}
-                  <div class="small text-muted text-truncate">{{ u.email }}</div>
-                {% endif %}
-              </div>
-              <div>
-                {% if u.is_active %}
-                  <span class="badge bg-success">Active</span>
-                {% else %}
-                  <span class="badge bg-secondary">Inactive</span>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-          <div class="card-body py-2">
-            <div class="mb-2">
-              <h6 class="text-muted small mb-1">Roles</h6>
-              <div>
-                {% if u.roles %}
-                  {% for r in u.roles %}
-                    <span class="badge text-bg-secondary me-1">{{ r.name }}</span>
-                  {% endfor %}
-                {% else %}
-                  <span class="text-muted small">No roles assigned</span>
-                {% endif %}
-              </div>
-            </div>
-            
-            <div class="mb-2">
-              <h6 class="text-muted small mb-1">Lab Unit Associations</h6>
-              <div class="small">
-                {% if u.lab_units %}
-                  {% set grouped_units = {} %}
-                  {% for lu in u.lab_units %}
-                    {% if lu.hospital.name not in grouped_units %}
-                      {% set _ = grouped_units.update({lu.hospital.name: []}) %}
-                    {% endif %}
-                    {% set _ = grouped_units[lu.hospital.name].append(lu.name) %}
-                  {% endfor %}
-                  
-                  {% for hospital_name, unit_names in grouped_units.items() %}
-                    <div class="mb-1">
-                      <strong>{{ hospital_name }}:</strong>
-                      <div class="ms-2">
-                        {% for unit_name in unit_names %}
-                          <span class="badge bg-primary-subtle text-primary-emphasis me-1">{{ unit_name }}</span>
-                        {% endfor %}
-                      </div>
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <span class="text-muted">No lab units assigned</span>
-                {% endif %}
-              </div>
-            </div>
-            
-            {% if u.has_role("ophthalmologist") or u.has_role("resident") %}
-            <div class="mb-2">
-              <h6 class="text-muted small mb-1">Grading Eligibility</h6>
-              <div class="small grading-eligibility" data-user-id="{{ u.id }}">
-                <span class="text-muted">Loading...</span>
-              </div>
-            </div>
-            {% endif %}
-          </div>
-          <div class="card-footer bg-white py-2">
-            <div class="d-flex justify-content-between align-items-center">
-              <div class="small text-muted">
-                {% if u.created_at %}
-                  Created: {{ u.created_at|user_datetime('%Y-%m-%d') }}
-                {% endif %}
-              </div>
-              <div>
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.change_password', username=u.username) }}">
-                  Password
-                </a>
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
-                  Edit
-                </a>
-                {% if u.has_role("ophthalmologist") or u.has_role("resident") %}
-                <a class="btn btn-sm btn-outline-info" href="{{ url_for('admin.edit_eligibility', user_id=u.id) }}">
-                  Edit Grading Eligibility
-                </a>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  {% endif %}
-</div>
+{% include "admin/partials/user_list_workspace.html" %}
 {% endblock %}
 
 {% block page_scripts %}
@@ -143,91 +12,87 @@
 <script>
 {% endif %}
 document.addEventListener('DOMContentLoaded', function() {
-  const filterInput = document.getElementById('user-filter');
-  const userCards = Array.from(document.querySelectorAll('[data-username]'));
+  function initUsersWorkspace() {
+    const filterInput = document.getElementById('user-filter');
+    const userCards = Array.from(document.querySelectorAll('[data-username]'));
 
-  if (filterInput && userCards.length > 0) {
-    const applyFilter = () => {
-      const query = filterInput.value.trim().toLowerCase();
-      userCards.forEach(card => {
-        if (!query) {
-          card.hidden = false;
-          return;
-        }
+    if (filterInput && userCards.length > 0) {
+      const applyFilter = () => {
+        const query = filterInput.value.trim().toLowerCase();
+        userCards.forEach(card => {
+          if (!query) {
+            card.hidden = false;
+            return;
+          }
 
-        const username = card.dataset.username || '';
-        const userId = card.dataset.userId || '';
-        const fullName = card.dataset.fullName || '';
-        const email = card.dataset.email || '';
-        const matches = (
-          username.includes(query) ||
-          userId.includes(query) ||
-          fullName.includes(query) ||
-          email.includes(query)
-        );
-        card.hidden = !matches;
-      });
-    };
+          const username = card.dataset.username || '';
+          const userId = card.dataset.userId || '';
+          const fullName = card.dataset.fullName || '';
+          const email = card.dataset.email || '';
+          const matches = (
+            username.includes(query) ||
+            userId.includes(query) ||
+            fullName.includes(query) ||
+            email.includes(query)
+          );
+          card.hidden = !matches;
+        });
+      };
 
-    filterInput.addEventListener('input', applyFilter);
+      filterInput.addEventListener('input', applyFilter);
+    }
+
+    const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');
+    const shownLabUnitCountLimit = 4;
+
+    gradingEligibilityElements.forEach(element => {
+      const userId = element.getAttribute('data-user-id');
+
+      fetch(`/api/grading-eligibility/users/${userId}/details`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.eligibility_details && Object.keys(data.eligibility_details).length > 0) {
+            let eligibilityHtml = '';
+            let shownLabUnitCount = 0;
+            const totalLabUnits = Object.keys(data.eligibility_details).length;
+
+            for (const labUnitId in data.eligibility_details) {
+              const labUnitData = data.eligibility_details[labUnitId];
+              if (shownLabUnitCountLimit > 0 && shownLabUnitCount >= shownLabUnitCountLimit) {
+                const remainingUnits = totalLabUnits - shownLabUnitCount;
+                if (remainingUnits > 0) {
+                  eligibilityHtml += `<div><span class="text-muted">and ${remainingUnits} more lab units...</span></div>`;
+                }
+                break;
+              }
+
+              eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;
+              for (const diseaseId in labUnitData.diseases) {
+                const diseaseData = labUnitData.diseases[diseaseId];
+                eligibilityHtml += `<span class="badge bg-success-subtle text-success-emphasis me-1">${diseaseData.disease_name}: ${diseaseData.roles.join(', ')}</span>`;
+              }
+              eligibilityHtml += '</div>';
+              shownLabUnitCount++;
+            }
+
+            element.innerHTML = eligibilityHtml;
+          } else {
+            element.innerHTML = '<span class="text-muted">No grading eligibility</span>';
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching grading eligibility:', error);
+          element.innerHTML = '<span class="text-muted">Error loading eligibility</span>';
+        });
+    });
   }
 
-  // Fetch grading eligibility for all users with resident or ophthalmologist roles
-  const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');
-  
-  // Configure how many lab units to display (set to 0 for unlimited)
-  const shownLabUnitCountLimit = 4; // 0 means show all, any positive number limits the display
-  
-  gradingEligibilityElements.forEach(element => {
-    const userId = element.getAttribute('data-user-id');
-    
-    // Fetch detailed grading eligibility from API
-    fetch(`/api/grading-eligibility/users/${userId}/details`)
-      .then(response => response.json())
-      .then(data => {
-        if (data.eligibility_details && Object.keys(data.eligibility_details).length > 0) {
-          // Display the eligibility information
-          let eligibilityHtml = '';
-          let shownLabUnitCount = 0;
-          const totalLabUnits = Object.keys(data.eligibility_details).length;
-          
-          for (const labUnitId in data.eligibility_details) {
-            const labUnitData = data.eligibility_details[labUnitId];
-            
-            // Check if we've reached the display limit (if set)
-            if (shownLabUnitCountLimit > 0 && shownLabUnitCount >= shownLabUnitCountLimit) {
-              // Add a note about remaining units if we hit the limit
-              const remainingUnits = totalLabUnits - shownLabUnitCount;
-              if (remainingUnits > 0) {
-                eligibilityHtml += `<div><span class="text-muted">and ${remainingUnits} more lab units...</span></div>`;
-              }
-              break;
-            }
-            
-            // Show hospital name and lab unit name
-            eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;
-            
-            // Show diseases and roles
-            let diseaseCount = 0;
-            for (const diseaseId in labUnitData.diseases) {
-              const diseaseData = labUnitData.diseases[diseaseId];
-              eligibilityHtml += `<span class="badge bg-success-subtle text-success-emphasis me-1">${diseaseData.disease_name}: ${diseaseData.roles.join(', ')}</span>`;
-              diseaseCount++;
-            }
-            
-            eligibilityHtml += '</div>';
-            shownLabUnitCount++;
-          }
-          
-          element.innerHTML = eligibilityHtml;
-        } else {
-          element.innerHTML = '<span class="text-muted">No grading eligibility</span>';
-        }
-      })
-      .catch(error => {
-        console.error('Error fetching grading eligibility:', error);
-        element.innerHTML = '<span class="text-muted">Error loading eligibility</span>';
-      });
+  initUsersWorkspace();
+
+  document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail && event.detail.target && event.detail.target.id === 'admin-users-workspace') {
+      initUsersWorkspace();
+    }
   });
 });
 </script>

@@ -1,0 +1,15 @@
+{% if tab == 'overview' %}
+  {% include "admin/partials/user_hub_overview.html" %}
+{% elif tab == 'access' %}
+  {% include "admin/partials/user_hub_access.html" %}
+{% elif tab == 'grading' %}
+  {% include "admin/partials/user_hub_grading.html" %}
+{% elif tab == 'uploads' %}
+  {% include "admin/partials/user_hub_uploads.html" %}
+{% elif tab == 'sessions' %}
+  {% include "admin/partials/user_hub_sessions.html" %}
+{% elif tab == 'activity' %}
+  {% include "admin/partials/user_hub_activity.html" %}
+{% else %}
+  {% include "admin/partials/user_hub_overview.html" %}
+{% endif %}

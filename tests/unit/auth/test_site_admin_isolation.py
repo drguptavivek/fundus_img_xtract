@@ -163,3 +163,27 @@ def test_edit_user_site_admin_cannot_edit_ai_model(local_mock_app, site_admin_us
             # Verify blocked
             mock_flash.assert_called_with("You do not have permission to edit this user.", "danger")
             mock_redirect.assert_called()
+
+
+def test_user_detail_renders_hub(local_mock_app, site_admin_user):
+    """Verify the canonical user hub renders when the detail loader returns data."""
+    from admin.users import user_detail
+
+    payload = {
+        "user": MagicMock(id=55, username="jane_doe", hospital_id=10),
+        "roles": ["resident"],
+        "grouped_lab_units": [],
+        "grading_rows": [],
+        "investigator_rows": [],
+        "mapping_rows": [],
+        "login_attempts": [],
+        "mobile_sessions": [],
+    }
+
+    with local_mock_app.test_request_context():
+        with patch('admin.users._build_user_detail_context', return_value=payload), \
+             patch('admin.users.get_db_session'), \
+             patch('admin.users.render_template') as mock_render:
+            user_detail(55)
+            mock_render.assert_called_once()
+            assert mock_render.call_args.args[0] == "admin/user_detail.html"

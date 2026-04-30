@@ -112,21 +112,48 @@ Rules:
 - No admin, master-admin, local-admin, or data-manager role expands the lab-unit set for upload mapping use or management.
 - `admin`, `local_admin`, and `data_manager` may manage mappings only for lab units they are explicitly assigned to.
 
-## Shared Helper API
+## Dedicated Upload Scope Module
 
-Extend `utils/upload_eligibility.py` with mapping-aware helpers.
+Create a dedicated upload-scoping module instead of adding more behavior to existing route files or the current lab-unit eligibility helper.
 
-Recommended functions:
+Recommended module:
+
+- `utils/upload_scope.py`
+
+Responsibilities:
+
+- Own all `Project` + `UploadMapping` query and validation behavior.
+- Expose route-safe interfaces for direct, pregraded, Remedio ZIP, and encounter-set uploads.
+- Keep role/lab-unit scoping consistent and centralized.
+- Keep existing `utils/upload_eligibility.py` focused on legacy/current lab-unit eligibility until callers are migrated.
+- Provide typed exceptions and structured return objects so routes do not duplicate selection logic.
+
+Recommended data contracts:
+
+- `UploadScopeError`: base exception with safe `message` and optional machine-readable `code`.
+- `UploadScopeSelection`: normalized selected `project_id`, `lab_unit_id`, `disease_id`, `camera_id`, `area_id`, and `is_mydriatic`.
+- `UploadScopeMapping`: route-facing DTO containing matching mapping ID, project, lab unit, disease, default disease, allowed camera IDs, allowed area IDs, allowed mydriatic states, and default mydriatic.
+- `UploadOptions`: UI-ready DTO/dict containing projects and dependent options for the current user.
+
+Public interfaces:
 
 - `get_user_upload_mappings(db, user_id) -> list[UploadMapping]`
-- `get_user_upload_options(db, user_id) -> dict`
-- `validate_upload_selection(db, user_id, project_id, lab_unit_id, disease_id, camera_id, area_id, is_mydriatic) -> UploadMapping`
-- `validate_remedio_selection(db, user_id, project_id, lab_unit_id, camera_id) -> UploadMapping`
-- `validate_encounter_set_selection(db, user_id, project_id, lab_unit_id, disease_id | None) -> UploadMapping`
-- `resolve_default_upload_disease(mapping) -> int`
+- `get_user_upload_options(db, user_id) -> UploadOptions`
+- `validate_direct_upload_scope(db, user_id, selection: UploadScopeSelection) -> UploadScopeMapping`
+- `validate_pregraded_upload_scope(db, user_id, selection: UploadScopeSelection) -> UploadScopeMapping`
+- `validate_remedio_upload_scope(db, user_id, project_id, lab_unit_id, camera_id) -> UploadScopeMapping`
+- `validate_encounter_set_upload_scope(db, user_id, project_id, lab_unit_id, disease_id | None) -> UploadScopeMapping`
+- `resolve_default_upload_disease(mapping: UploadScopeMapping) -> int`
 - `get_scoped_mapping_admin_lab_unit_ids(user_id) -> set[int]`
 
-Validation should return the matching mapping or raise a typed `UploadMappingError` with safe user-facing messages.
+Validation should return the matching route-facing mapping object or raise `UploadScopeError` with safe user-facing messages.
+
+Design constraints:
+
+- Routes must not query `UploadMapping` directly except in management screens.
+- Routes must not independently decide whether an admin/local-admin/data-manager can bypass scope.
+- All new upload routes should call the dedicated module before creating `Job`, `DirectImageUpload`, `PatientEncounters`, `EncounterFile`, `EncounterFilePDF`, or `EncounterSetImage` rows.
+- Test this module directly; route tests should mostly assert that routes call/enforce its outputs.
 
 ## Direct Image Upload Flow
 

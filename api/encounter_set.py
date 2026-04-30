@@ -25,6 +25,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from utils.hospital_scoping import apply_scoping
+from utils.upload_scope import UploadScopeError, validate_encounter_set_upload_scope
 
 # ============================================================================
 # FILE VALIDATION CONFIGURATION
@@ -395,7 +396,24 @@ def upload_encounter_set_image():
     Upload a single image for an encounter set.
     """
     claims = request.mobile_claims
-    lab_unit_id = claims.get("lab_unit_id")
+    mobile_auth = getattr(request, "mobile_auth", {})
+    uploader_user_id = mobile_auth.get("user_id")
+    try:
+        lab_unit_id = int(claims.get("lab_unit_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Upload token is missing lab_unit_id"}), 403
+    project_id_raw = request.form.get("project_id")
+    disease_id_raw = request.form.get("disease_id")
+    try:
+        project_id = int(project_id_raw) if project_id_raw else None
+        disease_id = int(disease_id_raw) if disease_id_raw else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid project_id or disease_id"}), 400
+
+    if not uploader_user_id:
+        return jsonify({"error": "Upload token is not associated with a user"}), 403
+    if not project_id:
+        return jsonify({"error": "Missing project_id"}), 400
     
     # Validate spatial position
     spatial_pos_raw = request.form.get("spatial_position")
@@ -427,6 +445,17 @@ def upload_encounter_set_image():
     encounter_uuid = request.form.get("encounter_uuid")
     
     with transaction_scope() as db:
+        try:
+            upload_mapping = validate_encounter_set_upload_scope(
+                db,
+                uploader_user_id,
+                project_id=project_id,
+                lab_unit_id=lab_unit_id,
+                disease_id=disease_id,
+            )
+        except UploadScopeError as exc:
+            return jsonify({"error": exc.code, "message": exc.message}), 403
+
         if encounter_uuid:
             encounter = db.query(PatientEncounters).filter_by(uuid=encounter_uuid).first()
             if not encounter:
@@ -437,6 +466,12 @@ def upload_encounter_set_image():
                 logger.warning("Cross-lab upload attempt. Encounter: %s, Token Lab: %s", 
                                sanitize_log_value(encounter.id), sanitize_log_value(lab_unit_id))
                 return jsonify({"error": "Unauthorized access to this encounter"}), 403
+            if encounter.project_id and encounter.project_id != upload_mapping.project_id:
+                return jsonify({"error": "Encounter belongs to a different project"}), 403
+            if encounter.project_id is None:
+                encounter.project_id = upload_mapping.project_id
+            if encounter.disease_id is None:
+                encounter.disease_id = upload_mapping.default_disease_id or upload_mapping.disease_id
         else:
             # Create new encounter
             patient_id = request.form.get("patient_id")
@@ -451,6 +486,8 @@ def upload_encounter_set_image():
                 patient_id=patient_id,
                 capture_date=capture_date,
                 lab_unit_id=lab_unit_id,
+                project_id=upload_mapping.project_id,
+                disease_id=upload_mapping.default_disease_id or upload_mapping.disease_id,
                 is_set_based=True,
                 uuid=str(uuid4())
             )
@@ -506,6 +543,7 @@ def upload_encounter_set_image():
             spatial_position=spatial_pos,
             original_filename=file.filename,  # User's original name for reference only
             folder_rel=folder_rel,
+            project_id=upload_mapping.project_id,
             created_at=utcnow()
         )
         db.add(set_image)

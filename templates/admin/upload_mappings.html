@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Upload Mappings{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Project Upload Mappings</h1>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.users_list') }}">Users</a>
+  </div>
+
+  <div class="alert alert-info">
+    Upload permission is granted only by active mappings below. Admin, local admin, and data manager users can manage mappings only for their explicitly assigned lab units.
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">Create Project</div>
+        <div class="card-body">
+          <form method="post">
+            {{ csrf_field() }}
+            <input type="hidden" name="action" value="create_project">
+            <div class="mb-3">
+              <label class="form-label" for="title">Project Title</label>
+              <input class="form-control" id="title" name="title" maxlength="255" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="code">Project Code</label>
+              <input class="form-control text-uppercase" id="code" name="code" maxlength="64" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="description">Description</label>
+              <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">Create Project</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">Add Investigator</div>
+        <div class="card-body">
+          <form method="post">
+            {{ csrf_field() }}
+            <input type="hidden" name="action" value="add_investigator">
+            <div class="mb-3">
+              <label class="form-label" for="investigator_project_id">Project</label>
+              <select class="form-select" id="investigator_project_id" name="project_id" required>
+                <option value="">Select project</option>
+                {% for project in projects %}
+                <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="investigator_user_id">Investigator</label>
+              <select class="form-select" id="investigator_user_id" name="user_id" required>
+                <option value="">Select user</option>
+                {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name or user.username }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="role">Role</label>
+              <select class="form-select" id="role" name="role">
+                <option value="principal_investigator">Principal Investigator</option>
+                <option value="co_investigator" selected>Co-Investigator</option>
+                <option value="coordinator">Coordinator</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" type="submit">Add Investigator</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">Create Upload Mapping</div>
+        <div class="card-body">
+          <form method="post">
+            {{ csrf_field() }}
+            <input type="hidden" name="action" value="create_mapping">
+            <div class="mb-3">
+              <label class="form-label" for="mapping_user_id">Uploader</label>
+              <select class="form-select" id="mapping_user_id" name="user_id" required>
+                <option value="">Select uploader</option>
+                {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name or user.username }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="mapping_lab_unit_id">Lab Unit</label>
+              <select class="form-select" id="mapping_lab_unit_id" name="lab_unit_id" required>
+                <option value="">Select lab unit</option>
+                {% for lab_unit in lab_units %}
+                <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} - {{ lab_unit.hospital.name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="mapping_project_id">Project</label>
+              <select class="form-select" id="mapping_project_id" name="project_id" required>
+                <option value="">Select project</option>
+                {% for project in projects if project.active %}
+                <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="disease_id">Allowed Disease</label>
+              <select class="form-select" id="disease_id" name="disease_id" required>
+                <option value="">Select disease</option>
+                {% for disease in diseases %}
+                <option value="{{ disease.id }}">{{ disease.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="default_disease_id">Default Disease For Upload Tasks</label>
+              <select class="form-select" id="default_disease_id" name="default_disease_id">
+                <option value="">No default</option>
+                {% for disease in diseases %}
+                <option value="{{ disease.id }}">{{ disease.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Allowed Cameras</label>
+              <div class="border rounded p-2" style="max-height: 140px; overflow: auto;">
+                {% for camera in cameras %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="camera_ids" value="{{ camera.id }}" id="camera_{{ camera.id }}">
+                  <label class="form-check-label" for="camera_{{ camera.id }}">{{ camera.name }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Allowed Sites</label>
+              <div class="border rounded p-2" style="max-height: 140px; overflow: auto;">
+                {% for area in areas %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="area_ids" value="{{ area.id }}" id="area_{{ area.id }}">
+                  <label class="form-check-label" for="area_{{ area.id }}">{{ area.name }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="allow_mydriatic" name="allow_mydriatic">
+              <label class="form-check-label" for="allow_mydriatic">Allow mydriatic</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="allow_non_mydriatic" name="allow_non_mydriatic" checked>
+              <label class="form-check-label" for="allow_non_mydriatic">Allow non-mydriatic</label>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="default_is_mydriatic" name="default_is_mydriatic">
+              <label class="form-check-label" for="default_is_mydriatic">Default is mydriatic</label>
+            </div>
+            <button class="btn btn-primary" type="submit">Create Mapping</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-header">Active And Historical Mappings</div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Uploader</th>
+            <th>Project</th>
+            <th>Lab Unit</th>
+            <th>Disease</th>
+            <th>Default</th>
+            <th>Cameras</th>
+            <th>Sites</th>
+            <th>Mydriatic</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mapping in mappings %}
+          <tr>
+            <td>{{ mapping.user.full_name or mapping.user.username }}</td>
+            <td>{{ mapping.project.title }} <span class="text-muted">({{ mapping.project.code }})</span></td>
+            <td>{{ mapping.lab_unit.name }}</td>
+            <td>{{ mapping.disease.name }}</td>
+            <td>{{ mapping.default_disease.name if mapping.default_disease else '-' }}</td>
+            <td>{{ mapping.cameras|map(attribute='camera.name')|join(', ') }}</td>
+            <td>{{ mapping.areas|map(attribute='area.name')|join(', ') }}</td>
+            <td>
+              {% if mapping.allow_mydriatic %}M{% endif %}
+              {% if mapping.allow_non_mydriatic %}NM{% endif %}
+            </td>
+            <td>
+              <span class="badge {{ 'bg-success' if mapping.active else 'bg-secondary' }}">{{ 'Active' if mapping.active else 'Inactive' }}</span>
+            </td>
+            <td class="text-end">
+              {% if mapping.active %}
+              <form method="post" action="{{ url_for('admin.deactivate_upload_mapping', mapping_id=mapping.id) }}">
+                {{ csrf_field() }}
+                <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-4">No upload mappings configured in your lab-unit scope.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-header">Project Investigators</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>User</th>
+            <th>Role</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for investigator in investigators %}
+          <tr>
+            <td>{{ investigator.project.title }}</td>
+            <td>{{ investigator.user.full_name or investigator.user.username }}</td>
+            <td>{{ investigator.role.replace('_', ' ')|title }}</td>
+            <td>{{ 'Active' if investigator.active else 'Inactive' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-3">No project investigators configured.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

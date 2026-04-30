@@ -26,6 +26,12 @@ from models import (
 
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids_no_admin_override
+from utils.upload_scope import (
+    UploadScopeError,
+    UploadScopeSelection,
+    get_user_upload_options,
+    validate_direct_upload_scope,
+)
 from utils.jobUtils import get_recent_zip_uploads
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 from utils.log_sanitize import sanitize_log_value
@@ -135,6 +141,7 @@ def upload():
         if request.method == "POST":
             # ---- form fields ----
             hospital_id = _to_int(request.form.get("hospital_id"))
+            project_id = _to_int(request.form.get("project_id"))
             lab_unit_id = _to_int(request.form.get("lab_unit_id"))
             camera_id   = _to_int(request.form.get("camera_id"))
             disease_id  = _to_int(request.form.get("disease_id"))
@@ -149,8 +156,9 @@ def upload():
                 sanitize_log_value(request.remote_addr),
             )
             current_app.logger.info(
-                "Upload parameters - Hospital:%s LabUnit:%s Camera:%s Disease:%s Area:%s Mydriatic:%s",
+                "Upload parameters - Hospital:%s Project:%s LabUnit:%s Camera:%s Disease:%s Area:%s Mydriatic:%s",
                 sanitize_log_value(hospital_id),
+                sanitize_log_value(project_id),
                 sanitize_log_value(lab_unit_id),
                 sanitize_log_value(camera_id),
                 sanitize_log_value(disease_id),
@@ -174,7 +182,7 @@ def upload():
             )
 
             # ---- validate required fields ----
-            if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
+            if not all([hospital_id, project_id, lab_unit_id, camera_id, disease_id, area_id]):
                 current_app.logger.warning(
                     "Direct upload failed: missing fields for user %s (%s)",
                     sanitize_log_value(current_user.username),
@@ -207,6 +215,23 @@ def upload():
             if lab_unit.id not in allowed_lab_units:
                 flash("You don't have access to the selected lab unit.", "danger")
                 return redirect(url_for("direct_uploads.upload"), code=303)
+
+            try:
+                upload_mapping = validate_direct_upload_scope(
+                    db_session,
+                    current_user.id,
+                    UploadScopeSelection(
+                        project_id=project_id,
+                        lab_unit_id=lab_unit.id,
+                        disease_id=disease.id,
+                        camera_id=camera.id,
+                        area_id=area.id,
+                        is_mydriatic=is_mydriatic,
+                    ),
+                )
+            except UploadScopeError as exc:
+                flash(exc.message, "danger")
+                return redirect(url_for("direct_uploads.upload"), code=303)
  
             # ---- job bookkeeping ----
             job_token = str(uuid.uuid4())
@@ -217,6 +242,7 @@ def upload():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit.id,
+                project_id=upload_mapping.project_id,
                 upload_type="direct image",
             )
             db_session.add(new_job)
@@ -366,6 +392,7 @@ def upload():
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
                                         lab_unit_id=lab_unit.id,
+                                        project_id=upload_mapping.project_id,
                                         camera_id=camera.id,
                                         disease_id=disease.id,
                                         area_id=area.id,
@@ -475,6 +502,7 @@ def upload():
         cameras  = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
         diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         areas    = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
+        upload_options = get_user_upload_options(db_session, current_user.id)
 
         # Get recent direct image uploads for display
         recent_uploads = get_recent_zip_uploads(limit=5, job_type="direct image")
@@ -495,6 +523,8 @@ def upload():
             cameras=cameras,
             diseases=diseases,
             areas=areas,
+            projects=upload_options.projects,
+            upload_mappings=upload_options.mappings,
             recent_uploads=recent_uploads,
             max_files_per_upload=display_max_files,
             per_file_mb_limit=display_max_mb,

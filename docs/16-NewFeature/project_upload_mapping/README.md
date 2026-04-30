@@ -37,13 +37,13 @@ Current model targets:
 
 ### `projects`
 
-Add a generic `Project` model.
+Add a generic `Project` model. Uploads happen against a project, and project metadata must support multiple project investigators.
 
 Required columns:
 
 - `id`
-- `name`
-- `code`, nullable
+- `title`
+- `code`
 - `description`, nullable
 - `active`, boolean, default true
 - `created_at`, timezone-aware UTC
@@ -51,9 +51,32 @@ Required columns:
 
 Indexes and constraints:
 
-- unique `name`
-- unique `code` when present
+- unique `title`
+- unique `code`
 - index on `active`
+
+### `project_investigators`
+
+Add a many-to-many association between projects and users so each project can have multiple investigators.
+
+Required columns:
+
+- `id`
+- `project_id`, FK `projects.id`
+- `user_id`, FK `users.id`
+- `role`, string, constrained to values such as `principal_investigator`, `co_investigator`, `coordinator`
+- `active`, boolean, default true
+- `created_at`, timezone-aware UTC
+- `updated_at`, timezone-aware UTC
+
+Indexes and constraints:
+
+- unique `project_id + user_id + role`
+- index on `project_id`
+- index on `user_id`
+- index on `active`
+
+Project investigators are project metadata and governance. They do not automatically grant upload permission. Upload permission still requires an active `UploadMapping`.
 
 ### `upload_mappings`
 
@@ -127,6 +150,7 @@ Responsibilities:
 - Keep role/lab-unit scoping consistent and centralized.
 - Keep existing `utils/upload_eligibility.py` focused on legacy/current lab-unit eligibility until callers are migrated.
 - Provide typed exceptions and structured return objects so routes do not duplicate selection logic.
+- Avoid lazy-loading/detached-instance bugs by returning plain DTOs/dicts from public interfaces, not live SQLAlchemy model instances.
 
 Recommended data contracts:
 
@@ -154,6 +178,36 @@ Design constraints:
 - Routes must not independently decide whether an admin/local-admin/data-manager can bypass scope.
 - All new upload routes should call the dedicated module before creating `Job`, `DirectImageUpload`, `PatientEncounters`, `EncounterFile`, `EncounterFilePDF`, or `EncounterSetImage` rows.
 - Test this module directly; route tests should mostly assert that routes call/enforce its outputs.
+
+### Docstring Requirements
+
+The dedicated upload scope module must have explicit docstrings because it will become the stable interface for multiple upload paths.
+
+Required docstrings:
+
+- Module docstring explaining ownership: project-scoped upload eligibility, validation, DTO generation, and no-admin-override behavior.
+- Public function docstrings for every exported helper, including inputs, return type, raised `UploadScopeError` codes, and whether DB session ownership stays with the caller.
+- DTO/dataclass docstrings explaining each field and whether values are scalar IDs, display labels, or allowed-value sets.
+- Exception class docstrings explaining safe user-facing messages versus log/debug details.
+- Non-obvious invariant comments/docstrings for mydriatic defaults, default disease resolution, and why investigators do not grant upload permission.
+
+Docstrings should state explicitly that public helpers return DTOs/dicts, not ORM instances, to avoid lazy-loading/detached-instance bugs.
+
+### Lazy-Loading And Session Safety
+
+The upload scope module must be designed to prevent detached SQLAlchemy instances in templates, JSON responses, Celery sidecar payloads, and post-commit enqueue logic.
+
+Rules:
+
+- Public `utils/upload_scope.py` functions return dataclasses or plain dicts only.
+- Do not return ORM entities such as `Project`, `UploadMapping`, `Camera`, `Disease`, `Area`, `LabUnit`, or `User` from public scope helpers.
+- Build `UploadOptions` inside the active DB session and serialize all fields needed by templates before the session closes.
+- Build `UploadScopeMapping` with scalar IDs/names and allowed ID sets only.
+- Use `selectinload`/explicit joins internally when loading mapping relationships, but strip the result to DTOs before returning.
+- Routes should pass only DTOs/dicts/lists to templates.
+- Celery tasks and sidecar metadata should receive scalar IDs only, never ORM objects.
+- Post-commit enqueue code should capture scalar IDs before commit if needed after the session closes.
+- Tests should include at least one route/template test that renders upload options after the DB session context exits, to catch detached-instance regressions.
 
 ## Direct Image Upload Flow
 
@@ -271,6 +325,7 @@ Initial implementation can be simple server-rendered Bootstrap forms. Bulk CSV i
 Create an idempotent Alembic migration:
 
 - Create `projects`.
+- Create `project_investigators`.
 - Create `upload_mappings`.
 - Create `upload_mapping_cameras`.
 - Create `upload_mapping_areas`.
@@ -294,9 +349,14 @@ Recommended phases:
 
 Legacy data:
 
-- Existing records may keep `project_id = NULL`.
-- Reporting/search can display `Unassigned project` for null legacy rows.
-- Do not backfill project IDs automatically unless the mapping can be inferred safely.
+- Existing upload records are known to belong to a project titled `Routine Patient Care Services`.
+- Use a stable project code such as `ROUTINE_PATIENT_CARE`.
+- Do not automatically backfill existing uploads inside the schema migration.
+- Provide a separate manual script, for example `scripts/backfill_routine_patient_care_project.py`, with dry-run as the default behavior and an explicit `--apply` flag.
+- The manual script should create the routine-care project only if it does not exist, then update only null `project_id` rows.
+- The manual script should cover existing `Job`, `DirectImageUpload`, `PatientEncounters`, `EncounterFile`, `EncounterFilePDF`, and `EncounterSetImage` records where `project_id IS NULL`.
+- Keep `project_id` nullable at the schema level during rollout for safety, but application validation should require `project_id` for all new uploads.
+- The script should print counts before applying and record/log that the legacy assignment was applied as a manual system backfill.
 
 ## Testing
 

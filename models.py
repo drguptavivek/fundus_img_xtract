@@ -420,6 +420,162 @@ class Area(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
+
+class Project(Base):
+    """Upload provenance project for intake authorization and governance."""
+
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    investigators: Mapped[List["ProjectInvestigator"]] = relationship(
+        "ProjectInvestigator",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    upload_mappings: Mapped[List["UploadMapping"]] = relationship(
+        "UploadMapping",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("title", name="uq_projects_title"),
+        UniqueConstraint("code", name="uq_projects_code"),
+        Index("ix_projects_active", "active"),
+    )
+
+
+class ProjectInvestigator(Base):
+    """Project governance membership; this does not grant upload permission."""
+
+    __tablename__ = "project_investigators"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="investigators")
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "user_id", "role", name="uq_project_investigator_role"),
+        CheckConstraint(
+            "role IN ('principal_investigator','co_investigator','coordinator')",
+            name="ck_project_investigator_role",
+        ),
+        Index("ix_project_investigators_project_active", "project_id", "active"),
+        Index("ix_project_investigators_user_active", "user_id", "active"),
+    )
+
+
+class UploadMapping(Base):
+    """Authoritative project-scoped upload permission mapping for one uploader."""
+
+    __tablename__ = "upload_mappings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="CASCADE"), nullable=False, index=True)
+    default_disease_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
+    allow_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    allow_non_mydriatic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    default_is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    user: Mapped["User"] = relationship("User")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+    project: Mapped["Project"] = relationship("Project", back_populates="upload_mappings")
+    disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[disease_id])
+    default_disease: Mapped["Disease | None"] = relationship("Disease", foreign_keys=[default_disease_id])
+    cameras: Mapped[List["UploadMappingCamera"]] = relationship(
+        "UploadMappingCamera",
+        back_populates="mapping",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    areas: Mapped[List["UploadMappingArea"]] = relationship(
+        "UploadMappingArea",
+        back_populates="mapping",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "lab_unit_id",
+            "project_id",
+            "disease_id",
+            name="uq_upload_mapping_user_lab_project_disease",
+        ),
+        CheckConstraint(
+            "(allow_mydriatic = true) OR (allow_non_mydriatic = true)",
+            name="ck_upload_mapping_allows_any_mydriatic_state",
+        ),
+        CheckConstraint(
+            "(default_is_mydriatic = false) OR (allow_mydriatic = true)",
+            name="ck_upload_mapping_default_mydriatic_allowed",
+        ),
+        CheckConstraint(
+            "(default_is_mydriatic = true) OR (allow_non_mydriatic = true)",
+            name="ck_upload_mapping_default_nonmydriatic_allowed",
+        ),
+        Index("ix_upload_mappings_user_project_active", "user_id", "project_id", "active"),
+        Index("ix_upload_mappings_lab_project_active", "lab_unit_id", "project_id", "active"),
+    )
+
+
+class UploadMappingCamera(Base):
+    """Allowed camera entry for an upload mapping."""
+
+    __tablename__ = "upload_mapping_cameras"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_mapping_id: Mapped[int] = mapped_column(ForeignKey("upload_mappings.id", ondelete="CASCADE"), nullable=False, index=True)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    mapping: Mapped["UploadMapping"] = relationship("UploadMapping", back_populates="cameras")
+    camera: Mapped["Camera"] = relationship("Camera")
+
+    __table_args__ = (
+        UniqueConstraint("upload_mapping_id", "camera_id", name="uq_upload_mapping_camera"),
+    )
+
+
+class UploadMappingArea(Base):
+    """Allowed site/area entry for an upload mapping."""
+
+    __tablename__ = "upload_mapping_areas"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_mapping_id: Mapped[int] = mapped_column(ForeignKey("upload_mappings.id", ondelete="CASCADE"), nullable=False, index=True)
+    area_id: Mapped[int] = mapped_column(ForeignKey("areas.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    mapping: Mapped["UploadMapping"] = relationship("UploadMapping", back_populates="areas")
+    area: Mapped["Area"] = relationship("Area")
+
+    __table_args__ = (
+        UniqueConstraint("upload_mapping_id", "area_id", name="uq_upload_mapping_area"),
+    )
+
+
 class DiseaseGrading(Base):
     __tablename__ = 'disease_gradings'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -501,6 +657,7 @@ class PatientEncounters(Base):
     encounter_verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     encounter_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id'), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
@@ -510,6 +667,7 @@ class PatientEncounters(Base):
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_results_cleaned: Mapped[List["GlaucomaResultsCleaned"]] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
+    project: Mapped["Project | None"] = relationship("Project")
 
 class EncounterSetImage(Base):
     __tablename__ = 'encounter_set_images'
@@ -531,12 +689,14 @@ class EncounterSetImage(Base):
 
     # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
     hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
     s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
     s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
     s3_object_key_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for thumbnail
 
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_set_images")
+    project: Mapped["Project | None"] = relationship("Project")
     s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
 
     __table_args__ = (
@@ -559,6 +719,7 @@ class EncounterFile(Base):
     centering: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
     camera_id: Mapped[int | None] = mapped_column(ForeignKey('cameras.id'), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
 
     # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
@@ -570,6 +731,7 @@ class EncounterFile(Base):
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     lab_unit: Mapped["LabUnit"] = relationship()
     camera: Mapped["Camera | None"] = relationship()
+    project: Mapped["Project | None"] = relationship("Project")
     s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
     # Note: ImageGrading relationship removed - now using Grade model through GradingTask
     # Add a check constraint to ensure only image files are stored in this table
@@ -591,6 +753,7 @@ class EncounterFilePDF(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
 
     # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
     hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
@@ -599,6 +762,7 @@ class EncounterFilePDF(Base):
 
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_file_pdfs")
     lab_unit: Mapped["LabUnit"] = relationship()
+    project: Mapped["Project | None"] = relationship("Project")
     s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
 
     # Add a check constraint to ensure only PDF files are stored in this table
@@ -666,8 +830,10 @@ class Job(Base):
     uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey("lab_units.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     items: Mapped[List["JobItem"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+    project: Mapped["Project | None"] = relationship("Project")
 
 class JobItem(Base):
     __tablename__ = "job_items"
@@ -867,6 +1033,7 @@ class DirectImageUpload(Base):
     uploader_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     hospital_id: Mapped[int] = mapped_column(ForeignKey("hospitals.id"), nullable=False)
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id"), nullable=False)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id"), nullable=False)
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False)
     area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
@@ -887,6 +1054,7 @@ class DirectImageUpload(Base):
     uploader: Mapped["User"] = relationship(foreign_keys=[uploader_id])
     hospital: Mapped["Hospital"] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
+    project: Mapped["Project | None"] = relationship("Project")
     camera: Mapped["Camera"] = relationship()
     disease: Mapped["Disease"] = relationship()
     area: Mapped["Area"] = relationship()

@@ -22,6 +22,12 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.upload_scope import (
+    UploadScopeError,
+    UploadScopeSelection,
+    get_user_upload_options,
+    validate_pregraded_upload_scope,
+)
 from utils.utils2 import uniquify
 from models import (
     User,
@@ -64,6 +70,7 @@ def pregraded_upload():
 
         if request.method == "POST":
             hospital_id = _to_int(request.form.get("hospital_id"))
+            project_id = _to_int(request.form.get("project_id"))
             lab_unit_id = _to_int(request.form.get("lab_unit_id"))
             camera_id = _to_int(request.form.get("camera_id"))
             disease_id = _to_int(request.form.get("disease_id"))
@@ -90,6 +97,7 @@ def pregraded_upload():
             if len(files) > MAX_FILES_ALLOWED:
                 session["pregraded_upload_form_data"] = {
                     "hospital_id": hospital_id,
+                    "project_id": project_id,
                     "lab_unit_id": lab_unit_id,
                     "camera_id": camera_id,
                     "disease_id": disease_id,
@@ -100,10 +108,11 @@ def pregraded_upload():
                 flash(f"Too many files selected. You can upload up to {MAX_FILES_ALLOWED} files at once.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
-            if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
+            if not all([hospital_id, project_id, lab_unit_id, camera_id, disease_id, area_id]):
                 # Store form data in session for potential validation failure
                 form_data = {
                     "hospital_id": hospital_id,
+                    "project_id": project_id,
                     "lab_unit_id": lab_unit_id,
                     "camera_id": camera_id,
                     "disease_id": disease_id,
@@ -140,6 +149,23 @@ def pregraded_upload():
                 flash("You don't have access to the selected lab unit.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
+            try:
+                upload_mapping = validate_pregraded_upload_scope(
+                    db_session,
+                    current_user.id,
+                    UploadScopeSelection(
+                        project_id=project_id,
+                        lab_unit_id=lab_unit.id,
+                        disease_id=disease.id,
+                        camera_id=camera.id,
+                        area_id=area.id,
+                        is_mydriatic=is_mydriatic,
+                    ),
+                )
+            except UploadScopeError as exc:
+                flash(exc.message, "danger")
+                return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
+
             job_token = str(uuid.uuid4())
             new_job = Job(
                 token=job_token,
@@ -149,6 +175,7 @@ def pregraded_upload():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit.id,
+                project_id=upload_mapping.project_id,
             )
             db_session.add(new_job)
             db_session.flush()
@@ -225,6 +252,7 @@ def pregraded_upload():
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
                                         lab_unit_id=lab_unit.id,
+                                        project_id=upload_mapping.project_id,
                                         camera_id=camera.id,
                                         disease_id=disease.id,
                                         area_id=area.id,
@@ -344,6 +372,7 @@ def pregraded_upload():
             # Pass the stored form data to the template
             context.update({
                 "selected_hospital": stored_form_data.get("hospital_id"),
+                "selected_project": stored_form_data.get("project_id"),
                 "selected_lab_unit": stored_form_data.get("lab_unit_id"),
                 "selected_camera": stored_form_data.get("camera_id"),
                 "selected_disease": stored_form_data.get("disease_id"),
@@ -443,6 +472,7 @@ def pregraded_upload():
         areas = (
             db_session.execute(select(Area).order_by(Area.name)).scalars().all()
         )
+        upload_options = get_user_upload_options(db_session, current_user.id)
 
         # Get recent pregraded uploads for display
         recent_uploads = get_recent_zip_uploads(
@@ -457,6 +487,8 @@ def pregraded_upload():
             "cameras": cameras,
             "diseases": diseases,
             "areas": areas,
+            "projects": upload_options.projects,
+            "upload_mappings": upload_options.mappings,
             "recent_uploads": recent_uploads,
             "max_files_per_upload": _get_int_setting(
                 db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100

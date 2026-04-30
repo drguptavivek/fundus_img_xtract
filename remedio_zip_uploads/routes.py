@@ -15,6 +15,7 @@ from worker import queue_job
 from . import bp
 from auth.roles import roles_required
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.upload_scope import UploadScopeError, get_user_upload_options, validate_remedio_upload_scope
 from utils.jobUtils import get_recent_zip_uploads
 from db_transaction_manager import get_db_session
 
@@ -108,6 +109,7 @@ def upload_form():
     from db_transaction_manager import transaction_scope
 
     with transaction_scope() as db:
+        upload_options = get_user_upload_options(db, current_user.id)
         lab_units = (
             db.query(LabUnit)
             .options(selectinload(LabUnit.hospital))
@@ -187,6 +189,8 @@ def upload_form():
         hospitals=hospitals_data,  # Use extracted data instead of objects
         lab_units=lab_units_data,   # Use extracted data instead of objects
         zip_cameras=zip_cameras_data,
+        projects=upload_options.projects,
+        upload_mappings=upload_options.mappings,
         recent_uploads=recent_uploads
     )
 
@@ -211,14 +215,15 @@ def upload_files():
     # Validate hospital and lab unit selection
     try:
         hospital_id = int(request.form.get("hospital_id", 0))
+        project_id = int(request.form.get("project_id", 0))
         lab_unit_id = int(request.form.get("lab_unit_id", 0))
         camera_id = int(request.form.get("camera_id", 0))
     except (ValueError, TypeError):
-        flash("Invalid hospital, lab unit, or camera selection.", "danger")
+        flash("Invalid hospital, project, lab unit, or camera selection.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
-    if hospital_id <= 0 or lab_unit_id <= 0 or camera_id <= 0:
-        flash("Please select a hospital, a lab unit, and a ZIP-enabled camera.", "danger")
+    if hospital_id <= 0 or project_id <= 0 or lab_unit_id <= 0 or camera_id <= 0:
+        flash("Please select a hospital, project, lab unit, and ZIP-enabled camera.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
     allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
@@ -247,6 +252,17 @@ def upload_files():
         # Validate that the current user has access to this lab unit
         if lab_unit_id not in allowed_lab_unit_ids:
             flash("You don't have access to the selected lab unit.", "danger")
+            return redirect(url_for("remedio_zip_uploads.upload_form"))
+        try:
+            upload_mapping = validate_remedio_upload_scope(
+                db,
+                current_user.id,
+                project_id=project_id,
+                lab_unit_id=lab_unit_id,
+                camera_id=camera_id,
+            )
+        except UploadScopeError as exc:
+            flash(exc.message, "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
 
     files = request.files.getlist("files")
@@ -306,6 +322,8 @@ def upload_files():
                     "user_agent": request.headers.get("User-Agent", "-"),
                     "hospital_id": hospital_id,
                     "lab_unit_id": lab_unit_id,
+                    "project_id": upload_mapping.project_id,
+                    "default_disease_id": upload_mapping.default_disease_id,
                     "camera_id": camera_id,
                 }
                 with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
@@ -333,6 +351,7 @@ def upload_files():
         uploader_username=uploader_username,
         uploader_ip=ip,
         lab_unit_id=lab_unit_id,
+        project_id=upload_mapping.project_id,
         upload_type="zip upload",
     )
     queue_job(

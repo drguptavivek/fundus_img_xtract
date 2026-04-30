@@ -425,6 +425,8 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
             # Read metadata to get lab unit information
             lab_unit_id = None
             camera_id = None
+            project_id = None
+            default_disease_id = None
             try:
                 meta_dir = UPLOAD_DIR.parent / "upload_meta"
                 meta_path = meta_dir / f"{zip_path.name}.json"
@@ -434,6 +436,8 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                         meta = json.load(mf)
                         lab_unit_id = meta.get("lab_unit_id")
                         camera_id = meta.get("camera_id")
+                        project_id = meta.get("project_id")
+                        default_disease_id = meta.get("default_disease_id")
             except Exception:
                 pass  # If metadata is not available or invalid, continue without lab_unit_id
 
@@ -452,6 +456,8 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                 patient_id=patient_id,
                 capture_date=capture_date,
                 lab_unit_id=lab_unit_id,
+                project_id=project_id,
+                disease_id=default_disease_id,
             )
             # Populate proper Date column when possible
             parsed_dt = parse_capture_date(capture_date)
@@ -517,7 +523,15 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
 
                 # Create appropriate model instance
                 if file_type == 'pdf':
-                    files_to_add_pdfs.append(EncounterFilePDF(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
+                    files_to_add_pdfs.append(
+                        EncounterFilePDF(
+                            filename=new_filename,
+                            file_type=file_type,
+                            uuid=str(uuid4()),
+                            lab_unit_id=lab_unit_id,
+                            project_id=project_id,
+                        )
+                    )
                     added_pdf_filenames.append(new_filename)
                 else:
                     # Generate thumbnail for the image file
@@ -560,6 +574,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                         uuid=str(uuid4()),
                         lab_unit_id=lab_unit_id,
                         camera_id=camera_id,
+                        project_id=project_id,
                         thumbnail_filename=thumbnail_filename,
                     )
                     session.add(encounter_file)
@@ -686,6 +701,8 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
     # Get metadata for Lab Unit
     lab_unit_id = None
     camera_id = None
+    project_id = None
+    default_disease_id = None
     try:
         meta_dir = UPLOAD_DIR.parent / "upload_meta"
         meta_path = meta_dir / f"{zip_path.name}.json"
@@ -695,6 +712,8 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                 meta = json.load(mf)
                 lab_unit_id = meta.get("lab_unit_id")
                 camera_id = meta.get("camera_id")
+                project_id = meta.get("project_id")
+                default_disease_id = meta.get("default_disease_id")
     except Exception:
         pass
 
@@ -771,6 +790,8 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                 patient_id=patient_id,
                 capture_date=capture_date,
                 lab_unit_id=lab_unit_id,
+                project_id=project_id,
+                disease_id=default_disease_id,
             )
             parsed_dt = parse_capture_date(capture_date)
             if parsed_dt:
@@ -805,6 +826,7 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                         uuid=file_uuid,
                         lab_unit_id=lab_unit_id,
                         camera_id=camera_id,
+                        project_id=project_id,
                         thumbnail_filename=None # Will be set by async task
                     )
                     files_to_add.append(ef)
@@ -820,7 +842,8 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                         filename=new_filename,
                         file_type='pdf',
                         uuid=file_uuid,
-                        lab_unit_id=lab_unit_id
+                        lab_unit_id=lab_unit_id,
+                        project_id=project_id,
                     )
                     files_to_add_pdfs.append(ef_pdf)
                     extracted_pdfs.append((target_path, ef_pdf))

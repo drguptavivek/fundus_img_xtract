@@ -25,6 +25,19 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('remedio_zip_uploads.upload_files') }}" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="mb-3">
+            <label class="form-label">Project <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="project-buttons">
+              {% for project in projects %}
+              <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="project_{{ project.id }}">{{ project.title }} <span class="text-muted">({{ project.code }})</span></label>
+              {% endfor %}
+            </div>
+            {% if not projects %}
+            <div class="text-danger small">No upload projects are configured for your account.</div>
+            {% endif %}
+          </div>
           
           <!-- Hospital Selection -->
           <div class="mb-3">
@@ -217,33 +230,67 @@
 <script>
 {% endif %}
 document.addEventListener('DOMContentLoaded', function() {
+    const uploadMappings = {{ upload_mappings|tojson }};
+    const projectButtons = document.querySelectorAll('[name="project_id"]');
     const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
     const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
+    const cameraSelect = document.getElementById('camera_id');
+    const cameraOptions = Array.from(cameraSelect.querySelectorAll('option')).map(option => option.cloneNode(true));
+
+    function selectedValue(name) {
+        const selected = document.querySelector(`[name="${name}"]:checked`);
+        return selected ? Number(selected.value) : null;
+    }
+
+    function setRadioVisibility(button, visible) {
+        const label = document.querySelector(`label[for="${button.id}"]`);
+        button.parentElement.style.display = visible ? 'inline-block' : 'none';
+        if (label) {
+            label.style.display = visible ? 'inline-block' : 'none';
+        }
+        if (!visible) {
+            button.checked = false;
+        }
+    }
+
+    function filterUploadScopeOptions() {
+        const projectId = selectedValue('project_id');
+        const hospitalId = selectedValue('hospital_id');
+        const labUnitId = selectedValue('lab_unit_id');
+        const selectedMappings = uploadMappings.filter(mapping => {
+            if (projectId && mapping.project_id !== projectId) return false;
+            if (labUnitId && mapping.lab_unit_id !== labUnitId) return false;
+            return true;
+        });
+        const labIds = new Set(selectedMappings.map(mapping => mapping.lab_unit_id));
+        const cameraIds = new Set(selectedMappings.flatMap(mapping => mapping.camera_ids));
+
+        labUnitButtons.forEach(labButton => {
+            const hospitalMatches = !hospitalId || labButton.dataset.hospitalId === String(hospitalId);
+            setRadioVisibility(labButton, hospitalMatches && (!projectId || labIds.has(Number(labButton.value))));
+        });
+
+        const currentCamera = cameraSelect.value;
+        cameraSelect.innerHTML = '';
+        cameraOptions.forEach(option => {
+            if (!option.value || !projectId || cameraIds.has(Number(option.value))) {
+                cameraSelect.appendChild(option.cloneNode(true));
+            }
+        });
+        if ([...cameraSelect.options].some(option => option.value === currentCamera)) {
+            cameraSelect.value = currentCamera;
+        }
+    }
 
     hospitalButtons.forEach(button => {
         button.addEventListener('change', function() {
-            const selectedHospitalId = this.value;
-            
-            // Show/hide lab unit buttons based on hospital selection
-            labUnitButtons.forEach(labButton => {
-                const label = document.querySelector(`label[for="${labButton.id}"]`);
-                if (labButton.dataset.hospitalId === selectedHospitalId) {
-                    labButton.parentElement.style.display = 'inline-block';
-                    label.style.display = 'inline-block';
-                } else {
-                    labButton.parentElement.style.display = 'none';
-                    label.style.display = 'none';
-                }
-            });
+            filterUploadScopeOptions();
         });
     });
+    projectButtons.forEach(button => button.addEventListener('change', filterUploadScopeOptions));
+    labUnitButtons.forEach(button => button.addEventListener('change', filterUploadScopeOptions));
 
-    // Initially hide all lab unit buttons until a hospital is selected
-    labUnitButtons.forEach(labButton => {
-        const label = document.querySelector(`label[for="${labButton.id}"]`);
-        labButton.parentElement.style.display = 'none';
-        label.style.display = 'none';
-    });
+    filterUploadScopeOptions();
 });
 </script>
 {% endblock %}

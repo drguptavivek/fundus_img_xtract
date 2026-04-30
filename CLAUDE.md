@@ -6,7 +6,7 @@ Medical imaging system for fundus image management with multi-disease grading (G
 
 ## Tech Stack
 
-- **Stack**: Flask + SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3
+- **Stack**: Flask + SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat, Celery Worker
 - **Package Manager**: `uv` (**CRITICAL**: Always use `uv run` prefix, never bare `python`)
 - **Port**: 5001
 - **Tests**: pytest (unit), Playwright (E2E - stale)
@@ -14,23 +14,12 @@ Medical imaging system for fundus image management with multi-disease grading (G
 ### 🚨 Docker Permission Issues
 
 **Problem**: Commands run inside Docker container create files owned by `root`, causing permission errors when editing from host.
-
 **Solution**: Always run Docker commands with your user ID (`-u $(id -u):$(id -g)`) for uv run alembic. Other commands can be run directly
-
-```bash
-#  - Creates root-owned files:
-$DC exec web uv run alembic revision --autogenerate -m "description"
-
-# CORRECT - Creates files with your ownership:
-$DC exec web uv run alembic revision --autogenerate -m "description"
-
-# Fix existing root-owned files via Docker:
-$DC exec -u root web chown -R $(id -u):$(id -g) /app/migrations/versions
-```
-
 **Common offenders**: `alembic revision`, `uv run pytest`, file creation scripts
 
 ## Essential Commands
+
+Use `make` for common operations such as `logs`, `logs-tail`, `logs-web`, `logs-web-tail`, `logs-celery`, `logs-celery-tail`, `logs-workers`, `logs-workers-tail`, `logs-db`, `logs-db-tail`, `alembic-current`, `start`, `stop`, `restart`, `restart-all`, `restart-celery`, `backup`, `test`, `script`/`scripts`, and `shell`; only `*-tail` log targets follow logs.
 
 ```bash
 # Docker compose prefix (use for all commands below)
@@ -47,16 +36,7 @@ docker compose exec web uv run alembic heads
 docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run alembic revision  --autogenerate -m  "description"
 docker compose exec web uv run alembic upgrade head
 
-# Create user
-docker compose exec web uv run python -m scripts.create_user <username>
 ```
-
-## Architecture
-
-**Core files**: `app.py` (Flask factory), `models.py` (70+ SQLAlchemy models), `wsgi.py` (Gunicorn entry)
-
-**Key blueprints**: auth (login, RBAC), admin, analytics, grading (dual grading workflow), tasks, direct_uploads, remedio_zip_uploads, verify_remedio_*, review, search, api
-
 ## MANDATORY Patterns
 
 ### 1. Database Sessions
@@ -160,7 +140,6 @@ def update_grading_task(task_id, changes):
 ### 8. Alembic Migrations (CRITICAL)
 
 **🚨 NEVER use `pass` in migrations** - always write proper upgrade/downgrade.
-
 **🚨 Make migrations IDEMPOTENT** - they should be safe to run multiple times:
 
 ```bash
@@ -245,8 +224,23 @@ def downgrade():
 - Use `@with_session()` for DB (never manual sessions)
 - Efficient queries (selectinload/joinedload, avoid N+1)
 - Bootstrap 5.3 for UI, flash toasts for feedback
-- Small, focused commits with descriptive messages
+- Commit only after the work scope is complete and verified; do not commit after each small change
+- Do not commit documentation-only changes unless explicitly requested or bundled into a completed, verified work session
 - Do not duplicate code. Create reusable utilities and functions.  
+
+## Architecture Pattern: Deep Modules, Thin Interfaces
+
+For cross-cutting domain logic, prefer a dedicated deep module with a narrow public interface instead of spreading logic across routes, templates, and ad-hoc utilities.
+
+**Recommended pattern:**
+- Put domain rules, scoping, validation, query composition, DTOs, and typed exceptions in one cohesive module.
+- Expose a small set of route-facing functions with clear names and stable return types.
+- Keep Flask routes thin: parse request, call the domain interface, persist/render/redirect.
+- Do not let routes duplicate permission checks, scope expansion rules, or filtering logic.
+- During migrations, keep old utility modules only as thin compatibility shims that delegate to the new module.
+- Once callers are migrated, remove the shim to avoid split-brain business logic.
+
+**Example:** Upload scoping should live in a dedicated module such as `utils/upload_scope.py`. Existing `utils/upload_eligibility.py` should be merged into that module or temporarily reduced to a compatibility shim that re-exports/delegates to `upload_scope.py`.
 
 ## Key Files
 **Config**: `pyproject.toml`, `alembic.ini`, `gunicorn_config.py`, `deploy.*.env`
@@ -255,15 +249,10 @@ def downgrade():
 
 ## 🚨 SESSION CLOSE PROTOCOL 🚨
 
-**CRITICAL**: Before saying "done", MUST complete:
-```bash
-git status                    # Check changes
-git add <files>              # Stage code
-bd vc status                 # Check Beads/Dolt working set
-bd vc commit -m "Update beads state"   # Commit Beads changes if any
-git commit -m "message"      # Commit
-git push                     # PUSH (work NOT done until this succeeds)
-```
+**Commit timing rules:**
+- Do not commit after every small change; batch related edits into one intentional commit after implementation and verification are complete.
+- Do not commit documentation-only changes unless the user explicitly asks for a commit/push, or the doc change is part of a completed verified implementation session.
+- It is acceptable to leave documentation-only work unstaged/uncommitted and report the changed files in the handoff.
 
 ## Development Workflow
 
@@ -351,10 +340,7 @@ $DC exec -u $(id -u):$(id -g) web uv run pytest tests/test_feature.py -v
 # 3. Refactor while keeping tests green
 $DC exec web uv run pytest tests/
 ```
-
 **Deliverable**: Tested code with coverage
-
----
 
 ### 6. CLOSE - Complete the Cycle
 
@@ -372,7 +358,7 @@ bd update <id> --description="
 - Commands run: pytest tests/
 "
 
-# 2. Commit and push code
+# 2. Commit and push code only after implementation and verification are complete
 git add . && git commit -m "Feature: description" && git push
 
 # 3. Close bead (source of truth)
@@ -387,8 +373,6 @@ bd vc commit -m "Update beads state"
 
 **Deliverable**: Closed bead, closed GitHub issue, pushed code
 
----
-
 ### Quick Reference: When to Use This Workflow
 
 | Scenario | Use Full Workflow? |
@@ -397,7 +381,7 @@ bd vc commit -m "Update beads state"
 | Refactoring | ✅ Yes |
 | New session | ✅ Yes |
 | Simple bug fix (1-2 lines) | ⚠️ Skip to BEAD |
-| Documentation only | ⚠️ Skip to BEAD |
+| Documentation only | ⚠️ Skip to BEAD; do not auto-commit unless requested |
 | Trivial typo fix | ⚠️ Skip BEAD & TDD |
 
 ---
@@ -448,32 +432,3 @@ Backend notes:
 | `Chore` | Maintenance tasks |
 | `Task` | Task item |
 | `Epic` | Large multi-issue effort |
-
----
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd vc status
-   bd vc commit -m "Update beads state"
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds

@@ -211,7 +211,7 @@ def upload_mappings_admin():
                 flash("Duplicate or invalid project/mapping configuration.", "danger")
             if request.headers.get("HX-Request"):
                 context = _mapping_form_context(db, scoped_lab_ids)
-                return render_template("admin/partials/project_dashboard_panel.html", **context)
+                return render_template("admin/partials/project_dashboard_workspace.html", **context)
             return redirect(url_for("admin.upload_mappings_admin"))
 
         context = _mapping_form_context(db, scoped_lab_ids)

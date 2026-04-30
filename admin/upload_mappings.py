@@ -100,10 +100,32 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         .scalars()
         .all()
     )
+    project_cards = []
+    for project in projects:
+        project_cards.append(
+            {
+                "project": project,
+                "investigator_count": sum(
+                    1 for investigator in investigators if investigator.project_id == project.id and investigator.active
+                ),
+                "mapping_count": sum(
+                    1 for mapping in mappings if mapping.project_id == project.id and mapping.active
+                ),
+                "uploader_count": len(
+                    {
+                        mapping.user_id
+                        for mapping in mappings
+                        if mapping.project_id == project.id and mapping.active
+                    }
+                ),
+            }
+        )
+
     return {
         "lab_units": lab_units,
         "users": users,
         "projects": projects,
+        "project_cards": project_cards,
         "diseases": db.execute(select(Disease).order_by(Disease.name)).scalars().all(),
         "cameras": db.execute(select(Camera).order_by(Camera.name)).scalars().all(),
         "areas": db.execute(select(Area).order_by(Area.name)).scalars().all(),
@@ -114,7 +136,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
 
 @roles_required("admin", "local_admin", "data_manager")
 def upload_mappings_admin():
-    """List and create projects, investigators, and upload mappings."""
+    """Render the project dashboard and handle HTMX project/upload actions."""
     scoped_lab_ids = _manager_lab_unit_ids()
     if not scoped_lab_ids:
         flash("You are not assigned to any lab units for upload mapping management.", "warning")
@@ -185,7 +207,11 @@ def upload_mappings_admin():
                 else:
                     flash("Unknown upload mapping action.", "danger")
             except IntegrityError:
+                db.rollback()
                 flash("Duplicate or invalid project/mapping configuration.", "danger")
+            if request.headers.get("HX-Request"):
+                context = _mapping_form_context(db, scoped_lab_ids)
+                return render_template("admin/partials/project_dashboard_panel.html", **context)
             return redirect(url_for("admin.upload_mappings_admin"))
 
         context = _mapping_form_context(db, scoped_lab_ids)

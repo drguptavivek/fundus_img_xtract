@@ -63,6 +63,40 @@
         overflow-y: auto;
       }
     }
+
+    @media (min-width: 992px) {
+      .admin-menu {
+        min-width: 17rem;
+      }
+
+      .admin-menu .dropend {
+        position: relative;
+      }
+
+      .admin-menu .dropend:hover > .dropdown-menu,
+      .admin-menu .dropend:focus-within > .dropdown-menu {
+        display: block;
+      }
+
+      .admin-menu .admin-submenu {
+        top: 0;
+        right: 100%;
+        left: auto;
+        margin-top: 0;
+        margin-right: 0.125rem;
+        min-width: 16rem;
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      .admin-menu .admin-submenu {
+        position: static;
+        display: block;
+        margin: 0 0 0.25rem 1rem;
+        border: 0;
+        box-shadow: none;
+      }
+    }
   </style>
 
   {% block extra_styles %}
@@ -410,7 +444,7 @@
               id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Admin
             </a>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
+            <ul class="dropdown-menu dropdown-menu-end admin-menu" aria-labelledby="adminMenu">
               <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.admin_status') }}">
                   <i class="fas fa-tachometer-alt"></i> Admin Status Dashboard
                   <span class="badge bg-primary ms-auto">New</span>
@@ -418,123 +452,117 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Dashboard</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.log_viewer') }}">Logs</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.task_backfill_admin') }}">Task Backfill</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.metadata_backfill_admin') }}">Metadata Backfill</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('rate_limit_admin.index') }}">Rate Limits</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.disk_usage') }}">Disk Usage</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.database_dump') }}">Database Backup</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.database_restore.index') }}">
-                  <i class="fas fa-database-import"></i> Database Restore
-                  <span class="badge bg-warning ms-auto">New</span>
-                </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.database_excel_export') }}">Database Tables
-                  export</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.email_settings_list') }}">
-                  <i class="fas fa-envelope"></i> Email Settings
-                </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.s3_configs_list') }}">
-                  <i class="fas fa-cloud"></i> S3 Config
-                </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.s3_sync_dashboard') }}">
-                  <i class="fas fa-sync-alt"></i> S3 Sync Status
-                </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a>
-              </li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views
-                  Status</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views
-                  Status</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.grading_state_inconsistencies') }}">Grading State
-                  Inconsistencies</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.linked_task_inconsistencies') }}">Linked Task
-                  Inconsistencies</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.sensitive_operations_audit') }}">
-                  <i class="fas fa-shield-alt"></i> Sensitive Ops Audit
-                </a></li>
-              <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.cve_security_report') }}">
-                  <i class="fas fa-shield-virus"></i> CVE Security
-                  <span id="cveCountBadge" class="badge bg-secondary ms-auto">-</span>
-                </a></li>
-              <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.package_updates_report') }}">
-                  <i class="fas fa-box-open"></i> Package Updates
-                  <span id="packageUpdateCountBadge" class="badge bg-secondary ms-auto">-</span>
-                </a></li>
-
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-
-              <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
-
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_hospitals') }}">
-                  Hospitals
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  User Management
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add User</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change User Password</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.role_usage') }}">Role Usage</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">
-                  AI Models
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Projects
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_mappings_admin') }}#create-project">Create Project</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_mappings_admin') }}#add-investigator">Assign Project Investigators</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_mappings_admin') }}#project-investigators">Project Investigators</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_lab_units') }}">
-                  Units / Labs.
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Upload Management
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_mappings_admin') }}#upload-mappings">Upload Mappings</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.task_backfill_admin') }}">Task Backfill</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.metadata_backfill_admin') }}">Metadata Backfill</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_cameras') }}">
-                  Devices / Cameras
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Masters
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_hospitals') }}">Hospitals</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_lab_units') }}">Units / Labs</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_cameras') }}">Devices / Cameras</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_areas') }}">Areas</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_diseases') }}">Diseases</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_disease_gradings') }}">Disease Gradings</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.linked_disease_gradings_list') }}">Linked Disease Gradings</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.manage_eligibility_users') }}">Grading Eligibility</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">AI Models</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_diseases') }}">
-                  Diseases
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Operations
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.log_viewer') }}">Logs</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views Status</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.grading_state_inconsistencies') }}">Grading State Inconsistencies</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.linked_task_inconsistencies') }}">Linked Task Inconsistencies</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.email_settings_list') }}">Email Settings</a></li>
+                  <li><a class="dropdown-item" href="/healthz">Health</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_disease_gradings') }}">
-                  Disease Gradings
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Data & Storage
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.database_dump') }}">Database Backup</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.database_restore.index') }}">Database Restore</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.database_excel_export') }}">Database Tables Export</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.disk_usage') }}">Disk Usage</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.s3_configs_list') }}">S3 Config</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.s3_sync_dashboard') }}">S3 Sync Status</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.linked_disease_gradings_list') }}">
-                  Linked Disease Gradings
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Security
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('rate_limit_admin.index') }}">Rate Limits</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.sensitive_operations_audit') }}">Sensitive Ops Audit</a></li>
+                  <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.cve_security_report') }}">
+                    <span>CVE Security</span>
+                    <span id="cveCountBadge" class="badge bg-secondary ms-auto">-</span>
+                  </a></li>
+                  <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.package_updates_report') }}">
+                    <span>Package Updates</span>
+                    <span id="packageUpdateCountBadge" class="badge bg-secondary ms-auto">-</span>
+                  </a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.manage_eligibility_users') }}">
-                  Grading Eligibility
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Dashboards
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Hospital Dashboard</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('dashboard.image_list') }}">Image List</a></li>
+                </ul>
               </li>
-              <li>
-                <a class="dropdown-item" href="{{ url_for('admin.list_areas') }}">
-                  Areas
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Developer Tools
                 </a>
+                <ul class="dropdown-menu admin-submenu">
+                  <li><a class="dropdown-item" href="{{ url_for('style_guide') }}">Style Guide</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('docs.swagger_ui') }}">API Testing (Swagger UI)</a></li>
+                </ul>
               </li>
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Hospital Dashboard</a>
-              </li>
-              <li><a class="dropdown-item" href="{{ url_for('dashboard.image_list') }}">Image List</a></li>
-
-
-              <li><a class="dropdown-item" href="{{ url_for('style_guide') }}">Style Guide</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('docs.swagger_ui') }}">API Testing (Swagger UI)</a></li>
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li><a class="dropdown-item" href="/healthz">Health</a></li>
-
             </ul>
           </li>
           {% endif %}

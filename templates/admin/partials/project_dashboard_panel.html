@@ -1,0 +1,144 @@
+<div class="row g-3 mb-4" id="projects-summary">
+  {% for item in project_cards %}
+  {% set project = item.project %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3">
+          <div>
+            <h2 class="h5 mb-1">{{ project.title }}</h2>
+            <div class="text-muted small">{{ project.code }}</div>
+          </div>
+          <span class="badge {{ 'bg-success' if project.active else 'bg-secondary' }}">
+            {{ 'Active' if project.active else 'Inactive' }}
+          </span>
+        </div>
+        {% if project.description %}
+        <p class="small text-muted mt-3 mb-0">{{ project.description }}</p>
+        {% endif %}
+      </div>
+      <div class="card-footer bg-body">
+        <div class="row text-center g-2">
+          <div class="col">
+            <div class="fw-semibold">{{ item.investigator_count }}</div>
+            <div class="small text-muted">Investigators</div>
+          </div>
+          <div class="col">
+            <div class="fw-semibold">{{ item.uploader_count }}</div>
+            <div class="small text-muted">Uploaders</div>
+          </div>
+          <div class="col">
+            <div class="fw-semibold">{{ item.mapping_count }}</div>
+            <div class="small text-muted">Mappings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body text-center text-muted py-5">
+        No projects have been created yet.
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-5" id="project-investigators">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Project Investigators</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#addInvestigatorModal">
+          Assign
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>User</th>
+              <th>Role</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for investigator in investigators %}
+            <tr>
+              <td>{{ investigator.project.title }}</td>
+              <td>{{ investigator.user.full_name or investigator.user.username }}</td>
+              <td>{{ investigator.role.replace('_', ' ')|title }}</td>
+              <td>{{ 'Active' if investigator.active else 'Inactive' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">No project investigators configured.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-7" id="upload-mappings">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Uploaders And Upload Mappings</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#createMappingModal">
+          Add Mapping
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Uploader</th>
+              <th>Project</th>
+              <th>Lab Unit</th>
+              <th>Disease</th>
+              <th>Default</th>
+              <th>Cameras</th>
+              <th>Sites</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mapping in mappings %}
+            <tr>
+              <td>{{ mapping.user.full_name or mapping.user.username }}</td>
+              <td>{{ mapping.project.title }}</td>
+              <td>{{ mapping.lab_unit.name }}</td>
+              <td>{{ mapping.disease.name }}</td>
+              <td>{{ mapping.default_disease.name if mapping.default_disease else '-' }}</td>
+              <td class="small">{{ mapping.cameras|map(attribute='camera.name')|join(', ') }}</td>
+              <td class="small">{{ mapping.areas|map(attribute='area.name')|join(', ') }}</td>
+              <td>
+                <span class="badge {{ 'bg-success' if mapping.active else 'bg-secondary' }}">
+                  {{ 'Active' if mapping.active else 'Inactive' }}
+                </span>
+              </td>
+              <td class="text-end">
+                {% if mapping.active %}
+                <form method="post" action="{{ url_for('admin.deactivate_upload_mapping', mapping_id=mapping.id) }}">
+                  {{ csrf_field() }}
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="9" class="text-center text-muted py-4">No upload mappings configured in your lab-unit scope.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

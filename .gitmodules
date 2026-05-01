@@ -1,0 +1,3 @@
+[submodule "apps/fundus_glaucoma_mobile"]
+	path = apps/fundus_glaucoma_mobile
+	url = https://github.com/drguptavivek/fundus_glaucoma_mobile.git

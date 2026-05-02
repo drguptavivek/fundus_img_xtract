@@ -19,7 +19,8 @@ $DC run --rm -u "$(id -u):$(id -g)" \
     -e XDG_DATA_HOME=/tmp/.local/share \
     -e XDG_CACHE_HOME=/tmp/.cache \
     -e UV_CACHE_DIR=/tmp/.uv-cache-local \
-    -e UV_PYTHON_DIR=/tmp/.uv-python \
+    -e UV_PYTHON=/usr/local/bin/python3.13 \
+    -e UV_NO_MANAGED_PYTHON=1 \
     -e UV_NO_PROJECT_ENVIRONMENT=1 \
     requirements-exporter sh -lc "
     set -e

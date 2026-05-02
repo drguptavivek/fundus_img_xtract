@@ -39,7 +39,7 @@ defusedxml==0.7.1
     # via py-serializable
 filelock==3.20.3
     # via cachecontrol
-flask==3.1.2
+flask==3.1.3
     # via
     #   flask-caching
     #   flask-login
@@ -80,7 +80,7 @@ packaging==26.0
     #   kombu
     #   pip-audit
     #   pip-requirements-parser
-pip==26.0
+pip==26.1
     # via pip-api
 pip-api==0.0.34
     # via pip-audit
@@ -96,13 +96,13 @@ psycopg2-binary==2.9.11
     # via fundus-img-xtract
 py-serializable==1.1.2
     # via cyclonedx-python-lib
-pygments==2.19.2
+pygments==2.20.0
     # via rich
 pyparsing==3.3.2
     # via pip-requirements-parser
 python-dateutil==2.9.0.post0
     # via celery
-python-dotenv==1.2.1
+python-dotenv==1.2.2
     # via fundus-img-xtract
 pytz==2025.2
     # via fundus-img-xtract
@@ -112,7 +112,7 @@ redis==6.4.0
     # via
     #   fundus-img-xtract
     #   kombu
-requests==2.32.5
+requests==2.33.0
     # via
     #   cachecontrol
     #   pip-audit
@@ -145,7 +145,7 @@ vine==5.1.0
     #   kombu
 wcwidth==0.5.2
     # via prompt-toolkit
-werkzeug==3.1.5
+werkzeug==3.1.6
     # via
     #   flask
     #   flask-login

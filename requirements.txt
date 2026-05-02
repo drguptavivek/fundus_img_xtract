@@ -23,7 +23,7 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
-flask==3.1.2
+flask==3.1.3
     # via fundus-img-xtract
 greenlet==3.3.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -48,7 +48,7 @@ psycopg2-binary==2.9.11
     # via fundus-img-xtract
 python-dateutil==2.9.0.post0
     # via celery
-python-dotenv==1.2.1
+python-dotenv==1.2.2
     # via fundus-img-xtract
 redis==6.4.0
     # via
@@ -73,5 +73,5 @@ vine==5.1.0
     #   kombu
 wcwidth==0.5.2
     # via prompt-toolkit
-werkzeug==3.1.5
+werkzeug==3.1.6
     # via flask

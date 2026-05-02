@@ -102,7 +102,7 @@ CMD ["uv", "run", "gunicorn", "-c", "gunicorn_config.py", "wsgi:application"]
 # ======================================================================
 # REQUIREMENTS EXPORTER — lightweight uv-only image
 # ======================================================================
-FROM astral/uv:python3.12-bookworm-slim AS requirements-exporter
+FROM common-base AS requirements-exporter
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

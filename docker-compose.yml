@@ -9,7 +9,13 @@ services:
     environment:
       UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
-      - .:/app
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./uv.lock:/app/uv.lock:ro
+      - ./requirements.txt:/app/requirements.txt
+      - ./requirements-web.txt:/app/requirements-web.txt
+      - ./requirements-ocr.txt:/app/requirements-ocr.txt
+      - ./requirements-beat.txt:/app/requirements-beat.txt
+      - ./requirements-general.txt:/app/requirements-general.txt
       - uv_cache:/tmp/.uv-cache
     restart: "no"
 

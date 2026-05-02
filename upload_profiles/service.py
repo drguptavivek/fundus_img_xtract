@@ -223,6 +223,11 @@ def filter_upload_options(
     return _build_upload_options_from_payloads(options, profiles)
 
 
+def restrict_upload_options_to_profiles(options: UploadOptions, profiles: list[dict[str, Any]]) -> UploadOptions:
+    """Rebuild dependent selector lists from an already filtered profile payload list."""
+    return _build_upload_options_from_payloads(options, profiles)
+
+
 def validate_direct_upload_scope(db: OrmSession, user_id: int, selection: UploadSelection) -> UploadProfileDTO:
     """Validate a direct image upload selection and return the matching profile."""
     return validate_upload_scope(db, user_id, selection, upload_kind=UPLOAD_KIND_DIRECT_IMAGE)

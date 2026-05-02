@@ -24,6 +24,31 @@
 </div>
 {%- endmacro %}
 
+{% macro profile_buttons(profiles) -%}
+<div class="mb-3">
+  <div class="form-label">Upload Profile</div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for profile in profiles %}
+    {% set input_id = 'profile_id_' ~ profile.profile_id %}
+    <input class="btn-check"
+           type="radio"
+           name="profile_id"
+           id="{{ input_id }}"
+           value="{{ profile.profile_id }}"
+           autocomplete="off"
+           required
+           {% if profiles|length == 1 %}checked{% endif %}>
+    <label class="btn btn-outline-primary btn-sm text-start" for="{{ input_id }}">
+      <span class="d-block fw-semibold">{{ profile.name }}</span>
+      <span class="d-block small">{{ profile.description or 'AI workflow enabled' }}</span>
+    </label>
+    {% else %}
+    <div class="text-muted small">No glaucoma AI upload profiles are configured for your account.</div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
 {% block title %}Glaucoma AI Upload{% endblock %}
 
 {% block extra_styles %}
@@ -67,10 +92,17 @@
 
   <div class="row g-4">
     <div class="col-lg-4">
-      <form method="post" action="{{ url_for('glaucoma_ai.upload') }}" enctype="multipart/form-data" class="card glaucoma-ai-upload-form">
+      <form method="post"
+            action="{{ url_for('fundus_api.create_glaucoma_ai_upload_web') }}"
+            enctype="multipart/form-data"
+            class="card glaucoma-ai-upload-form"
+            hx-post="{{ url_for('fundus_api.create_glaucoma_ai_upload_web') }}"
+            hx-target="#glaucoma-ai-workspace"
+            hx-swap="innerHTML"
+            hx-disabled-elt="button[type='submit']">
         {{ csrf_field() }}
         <div class="card-body" data-upload-profiles='{{ upload_options.profiles | tojson }}'>
-          <input type="hidden" name="profile_id" value="">
+          {{ profile_buttons(upload_options.profiles) }}
           {{ option_buttons('project_id', 'Project', upload_options.projects, 'title') }}
           {{ option_buttons('lab_unit_id', 'Lab Unit', upload_options.lab_units) }}
           {{ option_buttons('camera_id', 'Camera', upload_options.cameras) }}
@@ -106,33 +138,17 @@
             <input class="form-control" id="files" name="files" type="file" accept="image/jpeg,image/png" multiple required>
             <div class="form-text">JPG or PNG, maximum 10 images.</div>
           </div>
-          <button type="submit" class="btn btn-primary w-100">Upload and Run AI</button>
+          <button type="submit" class="btn btn-primary w-100" {% if not upload_options.profiles %}disabled{% endif %}>
+            Upload and Run AI
+          </button>
         </div>
       </form>
     </div>
 
     <div class="col-lg-8">
-      {% if results %}
-      <div class="border rounded p-2 mb-3">
-        <div class="small fw-semibold mb-2">Upload Status</div>
-        <div class="vstack gap-1">
-          {% for item in results.items %}
-          <div class="d-flex align-items-start justify-content-between gap-2 small">
-            <div class="min-w-0">
-              <div class="text-break">{{ item.filename or 'Upload' }}</div>
-              <div class="text-muted text-break">
-                {{ item.message }}
-                {% if item.job_token %} Job {{ item.job_token }}{% endif %}
-              </div>
-            </div>
-            <span class="badge text-bg-{{ 'success' if item.status == 'success' else ('warning' if item.status == 'queued' else 'danger') }} flex-shrink-0">{{ item.status }}</span>
-          </div>
-          {% endfor %}
-        </div>
+      <div id="glaucoma-ai-workspace">
+        {% include "glaucoma_ai/_workspace.html" with context %}
       </div>
-      {% endif %}
-
-      {% include "glaucoma_ai/_recent_results.html" with context %}
     </div>
   </div>
 </div>
@@ -143,5 +159,6 @@
 <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
 <script src="{{ url_for('static', filename='js/glaucoma-ai-results.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
 {% endblock %}

@@ -3,15 +3,17 @@ from __future__ import annotations
 import mimetypes
 from typing import Any
 
-from flask import current_app, jsonify, request, send_file, url_for
+from flask import current_app, jsonify, render_template, request, send_file, url_for
+from flask_login import current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth.decorators import token_auth_required
+from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import AIInferenceRun, DirectImageUpload, DirectImageVerify, Grade, GradingTask, User
 from services.glaucoma_ai_upload import (
-    GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK,
+    GLAUCOMA_AI_UPLOAD_MARKER_REMARKS,
     GlaucomaAIUploadSelection,
     get_glaucoma_disease_id,
     process_glaucoma_ai_uploads,
@@ -94,7 +96,7 @@ def get_glaucoma_ai_upload_result(uuid_str: str):
                 .where(DirectImageUpload.disease_id == glaucoma_disease_id)
                 .where(
                     DirectImageUpload.verifications.any(
-                        DirectImageVerify.remarks == GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+                        DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
                     )
                 )
             )
@@ -172,6 +174,60 @@ def create_glaucoma_ai_upload():
     ), status_code
 
 
+@api_bp.route("/glaucoma-ai/uploads/web", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
+def create_glaucoma_ai_upload_web():
+    """Session-auth HTMX endpoint for the browser upload page."""
+    try:
+        selection = GlaucomaAIUploadSelection(
+            project_id=_form_int("project_id"),
+            lab_unit_id=_form_int("lab_unit_id"),
+            camera_id=_form_int("camera_id"),
+            area_id=_form_int("area_id"),
+            is_mydriatic=_form_bool("is_mydriatic"),
+            profile_id=_form_optional_int("profile_id"),
+        )
+    except ValueError as exc:
+        return _web_upload_response(str(exc), "danger", None, status_code=400)
+
+    try:
+        result = process_glaucoma_ai_uploads(
+            files=request.files.getlist("files"),
+            user_id=current_user.id,
+            username=current_user.username,
+            remote_addr=request.remote_addr,
+            selection=selection,
+            request_url_builder=lambda image_uuid: url_for("media._directImgFinalByUUID", uuid_str=image_uuid),
+            thumbnail_url_builder=lambda image_uuid: url_for("media._directImgFinalThumbnailByUUID", uuid_str=image_uuid),
+            app=current_app._get_current_object(),
+        )
+    except UploadProfileError as exc:
+        current_app.logger.warning(
+            "Web glaucoma AI upload rejected for user=%s code=%s",
+            sanitize_log_value(current_user.id),
+            sanitize_log_value(exc.code),
+        )
+        return _web_upload_response(exc.message, "danger", None, status_code=400)
+
+    messages = []
+    if result.success_count:
+        messages.append(("success", f"Queued {result.success_count} image(s) for AI inference. Human verification is still required before human grading."))
+    if result.error_count:
+        messages.append(("warning", f"{result.error_count} image(s) could not be processed."))
+
+    if request.headers.get("HX-Request"):
+        return _render_web_workspace(result=result, messages=messages)
+
+    return jsonify(
+        {
+            "success": result.success_count > 0,
+            "success_count": result.success_count,
+            "error_count": result.error_count,
+            "items": [_serialize_item(item) for item in result.items],
+        }
+    ), 201 if result.success_count else 400
+
+
 @api_bp.route("/glaucoma-ai/uploads/<string:uuid_str>/image", methods=["GET"])
 @token_auth_required
 def get_glaucoma_ai_upload_image(uuid_str: str):
@@ -192,7 +248,7 @@ def get_glaucoma_ai_upload_image(uuid_str: str):
             .filter(DirectImageUpload.disease_id == glaucoma_disease_id)
             .filter(
                 DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks == GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
                 )
             )
             .one_or_none()
@@ -230,7 +286,7 @@ def get_glaucoma_ai_upload_thumbnail(uuid_str: str):
             .filter(DirectImageUpload.disease_id == glaucoma_disease_id)
             .filter(
                 DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks == GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
                 )
             )
             .one_or_none()
@@ -299,6 +355,33 @@ def _query_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+def _render_web_workspace(*, result=None, messages=None):
+    with transaction_scope() as db:
+        recent_uploads = _load_web_recent_uploads(db, current_user.id)
+    return render_template(
+        "glaucoma_ai/_workspace.html",
+        results=result,
+        recent_uploads=recent_uploads,
+        messages=messages or [],
+    )
+
+
+def _web_upload_response(message: str, category: str, result, *, status_code: int):
+    if request.headers.get("HX-Request"):
+        return _render_web_workspace(result=result, messages=[(category, message)])
+    return jsonify({"success": False, "error": message}), status_code
+
+
+def _load_web_recent_uploads(db, user_id: int) -> list[dict[str, Any]]:
+    items = load_user_glaucoma_ai_upload_results(db, user_id, limit=20, offset=0, external_urls=False)
+    for item in items:
+        image_uuid = item.get("image_uuid")
+        if image_uuid:
+            item["image_url"] = url_for("media._directImgFinalByUUID", uuid_str=image_uuid)
+            item["thumbnail_url"] = url_for("media._directImgFinalThumbnailByUUID", uuid_str=image_uuid)
+    return items
+
+
 def _load_glaucoma_task_map(db, upload_ids: list[int], glaucoma_disease_id: int) -> dict[int, GradingTask]:
     if not upload_ids:
         return {}
@@ -342,7 +425,7 @@ def load_user_glaucoma_ai_upload_results(
             .where(DirectImageUpload.disease_id == glaucoma_disease_id)
             .where(
                 DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks == GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
                 )
             )
             .order_by(DirectImageUpload.created_at.desc(), DirectImageUpload.id.desc())
@@ -374,7 +457,7 @@ def load_user_glaucoma_ai_inference_updates(
             .where(DirectImageUpload.disease_id == glaucoma_disease_id)
             .where(
                 DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks == GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
                 )
             )
             .order_by(DirectImageUpload.created_at.desc(), DirectImageUpload.id.desc())

@@ -12,7 +12,13 @@
      data-poll-active="{{ '1' if ns.poll_active else '0' }}">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h2 class="h5 mb-0">Recent AI Results</h2>
-    <span class="small text-muted" data-last-updated>Auto-refreshes while pending</span>
+    <button class="btn btn-outline-secondary btn-sm"
+            type="button"
+            hx-get="{{ url_for('glaucoma_ai.recent_results_partial') }}"
+            hx-target="#glaucoma-ai-results"
+            hx-swap="outerHTML">
+      Refresh
+    </button>
   </div>
 
   {% if recent_uploads %}

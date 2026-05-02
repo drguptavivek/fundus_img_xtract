@@ -1,0 +1,29 @@
+{% if messages %}
+<div class="vstack gap-2 mb-3">
+  {% for category, message in messages %}
+  <div class="alert alert-{{ category }} mb-0">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if results %}
+<div class="border rounded p-2 mb-3">
+  <div class="small fw-semibold mb-2">Upload Status</div>
+  <div class="vstack gap-1">
+    {% for item in results.items %}
+    <div class="d-flex align-items-start justify-content-between gap-2 small">
+      <div class="min-w-0">
+        <div class="text-break">{{ item.filename or 'Upload' }}</div>
+        <div class="text-muted text-break">
+          {{ item.message }}
+          {% if item.job_token %} Job {{ item.job_token }}{% endif %}
+        </div>
+      </div>
+      <span class="badge text-bg-{{ 'success' if item.status == 'success' else ('warning' if item.status == 'queued' else 'danger') }} flex-shrink-0">{{ item.status }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% include "glaucoma_ai/_recent_results.html" with context %}

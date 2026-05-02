@@ -1,13 +1,13 @@
 # Glaucoma AI Upload API
 
-Uploads 1-10 direct fundus images, creates verified glaucoma grading tasks, queues the linked Wadhwani glaucoma AI model, and returns upload/task identifiers immediately.
+Uploads 1-10 direct fundus images through a selected Upload Profile, creates unverified direct-image records plus glaucoma tasks for AI processing, queues the linked Wadhwani glaucoma AI model, and returns upload/task identifiers immediately. Human grading still requires the normal verification workflow.
 
 ## `POST /api/glaucoma-ai/uploads`
 
 - Auth: Bearer JWT from `/api/mobile/v1/auth/login`.
 - Roles: `admin`, `local_admin`, `data_manager`, `ophthalmologist`, `optometrist`, or `fileUploader`.
 - CSRF: not required because the route uses bearer-token auth.
-- Scope: the token user must have an active upload profile for the selected project, lab unit, glaucoma disease, camera, site, and mydriatic state.
+- Scope: the token user must submit a concrete active upload profile for the selected project, lab unit, glaucoma disease, camera, site, and mydriatic state. That profile must enable a direct-image AI workflow linked to the enabled Wadhwani glaucoma model.
 - Body: `multipart/form-data`.
 
 ### Form Fields
@@ -16,7 +16,7 @@ Uploads 1-10 direct fundus images, creates verified glaucoma grading tasks, queu
 | --- | --- | --- | --- |
 | `project_id` | integer | yes | Active project in the caller's upload profile. |
 | `lab_unit_id` | integer | yes | Explicitly assigned lab unit. |
-| `profile_id` | integer | no | Concrete assigned upload profile. Recommended when the client has a profile selection. |
+| `profile_id` | integer | yes | Concrete assigned upload profile selected from `/api/mobile/v1/upload-options`. |
 | `camera_id` | integer | yes | Camera allowed by the upload profile. |
 | `area_id` | integer | yes | Site/area allowed by the upload profile. |
 | `is_mydriatic` | boolean-ish | no | Accepts `1`, `true`, `yes`, or `on`. Defaults false. |
@@ -169,6 +169,7 @@ Status: `201 Created`
 - `401`: missing, expired, or invalid JWT.
 - `403`: inactive user or token roles do not permit upload/inference.
 - Per-file failures are returned in `items` with `status: "error"` or `status: "enqueue_failed"`.
+- Successful uploads are stored as unverified direct images with a glaucoma task for AI inference. Human grading remains blocked until the image is verified through the normal verification workflow.
 - Wadhwani inference runs asynchronously through `celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task`. Poll `/recent/results` or `/<image_uuid>/result` for `inference.status`; use `/recent/results` when avoiding media reloads.
 
 ### Example
@@ -178,6 +179,7 @@ curl -X POST http://localhost:5001/api/glaucoma-ai/uploads \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -F project_id=1 \
   -F lab_unit_id=2 \
+  -F profile_id=12 \
   -F camera_id=1 \
   -F area_id=1 \
   -F is_mydriatic=false \

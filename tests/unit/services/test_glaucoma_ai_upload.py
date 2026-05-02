@@ -1,12 +1,17 @@
 from werkzeug.datastructures import FileStorage
+from types import SimpleNamespace
 
+from models import AIModel, AIModelIntegration, Disease
 from services.glaucoma_ai_upload import (
     GlaucomaAIUploadItem,
     GlaucomaAIUploadSelection,
     MAX_GLAUCOMA_AI_UPLOAD_FILES,
     _enqueue_wadhwani_inference,
+    _validate_glaucoma_ai_workflow,
     process_glaucoma_ai_uploads,
 )
+from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UploadProfileError
 
 
 def _selection() -> GlaucomaAIUploadSelection:
@@ -88,3 +93,53 @@ def test_glaucoma_ai_upload_enqueue_uses_existing_wadhwani_batch_task(monkeypatc
     assert captured["enqueue_kwargs"]["user_id"] == 1
     assert queued[0].status == "queued"
     assert queued[0].job_token == "job-token"
+
+
+def test_glaucoma_ai_workflow_requires_selected_profile_linked_to_wadhwani(db_session):
+    disease = Disease(name="Glaucoma Workflow Test")
+    integration = db_session.query(AIModelIntegration).filter_by(provider=WADHWANI_PROVIDER).one_or_none()
+    if integration is None:
+        model = AIModel(name="Glaucoma Screening MOHFW Wadhwani AI Model", version="1.0")
+        db_session.add(model)
+        db_session.flush()
+        integration = AIModelIntegration(
+            ai_model_id=model.id,
+            provider=WADHWANI_PROVIDER,
+            is_enabled=True,
+            client_id="client",
+            bearer_token="token",
+        )
+        db_session.add(integration)
+    else:
+        integration.is_enabled = True
+    db_session.add(disease)
+    db_session.flush()
+
+    profile = SimpleNamespace(
+        ai_workflows=(
+            {
+                "disease_id": disease.id,
+                "ai_model_id": integration.ai_model_id,
+                "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
+                "active": True,
+            },
+        )
+    )
+
+    assert _validate_glaucoma_ai_workflow(db_session, profile, disease.id) == model.id
+
+
+def test_glaucoma_ai_workflow_rejects_profile_without_ai_workflow(db_session):
+    disease = db_session.query(Disease).filter(Disease.name.ilike("glaucoma")).first()
+    if disease is None:
+        disease = Disease(name="Glaucoma")
+        db_session.add(disease)
+        db_session.flush()
+    profile = SimpleNamespace(ai_workflows=())
+
+    try:
+        _validate_glaucoma_ai_workflow(db_session, profile, disease.id)
+    except UploadProfileError as exc:
+        assert exc.code == "ai_workflow_not_allowed"
+    else:
+        raise AssertionError("Expected UploadProfileError")

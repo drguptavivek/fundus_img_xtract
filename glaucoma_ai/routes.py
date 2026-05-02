@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import jsonify, render_template, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from api.glaucoma_ai import load_user_glaucoma_ai_inference_updates, load_user_glaucoma_ai_upload_results
-from services.glaucoma_ai_upload import GlaucomaAIUploadSelection, process_glaucoma_ai_uploads
-from utils.log_sanitize import sanitize_log_value
-from upload_profiles.service import UploadProfileError, get_user_upload_options
+from services.glaucoma_ai_upload import get_glaucoma_disease_id
+from upload_profiles.service import (
+    UPLOAD_KIND_DIRECT_IMAGE,
+    filter_upload_options,
+    get_user_upload_options_for_kind,
+    restrict_upload_options_to_profiles,
+)
 
 from . import bp
 
@@ -17,66 +21,13 @@ from . import bp
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
 def index():
     with get_db_session() as db:
-        upload_options = get_user_upload_options(db, current_user.id)
+        upload_options = _load_upload_options(db)
         recent_uploads = _load_web_recent_uploads(db)
     return render_template(
         "glaucoma_ai/upload.html",
         upload_options=upload_options,
         mydriatic_options=_mydriatic_options(upload_options),
         results=None,
-        recent_uploads=recent_uploads,
-    )
-
-
-@bp.route("/upload", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
-def upload():
-    try:
-        selection = GlaucomaAIUploadSelection(
-            project_id=_to_int(request.form.get("project_id")),
-            lab_unit_id=_to_int(request.form.get("lab_unit_id")),
-            camera_id=_to_int(request.form.get("camera_id")),
-            area_id=_to_int(request.form.get("area_id")),
-            is_mydriatic=_to_bool(request.form.get("is_mydriatic")),
-            profile_id=_to_int(request.form.get("profile_id")) if request.form.get("profile_id") else None,
-        )
-    except ValueError:
-        flash("Project, lab unit, camera, and site are required.", "danger")
-        return redirect(url_for("glaucoma_ai.index"), code=303)
-
-    try:
-        result = process_glaucoma_ai_uploads(
-            files=request.files.getlist("files"),
-            user_id=current_user.id,
-            username=current_user.username,
-            remote_addr=request.remote_addr,
-            selection=selection,
-            request_url_builder=lambda image_uuid: url_for("media._directImgFinalByUUID", uuid_str=image_uuid),
-            thumbnail_url_builder=lambda image_uuid: url_for("media._directImgFinalThumbnailByUUID", uuid_str=image_uuid),
-            app=current_app._get_current_object(),
-        )
-    except UploadProfileError as exc:
-        current_app.logger.warning(
-            "Glaucoma AI upload rejected for user=%s code=%s",
-            sanitize_log_value(current_user.id),
-            sanitize_log_value(exc.code),
-        )
-        flash(exc.message, "danger")
-        return redirect(url_for("glaucoma_ai.index"), code=303)
-
-    if result.success_count:
-        flash(f"Processed {result.success_count} image(s).", "success")
-    if result.error_count:
-        flash(f"{result.error_count} image(s) could not be processed.", "warning")
-
-    with get_db_session() as db:
-        upload_options = get_user_upload_options(db, current_user.id)
-        recent_uploads = _load_web_recent_uploads(db)
-    return render_template(
-        "glaucoma_ai/upload.html",
-        upload_options=upload_options,
-        mydriatic_options=_mydriatic_options(upload_options),
-        results=result,
         recent_uploads=recent_uploads,
     )
 
@@ -107,18 +58,20 @@ def _load_web_recent_uploads(db) -> list[dict]:
     return items
 
 
-def _to_int(value: str | None) -> int:
-    try:
-        parsed = int(value or "")
-    except (TypeError, ValueError) as exc:
-        raise ValueError("invalid integer") from exc
-    if parsed <= 0:
-        raise ValueError("invalid integer")
-    return parsed
-
-
-def _to_bool(value: str | None) -> bool:
-    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+def _load_upload_options(db):
+    glaucoma_disease_id = get_glaucoma_disease_id(db)
+    options = get_user_upload_options_for_kind(db, current_user.id, UPLOAD_KIND_DIRECT_IMAGE)
+    options = filter_upload_options(db, options, disease_id=glaucoma_disease_id)
+    profiles = [
+        profile for profile in options.profiles
+        if any(
+            workflow.get("disease_id") == glaucoma_disease_id
+            and workflow.get("upload_kind") == UPLOAD_KIND_DIRECT_IMAGE
+            and workflow.get("active", True)
+            for workflow in profile.get("ai_workflows", [])
+        )
+    ]
+    return restrict_upload_options_to_profiles(options, profiles)
 
 
 def _mydriatic_options(upload_options) -> dict:

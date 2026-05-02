@@ -130,14 +130,26 @@ Success response: `200 OK`
     {
       "profile_id": 100,
       "name": "Glaucoma screening profile",
+      "description": "MOHFW Wadhwani AI screening profile",
       "project_id": 10,
       "lab_unit_id": 12,
       "disease_ids": [2],
+      "disease_id": 2,
       "default_disease_ids": [2],
+      "default_disease_id": 2,
       "camera_ids": [3],
       "area_ids": [4],
       "upload_kinds": ["direct_image"],
-      "ai_workflows": [],
+      "ai_workflows": [
+        {
+          "id": 8,
+          "disease_id": 2,
+          "ai_model_id": 5,
+          "ai_model_name": "Glaucoma Screening MOHFW Wadhwani AI Model",
+          "upload_kind": "direct_image",
+          "active": true
+        }
+      ],
       "allow_mydriatic": true,
       "allow_non_mydriatic": true,
       "default_is_mydriatic": false
@@ -155,4 +167,4 @@ Errors:
 - `401` when the bearer token is missing or invalid
 - `403` when the user is inactive or lacks `fileUploader`
 
-Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma` to choose a valid default profile, then continue uploads through `POST /api/glaucoma-ai/uploads`.
+Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma`, let the user or app choose the intended profile, and submit that exact `profile_id` to `POST /api/glaucoma-ai/uploads`. A user may have multiple glaucoma-capable profiles; the selected profile is the source of truth for project, lab unit, camera, site, mydriatic scope, and enabled AI workflow.

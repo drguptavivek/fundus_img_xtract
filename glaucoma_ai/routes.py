@@ -20,15 +20,18 @@ from . import bp
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
 def index():
+    return render_template("glaucoma_ai/upload.html")
+
+
+@bp.route("/form", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
+def upload_form_partial():
     with get_db_session() as db:
         upload_options = _load_upload_options(db)
-        recent_uploads = _load_web_recent_uploads(db)
     return render_template(
-        "glaucoma_ai/upload.html",
+        "glaucoma_ai/_upload_form.html",
         upload_options=upload_options,
         mydriatic_options=_mydriatic_options(upload_options),
-        results=None,
-        recent_uploads=recent_uploads,
     )
 
 

@@ -125,7 +125,10 @@
   });
 
   document.body.addEventListener("htmx:afterSwap", function (event) {
-    if (event.target && event.target.id === "glaucoma-ai-workspace") {
+    if (
+      event.target
+      && (event.target.id === "glaucoma-ai-workspace" || event.target.id === "glaucoma-ai-form-panel")
+    ) {
       initUploadOptions();
     }
   });

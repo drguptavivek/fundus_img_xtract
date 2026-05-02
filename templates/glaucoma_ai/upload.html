@@ -1,54 +1,4 @@
 {% extends "base.html" %}
-{% from "_forms.html" import csrf_field %}
-{% macro option_buttons(name, label, options, label_attr='name') -%}
-<div class="mb-3">
-  <div class="form-label">{{ label }}</div>
-  <div class="d-flex flex-wrap gap-2">
-    {% for option in options %}
-    {% set input_id = name ~ '_' ~ option.id %}
-    <input class="btn-check"
-           type="radio"
-           name="{{ name }}"
-           id="{{ input_id }}"
-           value="{{ option.id }}"
-           autocomplete="off"
-           required
-           {% if options|length == 1 %}checked{% endif %}>
-    <label class="btn btn-outline-primary btn-sm text-start" for="{{ input_id }}">
-      {{ option[label_attr] }}
-    </label>
-    {% else %}
-    <div class="text-muted small">No {{ label|lower }} options available.</div>
-    {% endfor %}
-  </div>
-</div>
-{%- endmacro %}
-
-{% macro profile_buttons(profiles) -%}
-<div class="mb-3">
-  <div class="form-label">Upload Profile</div>
-  <div class="d-flex flex-wrap gap-2">
-    {% for profile in profiles %}
-    {% set input_id = 'profile_id_' ~ profile.profile_id %}
-    <input class="btn-check"
-           type="radio"
-           name="profile_id"
-           id="{{ input_id }}"
-           value="{{ profile.profile_id }}"
-           autocomplete="off"
-           required
-           {% if profiles|length == 1 %}checked{% endif %}>
-    <label class="btn btn-outline-primary btn-sm text-start" for="{{ input_id }}">
-      <span class="d-block fw-semibold">{{ profile.name }}</span>
-      <span class="d-block small">{{ profile.description or 'AI workflow enabled' }}</span>
-    </label>
-    {% else %}
-    <div class="text-muted small">No glaucoma AI upload profiles are configured for your account.</div>
-    {% endfor %}
-  </div>
-</div>
-{%- endmacro %}
-
 {% block title %}Glaucoma AI Upload{% endblock %}
 
 {% block extra_styles %}
@@ -92,62 +42,26 @@
 
   <div class="row g-4">
     <div class="col-lg-4">
-      <form method="post"
-            action="{{ url_for('fundus_api.create_glaucoma_ai_upload_web') }}"
-            enctype="multipart/form-data"
-            class="card glaucoma-ai-upload-form"
-            hx-post="{{ url_for('fundus_api.create_glaucoma_ai_upload_web') }}"
-            hx-target="#glaucoma-ai-workspace"
-            hx-swap="innerHTML"
-            hx-disabled-elt="button[type='submit']">
-        {{ csrf_field() }}
-        <div class="card-body" data-upload-profiles='{{ upload_options.profiles | tojson }}'>
-          {{ profile_buttons(upload_options.profiles) }}
-          {{ option_buttons('project_id', 'Project', upload_options.projects, 'title') }}
-          {{ option_buttons('lab_unit_id', 'Lab Unit', upload_options.lab_units) }}
-          {{ option_buttons('camera_id', 'Camera', upload_options.cameras) }}
-          {{ option_buttons('area_id', 'Site', upload_options.areas) }}
-          <div class="mb-3" data-mydriatic-group>
-            <div class="form-label">Mydriatic</div>
-            <div class="d-flex flex-wrap gap-2">
-              <input class="btn-check"
-                     type="radio"
-                     name="is_mydriatic"
-                     id="is_mydriatic_false"
-                     value="false"
-                     autocomplete="off"
-                     required
-                     {% if not mydriatic_options.allow_non_mydriatic %}disabled{% endif %}
-                     {% if not mydriatic_options.default_is_mydriatic %}checked{% endif %}>
-              <label class="btn btn-outline-primary btn-sm" for="is_mydriatic_false">Non-mydriatic</label>
-
-              <input class="btn-check"
-                     type="radio"
-                     name="is_mydriatic"
-                     id="is_mydriatic_true"
-                     value="true"
-                     autocomplete="off"
-                     required
-                     {% if not mydriatic_options.allow_mydriatic %}disabled{% endif %}
-                     {% if mydriatic_options.default_is_mydriatic %}checked{% endif %}>
-              <label class="btn btn-outline-primary btn-sm" for="is_mydriatic_true">Mydriatic</label>
-            </div>
+      <div id="glaucoma-ai-form-panel"
+           hx-get="{{ url_for('glaucoma_ai.upload_form_partial') }}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="card">
+          <div class="card-body text-muted small">
+            Loading upload options...
           </div>
-          <div class="mb-3">
-            <label for="files" class="form-label">Images</label>
-            <input class="form-control" id="files" name="files" type="file" accept="image/jpeg,image/png" multiple required>
-            <div class="form-text">JPG or PNG, maximum 10 images.</div>
-          </div>
-          <button type="submit" class="btn btn-primary w-100" {% if not upload_options.profiles %}disabled{% endif %}>
-            Upload and Run AI
-          </button>
         </div>
-      </form>
+      </div>
     </div>
 
     <div class="col-lg-8">
-      <div id="glaucoma-ai-workspace">
-        {% include "glaucoma_ai/_workspace.html" with context %}
+      <div id="glaucoma-ai-workspace"
+           hx-get="{{ url_for('glaucoma_ai.workspace_partial') }}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="border rounded p-4 text-muted">
+          Loading recent AI results...
+        </div>
       </div>
     </div>
   </div>

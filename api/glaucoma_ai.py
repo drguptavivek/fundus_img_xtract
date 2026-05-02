@@ -211,7 +211,7 @@ def create_glaucoma_ai_upload_web():
 
     messages = []
     if result.success_count:
-        messages.append(("success", f"Queued {result.success_count} image(s) for AI inference. Human verification is still required before human grading."))
+        messages.append(("success", f"Submitted {result.success_count} image(s) for AI inference. Human verification is still required before human grading."))
     if result.error_count:
         messages.append(("warning", f"{result.error_count} image(s) could not be processed."))
 
@@ -373,7 +373,14 @@ def _web_upload_response(message: str, category: str, result, *, status_code: in
 
 
 def _load_web_recent_uploads(db, user_id: int) -> list[dict[str, Any]]:
-    items = load_user_glaucoma_ai_upload_results(db, user_id, limit=20, offset=0, external_urls=False)
+    items = load_user_glaucoma_ai_upload_results(
+        db,
+        user_id,
+        limit=20,
+        offset=0,
+        external_urls=False,
+        include_created_at_dt=True,
+    )
     for item in items:
         image_uuid = item.get("image_uuid")
         if image_uuid:
@@ -408,6 +415,7 @@ def load_user_glaucoma_ai_upload_results(
     limit: int,
     offset: int = 0,
     external_urls: bool = False,
+    include_created_at_dt: bool = False,
 ) -> list[dict[str, Any]]:
     glaucoma_disease_id = get_glaucoma_disease_id(db)
     uploads = (
@@ -437,7 +445,13 @@ def load_user_glaucoma_ai_upload_results(
     )
     task_map = _load_glaucoma_task_map(db, [upload.id for upload in uploads], glaucoma_disease_id)
     return [
-        _serialize_upload_result(upload, task_map.get(upload.id), include_image_url=True, external_urls=external_urls)
+        _serialize_upload_result(
+            upload,
+            task_map.get(upload.id),
+            include_image_url=True,
+            external_urls=external_urls,
+            include_created_at_dt=include_created_at_dt,
+        )
         for upload in uploads
     ]
 
@@ -477,10 +491,11 @@ def _serialize_upload_result(
     *,
     include_image_url: bool,
     external_urls: bool = True,
+    include_created_at_dt: bool = False,
 ) -> dict[str, Any]:
     latest_run = _latest_inference_run(task)
     ai_grade = _latest_ai_grade(task)
-    return {
+    result = {
         "upload_id": upload.id,
         "image_uuid": upload.uuid,
         "filename": upload.filename,
@@ -509,6 +524,9 @@ def _serialize_upload_result(
         "result_url": url_for("fundus_api.get_glaucoma_ai_upload_result", uuid_str=upload.uuid, _external=external_urls),
         "inference": _serialize_inference_result(latest_run, ai_grade),
     }
+    if include_created_at_dt:
+        result["created_at_dt"] = upload.created_at
+    return result
 
 
 def _serialize_inference_update(upload: DirectImageUpload, task: GradingTask | None) -> dict[str, Any]:

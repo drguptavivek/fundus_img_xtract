@@ -7,15 +7,15 @@
 {% endfor %}
 <div id="glaucoma-ai-results"
      class="pswp-gallery"
-     data-results-url="{{ url_for('glaucoma_ai.recent_results_partial') }}"
+     data-results-url="{{ url_for('glaucoma_ai.workspace_partial') }}"
      data-results-json-url="{{ url_for('glaucoma_ai.recent_results_json') }}"
      data-poll-active="{{ '1' if ns.poll_active else '0' }}">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h2 class="h5 mb-0">Recent AI Results</h2>
     <button class="btn btn-outline-secondary btn-sm"
             type="button"
-            hx-get="{{ url_for('glaucoma_ai.recent_results_partial') }}"
-            hx-target="#glaucoma-ai-results"
+            hx-get="{{ url_for('glaucoma_ai.workspace_partial') }}"
+            hx-target="#glaucoma-ai-workspace"
             hx-swap="outerHTML">
       Refresh
     </button>
@@ -48,6 +48,9 @@
                 <span class="badge text-bg-{{ 'success' if status == 'success' else ('danger' if status == 'failed' else 'warning') }} flex-shrink-0" data-result-status>{{ status }}</span>
               </div>
               <div class="small text-muted text-break mb-1">{{ item.task_uuid or '-' }}</div>
+              {% if item.created_at_dt %}
+              <div class="small text-muted mb-1">{{ item.created_at_dt | user_datetime }}</div>
+              {% endif %}
               <div class="glaucoma-ai-result-grid small">
                 <span class="text-muted">Impression</span>
                 <span data-result-impression>{{ inference.grade_impression or 'Pending' }}</span>

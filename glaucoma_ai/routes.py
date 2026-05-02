@@ -40,6 +40,19 @@ def recent_results_partial():
     return render_template("glaucoma_ai/_recent_results.html", recent_uploads=recent_uploads)
 
 
+@bp.route("/workspace", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
+def workspace_partial():
+    with get_db_session() as db:
+        recent_uploads = _load_web_recent_uploads(db)
+    return render_template(
+        "glaucoma_ai/_workspace.html",
+        results=None,
+        recent_uploads=recent_uploads,
+        messages=[],
+    )
+
+
 @bp.route("/recent/results", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
 def recent_results_json():
@@ -49,7 +62,14 @@ def recent_results_json():
 
 
 def _load_web_recent_uploads(db) -> list[dict]:
-    items = load_user_glaucoma_ai_upload_results(db, current_user.id, limit=20, offset=0, external_urls=False)
+    items = load_user_glaucoma_ai_upload_results(
+        db,
+        current_user.id,
+        limit=20,
+        offset=0,
+        external_urls=False,
+        include_created_at_dt=True,
+    )
     for item in items:
         image_uuid = item.get("image_uuid")
         if image_uuid:

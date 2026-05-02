@@ -2,7 +2,7 @@
 
 Base path: `/api/mobile/v1`
 
-These routes return the current authenticated user context and token-shape metadata.
+These routes return the current authenticated user context, token-shape metadata, and upload selector options.
 
 ## CSRF
 
@@ -94,3 +94,62 @@ The `token_auth_required` decorator emits `401/403` JSON errors with a `message`
 - `allowed_disease_ids` is derived from active `UserDiseaseUnitRole` rows.
 - `roles` is the sorted list of role names on the current user.
 - `allowed_lab_unit_ids` is part of the access token claims, but it is not returned as a top-level field in this endpoint.
+
+## `GET /upload-options`
+
+Auth: bearer access token
+
+Role: `fileUploader`
+
+Query parameters:
+- `disease_id`: optional positive integer
+- `disease_name`: optional disease name, case-insensitive
+- `project_id`: optional positive integer
+- `lab_unit_id`: optional positive integer
+
+Success response: `200 OK`
+
+```json
+{
+  "projects": [
+    { "id": 10, "title": "Routine Patient Care", "code": "ROUTINE" }
+  ],
+  "lab_units": [
+    { "id": 12, "name": "Retina Clinic", "hospital_id": 5 }
+  ],
+  "diseases": [
+    { "id": 2, "name": "Glaucoma" }
+  ],
+  "cameras": [
+    { "id": 3, "name": "Remidio" }
+  ],
+  "areas": [
+    { "id": 4, "name": "Macula" }
+  ],
+  "mappings": [
+    {
+      "mapping_id": 100,
+      "project_id": 10,
+      "lab_unit_id": 12,
+      "disease_id": 2,
+      "default_disease_id": 2,
+      "camera_ids": [3],
+      "area_ids": [4],
+      "allow_mydriatic": true,
+      "allow_non_mydriatic": true,
+      "default_is_mydriatic": false
+    }
+  ]
+}
+```
+
+The response is built from active upload mappings and explicit lab-unit assignment. Admin, local-admin, and data-manager roles do not add upload mappings without an explicit lab-unit assignment. Filters trim `mappings` first, then rebuild the option arrays from the remaining mappings so clients do not display stale projects, lab units, diseases, cameras, or areas.
+
+This endpoint is for client selector defaults only. Upload endpoints must still validate submitted IDs server-side.
+
+Errors:
+- `400` when an integer filter is invalid
+- `401` when the bearer token is missing or invalid
+- `403` when the user is inactive or lacks `fileUploader`
+
+Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma` to choose a valid default mapping, then continue uploads through `POST /api/glaucoma-ai/uploads`.

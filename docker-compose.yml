@@ -124,7 +124,7 @@ services:
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_APP_USER} -d ${POSTGRES_APP_DB}" ]
       interval: 10s
@@ -283,7 +283,7 @@ services:
     # ports:
     #   - "127.0.0.1:5438:5432"
     tmpfs:
-      - /var/lib/postgresql/data # In-memory for speed
+      - /var/lib/postgresql # In-memory for speed
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U test_user -d fundus_test" ]
       interval: 5s

@@ -166,7 +166,7 @@ db:
   ports:
     - "${POSTGRES_PORT:-5432}:5432"
   volumes:
-    - postgres_data:/var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql
   healthcheck:
     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_APP_USER} -d ${POSTGRES_APP_DB}"]
     interval: 10s

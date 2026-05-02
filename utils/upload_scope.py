@@ -288,6 +288,39 @@ def get_user_upload_mappings(db: OrmSession, user_id: int) -> list[UploadScopeMa
 def get_user_upload_options(db: OrmSession, user_id: int) -> UploadOptions:
     """Return UI-ready upload options for the user's active mappings."""
     mappings = get_user_upload_mappings(db, user_id)
+    return _build_upload_options(db, mappings)
+
+
+def filter_upload_options(
+    db: OrmSession,
+    options: UploadOptions,
+    *,
+    disease_id: int | None = None,
+    disease_name: str | None = None,
+    project_id: int | None = None,
+    lab_unit_id: int | None = None,
+) -> UploadOptions:
+    """Filter upload options by mapping attributes and rebuild dependent lists."""
+    if disease_name is not None:
+        disease_name = disease_name.strip().lower()
+
+    disease_name_by_id = {
+        item["id"]: str(item["name"]).lower()
+        for item in options.diseases
+    }
+    mappings = [
+        mapping
+        for mapping in options.mappings
+        if (disease_id is None or mapping["disease_id"] == disease_id)
+        and (not disease_name or disease_name_by_id.get(mapping["disease_id"]) == disease_name)
+        and (project_id is None or mapping["project_id"] == project_id)
+        and (lab_unit_id is None or mapping["lab_unit_id"] == lab_unit_id)
+    ]
+    return _build_upload_options_from_payloads(db, options, mappings)
+
+
+def _build_upload_options(db: OrmSession, mappings: list[UploadScopeMapping]) -> UploadOptions:
+    """Build UI-ready upload options from upload mapping DTOs."""
     project_map: dict[int, dict[str, Any]] = {}
     lab_map: dict[int, dict[str, Any]] = {}
     disease_map: dict[int, dict[str, Any]] = {}
@@ -339,6 +372,49 @@ def get_user_upload_options(db: OrmSession, user_id: int) -> UploadOptions:
             }
             for mapping in mappings
         ],
+    )
+
+
+def _build_upload_options_from_payloads(
+    db: OrmSession,
+    options: UploadOptions,
+    mappings: list[dict[str, Any]],
+) -> UploadOptions:
+    """Rebuild option lists from already serialized mapping payloads."""
+    project_ids = {mapping["project_id"] for mapping in mappings}
+    lab_unit_ids = {mapping["lab_unit_id"] for mapping in mappings}
+    disease_ids = {mapping["disease_id"] for mapping in mappings}
+    camera_ids = {camera_id for mapping in mappings for camera_id in mapping["camera_ids"]}
+    area_ids = {area_id for mapping in mappings for area_id in mapping["area_ids"]}
+
+    projects = sorted(
+        [item for item in options.projects if item["id"] in project_ids],
+        key=lambda item: (item["title"], item["id"]),
+    )
+    lab_units = sorted(
+        [item for item in options.lab_units if item["id"] in lab_unit_ids],
+        key=lambda item: (item["hospital_id"], item["name"], item["id"]),
+    )
+    diseases = sorted(
+        [item for item in options.diseases if item["id"] in disease_ids],
+        key=lambda item: (item["name"], item["id"]),
+    )
+    cameras = [
+        {"id": camera.id, "name": camera.name}
+        for camera in db.execute(select(Camera).where(Camera.id.in_(camera_ids or {-1})).order_by(Camera.name)).scalars().all()
+    ]
+    areas = [
+        {"id": area.id, "name": area.name}
+        for area in db.execute(select(Area).where(Area.id.in_(area_ids or {-1})).order_by(Area.name)).scalars().all()
+    ]
+
+    return UploadOptions(
+        projects=projects,
+        lab_units=lab_units,
+        diseases=diseases,
+        cameras=cameras,
+        areas=areas,
+        mappings=mappings,
     )
 
 
@@ -420,6 +496,7 @@ __all__ = [
     "UploadScopeError",
     "UploadScopeMapping",
     "UploadScopeSelection",
+    "filter_upload_options",
     "get_scoped_mapping_admin_lab_unit_ids",
     "get_user_lab_unit_ids",
     "get_user_lab_unit_ids_no_admin_override",

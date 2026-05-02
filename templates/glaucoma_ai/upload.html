@@ -69,7 +69,8 @@
     <div class="col-lg-4">
       <form method="post" action="{{ url_for('glaucoma_ai.upload') }}" enctype="multipart/form-data" class="card glaucoma-ai-upload-form">
         {{ csrf_field() }}
-        <div class="card-body" data-upload-mappings='{{ upload_options.mappings | tojson }}'>
+        <div class="card-body" data-upload-profiles='{{ upload_options.profiles | tojson }}'>
+          <input type="hidden" name="profile_id" value="">
           {{ option_buttons('project_id', 'Project', upload_options.projects, 'title') }}
           {{ option_buttons('lab_unit_id', 'Lab Unit', upload_options.lab_units) }}
           {{ option_buttons('camera_id', 'Camera', upload_options.cameras) }}

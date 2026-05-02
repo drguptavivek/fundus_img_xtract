@@ -10,6 +10,31 @@ Beads is issue tracking that lives in your repo, making it perfect for AI coding
 
 ## Quick Start
 
+### Repository Mode
+
+This repository uses Beads with Dolt in **embedded** mode. The portable,
+tracked issue export is `.beads/issues.jsonl`; the local embedded Dolt store is
+runtime state and is ignored by Git.
+
+Tracked Beads files:
+- `.beads/config.yaml`
+- `.beads/metadata.json`
+- `.beads/issues.jsonl`
+- `.beads/README.md`
+- `.beads/.gitignore`
+
+Ignored local/runtime Beads files include `.beads/dolt/`,
+`.beads/embeddeddolt/`, `.beads/backup/`, logs, locks, credentials, and
+export-state files.
+
+After issue changes, refresh the tracked export:
+
+```bash
+bd export -o .beads/issues.jsonl
+```
+
+Do not use `bd sync` or `bd dolt push` in this repository's normal workflow.
+
 ### Essential Commands
 
 ```bash
@@ -26,17 +51,17 @@ bd show <issue-id>
 bd update <issue-id> --status in_progress
 bd update <issue-id> --status done
 
-# Sync with git remote
-bd sync
+# Refresh tracked issue export
+bd export -o .beads/issues.jsonl
 ```
 
 ### Working with Issues
 
 Issues in Beads are:
-- **Git-native**: Stored in `.beads/issues.jsonl` and synced like code
+- **Git-native**: Exported to `.beads/issues.jsonl` and committed like code
 - **AI-friendly**: CLI-first design works perfectly with AI coding agents
 - **Branch-aware**: Issues can follow your branch workflow
-- **Always in sync**: Auto-syncs with your commits
+- **Portable**: Refresh the tracked export with `bd export -o .beads/issues.jsonl`
 
 ## Why Beads?
 
@@ -47,7 +72,7 @@ Issues in Beads are:
 
 🚀 **Developer Focused**
 - Issues live in your repo, right next to your code
-- Works offline, syncs when you push
+- Works offline, then travels with your Git commits
 - Fast, lightweight, and stays out of your way
 
 🔧 **Git Integration**

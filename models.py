@@ -410,6 +410,12 @@ class Disease(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     grading_scope: Mapped[str] = mapped_column(String(20), default="image", server_default="image", nullable=False)
     disease_gradings: Mapped[List["DiseaseGrading"]] = relationship("DiseaseGrading", back_populates="disease")
+    ai_model_links: Mapped[List["AIModelDisease"]] = relationship(
+        "AIModelDisease",
+        back_populates="disease",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         CheckConstraint("grading_scope IN ('image', 'encounter')", name="ck_disease_grading_scope"),
@@ -440,8 +446,8 @@ class Project(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    upload_mappings: Mapped[List["UploadMapping"]] = relationship(
-        "UploadMapping",
+    upload_profiles: Mapped[List["UploadProfile"]] = relationship(
+        "UploadProfile",
         back_populates="project",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -478,101 +484,6 @@ class ProjectInvestigator(Base):
         ),
         Index("ix_project_investigators_project_active", "project_id", "active"),
         Index("ix_project_investigators_user_active", "user_id", "active"),
-    )
-
-
-class UploadMapping(Base):
-    """Authoritative project-scoped upload permission mapping for one uploader."""
-
-    __tablename__ = "upload_mappings"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
-    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="CASCADE"), nullable=False, index=True)
-    default_disease_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
-    allow_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
-    allow_non_mydriatic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
-    default_is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
-    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-
-    user: Mapped["User"] = relationship("User")
-    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
-    project: Mapped["Project"] = relationship("Project", back_populates="upload_mappings")
-    disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[disease_id])
-    default_disease: Mapped["Disease | None"] = relationship("Disease", foreign_keys=[default_disease_id])
-    cameras: Mapped[List["UploadMappingCamera"]] = relationship(
-        "UploadMappingCamera",
-        back_populates="mapping",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-    areas: Mapped[List["UploadMappingArea"]] = relationship(
-        "UploadMappingArea",
-        back_populates="mapping",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "lab_unit_id",
-            "project_id",
-            "disease_id",
-            name="uq_upload_mapping_user_lab_project_disease",
-        ),
-        CheckConstraint(
-            "(allow_mydriatic = true) OR (allow_non_mydriatic = true)",
-            name="ck_upload_mapping_allows_any_mydriatic_state",
-        ),
-        CheckConstraint(
-            "(default_is_mydriatic = false) OR (allow_mydriatic = true)",
-            name="ck_upload_mapping_default_mydriatic_allowed",
-        ),
-        CheckConstraint(
-            "(default_is_mydriatic = true) OR (allow_non_mydriatic = true)",
-            name="ck_upload_mapping_default_nonmydriatic_allowed",
-        ),
-        Index("ix_upload_mappings_user_project_active", "user_id", "project_id", "active"),
-        Index("ix_upload_mappings_lab_project_active", "lab_unit_id", "project_id", "active"),
-    )
-
-
-class UploadMappingCamera(Base):
-    """Allowed camera entry for an upload mapping."""
-
-    __tablename__ = "upload_mapping_cameras"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    upload_mapping_id: Mapped[int] = mapped_column(ForeignKey("upload_mappings.id", ondelete="CASCADE"), nullable=False, index=True)
-    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    mapping: Mapped["UploadMapping"] = relationship("UploadMapping", back_populates="cameras")
-    camera: Mapped["Camera"] = relationship("Camera")
-
-    __table_args__ = (
-        UniqueConstraint("upload_mapping_id", "camera_id", name="uq_upload_mapping_camera"),
-    )
-
-
-class UploadMappingArea(Base):
-    """Allowed site/area entry for an upload mapping."""
-
-    __tablename__ = "upload_mapping_areas"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    upload_mapping_id: Mapped[int] = mapped_column(ForeignKey("upload_mappings.id", ondelete="CASCADE"), nullable=False, index=True)
-    area_id: Mapped[int] = mapped_column(ForeignKey("areas.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    mapping: Mapped["UploadMapping"] = relationship("UploadMapping", back_populates="areas")
-    area: Mapped["Area"] = relationship("Area")
-
-    __table_args__ = (
-        UniqueConstraint("upload_mapping_id", "area_id", name="uq_upload_mapping_area"),
     )
 
 
@@ -878,6 +789,7 @@ class PatientEncounters(Base):
     encounter_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id'), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
@@ -888,6 +800,7 @@ class PatientEncounters(Base):
     glaucoma_results_cleaned: Mapped[List["GlaucomaResultsCleaned"]] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
     project: Mapped["Project | None"] = relationship("Project")
+    upload_profile: Mapped["UploadProfile | None"] = relationship("UploadProfile")
 
 class EncounterSetImage(Base):
     __tablename__ = 'encounter_set_images'
@@ -910,6 +823,9 @@ class EncounterSetImage(Base):
     # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
     hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="SET NULL"), nullable=True, index=True)
+    area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_mydriatic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
     s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
     s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
@@ -917,6 +833,8 @@ class EncounterSetImage(Base):
 
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_set_images")
     project: Mapped["Project | None"] = relationship("Project")
+    camera: Mapped["Camera | None"] = relationship("Camera")
+    area: Mapped["Area | None"] = relationship("Area")
     s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
 
     __table_args__ = (
@@ -1412,6 +1330,12 @@ class AIModel(Base):
     )
 
     grades: Mapped[List["Grade"]] = relationship("Grade", back_populates="ai_model")
+    disease_links: Mapped[List["AIModelDisease"]] = relationship(
+        "AIModelDisease",
+        back_populates="ai_model",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     integration: Mapped["AIModelIntegration | None"] = relationship(
         "AIModelIntegration",
         back_populates="ai_model",
@@ -1422,6 +1346,26 @@ class AIModel(Base):
         "AIInferenceRun",
         back_populates="ai_model",
         cascade="all, delete-orphan",
+    )
+
+
+class AIModelDisease(Base):
+    """Explicit disease eligibility for an AI model."""
+
+    __tablename__ = "ai_model_diseases"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ai_model_id: Mapped[int] = mapped_column(ForeignKey("ai_models.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="CASCADE"), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    ai_model: Mapped["AIModel"] = relationship("AIModel", back_populates="disease_links")
+    disease: Mapped["Disease"] = relationship("Disease", back_populates="ai_model_links")
+
+    __table_args__ = (
+        UniqueConstraint("ai_model_id", "disease_id", name="uq_ai_model_disease"),
+        Index("ix_ai_model_diseases_disease_active", "disease_id", "active"),
     )
 
 
@@ -2784,3 +2728,17 @@ class PackageUpdateScan(Base):
             "triggered_by_user_id": self.triggered_by_user_id,
             "duration_seconds": self.duration_seconds,
         }
+
+
+# Import feature-specific model modules so their tables are registered on
+# Base.metadata while keeping this root model file from growing indefinitely.
+from upload_profiles.models import (  # noqa: E402,F401
+    UploadProfile,
+    UploadProfileAIWorkflow,
+    UploadProfileArea,
+    UploadProfileAssignment,
+    UploadProfileCamera,
+    UploadProfileDisease,
+    UploadProfileKind,
+    PatientEncounterTargetDisease,
+)

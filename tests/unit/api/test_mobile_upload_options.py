@@ -4,7 +4,16 @@ from itertools import count
 
 import pytest
 
-from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role, UploadMapping, UploadMappingArea, UploadMappingCamera
+from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role
+from upload_profiles.models import (
+    UploadProfile,
+    UploadProfileArea,
+    UploadProfileAssignment,
+    UploadProfileCamera,
+    UploadProfileDisease,
+    UploadProfileKind,
+)
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
 from tests.helpers.factories import UserFactory
 
 
@@ -63,10 +72,10 @@ def upload_options_data(db_session, core_test_data):
     db_session.add_all([project_a, project_b])
     db_session.flush()
 
-    mapping_a = _add_mapping(db_session, uploader.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
-    mapping_b = _add_mapping(db_session, uploader.id, lab_b.id, project_b.id, dr.id, camera_b.id, area_b.id)
-    _add_mapping(db_session, admin_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
-    _add_mapping(db_session, elevated_uploader_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
+    profile_a = _add_profile(db_session, uploader.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
+    profile_b = _add_profile(db_session, uploader.id, lab_b.id, project_b.id, dr.id, camera_b.id, area_b.id)
+    _add_profile(db_session, admin_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
+    _add_profile(db_session, elevated_uploader_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
     db_session.flush()
 
     return {
@@ -84,8 +93,8 @@ def upload_options_data(db_session, core_test_data):
         "lab_b": lab_b,
         "project_a": project_a,
         "project_b": project_b,
-        "mapping_a": mapping_a,
-        "mapping_b": mapping_b,
+        "profile_a": profile_a,
+        "profile_b": profile_b,
     }
 
 
@@ -106,7 +115,7 @@ def test_mobile_upload_options_rejects_user_without_file_uploader_role(client, d
     assert response.status_code == 403
 
 
-def test_mobile_upload_options_returns_empty_arrays_without_valid_mappings(client, db_session, monkeypatch):
+def test_mobile_upload_options_returns_empty_arrays_without_valid_profiles(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user = UserFactory.create_by_role(db_session, "fileUploader", username="mobile_options_empty")
     db_session.flush()
@@ -121,7 +130,7 @@ def test_mobile_upload_options_returns_empty_arrays_without_valid_mappings(clien
         "diseases": [],
         "cameras": [],
         "areas": [],
-        "mappings": [],
+        "profiles": [],
     }
 
 
@@ -137,7 +146,7 @@ def test_mobile_upload_options_admin_has_no_mapping_without_explicit_lab_assignm
     response = client.get("/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
-    assert response.get_json()["mappings"] == []
+    assert response.get_json()["profiles"] == []
 
 
 def test_mobile_upload_options_filters_keep_option_lists_consistent(client, db_session, monkeypatch, upload_options_data):
@@ -169,25 +178,26 @@ def test_mobile_upload_options_filters_keep_option_lists_consistent(client, db_s
     assert payload["diseases"] == [{"id": upload_options_data["glaucoma"].id, "name": upload_options_data["glaucoma"].name}]
     assert payload["cameras"] == [{"id": upload_options_data["camera_a"].id, "name": upload_options_data["camera_a"].name}]
     assert payload["areas"] == [{"id": upload_options_data["area_a"].id, "name": upload_options_data["area_a"].name}]
-    assert [item["mapping_id"] for item in payload["mappings"]] == [upload_options_data["mapping_a"].id]
+    assert [item["profile_id"] for item in payload["profiles"]] == [upload_options_data["profile_a"].id]
 
 
-def _add_mapping(db_session, user_id, lab_unit_id, project_id, disease_id, camera_id, area_id):
-    mapping = UploadMapping(
-        user_id=user_id,
+def _add_profile(db_session, user_id, lab_unit_id, project_id, disease_id, camera_id, area_id):
+    profile = UploadProfile(
+        name=f"Mobile profile {user_id}-{project_id}-{lab_unit_id}",
         lab_unit_id=lab_unit_id,
         project_id=project_id,
-        disease_id=disease_id,
-        default_disease_id=disease_id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
     )
-    mapping.cameras.append(UploadMappingCamera(camera_id=camera_id))
-    mapping.areas.append(UploadMappingArea(area_id=area_id))
-    db_session.add(mapping)
+    profile.assignments.append(UploadProfileAssignment(user_id=user_id, active=True))
+    profile.diseases.append(UploadProfileDisease(disease_id=disease_id, is_default=True))
+    profile.cameras.append(UploadProfileCamera(camera_id=camera_id))
+    profile.areas.append(UploadProfileArea(area_id=area_id))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
+    db_session.add(profile)
     db_session.flush()
-    return mapping
+    return profile
 
 
 def _mobile_access_token(client, username: str) -> str:

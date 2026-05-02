@@ -7,17 +7,18 @@ Uploads 1-10 direct fundus images, creates verified glaucoma grading tasks, queu
 - Auth: Bearer JWT from `/api/mobile/v1/auth/login`.
 - Roles: `admin`, `local_admin`, `data_manager`, `ophthalmologist`, `optometrist`, or `fileUploader`.
 - CSRF: not required because the route uses bearer-token auth.
-- Scope: the token user must have an active upload mapping for the selected project, lab unit, glaucoma disease, camera, site, and mydriatic state.
+- Scope: the token user must have an active upload profile for the selected project, lab unit, glaucoma disease, camera, site, and mydriatic state.
 - Body: `multipart/form-data`.
 
 ### Form Fields
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `project_id` | integer | yes | Active project in the caller's upload mapping. |
+| `project_id` | integer | yes | Active project in the caller's upload profile. |
 | `lab_unit_id` | integer | yes | Explicitly assigned lab unit. |
-| `camera_id` | integer | yes | Camera allowed by the upload mapping. |
-| `area_id` | integer | yes | Site/area allowed by the upload mapping. |
+| `profile_id` | integer | no | Concrete assigned upload profile. Recommended when the client has a profile selection. |
+| `camera_id` | integer | yes | Camera allowed by the upload profile. |
+| `area_id` | integer | yes | Site/area allowed by the upload profile. |
 | `is_mydriatic` | boolean-ish | no | Accepts `1`, `true`, `yes`, or `on`. Defaults false. |
 | `files` | file[] | yes | 1-10 JPG/PNG images. |
 

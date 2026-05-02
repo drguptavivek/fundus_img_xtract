@@ -53,4 +53,4 @@ Response fields:
 ## Implementation Notes
 
 - These routes are the public read surface for upload eligibility and hospital scoping.
-- If upload eligibility logic changes, update `utils/upload_scope.py` and keep these endpoints as thin wrappers over the shared scoping module.
+- If upload eligibility logic changes, update `upload_profiles.service` and keep these endpoints as thin wrappers over the shared profile/scoping service.

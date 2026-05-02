@@ -115,39 +115,41 @@
     if (checked && allowed) input.checked = true;
   }
 
-  function mappingMatches(mapping, projectId, labUnitId, cameraId, areaId) {
-    if (projectId && mapping.project_id !== projectId) return false;
-    if (labUnitId && mapping.lab_unit_id !== labUnitId) return false;
-    if (cameraId && Array.isArray(mapping.camera_ids) && mapping.camera_ids.indexOf(cameraId) === -1) return false;
-    if (areaId && Array.isArray(mapping.area_ids) && mapping.area_ids.indexOf(areaId) === -1) return false;
+  function profileMatches(profile, projectId, labUnitId, cameraId, areaId) {
+    if (projectId && profile.project_id !== projectId) return false;
+    if (labUnitId && profile.lab_unit_id !== labUnitId) return false;
+    if (cameraId && Array.isArray(profile.camera_ids) && profile.camera_ids.indexOf(cameraId) === -1) return false;
+    if (areaId && Array.isArray(profile.area_ids) && profile.area_ids.indexOf(areaId) === -1) return false;
     return true;
   }
 
   function updateMydriaticDefaults(form) {
-    var holder = form.querySelector("[data-upload-mappings]");
+    var holder = form.querySelector("[data-upload-profiles]");
     if (!holder) return;
-    var mappings = [];
+    var profiles = [];
     try {
-      mappings = JSON.parse(holder.getAttribute("data-upload-mappings") || "[]");
+      profiles = JSON.parse(holder.getAttribute("data-upload-profiles") || "[]");
     } catch (err) {
       return;
     }
-    if (!Array.isArray(mappings) || mappings.length === 0) return;
+    if (!Array.isArray(profiles) || profiles.length === 0) return;
 
     var projectId = selectedNumber(form, "project_id");
     var labUnitId = selectedNumber(form, "lab_unit_id");
     var cameraId = selectedNumber(form, "camera_id");
     var areaId = selectedNumber(form, "area_id");
-    var matches = mappings.filter(function (mapping) {
-      return mappingMatches(mapping, projectId, labUnitId, cameraId, areaId);
+    var matches = profiles.filter(function (profile) {
+      return profileMatches(profile, projectId, labUnitId, cameraId, areaId);
     });
+    var profileInput = form.querySelector('input[name="profile_id"]');
+    if (profileInput) profileInput.value = matches.length === 1 ? String(matches[0].profile_id || "") : "";
     if (matches.length === 0) return;
 
-    var allowMydriatic = matches.some(function (mapping) { return Boolean(mapping.allow_mydriatic); });
-    var allowNonMydriatic = matches.some(function (mapping) { return Boolean(mapping.allow_non_mydriatic); });
-    var selectedMapping = matches.length === 1 ? matches[0] : null;
-    var defaultIsMydriatic = selectedMapping
-      ? Boolean(selectedMapping.default_is_mydriatic)
+    var allowMydriatic = matches.some(function (profile) { return Boolean(profile.allow_mydriatic); });
+    var allowNonMydriatic = matches.some(function (profile) { return Boolean(profile.allow_non_mydriatic); });
+    var selectedProfile = matches.length === 1 ? matches[0] : null;
+    var defaultIsMydriatic = selectedProfile
+      ? Boolean(selectedProfile.default_is_mydriatic)
       : allowMydriatic && !allowNonMydriatic;
 
     setMydriaticOption(form, "false", allowNonMydriatic, !defaultIsMydriatic);

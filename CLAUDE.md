@@ -38,13 +38,15 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
 
 ## API And UI
 
-- Prefer RESTful API endpoints plus HTMX-based page structures for enhanced UI interactions.
+- Expose all new or materially changed functionality through explicit RESTful JSON APIs for mobile apps, JavaScript apps, and HTMX-driven frontend workflows unless the behavior is strictly internal server rendering.
+- Frontend mutations and dynamic reads should call documented API endpoints from the `api` package. HTMX requests must include CSRF via `X-CSRFToken` or form-rendered `{{ csrf_field() }}`.
+- Page routes should render initial pages, layouts, and reusable HTMX fragments only. They should not own JSON/data mutations or reusable application behavior.
 - For HTMX mutations that affect select options, modal forms, counts, badges, or related lists, swap a shared workspace/container that includes every dependent fragment. Do not refresh only the visible table/panel if hidden modal or dropdown data can become stale.
 - Keep HTMX modal/forms in reusable partials and return the same partial tree after mutations so dependent data is refetched from the server source of truth.
 - All new API endpoints must live in the `api` package and register on `api_bp` from `api/__init__.py`, or on a versioned API blueprint such as `api/mobile/__init__.py`.
 - Do not add `/api/...` routes inside page feature blueprints.
-- Page blueprints should render pages and HTMX fragments. JSON/data mutations and reusable API behavior belong in the API blueprint.
-- Every new or materially changed functionality must expose an explicit, documented API for mobile apps and JavaScript apps unless the feature is strictly server-rendered and internal. Document request/response shape, auth/role requirements, lab/project scoping, validation errors, and example calls.
+- API routes may return JSON by default and HTMX partials only when explicitly documented for progressive enhancement; keep the underlying domain/service contract DTO-based and reusable.
+- Document request/response shape, auth/role requirements, lab/project scoping, validation errors, CSRF requirements, HTMX response behavior where applicable, and example calls.
 - Generate API documentation under `docs/API/<feature-or-module>/` for each API surface; keep endpoint docs feature-scoped instead of scattering API details across unrelated docs.
 - When modifying an existing `/api/...` route outside `api`, move it into the API blueprint when feasible.
 - Use Bootstrap 5.3 and flash toasts for UI feedback.
@@ -61,8 +63,11 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
 
 ## Architecture
 
-- Keep Flask routes thin: parse request, call domain/service functions, render/redirect/return JSON.
-- Put domain rules, scoping, validation, query composition, DTOs, and typed exceptions in cohesive deep modules with narrow public interfaces.
+- Keep Flask routes thin: authenticate/authorize, parse and validate transport input, call service module functions, then render/redirect/return JSON. Do not put business rules, query construction, or workflow branching in routes.
+- Put domain rules, scoping, validation, query composition, DTOs, serializers/deserializers, and typed exceptions in cohesive deep service modules with narrow public interfaces.
+- Organize deep feature modules as folders that own their ORM models, service logic, DTOs, serializers, validators, and domain exceptions. Avoid scattering a feature's domain code across unrelated top-level files. Web APIs, page routes/blueprints, and Jinja templates may remain in the shared `api/`, route/blueprint, and `templates/` directories while delegating domain behavior to the deep module.
+- Treat DTOs as the contract between routes, APIs, templates, and services. Avoid passing raw request data, ORM rows, or ad-hoc dicts across module boundaries when a typed DTO or serializer is appropriate.
+- Build features around service modules that can serve JSON APIs, HTMX partials, background jobs, and tests from the same domain layer.
 - Do not duplicate permission checks, scope expansion, filtering, or grading business rules across routes/templates.
 - Keep compatibility shims only temporarily; remove them once callers are migrated.
 - Do not duplicate code. Create reusable utilities where the codebase already has a matching pattern.
@@ -89,9 +94,12 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
   `bd update <id> --description="## Implementation\n...\n## Verification\n..."`
   `bd close <id>`
   `bd vc status`
-  `bd vc commit -m "Update beads state"`
-- `bd 0.62.0` uses Dolt. `bd sync` is obsolete.
-- If Dolt state is missing but `.beads/issues.jsonl` exists, rebuild with:
+  `bd export -o .beads/issues.jsonl`
+- This repository uses Beads `bd` with Dolt in embedded mode. Confirm with `.beads/metadata.json` (`"dolt_mode": "embedded"`) and `bd version`.
+- Do not use `bd sync`, `bd dolt push`, or server-mode Dolt commands for normal workflow in this repo.
+- Keep Beads state in Git by including the tracked files `.beads/config.yaml`, `.beads/metadata.json`, and `.beads/issues.jsonl`. Runtime directories such as `.beads/dolt/`, `.beads/embeddeddolt/`, `.beads/backup/`, logs, locks, and export-state files remain ignored.
+- After creating/updating/closing beads, run `bd export -o .beads/issues.jsonl`, then review and commit the resulting `.beads/issues.jsonl` change with the implementation when appropriate.
+- If embedded Dolt state is missing but `.beads/issues.jsonl` exists, rebuild with:
   `bd init --force --destroy-token DESTROY-fundus_img_xtract --database beads --from-jsonl --skip-agents --skip-hooks`
 
 ## Common Files
@@ -104,7 +112,7 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+This project uses **bd (beads)** for issue tracking in embedded Dolt mode. Run `bd prime` to see full workflow context and commands.
 
 ### Quick Reference
 
@@ -113,6 +121,7 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --claim  # Claim work
 bd close <id>         # Complete work
+bd export -o .beads/issues.jsonl  # Write tracked issue export
 ```
 
 ### Rules
@@ -120,6 +129,7 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Do not use `bd sync` or `bd dolt push`; this repo uses embedded Dolt plus the tracked `.beads/issues.jsonl` export
 
 ## Session Completion
 
@@ -133,7 +143,7 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd dolt push
+   bd export -o .beads/issues.jsonl
    git push
    git status  # MUST show "up to date with origin"
    ```

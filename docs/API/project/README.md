@@ -1,59 +1,109 @@
-# Project Dashboard Contract
+# Project Upload Profiles API
 
-This folder documents the internal HTMX contract for project creation, investigator assignment, and upload-mapping management.
+Browser admin pages render under `/admin/upload-profiles`. Project,
+investigator, and upload-profile mutations use JSON APIs under `/api/upload-profiles`.
+See `docs/API/upload-profiles/README.md` for the current profile contract.
 
-## Route
+## Auth
 
-- `POST /admin/upload-mappings`
+- Requires authenticated browser session.
+- Roles: `admin`, `local_admin`, or `data_manager`.
+- CSRF required via form `csrf_token` or `X-CSRFToken`.
+- Upload profile mutations are scoped to the caller's explicitly assigned lab units.
 
-## Surface Type
+## Response Shape
 
-- HTML/HTMX partial
+Success:
 
-## Contract Rules
+```json
+{
+  "success": true,
+  "message": "Upload profile updated.",
+  "redirect_url": "/admin/upload-profiles",
+  "profile_id": 12
+}
+```
 
-- This is not a public JSON API.
-- It is a browser-session HTMX surface that returns a refreshed workspace fragment.
-- All forms must include `{{ csrf_field() }}`.
-- Missing or invalid CSRF should be treated as a `400` failure.
-- The response must refresh the shared `#project-dashboard-workspace` container so project lists, investigator modals, and upload-mapping selects are refetched from the server source of truth.
+Error:
 
-## Create Project
+```json
+{
+  "success": false,
+  "message": "Upload profile not found in your lab-unit scope.",
+  "error": "Upload profile not found in your lab-unit scope.",
+  "redirect_url": "/admin/upload-profiles"
+}
+```
 
-- `action=create_project`
-- Fields: `title`, `code`, `description`
-- Response: refreshed `#project-dashboard-workspace`
-- Errors: `400` validation or CSRF failure, `403` role/scope failure
+## Endpoints
 
-## Assign Investigator
+### Create Project
 
-- `action=add_investigator`
-- Fields: `project_id`, `user_id`, `role`
-- Response: refreshed `#project-dashboard-workspace`
-- Errors: `400` validation or CSRF failure, `403` role/scope failure
+`POST /api/upload-profiles/projects`
 
-## Create Upload Mapping
+Fields:
+- `title` string, required
+- `code` string, required
+- `description` string, optional
 
-- `action=create_mapping`
-- Fields:
-  - `user_id`
-  - `lab_unit_id`
-  - `project_id`
-  - `disease_id`
-  - `default_disease_id`
-  - `allow_mydriatic`
-  - `allow_non_mydriatic`
-  - `default_is_mydriatic`
-  - `camera_ids[]`
-  - `area_ids[]`
-- Response: refreshed `#project-dashboard-workspace`
-- Validation:
-  - uploader, lab unit, project, disease, cameras, and sites are required
-  - the lab unit must be in the caller’s explicit management scope
-  - the uploader must already belong to the selected lab unit
-- Errors: `400` validation or CSRF failure, `403` role/scope failure
+### Assign Investigator
 
-## Notes
+`POST /api/upload-profiles/investigators`
 
-- The dashboard is the source of truth for project investigator and upload-mapping options.
-- If only a visible panel is refreshed, newly created projects will not appear in modal selects until reload. The shared workspace avoids that stale-data bug.
+Fields:
+- `project_id` integer, required
+- `user_id` integer, required
+- `role` one of `principal_investigator`, `co_investigator`, `coordinator`
+
+### Create Upload Profile
+
+`POST /api/upload-profiles`
+
+Fields:
+- `name` string, required
+- `user_ids` repeated integers, required
+- `lab_unit_id` integer, required and in caller scope
+- `project_id` integer, required
+- `disease_ids` repeated integers, required
+- `default_disease_ids` repeated integers, optional
+- `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
+- `allow_mydriatic` checkbox value `on`
+- `allow_non_mydriatic` checkbox value `on`
+- `default_is_mydriatic` checkbox value `on`
+- `camera_ids` repeated integer values, required
+- `area_ids` repeated integer values, required
+
+### Edit Upload Profile
+
+`POST|PATCH /api/upload-profiles/<profile_id>`
+
+Uses the same fields and validation as create.
+
+### Activate Upload Profile
+
+`POST /api/upload-profiles/<profile_id>/activate`
+
+### Deactivate Upload Profile
+
+`POST /api/upload-profiles/<profile_id>/deactivate`
+
+### Duplicate Upload Profile
+
+`POST /api/upload-profiles/<profile_id>/duplicate`
+
+## Validation Errors
+
+- Required profile name, uploaders, lab unit, project, diseases, upload kinds, cameras, and sites.
+- Lab unit must be in the caller's explicit management scope.
+- Uploader must already belong to the selected lab unit.
+- At least one mydriatic scope must be selected.
+- Default mydriatic state must be allowed by the selected scope.
+
+## Example
+
+```bash
+curl -X POST https://example.org/api/upload-profiles/12/activate \
+  -H "X-CSRFToken: <csrf-token>" \
+  -H "Accept: application/json" \
+  -b "<browser-session-cookie>"
+```

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from . import api_bp
 from db_transaction_manager import transaction_scope
 from models import PatientEncounters, EncounterSetImage, User
+from upload_profiles.models import PatientEncounterTargetDisease
 from auth.utils import utcnow
 from auth.decorators import token_auth_required
 from utils.rate_limiter import api_rate_limit
@@ -25,7 +26,11 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from utils.hospital_scoping import apply_scoping
-from utils.upload_scope import UploadScopeError, validate_encounter_set_upload_scope
+from upload_profiles.service import (
+    UPLOAD_KIND_ENCOUNTER_SET,
+    UploadProfileError,
+    validate_profile_upload_scope,
+)
 
 # ============================================================================
 # FILE VALIDATION CONFIGURATION
@@ -402,13 +407,18 @@ def upload_encounter_set_image():
         lab_unit_id = int(claims.get("lab_unit_id"))
     except (TypeError, ValueError):
         return jsonify({"error": "Upload token is missing lab_unit_id"}), 403
-    project_id_raw = request.form.get("project_id")
+    profile_id_raw = request.form.get("upload_profile_id") or request.form.get("profile_id")
     disease_id_raw = request.form.get("disease_id")
+    camera_id_raw = request.form.get("camera_id")
+    area_id_raw = request.form.get("area_id")
     try:
-        project_id = int(project_id_raw) if project_id_raw else None
+        upload_profile_id = int(profile_id_raw) if profile_id_raw else None
         disease_id = int(disease_id_raw) if disease_id_raw else None
+        camera_id = int(camera_id_raw) if camera_id_raw else None
+        area_id = int(area_id_raw) if area_id_raw else None
     except (TypeError, ValueError):
-        return jsonify({"error": "Invalid project_id or disease_id"}), 400
+        return jsonify({"error": "Invalid upload_profile_id, disease_id, camera_id, or area_id"}), 400
+    is_mydriatic = (request.form.get("is_mydriatic") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     if not uploader_user_id:
         return jsonify({"error": "Upload token is not associated with a user"}), 403
@@ -417,8 +427,10 @@ def upload_encounter_set_image():
     ).scalar_one_or_none()
     if uploader_user is None or not uploader_user.has_role("fileUploader"):
         return jsonify({"error": "Forbidden", "message": "Encounter set uploads require the fileUploader role"}), 403
-    if not project_id:
-        return jsonify({"error": "Missing project_id"}), 400
+    if not upload_profile_id:
+        return jsonify({"error": "Missing upload_profile_id"}), 400
+    if not camera_id or not area_id:
+        return jsonify({"error": "Missing camera_id or area_id"}), 400
     
     # Validate spatial position
     spatial_pos_raw = request.form.get("spatial_position")
@@ -451,15 +463,21 @@ def upload_encounter_set_image():
     
     with transaction_scope() as db:
         try:
-            upload_mapping = validate_encounter_set_upload_scope(
+            upload_profile = validate_profile_upload_scope(
                 db,
                 uploader_user_id,
-                project_id=project_id,
-                lab_unit_id=lab_unit_id,
+                profile_id=upload_profile_id,
+                upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
                 disease_id=disease_id,
+                camera_id=camera_id,
+                area_id=area_id,
+                is_mydriatic=is_mydriatic,
             )
-        except UploadScopeError as exc:
+        except UploadProfileError as exc:
             return jsonify({"error": exc.code, "message": exc.message}), 403
+        if upload_profile.lab_unit_id != lab_unit_id:
+            return jsonify({"error": "profile_lab_mismatch", "message": "Upload profile is not valid for this token lab unit."}), 403
+        target_disease_ids = [disease_id] if disease_id else sorted(upload_profile.disease_ids)
 
         if encounter_uuid:
             encounter = db.query(PatientEncounters).filter_by(uuid=encounter_uuid).first()
@@ -471,12 +489,16 @@ def upload_encounter_set_image():
                 logger.warning("Cross-lab upload attempt. Encounter: %s, Token Lab: %s", 
                                sanitize_log_value(encounter.id), sanitize_log_value(lab_unit_id))
                 return jsonify({"error": "Unauthorized access to this encounter"}), 403
-            if encounter.project_id and encounter.project_id != upload_mapping.project_id:
+            if encounter.project_id and encounter.project_id != upload_profile.project_id:
                 return jsonify({"error": "Encounter belongs to a different project"}), 403
             if encounter.project_id is None:
-                encounter.project_id = upload_mapping.project_id
+                encounter.project_id = upload_profile.project_id
+            if encounter.upload_profile_id and encounter.upload_profile_id != upload_profile.profile_id:
+                return jsonify({"error": "Encounter belongs to a different upload profile"}), 403
+            if encounter.upload_profile_id is None:
+                encounter.upload_profile_id = upload_profile.profile_id
             if encounter.disease_id is None:
-                encounter.disease_id = upload_mapping.default_disease_id or upload_mapping.disease_id
+                encounter.disease_id = target_disease_ids[0] if len(target_disease_ids) == 1 else None
         else:
             # Create new encounter
             patient_id = request.form.get("patient_id")
@@ -491,14 +513,35 @@ def upload_encounter_set_image():
                 patient_id=patient_id,
                 capture_date=capture_date,
                 lab_unit_id=lab_unit_id,
-                project_id=upload_mapping.project_id,
-                disease_id=upload_mapping.default_disease_id or upload_mapping.disease_id,
+                project_id=upload_profile.project_id,
+                upload_profile_id=upload_profile.profile_id,
+                disease_id=target_disease_ids[0] if len(target_disease_ids) == 1 else None,
                 is_set_based=True,
                 uuid=str(uuid4())
             )
             db.add(encounter)
             db.flush() # Get encounter.id
             encounter_uuid = encounter.uuid
+
+        existing_targets = {
+            row[0]
+            for row in db.execute(
+                select(PatientEncounterTargetDisease.disease_id).where(
+                    PatientEncounterTargetDisease.patient_encounter_id == encounter.id
+                )
+            ).all()
+        }
+        if existing_targets and existing_targets != set(target_disease_ids):
+            return jsonify({"error": "Encounter target diseases cannot be changed after upload starts"}), 403
+        for target_disease_id in target_disease_ids:
+            if target_disease_id not in existing_targets:
+                db.add(
+                    PatientEncounterTargetDisease(
+                        patient_encounter_id=encounter.id,
+                        disease_id=target_disease_id,
+                        is_default=False,
+                    )
+                )
             
         # =========================================================================
         # HANDLE FILE STORAGE - USE SAFE FILENAMES
@@ -548,7 +591,10 @@ def upload_encounter_set_image():
             spatial_position=spatial_pos,
             original_filename=file.filename,  # User's original name for reference only
             folder_rel=folder_rel,
-            project_id=upload_mapping.project_id,
+            project_id=upload_profile.project_id,
+            camera_id=camera_id,
+            area_id=area_id,
+            is_mydriatic=is_mydriatic,
             created_at=utcnow()
         )
         db.add(set_image)

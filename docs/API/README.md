@@ -11,6 +11,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Scoping APIs](scoping/README.md)
 - [Lookup APIs](lookups/README.md)
 - [Uploads Index](uploads/README.md)
+- [Upload Profiles API](upload-profiles/README.md)
 - [Analytics APIs](analytics/README.md)
 - [Admin APIs](admin/README.md)
 - [Media APIs](media/README.md)

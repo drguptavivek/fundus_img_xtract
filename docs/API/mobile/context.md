@@ -126,15 +126,18 @@ Success response: `200 OK`
   "areas": [
     { "id": 4, "name": "Macula" }
   ],
-  "mappings": [
+  "profiles": [
     {
-      "mapping_id": 100,
+      "profile_id": 100,
+      "name": "Glaucoma screening profile",
       "project_id": 10,
       "lab_unit_id": 12,
-      "disease_id": 2,
-      "default_disease_id": 2,
+      "disease_ids": [2],
+      "default_disease_ids": [2],
       "camera_ids": [3],
       "area_ids": [4],
+      "upload_kinds": ["direct_image"],
+      "ai_workflows": [],
       "allow_mydriatic": true,
       "allow_non_mydriatic": true,
       "default_is_mydriatic": false
@@ -143,7 +146,7 @@ Success response: `200 OK`
 }
 ```
 
-The response is built from active upload mappings and explicit lab-unit assignment. Admin, local-admin, and data-manager roles do not add upload mappings without an explicit lab-unit assignment. Filters trim `mappings` first, then rebuild the option arrays from the remaining mappings so clients do not display stale projects, lab units, diseases, cameras, or areas.
+The response is built from active upload profiles and explicit lab-unit assignment. Admin, local-admin, and data-manager roles do not add upload profiles without an explicit lab-unit assignment. Filters trim `profiles` first, then rebuild the option arrays from the remaining profiles so clients do not display stale projects, lab units, diseases, cameras, or areas.
 
 This endpoint is for client selector defaults only. Upload endpoints must still validate submitted IDs server-side.
 
@@ -152,4 +155,4 @@ Errors:
 - `401` when the bearer token is missing or invalid
 - `403` when the user is inactive or lacks `fileUploader`
 
-Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma` to choose a valid default mapping, then continue uploads through `POST /api/glaucoma-ai/uploads`.
+Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma` to choose a valid default profile, then continue uploads through `POST /api/glaucoma-ai/uploads`.

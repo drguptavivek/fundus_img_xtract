@@ -2,6 +2,14 @@
 # This file configures default behavior for all bd commands in this repository
 # All settings can also be set via environment variables (BD_* prefix)
 # or overridden with command-line flags
+#
+# Repository note:
+# - This repo uses Dolt in embedded mode; see .beads/metadata.json.
+# - Commit .beads/config.yaml, .beads/metadata.json, and .beads/issues.jsonl.
+# - Do not commit local runtime state such as .beads/dolt/, .beads/embeddeddolt/,
+#   .beads/backup/, logs, locks, credentials, or export-state files.
+# - After bead changes, refresh the tracked export with:
+#   bd export -o .beads/issues.jsonl
 
 # Issue prefix for this repository (used by bd init)
 # If not set, bd init will auto-detect from directory name
@@ -42,11 +50,9 @@ issue-prefix: "fundus_img_xtract"
 # Use 'bd export --events' to trigger manually regardless of this setting.
 # events-export: false
 
-# Git branch for beads commits (bd sync will commit to this branch)
-# IMPORTANT: Set this for team projects so all clones use the same sync branch.
-# This setting persists across clones (unlike database config which is gitignored).
-# Can also use BEADS_SYNC_BRANCH env var for local override.
-# If not set, bd sync will require you to run 'bd config set sync.branch <branch>'.
+# Legacy sync branch setting. Normal workflow in this repository does not use
+# `bd sync`; keep issue state portable by running:
+#   bd export -o .beads/issues.jsonl
 sync-branch: "beads-sync"
 
 # Multi-repo configuration (experimental - bd-307)

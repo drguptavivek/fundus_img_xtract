@@ -90,7 +90,7 @@ from .celery_schedule import (
     celery_schedule_update,
     celery_schedule_delete,
 )
-from .upload_mappings import upload_mappings_admin, deactivate_upload_mapping
+from .upload_profiles import upload_profiles_admin, upload_project_create_workspace, upload_project_workspace, upload_projects_admin
 
 
 # Register routes with the blueprint
@@ -106,12 +106,10 @@ admin_bp.add_url_rule("/users/<int:user_id>", view_func=user_detail, methods=["G
 admin_bp.add_url_rule("/users/<int:user_id>/edit", view_func=edit_user, methods=["GET", "POST"])
 admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, methods=["POST"])
 admin_bp.add_url_rule("/users/<int:user_id>/mobile-sessions/<string:session_id>/revoke", view_func=revoke_mobile_session, methods=["POST"])
-admin_bp.add_url_rule("/upload-mappings", view_func=upload_mappings_admin, methods=["GET", "POST"])
-admin_bp.add_url_rule(
-    "/upload-mappings/<int:mapping_id>/deactivate",
-    view_func=deactivate_upload_mapping,
-    methods=["POST"],
-)
+admin_bp.add_url_rule("/upload-profiles", view_func=upload_profiles_admin, methods=["GET"])
+admin_bp.add_url_rule("/upload-projects", view_func=upload_projects_admin, methods=["GET"])
+admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project_create_workspace, methods=["GET"])
+admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
 
 # Security routes (password and roles)
 admin_bp.add_url_rule("/change-password", view_func=change_password, methods=["GET", "POST"])

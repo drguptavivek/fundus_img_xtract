@@ -19,7 +19,7 @@ from services.glaucoma_ai_upload import (
 from utils.fileUtils import abs_from_parts, get_thumbnail_path_direct
 from utils.image_processing import generate_thumbnail, get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
-from utils.upload_scope import UploadScopeError
+from upload_profiles.service import UploadProfileError
 
 from . import api_bp
 
@@ -123,6 +123,7 @@ def create_glaucoma_ai_upload():
             camera_id=_form_int("camera_id"),
             area_id=_form_int("area_id"),
             is_mydriatic=_form_bool("is_mydriatic"),
+            profile_id=_form_optional_int("profile_id"),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -152,7 +153,7 @@ def create_glaucoma_ai_upload():
             ),
             app=current_app._get_current_object(),
         )
-    except UploadScopeError as exc:
+    except UploadProfileError as exc:
         current_app.logger.warning(
             "JWT glaucoma AI upload rejected user=%s code=%s",
             sanitize_log_value(user_id),
@@ -266,6 +267,19 @@ def _form_int(name: str) -> int:
         raise ValueError(f"{name} is required") from exc
     if value <= 0:
         raise ValueError(f"{name} is required")
+    return value
+
+
+def _form_optional_int(name: str) -> int | None:
+    raw = request.form.get(name)
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
     return value
 
 

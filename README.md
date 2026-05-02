@@ -209,7 +209,8 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Database Models](docs/00-Core/models.md) - Updated with dual grading system models
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
-- [Project-Scoped Upload Mappings](docs/01-Adding_Images/project_upload_mapping.md) - Project provenance, upload mapping source of truth, upload-scope module interfaces, and rollout/backfill plan
+- [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current admin and upload-governance model for projects, reusable profiles, uploader assignments, Remidio ZIP defaults, and AI workflow bindings
+- [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
@@ -229,7 +230,8 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
     - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
 - [Comprehensive Direct Upload Workflow](docs/01-Adding_Images/comprehensive_direct_upload_workflow.md) - Complete individual image upload system
-- [Project-Scoped Upload Mappings](docs/01-Adding_Images/project_upload_mapping.md) - Completed upload project and mapping design for direct, pregraded, Remedio ZIP, and encounter-set intake
+- [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current upload governance rules for direct, pre-graded, Remidio ZIP, encounter-set intake, and AI workflow binding
+- [Upload Profiles API](docs/API/upload-profiles/README.md) - Completed project/profile design for direct, pregraded, Remedio ZIP, encounter-set intake, and AI workflow binding
 - [Pre-Graded Uploads](docs/01-Adding_Images/pre_graded.md)
 - [AI Grades Import Workflow (Excel Consumption)](docs/01-Adding_Images/comprehensive_ai_grades_import_workflow.md) - Excel file import for AI grades (consumption only)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)
@@ -299,7 +301,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
 - [Upload Policy](docs/policy/upload_policy.md) - Dashboard access vs upload-form access and fileUploader-only eligibility rules
 - [Admin Access Policy](docs/policy/admin_access_policy.md) - Admin vs local_admin hospital/lab-unit scope rules
-- [Project Upload Scope Module](docs/01-Adding_Images/project_upload_mapping.md#dedicated-upload-scope-module) - Dedicated `utils/upload_scope.py` interface for project-scoped upload eligibility and validation
+- [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation
 
 #### Master Data Utilities
 - [Master Utilities](docs/10-DEVELOP/Utilities/utils_masterUtils.md) - Functions for retrieving core entities like diseases, hospitals, etc.

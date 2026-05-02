@@ -23,11 +23,15 @@ from models import (
     LabUnit,
     UserDiseaseUnitRole,
     ProjectInvestigator,
-    UploadMapping,
-    UploadMappingCamera,
-    UploadMappingArea,
     MobileAuthSession,
     LoginAttempt,
+)
+from upload_profiles.models import (
+    UploadProfile,
+    UploadProfileArea,
+    UploadProfileAssignment,
+    UploadProfileCamera,
+    UploadProfileDisease,
 )
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.timezone_choices import (
@@ -93,19 +97,20 @@ def _build_user_detail_context(db, user_id: int) -> dict | None:
         .order_by(ProjectInvestigator.active.desc(), ProjectInvestigator.project_id.asc())
     ).scalars().all()
 
-    mapping_rows = db.execute(
-        select(UploadMapping)
+    upload_profile_rows = db.execute(
+        select(UploadProfile)
+        .join(UploadProfileAssignment, UploadProfileAssignment.upload_profile_id == UploadProfile.id)
         .options(
-            selectinload(UploadMapping.project),
-            selectinload(UploadMapping.lab_unit).selectinload(LabUnit.hospital),
-            selectinload(UploadMapping.disease),
-            selectinload(UploadMapping.default_disease),
-            selectinload(UploadMapping.cameras).selectinload(UploadMappingCamera.camera),
-            selectinload(UploadMapping.areas).selectinload(UploadMappingArea.area),
+            selectinload(UploadProfile.project),
+            selectinload(UploadProfile.lab_unit).selectinload(LabUnit.hospital),
+            selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
+            selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
+            selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
+            selectinload(UploadProfile.assignments),
         )
-        .where(UploadMapping.user_id == user_id)
-        .order_by(UploadMapping.active.desc(), UploadMapping.project_id.asc(), UploadMapping.lab_unit_id.asc(), UploadMapping.disease_id.asc())
-    ).scalars().all()
+        .where(UploadProfileAssignment.user_id == user_id)
+        .order_by(UploadProfile.active.desc(), UploadProfile.project_id.asc(), UploadProfile.lab_unit_id.asc(), UploadProfile.name.asc())
+    ).scalars().unique().all()
 
     login_attempts = db.execute(
         select(LoginAttempt)
@@ -126,7 +131,8 @@ def _build_user_detail_context(db, user_id: int) -> dict | None:
         "grouped_lab_units": _group_lab_units_by_hospital(list(user.lab_units or [])),
         "grading_rows": grading_rows,
         "investigator_rows": investigator_rows,
-        "mapping_rows": mapping_rows,
+        "mapping_rows": upload_profile_rows,
+        "upload_profile_rows": upload_profile_rows,
         "login_attempts": login_attempts,
         "mobile_sessions": mobile_sessions,
     }

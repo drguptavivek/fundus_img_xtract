@@ -4,11 +4,11 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post"
-            hx-post="{{ url_for('admin.upload_mappings_admin') }}"
-            hx-target="#project-dashboard-workspace"
-            hx-swap="outerHTML">
+            action="{{ url_for('fundus_api.create_upload_profile_project') }}"
+            hx-post="{{ url_for('fundus_api.create_upload_profile_project') }}"
+            hx-swap="none"
+            data-json-api-htmx>
         {{ csrf_field() }}
-        <input type="hidden" name="action" value="create_project">
         <div class="modal-header">
           <h5 class="modal-title" id="createProjectModalLabel">Create Project</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -36,15 +36,94 @@
   </div>
 </div>
 
+<div class="modal fade" id="editProjectModal" tabindex="-1" aria-labelledby="editProjectModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post"
+            action=""
+            hx-post=""
+            hx-swap="none"
+            data-json-api-htmx
+            data-project-edit-form>
+        {{ csrf_field() }}
+        <div class="modal-header">
+          <h5 class="modal-title" id="editProjectModalLabel">Edit Project</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" for="edit_project_title">Project Title</label>
+            <input class="form-control" id="edit_project_title" name="title" maxlength="255" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="edit_project_code">Project Code</label>
+            <input class="form-control text-uppercase" id="edit_project_code" name="code" maxlength="64" required>
+          </div>
+          <div class="mb-0">
+            <label class="form-label" for="edit_project_description">Description</label>
+            <textarea class="form-control" id="edit_project_description" name="description" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" type="submit">Save Project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="assignProfileUserModal" tabindex="-1" aria-labelledby="assignProfileUserModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post"
+            action="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+            hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+            hx-swap="none"
+            data-json-api-htmx>
+        {{ csrf_field() }}
+        <div class="modal-header">
+          <h5 class="modal-title" id="assignProfileUserModalLabel">Assign User To Upload Profile</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" for="assignment_profile_id">Upload Profile</label>
+            <select class="form-select" id="assignment_profile_id" name="profile_id" required>
+              <option value="">Select upload profile</option>
+              {% for profile in upload_profiles if profile.active %}
+              <option value="{{ profile.id }}">{{ profile.project.title }} - {{ profile.name }} ({{ profile.lab_unit.name }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-0">
+            <label class="form-label" for="assignment_user_id">User</label>
+            <select class="form-select" id="assignment_user_id" name="user_id" required>
+              <option value="">Select user</option>
+              {% for user in users %}
+              <option value="{{ user.id }}">{{ user.full_name or user.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" type="submit">Assign User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="addInvestigatorModal" tabindex="-1" aria-labelledby="addInvestigatorModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post"
-            hx-post="{{ url_for('admin.upload_mappings_admin') }}"
-            hx-target="#project-dashboard-workspace"
-            hx-swap="outerHTML">
+            action="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
+            hx-post="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
+            hx-swap="none"
+            data-json-api-htmx>
         {{ csrf_field() }}
-        <input type="hidden" name="action" value="add_investigator">
         <div class="modal-header">
           <h5 class="modal-title" id="addInvestigatorModalLabel">Assign Project Investigator</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -80,116 +159,6 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
           <button class="btn btn-primary" type="submit">Assign Investigator</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="createMappingModal" tabindex="-1" aria-labelledby="createMappingModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <form method="post"
-            hx-post="{{ url_for('admin.upload_mappings_admin') }}"
-            hx-target="#project-dashboard-workspace"
-            hx-swap="outerHTML">
-        {{ csrf_field() }}
-        <input type="hidden" name="action" value="create_mapping">
-        <div class="modal-header">
-          <h5 class="modal-title" id="createMappingModalLabel">Add Upload Mapping</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label" for="mapping_user_id">Uploader</label>
-              <select class="form-select" id="mapping_user_id" name="user_id" required>
-                <option value="">Select uploader</option>
-                {% for user in users %}
-                <option value="{{ user.id }}">{{ user.full_name or user.username }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="mapping_lab_unit_id">Lab Unit</label>
-              <select class="form-select" id="mapping_lab_unit_id" name="lab_unit_id" required>
-                <option value="">Select lab unit</option>
-                {% for lab_unit in lab_units %}
-                <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} - {{ lab_unit.hospital.name }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="mapping_project_id">Project</label>
-              <select class="form-select" id="mapping_project_id" name="project_id" required>
-                <option value="">Select project</option>
-                {% for project in projects if project.active %}
-                <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="disease_id">Allowed Disease</label>
-              <select class="form-select" id="disease_id" name="disease_id" required>
-                <option value="">Select disease</option>
-                {% for disease in diseases %}
-                <option value="{{ disease.id }}">{{ disease.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="default_disease_id">Default Disease For Upload Tasks</label>
-              <select class="form-select" id="default_disease_id" name="default_disease_id">
-                <option value="">No default</option>
-                {% for disease in diseases %}
-                <option value="{{ disease.id }}">{{ disease.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Mydriatic Scope</label>
-              <div class="border rounded p-2">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="allow_mydriatic" name="allow_mydriatic">
-                  <label class="form-check-label" for="allow_mydriatic">Allow mydriatic</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="allow_non_mydriatic" name="allow_non_mydriatic" checked>
-                  <label class="form-check-label" for="allow_non_mydriatic">Allow non-mydriatic</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="default_is_mydriatic" name="default_is_mydriatic">
-                  <label class="form-check-label" for="default_is_mydriatic">Default is mydriatic</label>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Allowed Cameras</label>
-              <div class="border rounded p-2" style="max-height: 180px; overflow: auto;">
-                {% for camera in cameras %}
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="camera_ids" value="{{ camera.id }}" id="camera_{{ camera.id }}">
-                  <label class="form-check-label" for="camera_{{ camera.id }}">{{ camera.name }}</label>
-                </div>
-                {% endfor %}
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Allowed Sites</label>
-              <div class="border rounded p-2" style="max-height: 180px; overflow: auto;">
-                {% for area in areas %}
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="area_ids" value="{{ area.id }}" id="area_{{ area.id }}">
-                  <label class="form-check-label" for="area_{{ area.id }}">{{ area.name }}</label>
-                </div>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" type="submit">Create Mapping</button>
         </div>
       </form>
     </div>

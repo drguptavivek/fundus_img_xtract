@@ -28,9 +28,17 @@
 
       </div>
     <div class="card-body">
-      <form method="post" action="{{ url_for('direct_uploads.pregraded_upload') }}" enctype="multipart/form-data" novalidate>
+      <form method="post" action="{{ url_for('direct_uploads.pregraded_upload') }}" enctype="multipart/form-data" novalidate data-upload-profile-form>
         {{ csrf_field() }}
+        <div data-upload-profiles='{{ upload_profiles | tojson }}'></div>
 
+        {% if not upload_profiles %}
+        <div class="alert alert-warning">
+          No pre-graded upload profile is configured for your account. Ask an admin to assign an active profile with the Pre-graded upload type.
+        </div>
+        {% endif %}
+
+        <fieldset {% if not upload_profiles %}disabled{% endif %}>
         <div class="row g-3">
           <div class="col-12">
             <label class="form-label">Project <span class="text-danger">*</span></label>
@@ -124,6 +132,7 @@
           </div>
           <button type="submit" class="btn btn-primary">Upload Pre-Graded Images</button>
         </div>
+        </fieldset>
       </form>
     </div>
   </div>
@@ -381,7 +390,6 @@
 
     const mydriaticCheckbox = document.getElementById('is_mydriatic');
     const mydriaticLabel = document.getElementById('mydriatic-label');
-    const uploadMappings = {{ upload_mappings|tojson }};
     const projectButtons = document.querySelectorAll('[name="project_id"]');
     const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
     const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
@@ -412,49 +420,9 @@
       });
     }
 
-    function selectedValue(name) {
-      const selected = document.querySelector(`[name="${name}"]:checked`);
-      return selected ? Number(selected.value) : null;
-    }
-
-    function setRadioVisibility(button, visible) {
-      const label = document.querySelector(`label[for="${button.id}"]`);
-      button.parentElement.style.display = visible ? 'inline-block' : 'none';
-      if (label) {
-        label.style.display = visible ? 'inline-block' : 'none';
-      }
-      if (!visible) {
-        button.checked = false;
-      }
-    }
-
-    function filterUploadScopeOptions() {
-      const projectId = selectedValue('project_id');
-      const hospitalId = selectedValue('hospital_id');
-      const labUnitId = selectedValue('lab_unit_id');
-      const selectedMappings = uploadMappings.filter(mapping => {
-        if (projectId && mapping.project_id !== projectId) return false;
-        if (labUnitId && mapping.lab_unit_id !== labUnitId) return false;
-        return true;
-      });
-      const labIds = new Set(selectedMappings.map(mapping => mapping.lab_unit_id));
-      const cameraIds = new Set(selectedMappings.flatMap(mapping => mapping.camera_ids));
-      const diseaseIds = new Set(selectedMappings.map(mapping => mapping.disease_id));
-      const areaIds = new Set(selectedMappings.flatMap(mapping => mapping.area_ids));
-
-      labUnitButtons.forEach(labButton => {
-        const hospitalMatches = !hospitalId || labButton.dataset.hospitalId === String(hospitalId);
-        setRadioVisibility(labButton, hospitalMatches && (!projectId || labIds.has(Number(labButton.value))));
-      });
-      cameraButtons.forEach(button => setRadioVisibility(button, !projectId || cameraIds.has(Number(button.value))));
-      diseaseButtons.forEach(button => setRadioVisibility(button, !projectId || diseaseIds.has(Number(button.value))));
-      areaButtons.forEach(button => setRadioVisibility(button, !projectId || areaIds.has(Number(button.value))));
-    }
-
     projectButtons.forEach(button => {
       button.addEventListener('change', function () {
         savePref('project_id', this.value);
-        filterUploadScopeOptions();
       });
     });
 
@@ -462,14 +430,12 @@
       button.addEventListener('change', function () {
         const selectedHospitalId = this.value;
         savePref('hospital_id', selectedHospitalId);
-        filterUploadScopeOptions();
       });
     });
 
     labUnitButtons.forEach(button => {
       button.addEventListener('change', function () {
         savePref('lab_unit_id', this.value);
-        filterUploadScopeOptions();
       });
     });
 
@@ -496,7 +462,7 @@
     if (selectedHospital) {
       savePref('hospital_id', selectedHospital.value);
     }
-    filterUploadScopeOptions();
   });
 </script>
+<script src="{{ url_for('static', filename='js/upload-profile-options.js') }}"></script>
 {% endblock %}

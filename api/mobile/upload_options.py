@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
 from models import User
-from utils.upload_scope import UploadOptions, filter_upload_options, get_user_upload_options
+from upload_profiles.service import UploadOptions, filter_upload_options, get_user_upload_options
 
 from . import mobile_api_bp
 
@@ -72,5 +72,5 @@ def _serialize_upload_options(options: UploadOptions) -> dict:
         "diseases": options.diseases,
         "cameras": options.cameras,
         "areas": options.areas,
-        "mappings": options.mappings,
+        "profiles": options.profiles,
     }

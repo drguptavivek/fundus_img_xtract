@@ -7,6 +7,7 @@
     <h2>{{ title }}</h2>
     {% set integration = item.integration %}
     {% set integration_enabled = request.form.get('link_to_wadhwani_glaucoma_api') == 'on' if request.method == 'POST' else (integration and integration.provider == 'wadhwani_glaucoma') %}
+    {% set selected_disease_ids = request.form.getlist('disease_ids')|map('int')|list if request.method == 'POST' else item.disease_links|selectattr('active')|map(attribute='disease_id')|list %}
 
     <div class="card">
         <div class="card-body">
@@ -23,6 +24,20 @@
                 <div class="mb-3">
                     <label for="description" class="form-label">Description</label>
                     <textarea class="form-control" id="description" name="description">{{ request.form.get('description', item.description) }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+                        <label class="form-label mb-0">Diseases</label>
+                        <button class="btn btn-sm btn-outline-secondary js-select-all-diseases" type="button">Select All</button>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3 border rounded p-2" data-ai-model-disease-list>
+                        {% for disease in diseases %}
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" name="disease_ids" value="{{ disease.id }}" id="ai_model_disease_{{ disease.id }}" {% if disease.id in selected_disease_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="ai_model_disease_{{ disease.id }}">{{ disease.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
                 <div class="mb-3">
                     <div class="form-check">

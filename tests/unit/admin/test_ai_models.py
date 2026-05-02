@@ -1,4 +1,9 @@
-from models import AIModel, AIModelIntegration
+from models import AIModel, AIModelDisease, AIModelIntegration, Disease
+
+
+def _glaucoma_id(db_session):
+    disease = db_session.query(Disease).filter_by(name="Glaucoma").one()
+    return disease.id
 
 
 def test_create_ai_model_with_wadhwani_binding(client, login_user, db_session):
@@ -13,6 +18,7 @@ def test_create_ai_model_with_wadhwani_binding(client, login_user, db_session):
             "link_to_wadhwani_glaucoma_api": "on",
             "wadhwani_client_id": "client-123",
             "wadhwani_bearer_token": "secret-token",
+            "disease_ids": [str(_glaucoma_id(db_session))],
         },
         follow_redirects=True,
     )
@@ -22,10 +28,12 @@ def test_create_ai_model_with_wadhwani_binding(client, login_user, db_session):
 
     model = db_session.query(AIModel).filter_by(name="wai_glaucoma_ver1", version="1.0").one()
     integration = db_session.query(AIModelIntegration).filter_by(ai_model_id=model.id).one()
+    disease_link = db_session.query(AIModelDisease).filter_by(ai_model_id=model.id, disease_id=_glaucoma_id(db_session)).one()
 
     assert integration.provider == "wadhwani_glaucoma"
     assert integration.client_id == "client-123"
     assert integration.bearer_token == "secret-token"
+    assert disease_link.active is True
 
 
 def test_only_one_ai_model_can_be_linked_to_wadhwani(client, login_user, db_session):
@@ -53,6 +61,7 @@ def test_only_one_ai_model_can_be_linked_to_wadhwani(client, login_user, db_sess
             "link_to_wadhwani_glaucoma_api": "on",
             "wadhwani_client_id": "client-456",
             "wadhwani_bearer_token": "secret-token-2",
+            "disease_ids": [str(_glaucoma_id(db_session))],
         },
         follow_redirects=True,
     )

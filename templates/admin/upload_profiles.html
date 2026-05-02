@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Upload Profiles{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Upload Profiles</h1>
+      <p class="text-muted mb-0">Create, edit, duplicate, activate, and deactivate reusable upload profiles.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_projects_admin') }}">
+        Projects
+      </a>
+      <button class="btn btn-primary" type="button" data-upload-profile-add>
+        Add Upload Profile
+      </button>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    Upload permission is granted only by active upload profiles assigned to a user in Manage Projects. Profiles define upload types, diseases, AI workflows, cameras, sites, and mydriatic scope.
+  </div>
+
+  {% include "admin/partials/project_dashboard_workspace.html" %}
+</div>
+
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  function syncUploadProfileDiseaseRow(row) {
+    const diseaseToggle = row.querySelector('[data-upload-profile-disease-toggle]');
+    const dependents = row.querySelectorAll('[data-upload-profile-dependent]');
+    const enabled = Boolean(diseaseToggle && diseaseToggle.checked);
+    dependents.forEach(function (input) {
+      input.disabled = !enabled;
+      if (!enabled) {
+        input.checked = false;
+      }
+    });
+  }
+
+  function syncUploadProfileZipDefault(form) {
+    const remidioKind = form.querySelector('[data-upload-profile-remedio-kind]');
+    const zipDefaults = form.querySelectorAll('[data-upload-profile-remedio-default]');
+    const enabled = Boolean(remidioKind && remidioKind.checked);
+    zipDefaults.forEach(function (input) {
+      const diseaseToggle = input.closest('[data-upload-profile-disease-row]')?.querySelector('[data-upload-profile-disease-toggle]');
+      input.disabled = !enabled || !diseaseToggle || !diseaseToggle.checked;
+      if (!enabled) {
+        input.checked = false;
+      }
+    });
+  }
+
+  function syncUploadProfileMydriaticDefaults(form) {
+    const allowMydriatic = form.querySelector('[data-upload-profile-allow-mydriatic]');
+    const defaultMydriatic = form.querySelector('[data-upload-profile-default-mydriatic]');
+    if (!allowMydriatic || !defaultMydriatic) {
+      return;
+    }
+    const enabled = allowMydriatic.checked;
+    defaultMydriatic.disabled = !enabled;
+    if (!enabled) {
+      defaultMydriatic.checked = false;
+    }
+  }
+
+  function initUploadProfileEditors(root) {
+    root.querySelectorAll('[data-upload-profile-disease-row]').forEach(function (row) {
+      syncUploadProfileDiseaseRow(row);
+      const diseaseToggle = row.querySelector('[data-upload-profile-disease-toggle]');
+      if (diseaseToggle && !diseaseToggle.dataset.uploadProfileBound) {
+        diseaseToggle.addEventListener('change', function () {
+          syncUploadProfileDiseaseRow(row);
+          const form = row.closest('[data-upload-profile-editor]');
+          if (form) {
+            syncUploadProfileZipDefault(form);
+          }
+        });
+        diseaseToggle.dataset.uploadProfileBound = 'true';
+      }
+    });
+    root.querySelectorAll('[data-upload-profile-editor]').forEach(function (form) {
+      syncUploadProfileMydriaticDefaults(form);
+      syncUploadProfileZipDefault(form);
+      const allowMydriatic = form.querySelector('[data-upload-profile-allow-mydriatic]');
+      if (allowMydriatic && !allowMydriatic.dataset.uploadProfileBound) {
+        allowMydriatic.addEventListener('change', function () {
+          syncUploadProfileMydriaticDefaults(form);
+        });
+        allowMydriatic.dataset.uploadProfileBound = 'true';
+      }
+      const remidioKind = form.querySelector('[data-upload-profile-remedio-kind]');
+      if (remidioKind && !remidioKind.dataset.uploadProfileBound) {
+        remidioKind.addEventListener('change', function () {
+          syncUploadProfileZipDefault(form);
+        });
+        remidioKind.dataset.uploadProfileBound = 'true';
+      }
+    });
+  }
+
+  function splitUploadProfileIds(value) {
+    return (value || '').split(',').map(function (item) {
+      return item.trim();
+    }).filter(Boolean);
+  }
+
+  function setUploadProfileCheckedValues(form, name, values) {
+    const selected = new Set(values.map(String));
+    form.querySelectorAll('[name="' + name + '"]').forEach(function (input) {
+      input.checked = selected.has(String(input.value));
+    });
+  }
+
+  function resetUploadProfileEditorForm(form) {
+    form.reset();
+    form.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(function (input) {
+      input.checked = false;
+    });
+
+    const directUploadKind = form.querySelector('input[name="upload_kinds"][value="direct_image"]');
+    const allowNonMydriatic = form.querySelector('input[name="allow_non_mydriatic"]');
+    if (directUploadKind) {
+      directUploadKind.checked = true;
+    }
+    if (allowNonMydriatic) {
+      allowNonMydriatic.checked = true;
+    }
+  }
+
+  function openUploadProfileEditor(button) {
+    const section = document.getElementById('upload-profile-editor-section');
+    const form = section?.querySelector('[data-upload-profile-editor]');
+    if (!section || !form) {
+      return;
+    }
+
+    const isEdit = button.matches('[data-upload-profile-edit]');
+    resetUploadProfileEditorForm(form);
+    form.action = isEdit ? button.dataset.action : form.dataset.createAction;
+    form.setAttribute('hx-post', form.action);
+
+    const title = section.querySelector('[data-upload-profile-editor-title]');
+    const submitLabel = section.querySelector('[data-upload-profile-submit-label]');
+    if (title) {
+      title.textContent = 'Add/Edit Upload Profile';
+    }
+    if (submitLabel) {
+      submitLabel.textContent = isEdit ? 'Save Changes' : 'Create Profile';
+    }
+
+    if (isEdit) {
+      const nameInput = form.querySelector('[name="name"]');
+      const labUnitInput = form.querySelector('[name="lab_unit_id"]');
+      const projectInput = form.querySelector('[name="project_id"]');
+      if (nameInput) {
+        nameInput.value = button.dataset.name || '';
+      }
+      if (labUnitInput) {
+        labUnitInput.value = button.dataset.labUnitId || '';
+      }
+      if (projectInput) {
+        projectInput.value = button.dataset.projectId || '';
+      }
+
+      setUploadProfileCheckedValues(form, 'disease_ids', splitUploadProfileIds(button.dataset.diseaseIds));
+      setUploadProfileCheckedValues(form, 'default_disease_ids', splitUploadProfileIds(button.dataset.defaultDiseaseIds));
+      setUploadProfileCheckedValues(form, 'camera_ids', splitUploadProfileIds(button.dataset.cameraIds));
+      setUploadProfileCheckedValues(form, 'area_ids', splitUploadProfileIds(button.dataset.areaIds));
+      setUploadProfileCheckedValues(form, 'upload_kinds', splitUploadProfileIds(button.dataset.uploadKinds));
+      setUploadProfileCheckedValues(form, 'ai_workflows', splitUploadProfileIds(button.dataset.aiWorkflows));
+
+      const allowMydriatic = form.querySelector('[name="allow_mydriatic"]');
+      const allowNonMydriatic = form.querySelector('[name="allow_non_mydriatic"]');
+      const defaultMydriatic = form.querySelector('[name="default_is_mydriatic"]');
+      if (allowMydriatic) {
+        allowMydriatic.checked = button.dataset.allowMydriatic === '1';
+      }
+      if (allowNonMydriatic) {
+        allowNonMydriatic.checked = button.dataset.allowNonMydriatic === '1';
+      }
+      if (defaultMydriatic) {
+        defaultMydriatic.checked = button.dataset.defaultIsMydriatic === '1';
+      }
+    }
+
+    section.classList.remove('d-none');
+    initUploadProfileEditors(form);
+    if (window.htmx) {
+      window.htmx.process(form);
+    }
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form.querySelector('[name="name"]')?.focus({ preventScroll: true });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initUploadProfileEditors(document);
+    document.querySelectorAll('[data-upload-profile-add], [data-upload-profile-edit]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        openUploadProfileEditor(button);
+      });
+    });
+    document.querySelectorAll('[data-upload-profile-editor-close]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        button.closest('#upload-profile-editor-section')?.classList.add('d-none');
+      });
+    });
+  });
+
+  document.body.addEventListener('htmx:beforeRequest', function (event) {
+    const form = event.detail.elt.closest && event.detail.elt.closest('[data-upload-profile-editor]');
+    if (form) {
+      initUploadProfileEditors(form);
+    }
+  });
+</script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ v }}"></script>
+{% endblock %}

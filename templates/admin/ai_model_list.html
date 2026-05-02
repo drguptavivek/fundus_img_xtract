@@ -32,6 +32,22 @@
                 </div>
                 <div class="row mt-3">
                     <div class="col-md-12">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+                            <label class="form-label mb-0">Diseases</label>
+                            <button class="btn btn-sm btn-outline-secondary js-select-all-diseases" type="button">Select All</button>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 border rounded p-2" data-ai-model-disease-list>
+                            {% for disease in diseases %}
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" name="disease_ids" value="{{ disease.id }}" id="ai_model_disease_{{ disease.id }}">
+                                <label class="form-check-label" for="ai_model_disease_{{ disease.id }}">{{ disease.name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
                         <div class="form-check">
                             <input
                                 class="form-check-input js-wadhwani-toggle"
@@ -70,6 +86,7 @@
                         <th>Name</th>
                         <th>Version</th>
                         <th>Description</th>
+                        <th>Diseases</th>
                         <th>Integration</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -80,6 +97,9 @@
                         <td>{{ item.name }}</td>
                         <td>{{ item.version }}</td>
                         <td>{{ item.description }}</td>
+                        <td class="small">
+                            {{ item.disease_links|selectattr('active')|map(attribute='disease.name')|join(', ') or '-' }}
+                        </td>
                         <td>
                             {% if item.integration and item.integration.provider == 'wadhwani_glaucoma' %}
                                 <div

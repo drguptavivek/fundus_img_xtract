@@ -8,7 +8,7 @@ from db_transaction_manager import get_db_session
 from api.glaucoma_ai import load_user_glaucoma_ai_inference_updates, load_user_glaucoma_ai_upload_results
 from services.glaucoma_ai_upload import GlaucomaAIUploadSelection, process_glaucoma_ai_uploads
 from utils.log_sanitize import sanitize_log_value
-from utils.upload_scope import UploadScopeError, get_user_upload_options
+from upload_profiles.service import UploadProfileError, get_user_upload_options
 
 from . import bp
 
@@ -38,6 +38,7 @@ def upload():
             camera_id=_to_int(request.form.get("camera_id")),
             area_id=_to_int(request.form.get("area_id")),
             is_mydriatic=_to_bool(request.form.get("is_mydriatic")),
+            profile_id=_to_int(request.form.get("profile_id")) if request.form.get("profile_id") else None,
         )
     except ValueError:
         flash("Project, lab unit, camera, and site are required.", "danger")
@@ -54,7 +55,7 @@ def upload():
             thumbnail_url_builder=lambda image_uuid: url_for("media._directImgFinalThumbnailByUUID", uuid_str=image_uuid),
             app=current_app._get_current_object(),
         )
-    except UploadScopeError as exc:
+    except UploadProfileError as exc:
         current_app.logger.warning(
             "Glaucoma AI upload rejected for user=%s code=%s",
             sanitize_log_value(current_user.id),
@@ -121,10 +122,10 @@ def _to_bool(value: str | None) -> bool:
 
 
 def _mydriatic_options(upload_options) -> dict:
-    mappings = upload_options.mappings or []
-    allow_mydriatic = any(mapping.get("allow_mydriatic") for mapping in mappings)
-    allow_non_mydriatic = any(mapping.get("allow_non_mydriatic") for mapping in mappings)
-    defaults = {bool(mapping.get("default_is_mydriatic")) for mapping in mappings}
+    profiles = upload_options.profiles or []
+    allow_mydriatic = any(profile.get("allow_mydriatic") for profile in profiles)
+    allow_non_mydriatic = any(profile.get("allow_non_mydriatic") for profile in profiles)
+    defaults = {bool(profile.get("default_is_mydriatic")) for profile in profiles}
     if allow_mydriatic and not allow_non_mydriatic:
         default_is_mydriatic = True
     elif allow_non_mydriatic and not allow_mydriatic:

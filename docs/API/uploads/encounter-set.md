@@ -1,6 +1,6 @@
 # Encounter Set Upload API
 
-This is the upload contract for encounter-set ingestion and the project-scoped upload mapping flow.
+This is the upload contract for encounter-set ingestion and the project-scoped upload profile flow.
 
 ## `GET /api/v1/encounter-set/unverified`
 
@@ -41,13 +41,16 @@ Uploads one image into an encounter set.
 Required inputs:
 - `lab_unit_id`
 - `project_id`
-- `disease_id`
+- `upload_profile_id` or `profile_id`
 - `spatial_position`
+- `camera_id`
+- `area_id`
 - file upload payload
 
 Important validation:
-- upload scope is validated against the current user’s permitted lab units and the project/mapping rules
-- the encounter must belong to the selected project
+- upload scope is validated against the current user's assigned profile, permitted lab unit, project, disease, camera/site, and mydriatic rules
+- the encounter must belong to the selected project/profile
+- target diseases are stored on the encounter; they cannot change after upload starts
 
 Common errors:
 - missing or invalid project/lab/disease context
@@ -57,4 +60,4 @@ Common errors:
 
 ## Notes
 
-- This is the main contract to document for the project-scoped upload mapping system because uploads are accepted only when the caller’s project/lab/disease scope matches the server-side mapping source of truth.
+- This is the main contract to document for project-scoped upload profiles because uploads are accepted only when the caller's project/lab/disease/camera/site scope matches the server-side profile source of truth.

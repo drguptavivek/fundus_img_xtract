@@ -3,5 +3,9 @@
     {% include "admin/partials/project_dashboard_panel.html" %}
   </div>
 
+  {% if profiles_only %}
+  {% include "admin/partials/upload_profile_modals.html" %}
+  {% elif not projects_only %}
   {% include "admin/partials/project_dashboard_modals.html" %}
+  {% endif %}
 </div>

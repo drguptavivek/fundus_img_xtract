@@ -18,7 +18,7 @@ from utils.filename_sanitizer import sanitize_storage_filename
 from utils.filename_validation import validate_upload_filename
 from utils.log_sanitize import sanitize_log_value
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
-from utils.upload_scope import UploadScopeError, UploadScopeSelection, validate_direct_upload_scope
+from upload_profiles.service import UploadProfileError, UploadSelection, validate_direct_upload_scope
 from utils.utils2 import uniquify
 
 
@@ -35,6 +35,7 @@ class GlaucomaAIUploadSelection:
     camera_id: int
     area_id: int
     is_mydriatic: bool = False
+    profile_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -73,7 +74,7 @@ def get_glaucoma_disease_id(db) -> int:
         .first()
     )
     if disease is None:
-        raise UploadScopeError("Glaucoma disease is not configured.", code="glaucoma_not_configured")
+        raise UploadProfileError("Glaucoma disease is not configured.", code="glaucoma_not_configured")
     return disease.id
 
 
@@ -101,24 +102,25 @@ def process_glaucoma_ai_uploads(
 
     with transaction_scope() as db:
         glaucoma_disease_id = get_glaucoma_disease_id(db)
-        upload_mapping = validate_direct_upload_scope(
+        upload_profile = validate_direct_upload_scope(
             db,
             user_id,
-            UploadScopeSelection(
+            UploadSelection(
                 project_id=selection.project_id,
                 lab_unit_id=selection.lab_unit_id,
                 disease_id=glaucoma_disease_id,
                 camera_id=selection.camera_id,
                 area_id=selection.area_id,
                 is_mydriatic=selection.is_mydriatic,
+                profile_id=selection.profile_id,
             ),
         )
-        lab_unit = db.get(LabUnit, upload_mapping.lab_unit_id)
-        hospital = db.get(Hospital, upload_mapping.hospital_id)
+        lab_unit = db.get(LabUnit, upload_profile.lab_unit_id)
+        hospital = db.get(Hospital, upload_profile.hospital_id)
         camera = db.get(Camera, selection.camera_id)
         area = db.get(Area, selection.area_id)
         if not all([lab_unit, hospital, camera, area]):
-            raise UploadScopeError("Invalid upload selection.", code="invalid_selection")
+            raise UploadProfileError("Invalid upload selection.", code="invalid_selection")
 
         orig_dir, _edited_dir, dup_dir, folder_rel = get_upload_dirs(user_id)
         created_items: list[GlaucomaAIUploadItem] = []
@@ -130,7 +132,7 @@ def process_glaucoma_ai_uploads(
                 user_id=user_id,
                 username=username,
                 remote_addr=remote_addr,
-                upload_mapping=upload_mapping,
+                upload_profile=upload_profile,
                 hospital_id=hospital.id,
                 lab_unit_id=lab_unit.id,
                 camera_id=camera.id,
@@ -228,7 +230,7 @@ def _create_upload_and_task(
     user_id: int,
     username: str,
     remote_addr: str | None,
-    upload_mapping,
+    upload_profile,
     hospital_id: int,
     lab_unit_id: int,
     camera_id: int,
@@ -284,7 +286,7 @@ def _create_upload_and_task(
         uploader_id=user_id,
         hospital_id=hospital_id,
         lab_unit_id=lab_unit_id,
-        project_id=upload_mapping.project_id,
+        project_id=upload_profile.project_id,
         camera_id=camera_id,
         disease_id=glaucoma_disease_id,
         area_id=area_id,

@@ -1,0 +1,167 @@
+{% from "_forms.html" import csrf_field %}
+
+{% if not selected_project %}
+<div class="card shadow-sm">
+  <div class="card-body text-center text-muted py-5">Project not found in your scope.</div>
+</div>
+{% else %}
+<div class="card shadow-sm" id="project-detail-panel">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">{{ selected_project.title }}</div>
+      <div class="small text-muted">{{ selected_project.code }}</div>
+    </div>
+    <span class="badge {{ 'bg-success' if selected_project.active else 'bg-secondary' }}">{{ 'Active' if selected_project.active else 'Inactive' }}</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-4">
+      <div class="col-xl-5">
+        <h3 class="h6">Project Details</h3>
+        <form method="post"
+              action="{{ url_for('fundus_api.update_upload_profile_project', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.update_upload_profile_project', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <div class="mb-3">
+            <label class="form-label" for="detail_project_title">Project Title</label>
+            <input class="form-control" id="detail_project_title" name="title" maxlength="255" value="{{ selected_project.title }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="detail_project_code">Project Code</label>
+            <input class="form-control text-uppercase" id="detail_project_code" name="code" maxlength="64" value="{{ selected_project.code }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="detail_project_description">Description</label>
+            <textarea class="form-control" id="detail_project_description" name="description" rows="3">{{ selected_project.description or '' }}</textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Save Project</button>
+        </form>
+      </div>
+
+      <div class="col-xl-7">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">Investigators</h3>
+          <span class="badge text-bg-secondary">{{ project_investigators|length }}</span>
+        </div>
+        <div class="table-responsive mb-3">
+          <table class="table table-sm align-middle">
+            <thead><tr><th>User</th><th>Role</th></tr></thead>
+            <tbody>
+              {% for investigator in project_investigators %}
+              <tr>
+                <td>{{ investigator.user.full_name or investigator.user.username }}</td>
+                <td>{{ investigator.role.replace('_', ' ')|title }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="2" class="text-muted text-center py-3">No investigators assigned.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
+              hx-post="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <input type="hidden" name="project_id" value="{{ selected_project.id }}">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label" for="detail_investigator_search">Search User</label>
+              <input class="form-control" id="detail_investigator_search" type="search" placeholder="Type name or username" data-user-search="detail_investigator_user_id">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="detail_investigator_user_id">Matched User</label>
+              <select class="form-select" id="detail_investigator_user_id" name="user_id" required>
+                <option value="">Select user</option>
+                {% for user in users %}
+                <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="detail_investigator_role">Role</label>
+              <select class="form-select" id="detail_investigator_role" name="role">
+                <option value="principal_investigator">Principal Investigator</option>
+                <option value="co_investigator" selected>Co-Investigator</option>
+                <option value="coordinator">Coordinator</option>
+              </select>
+            </div>
+            <div class="col-12 text-end">
+              <button class="btn btn-outline-primary" type="submit">Add Investigator</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="col-12">
+        <h3 class="h6">Profiles And Uploaders</h3>
+        <div class="row g-3">
+          {% for profile in project_profiles %}
+          <div class="col-lg-6">
+            <div class="border rounded p-3 h-100">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold"
+                       title="Diseases: {{ profile.diseases|map(attribute='disease.name')|join(', ') }}&#10;Upload types: {{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}&#10;Cameras: {{ profile.cameras|map(attribute='camera.name')|join(', ') }}&#10;Sites: {{ profile.areas|map(attribute='area.name')|join(', ') }}">
+                    {{ profile.name }}
+                  </div>
+                  <div class="small text-muted">{{ profile.lab_unit.name }}</div>
+                </div>
+                <span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span>
+              </div>
+              <div class="small mt-2">
+                <span class="text-muted">Uploaders:</span>
+                {% for assignment in profile.assignments if assignment.active %}
+                  {{ assignment.user.full_name or assignment.user.username }}{% if not loop.last %}, {% endif %}
+                {% else %}
+                  -
+                {% endfor %}
+              </div>
+              <form class="row g-2 align-items-end mt-2"
+                    method="post"
+                    action="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+                    hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                    data-json-api-reload-target="#project-detail-workspace">
+                {{ csrf_field() }}
+                <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                <div class="col-md-5">
+                  <label class="form-label" for="profile_user_search_{{ profile.id }}">Search User</label>
+                  <input class="form-control" id="profile_user_search_{{ profile.id }}" type="search" placeholder="Type name or username" data-user-search="profile_user_id_{{ profile.id }}">
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label" for="profile_user_id_{{ profile.id }}">Matched User</label>
+                  <select class="form-select" id="profile_user_id_{{ profile.id }}" name="user_id" required>
+                    <option value="">Select user</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-2 text-end">
+                  <button class="btn btn-outline-primary w-100" type="submit">Add</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <div class="col-12">
+            <div class="border rounded text-center text-muted py-4">No upload profiles configured for this project.</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}

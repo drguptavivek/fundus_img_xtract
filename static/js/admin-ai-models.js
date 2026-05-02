@@ -85,6 +85,16 @@ document.addEventListener('DOMContentLoaded', function () {
     sync();
   });
 
+  document.querySelectorAll('.js-select-all-diseases').forEach(function (button) {
+    button.addEventListener('click', function () {
+      const list = button.closest('form')?.querySelector('[data-ai-model-disease-list]');
+      if (!list) return;
+      list.querySelectorAll('input[name="disease_ids"]').forEach(function (input) {
+        input.checked = true;
+      });
+    });
+  });
+
   document.querySelectorAll('.js-ai-health-widget').forEach(function (container) {
     runHealthCheck(container, { notifyOnFailure: true, notifyOnSuccess: false });
   });

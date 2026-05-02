@@ -1,19 +1,31 @@
 {% from "_forms.html" import csrf_field %}
 
+{% if not profiles_only %}
+
 <div class="row g-3 mb-4" id="projects-summary">
   {% for item in project_cards %}
   {% set project = item.project %}
   <div class="col-md-6 col-xl-4">
-    <div class="card shadow-sm h-100">
+    <button
+      class="card shadow-sm h-100 w-100 text-start border bg-body"
+      type="button"
+      hx-get="{{ url_for('admin.upload_project_workspace', project_id=project.id) }}"
+      hx-target="#project-detail-workspace"
+      hx-swap="innerHTML"
+      hx-push-url="false">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start gap-3">
           <div>
             <h2 class="h5 mb-1">{{ project.title }}</h2>
             <div class="text-muted small">{{ project.code }}</div>
+            <div class="small mt-2">
+              <span class="text-muted">PI:</span>
+              {{ item.pi_names|join(', ') if item.pi_names else '-' }}
+            </div>
           </div>
-          <span class="badge {{ 'bg-success' if project.active else 'bg-secondary' }}">
-            {{ 'Active' if project.active else 'Inactive' }}
-          </span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge {{ 'bg-success' if project.active else 'bg-secondary' }}">{{ 'Active' if project.active else 'Inactive' }}</span>
+          </div>
         </div>
         {% if project.description %}
         <p class="small text-muted mt-3 mb-0">{{ project.description }}</p>
@@ -21,31 +33,24 @@
       </div>
       <div class="card-footer bg-body">
         <div class="row text-center g-2">
-          <div class="col">
-            <div class="fw-semibold">{{ item.investigator_count }}</div>
-            <div class="small text-muted">Investigators</div>
-          </div>
-          <div class="col">
-            <div class="fw-semibold">{{ item.uploader_count }}</div>
-            <div class="small text-muted">Uploaders</div>
-          </div>
-          <div class="col">
-            <div class="fw-semibold">{{ item.mapping_count }}</div>
-            <div class="small text-muted">Mappings</div>
-          </div>
+          <div class="col"><div class="fw-semibold">{{ item.investigator_count }}</div><div class="small text-muted">Investigators</div></div>
+          <div class="col"><div class="fw-semibold">{{ item.uploader_count }}</div><div class="small text-muted">Uploaders</div></div>
+          <div class="col"><div class="fw-semibold">{{ item.mapping_count }}</div><div class="small text-muted">Profiles</div></div>
         </div>
       </div>
-    </div>
+    </button>
   </div>
   {% else %}
   <div class="col-12">
-    <div class="card shadow-sm">
-      <div class="card-body text-center text-muted py-5">
-        No projects have been created yet.
-      </div>
-    </div>
+    <div class="card shadow-sm"><div class="card-body text-center text-muted py-5">No projects have been created yet.</div></div>
   </div>
   {% endfor %}
+</div>
+
+<div id="project-detail-workspace" class="mb-4">
+  <div class="card shadow-sm">
+    <div class="card-body text-center text-muted py-5">Select a project to manage details, investigators, upload profiles, and uploaders.</div>
+  </div>
 </div>
 
 <div class="row g-4">
@@ -53,20 +58,11 @@
     <div class="card shadow-sm h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>Project Investigators</span>
-        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#addInvestigatorModal">
-          Assign
-        </button>
+        <span class="small text-muted">Select a project above to edit assignments.</span>
       </div>
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>User</th>
-              <th>Role</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Project</th><th>User</th><th>Role</th><th>Status</th></tr></thead>
           <tbody>
             {% for investigator in investigators %}
             <tr>
@@ -76,9 +72,7 @@
               <td>{{ 'Active' if investigator.active else 'Inactive' }}</td>
             </tr>
             {% else %}
-            <tr>
-              <td colspan="4" class="text-center text-muted py-4">No project investigators configured.</td>
-            </tr>
+            <tr><td colspan="4" class="text-center text-muted py-4">No project investigators configured.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -86,57 +80,49 @@
     </div>
   </div>
 
-  <div class="col-xl-7" id="upload-mappings">
+  <div class="col-xl-7" id="project-upload-profile-users">
     <div class="card shadow-sm h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Uploaders And Upload Mappings</span>
-        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#createMappingModal">
-          Add Mapping
-        </button>
+        <span>Project Upload Profiles And Users</span>
+        <div class="d-inline-flex gap-2">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Profiles</a>
+        </div>
       </div>
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
-              <th>Uploader</th>
-              <th>Project</th>
-              <th>Lab Unit</th>
-              <th>Disease</th>
-              <th>Default</th>
-              <th>Cameras</th>
-              <th>Sites</th>
-              <th>Status</th>
-              <th></th>
+              <th>Project</th><th>Profile</th><th>Lab Unit</th><th>Uploaders</th><th>Types</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {% for mapping in mappings %}
+            {% for profile in upload_profiles %}
             <tr>
-              <td>{{ mapping.user.full_name or mapping.user.username }}</td>
-              <td>{{ mapping.project.title }}</td>
-              <td>{{ mapping.lab_unit.name }}</td>
-              <td>{{ mapping.disease.name }}</td>
-              <td>{{ mapping.default_disease.name if mapping.default_disease else '-' }}</td>
-              <td class="small">{{ mapping.cameras|map(attribute='camera.name')|join(', ') }}</td>
-              <td class="small">{{ mapping.areas|map(attribute='area.name')|join(', ') }}</td>
-              <td>
-                <span class="badge {{ 'bg-success' if mapping.active else 'bg-secondary' }}">
-                  {{ 'Active' if mapping.active else 'Inactive' }}
-                </span>
-              </td>
-              <td class="text-end">
-                {% if mapping.active %}
-                <form method="post" action="{{ url_for('admin.deactivate_upload_mapping', mapping_id=mapping.id) }}">
+              <td>{{ profile.project.title }}</td>
+              <td>{{ profile.name }}</td>
+              <td>{{ profile.lab_unit.name }}</td>
+              <td class="small">
+                {% for assignment in profile.assignments if assignment.active %}
+                <form class="d-inline"
+                      method="post"
+                      action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                      hx-post="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                      hx-swap="none"
+                      data-json-api-htmx>
                   {{ csrf_field() }}
-                  <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+                  <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                  <input type="hidden" name="user_id" value="{{ assignment.user_id }}">
+                  <button class="btn btn-sm btn-link p-0 align-baseline" type="submit">{{ assignment.user.username }}</button>{% if not loop.last %}, {% endif %}
                 </form>
-                {% endif %}
+                {% else %}
+                -
+                {% endfor %}
               </td>
+              <td class="small">{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</td>
+              <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
             </tr>
             {% else %}
-            <tr>
-              <td colspan="9" class="text-center text-muted py-4">No upload mappings configured in your lab-unit scope.</td>
-            </tr>
+            <tr><td colspan="6" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -144,3 +130,100 @@
     </div>
   </div>
 </div>
+
+{% else %}
+
+<div class="row g-4">
+  <div class="col-12" id="upload-profiles">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Upload Profiles</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-upload-profile-add>Add Profile</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th><th>Project</th><th>Lab Unit</th><th>Diseases</th><th>Remidio ZIP Default</th><th>Types</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for profile in upload_profiles %}
+            {% set row_disease_ids = profile.diseases|map(attribute='disease_id')|list %}
+            {% set row_default_disease_ids = profile.diseases|selectattr('is_default')|map(attribute='disease_id')|list %}
+            {% set row_camera_ids = profile.cameras|map(attribute='camera_id')|list %}
+            {% set row_area_ids = profile.areas|map(attribute='area_id')|list %}
+            {% set row_upload_kinds = profile.upload_kinds|map(attribute='upload_kind')|list %}
+            {% set row_ai_workflows = [] %}
+            {% for workflow in profile.ai_workflows if workflow.active %}
+              {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind) %}
+            {% endfor %}
+            <tr>
+              <td>{{ profile.name }}</td>
+              <td>{{ profile.project.title }}</td>
+              <td>{{ profile.lab_unit.name }}</td>
+              <td class="small">{{ profile.diseases|map(attribute='disease.name')|join(', ') }}</td>
+              <td class="small">{{ profile.diseases|selectattr('is_default')|map(attribute='disease.name')|join(', ') or '-' }}</td>
+              <td class="small">{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</td>
+              <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-2">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    type="button"
+                    data-upload-profile-edit
+                    data-action="{{ url_for('fundus_api.update_upload_profile', profile_id=profile.id) }}"
+                    data-name="{{ profile.name|e }}"
+                    data-lab-unit-id="{{ profile.lab_unit_id }}"
+                    data-project-id="{{ profile.project_id }}"
+                    data-disease-ids="{{ row_disease_ids|join(',') }}"
+                    data-default-disease-ids="{{ row_default_disease_ids|join(',') }}"
+                    data-camera-ids="{{ row_camera_ids|join(',') }}"
+                    data-area-ids="{{ row_area_ids|join(',') }}"
+                    data-upload-kinds="{{ row_upload_kinds|join(',') }}"
+                    data-ai-workflows="{{ row_ai_workflows|join(',') }}"
+                    data-allow-mydriatic="{{ '1' if profile.allow_mydriatic else '0' }}"
+                    data-allow-non-mydriatic="{{ '1' if profile.allow_non_mydriatic else '0' }}"
+                    data-default-is-mydriatic="{{ '1' if profile.default_is_mydriatic else '0' }}"
+                  >Edit</button>
+                  <form method="post"
+                        action="{{ url_for('fundus_api.duplicate_upload_profile', profile_id=profile.id) }}"
+                        hx-post="{{ url_for('fundus_api.duplicate_upload_profile', profile_id=profile.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx>
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Duplicate</button>
+                  </form>
+                  {% if profile.active %}
+                  <form method="post"
+                        action="{{ url_for('fundus_api.deactivate_upload_profile', profile_id=profile.id) }}"
+                        hx-post="{{ url_for('fundus_api.deactivate_upload_profile', profile_id=profile.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx>
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+                  </form>
+                  {% else %}
+                  <form method="post"
+                        action="{{ url_for('fundus_api.activate_upload_profile', profile_id=profile.id) }}"
+                        hx-post="{{ url_for('fundus_api.activate_upload_profile', profile_id=profile.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx>
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-success" type="submit">Activate</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Projects</h1>
+      <p class="text-muted mb-0">Manage project governance and project investigator assignments.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a>
+      <button class="btn btn-primary"
+              type="button"
+              hx-get="{{ url_for('admin.upload_project_create_workspace') }}"
+              hx-target="#project-detail-workspace"
+              hx-swap="innerHTML">Create Project</button>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    Projects define provenance and governance. Upload permission itself is granted on the dedicated Upload Profiles page.
+  </div>
+
+  {% include "admin/partials/project_dashboard_workspace.html" %}
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ v }}"></script>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  document.addEventListener('DOMContentLoaded', function () {
+    document.body.addEventListener('input', function (event) {
+      const input = event.target.closest('[data-user-search]');
+      if (!input) {
+        return;
+      }
+      const select = document.getElementById(input.dataset.userSearch);
+      if (!select) {
+        return;
+      }
+      const query = input.value.trim().toLowerCase();
+      select.querySelectorAll('option').forEach(function (option) {
+        if (!option.value) {
+          option.hidden = false;
+          return;
+        }
+        const text = (option.dataset.searchText || option.textContent || '').toLowerCase();
+        option.hidden = query && text.indexOf(query) === -1;
+      });
+    });
+  });
+</script>
+{% endblock %}

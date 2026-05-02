@@ -17,9 +17,17 @@
 
     <div class="card shadow-sm">
         <div class="card-body">
-            <form method="post" action="{{ url_for('direct_uploads.upload') }}" enctype="multipart/form-data" novalidate>
+            <form method="post" action="{{ url_for('direct_uploads.upload') }}" enctype="multipart/form-data" novalidate data-upload-profile-form>
                 {{ csrf_field() }}
+                <div data-upload-profiles='{{ upload_profiles | tojson }}'></div>
 
+                {% if not upload_profiles %}
+                <div class="alert alert-warning">
+                    No direct image upload profile is configured for your account. Ask an admin to assign an active profile with the Direct Image upload type.
+                </div>
+                {% endif %}
+
+                <fieldset {% if not upload_profiles %}disabled{% endif %}>
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label">Project <span class="text-danger">*</span></label>
@@ -103,6 +111,7 @@
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary">Upload Images</button>
                 </div>
+                </fieldset>
             </form>
         </div>
     </div>
@@ -240,82 +249,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-{% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-
-    document.addEventListener('DOMContentLoaded', function() {
-        // Handle mydriatic checkbox label change
-        const mydriaticCheckbox = document.getElementById('is_mydriatic');
-        const mydriaticLabel = document.getElementById('mydriatic-label');
-        
-        mydriaticCheckbox.addEventListener('change', function() {
-            mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
-        });
-
-        const uploadMappings = {{ upload_mappings|tojson }};
-        const projectButtons = document.querySelectorAll('[name="project_id"]');
-        const cameraButtons = document.querySelectorAll('[name="camera_id"]');
-        const diseaseButtons = document.querySelectorAll('[name="disease_id"]');
-        const areaButtons = document.querySelectorAll('[name="area_id"]');
-
-        function setRadioVisibility(button, visible) {
-            const label = document.querySelector(`label[for="${button.id}"]`);
-            button.parentElement.style.display = visible ? 'inline-block' : 'none';
-            if (label) {
-                label.style.display = visible ? 'inline-block' : 'none';
-            }
-            if (!visible) {
-                button.checked = false;
-            }
-        }
-
-        function selectedValue(name) {
-            const selected = document.querySelector(`[name="${name}"]:checked`);
-            return selected ? Number(selected.value) : null;
-        }
-
-        function filterUploadScopeOptions() {
-            const projectId = selectedValue('project_id');
-            const labUnitId = selectedValue('lab_unit_id');
-            const selectedMappings = uploadMappings.filter(mapping => {
-                if (projectId && mapping.project_id !== projectId) return false;
-                if (labUnitId && mapping.lab_unit_id !== labUnitId) return false;
-                return true;
-            });
-            const labIds = new Set(selectedMappings.map(mapping => mapping.lab_unit_id));
-            const diseaseIds = new Set(selectedMappings.map(mapping => mapping.disease_id));
-            const cameraIds = new Set(selectedMappings.flatMap(mapping => mapping.camera_ids));
-            const areaIds = new Set(selectedMappings.flatMap(mapping => mapping.area_ids));
-
-            labUnitButtons.forEach(button => {
-                const hospitalMatches = !selectedValue('hospital_id') || button.dataset.hospitalId === String(selectedValue('hospital_id'));
-                setRadioVisibility(button, hospitalMatches && (!projectId || labIds.has(Number(button.value))));
-            });
-            cameraButtons.forEach(button => setRadioVisibility(button, !projectId || cameraIds.has(Number(button.value))));
-            diseaseButtons.forEach(button => setRadioVisibility(button, !projectId || diseaseIds.has(Number(button.value))));
-            areaButtons.forEach(button => setRadioVisibility(button, !projectId || areaIds.has(Number(button.value))));
-        }
-
-        [...projectButtons, ...cameraButtons, ...diseaseButtons, ...areaButtons].forEach(button => {
-            button.addEventListener('change', filterUploadScopeOptions);
-        });
-
-        // Handle hospital selection and filter lab units
-        const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
-        const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
-
-        hospitalButtons.forEach(button => {
-            button.addEventListener('change', function() {
-                filterUploadScopeOptions();
-            });
-        });
-        labUnitButtons.forEach(button => button.addEventListener('change', filterUploadScopeOptions));
-
-        // Initially hide all lab unit buttons until a hospital is selected
-        filterUploadScopeOptions();
-    });
-</script>
+<script src="{{ url_for('static', filename='js/upload-profile-options.js') }}"></script>
 {% endblock %}

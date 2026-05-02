@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from auth.roles import roles_required
 from auth.security import hash_password
-from models import AIModel, AIModelIntegration, Grade, User
+from models import AIModel, AIModelDisease, AIModelIntegration, Disease, Grade, User
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.log_sanitize import sanitize_log_value
 
@@ -49,6 +49,30 @@ def _integration_form_payload() -> tuple[bool, str, str]:
     return link_enabled, client_id, bearer_token
 
 
+def _disease_ids_from_request() -> list[int]:
+    disease_ids: list[int] = []
+    for value in request.form.getlist("disease_ids"):
+        try:
+            disease_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return disease_ids
+
+
+def _sync_ai_model_diseases(db_session: Session, model: AIModel, disease_ids: list[int]) -> None:
+    requested_ids = set(disease_ids)
+    existing_links = {
+        link.disease_id: link
+        for link in db_session.execute(
+            select(AIModelDisease).where(AIModelDisease.ai_model_id == model.id)
+        ).scalars()
+    }
+    for disease_id, link in existing_links.items():
+        link.active = disease_id in requested_ids
+    for disease_id in requested_ids - set(existing_links):
+        db_session.add(AIModelDisease(ai_model_id=model.id, disease_id=disease_id, active=True))
+
+
 def _validate_wadhwani_binding(
     db_session: Session,
     *,
@@ -71,6 +95,29 @@ def _validate_wadhwani_binding(
         linked_name = linked_model.name if linked_model else f"ID {existing_link.ai_model_id}"
         return f"Only one AI Model can be linked to the Wadhwani Glaucoma API. Currently linked: {linked_name}."
 
+    return None
+
+
+def _validate_ai_model_diseases(
+    db_session: Session,
+    *,
+    disease_ids: list[int],
+    link_enabled: bool,
+) -> str | None:
+    if not disease_ids:
+        return "Select at least one disease for this AI Model."
+    valid_disease_ids = {
+        row[0]
+        for row in db_session.execute(select(Disease.id).where(Disease.id.in_(set(disease_ids)))).all()
+    }
+    if valid_disease_ids != set(disease_ids):
+        return "Selected disease is invalid."
+    if link_enabled:
+        glaucoma_id = db_session.execute(
+            select(Disease.id).where(func.lower(Disease.name) == "glaucoma")
+        ).scalar_one_or_none()
+        if not glaucoma_id or glaucoma_id not in set(disease_ids):
+            return "Wadhwani Glaucoma API models must be linked to the Glaucoma disease."
     return None
 
 
@@ -116,6 +163,7 @@ def list_and_create_ai_model():
         name = request.form.get("name", "").strip()
         version = request.form.get("version", "").strip()
         description = request.form.get("description", "").strip()
+        disease_ids = _disease_ids_from_request()
         link_enabled, client_id, bearer_token = _integration_form_payload()
 
         if not name or not version:
@@ -128,6 +176,14 @@ def list_and_create_ai_model():
                     link_enabled=link_enabled,
                     client_id=client_id,
                     bearer_token=bearer_token,
+                )
+                if validation_error:
+                    flash(validation_error, "danger")
+                    return redirect(url_for(AI_MODEL_LIST_ROUTE))
+                validation_error = _validate_ai_model_diseases(
+                    db,
+                    disease_ids=disease_ids,
+                    link_enabled=link_enabled,
                 )
                 if validation_error:
                     flash(validation_error, "danger")
@@ -146,6 +202,7 @@ def list_and_create_ai_model():
                     model = AIModel(name=name, version=version, description=description)
                     db.add(model)
                     db.flush()
+                    _sync_ai_model_diseases(db, model, disease_ids)
                     _create_ai_model_user(db, model)
                     _sync_wadhwani_integration(
                         db,
@@ -160,12 +217,21 @@ def list_and_create_ai_model():
 
     # --- Handle listing ---
     with get_db_session() as db:
-        stmt = select(AIModel).options(selectinload(AIModel.integration)).order_by(AIModel.id)
+        stmt = (
+            select(AIModel)
+            .options(
+                selectinload(AIModel.integration),
+                selectinload(AIModel.disease_links).selectinload(AIModelDisease.disease),
+            )
+            .order_by(AIModel.id)
+        )
         items = db.scalars(stmt).all()
+        diseases = db.scalars(select(Disease).order_by(Disease.name)).all()
         
         return render_template(
             "admin/ai_model_list.html",
             items=items,
+            diseases=diseases,
             title="AI Models",
         )
 
@@ -176,7 +242,10 @@ def edit_ai_model(item_id):
     with get_db_session() as db:
         item = db.execute(
             select(AIModel)
-            .options(selectinload(AIModel.integration))
+            .options(
+                selectinload(AIModel.integration),
+                selectinload(AIModel.disease_links).selectinload(AIModelDisease.disease),
+            )
             .where(AIModel.id == item_id)
         ).scalar_one_or_none()
         if not item:
@@ -187,6 +256,7 @@ def edit_ai_model(item_id):
             name = request.form.get("name", "").strip()
             version = request.form.get("version", "").strip()
             description = request.form.get("description", "").strip()
+            disease_ids = _disease_ids_from_request()
             link_enabled, client_id, bearer_token = _integration_form_payload()
 
             if not name or not version:
@@ -204,6 +274,20 @@ def edit_ai_model(item_id):
                     return render_template(
                         "admin/ai_model_edit.html",
                         item=item,
+                        diseases=db.scalars(select(Disease).order_by(Disease.name)).all(),
+                        title="Edit AI Model",
+                    )
+                validation_error = _validate_ai_model_diseases(
+                    db,
+                    disease_ids=disease_ids,
+                    link_enabled=link_enabled,
+                )
+                if validation_error:
+                    flash(validation_error, "danger")
+                    return render_template(
+                        "admin/ai_model_edit.html",
+                        item=item,
+                        diseases=db.scalars(select(Disease).order_by(Disease.name)).all(),
                         title="Edit AI Model",
                     )
 
@@ -222,12 +306,16 @@ def edit_ai_model(item_id):
                     with transaction_scope() as write_db:
                         item_to_update = write_db.execute(
                             select(AIModel)
-                            .options(selectinload(AIModel.integration))
+                            .options(
+                                selectinload(AIModel.integration),
+                                selectinload(AIModel.disease_links),
+                            )
                             .where(AIModel.id == item_id)
                         ).scalar_one()
                         item_to_update.name = name
                         item_to_update.version = version
                         item_to_update.description = description
+                        _sync_ai_model_diseases(write_db, item_to_update, disease_ids)
                         _sync_wadhwani_integration(
                             write_db,
                             model=item_to_update,
@@ -242,6 +330,7 @@ def edit_ai_model(item_id):
         return render_template(
             "admin/ai_model_edit.html",
             item=item,
+            diseases=db.scalars(select(Disease).order_by(Disease.name)).all(),
             title="Edit AI Model",
         )
 

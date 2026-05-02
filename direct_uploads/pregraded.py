@@ -22,10 +22,11 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-from utils.upload_scope import (
-    UploadScopeError,
-    UploadScopeSelection,
-    get_user_upload_options,
+from upload_profiles.service import (
+    UPLOAD_KIND_PREGRADED,
+    UploadProfileError,
+    UploadSelection,
+    get_user_upload_options_for_kind,
     validate_pregraded_upload_scope,
 )
 from utils.utils2 import uniquify
@@ -150,10 +151,10 @@ def pregraded_upload():
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
             try:
-                upload_mapping = validate_pregraded_upload_scope(
+                upload_profile = validate_pregraded_upload_scope(
                     db_session,
                     current_user.id,
-                    UploadScopeSelection(
+                    UploadSelection(
                         project_id=project_id,
                         lab_unit_id=lab_unit.id,
                         disease_id=disease.id,
@@ -162,7 +163,7 @@ def pregraded_upload():
                         is_mydriatic=is_mydriatic,
                     ),
                 )
-            except UploadScopeError as exc:
+            except UploadProfileError as exc:
                 flash(exc.message, "danger")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
@@ -175,7 +176,7 @@ def pregraded_upload():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit.id,
-                project_id=upload_mapping.project_id,
+                project_id=upload_profile.project_id,
             )
             db_session.add(new_job)
             db_session.flush()
@@ -252,7 +253,7 @@ def pregraded_upload():
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
                                         lab_unit_id=lab_unit.id,
-                                        project_id=upload_mapping.project_id,
+                                        project_id=upload_profile.project_id,
                                         camera_id=camera.id,
                                         disease_id=disease.id,
                                         area_id=area.id,
@@ -472,7 +473,7 @@ def pregraded_upload():
         areas = (
             db_session.execute(select(Area).order_by(Area.name)).scalars().all()
         )
-        upload_options = get_user_upload_options(db_session, current_user.id)
+        upload_options = get_user_upload_options_for_kind(db_session, current_user.id, UPLOAD_KIND_PREGRADED)
 
         # Get recent pregraded uploads for display
         recent_uploads = get_recent_zip_uploads(
@@ -488,7 +489,7 @@ def pregraded_upload():
             "diseases": diseases,
             "areas": areas,
             "projects": upload_options.projects,
-            "upload_mappings": upload_options.mappings,
+            "upload_profiles": upload_options.profiles,
             "recent_uploads": recent_uploads,
             "max_files_per_upload": _get_int_setting(
                 db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100

@@ -20,6 +20,7 @@ from utils.celery_queue_config import (
     CELERY_TASK_ROUTES,
 )
 from utils.env_loader import load_environment
+from utils.redis_connection import build_redis_url
 
 # Ensure project root is on sys.path for task discovery in containers
 _ROOT = Path(__file__).resolve().parent
@@ -61,8 +62,9 @@ def _times_to_crontab(times: list[str]) -> list[crontab]:
 def make_celery_app() -> Celery:
     load_environment()
 
-    broker_url = os.getenv("CELERY_BROKER_URL")
-    result_backend = os.getenv("CELERY_RESULT_BACKEND")
+    redis_url = build_redis_url()
+    broker_url = os.getenv("CELERY_BROKER_URL") or redis_url
+    result_backend = os.getenv("CELERY_RESULT_BACKEND") or redis_url
 
     app = Celery(
         "fundus_img_xtract",

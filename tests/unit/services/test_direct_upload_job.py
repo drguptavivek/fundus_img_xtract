@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import io
+from itertools import count
+
+from PIL import Image
+from werkzeug.datastructures import FileStorage
+
+from models import Area, Camera, DirectImageUpload, Hospital, Job, JobItem, LabUnit, Project
+from services.uploads.direct import DirectUploadActor, DirectUploadJobRequest, create_direct_upload_job, direct_upload_response_payload
+from tests.helpers.factories import UserFactory
+from upload_profiles.models import (
+    UploadProfile,
+    UploadProfileArea,
+    UploadProfileAssignment,
+    UploadProfileCamera,
+    UploadProfileDisease,
+    UploadProfileKind,
+)
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
+
+
+_SEQUENCE = count(1)
+
+
+def test_direct_upload_service_creates_job_items_and_upload_records(db_session, core_test_data):
+    suffix = next(_SEQUENCE)
+    hospital = Hospital(name=f"Direct Service Hospital {suffix}")
+    db_session.add(hospital)
+    db_session.flush()
+
+    lab = LabUnit(name=f"Direct Service Lab {suffix}", hospital_id=hospital.id)
+    project = Project(title=f"Direct Service Project {suffix}", code=f"DIRECT_SERVICE_{suffix}", active=True)
+    disease = db_session.merge(core_test_data["glaucoma"])
+    camera = Camera(name=f"Direct Service Camera {suffix}", is_zip_upload_enabled=True)
+    area = Area(name=f"Direct Service Area {suffix}")
+    db_session.add_all([lab, project, camera, area])
+    db_session.flush()
+
+    uploader = UserFactory.create_by_role(
+        db_session,
+        "fileUploader",
+        username=f"direct_service_uploader_{suffix}",
+        lab_units=[lab],
+    )
+    profile = UploadProfile(
+        name=f"Direct Service Profile {suffix}",
+        lab_unit_id=lab.id,
+        project_id=project.id,
+        active=True,
+        allow_mydriatic=True,
+        allow_non_mydriatic=True,
+        default_is_mydriatic=False,
+    )
+    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
+    profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
+    profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
+    profile.areas.append(UploadProfileArea(area_id=area.id))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
+    db_session.add(profile)
+    db_session.flush()
+
+    result = create_direct_upload_job(
+        db=db_session,
+        actor=DirectUploadActor(user_id=uploader.id, username=uploader.username, remote_addr="127.0.0.1"),
+        request=DirectUploadJobRequest(
+            profile_id=profile.id,
+            project_id=project.id,
+            lab_unit_id=lab.id,
+            disease_id=disease.id,
+            camera_id=camera.id,
+            area_id=area.id,
+            is_mydriatic=False,
+            remarks="plain service remarks",
+        ),
+        files=[_png_file("direct-service.png")],
+        upload_type="test direct image",
+    )
+
+    assert result.accepted_count == 1
+    assert result.rejected_count == 0
+    assert result.job.status == "completed"
+    assert result.job.upload_kind == UPLOAD_KIND_DIRECT_IMAGE
+    assert result.job.upload_profile_id == profile.id
+
+    job = db_session.query(Job).filter_by(token=result.job.token).one()
+    assert job.upload_type == "test direct image"
+    item = db_session.query(JobItem).filter_by(job_id=job.id).one()
+    assert item.state == "completed"
+    assert item.source_type == "direct_image"
+    assert item.source_id is not None
+    assert item.source_uuid is not None
+
+    upload = db_session.query(DirectImageUpload).filter_by(id=item.source_id).one()
+    assert upload.remarks == "plain service remarks"
+
+    payload = direct_upload_response_payload(result)
+    assert payload["upload_token"] == job.token
+    assert payload["accepted_count"] == 1
+
+
+def _png_file(filename: str) -> FileStorage:
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=(0, 255, 0)).save(buffer, format="PNG")
+    buffer.seek(0)
+    return FileStorage(stream=buffer, filename=filename, content_type="image/png")

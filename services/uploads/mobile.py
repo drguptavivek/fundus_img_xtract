@@ -16,12 +16,14 @@ from werkzeug.utils import secure_filename
 
 from auth.utils import utcnow
 from models import AIInferenceRun, AIModelIntegration, EncounterSetImage, Job, JobItem, PatientEncounters, User
-from services.direct_upload_service import (
-    DirectUploadSelection,
-    create_direct_upload_batch,
-    create_unverified_direct_upload_task_batch,
-)
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
+from .direct import (
+    DirectUploadActor,
+    DirectUploadJobError,
+    DirectUploadJobRequest,
+    create_direct_upload_job,
+    direct_upload_response_payload,
+)
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.service import (
     UPLOAD_KIND_DIRECT_IMAGE,
@@ -146,70 +148,26 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
     upload_files = files.getlist("files")
     if not upload_files:
         raise MobileUploadError("At least one file is required.", code="files_required")
-    remarks = _remarks(form.get("remarks"))
-    profile = validate_profile_upload_scope(
-        db,
-        actor.user_id,
-        profile_id=profile_id,
-        upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
-        disease_id=disease_id,
-        camera_id=camera_id,
-        area_id=area_id,
-        is_mydriatic=_optional_bool(form, "is_mydriatic"),
-    )
-    if profile.project_id != project_id or profile.lab_unit_id != lab_unit_id:
-        raise MobileUploadError("Selected profile does not match project or lab unit.", code="profile_scope_mismatch", status_code=403)
-    is_mydriatic = _optional_bool(form, "is_mydriatic")
-    if is_mydriatic is None:
-        is_mydriatic = profile.default_is_mydriatic
-    executable_workflow = _profile_has_executable_workflow(db, profile, disease_id=disease_id, upload_kind=UPLOAD_KIND_DIRECT_IMAGE)
-    batch_factory = create_unverified_direct_upload_task_batch if executable_workflow else create_direct_upload_batch
-    result = batch_factory(
-        db=db,
-        files=upload_files,
-        user_id=actor.user_id,
-        selection=DirectUploadSelection(
-            project_id=project_id,
-            lab_unit_id=lab_unit_id,
-            disease_id=disease_id,
-            camera_id=camera_id,
-            area_id=area_id,
-            is_mydriatic=is_mydriatic,
-            profile_id=profile_id,
-        ),
-        remarks=remarks,
-    )
-    job = _create_job(
-        db,
-        actor,
-        upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
-        upload_type="mobile direct image",
-        profile_id=profile.profile_id,
-        lab_unit_id=lab_unit_id,
-        project_id=project_id,
-        status="completed" if result.error_count == 0 else "partial_error",
-    )
-    for item in result.items:
-        db.add(
-            JobItem(
-                job_id=job.id,
-                filename=item.filename,
-                state="completed" if item.status == "success" else "error",
-                detail=item.message,
-                uploader_user_id=actor.user_id,
-                uploader_username=actor.username,
-                uploader_ip=actor.remote_addr,
-                source_type="direct_image",
-                source_id=item.upload_id,
-                source_uuid=item.image_uuid,
-                task_id=item.task_id,
-                finished_at=utcnow(),
-            )
+    try:
+        result = create_direct_upload_job(
+            db=db,
+            actor=DirectUploadActor(user_id=actor.user_id, username=actor.username, remote_addr=actor.remote_addr),
+            request=DirectUploadJobRequest(
+                profile_id=profile_id,
+                project_id=project_id,
+                lab_unit_id=lab_unit_id,
+                disease_id=disease_id,
+                camera_id=camera_id,
+                area_id=area_id,
+                is_mydriatic=_optional_bool(form, "is_mydriatic"),
+                remarks=_remarks(form.get("remarks")),
+            ),
+            files=upload_files,
+            upload_type="mobile direct image",
         )
-    db.flush()
-    payload = _upload_response(job, upload_kind=UPLOAD_KIND_DIRECT_IMAGE, accepted=result.success_count, rejected=result.error_count)
-    payload["inference_available"] = executable_workflow and any(item.task_id for item in result.items)
-    return payload
+    except DirectUploadJobError as exc:
+        raise MobileUploadError(exc.message, code=exc.code, status_code=exc.status_code) from exc
+    return direct_upload_response_payload(result)
 
 
 def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict) -> dict[str, Any]:

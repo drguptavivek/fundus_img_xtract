@@ -1,9 +1,9 @@
-# api/direct_uploads.py
-from flask import jsonify, request
+from flask import current_app, jsonify, render_template, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from db_transaction_manager import get_db_session
+from db_transaction_manager import get_db_session, transaction_scope
 
 # Import the blueprint
 from . import api_bp
@@ -11,6 +11,13 @@ from . import api_bp
 # Import utility functions and models
 from auth.roles import roles_required
 from models import User, LabUnit, Job, JobItem
+from services.uploads.direct import (
+    DirectUploadJobError,
+    build_web_direct_upload_context,
+    create_web_direct_upload_from_form,
+    enqueue_direct_upload_post_commit,
+)
+from upload_profiles.service import UploadProfileError
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.hospital_scoping import apply_scoping
 
@@ -59,17 +66,142 @@ def get_hospital(lab_unit_id):
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with get_db_session() as db:
-        job = db.query(Job).filter_by(token=job_token).first()
-        # Scope check: Job must belong to user or be in user's scoped lab units
-        if not job:
-             return jsonify({"error": "Upload job not found."}), 404
-             
-        if job.uploader_user_id != current_user.id:
-            # Check if it belongs to valid lab units (if uploader is different)
-            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-            if job.lab_unit_id not in allowed_lab_unit_ids:
-                return jsonify({"error": "Unauthorized access to this job."}), 403
+        job = _scoped_job(db, job_token)
+        if job is None:
+            return jsonify({"error": "Upload job not found."}), 404
+        return jsonify(_job_payload(job))
 
-        items = db.execute(select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)).scalars().all()
-        payload = [{"filename": it.filename, "state": it.state, "detail": it.detail} for it in items]
-        return jsonify({"job_id": job.id, "job_token": job.token, "job_status": job.status, "items": payload})
+
+@api_bp.route("/direct-uploads/form", methods=["GET"])
+@roles_required("fileUploader")
+def direct_upload_form():
+    """HTMX/JSON form options for browser direct uploads."""
+    with get_db_session() as db:
+        context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+    if _wants_json():
+        return jsonify(_options_payload(context))
+    return render_template("direct_uploads/_upload_form.html", **context)
+
+
+@api_bp.route("/direct-uploads/workspace", methods=["GET"])
+@roles_required("fileUploader")
+def direct_upload_workspace():
+    """HTMX/JSON workspace for recent direct upload jobs."""
+    with get_db_session() as db:
+        context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+    if _wants_json():
+        return jsonify({"recent_uploads": context["recent_uploads"], "messages": []})
+    return render_template("direct_uploads/_workspace.html", recent_uploads=context["recent_uploads"], messages=[], result=None)
+
+
+@api_bp.route("/direct-uploads/uploads/web", methods=["POST"])
+@roles_required("fileUploader")
+def create_direct_upload_web():
+    """Session-auth HTMX/JSON endpoint for browser direct uploads."""
+    try:
+        with transaction_scope() as db:
+            result = create_web_direct_upload_from_form(
+                db=db,
+                user_id=current_user.id,
+                username=current_user.username,
+                remote_addr=request.remote_addr,
+                form=request.form,
+                files=request.files,
+            )
+            token = result.job.token
+            upload_ids = result.upload_ids_for_post_commit
+            hospital_id = result.hospital_id_for_post_commit
+    except UploadProfileError as exc:
+        return _upload_error(exc.message, status_code=400)
+    except DirectUploadJobError as exc:
+        return _upload_error(exc.message, status_code=exc.status_code)
+
+    enqueue_direct_upload_post_commit(
+        current_app,
+        user_id=current_user.id,
+        upload_ids=upload_ids,
+        job_token=token,
+        hospital_id=hospital_id,
+    )
+
+    messages = [("success", f"Submitted {result.accepted_count} image(s).")]
+    if result.rejected_count:
+        messages.append(("warning", f"{result.rejected_count} image(s) could not be processed."))
+
+    if request.headers.get("HX-Request"):
+        with get_db_session() as db:
+            context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+            job = _scoped_job(db, token)
+            result_payload = _job_payload(job) if job else None
+        return render_template("direct_uploads/_workspace.html", recent_uploads=context["recent_uploads"], messages=messages, result=result_payload)
+
+    return jsonify({"upload_token": token, "messages": messages}), 201
+
+
+@api_bp.route("/direct-uploads/uploads/<job_token>/status", methods=["GET"])
+@roles_required("fileUploader")
+def direct_upload_status(job_token: str):
+    with get_db_session() as db:
+        job = _scoped_job(db, job_token)
+        if job is None:
+            return jsonify({"error": "Upload job not found."}), 404
+        payload = _job_payload(job)
+    if request.headers.get("HX-Request"):
+        return render_template("direct_uploads/_job_status.html", job=payload)
+    return jsonify(payload)
+
+
+def _upload_error(message: str, *, status_code: int):
+    if request.headers.get("HX-Request"):
+        with get_db_session() as db:
+            context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+        return render_template(
+            "direct_uploads/_workspace.html",
+            recent_uploads=context["recent_uploads"],
+            messages=[("danger", message)],
+            result=None,
+        ), status_code
+    return jsonify({"error": message}), status_code
+
+
+def _scoped_job(db, job_token: str) -> Job | None:
+    job = db.query(Job).filter_by(token=job_token).first()
+    if not job:
+        return None
+    if job.uploader_user_id != current_user.id:
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if job.lab_unit_id not in allowed_lab_unit_ids:
+            return None
+    return job
+
+
+def _job_payload(job: Job) -> dict:
+    items = sorted(job.items, key=lambda item: item.id or 0)
+    return {
+        "job_id": job.id,
+        "job_token": job.token,
+        "job_status": job.status,
+        "status_url": url_for("fundus_api.direct_upload_status", job_token=job.token),
+        "items": [{"filename": item.filename, "state": item.state, "detail": item.detail} for item in items],
+    }
+
+
+def _options_payload(context: dict) -> dict:
+    return {
+        "projects": context["projects"],
+        "upload_profiles": context["upload_profiles"],
+        "hospitals": context["hospitals"],
+        "lab_units": context["lab_units"],
+        "cameras": context["cameras"],
+        "diseases": context["diseases"],
+        "areas": context["areas"],
+        "limits": {
+            "max_files_per_upload": context["max_files_per_upload"],
+            "per_file_mb_limit": context["per_file_mb_limit"],
+            "lifetime_quota": context["lifetime_quota"],
+        },
+    }
+
+
+def _wants_json() -> bool:
+    return request.args.get("format") == "json" or request.accept_mimetypes.best == "application/json"

@@ -1,0 +1,101 @@
+{% from "_forms.html" import csrf_field %}
+<form method="post"
+      action="{{ url_for('fundus_api.create_direct_upload_web') }}"
+      enctype="multipart/form-data"
+      class="card"
+      data-upload-profile-form
+      hx-post="{{ url_for('fundus_api.create_direct_upload_web') }}"
+      hx-target="#direct-upload-workspace"
+      hx-swap="innerHTML"
+      hx-disabled-elt="button[type='submit']">
+  {{ csrf_field() }}
+  <div class="card-body">
+    <div data-upload-profiles='{{ upload_profiles | tojson }}'></div>
+
+    {% if not upload_profiles %}
+    <div class="alert alert-warning">
+      No direct image upload profile is configured for your account.
+    </div>
+    {% endif %}
+
+    <fieldset {% if not upload_profiles %}disabled{% endif %}>
+      <div class="mb-3">
+        <label class="form-label">Project</label>
+        <div class="d-flex flex-wrap gap-2" id="project-buttons">
+          {% for project in projects %}
+          <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off" required {% if projects|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="project_{{ project.id }}">{{ project.title }} <span class="text-muted">({{ project.code }})</span></label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Hospital</label>
+        <div class="d-flex flex-wrap gap-2" id="hospital-buttons">
+          {% for hospital in hospitals %}
+          <input type="radio" class="btn-check" name="hospital_id" id="hospital_{{ hospital.id }}" value="{{ hospital.id }}" autocomplete="off" required {% if hospitals|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="hospital_{{ hospital.id }}">{{ hospital.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Lab Unit</label>
+        <div class="d-flex flex-wrap gap-2" id="lab-unit-buttons">
+          {% for lab_unit in lab_units %}
+          <input type="radio" class="btn-check" name="lab_unit_id" id="lab_unit_{{ lab_unit.id }}" value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}" autocomplete="off" required {% if lab_units|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="lab_unit_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Camera</label>
+        <div class="d-flex flex-wrap gap-2" id="camera-buttons">
+          {% for camera in cameras %}
+          <input type="radio" class="btn-check" name="camera_id" id="camera_{{ camera.id }}" value="{{ camera.id }}" autocomplete="off" required {% if cameras|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="camera_{{ camera.id }}">{{ camera.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Disease</label>
+        <div class="d-flex flex-wrap gap-2" id="disease-buttons">
+          {% for disease in diseases %}
+          <input type="radio" class="btn-check" name="disease_id" id="disease_{{ disease.id }}" value="{{ disease.id }}" autocomplete="off" required {% if diseases|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="disease_{{ disease.id }}">{{ disease.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Site</label>
+        <div class="d-flex flex-wrap gap-2" id="area-buttons">
+          {% for area in areas %}
+          <input type="radio" class="btn-check" name="area_id" id="area_{{ area.id }}" value="{{ area.id }}" autocomplete="off" required {% if areas|length == 1 %}checked{% endif %}>
+          <label class="btn btn-outline-primary btn-sm text-start" for="area_{{ area.id }}">{{ area.name }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic">
+        <label class="form-check-label" for="is_mydriatic" id="mydriatic-label">Non Mydriatic</label>
+      </div>
+
+      <div class="mb-3">
+        <label for="remarks" class="form-label">Remarks</label>
+        <textarea class="form-control" id="remarks" name="remarks" rows="2" maxlength="1000"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label for="files" class="form-label">Images</label>
+        <input class="form-control" type="file" id="files" name="files" multiple accept="image/jpeg,image/png" required>
+        <div class="form-text">JPG or PNG. Max {{ max_files_per_upload }} files, {{ per_file_mb_limit }}MB per file.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100" {% if not upload_profiles %}disabled{% endif %}>Upload Images</button>
+    </fieldset>
+  </div>
+</form>

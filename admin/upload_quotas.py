@@ -10,21 +10,13 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from direct_uploads.upload import _get_int_setting
 from models import User
+from services.uploads.direct import get_direct_upload_settings
 
 
 def _resolve_default_quota(db_session) -> int | None:
     """Get the default lifetime quota (None means unlimited)."""
-    quota = _get_int_setting(
-        db_session,
-        "DIRECT_UPLOAD_LIFETIME_QUOTA",
-        "DIRECT_UPLOAD_LIFETIME_QUOTA",
-        50,
-    )
-    if quota is None or quota <= 0:
-        return None
-    return quota
+    return get_direct_upload_settings(db_session).lifetime_quota
 
 
 @roles_required("admin", "data_manager")

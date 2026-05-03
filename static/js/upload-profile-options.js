@@ -124,4 +124,8 @@
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll("[data-upload-profile-form]").forEach(initForm);
   });
+
+  document.addEventListener("htmx:afterSwap", function (event) {
+    event.target.querySelectorAll("[data-upload-profile-form]").forEach(initForm);
+  });
 })();

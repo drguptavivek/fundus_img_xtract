@@ -46,7 +46,7 @@ from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
 from utils.env_loader import load_environment
 from utils.log_sanitize import sanitize_log_value
-from .upload import _get_int_setting, _get_csv_setting, _get_lifetime_quota
+from services.uploads.direct import get_direct_upload_settings
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 
 
@@ -80,20 +80,12 @@ def pregraded_upload():
             is_mydriatic = request.form.get("is_mydriatic") == "on"
             files = request.files.getlist("files")
 
-            MAX_FILES_ALLOWED = _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
-            )
-            MAX_FILE_SIZE_MB = _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 15
-            )
+            upload_settings = get_direct_upload_settings(db_session, user=current_user)
+            MAX_FILES_ALLOWED = upload_settings.max_files
+            MAX_FILE_SIZE_MB = upload_settings.max_file_size_mb
             MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-            ALLOWED_MIMETYPES = _get_csv_setting(
-                db_session,
-                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
-                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
-                ["image/jpeg", "image/png"],
-            )
-            lifetime_quota = _get_lifetime_quota(db_session, current_user)
+            ALLOWED_MIMETYPES = upload_settings.allowed_mimetypes
+            lifetime_quota = upload_settings.lifetime_quota
 
             if len(files) > MAX_FILES_ALLOWED:
                 session["pregraded_upload_form_data"] = {
@@ -438,6 +430,7 @@ def pregraded_upload():
                 last_job_images = job_items
                 break
         
+        upload_settings = get_direct_upload_settings(db_session, user=current_user)
         context.update({
             "last_job": last_job,
             "last_job_images": last_job_images,
@@ -491,15 +484,9 @@ def pregraded_upload():
             "projects": upload_options.projects,
             "upload_profiles": upload_options.profiles,
             "recent_uploads": recent_uploads,
-            "max_files_per_upload": _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
-            ),
-            "per_file_mb_limit": _get_int_setting(
-                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 15
-            ),
-            "lifetime_quota": _get_lifetime_quota(
-                db_session, current_user
-            ),
+            "max_files_per_upload": upload_settings.max_files,
+            "per_file_mb_limit": upload_settings.max_file_size_mb,
+            "lifetime_quota": upload_settings.lifetime_quota,
         })
 
         return render_template("direct_uploads/pregraded_upload.html", **context)

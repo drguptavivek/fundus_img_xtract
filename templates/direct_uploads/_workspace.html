@@ -1,0 +1,64 @@
+{% if messages %}
+<div class="vstack gap-2 mb-3">
+  {% for category, message in messages %}
+  <div class="alert alert-{{ category }} mb-0">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if result %}
+<div class="border rounded p-3 mb-3"
+     hx-get="{{ result.status_url }}"
+     hx-trigger="load delay:1s, every 4s"
+     hx-target="this"
+     hx-swap="outerHTML">
+  {% include "direct_uploads/_job_status.html" with context %}
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header bg-secondary text-white">
+    <h5 class="mb-0">Recent Direct Image Uploads</h5>
+  </div>
+  <div class="card-body p-0">
+    {% if recent_uploads %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Job</th>
+            <th>Lab Unit</th>
+            <th>Status</th>
+            <th>Files</th>
+            <th>Progress</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for upload in recent_uploads %}
+          <tr>
+            <td>
+              <a href="{{ url_for('jobs.job_status_page', job_token=upload.job['token']) }}" class="text-decoration-none">
+                {{ upload.job['token'][:8] }}...
+              </a>
+              <div class="small text-muted">{{ upload.job['created_at']|user_datetime('%Y-%m-%d %H:%M') }}</div>
+            </td>
+            <td>{{ upload.job['lab_unit']['name'] if upload.job['lab_unit'] else 'N/A' }}</td>
+            <td><span class="{{ upload.status_class }}">{{ upload.status|title }}</span></td>
+            <td>{{ upload.total_items }}</td>
+            <td>
+              <div class="small text-muted">
+                {{ upload.successful_items }} success, {{ upload.failed_items }} failed, {{ upload.processing_items }} processing
+              </div>
+            </td>
+            <td><a href="{{ url_for('jobs.job_status_page', job_token=upload.job['token']) }}" class="btn btn-sm btn-outline-primary">View</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-muted">No recent uploads found.</div>
+    {% endif %}
+  </div>
+</div>

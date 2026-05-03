@@ -1,0 +1,367 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime
+
+import jwt
+import redis
+from flask import request
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+
+from auth.mobile_tokens import (
+    find_session_by_refresh_token,
+    mobile_auth_response,
+    revoke_mobile_session,
+    rotate_refresh_token,
+    serialize_mobile_session,
+    validate_mobile_session,
+)
+from auth.mobile_tokens import create_mobile_session as create_token_session
+from auth.routes import (
+    MAX_FAILS_PER_IP,
+    MAX_FAILS_PER_USERNAME,
+    _is_ip_locked,
+    _lock_ip,
+    _lock_user,
+    _recent_failed_by_ip,
+    _recent_failed_by_username,
+    _record_attempt,
+)
+from auth.security import verify_password
+from auth.utils import utcnow
+from models import MobileAuthSession, User
+from utils.log_sanitize import sanitize_log_value
+from utils.redis_connection import build_redis_url
+
+logger = logging.getLogger(__name__)
+
+_redis_client: redis.Redis | None = None
+_REVOKED_JTI_PREFIX = "fim:mobile:revoked_jti:"
+MAX_ACTIVE_MOBILE_SESSIONS_PER_USER = 2
+
+
+@dataclass(frozen=True)
+class MobileLoginRequest:
+    username: str
+    password: str
+    device_id: str
+    device_name: str
+    ip_address: str
+
+
+@dataclass(frozen=True)
+class RefreshTokenRequest:
+    refresh_token: str
+    device_id: str
+
+
+@dataclass(frozen=True)
+class AccessTokenContext:
+    claims: dict
+    session: MobileAuthSession
+    user: User
+
+
+class MobileAuthError(ValueError):
+    def __init__(self, message: str, *, code: str = "mobile_auth_error", status_code: int = 400) -> None:
+        super().__init__(message)
+        self.message = message
+        self.code = code
+        self.status_code = status_code
+
+
+def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
+    username = login_request.username
+    ip = login_request.ip_address
+
+    ip_locked, _ = _is_ip_locked(db, ip)
+    if ip_locked:
+        raise MobileAuthError("Too many attempts. IP is temporarily locked.", code="ip_locked", status_code=403)
+
+    recent_user_fails = _recent_failed_by_username(db, username)
+    if recent_user_fails >= MAX_FAILS_PER_USERNAME:
+        user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+        if user:
+            _lock_user(db, user)
+        _record_attempt(db, username, ip, success=False)
+        raise MobileAuthError("Too many attempts. User is temporarily locked.", code="user_locked", status_code=403)
+
+    recent_ip_fails = _recent_failed_by_ip(db, ip)
+    if recent_ip_fails >= MAX_FAILS_PER_IP:
+        _lock_ip(db, ip)
+        _record_attempt(db, username, ip, success=False)
+        raise MobileAuthError("Too many attempts. IP is temporarily locked.", code="ip_locked", status_code=403)
+
+    user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
+    if user and user.is_locked_until:
+        locked_until = user.is_locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=utcnow().tzinfo)
+        if locked_until > utcnow():
+            _record_attempt(db, username, ip, success=False)
+            raise MobileAuthError("Too many attempts. User is temporarily locked.", code="user_locked", status_code=403)
+
+    if user is None or not user.is_active or not verify_password(user.password_hash, login_request.password):
+        _record_attempt(db, username, ip, success=False)
+        if user and _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME:
+            _lock_user(db, user)
+        if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
+            _lock_ip(db, ip)
+        raise MobileAuthError("Invalid username or password", code="invalid_credentials", status_code=401)
+
+    _record_attempt(db, username, ip, success=True)
+    mobile_session, access_token, refresh_token, scope = create_token_session(
+        db,
+        user,
+        device_id=login_request.device_id,
+        device_name=login_request.device_name,
+    )
+    enforce_mobile_session_limit(db, user_id=user.id, current_session_id=mobile_session.id)
+    logger.info(
+        "Mobile login successful user=%s device_id=%s",
+        sanitize_log_value(user.username),
+        sanitize_log_value(login_request.device_id),
+    )
+    return mobile_auth_response(user, access_token, refresh_token, scope)
+
+
+def refresh_mobile_tokens(db, refresh_request: RefreshTokenRequest) -> dict:
+    mobile_session = find_session_by_refresh_token(db, refresh_request.refresh_token)
+    if not validate_mobile_session(mobile_session):
+        raise MobileAuthError("Invalid refresh token", code="invalid_refresh_token", status_code=401)
+    assert mobile_session is not None
+    if mobile_session.device_id != refresh_request.device_id:
+        raise MobileAuthError("Invalid device for refresh token", code="invalid_refresh_device", status_code=401)
+
+    user = db.get(User, mobile_session.user_id)
+    if user is None or not user.is_active:
+        revoke_mobile_session(db, mobile_session)
+        raise MobileAuthError("User is inactive", code="inactive_user", status_code=403)
+
+    access_token, new_refresh_token, scope = rotate_refresh_token(db, mobile_session, user)
+    return mobile_auth_response(user, access_token, new_refresh_token, scope)
+
+
+def logout_mobile_session(db, *, refresh_token: str, access_claims: dict | None = None) -> None:
+    mobile_session = find_session_by_refresh_token(db, refresh_token)
+    if mobile_session is None:
+        return
+    revoke_mobile_session(db, mobile_session)
+    _revoke_claims_jti(access_claims)
+
+
+def mobile_sessions_collection(db, *, user_id: int, current_session_id: str | None) -> dict:
+    return {
+        "sessions": list_mobile_sessions(db, user_id=user_id, current_session_id=current_session_id),
+        "_links": {
+            "self": {"href": "/api/mobile/v1/sessions"},
+            "context": {"href": "/api/mobile/v1/context/me"},
+            "upload_profiles": {"href": "/api/mobile/v1/upload-options"},
+            "refresh": {"href": "/api/mobile/v1/auth/refresh", "method": "POST"},
+            "logout": {"href": "/api/mobile/v1/auth/logout", "method": "POST"},
+        },
+    }
+
+
+def list_mobile_sessions(db, *, user_id: int, current_session_id: str | None) -> list[dict]:
+    user = db.execute(
+        select(User)
+        .options(selectinload(User.roles))
+        .where(User.id == user_id)
+    ).scalar_one_or_none()
+    profile = _session_profile(user) if user else None
+    sessions = db.execute(
+        select(MobileAuthSession)
+        .where(MobileAuthSession.user_id == user_id)
+        .order_by(MobileAuthSession.created_at.desc())
+    ).scalars().all()
+    payload = []
+    for item in sessions:
+        payload.append(_serialize_session_item(item, current_session_id=current_session_id, profile=profile))
+    return payload
+
+
+def get_mobile_session_payload(db, *, user_id: int, session_id: str, current_session_id: str | None) -> dict | None:
+    user = db.execute(
+        select(User)
+        .options(selectinload(User.roles))
+        .where(User.id == user_id)
+    ).scalar_one_or_none()
+    item = db.execute(
+        select(MobileAuthSession)
+        .where(MobileAuthSession.id == session_id)
+        .where(MobileAuthSession.user_id == user_id)
+    ).scalar_one_or_none()
+    if item is None:
+        return None
+    return _serialize_session_item(item, current_session_id=current_session_id, profile=_session_profile(user) if user else None)
+
+
+def revoke_user_mobile_session(
+    db,
+    *,
+    user_id: int,
+    session_id: str,
+    current_session_id: str | None,
+    access_claims: dict | None = None,
+) -> bool:
+    mobile_session = db.execute(
+        select(MobileAuthSession)
+        .where(MobileAuthSession.id == session_id)
+        .where(MobileAuthSession.user_id == user_id)
+    ).scalar_one_or_none()
+    if mobile_session is None:
+        return False
+    revoke_mobile_session(db, mobile_session)
+    if session_id == current_session_id:
+        _revoke_claims_jti(access_claims)
+    return True
+
+
+def enforce_mobile_session_limit(
+    db,
+    *,
+    user_id: int,
+    current_session_id: str,
+    max_active_sessions: int = MAX_ACTIVE_MOBILE_SESSIONS_PER_USER,
+) -> int:
+    active_sessions = db.execute(
+        select(MobileAuthSession)
+        .where(MobileAuthSession.user_id == user_id)
+        .where(MobileAuthSession.is_revoked == False)  # noqa: E712
+        .order_by(MobileAuthSession.created_at.desc(), MobileAuthSession.last_used_at.desc())
+    ).scalars().all()
+    protected = [session for session in active_sessions if session.id == current_session_id]
+    others = [session for session in active_sessions if session.id != current_session_id]
+    keep_ids = {session.id for session in (protected + others)[:max_active_sessions]}
+
+    revoked = 0
+    for session in active_sessions:
+        if session.id in keep_ids:
+            continue
+        revoke_mobile_session(db, session)
+        revoked += 1
+    return revoked
+
+
+def validate_access_session(db, claims: dict) -> AccessTokenContext:
+    jti = claims.get("jti")
+    if jti and is_access_jti_revoked(str(jti)):
+        raise MobileAuthError("Token has been revoked", code="access_token_revoked", status_code=401)
+
+    mobile_session_id = claims.get("mobile_session_id")
+    if not mobile_session_id:
+        raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
+
+    mobile_session = db.execute(
+        select(MobileAuthSession).where(MobileAuthSession.id == mobile_session_id)
+    ).scalar_one_or_none()
+    if mobile_session is None or mobile_session.is_revoked:
+        raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
+    if mobile_session.refresh_token_expires_at <= utcnow():
+        raise MobileAuthError("Mobile session expired", code="mobile_session_expired", status_code=401)
+
+    user = db.get(User, mobile_session.user_id)
+    if user is None or not user.is_active:
+        raise MobileAuthError("User is inactive", code="inactive_user", status_code=403)
+
+    mobile_session.last_used_at = utcnow()
+    mobile_session.last_used_ip = request.remote_addr
+    mobile_session.last_user_agent = request.headers.get("User-Agent")
+    db.flush()
+    return AccessTokenContext(claims=claims, session=mobile_session, user=user)
+
+
+def revoke_access_jti(jti: str, expires_at: datetime | int | float | None) -> None:
+    if not jti or expires_at is None:
+        return
+    ttl_seconds = _ttl_seconds(expires_at)
+    if ttl_seconds <= 0:
+        return
+    client = _get_redis_client()
+    if client is None:
+        logger.warning("Mobile access-token revocation skipped because Redis is unavailable")
+        return
+    try:
+        client.setex(_revoked_jti_key(jti), ttl_seconds, "1")
+    except redis.RedisError as exc:
+        logger.error("Mobile access-token revocation write failed: %s", sanitize_log_value(exc))
+
+
+def is_access_jti_revoked(jti: str | None) -> bool:
+    if not jti:
+        return False
+    client = _get_redis_client()
+    if client is None:
+        logger.warning("Mobile access-token revocation check skipped because Redis is unavailable")
+        return False
+    try:
+        return client.get(_revoked_jti_key(jti)) == "1"
+    except redis.RedisError as exc:
+        logger.error("Mobile access-token revocation check failed: %s", sanitize_log_value(exc))
+        return False
+
+
+def decode_access_claims_without_revocation(token: str, jwt_secret: str) -> dict | None:
+    try:
+        claims = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return None
+    if claims.get("typ") and claims.get("typ") != "access":
+        return None
+    return claims
+
+
+def _revoke_claims_jti(claims: dict | None) -> None:
+    if not claims:
+        return
+    revoke_access_jti(str(claims.get("jti") or ""), claims.get("exp"))
+
+
+def _ttl_seconds(expires_at: datetime | int | float) -> int:
+    if isinstance(expires_at, datetime):
+        return max(0, int((expires_at - utcnow()).total_seconds()))
+    return max(0, int(float(expires_at) - utcnow().timestamp()))
+
+
+def _get_redis_client() -> redis.Redis | None:
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        _redis_client = redis.Redis.from_url(build_redis_url(), decode_responses=True)
+    except redis.RedisError as exc:
+        logger.error("Mobile auth Redis init failed: %s", sanitize_log_value(exc))
+        _redis_client = None
+    return _redis_client
+
+
+def _revoked_jti_key(jti: str) -> str:
+    return f"{_REVOKED_JTI_PREFIX}{jti}"
+
+
+def _serialize_session_item(item: MobileAuthSession, *, current_session_id: str | None, profile: dict | None) -> dict:
+    row = serialize_mobile_session(item)
+    row["session_id"] = row.pop("id")
+    row["is_current"] = item.id == current_session_id
+    row["current"] = row["is_current"]
+    row["revoked_at"] = item.revoked_at.isoformat() if item.revoked_at else None
+    row["last_user_agent"] = item.last_user_agent
+    row["last_used_ip"] = item.last_used_ip
+    row["profile"] = profile
+    row["_links"] = {"self": {"href": f"/api/mobile/v1/sessions/{item.id}"}}
+    if not item.is_revoked:
+        row["_links"]["revoke"] = {"href": f"/api/mobile/v1/sessions/{item.id}/revoke", "method": "POST"}
+    return row
+
+
+def _session_profile(user: User) -> dict:
+    return {
+        "user_id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "hospital_id": user.hospital_id,
+        "roles": sorted(role.name for role in (user.roles or [])),
+    }

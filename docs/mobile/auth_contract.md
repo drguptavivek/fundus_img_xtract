@@ -45,6 +45,12 @@ Meaning:
 Lifetime:
 - 15 minutes
 
+Validation policy:
+- Access tokens are JWTs, but mobile access is intentionally state-aware.
+- Every authenticated mobile API checks the token `jti` against the Redis-backed revoked-token list.
+- Every authenticated mobile API also checks `mobile_session_id` against the DB-backed `MobileAuthSession`.
+- A token is rejected when its session is revoked, expired, missing, or owned by an inactive user.
+
 ## Refresh Token Shape
 
 Format:
@@ -65,6 +71,12 @@ Lifetime:
 Usage:
 - Sent in JSON body to `/api/mobile/v1/auth/refresh`
 - Sent in JSON body to `/api/mobile/v1/auth/logout`
+
+Refresh policy:
+- Refresh tokens are the durable session-continuity credential.
+- Refresh tokens are rotated on every successful refresh.
+- Revoking a mobile session immediately invalidates the refresh path.
+- Each user may have at most two active mobile sessions. Creating a third active device session revokes the oldest active session.
 
 ## Login Request
 
@@ -135,5 +147,74 @@ Same shape as login response, with a newly rotated access token and refresh toke
 ```json
 {
   "refresh_token": "<opaque-secret>"
+}
+```
+
+If the request includes `Authorization: Bearer <access_token>`, the server also revokes that access token `jti` in Redis until the JWT would naturally expire.
+
+## Session Audit
+
+`GET /api/mobile/v1/sessions`
+
+Returns the authenticated user's mobile sessions only.
+
+```json
+{
+  "sessions": [
+    {
+      "session_id": "9f0a4d52-2436-4a73-a9c4-8f9d62f70a4d",
+      "device_id": "mobile-install-uuid",
+      "device_name": "Pixel 9",
+      "created_at": "2026-03-20T12:00:00+00:00",
+      "updated_at": "2026-03-20T12:00:00+00:00",
+      "last_used_at": "2026-03-20T12:00:00+00:00",
+      "refresh_token_expires_at": "2026-04-19T12:00:00+00:00",
+      "allowed_lab_unit_ids": [12],
+      "allowed_disease_ids": [1],
+      "is_revoked": false,
+      "is_current": true,
+      "revoked_at": null,
+      "profile": {
+        "user_id": 123,
+        "username": "mobile_user",
+        "full_name": "Mobile User",
+        "hospital_id": 5,
+        "roles": ["fileUploader"]
+      },
+      "_links": {
+        "self": { "href": "/api/mobile/v1/sessions/9f0a4d52-2436-4a73-a9c4-8f9d62f70a4d" },
+        "revoke": {
+          "href": "/api/mobile/v1/sessions/9f0a4d52-2436-4a73-a9c4-8f9d62f70a4d/revoke",
+          "method": "POST"
+        }
+      }
+    }
+  ],
+  "_links": {
+    "self": { "href": "/api/mobile/v1/sessions" },
+    "context": { "href": "/api/mobile/v1/context/me" },
+    "upload_profiles": { "href": "/api/mobile/v1/upload-options" },
+    "refresh": { "href": "/api/mobile/v1/auth/refresh", "method": "POST" },
+    "logout": { "href": "/api/mobile/v1/auth/logout", "method": "POST" }
+  }
+}
+```
+
+HATEOAS policy:
+- Mobile collection responses include `_links.self`.
+- Session items include `_links.self`.
+- Session items include `_links.revoke` only when the session is not already revoked.
+- Upload profile details stay in `/api/mobile/v1/upload-options`; session `profile` is the authenticated user/device profile, not the upload profile list.
+
+## Session Revoke
+
+`POST /api/mobile/v1/sessions/<session_id>/revoke`
+
+Revokes one mobile session owned by the authenticated user.
+
+```json
+{
+  "session_id": "9f0a4d52-2436-4a73-a9c4-8f9d62f70a4d",
+  "revoked": true
 }
 ```

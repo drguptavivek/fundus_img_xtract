@@ -2,7 +2,7 @@
 
 Base path: `/api/mobile/v1`
 
-These routes live in `api/mobile/auth.py` and `auth/mobile_tokens.py`.
+These routes live in `api/mobile/auth.py`, `api/mobile/sessions.py`, and `services/mobile/auth_sessions.py`.
 
 ## CSRF
 
@@ -12,9 +12,11 @@ These routes live in `api/mobile/auth.py` and `auth/mobile_tokens.py`.
 ## Auth and Errors
 
 - `POST /auth/login`, `POST /auth/refresh`, and `POST /auth/logout` do not require a bearer token.
-- `GET /auth/sessions` and `DELETE /auth/sessions/<session_id>` require `Authorization: Bearer <access_token>`.
+- `GET /sessions` and `POST /sessions/<session_id>/revoke` require `Authorization: Bearer <access_token>`.
 - `token_auth_required` returns JSON errors with a `message` key.
 - Route-level validation returns JSON errors with an `error` key.
+- Access JWTs include `jti` and are checked against Redis-backed revocation keys on every token-authenticated mobile API call.
+- Mobile sessions are DB-backed and capped at two active sessions per user. Creating a new session revokes the oldest active session beyond that limit.
 
 ## `POST /auth/login`
 
@@ -145,11 +147,12 @@ Success response: `204 No Content`
 Behavior:
 - If the token resolves to an active mobile session, the session is revoked.
 - If the token is unknown, the route still returns `204`.
+- If the request also includes `Authorization: Bearer <access_token>`, that access token's `jti` is added to the Redis revocation list until its JWT expiry.
 
 Errors:
 - `400` when `refresh_token` is missing
 
-## `GET /auth/sessions`
+## `GET /sessions`
 
 Auth: bearer access token
 
@@ -169,9 +172,31 @@ Success response: `200 OK`
       "allowed_lab_unit_ids": [12],
       "allowed_disease_ids": [1],
       "is_revoked": false,
-      "current": true
+      "is_current": true,
+      "current": true,
+      "revoked_at": null,
+      "last_user_agent": "MobileClient/1.0",
+      "last_used_ip": "203.0.113.1",
+      "profile": {
+        "user_id": 123,
+        "username": "mobile_user",
+        "full_name": "Mobile User",
+        "hospital_id": 5,
+        "roles": ["fileUploader"]
+      },
+      "_links": {
+        "self": { "href": "/api/mobile/v1/sessions/uuid" },
+        "revoke": { "href": "/api/mobile/v1/sessions/uuid/revoke", "method": "POST" }
+      }
     }
-  ]
+  ],
+  "_links": {
+    "self": { "href": "/api/mobile/v1/sessions" },
+    "context": { "href": "/api/mobile/v1/context/me" },
+    "upload_profiles": { "href": "/api/mobile/v1/upload-options" },
+    "refresh": { "href": "/api/mobile/v1/auth/refresh", "method": "POST" },
+    "logout": { "href": "/api/mobile/v1/auth/logout", "method": "POST" }
+  }
 }
 ```
 
@@ -189,7 +214,13 @@ Top-level response keys:
 - `allowed_lab_unit_ids`
 - `allowed_disease_ids`
 - `is_revoked`
+- `is_current`
 - `current`
+- `revoked_at`
+- `last_user_agent`
+- `last_used_ip`
+- `profile`
+- `_links`
 
 Errors:
 - `401` when the bearer token is missing, expired, invalid, or not an access token
@@ -200,26 +231,46 @@ The `token_auth_required` decorator returns these error shapes with a `message` 
 - `{"message": "Token has expired"}`
 - `{"message": "Invalid token"}`
 - `{"message": "Invalid token type"}`
+- `{"message": "Token has been revoked"}`
 - `{"message": "Mobile session is invalid"}`
 - `{"message": "Mobile session expired"}`
 - `{"message": "User is inactive"}`
 
-## `DELETE /auth/sessions/<session_id>`
+## `POST /sessions/<session_id>/revoke`
 
 Auth: bearer access token
 
 Path parameter:
 - `session_id`: the mobile session UUID
 
-Success response: `204 No Content`
+Success response: `200 OK`
+
+```json
+{
+  "session_id": "uuid",
+  "revoked": true
+}
+```
 
 Behavior:
 - If the session belongs to the current user, it is revoked.
-- If the session does not exist or does not belong to the current user, the route still returns `204`.
+- If the current session is revoked, the current access token's `jti` is added to Redis until JWT expiry.
+- If the session does not exist or does not belong to the current user, `revoked` is `false`.
 
 Errors:
 - `401` when the bearer token is missing or invalid
 - `403` when the underlying user is inactive
+
+## `GET /sessions/<session_id>`
+
+Auth: bearer access token
+
+Returns the same session item shape used by `GET /sessions`.
+
+Errors:
+- `401` when the bearer token is missing or invalid
+- `403` when the underlying user is inactive
+- `404` when the session does not exist or is owned by another user
 
 ## Response Token Shape
 
@@ -240,3 +291,9 @@ Access token claims:
 Token metadata:
 - `expires_in` is `900`
 - `refresh_expires_in` is `2592000`
+
+Stateful checks:
+- The access token is a JWT, but mobile APIs intentionally perform stateful checks.
+- The token `jti` must not exist in the Redis revoked-token list.
+- The `mobile_session_id` must point to a non-revoked, non-expired `MobileAuthSession`.
+- The session user must still be active.

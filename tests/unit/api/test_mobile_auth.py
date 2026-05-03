@@ -4,6 +4,7 @@ import jwt
 
 from auth.mobile_tokens import hash_refresh_token
 from models import Disease, Hospital, LabUnit, MobileAuthSession
+from services.mobile import auth_sessions
 from tests.helpers.factories import UserFactory
 
 
@@ -59,6 +60,8 @@ def test_mobile_login_returns_token_shapes(client, db_session, monkeypatch):
     assert payload["token_type"] == "Bearer"
     assert payload["expires_in"] == 900
     assert payload["refresh_expires_in"] == 2592000
+    assert payload["_links"]["sessions"]["href"] == "/api/mobile/v1/sessions"
+    assert payload["_links"]["upload_profiles"]["href"] == "/api/mobile/v1/upload-options"
     assert payload["context"]["hospital"] == {"id": hospital.id, "name": hospital.name}
     assert payload["context"]["lab_units"] == [
         {
@@ -174,6 +177,58 @@ def test_mobile_logout_revokes_access(client, db_session, monkeypatch):
     assert revoked_context.status_code == 401
 
 
+def test_mobile_logout_records_access_jti_in_revoked_store(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    revoked_jtis = set()
+    monkeypatch.setattr(auth_sessions, "revoke_access_jti", lambda jti, expires_at: revoked_jtis.add(jti))
+    user, _, _ = _seed_mobile_user(db_session)
+    login_response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": "Test@2026",
+            "device_id": "device-logout-jti",
+            "device_name": "Android",
+        },
+    )
+    login_payload = login_response.get_json()
+    claims = jwt.decode(login_payload["access_token"], JWT_SECRET, algorithms=["HS256"])
+
+    logout_response = client.post(
+        "/api/mobile/v1/auth/logout",
+        json={"refresh_token": login_payload["refresh_token"]},
+        headers={"Authorization": f"Bearer {login_payload['access_token']}"},
+    )
+
+    assert logout_response.status_code == 204
+    assert claims["jti"] in revoked_jtis
+
+
+def test_mobile_token_auth_rejects_redis_revoked_jti(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    login_response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": "Test@2026",
+            "device_id": "device-revoked-jti",
+            "device_name": "Android",
+        },
+    )
+    access_token = login_response.get_json()["access_token"]
+    claims = jwt.decode(access_token, JWT_SECRET, algorithms=["HS256"])
+    monkeypatch.setattr(auth_sessions, "is_access_jti_revoked", lambda jti: jti == claims["jti"])
+
+    response = client.get(
+        "/api/mobile/v1/context/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.get_json()["message"] == "Token has been revoked"
+
+
 def test_mobile_sessions_endpoint_lists_current_device(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
@@ -189,12 +244,85 @@ def test_mobile_sessions_endpoint_lists_current_device(client, db_session, monke
     access_token = login_response.get_json()["access_token"]
 
     response = client.get(
-        "/api/mobile/v1/auth/sessions",
+        "/api/mobile/v1/sessions",
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
     assert response.status_code == 200
     payload = response.get_json()
     assert len(payload["sessions"]) == 1
-    assert payload["sessions"][0]["device_id"] == "device-list"
-    assert payload["sessions"][0]["current"] is True
+    session = payload["sessions"][0]
+    assert session["device_id"] == "device-list"
+    assert session["is_current"] is True
+    assert session["profile"]["user_id"] == user.id
+    assert session["profile"]["username"] == user.username
+    assert session["_links"]["self"]["href"] == f"/api/mobile/v1/sessions/{session['session_id']}"
+    assert session["_links"]["revoke"] == {
+        "href": f"/api/mobile/v1/sessions/{session['session_id']}/revoke",
+        "method": "POST",
+    }
+    assert payload["_links"]["self"]["href"] == "/api/mobile/v1/sessions"
+    assert payload["_links"]["upload_profiles"]["href"] == "/api/mobile/v1/upload-options"
+    assert payload["_links"]["logout"] == {"href": "/api/mobile/v1/auth/logout", "method": "POST"}
+
+    self_response = client.get(
+        session["_links"]["self"]["href"],
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert self_response.status_code == 200
+    assert self_response.get_json()["session_id"] == session["session_id"]
+
+
+def test_legacy_mobile_auth_sessions_route_is_removed(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+    login_response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": "Test@2026",
+            "device_id": "device-hard-cutover",
+            "device_name": "Current Device",
+        },
+    )
+    access_token = login_response.get_json()["access_token"]
+
+    response = client.get(
+        "/api/mobile/v1/auth/sessions",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_mobile_login_revokes_oldest_session_when_more_than_two_active(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    user, _, _ = _seed_mobile_user(db_session)
+
+    for index in range(3):
+        response = client.post(
+            "/api/mobile/v1/auth/login",
+            json={
+                "username": user.username,
+                "password": "Test@2026",
+                "device_id": f"device-concurrent-{index}",
+                "device_name": f"Device {index}",
+            },
+        )
+        assert response.status_code == 200
+
+    sessions = (
+        db_session.query(MobileAuthSession)
+        .filter_by(user_id=user.id)
+        .order_by(MobileAuthSession.created_at.asc())
+        .all()
+    )
+
+    assert len(sessions) == 3
+    assert sessions[0].device_id == "device-concurrent-0"
+    assert sessions[0].is_revoked is True
+    assert sessions[0].revoked_at is not None
+    assert [session.device_id for session in sessions if not session.is_revoked] == [
+        "device-concurrent-1",
+        "device-concurrent-2",
+    ]

@@ -284,4 +284,11 @@ def mobile_auth_response(user: User, access_token: str, refresh_token: str, scop
             "allowed_disease_ids": scope["allowed_disease_ids"],
             "roles": scope["roles"],
         },
+        "_links": {
+            "context": {"href": "/api/mobile/v1/context/me"},
+            "sessions": {"href": "/api/mobile/v1/sessions"},
+            "upload_profiles": {"href": "/api/mobile/v1/upload-options"},
+            "refresh": {"href": "/api/mobile/v1/auth/refresh", "method": "POST"},
+            "logout": {"href": "/api/mobile/v1/auth/logout", "method": "POST"},
+        },
     }

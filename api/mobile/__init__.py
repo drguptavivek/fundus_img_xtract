@@ -2,4 +2,4 @@ from flask import Blueprint
 
 mobile_api_bp = Blueprint("mobile_api", __name__, url_prefix="/api/mobile/v1")
 
-from . import auth, context, upload_options, uploads  # noqa: E402,F401
+from . import auth, context, sessions, upload_options, uploads  # noqa: E402,F401

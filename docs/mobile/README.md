@@ -14,8 +14,9 @@ This surface is intentionally separate from the browser/session APIs under `/api
 - `POST /api/mobile/v1/auth/login`
 - `POST /api/mobile/v1/auth/refresh`
 - `POST /api/mobile/v1/auth/logout`
-- `GET /api/mobile/v1/auth/sessions`
-- `DELETE /api/mobile/v1/auth/sessions/<session_id>`
+- `GET /api/mobile/v1/sessions`
+- `GET /api/mobile/v1/sessions/<session_id>`
+- `POST /api/mobile/v1/sessions/<session_id>/revoke`
 - `GET /api/mobile/v1/context/me`
 
 ## Contract Docs

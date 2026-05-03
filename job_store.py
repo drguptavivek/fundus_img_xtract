@@ -17,6 +17,8 @@ def db_create_job(
     lab_unit_id: Optional[int] = None,
     project_id: Optional[int] = None,
     upload_type: Optional[str] = None,
+    upload_kind: Optional[str] = None,
+    upload_profile_id: Optional[int] = None,
 ) -> str:
     with transaction_scope() as db:
         job = Job(
@@ -29,6 +31,8 @@ def db_create_job(
             lab_unit_id=lab_unit_id,
             project_id=project_id,
             upload_type=upload_type,
+            upload_kind=upload_kind,
+            upload_profile_id=upload_profile_id,
         )
         db.add(job)
         db.flush()
@@ -120,6 +124,10 @@ def db_get_job_payload(job_token: str) -> dict | None:
                     "uploader_user_id": it.uploader_user_id,
                     "uploader_username": sanitize_log_value(it.uploader_username),
                     "uploader_ip": it.uploader_ip,
+                    "source_type": it.source_type,
+                    "source_id": it.source_id,
+                    "source_uuid": it.source_uuid,
+                    "task_id": it.task_id,
                     "started_at": it.started_at.isoformat() + "Z" if it.started_at else None,
                     "finished_at": it.finished_at.isoformat() + "Z" if it.finished_at else None,
                 }

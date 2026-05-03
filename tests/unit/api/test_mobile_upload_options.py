@@ -13,7 +13,7 @@ from upload_profiles.models import (
     UploadProfileDisease,
     UploadProfileKind,
 )
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO
 from tests.helpers.factories import UserFactory
 
 
@@ -179,6 +179,21 @@ def test_mobile_upload_options_filters_keep_option_lists_consistent(client, db_s
     assert payload["cameras"] == [{"id": upload_options_data["camera_a"].id, "name": upload_options_data["camera_a"].name}]
     assert payload["areas"] == [{"id": upload_options_data["area_a"].id, "name": upload_options_data["area_a"].name}]
     assert [item["profile_id"] for item in payload["profiles"]] == [upload_options_data["profile_a"].id]
+
+
+def test_mobile_upload_options_strips_web_only_pregraded_kind(client, db_session, monkeypatch, upload_options_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    upload_options_data["profile_a"].upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_PREGRADED))
+    upload_options_data["profile_a"].upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_REMIDIO))
+    db_session.flush()
+    token = _mobile_access_token(client, upload_options_data["uploader"].username)
+
+    response = client.get("/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    profile = next(item for item in response.get_json()["profiles"] if item["profile_id"] == upload_options_data["profile_a"].id)
+    assert UPLOAD_KIND_PREGRADED not in profile["upload_kinds"]
+    assert profile["upload_kinds"] == [UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO]
 
 
 def _add_profile(db_session, user_id, lab_unit_id, project_id, disease_id, camera_id, area_id):

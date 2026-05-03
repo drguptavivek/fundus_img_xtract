@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
 from models import User
+from services.uploads import serialize_mobile_upload_options
 from upload_profiles.service import UploadOptions, filter_upload_options, get_user_upload_options
 
 from . import mobile_api_bp
@@ -37,7 +38,7 @@ def get_mobile_upload_options():
 
         options = get_user_upload_options(db, user.id)
         options = filter_upload_options(db, options, **filters)
-        return jsonify(_serialize_upload_options(options))
+        return jsonify(_serialize_upload_options(db, options))
 
 
 def _parse_filters():
@@ -65,12 +66,5 @@ def _optional_int(name: str) -> int | None:
     return parsed
 
 
-def _serialize_upload_options(options: UploadOptions) -> dict:
-    return {
-        "projects": options.projects,
-        "lab_units": options.lab_units,
-        "diseases": options.diseases,
-        "cameras": options.cameras,
-        "areas": options.areas,
-        "profiles": options.profiles,
-    }
+def _serialize_upload_options(db, options: UploadOptions) -> dict:
+    return serialize_mobile_upload_options(options, db=db)

@@ -1,0 +1,277 @@
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from itertools import count
+
+import pytest
+from PIL import Image
+
+from models import Area, Camera, Disease, DirectImageUpload, EncounterSetImage, Hospital, Job, LabUnit, PatientEncounters, Project
+from upload_profiles.models import (
+    UploadProfile,
+    UploadProfileArea,
+    UploadProfileAssignment,
+    UploadProfileCamera,
+    UploadProfileDisease,
+    UploadProfileKind,
+)
+from upload_profiles.service import (
+    UPLOAD_KIND_DIRECT_IMAGE,
+    UPLOAD_KIND_ENCOUNTER_SET,
+    UPLOAD_KIND_PREGRADED,
+    UPLOAD_KIND_REMIDIO,
+)
+from tests.helpers.factories import UserFactory
+
+
+JWT_SECRET = "test-mobile-uploads-secret"
+_SEQUENCE = count(1)
+
+
+@pytest.fixture
+def mobile_upload_data(db_session, core_test_data):
+    suffix = next(_SEQUENCE)
+    hospital = Hospital(name=f"Mobile Upload Hospital {suffix}")
+    db_session.add(hospital)
+    db_session.flush()
+
+    lab = LabUnit(name=f"Mobile Upload Lab {suffix}", hospital_id=hospital.id)
+    project = Project(title=f"EIM Upload Project {suffix}", code=f"EIM_UPLOAD_{suffix}", active=True)
+    disease = db_session.merge(core_test_data["glaucoma"])
+    camera = Camera(name=f"Mobile Upload Camera {suffix}", is_zip_upload_enabled=True)
+    area = Area(name=f"Mobile Upload Area {suffix}")
+    db_session.add_all([lab, project, camera, area])
+    db_session.flush()
+
+    uploader = UserFactory.create_by_role(
+        db_session,
+        "fileUploader",
+        username=f"mobile_uploads_user_{suffix}",
+        lab_units=[lab],
+    )
+    profile = UploadProfile(
+        name=f"EIM Mobile Profile {suffix}",
+        lab_unit_id=lab.id,
+        project_id=project.id,
+        active=True,
+        allow_mydriatic=True,
+        allow_non_mydriatic=True,
+        default_is_mydriatic=False,
+    )
+    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
+    profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
+    profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
+    profile.areas.append(UploadProfileArea(area_id=area.id))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_REMIDIO))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_PREGRADED))
+    db_session.add(profile)
+    db_session.flush()
+
+    return {
+        "uploader": uploader,
+        "profile": profile,
+        "hospital": hospital,
+        "lab": lab,
+        "project": project,
+        "disease": disease,
+        "camera": camera,
+        "area": area,
+    }
+
+
+def test_mobile_upload_rejects_pregraded_kind(client, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "upload_kind": UPLOAD_KIND_PREGRADED,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "unsupported_upload_kind"
+
+
+def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "disease_id": str(mobile_upload_data["disease"].id),
+            "camera_id": str(mobile_upload_data["camera"].id),
+            "area_id": str(mobile_upload_data["area"].id),
+            "remarks": "patient reported blurred vision",
+            "files": [(_png_file("direct-eye.png"), "direct-eye.png")],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["upload_kind"] == UPLOAD_KIND_DIRECT_IMAGE
+    assert payload["accepted_count"] == 1
+    assert payload["upload_token"]
+
+    upload = db_session.query(DirectImageUpload).one()
+    assert upload.remarks == "patient reported blurred vision"
+
+    status_response = client.get(
+        f"/api/mobile/v1/uploads/{payload['upload_token']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert status_response.status_code == 200
+    assert status_response.get_json()["items"][0]["source_type"] == "direct_image"
+
+
+def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "upload_kind": UPLOAD_KIND_REMIDIO,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "camera_id": str(mobile_upload_data["camera"].id),
+            "files": [(_zip_file("Patient_001_20260503/image.jpg"), "remidio.zip")],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["upload_kind"] == UPLOAD_KIND_REMIDIO
+    assert payload["accepted_count"] == 1
+    assert payload["status"] == "queued"
+
+
+def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    encounter_json = {
+        "patient_id": "MRN-123",
+        "patient_name": "Mobile Patient",
+        "capture_date": "2026-05-03",
+        "disease_ids": [mobile_upload_data["disease"].id],
+        "remarks": "encounter level text",
+        "items": [
+            {
+                "file_key": "right_eye",
+                "spatial_position": 1,
+                "camera_id": mobile_upload_data["camera"].id,
+                "area_id": mobile_upload_data["area"].id,
+                "remarks": "right eye text",
+            },
+            {
+                "file_key": "left_eye",
+                "spatial_position": 2,
+                "camera_id": mobile_upload_data["camera"].id,
+                "area_id": mobile_upload_data["area"].id,
+                "remarks": "left eye text",
+            },
+        ],
+    }
+
+    response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "upload_kind": UPLOAD_KIND_ENCOUNTER_SET,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "encounter_json": json.dumps(encounter_json),
+            "right_eye": (_png_file("right-eye.png"), "right-eye.png"),
+            "left_eye": (_png_file("left-eye.png"), "left-eye.png"),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["upload_kind"] == UPLOAD_KIND_ENCOUNTER_SET
+    assert payload["accepted_count"] == 2
+
+    encounter = db_session.query(PatientEncounters).one()
+    assert encounter.patient_id == "MRN-123"
+    assert encounter.remarks == "encounter level text"
+    assert db_session.query(EncounterSetImage).count() == 2
+    assert {image.remarks for image in db_session.query(EncounterSetImage).all()} == {"right eye text", "left eye text"}
+
+
+def test_mobile_upload_inference_returns_not_configured(client, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    job = Job(
+        token="mobile-inference-token",
+        status="completed",
+        upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+        upload_profile_id=mobile_upload_data["profile"].id,
+        uploader_user_id=mobile_upload_data["uploader"].id,
+        lab_unit_id=mobile_upload_data["lab"].id,
+        project_id=mobile_upload_data["project"].id,
+    )
+    from db_transaction_manager import transaction_scope
+
+    with transaction_scope() as db:
+        db.add(job)
+        db.flush()
+
+    response = client.get(
+        "/api/mobile/v1/uploads/mobile-inference-token/inference",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "not_configured"
+
+
+def _png_file(filename: str) -> io.BytesIO:
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=(255, 0, 0)).save(buffer, format="PNG")
+    buffer.seek(0)
+    buffer.name = filename
+    return buffer
+
+
+def _zip_file(inner_name: str) -> io.BytesIO:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(inner_name, b"\xff\xd8\xff\xe0" + b"0" * 20)
+    buffer.seek(0)
+    buffer.name = "remidio.zip"
+    return buffer
+
+
+def _mobile_access_token(client, username: str) -> str:
+    response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": username,
+            "password": "Test@2026",
+            "device_id": f"device-{username}",
+            "device_name": "Mobile Device",
+        },
+    )
+    assert response.status_code == 200
+    return response.get_json()["access_token"]

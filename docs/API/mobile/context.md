@@ -167,4 +167,4 @@ Errors:
 - `401` when the bearer token is missing or invalid
 - `403` when the user is inactive or lacks `fileUploader`
 
-Glaucoma AI mobile clients should call `/api/mobile/v1/upload-options?disease_name=glaucoma`, let the user or app choose the intended profile, and submit that exact `profile_id` to `POST /api/glaucoma-ai/uploads`. A user may have multiple glaucoma-capable profiles; the selected profile is the source of truth for project, lab unit, camera, site, mydriatic scope, and enabled AI workflow.
+Mobile clients should call `/api/mobile/v1/upload-options`, let the user or app choose the intended profile, and submit that exact `profile_id` to `POST /api/mobile/v1/uploads`. A profile may expose multiple mobile-capable `upload_kinds`; each upload request must choose one. The selected profile is the source of truth for project, lab unit, disease, camera, area, mydriatic scope, and enabled AI workflow.

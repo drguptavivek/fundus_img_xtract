@@ -85,6 +85,7 @@ def create_direct_upload_batch(
     max_file_size_bytes: int = DEFAULT_DIRECT_MAX_FILE_SIZE_BYTES,
     request_url_builder=None,
     thumbnail_url_builder=None,
+    remarks: str | None = None,
 ) -> DirectUploadBatchResult:
     """Create unverified direct image uploads after validating the selected upload profile."""
     return _create_direct_upload_batch(
@@ -101,6 +102,7 @@ def create_direct_upload_batch(
         resolved_upload_profile=None,
         request_url_builder=request_url_builder,
         thumbnail_url_builder=thumbnail_url_builder,
+        remarks=remarks,
     )
 
 
@@ -117,6 +119,7 @@ def create_unverified_direct_upload_task_batch(
     verification_user_id: int | None = None,
     request_url_builder=None,
     thumbnail_url_builder=None,
+    remarks: str | None = None,
 ) -> DirectUploadBatchResult:
     """Create unverified direct image uploads and disease tasks for API-triggered AI workflows."""
     return _create_direct_upload_batch(
@@ -133,6 +136,7 @@ def create_unverified_direct_upload_task_batch(
         resolved_upload_profile=resolved_upload_profile,
         request_url_builder=request_url_builder,
         thumbnail_url_builder=thumbnail_url_builder,
+        remarks=remarks,
     )
 
 
@@ -151,6 +155,7 @@ def _create_direct_upload_batch(
     resolved_upload_profile,
     request_url_builder,
     thumbnail_url_builder,
+    remarks: str | None,
 ) -> DirectUploadBatchResult:
     upload_profile = resolved_upload_profile or resolve_direct_upload_profile(db=db, user_id=user_id, selection=selection)
     lab_unit = db.get(LabUnit, upload_profile.lab_unit_id)
@@ -185,6 +190,7 @@ def _create_direct_upload_batch(
             create_task=create_task,
             request_url_builder=request_url_builder,
             thumbnail_url_builder=thumbnail_url_builder,
+            remarks=remarks,
         )
         for file in files
     ]
@@ -214,6 +220,7 @@ def _create_direct_upload_item(
     create_task: bool,
     request_url_builder,
     thumbnail_url_builder,
+    remarks: str | None,
 ) -> DirectUploadItemResult:
     original_filename = file.filename or ""
     valid, validation_error = validate_upload_filename(original_filename)
@@ -261,6 +268,7 @@ def _create_direct_upload_item(
         disease_id=disease_id,
         area_id=area_id,
         is_mydriatic=is_mydriatic,
+        remarks=remarks,
         thumbnail_filename=None,
         s3_config_id=None,
         s3_object_key=None,

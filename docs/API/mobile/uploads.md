@@ -1,0 +1,289 @@
+# Mobile EIM Uploads
+
+Base path: `/api/mobile/v1`
+
+This contract covers mobile EIM upload and inferencing entrypoints. EIM means the upload package that creates or queues Eye Image Management records and, when configured, links them to downstream AI inference work.
+
+## Vocabulary
+
+- `upload_profile`: server-side upload policy selected from `GET /upload-options`.
+- `upload_kind`: the concrete ingestion path for one upload request.
+- `upload_token`: opaque token returned after upload creation and used for status and inference polling.
+- `job`: server-side upload tracker containing one or more uploaded items.
+- `item`: a file or image row attached to the job.
+
+Mobile supports only these `upload_kind` values:
+- `direct_image`
+- `remidio`
+- `encounter_set`
+
+`pregraded` is webapp-only. Mobile clients must not display or submit it.
+
+## Profile Selection
+
+Clients must call `GET /upload-options`, let the user or app choose one concrete `profile_id`, and submit that `profile_id` to `POST /uploads`.
+
+A profile may allow multiple `upload_kinds`, but each upload request chooses exactly one `upload_kind`. The selected profile is the source of truth for project, lab unit, disease, camera, area, mydriatic policy, and AI workflow availability. The backend revalidates all submitted IDs against the selected profile.
+
+## Auth And Scope
+
+- Auth: `Authorization: Bearer <access_token>`
+- Role: `fileUploader`
+- CSRF: not required; this is a bearer-token mobile JSON/multipart surface.
+- Scope: uploads are limited to the authenticated user's active mobile session, lab-unit assignments, disease/profile permissions, and the selected upload profile.
+- Status and inference reads are scoped to the original uploader. A user cannot read another user's `upload_token`.
+
+## `POST /uploads`
+
+Content type: `multipart/form-data`
+
+Common fields:
+- `profile_id`: required positive integer
+- `upload_kind`: required, one of `direct_image`, `remidio`, `encounter_set`
+- `project_id`: required positive integer
+- `lab_unit_id`: required positive integer
+
+Success response: `201 Created`
+
+```json
+{
+  "upload_token": "uuid",
+  "upload_kind": "direct_image",
+  "profile_id": 100,
+  "status": "completed",
+  "accepted_count": 1,
+  "rejected_count": 0,
+  "inference_available": false
+}
+```
+
+`encounter_set` responses also include `encounter_uuid`.
+
+### Direct Image
+
+Use for independent fundus image files.
+
+Required fields:
+- common fields above
+- `disease_id`
+- `camera_id`
+- `area_id`
+- `files`: one or more image files
+
+Optional fields:
+- `is_mydriatic`: boolean-like value; profile default is used when omitted
+- `remarks`: plain text, see Remarks Policy
+
+Example:
+
+```bash
+curl -X POST http://localhost:5001/api/mobile/v1/uploads \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "profile_id=100" \
+  -F "upload_kind=direct_image" \
+  -F "project_id=10" \
+  -F "lab_unit_id=12" \
+  -F "disease_id=2" \
+  -F "camera_id=3" \
+  -F "area_id=4" \
+  -F "is_mydriatic=false" \
+  -F "remarks=patient reported blurred vision" \
+  -F "files=@right-eye.png"
+```
+
+### Remidio
+
+Use for Remidio ZIP packages queued for later processing.
+
+Required fields:
+- common fields above
+- `camera_id`
+- `files`: one or more `.zip` files
+
+ZIP files may contain only `.jpg`, `.jpeg`, and `.pdf` entries. Empty ZIPs, unsafe paths, and unsupported file types are rejected.
+
+Example:
+
+```bash
+curl -X POST http://localhost:5001/api/mobile/v1/uploads \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "profile_id=100" \
+  -F "upload_kind=remidio" \
+  -F "project_id=10" \
+  -F "lab_unit_id=12" \
+  -F "camera_id=3" \
+  -F "files=@remidio.zip"
+```
+
+### Encounter Set
+
+Use when one patient encounter contains multiple positioned images.
+
+Required fields:
+- common fields above
+- `encounter_json`: JSON object
+- one multipart file part for each `items[].file_key`
+
+`encounter_json` fields:
+- `patient_id`: required string
+- `patient_name`: required string
+- `capture_date`: required `YYYY-MM-DD` string
+- `disease_id` or `disease_ids`: required
+- `remarks`: optional encounter-level plain text
+- `items`: required non-empty array
+
+Each `items[]` entry:
+- `file_key`: multipart field name containing this image file
+- `spatial_position`: unique integer from 1 to 9
+- `camera_id`: positive integer allowed by the profile
+- `area_id`: positive integer allowed by the profile
+- `is_mydriatic`: optional boolean-like value
+- `remarks`: optional image-level plain text
+
+The `file_key` value is a mapping key, not a filename. For example, `file_key: "right_eye"` requires a multipart part named `right_eye`.
+
+Example:
+
+```bash
+curl -X POST http://localhost:5001/api/mobile/v1/uploads \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "profile_id=100" \
+  -F "upload_kind=encounter_set" \
+  -F "project_id=10" \
+  -F "lab_unit_id=12" \
+  -F 'encounter_json={
+    "patient_id":"MRN-123",
+    "patient_name":"Mobile Patient",
+    "capture_date":"2026-05-03",
+    "disease_ids":[2],
+    "items":[
+      {"file_key":"right_eye","spatial_position":1,"camera_id":3,"area_id":4},
+      {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4}
+    ]
+  }' \
+  -F "right_eye=@right-eye.png" \
+  -F "left_eye=@left-eye.png"
+```
+
+Encounter-set image files must be `.jpg`, `.jpeg`, or `.png`.
+
+## `GET /uploads/<upload_token>`
+
+Returns upload status for the authenticated uploader.
+
+Success response: `200 OK`
+
+```json
+{
+  "upload_token": "uuid",
+  "upload_kind": "direct_image",
+  "profile_id": 100,
+  "status": "completed",
+  "error": null,
+  "rejected_summary": null,
+  "created_at": "2026-05-03T12:00:00Z",
+  "updated_at": "2026-05-03T12:00:00Z",
+  "items": [
+    {
+      "id": 1,
+      "filename": "right-eye.png",
+      "state": "completed",
+      "detail": "Image uploaded successfully.",
+      "source_type": "direct_image",
+      "source_id": 55,
+      "source_uuid": "uuid",
+      "task_id": 99,
+      "started_at": null,
+      "finished_at": "2026-05-03T12:00:00Z"
+    }
+  ]
+}
+```
+
+## `GET /uploads/<upload_token>/inference`
+
+Returns inference state for task-linked upload items.
+
+Success response: `200 OK`
+
+```json
+{
+  "upload_token": "uuid",
+  "status": "pending",
+  "results": []
+}
+```
+
+`status` values:
+- `not_configured`: no task-linked items exist
+- `pending`: task-linked items exist but no inference runs have been recorded
+- `running`: at least one inference run is still in progress
+- `complete`: all returned runs succeeded
+- `failed`: at least one returned run failed
+
+Result fields, when present:
+- `task_id`
+- `ai_model_id`
+- `provider`
+- `status`
+- `prediction_id`
+- `execute_response`
+- `error_code`
+- `error_message`
+- `updated_at`
+
+## Remarks Policy
+
+`remarks` fields are plain text only. Clients should send human-entered notes as text, not HTML or structured JSON. The backend trims surrounding whitespace, stores blank remarks as `null`, allows newlines and tabs, rejects unsupported control characters, and limits remarks to 1000 characters.
+
+## Client Validation
+
+Clients should validate before upload:
+- bearer token is present and current
+- selected profile exists in the latest `/upload-options` response
+- selected `upload_kind` is present in `profile.upload_kinds`
+- one upload request contains exactly one `upload_kind`
+- all submitted project, lab, disease, camera, area, and mydriatic values are allowed by the selected profile
+- required files are present and use supported extensions
+- encounter-set `file_key` values match multipart part names
+- encounter-set positions are unique integers from 1 to 9
+- remarks are plain text and no longer than 1000 characters
+
+Client validation is for user experience only. Backend validation is authoritative.
+
+## Errors
+
+Errors use JSON:
+
+```json
+{
+  "error": "profile_scope_mismatch",
+  "message": "Selected profile does not match project or lab unit."
+}
+```
+
+Common statuses:
+- `400`: missing fields, invalid integers, unsupported upload kind, invalid files, invalid `encounter_json`, remarks too long
+- `401`: missing, invalid, expired, or unmappable bearer token
+- `403`: inactive user, missing `fileUploader` role, profile or scope mismatch
+- `404`: `upload_token` not found in the authenticated uploader's scope
+
+Common error codes:
+- `upload_kind_required`
+- `unsupported_upload_kind`
+- `files_required`
+- `profile_scope_mismatch`
+- `disease_required`
+- `disease_not_allowed`
+- `encounter_json_required`
+- `invalid_encounter_json`
+- `items_required`
+- `file_part_missing`
+- `invalid_spatial_position`
+- `invalid_filename`
+- `invalid_file_type`
+- `remarks_too_long`
+- `invalid_remarks`
+- `forbidden`
+- `inactive_user`
+- `upload_not_found`

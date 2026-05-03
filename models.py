@@ -790,6 +790,7 @@ class PatientEncounters(Base):
     disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id'), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
@@ -826,6 +827,7 @@ class EncounterSetImage(Base):
     camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="SET NULL"), nullable=True, index=True)
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True, index=True)
     is_mydriatic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
     s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
     s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
@@ -962,6 +964,8 @@ class Job(Base):
     rejected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     excel_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     upload_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    upload_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
@@ -972,6 +976,7 @@ class Job(Base):
     items: Mapped[List["JobItem"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
     project: Mapped["Project | None"] = relationship("Project")
+    upload_profile: Mapped["UploadProfile | None"] = relationship("UploadProfile")
 
 class JobItem(Base):
     __tablename__ = "job_items"
@@ -985,6 +990,10 @@ class JobItem(Base):
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    source_uuid: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     job: Mapped["Job"] = relationship(back_populates="items")
 
 
@@ -1177,6 +1186,7 @@ class DirectImageUpload(Base):
     area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
     is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_pregraded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
     edited_thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # edited thumbnail basename (thm_uuid.ext)
 

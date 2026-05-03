@@ -91,6 +91,7 @@ def test_mobile_upload_rejects_pregraded_kind(client, monkeypatch, mobile_upload
         "/api/mobile/v1/uploads",
         data={
             "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "pregraded-idempotency-key",
             "upload_kind": UPLOAD_KIND_PREGRADED,
             "project_id": str(mobile_upload_data["project"].id),
             "lab_unit_id": str(mobile_upload_data["lab"].id),
@@ -110,6 +111,7 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
         "/api/mobile/v1/uploads",
         data={
             "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "direct-idempotency-key",
             "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
             "project_id": str(mobile_upload_data["project"].id),
             "lab_unit_id": str(mobile_upload_data["lab"].id),
@@ -139,6 +141,35 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     assert status_response.status_code == 200
     assert status_response.get_json()["items"][0]["source_type"] == "direct_image"
 
+    replay_response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "direct-idempotency-key",
+            "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "disease_id": str(mobile_upload_data["disease"].id),
+            "camera_id": str(mobile_upload_data["camera"].id),
+            "area_id": str(mobile_upload_data["area"].id),
+            "files": [(_png_file("direct-eye-retry.png"), "direct-eye-retry.png")],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert replay_response.status_code == 200
+    assert replay_response.get_json()["upload_token"] == payload["upload_token"]
+    assert db_session.query(Job).count() == 1
+    assert db_session.query(DirectImageUpload).count() == 1
+
+    lookup_response = client.get(
+        "/api/mobile/v1/uploads/by-idempotency-key/direct-idempotency-key",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert lookup_response.status_code == 200
+    assert lookup_response.get_json()["upload_token"] == payload["upload_token"]
+
 
 def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkeypatch, mobile_upload_data):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
@@ -148,6 +179,7 @@ def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkey
         "/api/mobile/v1/uploads",
         data={
             "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "remidio-idempotency-key",
             "upload_kind": UPLOAD_KIND_REMIDIO,
             "project_id": str(mobile_upload_data["project"].id),
             "lab_unit_id": str(mobile_upload_data["lab"].id),
@@ -196,6 +228,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
         "/api/mobile/v1/uploads",
         data={
             "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "encounter-idempotency-key",
             "upload_kind": UPLOAD_KIND_ENCOUNTER_SET,
             "project_id": str(mobile_upload_data["project"].id),
             "lab_unit_id": str(mobile_upload_data["lab"].id),

@@ -966,6 +966,7 @@ class Job(Base):
     upload_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     upload_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
@@ -977,6 +978,15 @@ class Job(Base):
     lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
     project: Mapped["Project | None"] = relationship("Project")
     upload_profile: Mapped["UploadProfile | None"] = relationship("UploadProfile")
+    __table_args__ = (
+        Index(
+            "uq_jobs_uploader_idempotency_key",
+            "uploader_user_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
 class JobItem(Base):
     __tablename__ = "job_items"

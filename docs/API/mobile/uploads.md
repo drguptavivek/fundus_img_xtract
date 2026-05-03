@@ -9,6 +9,7 @@ This contract covers mobile EIM upload and inferencing entrypoints. EIM means th
 - `upload_profile`: server-side upload policy selected from `GET /upload-options`.
 - `upload_kind`: the concrete ingestion path for one upload request.
 - `upload_token`: opaque token returned after upload creation and used for status and inference polling.
+- `idempotency_key`: client-generated opaque key for one upload attempt; used to make retries and network-drop recovery safe.
 - `job`: server-side upload tracker containing one or more uploaded items.
 - `item`: a file or image row attached to the job.
 
@@ -38,12 +39,13 @@ A profile may allow multiple `upload_kinds`, but each upload request chooses exa
 Content type: `multipart/form-data`
 
 Common fields:
+- `idempotency_key`: required string, unique per upload attempt for the authenticated user
 - `profile_id`: required positive integer
 - `upload_kind`: required, one of `direct_image`, `remidio`, `encounter_set`
 - `project_id`: required positive integer
 - `lab_unit_id`: required positive integer
 
-Success response: `201 Created`
+Success response: `201 Created`. Replaying the same `idempotency_key` returns `200 OK` with the existing upload job instead of creating another job.
 
 ```json
 {
@@ -80,6 +82,7 @@ Example:
 curl -X POST http://localhost:5001/api/mobile/v1/uploads \
   -H "Authorization: Bearer $TOKEN" \
   -F "profile_id=100" \
+  -F "idempotency_key=$UPLOAD_ATTEMPT_KEY" \
   -F "upload_kind=direct_image" \
   -F "project_id=10" \
   -F "lab_unit_id=12" \
@@ -108,6 +111,7 @@ Example:
 curl -X POST http://localhost:5001/api/mobile/v1/uploads \
   -H "Authorization: Bearer $TOKEN" \
   -F "profile_id=100" \
+  -F "idempotency_key=$UPLOAD_ATTEMPT_KEY" \
   -F "upload_kind=remidio" \
   -F "project_id=10" \
   -F "lab_unit_id=12" \
@@ -148,6 +152,7 @@ Example:
 curl -X POST http://localhost:5001/api/mobile/v1/uploads \
   -H "Authorization: Bearer $TOKEN" \
   -F "profile_id=100" \
+  -F "idempotency_key=$UPLOAD_ATTEMPT_KEY" \
   -F "upload_kind=encounter_set" \
   -F "project_id=10" \
   -F "lab_unit_id=12" \
@@ -200,6 +205,14 @@ Success response: `200 OK`
 }
 ```
 
+## `GET /uploads/by-idempotency-key/<idempotency_key>`
+
+Returns upload status for an upload attempt when the client lost the POST response or otherwise does not know the `upload_token`.
+
+Success response: `200 OK`; response shape is the same as `GET /uploads/<upload_token>`.
+
+Clients should persist `idempotency_key` before starting the multipart request. If the POST fails with an ambiguous network error, call this endpoint before offering a retry. If it returns `404`, the server did not commit that upload attempt.
+
 ## `GET /uploads/<upload_token>/inference`
 
 Returns inference state for task-linked upload items.
@@ -240,11 +253,13 @@ Result fields, when present:
 
 Clients should validate before upload:
 - bearer token is present and current
+- a new `idempotency_key` has been generated and persisted before POST
 - selected profile exists in the latest `/upload-options` response
 - selected `upload_kind` is present in `profile.upload_kinds`
 - one upload request contains exactly one `upload_kind`
 - all submitted project, lab, disease, camera, area, and mydriatic values are allowed by the selected profile
 - required files are present and use supported extensions
+- POST retries reuse the same `idempotency_key`; never generate a new key for an ambiguous retry
 - encounter-set `file_key` values match multipart part names
 - encounter-set positions are unique integers from 1 to 9
 - remarks are plain text and no longer than 1000 characters
@@ -269,6 +284,7 @@ Common statuses:
 - `404`: `upload_token` not found in the authenticated uploader's scope
 
 Common error codes:
+- `idempotency_key_required`
 - `upload_kind_required`
 - `unsupported_upload_kind`
 - `files_required`

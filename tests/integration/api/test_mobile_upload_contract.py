@@ -88,6 +88,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
     def direct_image():
         return {
             "profile_id": str(mobile_upload_contract_data["profile"].id),
+            "idempotency_key": "contract-direct-idempotency-key",
             "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
             "project_id": str(mobile_upload_contract_data["project"].id),
             "lab_unit_id": str(mobile_upload_contract_data["lab"].id),
@@ -102,6 +103,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
     def remidio():
         return {
             "profile_id": str(mobile_upload_contract_data["profile"].id),
+            "idempotency_key": "contract-remidio-idempotency-key",
             "upload_kind": UPLOAD_KIND_REMIDIO,
             "project_id": str(mobile_upload_contract_data["project"].id),
             "lab_unit_id": str(mobile_upload_contract_data["lab"].id),
@@ -135,6 +137,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
         }
         return {
             "profile_id": str(mobile_upload_contract_data["profile"].id),
+            "idempotency_key": "contract-encounter-idempotency-key",
             "upload_kind": UPLOAD_KIND_ENCOUNTER_SET,
             "project_id": str(mobile_upload_contract_data["project"].id),
             "lab_unit_id": str(mobile_upload_contract_data["lab"].id),

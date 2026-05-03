@@ -4,7 +4,13 @@ from flask import jsonify, request
 
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
-from services.uploads import MobileUploadError, create_mobile_upload, get_mobile_upload_inference, get_mobile_upload_status
+from services.uploads import (
+    MobileUploadError,
+    create_mobile_upload,
+    get_mobile_upload_inference,
+    get_mobile_upload_status,
+    get_mobile_upload_status_by_idempotency_key,
+)
 from upload_profiles.service import UploadProfileError
 
 from . import mobile_api_bp
@@ -25,7 +31,8 @@ def create_upload():
                 files=request.files,
                 remote_addr=request.remote_addr,
             )
-            return jsonify(payload), 201
+            status_code = 200 if payload.pop("_replayed", False) else 201
+            return jsonify(payload), status_code
     except UploadProfileError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), 403
     except MobileUploadError as exc:
@@ -41,6 +48,25 @@ def upload_status(upload_token: str):
     try:
         with transaction_scope() as db:
             return jsonify(get_mobile_upload_status(db=db, user_id=user_id, upload_token=upload_token))
+    except MobileUploadError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@mobile_api_bp.route("/uploads/by-idempotency-key/<idempotency_key>", methods=["GET"])
+@token_auth_required
+def upload_status_by_idempotency_key(idempotency_key: str):
+    user_id = _mobile_user_id()
+    if not user_id:
+        return jsonify({"error": "Invalid access token"}), 401
+    try:
+        with transaction_scope() as db:
+            return jsonify(
+                get_mobile_upload_status_by_idempotency_key(
+                    db=db,
+                    user_id=user_id,
+                    idempotency_key=idempotency_key,
+                )
+            )
     except MobileUploadError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 

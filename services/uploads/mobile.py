@@ -83,6 +83,10 @@ def serialize_mobile_upload_options(options: UploadOptions, *, db=None) -> dict[
 
 def create_mobile_upload(*, db, user_id: int, form: MultiDict, files: MultiDict, remote_addr: str | None = None) -> dict[str, Any]:
     actor = _actor(db, user_id, remote_addr)
+    idempotency_key = _required_text(form, "idempotency_key")
+    existing = _job_by_idempotency_key(db, user_id=user_id, idempotency_key=idempotency_key)
+    if existing is not None:
+        return _upload_response_from_job(existing)
     upload_kind = _required_text(form, "upload_kind")
     if upload_kind == UPLOAD_KIND_PREGRADED:
         raise MobileUploadError("Pregraded uploads are webapp-only.", code="unsupported_upload_kind")
@@ -90,14 +94,21 @@ def create_mobile_upload(*, db, user_id: int, form: MultiDict, files: MultiDict,
         raise MobileUploadError("Unsupported upload kind.", code="unsupported_upload_kind")
 
     if upload_kind == UPLOAD_KIND_DIRECT_IMAGE:
-        return _create_direct_upload(db=db, actor=actor, form=form, files=files)
+        return _create_direct_upload(db=db, actor=actor, form=form, files=files, idempotency_key=idempotency_key)
     if upload_kind == UPLOAD_KIND_REMIDIO:
-        return _create_remidio_upload(db=db, actor=actor, form=form, files=files)
-    return _create_encounter_set_upload(db=db, actor=actor, form=form, files=files)
+        return _create_remidio_upload(db=db, actor=actor, form=form, files=files, idempotency_key=idempotency_key)
+    return _create_encounter_set_upload(db=db, actor=actor, form=form, files=files, idempotency_key=idempotency_key)
 
 
 def get_mobile_upload_status(*, db, user_id: int, upload_token: str) -> dict[str, Any]:
     job = _scoped_job(db, user_id, upload_token)
+    return _job_payload(job)
+
+
+def get_mobile_upload_status_by_idempotency_key(*, db, user_id: int, idempotency_key: str) -> dict[str, Any]:
+    job = _job_by_idempotency_key(db, user_id=user_id, idempotency_key=idempotency_key)
+    if job is None:
+        raise MobileUploadError("Upload was not found.", code="upload_not_found", status_code=404)
     return _job_payload(job)
 
 
@@ -138,7 +149,7 @@ def get_mobile_upload_inference(*, db, user_id: int, upload_token: str) -> dict[
     }
 
 
-def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict) -> dict[str, Any]:
+def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
     profile_id = _required_int(form, "profile_id")
     project_id = _required_int(form, "project_id")
     lab_unit_id = _required_int(form, "lab_unit_id")
@@ -161,6 +172,7 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
                 area_id=area_id,
                 is_mydriatic=_optional_bool(form, "is_mydriatic"),
                 remarks=_remarks(form.get("remarks")),
+                idempotency_key=idempotency_key,
             ),
             files=upload_files,
             upload_type="mobile direct image",
@@ -170,7 +182,7 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
     return direct_upload_response_payload(result)
 
 
-def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict) -> dict[str, Any]:
+def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
     profile_id = _required_int(form, "profile_id")
     project_id = _required_int(form, "project_id")
     lab_unit_id = _required_int(form, "lab_unit_id")
@@ -190,6 +202,7 @@ def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDi
         lab_unit_id=lab_unit_id,
         project_id=project_id,
         status="queued",
+        idempotency_key=idempotency_key,
     )
     accepted = 0
     rejected = 0
@@ -225,7 +238,7 @@ def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDi
     return _upload_response(job, upload_kind=UPLOAD_KIND_REMIDIO, accepted=accepted, rejected=rejected)
 
 
-def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict) -> dict[str, Any]:
+def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
     profile_id = _required_int(form, "profile_id")
     project_id = _required_int(form, "project_id")
     lab_unit_id = _required_int(form, "lab_unit_id")
@@ -278,6 +291,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         lab_unit_id=lab_unit_id,
         project_id=project_id,
         status="completed",
+        idempotency_key=idempotency_key,
     )
     accepted = 0
     seen_positions: set[int] = set()
@@ -366,7 +380,18 @@ def _save_encounter_set_image(*, file: FileStorage, encounter: PatientEncounters
     )
 
 
-def _create_job(db, actor: _Actor, *, upload_kind: str, upload_type: str, profile_id: int, lab_unit_id: int, project_id: int, status: str) -> Job:
+def _create_job(
+    db,
+    actor: _Actor,
+    *,
+    upload_kind: str,
+    upload_type: str,
+    profile_id: int,
+    lab_unit_id: int,
+    project_id: int,
+    status: str,
+    idempotency_key: str,
+) -> Job:
     job = Job(
         token=str(uuid.uuid4()),
         status=status,
@@ -378,6 +403,7 @@ def _create_job(db, actor: _Actor, *, upload_kind: str, upload_type: str, profil
         uploader_ip=actor.remote_addr,
         lab_unit_id=lab_unit_id,
         project_id=project_id,
+        idempotency_key=idempotency_key,
     )
     db.add(job)
     db.flush()
@@ -394,6 +420,14 @@ def _upload_response(job: Job, *, upload_kind: str, accepted: int, rejected: int
         "rejected_count": rejected,
         "inference_available": False,
     }
+
+
+def _upload_response_from_job(job: Job) -> dict[str, Any]:
+    accepted = sum(1 for item in job.items if item.state in {"completed", "queued", "running"})
+    rejected = sum(1 for item in job.items if item.state == "error")
+    payload = _upload_response(job, upload_kind=job.upload_kind or "", accepted=accepted, rejected=rejected)
+    payload["_replayed"] = True
+    return payload
 
 
 def _job_payload(job: Job) -> dict[str, Any]:
@@ -429,6 +463,12 @@ def _scoped_job(db, user_id: int, upload_token: str) -> Job:
     if job is None or job.uploader_user_id != user_id:
         raise MobileUploadError("Upload was not found.", code="upload_not_found", status_code=404)
     return job
+
+
+def _job_by_idempotency_key(db, *, user_id: int, idempotency_key: str) -> Job | None:
+    return db.execute(
+        select(Job).where(Job.uploader_user_id == user_id, Job.idempotency_key == idempotency_key)
+    ).scalar_one_or_none()
 
 
 def _actor(db, user_id: int, remote_addr: str | None) -> _Actor:

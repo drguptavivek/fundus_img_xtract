@@ -43,6 +43,7 @@ class DirectUploadJobRequest:
     area_id: int
     is_mydriatic: bool | None = None
     remarks: str | None = None
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,7 @@ def create_direct_upload_job(
         uploader_ip=actor.remote_addr,
         lab_unit_id=request.lab_unit_id,
         project_id=request.project_id,
+        idempotency_key=request.idempotency_key,
     )
     db.add(job)
     db.flush()

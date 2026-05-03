@@ -727,6 +727,8 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(404)
     def handle_404(e):
+        if request.path.startswith("/static/"):
+            return "Not found", 404
         return render_template("errors/404.html"), 404
 
     @app.errorhandler(405)

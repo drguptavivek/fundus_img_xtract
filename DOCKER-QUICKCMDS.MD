@@ -3,6 +3,7 @@
 Notes:
 - Docker Compose auto-loads `.env` in the repo root. No `--env-file` flags needed.
 - Runtime containers use `SKIP_UV_SYNC=true` and rely on the venv builders.
+- Stop runtime containers before refreshing venv volumes; the builders clear and recreate `/app/.venv`.
 
 ## Base images
 
@@ -41,9 +42,8 @@ Notes:
    - `docker compose build requirements-exporter`
    - `./scripts/export_requirements.sh`
 
-3) Rebuild and rerun the matching venv builder:
-   - `docker compose build <service>-venv-builder`
-   - `docker compose up <service>-venv-builder -d`
+3) Refresh venvs with runtime containers stopped:
+   - `make refresh-venvs`
 
 ```bash
 ## If you are in production
@@ -75,21 +75,17 @@ docker volume rm fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_im
 ./scripts/export_requirements.sh
 
 ### Create venv builders
-# 1. Rebuild images (only needed if Dockerfile or requirements files changed)
-docker compose build web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder
-
-# 2. Update the venv volumes (this installs/updates packages)
-docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
+# Stop runtime containers, rebuild builder images, refresh venv volumes, restart runtime containers,
+# then clear Flask app Redis cache keys.
+make refresh-venvs
 
 ## If no packages changed
 ### Build venv builders (rebuilds images only)
 docker compose build web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder
 
 ## Bring up venv builders (installs Python packages)
-# Runs the venv builder containers. They create/refresh /app/.venv by running:
-# - uv venv (only if missing)
-# - uv pip install -r requirements-*.txt
-docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
+# Stops runtime containers first because the builders clear/recreate /app/.venv.
+make up-builders
 docker compose logs web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder --tail=100
 
 # THIRD STEP: Main containers (app code uses the venvs)
@@ -100,10 +96,12 @@ docker compose logs web-venv-builder web celery-ocr-worker celery-general-worker
 ### Rebuild a specific venv builder
 # 1. Build
 docker compose build web-venv-builder
-# 2. Run to update the venv volume
-docker compose up web-venv-builder -d
+# 2. Run to update the venv volume only after stopping runtime containers
+docker compose stop web celery-ocr-worker celery-general-worker celery-beat
+docker compose up web-venv-builder
 
 # Replace web-venv-builder with ocr-venv-builder, general-venv-builder, or beat-venv-builder as needed.
+# Prefer make refresh-venvs for normal dependency refreshes.
 
 docker compose restart celery-beat
 
@@ -120,6 +118,13 @@ docker compose logs --tail=100 -f
 docker compose logs web --tail=100 -f
 docker compose logs web db --tail=100 -f
 docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100 -f
+
+# Clear Flask app Redis cache after DB restores or data backfills
+make clear-cache
+# Equivalent Docker command:
+docker compose exec -T cache sh -lc 'redis-cli -a "$REDIS_PASSWORD" --scan --pattern "fim:cache:*" | xargs -r redis-cli -a "$REDIS_PASSWORD" del'
+# Narrow cache clear example:
+make clear-cache CACHE_PATTERN='fim:cache:public:analytics:*'
 
 # Sizes
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Size}}" | grep -E "NAME|fundus"

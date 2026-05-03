@@ -187,7 +187,7 @@ FROM ocr-base AS ocr-venv-builder
 COPY requirements-ocr.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-ocr.txt"]
+CMD ["sh", "docker/build_venv.sh", "requirements-ocr.txt"]
 
 # ======================================================================
 # WEB VENV BUILDER — installs web deps into web venv volume
@@ -197,7 +197,7 @@ FROM web-base AS web-venv-builder
 COPY requirements-web.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-web.txt"]
+CMD ["sh", "docker/build_venv.sh", "requirements-web.txt"]
 
 # ======================================================================
 # BEAT BASE — minimal runtime for celery beat
@@ -217,7 +217,7 @@ FROM beat-base AS beat-venv-builder
 COPY requirements-beat.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-beat.txt"]
+CMD ["sh", "docker/build_venv.sh", "requirements-beat.txt"]
 
 # ======================================================================
 # GENERAL BASE — minimal runtime for celery general worker
@@ -237,4 +237,4 @@ FROM general-base AS general-venv-builder
 COPY requirements-general.txt ./
 
 ENTRYPOINT []
-CMD ["sh", "-c", "test -d .venv || uv venv && uv pip install -r requirements-general.txt"]
+CMD ["sh", "docker/build_venv.sh", "requirements-general.txt"]

@@ -7,6 +7,7 @@ PYTEST_ARGS ?= tests/
 FLASK_ARGS ?= --help
 SCRIPT ?=
 ARGS ?=
+CACHE_PATTERN ?= fim:cache:*
 
 WEB_UV = $(COMPOSE) exec -u $$(id -u):$$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run
 
@@ -65,8 +66,17 @@ rebuild-builders: ## Build venv builder images.
 	$(COMPOSE) build $(BUILDERS)
 
 .PHONY: up-builders
-up-builders: ## Run venv builder containers to refresh Python environments.
-	$(COMPOSE) up -d $(BUILDERS)
+up-builders: ## Stop app services, then run venv builders to refresh Python environments.
+	$(COMPOSE) stop $(SERVICES)
+	$(COMPOSE) up $(BUILDERS)
+
+.PHONY: refresh-venvs
+refresh-venvs: ## Stop app services, rebuild/run venv builders, then restart app services.
+	$(COMPOSE) stop $(SERVICES)
+	$(COMPOSE) build $(BUILDERS)
+	$(COMPOSE) up $(BUILDERS)
+	$(COMPOSE) up -d $(SERVICES)
+	$(MAKE) clear-cache
 
 .PHONY: logs
 logs: ## Print last 200 log lines for all services. Override with TAIL=100.
@@ -111,6 +121,10 @@ logs-db: ## Print last 200 database and cache log lines.
 .PHONY: logs-db-tail
 logs-db-tail: ## Follow last 200 database and cache log lines.
 	$(COMPOSE) logs --tail=$(TAIL) -f db cache
+
+.PHONY: clear-cache
+clear-cache: ## Clear Flask app Redis cache keys. Override with CACHE_PATTERN='fim:cache:public:*'.
+	$(COMPOSE) exec -T cache sh -lc 'redis-cli -a "$$REDIS_PASSWORD" --scan --pattern "$(CACHE_PATTERN)" | xargs -r redis-cli -a "$$REDIS_PASSWORD" del'
 
 .PHONY: logs-builders
 logs-builders: ## Print last 200 venv builder log lines.
@@ -159,7 +173,14 @@ flask-limiter-config: ## Show Flask-Limiter configuration inside the web contain
 	$(WEB_UV) flask limiter config
 
 .PHONY: test
-test: ## Run pytest inside the web container. Override with PYTEST_ARGS=tests/unit -v.
+test: ## Start test-db, then run pytest inside web. Override with PYTEST_ARGS=tests/unit -v.
+	$(COMPOSE) up -d test-db
+	@echo "Waiting for test-db..."
+	@i=0; while ! docker exec fundus-img-xtract-test-db pg_isready -U test_user -d fundus_test >/dev/null 2>&1; do \
+		i=$$((i + 1)); \
+		if [ $$i -ge 30 ]; then echo "test-db failed to become ready"; exit 1; fi; \
+		sleep 1; \
+	done
 	$(WEB_UV) pytest $(PYTEST_ARGS)
 
 .PHONY: script

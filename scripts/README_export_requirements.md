@@ -2,26 +2,33 @@
 
 ## Overview
 
-`export_requirements.sh` auto-generates all per-container requirements files from `pyproject.toml` dependency groups.
+`export_requirements.sh` updates `uv.lock` and auto-generates all per-container requirements files from `pyproject.toml` dependency groups.
 
 ## Usage
 
 ```bash
 # From project root
 ./scripts/export_requirements.sh
+
+# Force a full lockfile upgrade before exporting
+UV_LOCK_ARGS=--upgrade ./scripts/export_requirements.sh
+
+# Hide the uv tree summary
+SHOW_UV_TREE=0 ./scripts/export_requirements.sh
 ```
 
 ## What It Does
 
-1. Checks if web container is running (starts it if needed)
-2. Runs `uv export` for each dependency group inside the container:
+1. Creates a timestamped backup of the current `uv.lock` under `backups/requirements-locks/`
+2. Runs `uv lock` inside the lightweight requirements-exporter container
+3. Runs `uv export` for each dependency group inside the same container:
    - `--extra web` → `requirements-web.txt`
    - `--extra ocr` → `requirements-ocr.txt`
    - `--extra beat` → `requirements-beat.txt`
    - `--extra general` → `requirements-general.txt`
    - Core only → `requirements.txt`
-3. Copies generated files from container to host
-4. Shows summary of package counts
+4. Shows a focused `uv tree --outdated --universal --package redis --invert` summary at the end
+5. Shows summary of package counts
 
 ## Output Example
 
@@ -30,8 +37,6 @@
 
 📦 Generating requirements files...
 ✅ Generated all requirement files in container
-
-📋 Copying files from container to host...
 
 ✅ Successfully exported requirements files:
 
@@ -70,18 +75,15 @@ nano pyproject.toml
 # Add to [project.optional-dependencies.ocr]:
 #   "new-package==1.2.3"
 
-# 2. Sync uv.lock
-docker compose exec web uv sync
-
-# 3. Regenerate requirement files
+# 2. Update uv.lock and regenerate requirement files
 ./scripts/export_requirements.sh
 
-# 4. Commit changes
+# 3. Commit changes
 git add pyproject.toml uv.lock requirements*.txt
 git commit -m "feat: add new-package to OCR container"
 git push
 
-# 5. Rebuild containers
+# 4. Rebuild containers
 docker compose build --no-cache ocr-venv-builder
 docker compose up -d celery-ocr-worker
 ```

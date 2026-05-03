@@ -10,7 +10,7 @@ services:
       UV_CACHE_DIR: /tmp/.uv-cache
     volumes:
       - ./pyproject.toml:/app/pyproject.toml:ro
-      - ./uv.lock:/app/uv.lock:ro
+      - ./uv.lock:/app/uv.lock
       - ./requirements.txt:/app/requirements.txt
       - ./requirements-web.txt:/app/requirements-web.txt
       - ./requirements-ocr.txt:/app/requirements-ocr.txt

@@ -12,13 +12,13 @@ cachecontrol==0.14.4
     # via pip-audit
 cachelib==0.13.0
     # via flask-caching
-celery==5.6.2
+celery==5.6.3
     # via fundus-img-xtract
-certifi==2026.1.4
+certifi==2026.4.22
     # via requests
-charset-normalizer==3.4.4
+charset-normalizer==3.4.7
     # via requests
-click==8.3.1
+click==8.3.3
     # via
     #   celery
     #   click-didyoumean
@@ -37,29 +37,29 @@ contourpy==1.3.3
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
-cyclonedx-python-lib==7.6.2
+cyclonedx-python-lib==11.7.0
     # via pip-audit
 defusedxml==0.7.1
     # via py-serializable
-filelock==3.20.3
+filelock==3.29.0
     # via cachecontrol
 flask==3.1.3
     # via
     #   flask-caching
     #   fundus-img-xtract
-flask-caching==2.3.1
+flask-caching==2.4.0
     # via fundus-img-xtract
-fonttools==4.61.1
+fonttools==4.62.1
     # via matplotlib
-greenlet==3.3.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.0 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
-idna==3.11
+idna==3.13
     # via requests
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via flask
-kiwisolver==1.4.9
+kiwisolver==1.5.0
     # via matplotlib
 kombu==5.6.2
     # via celery
@@ -72,25 +72,25 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
-marshmallow==4.2.1
+marshmallow==4.3.0
     # via fundus-img-xtract
-matplotlib==3.10.8
+matplotlib==3.10.9
     # via fundus-img-xtract
 mdurl==0.1.2
     # via markdown-it-py
 msgpack==1.1.2
     # via cachecontrol
-numpy==2.4.1
+numpy==2.4.4
     # via
     #   contourpy
     #   fundus-img-xtract
     #   matplotlib
     #   opencv-python-headless
-opencv-python-headless==4.13.0.90
+opencv-python-headless==4.13.0.92
     # via fundus-img-xtract
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
-packaging==26.0
+packaging==26.2
     # via
     #   kombu
     #   matplotlib
@@ -110,17 +110,17 @@ pip-audit==2.10.0
     # via fundus-img-xtract
 pip-requirements-parser==32.0.1
     # via pip-audit
-platformdirs==4.5.1
+platformdirs==4.9.6
     # via pip-audit
 prompt-toolkit==3.0.52
     # via click-repl
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
     # via fundus-img-xtract
-py-serializable==1.1.2
+py-serializable==2.1.0
     # via cyclonedx-python-lib
 pygments==2.20.0
     # via rich
-pymupdf==1.26.7
+pymupdf==1.27.2.3
     # via fundus-img-xtract
 pyparsing==3.3.2
     # via
@@ -138,25 +138,25 @@ redis==6.4.0
     # via
     #   fundus-img-xtract
     #   kombu
-requests==2.33.0
+requests==2.33.1
     # via
     #   cachecontrol
     #   pip-audit
-rich==14.3.1
+rich==15.0.0
     # via pip-audit
 six==1.17.0
     # via python-dateutil
 sortedcontainers==2.4.0
     # via cyclonedx-python-lib
-sqlalchemy==2.0.46
+sqlalchemy==2.0.49
     # via fundus-img-xtract
-tomli==2.4.0
+tomli==2.4.1
     # via pip-audit
 tomli-w==1.2.0
     # via pip-audit
 typing-extensions==4.15.0
     # via sqlalchemy
-tzdata==2025.3
+tzdata==2026.2
     # via
     #   kombu
     #   tzlocal
@@ -169,7 +169,7 @@ vine==5.1.0
     #   amqp
     #   celery
     #   kombu
-wcwidth==0.5.2
+wcwidth==0.7.0
     # via prompt-toolkit
-werkzeug==3.1.6
+werkzeug==3.1.8
     # via flask

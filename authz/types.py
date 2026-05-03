@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
+
+
+class GrantSource(StrEnum):
+    """Relationship sources accepted by central authorization policies."""
+
+    UPLOAD_PROFILE = "upload_profile"
+    GRADING_SLOT = "grading_slot"
+    LAB_UNIT_ASSIGNMENT = "lab_unit_assignment"
+    HOSPITAL_SCOPE = "hospital_scope"
+    ADMIN_GLOBAL = "admin_global"
+
+
+@dataclass(frozen=True)
+class AuthzActor:
+    """Detached actor context used by authz policy checks."""
+
+    id: int
+    roles: frozenset[str] = field(default_factory=frozenset)
+    hospital_id: int | None = None
+
+    def has_any_role(self, roles: frozenset[str]) -> bool:
+        actor_roles = {role.lower() for role in self.roles}
+        return bool(actor_roles.intersection({role.lower() for role in roles}))
+
+
+@dataclass(frozen=True)
+class ResourceRef:
+    """Small, route/service-safe reference to the resource being authorized."""
+
+    type: str
+    id: int | str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+    def attr(self, name: str) -> Any:
+        return self.attributes.get(name)
+
+
+@dataclass(frozen=True)
+class RelationshipGrant:
+    """Resolved relationship between an actor and a resource family."""
+
+    source: GrantSource
+    hospital_id: int | None = None
+    lab_unit_id: int | None = None
+    resource_id: int | str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+    def attr(self, name: str) -> Any:
+        return self.attributes.get(name)
+
+
+@dataclass(frozen=True)
+class AuthzDecision:
+    """Allow/deny result with enough evidence for tests, logs, and audits."""
+
+    allowed: bool
+    action: str
+    reason: str
+    grant_source: GrantSource | None = None
+
+    @classmethod
+    def allow(cls, action: str, grant_source: GrantSource) -> "AuthzDecision":
+        return cls(True, action, "allowed", grant_source)
+
+    @classmethod
+    def deny(cls, action: str, reason: str) -> "AuthzDecision":
+        return cls(False, action, reason)

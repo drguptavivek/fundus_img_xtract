@@ -1,0 +1,7 @@
+[[actions]]
+name = "grading.resident.submit"
+domain = "grading"
+zone = "web"
+description = "Submit a resident grade for a grading task using an active grading slot."
+resource_type = "grading_task"
+requires_resource = true

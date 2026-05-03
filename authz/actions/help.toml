@@ -1,0 +1,7 @@
+[[actions]]
+name = "help.view"
+domain = "help"
+zone = "web"
+description = "View in-app help documentation."
+resource_type = "documentation"
+requires_resource = false

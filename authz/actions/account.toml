@@ -1,0 +1,23 @@
+[[actions]]
+name = "account.profile.view"
+domain = "account"
+zone = "web"
+description = "View the authenticated user's account profile."
+resource_type = "user"
+requires_resource = false
+
+[[actions]]
+name = "account.profile.update"
+domain = "account"
+zone = "web"
+description = "Update the authenticated user's account profile."
+resource_type = "user"
+requires_resource = true
+
+[[actions]]
+name = "account.password.change"
+domain = "account"
+zone = "web"
+description = "Change the authenticated user's password."
+resource_type = "user"
+requires_resource = true

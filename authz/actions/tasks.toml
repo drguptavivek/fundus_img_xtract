@@ -1,0 +1,15 @@
+[[actions]]
+name = "tasks.view"
+domain = "tasks"
+zone = "web"
+description = "View task dashboards, pending tasks, all tasks, and task details."
+resource_type = "grading_task"
+requires_resource = false
+
+[[actions]]
+name = "tasks.viewer.view"
+domain = "tasks"
+zone = "web"
+description = "View task image viewer assets."
+resource_type = "image"
+requires_resource = true

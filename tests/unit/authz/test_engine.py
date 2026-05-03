@@ -115,3 +115,41 @@ def test_general_actions_accept_lab_unit_hospital_or_admin_scope() -> None:
     assert admin_decision.grant_source == GrantSource.ADMIN_GLOBAL
     assert denied_wrong_lab.allowed is False
     assert denied_wrong_lab.reason == "missing_relationship"
+
+
+def test_verification_actions_are_general_scoped_actions() -> None:
+    direct_upload = ResourceRef(
+        type="direct_image_upload",
+        id=300,
+        attributes={"hospital_id": 10, "lab_unit_id": 30},
+    )
+    encounter = ResourceRef(
+        type="encounter",
+        id=400,
+        attributes={"hospital_id": 10, "lab_unit_id": 30},
+    )
+    data_manager = AuthzActor(id=1, roles=frozenset({"data_manager"}), hospital_id=10)
+    site_admin = AuthzActor(id=2, roles=frozenset({"local_admin"}), hospital_id=10)
+
+    direct_decision = authorize(
+        data_manager,
+        "verification.direct.update",
+        direct_upload,
+        grants=[RelationshipGrant(source=GrantSource.LAB_UNIT_ASSIGNMENT, lab_unit_id=30)],
+    )
+    remidio_decision = authorize(
+        site_admin,
+        "verification.remidio.update",
+        encounter,
+        grants=[RelationshipGrant(source=GrantSource.HOSPITAL_SCOPE, hospital_id=10)],
+    )
+    pregraded_decision = authorize(
+        data_manager,
+        "verification.pregraded.update",
+        direct_upload,
+        grants=[RelationshipGrant(source=GrantSource.LAB_UNIT_ASSIGNMENT, lab_unit_id=30)],
+    )
+
+    assert direct_decision.allowed is True
+    assert remidio_decision.allowed is True
+    assert pregraded_decision.allowed is True

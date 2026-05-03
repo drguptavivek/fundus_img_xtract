@@ -70,7 +70,44 @@ The initial service layer lives in `authz/`:
 - `authz.adapters` normalizes existing app objects into actors and grant sources.
 - `authz.policies` maps explicit action names to required roles and accepted
   relationship sources.
+- `authz/actions/*.toml` is the readable action registry. Each TOML file owns one
+  blueprint, domain, or route zone and lists canonical action names, descriptions,
+  zones, resource types, and whether a resource is required.
+- `authz.registry.load_action_registry()` loads every TOML file, rejects duplicate
+  actions, and verifies every Python policy action is registered.
 
 Routes should migrate from direct role lists and inline scope checks toward
 explicit action checks. Query/list pages should use central scope helpers once
 they are added.
+
+## TOML Registry Domains
+
+The first registry pass creates one file per mounted blueprint/domain:
+
+- `account.toml`
+- `ad_hoc_tasks.toml`
+- `admin.toml`
+- `analytics.toml`
+- `api.toml`
+- `auth.toml`
+- `datasets.toml`
+- `discrepancy_review.toml`
+- `docs.toml`
+- `glaucoma_ai.toml`
+- `grading.toml`
+- `help.toml`
+- `intra_rater.toml`
+- `jobs.toml`
+- `media.toml`
+- `notifications.toml`
+- `preprocess.toml`
+- `public.toml`
+- `reports.toml`
+- `screenings.toml`
+- `search.toml`
+- `tasks.toml`
+- `upload.toml`
+- `verification.toml`
+
+Route migration should import canonical action names from this registry rather
+than inventing new strings in route modules.

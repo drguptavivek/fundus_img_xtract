@@ -1,0 +1,71 @@
+[[actions]]
+name = "admin.dashboard.view"
+domain = "admin"
+zone = "web"
+description = "View administrative dashboards and status pages."
+resource_type = "admin_dashboard"
+requires_resource = false
+
+[[actions]]
+name = "admin.users.view"
+domain = "admin"
+zone = "web"
+description = "View users within the actor's administrative scope."
+resource_type = "user"
+requires_resource = false
+
+[[actions]]
+name = "admin.users.manage"
+domain = "admin"
+zone = "web"
+description = "Create, edit, activate, or deactivate users within administrative scope."
+resource_type = "user"
+requires_resource = true
+
+[[actions]]
+name = "admin.upload_profiles.manage"
+domain = "admin"
+zone = "web"
+description = "Manage upload projects, profiles, assignments, and profile activation."
+resource_type = "upload_profile"
+requires_resource = false
+
+[[actions]]
+name = "admin.lookup.manage"
+domain = "admin"
+zone = "web"
+description = "Manage lookup tables such as hospitals, lab units, diseases, cameras, and areas."
+resource_type = "lookup"
+requires_resource = false
+
+[[actions]]
+name = "admin.grading_eligibility.manage"
+domain = "admin"
+zone = "web"
+description = "Manage user grading eligibility and slot assignments."
+resource_type = "grading_slot"
+requires_resource = false
+
+[[actions]]
+name = "admin.s3.manage"
+domain = "admin"
+zone = "web"
+description = "Manage S3 configuration and S3 sync administration."
+resource_type = "s3_config"
+requires_resource = false
+
+[[actions]]
+name = "admin.system.manage"
+domain = "admin"
+zone = "web"
+description = "Manage system operations including database, Celery, packages, thumbnails, disk usage, and rate limits."
+resource_type = "system_operation"
+requires_resource = false
+
+[[actions]]
+name = "admin.security.view"
+domain = "admin"
+zone = "web"
+description = "View security, audit, CVE, log, and sensitive-operation administration pages."
+resource_type = "security_event"
+requires_resource = false

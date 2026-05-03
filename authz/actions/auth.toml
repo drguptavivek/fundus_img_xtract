@@ -1,0 +1,31 @@
+[[actions]]
+name = "auth.login"
+domain = "auth"
+zone = "web"
+description = "Public login and session creation action."
+resource_type = "session"
+requires_resource = false
+
+[[actions]]
+name = "auth.logout"
+domain = "auth"
+zone = "web"
+description = "End an authenticated web session."
+resource_type = "session"
+requires_resource = false
+
+[[actions]]
+name = "auth.password_reset"
+domain = "auth"
+zone = "web"
+description = "Public password reset request and completion flow."
+resource_type = "user"
+requires_resource = false
+
+[[actions]]
+name = "auth.reauth"
+domain = "auth"
+zone = "web"
+description = "Confirm password before a sensitive authenticated operation."
+resource_type = "session"
+requires_resource = false

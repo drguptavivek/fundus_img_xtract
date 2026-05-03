@@ -1,0 +1,15 @@
+[[actions]]
+name = "preprocess.dashboard.view"
+domain = "preprocess"
+zone = "web"
+description = "View preprocessing and anonymization dashboards."
+resource_type = "image"
+requires_resource = false
+
+[[actions]]
+name = "preprocess.image.update"
+domain = "preprocess"
+zone = "web"
+description = "Anonymize, restore, or override PII on scoped images."
+resource_type = "image"
+requires_resource = true

@@ -12,9 +12,12 @@ from authz.adapters import (
     upload_profile_grants,
 )
 from authz.engine import authorize
+from authz.registry import ActionDefinition, ActionRegistryError, get_action, load_action_registry
 from authz.types import AuthzActor, AuthzDecision, GrantSource, RelationshipGrant, ResourceRef
 
 __all__ = [
+    "ActionDefinition",
+    "ActionRegistryError",
     "AuthzActor",
     "AuthzDecision",
     "GrantSource",
@@ -24,10 +27,12 @@ __all__ = [
     "admin_global_grant",
     "authorize",
     "general_scope_grants",
+    "get_action",
     "grading_slot_grant",
     "grading_slot_grants",
     "hospital_scope_grant",
     "lab_unit_assignment_grants",
+    "load_action_registry",
     "upload_profile_grant",
     "upload_profile_grants",
 ]

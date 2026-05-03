@@ -1,0 +1,23 @@
+[[actions]]
+name = "media.image.view"
+domain = "media"
+zone = "web"
+description = "View scoped encounter, direct-upload, and encounter-set images."
+resource_type = "image"
+requires_resource = true
+
+[[actions]]
+name = "media.thumbnail.view"
+domain = "media"
+zone = "web"
+description = "View scoped image thumbnails."
+resource_type = "image"
+requires_resource = true
+
+[[actions]]
+name = "media.pdf.view"
+domain = "media"
+zone = "web"
+description = "View scoped encounter PDF files."
+resource_type = "encounter_file"
+requires_resource = true

@@ -1,0 +1,7 @@
+[[actions]]
+name = "analytics.encounters.view"
+domain = "analytics"
+zone = "web"
+description = "View encounter analytics scoped by admin, hospital, or lab-unit grants."
+resource_type = "encounter"
+requires_resource = false

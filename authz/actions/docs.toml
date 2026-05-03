@@ -1,0 +1,7 @@
+[[actions]]
+name = "docs.api.view"
+domain = "docs"
+zone = "web"
+description = "View generated API documentation and OpenAPI/Swagger assets."
+resource_type = "documentation"
+requires_resource = false

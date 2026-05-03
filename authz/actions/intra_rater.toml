@@ -1,0 +1,39 @@
+[[actions]]
+name = "intra_rater.batch.view"
+domain = "intra_rater"
+zone = "web"
+description = "View intra-rater batches and admin dashboards."
+resource_type = "intra_rater_batch"
+requires_resource = false
+
+[[actions]]
+name = "intra_rater.batch.create"
+domain = "intra_rater"
+zone = "web"
+description = "Create intra-rater batches."
+resource_type = "intra_rater_batch"
+requires_resource = true
+
+[[actions]]
+name = "intra_rater.task.view"
+domain = "intra_rater"
+zone = "web"
+description = "View assigned intra-rater tasks and image viewer."
+resource_type = "intra_rater_task"
+requires_resource = false
+
+[[actions]]
+name = "intra_rater.task.submit"
+domain = "intra_rater"
+zone = "web"
+description = "Submit an intra-rater grade."
+resource_type = "intra_rater_task"
+requires_resource = true
+
+[[actions]]
+name = "intra_rater.kpi.view"
+domain = "intra_rater"
+zone = "web"
+description = "View intra-rater KPI data."
+resource_type = "intra_rater_task"
+requires_resource = false

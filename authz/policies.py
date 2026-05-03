@@ -13,6 +13,16 @@ class ActionPolicy:
     grant_sources: frozenset[GrantSource]
 
 
+GENERAL_SCOPE_GRANTS = frozenset(
+    {
+        GrantSource.ADMIN_GLOBAL,
+        GrantSource.HOSPITAL_SCOPE,
+        GrantSource.LAB_UNIT_ASSIGNMENT,
+    }
+)
+
+VERIFICATION_ROLES = frozenset({"admin", "local_admin", "fileUploader", "optometrist", "data_manager"})
+
 POLICIES: dict[str, ActionPolicy] = {
     "upload.direct.create": ActionPolicy(
         roles=frozenset({"fileUploader"}),
@@ -24,13 +34,31 @@ POLICIES: dict[str, ActionPolicy] = {
     ),
     "analytics.encounters.view": ActionPolicy(
         roles=frozenset({"admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist"}),
-        grant_sources=frozenset(
-            {
-                GrantSource.ADMIN_GLOBAL,
-                GrantSource.HOSPITAL_SCOPE,
-                GrantSource.LAB_UNIT_ASSIGNMENT,
-            }
-        ),
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.direct.view": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.direct.update": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.remidio.view": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.remidio.update": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.pregraded.view": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.pregraded.update": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
     ),
 }
 

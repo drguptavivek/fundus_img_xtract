@@ -1,0 +1,23 @@
+[[actions]]
+name = "jobs.view"
+domain = "jobs"
+zone = "web"
+description = "View upload and processing jobs within scope."
+resource_type = "job"
+requires_resource = false
+
+[[actions]]
+name = "jobs.result.view"
+domain = "jobs"
+zone = "web"
+description = "View job result details and processing pages."
+resource_type = "job"
+requires_resource = true
+
+[[actions]]
+name = "jobs.regenerate"
+domain = "jobs"
+zone = "web"
+description = "Regenerate job-derived artifacts."
+resource_type = "job"
+requires_resource = true

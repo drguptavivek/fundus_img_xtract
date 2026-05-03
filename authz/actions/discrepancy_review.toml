@@ -1,0 +1,39 @@
+[[actions]]
+name = "review.discrepancy.view"
+domain = "discrepancy_review"
+zone = "web"
+description = "View discrepancy review queues and task comparison data."
+resource_type = "grading_task"
+requires_resource = false
+
+[[actions]]
+name = "review.discrepancy.export"
+domain = "discrepancy_review"
+zone = "web"
+description = "Create or download discrepancy review exports."
+resource_type = "discrepancy_export"
+requires_resource = false
+
+[[actions]]
+name = "review.task.view"
+domain = "discrepancy_review"
+zone = "web"
+description = "View task review detail pages and review viewer images."
+resource_type = "grading_task"
+requires_resource = true
+
+[[actions]]
+name = "review.task.submit"
+domain = "discrepancy_review"
+zone = "web"
+description = "Submit discrepancy review decisions for a grading task."
+resource_type = "grading_task"
+requires_resource = true
+
+[[actions]]
+name = "review.regrade_creator.manage"
+domain = "discrepancy_review"
+zone = "web"
+description = "Create regrade tasks from discrepancy review workflows."
+resource_type = "grading_task"
+requires_resource = false

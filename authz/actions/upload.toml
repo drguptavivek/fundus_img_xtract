@@ -1,0 +1,7 @@
+[[actions]]
+name = "upload.direct.create"
+domain = "upload"
+zone = "api"
+description = "Create a direct image upload using an assigned upload profile."
+resource_type = "upload_selection"
+requires_resource = true

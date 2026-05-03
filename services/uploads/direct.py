@@ -280,7 +280,7 @@ def build_web_direct_upload_context(*, db, user_id: int) -> dict[str, Any]:
         "areas": [{"id": area.id, "name": area.name} for area in areas],
         "projects": upload_options.projects,
         "upload_profiles": upload_options.profiles,
-        "recent_uploads": get_recent_zip_uploads(limit=5, job_type="direct image"),
+        "recent_uploads": get_recent_zip_uploads(limit=5, job_type="direct image", uploader_user_id=user_id),
         "max_files_per_upload": settings.max_files,
         "per_file_mb_limit": settings.max_file_size_mb,
         "lifetime_quota": settings.lifetime_quota,

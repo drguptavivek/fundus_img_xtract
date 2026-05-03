@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var DEFAULT_FIELDS = ["project_id", "hospital_id", "lab_unit_id", "camera_id", "disease_id", "area_id"];
+
   function numberValue(selector, root) {
     var checked = root.querySelector(selector + ":checked");
     if (!checked) return null;
@@ -29,6 +31,74 @@
       values.forEach(function (value) { ids.add(Number(value)); });
     });
     return ids;
+  }
+
+  function storageKey(form) {
+    return form.getAttribute("data-upload-defaults-storage-key") || "";
+  }
+
+  function localStorageRef() {
+    try {
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function readSavedDefaults(form) {
+    var key = storageKey(form);
+    var storage = localStorageRef();
+    if (!key || !storage) return {};
+    try {
+      var parsed = JSON.parse(storage.getItem(key) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function radioByValue(form, name, value) {
+    var expected = String(value);
+    var match = null;
+    form.querySelectorAll('input[type="radio"][name="' + name + '"]').forEach(function (input) {
+      if (input.value === expected) match = input;
+    });
+    return match;
+  }
+
+  function applySavedDefaults(form) {
+    var defaults = readSavedDefaults(form);
+    DEFAULT_FIELDS.forEach(function (name) {
+      if (defaults[name] === null || defaults[name] === undefined || defaults[name] === "") return;
+      var radio = radioByValue(form, name, defaults[name]);
+      if (radio && !radio.disabled) radio.checked = true;
+    });
+
+    var mydriatic = form.querySelector('[name="is_mydriatic"]');
+    if (mydriatic && typeof defaults.is_mydriatic === "boolean" && !mydriatic.disabled) {
+      mydriatic.checked = defaults.is_mydriatic;
+    }
+  }
+
+  function saveDefaults(form) {
+    var key = storageKey(form);
+    var storage = localStorageRef();
+    if (!key || !storage) return;
+
+    var defaults = {};
+    DEFAULT_FIELDS.forEach(function (name) {
+      var checked = form.querySelector('[name="' + name + '"]:checked');
+      if (checked && !checked.disabled) defaults[name] = checked.value;
+    });
+
+    var mydriatic = form.querySelector('[name="is_mydriatic"]');
+    if (mydriatic && !mydriatic.disabled) defaults.is_mydriatic = Boolean(mydriatic.checked);
+
+    try {
+      storage.setItem(key, JSON.stringify(defaults));
+    } catch (err) {
+      // Ignore storage quota or privacy-mode failures; upload behavior should continue.
+    }
   }
 
   function scalarIdsFor(profiles, field) {
@@ -108,8 +178,12 @@
     } catch (err) {
       form._uploadProfiles = [];
     }
+    applySavedDefaults(form);
     form.querySelectorAll('input[type="radio"], select, [name="is_mydriatic"]').forEach(function (input) {
-      input.addEventListener("change", function () { updateForm(form); });
+      input.addEventListener("change", function () {
+        updateForm(form);
+        saveDefaults(form);
+      });
     });
     var mydriatic = form.querySelector('[name="is_mydriatic"]');
     var label = form.querySelector("[data-mydriatic-label], #mydriatic-label");
@@ -119,6 +193,7 @@
       });
     }
     updateForm(form);
+    form.addEventListener("submit", function () { saveDefaults(form); });
   }
 
   document.addEventListener("DOMContentLoaded", function () {

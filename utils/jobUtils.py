@@ -12,6 +12,7 @@ def get_recent_zip_uploads(
     limit: int = 100,
     job_type: str = "zip upload",
     include_null_types: bool = False,
+    uploader_user_id: int | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Get recent ZIP upload jobs with success/failure status
@@ -21,6 +22,8 @@ def get_recent_zip_uploads(
         job_type: Type of job to filter (default: "zip upload")
         include_null_types: When True, include jobs where upload_type is NULL
             (useful for legacy rows that did not populate upload_type).
+        uploader_user_id: When provided, restrict results to jobs created by
+            this uploader.
 
     Returns:
         List of dictionaries containing job information and status counts
@@ -41,6 +44,8 @@ def get_recent_zip_uploads(
                 query = query.filter(Job.upload_type.in_([job_type, None]))
             else:
                 query = query.filter(Job.upload_type == job_type)
+        if uploader_user_id is not None:
+            query = query.filter(Job.uploader_user_id == uploader_user_id)
 
         jobs = (
             query

@@ -6,7 +6,7 @@ from itertools import count
 import pytest
 from PIL import Image
 
-from models import Area, Camera, Hospital, LabUnit, Project
+from models import Area, Camera, Hospital, Job, JobItem, LabUnit, Project
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
     UploadProfile,
@@ -40,6 +40,7 @@ def test_direct_upload_form_partial_is_api_rendered(client, login_user, direct_u
     assert response.status_code == 200
     assert b'hx-post="/api/direct-uploads/uploads/web"' in response.data
     assert b"data-upload-profile-form" in response.data
+    assert b'data-upload-defaults-storage-key="fundus.directUpload.web.defaults.v1"' in response.data
     assert direct_upload_web_data["profile"].name.encode() in response.data
 
 
@@ -66,6 +67,44 @@ def test_direct_upload_web_api_creates_job_and_returns_workspace(client, login_u
     assert response.status_code == 200
     assert b"Submitted 1 image" in response.data
     assert b"Upload Status" in response.data
+
+
+def test_direct_upload_workspace_shows_only_current_user_recent_jobs(client, login_user, db_session, direct_upload_web_data):
+    other_user = UserFactory.create_by_role(
+        db_session,
+        "fileUploader",
+        username=f"other_direct_web_uploader_{next(_SEQUENCE)}",
+        lab_units=[direct_upload_web_data["lab"]],
+    )
+    current_job = Job(
+        token=f"current-direct-{next(_SEQUENCE)}",
+        status="completed",
+        upload_type="direct image",
+        uploader_user_id=direct_upload_web_data["uploader"].id,
+        uploader_username=direct_upload_web_data["uploader"].username,
+        lab_unit_id=direct_upload_web_data["lab"].id,
+        project_id=direct_upload_web_data["project"].id,
+    )
+    other_job = Job(
+        token=f"other-direct-{next(_SEQUENCE)}",
+        status="completed",
+        upload_type="direct image",
+        uploader_user_id=other_user.id,
+        uploader_username=other_user.username,
+        lab_unit_id=direct_upload_web_data["lab"].id,
+        project_id=direct_upload_web_data["project"].id,
+    )
+    current_job.items.append(JobItem(filename="current.png", state="completed"))
+    other_job.items.append(JobItem(filename="other.png", state="completed"))
+    db_session.add_all([current_job, other_job])
+    db_session.flush()
+    login_user(direct_upload_web_data["uploader"].username, "Test@2026")
+
+    response = client.get("/api/direct-uploads/workspace")
+
+    assert response.status_code == 200
+    assert current_job.token[:8].encode() in response.data
+    assert other_job.token[:8].encode() not in response.data
 
 
 @pytest.fixture

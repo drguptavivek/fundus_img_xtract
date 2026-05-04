@@ -299,6 +299,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
+- [Authorization Rules](docs/policy/authorizations.md) - Human-readable source of truth for action-level authorization rules before route wiring
 - [Upload Policy](docs/policy/upload_policy.md) - Dashboard access vs upload-form access and fileUploader-only eligibility rules
 - [Admin Access Policy](docs/policy/admin_access_policy.md) - Admin vs local_admin hospital/lab-unit scope rules
 - [ReBAC Authorization Policy](docs/policy/rebac_authorization_policy.md) - Central action-policy model for roles, upload profiles, grading slots, lab-unit grants, and hospital-scope grants

@@ -3,6 +3,10 @@
 This policy defines the central authorization model for RBAC, ABAC, upload
 profiles, grading slots, lab-unit grants, and hospital-scope grants.
 
+For action-specific human-readable rules, use
+[`authorizations.md`](authorizations.md). Route wiring and code review must
+check that document before enforcing an action.
+
 ## Core Rule
 
 All app authorization should converge on one action-based decision:
@@ -37,6 +41,11 @@ Upload actions require:
 - `upload_profile` grant for the user;
 - selected project, lab unit, disease, camera, area, and upload kind must match
   the profile.
+
+The authorized project is persisted on created upload/image records. In this
+phase, project participates in upload authorization and tagging only; it is not
+yet the general authorization boundary for grading, verification, analytics,
+datasets, jobs, media, or search.
 
 ### Grading
 

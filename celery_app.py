@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import timedelta
 from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab, schedule as celery_schedule
@@ -116,6 +115,12 @@ def make_celery_app() -> Celery:
                 "task": "celery_tasks.tasks.maintenance_tasks.run_thumbnail_maintenance_task",
                 "schedule": schedule,
             }
+
+        queue_monitor_interval = _env_int("CELERY_QUEUE_MONITOR_INTERVAL_SECONDS", 300)
+        beat_schedule["celery-queue-health-check"] = {
+            "task": "celery_tasks.tasks.maintenance_tasks.check_celery_queues_task",
+            "schedule": celery_schedule(max(60, queue_monitor_interval)),
+        }
 
         # Package update scan - daily at 3 AM UTC
         beat_schedule["package-update-scan-daily"] = {

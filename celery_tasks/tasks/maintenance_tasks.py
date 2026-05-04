@@ -85,6 +85,23 @@ def auto_rotate_peppers_task(self, user_id: int | None = None, hospital_id: int 
     return auto_rotate_peppers()
 
 
+@celery_app.task(name="celery_tasks.tasks.maintenance_tasks.check_celery_queues_task", bind=True, acks_late=True)
+def check_celery_queues_task(self, user_id: int | None = None, hospital_id: int | None = None) -> dict:
+    _ = self, user_id, hospital_id
+    app = build_task_app()
+    with app.app_context():
+        from utils.celery_queue_monitor import check_celery_queues_and_alert
+
+        result = check_celery_queues_and_alert()
+    _LOGGER.info(
+        "Celery queue health check complete: status=%s issues=%s alert=%s",
+        sanitize_log_value(result.get("status")),
+        sanitize_log_value(len(result.get("issues") or [])),
+        sanitize_log_value(result.get("alert")),
+    )
+    return result
+
+
 @celery_app.task(name="celery_tasks.tasks.maintenance_tasks.cleanup_stuck_jobs_task", bind=True, acks_late=True)
 def cleanup_stuck_jobs_task(
     self,

@@ -370,6 +370,38 @@
             </div>
         </div>
 
+        <!-- Celery Queue Health -->
+        <div class="status-card {% if celery_queue_health.status == 'healthy' %}health-healthy{% elif celery_queue_health.status == 'warning' %}health-warning{% else %}health-error{% endif %}">
+            <h5>
+                <span class="status-icon {% if celery_queue_health.status == 'healthy' %}healthy{% elif celery_queue_health.status == 'warning' %}warning{% else %}error{% endif %}">
+                    {% if celery_queue_health.status == 'healthy' %}
+                        <i class="fas fa-check"></i>
+                    {% elif celery_queue_health.status == 'warning' %}
+                        <i class="fas fa-exclamation-triangle"></i>
+                    {% else %}
+                        <i class="fas fa-times"></i>
+                    {% endif %}
+                </span>
+                Celery Queues
+            </h5>
+            <div class="status-value">
+                {{ celery_queue_health.summary.queue_problem_count }}
+            </div>
+            <p class="status-details">
+                {{ celery_queue_health.summary.monitored_queue_count }} queues monitored<br>
+                {% if celery_queue_health.stale_zip_job %}
+                    ZIP job {{ celery_queue_health.stale_zip_job.job_id }} stale for {{ celery_queue_health.stale_zip_job.age_minutes }} min
+                {% else %}
+                    No stale ZIP jobs detected
+                {% endif %}
+            </p>
+            <div class="status-actions">
+                <span class="badge {% if celery_queue_health.status == 'healthy' %}text-bg-success{% elif celery_queue_health.status == 'warning' %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                    {{ celery_queue_health.status }}
+                </span>
+            </div>
+        </div>
+
         <!-- Thumbnail Status -->
         <div class="status-card {% if thumbnail_stats.direct_uploads.missing_thumbnails > 10 or thumbnail_stats.encounter_files.missing_thumbnails > 10 %}health-warning{% else %}health-healthy{% endif %}">
             <h5>
@@ -543,6 +575,64 @@
                     <i class="fas fa-hdd"></i> Disk Usage
                 </a>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h3 class="h5 mb-1">Celery Queue Health</h3>
+                    <p class="text-muted small mb-0">Redis queue depth and stale ZIP upload detection. Email alerts are throttled by the maintenance task.</p>
+                </div>
+                <span class="badge {% if celery_queue_health.status == 'healthy' %}text-bg-success{% elif celery_queue_health.status == 'warning' %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                    {{ celery_queue_health.status }}
+                </span>
+            </div>
+            {% if celery_queue_health.issues %}
+            <div class="alert {% if celery_queue_health.status == 'critical' %}alert-danger{% else %}alert-warning{% endif %}">
+                {{ celery_queue_health.issues|join('; ') }}
+            </div>
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle monitor-table">
+                    <thead>
+                        <tr>
+                            <th>Queue</th>
+                            <th>Status</th>
+                            <th>Depth</th>
+                            <th>Warning</th>
+                            <th>Critical</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in celery_queue_health.queues %}
+                        <tr>
+                            <td><code>{{ row.name }}</code></td>
+                            <td>
+                                {% if row.status == 'healthy' %}
+                                <span class="badge text-bg-success">healthy</span>
+                                {% elif row.status == 'warning' %}
+                                <span class="badge text-bg-warning">warning</span>
+                                {% else %}
+                                <span class="badge text-bg-danger">critical</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.depth }}</td>
+                            <td>{{ row.warning_threshold }}</td>
+                            <td>{{ row.critical_threshold }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if celery_queue_health.stale_zip_job %}
+            <div class="small text-muted">
+                Oldest stale ZIP job: #{{ celery_queue_health.stale_zip_job.job_id }}
+                by {{ celery_queue_health.stale_zip_job.uploader_username or 'unknown' }},
+                active since {{ celery_queue_health.stale_zip_job.oldest_active_at }}.
+            </div>
+            {% endif %}
         </div>
     </div>
 

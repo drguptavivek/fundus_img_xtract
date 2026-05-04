@@ -173,6 +173,7 @@ The application maintains extensive audit trails across all critical operations:
 #### **Processing Features**
 - **Duplicate Detection**: MD5-based duplicate prevention across all upload methods
 - **Celery Queueing**: Background workers handle OCR, metadata/PII tasks, and maintenance jobs
+- **Celery Queue Alerts**: Admin status dashboard and throttled admin email alerts flag stuck or backed-up Celery queues; see [docs/10-ADMIN/celery_queue_alerts.md](docs/10-ADMIN/celery_queue_alerts.md)
 - **Flask Caching**: Memoized query/compute results for expensive workflows
 - **PII Masking Workflow**: Verification supports anonymization and PII masking prior to grading
 - **Metadata Extraction**: Captures width/height, format, mode, bit depth, grayscale/alpha flags, file size, DPI, luminance stats (avg/max/std), RGB mean/median, luminance histogram, and raw + parsed EXIF/IPTC tags

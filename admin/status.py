@@ -27,6 +27,7 @@ from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
 from models import CeleryBeatSchedule, Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit, LinkedDiseaseGrading
 from utils.celery_queue_config import infer_celery_queue
+from utils.celery_queue_monitor import get_celery_queue_health
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.log_sanitize import sanitize_log_value
 
@@ -171,6 +172,7 @@ def admin_status():
     sequence_report = get_sequence_report()
 
     celery_status = get_celery_task_status()
+    celery_queue_health = get_celery_queue_health()
 
     # Scoped users for filters (based on current user's lab units)
     scoped_users = []
@@ -204,6 +206,7 @@ def admin_status():
         recent_activity=recent_activity,
         sequence_report=sequence_report,
         celery_status=celery_status,
+        celery_queue_health=celery_queue_health,
         scoped_users=scoped_users,
         grading_inconsistency_count=grading_inconsistency_count,
         linked_task_inconsistency_count=linked_task_inconsistency_count,
@@ -226,6 +229,7 @@ def api_admin_status():
             'system': get_system_statistics(),
             'recent_activity': get_recent_activity(),
             'celery': get_celery_task_status(),
+            'celery_queue_health': get_celery_queue_health(),
         }
 
         return jsonify({
@@ -481,24 +485,32 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
     def _value(row, key):
         return row[key] if isinstance(row, dict) else getattr(row, key)
 
-    task_counts = Counter()
+    schedule_counts = Counter()
     rows: list[dict] = []
 
     for row in db_rows:
-        task_counts[_value(row, "task_name")] += 1
+        if not _value(row, "enabled"):
+            continue
+        task_name = _value(row, "task_name")
+        queue_name = _value(row, "queue") or infer_celery_queue(task_name)
+        schedule_counts[(task_name, queue_name, _serialize_schedule_expression(row))] += 1
     for _, entry in code_entries.items():
         task_name = entry.get("task")
         if task_name:
-            task_counts[task_name] += 1
+            options = entry.get("options") or {}
+            queue_name = options.get("queue") or infer_celery_queue(task_name)
+            schedule_counts[(task_name, queue_name, _serialize_code_schedule_expression(entry))] += 1
 
     for row in db_rows:
         task_name = _value(row, "task_name")
         inferred_queue = _value(row, "queue") or infer_celery_queue(task_name)
+        schedule_expression = _serialize_schedule_expression(row)
+        duplicate_count = schedule_counts[(task_name, inferred_queue, schedule_expression)]
         issues: list[str] = []
         if not inferred_queue:
             issues.append("No queue configured or inferred")
-        if task_counts[task_name] > 1:
-            issues.append(f"Duplicate schedule definition ({task_counts[task_name]} total)")
+        if _value(row, "enabled") and duplicate_count > 1:
+            issues.append(f"Duplicate schedule definition ({duplicate_count} total)")
         last_run_at = _coerce_datetime(_value(row, "last_run_at"))
         next_run_at = _coerce_datetime(_value(row, "next_run_at"))
 
@@ -520,7 +532,7 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
             "queue_explicit": bool(_value(row, "queue")),
             "enabled": _value(row, "enabled"),
             "schedule_type": _value(row, "schedule_type"),
-            "schedule": _serialize_schedule_expression(row),
+            "schedule": schedule_expression,
             "last_run_at": last_run_at,
             "next_run_at": next_run_at,
             "status": status,
@@ -531,9 +543,11 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
         task_name = entry.get("task")
         options = entry.get("options") or {}
         queue_name = options.get("queue") or infer_celery_queue(task_name or "")
+        schedule_expression = _serialize_code_schedule_expression(entry)
+        duplicate_count = schedule_counts[(task_name, queue_name, schedule_expression)]
         issues: list[str] = []
-        if task_counts[task_name] > 1:
-            issues.append(f"Duplicate schedule definition ({task_counts[task_name]} total)")
+        if duplicate_count > 1:
+            issues.append(f"Duplicate schedule definition ({duplicate_count} total)")
 
         rows.append({
             "name": name,
@@ -543,7 +557,7 @@ def _build_celery_task_status_payload(db_rows, code_entries, now: datetime) -> d
             "queue_explicit": "queue" in options,
             "enabled": True,
             "schedule_type": "code",
-            "schedule": _serialize_code_schedule_expression(entry),
+            "schedule": schedule_expression,
             "last_run_at": None,
             "next_run_at": None,
             "status": "warning" if issues else "healthy",

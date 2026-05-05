@@ -61,7 +61,7 @@ def register_csp(app: Flask) -> None:
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: blob: https:",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
-            "connect-src 'self' https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu https://cdn.jsdelivr.net https://www.gstatic.com https://fonts.gstatic.com",
+            "connect-src 'self' blob: https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu https://cdn.jsdelivr.net https://www.gstatic.com https://fonts.gstatic.com",
             "media-src 'self' data: blob:",
             "frame-src 'self'",
             "object-src 'none'",

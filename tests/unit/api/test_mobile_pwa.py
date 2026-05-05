@@ -15,6 +15,7 @@ def test_mobile_pwa_serves_index_without_browser_login(client, tmp_path):
     assert "no-cache" in response.headers["Cache-Control"]
     csp = response.headers["Content-Security-Policy"]
     assert "'wasm-unsafe-eval'" in csp
+    assert "connect-src 'self' blob:" in csp
     assert "https://www.gstatic.com" in csp
     assert "https://fonts.gstatic.com" in csp
 

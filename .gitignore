@@ -106,6 +106,9 @@ docker-compose.override.yml
 /tmp/*
 /logs/*.log
 
+# Generated Flutter PWA bundle served by Flask at /mobile/.
+/static/mobile-pwa/
+
 .osgrep
 
 # Security audit reports (generated artifacts)

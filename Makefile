@@ -8,6 +8,7 @@ FLASK_ARGS ?= --help
 SCRIPT ?=
 ARGS ?=
 CACHE_PATTERN ?= fim:cache:*
+MOBILE_PWA_DIR ?= static/mobile-pwa
 
 WEB_UV = $(COMPOSE) exec -u $$(id -u):$$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run
 
@@ -60,6 +61,13 @@ rebuild: ## Build all compose images.
 .PHONY: rebuild-main
 rebuild-main: ## Build main application service images.
 	$(COMPOSE) build $(SERVICES)
+
+.PHONY: mobile-pwa-build
+mobile-pwa-build: ## Build Flutter PWA into static/mobile-pwa for Flask /mobile/ serving.
+	cd apps/fundus_glaucoma_mobile && flutter build web --base-href /mobile/
+	rm -rf $(MOBILE_PWA_DIR)
+	mkdir -p $(MOBILE_PWA_DIR)
+	cp -R apps/fundus_glaucoma_mobile/build/web/. $(MOBILE_PWA_DIR)/
 
 .PHONY: rebuild-builders
 rebuild-builders: ## Build venv builder images.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -22,12 +23,14 @@ from models import (
     DIRECT_UPLOAD_DIR,
     DirectImageUpload,
     EncounterSetImage,
+    Grade,
     Job,
     JobItem,
     PatientEncounters,
     User,
 )
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
+from services.glaucoma_ai_upload import GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
 from .direct import (
     DirectUploadActor,
     DirectUploadJobError,
@@ -53,6 +56,7 @@ from utils.log_sanitize import sanitize_log_value
 
 MOBILE_UPLOAD_KINDS = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
 MAX_REMARKS_LENGTH = 1000
+AI_PROBABILITY_PATTERN = re.compile(r"AI probability:\s*([0-9.]+)")
 
 
 class MobileUploadError(ValueError):
@@ -141,27 +145,86 @@ def get_mobile_upload_inference(*, db, user_id: int, upload_token: str) -> dict[
         .scalars()
         .all()
     )
-    if not runs:
+    grade_results = _latest_ai_grade_results(db, task_ids, {run.task_id for run in runs})
+    if not runs and not grade_results:
         return {"upload_token": job.token, "status": "pending", "results": []}
-    status = "complete" if all(run.status == "success" for run in runs) else "failed" if any(run.status == "failed" for run in runs) else "running"
+    run_results = [
+        {
+            "task_id": run.task_id,
+            "ai_model_id": run.ai_model_id,
+            "provider": run.integration.provider if run.integration else None,
+            "status": run.status,
+            "prediction_id": run.prediction_id,
+            "execute_response": run.execute_response_json,
+            "error_code": run.error_code,
+            "error_message": run.error_message,
+            "updated_at": _iso(run.updated_at),
+        }
+        for run in runs
+    ]
+    results = run_results + grade_results
+    status = (
+        "complete"
+        if all(result["status"] == "success" for result in results)
+        else "failed"
+        if any(result["status"] == "failed" for result in results)
+        else "running"
+    )
     return {
         "upload_token": job.token,
         "status": status,
-        "results": [
-            {
-                "task_id": run.task_id,
-                "ai_model_id": run.ai_model_id,
-                "provider": run.integration.provider if run.integration else None,
-                "status": run.status,
-                "prediction_id": run.prediction_id,
-                "execute_response": run.execute_response_json,
-                "error_code": run.error_code,
-                "error_message": run.error_message,
-                "updated_at": _iso(run.updated_at),
-            }
-            for run in runs
-        ],
+        "results": results,
     }
+
+
+def _latest_ai_grade_results(db, task_ids: list[int], run_task_ids: set[int]) -> list[dict[str, Any]]:
+    missing_run_task_ids = [task_id for task_id in task_ids if task_id not in run_task_ids]
+    if not missing_run_task_ids:
+        return []
+    grades = (
+        db.execute(
+            select(Grade)
+            .where(Grade.task_id.in_(missing_run_task_ids))
+            .where(Grade.role_slot == "ai")
+            .order_by(Grade.updated_at.desc(), Grade.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    seen: set[int] = set()
+    results: list[dict[str, Any]] = []
+    for grade in grades:
+        if grade.task_id in seen:
+            continue
+        seen.add(grade.task_id)
+        results.append(
+            {
+                "task_id": grade.task_id,
+                "ai_model_id": grade.ai_model_id,
+                "provider": WADHWANI_PROVIDER if grade.ai_model_id else None,
+                "status": "success",
+                "prediction_id": None,
+                "prediction": None,
+                "predicted_class_name": grade.grade_name,
+                "confidence": _confidence_from_grade_comment(grade.comment),
+                "error_code": None,
+                "error_message": None,
+                "updated_at": _iso(grade.updated_at),
+            }
+        )
+    return results
+
+
+def _confidence_from_grade_comment(comment: str | None) -> float | None:
+    if not comment:
+        return None
+    match = AI_PROBABILITY_PATTERN.search(comment)
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
 
 
 def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, image_uuid: str):
@@ -170,7 +233,7 @@ def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, i
     if image_uuid not in allowed_uuids:
         raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
     image = db.execute(select(DirectImageUpload).where(DirectImageUpload.uuid == image_uuid)).scalar_one_or_none()
-    if image is None or image.uploader_id != user_id:
+    if image is None:
         raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
 
     try:
@@ -211,6 +274,8 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
                 is_mydriatic=_optional_bool(form, "is_mydriatic"),
                 remarks=_remarks(form.get("remarks")),
                 idempotency_key=idempotency_key,
+                verification_remarks=GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK,
+                verification_user_id=actor.user_id,
             ),
             files=upload_files,
             upload_type="mobile direct image",

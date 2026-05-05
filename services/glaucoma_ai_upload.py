@@ -5,13 +5,10 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from db_transaction_manager import transaction_scope
-from models import AIModelIntegration, Disease
+from models import AIModelIntegration, Disease, GradingTask
 from job_store import db_create_job
-from services.direct_upload_service import (
-    DirectUploadSelection,
-    create_unverified_direct_upload_task_batch,
-    resolve_direct_upload_profile,
-)
+from services.direct_upload_service import DirectUploadSelection, resolve_direct_upload_profile
+from services.uploads.direct import DirectUploadActor, DirectUploadJobRequest, create_direct_upload_job
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER, WadhwaniInferenceResult
 from utils.celery_helpers import enqueue_task
 from utils.log_sanitize import sanitize_log_value
@@ -117,20 +114,41 @@ def process_glaucoma_ai_uploads(
         )
         upload_profile = resolve_direct_upload_profile(db=db, user_id=user_id, selection=direct_selection)
         _validate_glaucoma_ai_workflow(db, upload_profile, glaucoma_disease_id)
-        upload_batch = create_unverified_direct_upload_task_batch(
+        upload_result = create_direct_upload_job(
             db=db,
+            actor=DirectUploadActor(user_id=user_id, username=username, remote_addr=remote_addr),
+            request=DirectUploadJobRequest(
+                profile_id=selection.profile_id,
+                project_id=selection.project_id,
+                lab_unit_id=selection.lab_unit_id,
+                disease_id=glaucoma_disease_id,
+                camera_id=selection.camera_id,
+                area_id=selection.area_id,
+                is_mydriatic=selection.is_mydriatic,
+                verification_remarks=GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK,
+                verification_user_id=user_id,
+            ),
             files=files,
-            user_id=user_id,
-            selection=direct_selection,
+            upload_type="glaucoma ai upload",
             allowed_mimetypes=allowed_mimetypes,
             max_file_size_bytes=max_file_size_bytes,
-            verification_remarks=GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK,
-            verification_user_id=user_id,
-            resolved_upload_profile=upload_profile,
             request_url_builder=request_url_builder,
             thumbnail_url_builder=thumbnail_url_builder,
         )
-        created_items = [_glaucoma_item_from_direct(item) for item in upload_batch.items]
+        task_ids = [item.task_id for item in upload_result.job.items if item.task_id]
+        task_uuids = {
+            task.id: task.uuid
+            for task in db.execute(select(GradingTask).where(GradingTask.id.in_(task_ids))).scalars()
+        } if task_ids else {}
+        created_items = [
+            _glaucoma_item_from_job_item(
+                item,
+                task_uuids=task_uuids,
+                request_url_builder=request_url_builder,
+                thumbnail_url_builder=thumbnail_url_builder,
+            )
+            for item in upload_result.job.items
+        ]
 
     queued_items = _enqueue_wadhwani_inference(
         created_items,
@@ -236,17 +254,24 @@ def _enqueue_wadhwani_inference(
     ]
 
 
-def _glaucoma_item_from_direct(item) -> GlaucomaAIUploadItem:
+def _glaucoma_item_from_job_item(item, *, task_uuids: dict[int, str], request_url_builder, thumbnail_url_builder) -> GlaucomaAIUploadItem:
+    image_uuid = item.source_uuid
     return GlaucomaAIUploadItem(
         filename=item.filename,
-        status=item.status,
-        message="Image uploaded and glaucoma task created." if item.status == "success" else item.message,
-        upload_id=item.upload_id,
-        image_uuid=item.image_uuid,
+        status="success" if item.state in {"completed", "duplicate"} else item.state,
+        message=(
+            "Image uploaded and glaucoma task created."
+            if item.state == "completed"
+            else "Duplicate image linked to existing glaucoma task."
+            if item.state == "duplicate"
+            else item.detail
+        ),
+        upload_id=item.source_id,
+        image_uuid=image_uuid,
         task_id=item.task_id,
-        task_uuid=item.task_uuid,
-        image_url=item.image_url,
-        thumbnail_url=item.thumbnail_url,
+        task_uuid=task_uuids.get(item.task_id) if item.task_id else None,
+        image_url=request_url_builder(image_uuid) if request_url_builder and image_uuid else None,
+        thumbnail_url=thumbnail_url_builder(image_uuid) if thumbnail_url_builder and image_uuid else None,
     )
 
 

@@ -10,7 +10,7 @@ from auth.utils import utcnow
 from models import Area, Camera, DirectImageUpload, DirectImageVerify, GradingTask, Hospital, LabUnit
 from upload_profiles.service import UploadProfileError, UploadSelection, validate_direct_upload_scope
 from utils.fileUtils import get_upload_dirs
-from utils.file_hashing import get_hash_algorithm, hash_file_content, is_duplicate_file
+from utils.file_hashing import find_duplicate_file, get_hash_algorithm, hash_file_content
 from utils.filename_sanitizer import sanitize_storage_filename
 from utils.filename_validation import validate_upload_filename
 from utils.utils2 import uniquify
@@ -42,6 +42,7 @@ class DirectUploadItemResult:
     task_uuid: str | None = None
     image_url: str | None = None
     thumbnail_url: str | None = None
+    duplicate: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,11 +52,11 @@ class DirectUploadBatchResult:
 
     @property
     def success_count(self) -> int:
-        return sum(1 for item in self.items if item.status == "success")
+        return sum(1 for item in self.items if item.status in {"success", "duplicate"})
 
     @property
     def error_count(self) -> int:
-        return sum(1 for item in self.items if item.status != "success")
+        return sum(1 for item in self.items if item.status == "error")
 
 
 def resolve_direct_upload_profile(*, db, user_id: int, selection: DirectUploadSelection):
@@ -245,10 +246,28 @@ def _create_direct_upload_item(
 
     full_hash = hash_file_content(content, algorithm=get_hash_algorithm())
     file_hash = full_hash[:32]
-    duplicate = is_duplicate_file(file_hash, len(content), db)
+    duplicate = find_duplicate_file(file_hash, len(content), db)
     if duplicate:
         uniquify(dup_dir, filename).write_bytes(content)
-        return _error_item(filename, "Duplicate file.")
+        task = _direct_image_task_for_duplicate(
+            db=db,
+            upload=duplicate,
+            disease_id=disease_id,
+            lab_unit_id=lab_unit_id,
+            create_task=create_task,
+        )
+        return DirectUploadItemResult(
+            filename=filename,
+            status="duplicate",
+            message="Duplicate file.",
+            upload_id=duplicate.id,
+            image_uuid=duplicate.uuid,
+            task_id=task.id if task else None,
+            task_uuid=task.uuid if task else None,
+            image_url=request_url_builder(duplicate.uuid) if request_url_builder else None,
+            thumbnail_url=thumbnail_url_builder(duplicate.uuid) if thumbnail_url_builder else None,
+            duplicate=True,
+        )
 
     dest = uniquify(orig_dir, filename)
     dest.write_bytes(content)
@@ -321,6 +340,37 @@ def _create_direct_upload_item(
         image_url=image_url,
         thumbnail_url=thumbnail_url,
     )
+
+
+def _direct_image_task_for_duplicate(
+    *,
+    db,
+    upload: DirectImageUpload,
+    disease_id: int,
+    lab_unit_id: int,
+    create_task: bool,
+) -> GradingTask | None:
+    if not create_task:
+        return None
+    task = (
+        db.query(GradingTask)
+        .filter(
+            GradingTask.direct_image_upload_id == upload.id,
+            GradingTask.disease_id == disease_id,
+        )
+        .one_or_none()
+    )
+    if task is not None:
+        return task
+    task = GradingTask(
+        direct_image_upload_id=upload.id,
+        disease_id=disease_id,
+        lab_unit_id=lab_unit_id,
+        state="pending",
+    )
+    db.add(task)
+    db.flush()
+    return task
 
 
 def _read_file_bytes(file: BinaryIO) -> bytes:

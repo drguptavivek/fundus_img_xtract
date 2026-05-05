@@ -5,13 +5,13 @@ from typing import Any
 
 from flask import current_app, jsonify, render_template, request, send_file, url_for
 from flask_login import current_user
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import selectinload
 
 from auth.decorators import token_auth_required
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
-from models import AIInferenceRun, DirectImageUpload, DirectImageVerify, Grade, GradingTask, User
+from models import AIInferenceRun, DirectImageUpload, DirectImageVerify, Grade, GradingTask, Job, JobItem, User
 from services.glaucoma_ai_upload import (
     GLAUCOMA_AI_UPLOAD_MARKER_REMARKS,
     GlaucomaAIUploadSelection,
@@ -94,11 +94,7 @@ def get_glaucoma_ai_upload_result(uuid_str: str):
                 .where(DirectImageUpload.uuid == uuid_str)
                 .where(DirectImageUpload.uploader_id == user_id)
                 .where(DirectImageUpload.disease_id == glaucoma_disease_id)
-                .where(
-                    DirectImageUpload.verifications.any(
-                        DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
-                    )
-                )
+                .where(_glaucoma_ai_upload_visible_clause(user_id))
             )
             .scalar_one_or_none()
         )
@@ -246,11 +242,7 @@ def get_glaucoma_ai_upload_image(uuid_str: str):
             .filter(DirectImageUpload.uuid == uuid_str)
             .filter(DirectImageUpload.uploader_id == user_id)
             .filter(DirectImageUpload.disease_id == glaucoma_disease_id)
-            .filter(
-                DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
-                )
-            )
+            .filter(_glaucoma_ai_upload_visible_clause(user_id))
             .one_or_none()
         )
         if upload is None:
@@ -284,11 +276,7 @@ def get_glaucoma_ai_upload_thumbnail(uuid_str: str):
             .filter(DirectImageUpload.uuid == uuid_str)
             .filter(DirectImageUpload.uploader_id == user_id)
             .filter(DirectImageUpload.disease_id == glaucoma_disease_id)
-            .filter(
-                DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
-                )
-            )
+            .filter(_glaucoma_ai_upload_visible_clause(user_id))
             .one_or_none()
         )
         if upload is None:
@@ -357,11 +345,21 @@ def _query_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
 
 def _render_web_workspace(*, result=None, messages=None):
     with transaction_scope() as db:
-        recent_uploads = _load_web_recent_uploads(db, current_user.id)
+        page_items = _load_web_recent_uploads(db, current_user.id, limit=21, offset=0)
+        recent_uploads = page_items[:20]
     return render_template(
         "glaucoma_ai/_workspace.html",
         results=result,
         recent_uploads=recent_uploads,
+        pagination={
+            "limit": 20,
+            "offset": 0,
+            "previous_offset": 0,
+            "has_previous": False,
+            "next_offset": 20,
+            "has_next": len(page_items) > 20,
+            "page_number": 1,
+        },
         messages=messages or [],
     )
 
@@ -372,12 +370,12 @@ def _web_upload_response(message: str, category: str, result, *, status_code: in
     return jsonify({"success": False, "error": message}), status_code
 
 
-def _load_web_recent_uploads(db, user_id: int) -> list[dict[str, Any]]:
+def _load_web_recent_uploads(db, user_id: int, *, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
     items = load_user_glaucoma_ai_upload_results(
         db,
         user_id,
-        limit=20,
-        offset=0,
+        limit=limit,
+        offset=offset,
         external_urls=False,
         include_created_at_dt=True,
     )
@@ -431,11 +429,7 @@ def load_user_glaucoma_ai_upload_results(
             )
             .where(DirectImageUpload.uploader_id == user_id)
             .where(DirectImageUpload.disease_id == glaucoma_disease_id)
-            .where(
-                DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
-                )
-            )
+            .where(_glaucoma_ai_upload_visible_clause(user_id))
             .order_by(DirectImageUpload.created_at.desc(), DirectImageUpload.id.desc())
             .offset(offset)
             .limit(limit)
@@ -469,11 +463,7 @@ def load_user_glaucoma_ai_inference_updates(
             select(DirectImageUpload)
             .where(DirectImageUpload.uploader_id == user_id)
             .where(DirectImageUpload.disease_id == glaucoma_disease_id)
-            .where(
-                DirectImageUpload.verifications.any(
-                    DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
-                )
-            )
+            .where(_glaucoma_ai_upload_visible_clause(user_id))
             .order_by(DirectImageUpload.created_at.desc(), DirectImageUpload.id.desc())
             .offset(offset)
             .limit(limit)
@@ -527,6 +517,22 @@ def _serialize_upload_result(
     if include_created_at_dt:
         result["created_at_dt"] = upload.created_at
     return result
+
+
+def _glaucoma_ai_upload_visible_clause(user_id: int):
+    return or_(
+        DirectImageUpload.verifications.any(
+            DirectImageVerify.remarks.in_(GLAUCOMA_AI_UPLOAD_MARKER_REMARKS)
+        ),
+        exists(
+            select(JobItem.id)
+            .join(Job, Job.id == JobItem.job_id)
+            .where(JobItem.source_type == "direct_image")
+            .where(JobItem.source_id == DirectImageUpload.id)
+            .where(Job.uploader_user_id == user_id)
+            .where(Job.upload_type == "mobile direct image")
+        ),
+    )
 
 
 def _serialize_inference_update(upload: DirectImageUpload, task: GradingTask | None) -> dict[str, Any]:

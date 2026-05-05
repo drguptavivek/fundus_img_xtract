@@ -1,8 +1,9 @@
 # app.py
 import os
 import logging
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
+from flask import Flask, abort, current_app, jsonify, render_template, request, redirect, url_for, session, flash
 from flask import send_from_directory
 from flask import message_flashed
 from flask_cors import CORS
@@ -614,6 +615,8 @@ def _register_login_guard(app: Flask) -> None:
             or path.startswith("/static/")
             or path == "/favicon.ico"
             or path == "/robots.txt"
+            or path == "/mobile"
+            or path.startswith("/mobile/")
             or path == "/style_guide"
             or path == "/forgot-password"
             or path == "/reset-password"
@@ -774,6 +777,12 @@ def _register_error_handlers(app: Flask) -> None:
 
 
 def _register_utility_routes(app: Flask) -> None:
+    def _mobile_pwa_root() -> Path:
+        configured_root = current_app.config.get("MOBILE_PWA_ROOT")
+        if configured_root:
+            return Path(str(configured_root)).resolve()
+        return (Path(current_app.root_path) / "static" / "mobile-pwa").resolve()
+
     @app.get('/favicon.ico')
     @rate_limit("100 per minute")
     def _favicon():
@@ -783,6 +792,31 @@ def _register_utility_routes(app: Flask) -> None:
     @rate_limit("100 per minute")
     def _robots():
         return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
+
+    @app.get("/mobile")
+    def _mobile_pwa_no_slash():
+        return redirect("/mobile/", code=308)
+
+    @app.get("/mobile/")
+    @app.get("/mobile/<path:requested_path>")
+    def _mobile_pwa(requested_path: str = ""):
+        root = _mobile_pwa_root()
+        index_file = root / "index.html"
+        if not index_file.is_file():
+            abort(404)
+
+        candidate = (root / requested_path).resolve() if requested_path else index_file
+        if requested_path and candidate.is_file() and root in candidate.parents:
+            response = send_from_directory(root, requested_path)
+            if requested_path in {"flutter_service_worker.js", "index.html", "version.json"}:
+                response.cache_control.no_cache = True
+            return response
+        if Path(requested_path).suffix:
+            return "", 404, {"Content-Type": "text/plain; charset=utf-8"}
+
+        response = send_from_directory(root, "index.html")
+        response.cache_control.no_cache = True
+        return response
 
     @app.get("/sitemap.xml")
     @rate_limit("100 per minute")

@@ -61,12 +61,7 @@ def is_duplicate_file(file_hash: str, file_size: int, db: Session) -> bool:
     Returns:
         True if duplicate exists, False otherwise
     """
-    from models import DirectImageUpload
-
-    # Query for existing uploads with the same hash
-    existing = db.execute(
-        select(DirectImageUpload).filter_by(file_hash=file_hash).limit(1)
-    ).scalar_one_or_none()
+    existing = find_duplicate_file(file_hash, file_size, db)
 
     if not existing:
         return False
@@ -77,6 +72,18 @@ def is_duplicate_file(file_hash: str, file_size: int, db: Session) -> bool:
     # by file size if the model supported it.
     # For now, we'll trust the hash match since file_size isn't in the model yet
     return True
+
+
+def find_duplicate_file(file_hash: str, file_size: int, db: Session):
+    """Return the existing direct upload matching a file hash, if present."""
+    from models import DirectImageUpload
+
+    return db.execute(
+        select(DirectImageUpload)
+        .filter_by(file_hash=file_hash)
+        .order_by(DirectImageUpload.created_at.desc(), DirectImageUpload.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
 
 
 def get_hash_algorithm() -> str:

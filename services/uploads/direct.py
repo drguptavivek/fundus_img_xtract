@@ -44,6 +44,8 @@ class DirectUploadJobRequest:
     is_mydriatic: bool | None = None
     remarks: str | None = None
     idempotency_key: str | None = None
+    verification_remarks: str | None = None
+    verification_user_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +137,8 @@ def create_direct_upload_job(
             resolved_upload_profile=profile,
             request_url_builder=request_url_builder,
             thumbnail_url_builder=thumbnail_url_builder,
+            verification_remarks=request.verification_remarks,
+            verification_user_id=request.verification_user_id,
             remarks=request.remarks,
         )
     else:
@@ -171,7 +175,11 @@ def create_direct_upload_job(
             JobItem(
                 job_id=job.id,
                 filename=item.filename,
-                state="completed" if item.status == "success" else "error",
+                state="completed"
+                if item.status == "success"
+                else "duplicate"
+                if item.status == "duplicate"
+                else "error",
                 detail=item.message,
                 uploader_user_id=actor.user_id,
                 uploader_username=actor.username,
@@ -189,9 +197,11 @@ def create_direct_upload_job(
         job=job,
         accepted_count=batch.success_count,
         rejected_count=batch.error_count,
-        inference_available=executable_workflow and any(item.task_id for item in batch.items),
-        upload_ids_for_post_commit=tuple(item.upload_id for item in batch.items if item.upload_id),
-        inference_task_ids_for_post_commit=tuple(item.task_id for item in batch.items if executable_workflow and item.task_id),
+    inference_available=executable_workflow and any(item.task_id for item in batch.items),
+    upload_ids_for_post_commit=tuple(item.upload_id for item in batch.items if item.upload_id),
+    inference_task_ids_for_post_commit=tuple(
+        item.task_id for item in batch.items if executable_workflow and item.task_id
+    ),
     )
 
 

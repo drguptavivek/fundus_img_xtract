@@ -2,6 +2,8 @@
 
 Uploads 1-10 direct fundus images through a selected Upload Profile, creates unverified direct-image records plus glaucoma tasks for AI processing, queues the linked Wadhwani glaucoma AI model, and returns upload/task identifiers immediately. Human grading still requires the normal verification workflow.
 
+The browser page, this JWT API, and `/api/mobile/v1/uploads` all use the same direct-upload job service for direct-image persistence. They create `DirectImageUpload`, `Job`, `JobItem`, and `GradingTask` records through the shared service; endpoint differences are limited to authentication, response shape, and Wadhwani-specific enqueue/result presentation.
+
 ## `POST /api/glaucoma-ai/uploads`
 
 - Auth: Bearer JWT from `/api/mobile/v1/auth/login`.
@@ -39,7 +41,7 @@ Uploads 1-10 direct fundus images through a selected Upload Profile, creates unv
 Returns recent glaucoma AI uploads for the logged-in token user only.
 
 - Auth: same bearer JWT and role set as upload creation.
-- Scope: `DirectImageUpload.uploader_id` must equal the token user ID, disease must be glaucoma, and the image must have been created by the Wadhwani glaucoma AI upload flow. Admin/local-admin/data-manager roles do not expand this list.
+- Scope: `DirectImageUpload.uploader_id` must equal the token user ID, disease must be glaucoma, and the image must have been created by the Wadhwani glaucoma AI upload flow or linked from that user's mobile direct-upload job. Admin/local-admin/data-manager roles do not expand this list.
 - Query parameters:
   - `limit`: optional, default `20`, maximum `100`.
   - `offset`: optional, default `0`.
@@ -134,7 +136,7 @@ Response:
 Returns one glaucoma AI upload/result record for the logged-in token user only.
 
 - Auth: same bearer JWT and role set as upload creation.
-- Scope: `DirectImageUpload.uploader_id` must equal the token user ID and the image must have been created by the Wadhwani glaucoma AI upload flow.
+- Scope: `DirectImageUpload.uploader_id` must equal the token user ID and the image must have been created by the Wadhwani glaucoma AI upload flow or linked from that user's mobile direct-upload job.
 - Response: one item with the same shape used by `items[]` in `/recent`.
 
 ### Success Response
@@ -165,10 +167,11 @@ Status: `201 Created`
 
 ### Validation and Error Responses
 
-- `400`: missing form fields, invalid upload scope, no files, more than 10 files, duplicate image, unsupported MIME type, oversized image, or no successful items.
+- `400`: missing form fields, invalid upload scope, no files, more than 10 files, unsupported MIME type, oversized image, or no successful items.
 - `401`: missing, expired, or invalid JWT.
 - `403`: inactive user or token roles do not permit upload/inference.
 - Per-file failures are returned in `items` with `status: "error"` or `status: "enqueue_failed"`.
+- Duplicate direct images are represented as successful links to the existing canonical `DirectImageUpload`. The upload job item stores the existing image UUID and task ID, so the caller can display the previous thumbnail and the latest or newly queued Wadhwani result.
 - Successful uploads are stored as unverified direct images with a glaucoma task for AI inference. Human grading remains blocked until the image is verified through the normal verification workflow.
 - Wadhwani inference runs asynchronously through `celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task`. Poll `/recent/results` or `/<image_uuid>/result` for `inference.status`; use `/recent/results` when avoiding media reloads.
 

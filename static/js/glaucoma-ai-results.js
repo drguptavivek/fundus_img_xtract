@@ -107,6 +107,14 @@
     setMydriaticOption(form, "true", allowMydriatic, defaultIsMydriatic);
   }
 
+  function pageState() {
+    var holder = document.getElementById("glaucoma-ai-results");
+    return {
+      limit: holder ? Number(holder.dataset.resultsLimit || 20) || 20 : 20,
+      offset: holder ? Number(holder.dataset.resultsOffset || 0) || 0 : 0
+    };
+  }
+
   function initUploadOptions() {
     var form = document.querySelector(".glaucoma-ai-upload-form");
     if (!form) return;
@@ -132,4 +140,6 @@
       initUploadOptions();
     }
   });
+
+  window.glaucomaAiResultsPageState = pageState;
 })();

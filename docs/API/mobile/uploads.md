@@ -256,6 +256,18 @@ The `image_uuid` must belong to the requested `upload_token`; otherwise the API 
 
 Mobile clients should keep compact recent-result metadata for 7 days and use the `thumbnail_url` from upload status for image display. Do not rely on local picker file paths because they are not stable across Flutter Web, Android, iOS, and Windows app restarts.
 
+Direct-image duplicates are not dead rejected rows. When the shared direct-upload service detects a duplicate, the `JobItem` for the current upload attempt is stored with `state: "duplicate"` and points to the existing canonical `DirectImageUpload` through `source_id` and `source_uuid`. The mobile status payload returns that existing image UUID, thumbnail URL, and task ID so the app can show the duplicate thumbnail and refresh the latest Wadhwani result for the existing task. If no task exists yet for the duplicate image and selected disease, the service creates one before enqueueing inference.
+
+## Flutter PWA Serving
+
+The Flutter web/PWA app shell can be served by Flask at `/mobile/`; a separate nginx router is not required for this route. Build the PWA with:
+
+```bash
+make mobile-pwa-build
+```
+
+The target builds `apps/fundus_glaucoma_mobile` with `--base-href /mobile/` and copies the generated files into `static/mobile-pwa/`. Flask serves `index.html` for `/mobile/` and deep links under `/mobile/*`, while `/api/mobile/v1/*` remains the authenticated JSON API used by Android, iOS, Windows, and PWA clients.
+
 ## Remarks Policy
 
 `remarks` fields are plain text only. Clients should send human-entered notes as text, not HTML or structured JSON. The backend trims surrounding whitespace, stores blank remarks as `null`, allows newlines and tabs, rejects unsupported control characters, and limits remarks to 1000 characters.

@@ -198,7 +198,9 @@ def create_direct_upload_job(
         accepted_count=batch.success_count,
         rejected_count=batch.error_count,
     inference_available=executable_workflow and any(item.task_id for item in batch.items),
-    upload_ids_for_post_commit=tuple(item.upload_id for item in batch.items if item.upload_id),
+    upload_ids_for_post_commit=tuple(
+        item.upload_id for item in batch.items if item.upload_id and item.status != "duplicate"
+    ),
     inference_task_ids_for_post_commit=tuple(
         item.task_id for item in batch.items if executable_workflow and item.task_id
     ),

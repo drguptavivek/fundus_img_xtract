@@ -341,6 +341,8 @@ def _aggregate_inference_status(items: list[dict[str, Any]]) -> str:
         return "running"
     if any(status == "pending" for status in statuses):
         return "pending"
+    if any(status == "failed" for status in statuses) and any(status == "success" for status in statuses):
+        return "partial"
     if any(status == "failed" for status in statuses):
         return "failed"
     return "running"

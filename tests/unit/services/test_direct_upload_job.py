@@ -190,6 +190,7 @@ def test_direct_upload_duplicate_links_existing_image_and_task(db_session, core_
     assert duplicate_item.source_id == first_item.source_id
     assert duplicate_item.source_uuid == first_item.source_uuid
     assert duplicate_item.task_id is not None
+    assert duplicate.upload_ids_for_post_commit == ()
     assert db_session.query(GradingTask).filter_by(direct_image_upload_id=first_item.source_id).count() == 1
 
 

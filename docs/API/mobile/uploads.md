@@ -278,6 +278,7 @@ Success response: `200 OK`
 - `pending`: at least one task-linked item has no recorded inference run yet
 - `running`: at least one inference run is still in progress
 - `complete`: all task-linked items succeeded
+- `partial`: at least one task-linked item succeeded and at least one failed
 - `failed`: at least one task-linked item failed and none are still pending/running
 
 The `items` array is the UI source of truth for polling. Each image returns its own `inference` object as soon as that image has a known result, so clients should update image tiles independently and should not wait for the whole upload batch to complete.

@@ -49781,7 +49781,7 @@ a4D(a){this.r=this.r.asr(a)},
 mN(a){var s=0,r=A.w(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e,d
 var $async$mN=A.r(function(b,c){if(b===1){o.push(c)
 s=p}for(;;)switch(s){case 0:e=n.r
-if(e.a.length===0||e.c){s=1
+if(e.a.length===0||e.c||e.x!=null){s=1
 break}n.r=e.BA(!0,!0,"Submitting upload...")
 n.T()
 p=4
@@ -49980,31 +49980,32 @@ if(a==null)return null
 for(s=a.w,r=s.length,q=0;q<r;++q){p=s[q]
 if(p.a===b)return p}return null}}
 A.aD9.prototype={
-$2(a,b){var s,r,q,p,o,n,m,l=this,k=null,j=l.b,i=j.r,h=A.acH("assets/brand/retina_logo.png",44,44),g=A.bl("EIM Uploader and Inferencer",k,k,k,A.L(a).ok.r,k,k),f=l.c,e=f.rx,d=e==null,c=t.p
-g=A.eG(A.b([h,B.is,A.jB(A.ft(A.b([g,A.bl("Upload EIM images and review inference status. v1.0.0+1",k,k,k,A.dM(k,k,d?f.k3:e,k,k,k,k,k,k,k,k,k,k,k,k,k,k,!0,k,k,k,k,k,k,k,k),k,k)],c),B.aL,B.J,B.al),1)],c),B.S,B.J,B.al,0)
-h=A.aH9(new A.aD7(i,j))
-s=A.xp(k,B.I9,k,k,4,2,!1,j.ga4C(),k,B.m4)
-r=i.c
-q=A.aau(B.HC,B.XB,r?k:j.gazh())
-p=i.a
-o=p.length!==0
-n=!o||r?k:j.ga5c(j)
-m=r?B.di:B.HA
-n=A.aau(m,A.bl(r?"Uploading...":"Upload",k,k,k,k,k,k),n)
-q=A.b([q,n,A.aHp(B.HM,B.XK,!o||r?k:j.gZ7(j))],c)
-o=i.x
-n=o!=null
-if(n)q.push(A.aHp(B.HO,B.Xy,r?k:j.gZ7(j)))
-j=A.b([g,B.Ag,h,B.fs,s,B.fs,A.aON(q,B.B2,12,12)],c)
-h=i.w
-if(h!=null)B.b.S(j,A.b([B.av,A.bl(h,k,k,k,k,k,k)],c))
-if(n)B.b.S(j,A.b([B.av,new A.a2D(o,l.a.a.d,k)],c))
-j.push(B.Ag)
-j.push(A.bl("Queue",k,k,k,A.L(a).ok.r,k,k))
-j.push(B.cG)
-if(p.length===0)j.push(A.uF(new A.bU(B.dI,A.bl("No images selected yet.",k,k,k,A.dM(k,k,d?f.k3:e,k,k,k,k,k,k,k,k,k,k,k,k,k,k,!0,k,k,k,k,k,k,k,k),k,k),k)))
-else B.b.S(j,new A.U(p,new A.aD8(l.a,i),A.V(p).h("U<1,e>")))
-return A.PI(j,B.eO,k,!1)},
+$2(a,a0){var s,r,q,p,o,n,m,l,k=this,j=null,i=k.b,h=i.r,g=A.acH("assets/brand/retina_logo.png",44,44),f=A.bl("EIM Uploader and Inferencer",j,j,j,A.L(a).ok.r,j,j),e=k.c,d=e.rx,c=d==null,b=t.p
+f=A.eG(A.b([g,B.is,A.jB(A.ft(A.b([f,A.bl("Upload EIM images and review inference status. v1.0.0+1",j,j,j,A.dM(j,j,c?e.k3:d,j,j,j,j,j,j,j,j,j,j,j,j,j,j,!0,j,j,j,j,j,j,j,j),j,j)],b),B.aL,B.J,B.al),1)],b),B.S,B.J,B.al,0)
+g=A.aH9(new A.aD7(h,i))
+s=A.xp(j,B.I9,j,j,4,2,!1,i.ga4C(),j,B.m4)
+r=h.c
+q=!r
+p=A.aau(B.HC,B.XB,!q||h.x!=null?j:i.gazh())
+o=h.a
+n=o.length!==0
+m=!n||!q||h.x!=null?j:i.ga5c(i)
+l=r?B.di:B.HA
+m=A.aau(l,A.bl(r?"Uploading...":"Upload",j,j,j,j,j,j),m)
+p=A.b([p,m,A.aHp(B.HM,B.XK,!n||!q||h.x!=null?j:i.gZ7(i))],b)
+q=h.x
+n=q!=null
+if(n)p.push(A.aHp(B.HO,B.Xy,r?j:i.gZ7(i)))
+i=A.b([f,B.Ag,g,B.fs,s,B.fs,A.aON(p,B.B2,12,12)],b)
+g=h.w
+if(g!=null)B.b.S(i,A.b([B.av,A.bl(g,j,j,j,j,j,j)],b))
+if(n)B.b.S(i,A.b([B.av,new A.a2D(q,k.a.a.d,j)],b))
+i.push(B.Ag)
+i.push(A.bl("Queue",j,j,j,A.L(a).ok.r,j,j))
+i.push(B.cG)
+if(o.length===0)i.push(A.uF(new A.bU(B.dI,A.bl("No images selected yet.",j,j,j,A.dM(j,j,c?e.k3:d,j,j,j,j,j,j,j,j,j,j,j,j,j,j,!0,j,j,j,j,j,j,j,j),j,j),j)))
+else B.b.S(i,new A.U(o,new A.aD8(k.a,h),A.V(o).h("U<1,e>")))
+return A.PI(i,B.eO,j,!1)},
 $S:79}
 A.aD7.prototype={
 $2(a,b){var s=this.a,r=this.b,q=new A.a2B(s,r,null),p=new A.WO(s,r,null)

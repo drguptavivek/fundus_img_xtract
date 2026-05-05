@@ -10,7 +10,7 @@
          hx-swap="outerHTML">Edit user info</a>
       <a class="btn btn-sm btn-secondary"
          href="{{ url_for('admin.change_password', username=user.username) }}"
-         hx-get="{{ url_for('admin.change_password', username=user.username) }}?format=partial"
+         hx-get="{{ url_for('admin.change_password', username=user.username, format='partial') }}"
          hx-target="#admin-users-workspace"
          hx-swap="outerHTML">Reset password</a>
     </div>

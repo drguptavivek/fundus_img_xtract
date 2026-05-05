@@ -17,13 +17,19 @@ def change_password():
     Admin can change any user's password by username (case-insensitive).
     Lockout is cleared after reset.
     """
-    def render_password_form(user: User | None, username: str, email: str):
+    def render_password_form(
+        user_id: int | None,
+        username: str,
+        email: str,
+        generated_password: str | None = None,
+    ):
         if request.headers.get("HX-Request") or request.args.get("format") == "partial":
             return render_template(
                 "admin/partials/user_password_edit.html",
-                user=user,
+                user_id=user_id,
                 username=username,
                 email=email,
+                generated_password=generated_password,
             )
         return render_template("admin/change_password.html", username=username, email=email)
 
@@ -44,22 +50,26 @@ def change_password():
                 flash("User not found.", "danger")
                 return render_password_form(None, username, "")
 
-            if not user.email:
-                flash("User does not have an email address on file.", "danger")
-                return render_password_form(user, username, user.email or "")
-
             generated_password = generate_strong_password()
             user.password_hash = hash_password(generated_password)
             user.is_locked_until = None  # optional: clear any lockouts
             db.add(user)
 
-            email = user.email
+            email = user.email or ""
+            user_id = user.id
 
-        send_password_reset_email(email, username, generated_password)
+        if email:
+            send_password_reset_email(email, username, generated_password)
 
         if request.headers.get("HX-Request") or request.args.get("format") == "partial":
-            flash(f"Password updated for '{username}'.", "success")
-            return redirect(url_for("admin.user_detail", user_id=user.id, format="shell"))
+            if email:
+                flash(f"Password updated for '{username}' and emailed to the user.", "success")
+                return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
+            flash(
+                "Password reset. This user has no email address; copy the password and convey it securely.",
+                "warning",
+            )
+            return render_password_form(user_id, username, email, generated_password)
 
         return render_template(
             "admin/password_reset_done.html",
@@ -86,7 +96,7 @@ def change_password():
     # GET
     username = (request.args.get("username") or "").strip()
     email = ""
-    user = None
+    user_id = None
     if username:
         with get_db_session() as db:
             user = db.execute(
@@ -94,9 +104,10 @@ def change_password():
             ).scalar_one_or_none()
             if user:
                 email = user.email or ""
+                user_id = user.id
             else:
                 flash("User not found.", "danger")
-    return render_password_form(user, username, email)
+    return render_password_form(user_id, username, email)
 
 
 def manage_roles():

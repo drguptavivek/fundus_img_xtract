@@ -343,7 +343,7 @@ The Flutter web/PWA app shell can be served by Flask at `/mobile/`; a separate n
 make mobile-pwa-build
 ```
 
-The target builds `apps/fundus_glaucoma_mobile` with `--base-href /mobile/` and copies the generated files into `static/mobile-pwa/`. Flask serves `index.html` for `/mobile/` and deep links under `/mobile/*`, while `/api/mobile/v1/*` remains the authenticated JSON API used by Android, iOS, Windows, and PWA clients.
+The target builds `apps/fundus_glaucoma_mobile` with `--base-href /mobile/` and copies the generated files into `static/mobile-pwa/`. If `apps/fundus_glaucoma_mobile/.env` exists, the target reads it before building; `FUNDUS_API_BASE_URL=https://eyeimg.aiims.edu.in` pins the generated PWA bundle to that API origin. When no `FUNDUS_API_BASE_URL` build define is present, Flutter Web uses the current serving origin as its default server URL. If Android release artifacts exist, the target also copies them to `static/mobile-pwa/downloads/`: `eim-uploader-inferencer.apk` is served from `/mobile/download/android`, and `eim-uploader-inferencer.aab` is served from `/mobile/download/android-bundle`. Flask serves `index.html` for `/mobile/` and deep links under `/mobile/*`, while `/api/mobile/v1/*` remains the authenticated JSON API used by Android, iOS, Windows, and PWA clients.
 
 ## Remarks Policy
 

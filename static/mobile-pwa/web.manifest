@@ -1,5 +1,5 @@
 {
-    "name": "EIM Uploader and Inferencer",
+    "name": "EIM Uploader Inferencer",
     "short_name": "EIM Inferencer",
     "start_url": ".",
     "display": "standalone",

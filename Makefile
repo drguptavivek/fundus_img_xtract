@@ -9,6 +9,10 @@ SCRIPT ?=
 ARGS ?=
 CACHE_PATTERN ?= fim:cache:*
 MOBILE_PWA_DIR ?= static/mobile-pwa
+MOBILE_APK_SOURCE ?= apps/fundus_glaucoma_mobile/build/app/outputs/flutter-apk/app-release.apk
+MOBILE_APK_NAME ?= eim-uploader-inferencer.apk
+MOBILE_AAB_SOURCE ?= apps/fundus_glaucoma_mobile/build/app/outputs/bundle/release/app-release.aab
+MOBILE_AAB_NAME ?= eim-uploader-inferencer.aab
 
 WEB_UV = $(COMPOSE) exec -u $$(id -u):$$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run
 
@@ -64,10 +68,12 @@ rebuild-main: ## Build main application service images.
 
 .PHONY: mobile-pwa-build
 mobile-pwa-build: ## Build Flutter PWA into static/mobile-pwa for Flask /mobile/ serving.
-	cd apps/fundus_glaucoma_mobile && flutter build web --release --base-href /mobile/ --dart-define=APP_VERSION=$$(grep '^version:' pubspec.yaml | awk '{print $$2}')
+	cd apps/fundus_glaucoma_mobile && set -a && [ ! -f .env ] || . ./.env && set +a && flutter build web --release --base-href /mobile/ --dart-define=APP_VERSION=$$(grep '^version:' pubspec.yaml | awk '{print $$2}') $${FUNDUS_API_BASE_URL:+--dart-define=FUNDUS_API_BASE_URL=$$FUNDUS_API_BASE_URL}
 	rm -rf $(MOBILE_PWA_DIR)
 	mkdir -p $(MOBILE_PWA_DIR)
 	cp -R apps/fundus_glaucoma_mobile/build/web/. $(MOBILE_PWA_DIR)/
+	if [ -f "$(MOBILE_APK_SOURCE)" ]; then mkdir -p $(MOBILE_PWA_DIR)/downloads && cp "$(MOBILE_APK_SOURCE)" "$(MOBILE_PWA_DIR)/downloads/$(MOBILE_APK_NAME)"; fi
+	if [ -f "$(MOBILE_AAB_SOURCE)" ]; then mkdir -p $(MOBILE_PWA_DIR)/downloads && cp "$(MOBILE_AAB_SOURCE)" "$(MOBILE_PWA_DIR)/downloads/$(MOBILE_AAB_NAME)"; fi
 
 .PHONY: rebuild-builders
 rebuild-builders: ## Build venv builder images.

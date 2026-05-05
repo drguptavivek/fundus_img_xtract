@@ -797,6 +797,39 @@ def _register_utility_routes(app: Flask) -> None:
     def _mobile_pwa_no_slash():
         return redirect("/mobile/", code=308)
 
+    @app.get("/mobile/download/android")
+    def _mobile_android_apk_download():
+        root = _mobile_pwa_root()
+        return _send_mobile_download(
+            root,
+            "eim-uploader-inferencer.apk",
+            "application/vnd.android.package-archive",
+        )
+
+    @app.get("/mobile/download/android-bundle")
+    def _mobile_android_aab_download():
+        root = _mobile_pwa_root()
+        return _send_mobile_download(
+            root,
+            "eim-uploader-inferencer.aab",
+            "application/octet-stream",
+        )
+
+    def _send_mobile_download(root: Path, filename: str, mimetype: str):
+        relative_path = Path("downloads") / filename
+        file_path = (root / relative_path).resolve()
+        if not file_path.is_file() or root not in file_path.parents:
+            abort(404)
+        response = send_from_directory(
+            root,
+            str(relative_path),
+            as_attachment=True,
+            download_name=filename,
+            mimetype=mimetype,
+        )
+        response.cache_control.no_cache = True
+        return response
+
     @app.get("/mobile/")
     @app.get("/mobile/<path:requested_path>")
     def _mobile_pwa(requested_path: str = ""):

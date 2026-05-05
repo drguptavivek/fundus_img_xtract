@@ -7,6 +7,7 @@ from .mobile import (
     get_mobile_upload_inference,
     get_mobile_upload_status,
     get_mobile_upload_status_by_idempotency_key,
+    retry_mobile_upload_inference,
     run_mobile_upload_post_commit,
     serialize_mobile_upload_options,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "get_mobile_direct_upload_thumbnail",
     "get_mobile_upload_status",
     "get_mobile_upload_status_by_idempotency_key",
+    "retry_mobile_upload_inference",
     "run_mobile_upload_post_commit",
     "serialize_mobile_upload_options",
 ]

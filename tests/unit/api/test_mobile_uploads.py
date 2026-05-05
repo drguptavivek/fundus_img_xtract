@@ -8,7 +8,23 @@ from itertools import count
 import pytest
 from PIL import Image
 
-from models import Area, Camera, Disease, DirectImageUpload, EncounterSetImage, Hospital, Job, LabUnit, PatientEncounters, Project
+from models import (
+    AIInferenceRun,
+    AIModel,
+    AIModelIntegration,
+    Area,
+    Camera,
+    Disease,
+    DirectImageUpload,
+    EncounterSetImage,
+    GradingTask,
+    Hospital,
+    Job,
+    JobItem,
+    LabUnit,
+    PatientEncounters,
+    Project,
+)
 from upload_profiles.models import (
     UploadProfile,
     UploadProfileArea,
@@ -303,6 +319,136 @@ def test_mobile_upload_inference_returns_not_configured(client, monkeypatch, mob
     assert response.get_json()["status"] == "not_configured"
 
 
+def test_mobile_upload_inference_returns_image_wise_status(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    job = _mobile_inference_job(db_session, mobile_upload_data)
+    success_task = _direct_image_task(db_session, mobile_upload_data, filename="success.jpg")
+    pending_task = _direct_image_task(db_session, mobile_upload_data, filename="pending.jpg")
+    failed_task = _direct_image_task(db_session, mobile_upload_data, filename="failed.jpg")
+    model, integration = _wadhwani_model(db_session)
+    db_session.add_all(
+        [
+            JobItem(
+                job=job,
+                filename="success.jpg",
+                state="ok",
+                source_type="direct_image",
+                source_id=success_task.direct_image_upload_id,
+                source_uuid=success_task.direct_image.uuid,
+                task_id=success_task.id,
+            ),
+            JobItem(
+                job=job,
+                filename="pending.jpg",
+                state="ok",
+                source_type="direct_image",
+                source_id=pending_task.direct_image_upload_id,
+                source_uuid=pending_task.direct_image.uuid,
+                task_id=pending_task.id,
+            ),
+            JobItem(
+                job=job,
+                filename="failed.jpg",
+                state="ok",
+                source_type="direct_image",
+                source_id=failed_task.direct_image_upload_id,
+                source_uuid=failed_task.direct_image.uuid,
+                task_id=failed_task.id,
+            ),
+            AIInferenceRun(
+                task_id=success_task.id,
+                ai_model_id=model.id,
+                integration_id=integration.id,
+                source="mobile",
+                status="success",
+                prediction_id="prediction-success",
+                execute_response_json={"results": [{"predicted_class_name": "Glaucoma Present", "model_score": 0.71}]},
+            ),
+            AIInferenceRun(
+                task_id=failed_task.id,
+                ai_model_id=model.id,
+                integration_id=integration.id,
+                source="mobile",
+                status="failed",
+                error_code="execute_failed",
+                error_message="Remote Wadhwani API failed.",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        f"/api/mobile/v1/uploads/{job.token}/inference",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "pending"
+    by_filename = {item["filename"]: item for item in payload["items"]}
+    assert by_filename["success.jpg"]["inference"]["status"] == "success"
+    assert by_filename["pending.jpg"]["inference"]["status"] == "pending"
+    assert by_filename["failed.jpg"]["inference"]["status"] == "failed"
+    assert by_filename["failed.jpg"]["inference"]["error_message"] == "Remote Wadhwani API failed."
+
+
+def test_mobile_upload_inference_retry_queues_specific_failed_image(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    captured = {}
+    monkeypatch.setattr(
+        "services.uploads.mobile.enqueue_task",
+        lambda task_name, job_token, task_ids, user_id=None: captured.update(
+            task_name=task_name,
+            job_token=job_token,
+            task_ids=task_ids,
+            user_id=user_id,
+        ),
+    )
+    job = _mobile_inference_job(db_session, mobile_upload_data)
+    failed_task = _direct_image_task(db_session, mobile_upload_data, filename="failed.jpg")
+    other_failed_task = _direct_image_task(db_session, mobile_upload_data, filename="other-failed.jpg")
+    model, integration = _wadhwani_model(db_session)
+    for task in (failed_task, other_failed_task):
+        db_session.add(
+            JobItem(
+                job=job,
+                filename=task.direct_image.filename,
+                state="ok",
+                source_type="direct_image",
+                source_id=task.direct_image_upload_id,
+                source_uuid=task.direct_image.uuid,
+                task_id=task.id,
+            )
+        )
+        db_session.add(
+            AIInferenceRun(
+                task_id=task.id,
+                ai_model_id=model.id,
+                integration_id=integration.id,
+                source="mobile",
+                status="failed",
+                error_code="execute_failed",
+                error_message="Remote Wadhwani API failed.",
+            )
+        )
+    db_session.commit()
+
+    response = client.post(
+        f"/api/mobile/v1/uploads/{job.token}/inference/retry",
+        json={"task_ids": [failed_task.id]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 202
+    payload = response.get_json()
+    assert payload["queued_task_ids"] == [failed_task.id]
+    assert captured["task_name"] == "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task"
+    assert captured["task_ids"] == [failed_task.id]
+    assert captured["user_id"] == mobile_upload_data["uploader"].id
+
+
 def _png_file(filename: str) -> io.BytesIO:
     buffer = io.BytesIO()
     Image.new("RGB", (4, 4), color=(255, 0, 0)).save(buffer, format="PNG")
@@ -332,3 +478,60 @@ def _mobile_access_token(client, username: str) -> str:
     )
     assert response.status_code == 200
     return response.get_json()["access_token"]
+
+
+def _mobile_inference_job(db_session, mobile_upload_data):
+    job = Job(
+        token=f"mobile-inference-token-{next(_SEQUENCE)}",
+        status="done",
+        upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+        upload_profile_id=mobile_upload_data["profile"].id,
+        uploader_user_id=mobile_upload_data["uploader"].id,
+        uploader_username=mobile_upload_data["uploader"].username,
+        lab_unit_id=mobile_upload_data["lab"].id,
+        project_id=mobile_upload_data["project"].id,
+    )
+    db_session.add(job)
+    db_session.flush()
+    return job
+
+
+def _direct_image_task(db_session, mobile_upload_data, *, filename: str):
+    image = DirectImageUpload(
+        original_filename=filename,
+        filename=filename,
+        folder_rel="test-mobile-inference",
+        file_hash=f"hash-{next(_SEQUENCE)}",
+        uploader_id=mobile_upload_data["uploader"].id,
+        hospital_id=mobile_upload_data["hospital"].id,
+        lab_unit_id=mobile_upload_data["lab"].id,
+        project_id=mobile_upload_data["project"].id,
+        camera_id=mobile_upload_data["camera"].id,
+        disease_id=mobile_upload_data["disease"].id,
+        area_id=mobile_upload_data["area"].id,
+    )
+    db_session.add(image)
+    db_session.flush()
+    task = GradingTask(
+        direct_image_upload_id=image.id,
+        disease_id=mobile_upload_data["disease"].id,
+        lab_unit_id=mobile_upload_data["lab"].id,
+    )
+    db_session.add(task)
+    db_session.flush()
+    return task
+
+
+def _wadhwani_model(db_session):
+    model = AIModel(name=f"Wadhwani Test {next(_SEQUENCE)}", version="1")
+    db_session.add(model)
+    db_session.flush()
+    integration = AIModelIntegration(
+        ai_model_id=model.id,
+        provider="wadhwani_glaucoma",
+        client_id="client",
+        bearer_token="token",
+    )
+    db_session.add(integration)
+    db_session.flush()
+    return model, integration

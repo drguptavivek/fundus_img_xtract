@@ -21,6 +21,17 @@ def process_direct_upload_thumbnail_task(self, upload_id: int, job_token: str, u
         record = session.query(DirectImageUpload).get(upload_id)
         if not record: raise ValueError(f"DirectImageUpload {upload_id} not found")
         filename, file_path = record.filename, DIRECT_UPLOAD_DIR / record.folder_rel / record.filename
+        if not file_path.exists():
+            message = f"Source image missing; thumbnail skipped: {file_path}"
+            logger.warning(message)
+            db_set_item_state(job_token, filename, "ok", "Source image missing; thumbnail unavailable")
+            return {
+                "upload_id": upload_id,
+                "file_path": str(file_path),
+                "status": "missing",
+                "user_id": user_id,
+                "hospital_id": hospital_id,
+            }
         
         db_set_item_state(job_token, filename, "processing", "Generating thumbnail...")
         process_file_visual(upload_id, 'direct_upload', str(file_path), session)

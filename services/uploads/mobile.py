@@ -58,6 +58,7 @@ from utils.log_sanitize import sanitize_log_value
 MOBILE_UPLOAD_KINDS = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
 MAX_REMARKS_LENGTH = 1000
 AI_PROBABILITY_PATTERN = re.compile(r"AI probability:\s*([0-9.]+)")
+AI_PREDICTED_CLASS_NAME_PATTERN = re.compile(r"Predicted class name:\s*(.+)")
 
 
 class MobileUploadError(ValueError):
@@ -134,9 +135,15 @@ def get_mobile_upload_status_by_idempotency_key(*, db, user_id: int, idempotency
 
 def get_mobile_upload_inference(*, db, user_id: int, upload_token: str) -> dict[str, Any]:
     job = _scoped_job(db, user_id, upload_token)
+    thumbnail_urls = _available_direct_thumbnail_urls(job)
     task_ids = [item.task_id for item in job.items if item.task_id]
     if not task_ids:
-        return {"upload_token": job.token, "status": "not_configured", "results": []}
+        return {
+            "upload_token": job.token,
+            "status": "not_configured",
+            "items": [_inference_item_payload(item, thumbnail_urls, None) for item in job.items],
+            "results": [],
+        }
     runs = (
         db.execute(
             select(AIInferenceRun)
@@ -146,46 +153,97 @@ def get_mobile_upload_inference(*, db, user_id: int, upload_token: str) -> dict[
         .scalars()
         .all()
     )
-    grade_results = _latest_ai_grade_results(db, task_ids, {run.task_id for run in runs})
-    if not runs and not grade_results:
-        return {"upload_token": job.token, "status": "pending", "results": []}
-    run_results = [
-        {
-            "task_id": run.task_id,
-            "ai_model_id": run.ai_model_id,
-            "provider": run.integration.provider if run.integration else None,
-            "status": run.status,
-            "prediction_id": run.prediction_id,
-            "execute_response": run.execute_response_json,
-            "error_code": run.error_code,
-            "error_message": run.error_message,
-            "updated_at": _iso(run.updated_at),
-        }
-        for run in runs
+    latest_runs = _latest_inference_runs_by_task(runs)
+    grade_results = _latest_ai_grade_results(db, task_ids)
+    grades_by_task = {result["task_id"]: result for result in grade_results}
+    item_results = [
+        _inference_item_payload(
+            item,
+            thumbnail_urls,
+            _inference_result_for_item(item, latest_runs, grades_by_task),
+        )
+        for item in job.items
     ]
-    results = run_results + grade_results
-    status = (
-        "complete"
-        if all(result["status"] == "success" for result in results)
-        else "failed"
-        if any(result["status"] == "failed" for result in results)
-        else "running"
-    )
+    results = [item["inference"] for item in item_results if item.get("inference")]
+    status = _aggregate_inference_status(item_results)
     return {
         "upload_token": job.token,
         "status": status,
+        "items": item_results,
         "results": results,
     }
 
 
-def _latest_ai_grade_results(db, task_ids: list[int], run_task_ids: set[int]) -> list[dict[str, Any]]:
-    missing_run_task_ids = [task_id for task_id in task_ids if task_id not in run_task_ids]
-    if not missing_run_task_ids:
-        return []
+def retry_mobile_upload_inference(
+    *,
+    db,
+    user_id: int,
+    upload_token: str,
+    requested_task_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    job = _scoped_job(db, user_id, upload_token)
+    task_ids = [item.task_id for item in job.items if item.task_id]
+    if requested_task_ids:
+        requested = set(requested_task_ids)
+        task_ids = [task_id for task_id in task_ids if task_id in requested]
+    if not task_ids:
+        raise MobileUploadError("No inference-capable images were found for this upload.", code="inference_not_configured", status_code=400)
+
+    latest_runs = _latest_inference_runs_by_task(
+        db.execute(
+            select(AIInferenceRun)
+            .where(AIInferenceRun.task_id.in_(task_ids))
+            .order_by(AIInferenceRun.created_at.desc(), AIInferenceRun.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    retry_task_ids = [
+        task_id
+        for task_id in task_ids
+        if latest_runs.get(task_id) is not None and latest_runs[task_id].status == "failed"
+    ]
+    if not retry_task_ids:
+        raise MobileUploadError("No failed inference results were found to retry.", code="no_failed_inference", status_code=409)
+
+    inference_job_token = db_create_job(
+        [f"task:{task_id}" for task_id in retry_task_ids],
+        [],
+        uploader_user_id=user_id,
+        uploader_username=job.uploader_username,
+        uploader_ip=job.uploader_ip,
+        lab_unit_id=job.lab_unit_id,
+        project_id=job.project_id,
+        upload_type="mobile_direct_image_inference_retry",
+        upload_kind=job.upload_kind,
+        upload_profile_id=job.upload_profile_id,
+    )
+    enqueue_task(
+        "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task",
+        inference_job_token,
+        retry_task_ids,
+        user_id=user_id,
+    )
+    return {
+        "upload_token": job.token,
+        "retry_job_token": inference_job_token,
+        "queued_task_ids": retry_task_ids,
+        "queued_count": len(retry_task_ids),
+    }
+
+
+def _latest_inference_runs_by_task(runs: list[AIInferenceRun]) -> dict[int, AIInferenceRun]:
+    latest: dict[int, AIInferenceRun] = {}
+    for run in runs:
+        latest.setdefault(run.task_id, run)
+    return latest
+
+
+def _latest_ai_grade_results(db, task_ids: list[int]) -> list[dict[str, Any]]:
     grades = (
         db.execute(
             select(Grade)
-            .where(Grade.task_id.in_(missing_run_task_ids))
+            .where(Grade.task_id.in_(task_ids))
             .where(Grade.role_slot == "ai")
             .order_by(Grade.updated_at.desc(), Grade.id.desc())
         )
@@ -206,7 +264,7 @@ def _latest_ai_grade_results(db, task_ids: list[int], run_task_ids: set[int]) ->
                 "status": "success",
                 "prediction_id": None,
                 "prediction": None,
-                "predicted_class_name": grade.grade_name,
+                "predicted_class_name": _predicted_class_name_from_grade_comment(grade.comment) or grade.grade_name,
                 "confidence": _confidence_from_grade_comment(grade.comment),
                 "error_code": None,
                 "error_message": None,
@@ -214,6 +272,78 @@ def _latest_ai_grade_results(db, task_ids: list[int], run_task_ids: set[int]) ->
             }
         )
     return results
+
+
+def _inference_result_for_item(
+    item: JobItem,
+    latest_runs: dict[int, AIInferenceRun],
+    grades_by_task: dict[int, dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not item.task_id:
+        return None
+    grade_result = grades_by_task.get(item.task_id)
+    if grade_result is not None:
+        return grade_result
+    run = latest_runs.get(item.task_id)
+    if run is None:
+        return {
+            "task_id": item.task_id,
+            "ai_model_id": None,
+            "provider": None,
+            "status": "pending",
+            "prediction_id": None,
+            "prediction": None,
+            "predicted_class_name": None,
+            "confidence": None,
+            "error_code": None,
+            "error_message": None,
+            "updated_at": None,
+        }
+    return {
+        "task_id": run.task_id,
+        "ai_model_id": run.ai_model_id,
+        "provider": run.integration.provider if run.integration else None,
+        "status": run.status,
+        "prediction_id": run.prediction_id,
+        "execute_response": run.execute_response_json,
+        "error_code": run.error_code,
+        "error_message": run.error_message,
+        "updated_at": _iso(run.updated_at),
+    }
+
+
+def _inference_item_payload(item: JobItem, thumbnail_urls: dict[str, str], inference: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "filename": item.filename,
+        "state": item.state,
+        "detail": item.detail,
+        "source_type": item.source_type,
+        "source_id": item.source_id,
+        "source_uuid": item.source_uuid,
+        "thumbnail_url": thumbnail_urls.get(item.source_uuid),
+        "task_id": item.task_id,
+        "inference": inference,
+    }
+
+
+def _aggregate_inference_status(items: list[dict[str, Any]]) -> str:
+    statuses = [
+        item["inference"]["status"]
+        for item in items
+        if isinstance(item.get("inference"), dict) and item["inference"].get("status")
+    ]
+    if not statuses:
+        return "not_configured"
+    if all(status == "success" for status in statuses):
+        return "complete"
+    if any(status in {"running", "queued"} for status in statuses):
+        return "running"
+    if any(status == "pending" for status in statuses):
+        return "pending"
+    if any(status == "failed" for status in statuses):
+        return "failed"
+    return "running"
 
 
 def _confidence_from_grade_comment(comment: str | None) -> float | None:
@@ -226,6 +356,16 @@ def _confidence_from_grade_comment(comment: str | None) -> float | None:
         return float(match.group(1))
     except ValueError:
         return None
+
+
+def _predicted_class_name_from_grade_comment(comment: str | None) -> str | None:
+    if not comment:
+        return None
+    match = AI_PREDICTED_CLASS_NAME_PATTERN.search(comment)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value or None
 
 
 def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, image_uuid: str):

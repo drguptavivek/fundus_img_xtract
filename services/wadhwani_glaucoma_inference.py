@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 import mimetypes
 import re
+import requests
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -248,6 +249,42 @@ def run_task_inference(
             predicted_class_name=None,
             grade_impression=None,
             error_code=exc.error_code,
+        )
+    except requests.RequestException as exc:
+        message = f"Wadhwani request failed: {exc}"
+        _mark_run_failed(run_id, "request_failed", None, None, message)
+        return WadhwaniInferenceResult(
+            task_id=task_id,
+            ai_model_id=ai_model_id,
+            inference_run_id=run_id,
+            grade_id=None,
+            status="failed",
+            message=message,
+            reused_existing_grade=False,
+            prediction_id=None,
+            confidence=None,
+            predicted_class=None,
+            predicted_class_name=None,
+            grade_impression=None,
+            error_code="request_failed",
+        )
+    except Exception as exc:
+        message = f"Wadhwani inference failed: {exc}"
+        _mark_run_failed(run_id, "unexpected_error", None, None, message)
+        return WadhwaniInferenceResult(
+            task_id=task_id,
+            ai_model_id=ai_model_id,
+            inference_run_id=run_id,
+            grade_id=None,
+            status="failed",
+            message=message,
+            reused_existing_grade=False,
+            prediction_id=None,
+            confidence=None,
+            predicted_class=None,
+            predicted_class_name=None,
+            grade_impression=None,
+            error_code="unexpected_error",
         )
 
 
@@ -527,6 +564,7 @@ def _mark_run_failed(run_id: int, error_code: str, http_status: int | None, payl
         elif error_code == "execute_failed":
             run.execute_response_json = payload if isinstance(payload, dict) else None
         run.finished_at = utcnow()
+        db.flush()
 
 
 def _restore_grade_from_cached_run(db, *, task: GradingTask, integration: AIModelIntegration, ai_system: User, execute_payload: dict[str, Any]) -> Grade:
@@ -590,11 +628,7 @@ def _map_result_to_grading(db, disease_id: int, result_row: dict[str, Any]) -> D
     prediction = (result_row.get("prediction") or "").strip().lower()
     predicted_class = result_row.get("predicted_class")
 
-    positive = (
-        prediction == "referrable"
-        or predicted_class == 1
-        or "glaucoma" in predicted_class_name
-    )
+    positive = prediction == "referrable" or predicted_class == 1
     impression = "Glaucoma" if positive else "Normal"
     grading = db.execute(
         select(DiseaseGrading)

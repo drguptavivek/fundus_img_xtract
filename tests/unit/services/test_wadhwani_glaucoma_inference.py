@@ -1,6 +1,8 @@
 from pathlib import Path
 from uuid import uuid4
 
+import requests
+
 from models import (
     AIInferenceRun,
     AIModel,
@@ -163,6 +165,30 @@ def test_run_task_inference_reuses_cached_successful_run(app, db_session):
     assert grade.grade_name == "Glaucoma"
     assert "AI probability: 0.7700" in (grade.comment or "")
     assert db_session.query(AIInferenceRun).filter_by(task_id=task.id, ai_model_id=model.id).count() == 1
+
+
+def test_run_task_inference_marks_request_exception_failed(app, db_session, monkeypatch):
+    model, _integration = _linked_integration(db_session)
+    task = _direct_task(db_session)
+    _ai_system(db_session)
+
+    def raise_connection_error(**kwargs):
+        raise requests.ConnectionError("DNS failed")
+
+    monkeypatch.setattr(
+        "services.wadhwani_glaucoma_inference.initialize_prediction",
+        raise_connection_error,
+    )
+
+    result = run_task_inference(task_id=task.id, requested_by_user_id=None, force=False)
+
+    assert result.status == "failed"
+    assert result.error_code == "request_failed"
+    db_session.expire_all()
+    run = db_session.query(AIInferenceRun).filter_by(task_id=task.id, ai_model_id=model.id).one()
+    assert run.status == "failed"
+    assert run.error_code == "request_failed"
+    assert "DNS failed" in (run.error_message or "")
 
 
 def test_run_task_inference_rejects_encounter_set_task(app, db_session):

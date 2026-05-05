@@ -223,17 +223,64 @@ Success response: `200 OK`
 ```json
 {
   "upload_token": "uuid",
-  "status": "pending",
-  "results": []
+  "status": "running",
+  "items": [
+    {
+      "filename": "disc.jpg",
+      "state": "ok",
+      "source_uuid": "image-uuid",
+      "thumbnail_url": "/api/mobile/v1/uploads/uuid/images/image-uuid/thumbnail",
+      "task_id": 123,
+      "inference": {
+        "task_id": 123,
+        "provider": "wadhwani_glaucoma",
+        "status": "success",
+        "prediction_id": "remote-prediction-id",
+        "execute_response": {
+          "results": [
+            {
+              "prediction": "referrable",
+              "predicted_class": 1,
+              "predicted_class_name": "Glaucoma Present",
+              "model_score": 0.523
+            }
+          ]
+        },
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-05-05T05:30:00+00:00"
+      }
+    }
+  ],
+  "results": [
+    {
+      "task_id": 123,
+      "provider": "wadhwani_glaucoma",
+      "status": "success",
+      "prediction_id": "remote-prediction-id",
+      "execute_response": {
+        "results": [
+          {
+            "prediction": "referrable",
+            "predicted_class": 1,
+            "predicted_class_name": "Glaucoma Present",
+            "model_score": 0.523
+          }
+        ]
+      }
+    }
+  ]
 }
 ```
 
 `status` values:
 - `not_configured`: no task-linked items exist
-- `pending`: task-linked items exist but no inference runs have been recorded
+- `pending`: at least one task-linked item has no recorded inference run yet
 - `running`: at least one inference run is still in progress
-- `complete`: all returned runs succeeded
-- `failed`: at least one returned run failed
+- `complete`: all task-linked items succeeded
+- `failed`: at least one task-linked item failed and none are still pending/running
+
+The `items` array is the UI source of truth for polling. Each image returns its own `inference` object as soon as that image has a known result, so clients should update image tiles independently and should not wait for the whole upload batch to complete.
 
 Result fields, when present:
 - `task_id`
@@ -245,6 +292,35 @@ Result fields, when present:
 - `error_code`
 - `error_message`
 - `updated_at`
+
+Clients should display Wadhwani result text from the remote payload without deriving present/absent from local grade labels. For glaucoma, use `execute_response.results[0].predicted_class_name` and show `model_score` or `confidence` as a percent with one decimal place.
+
+## `POST /uploads/<upload_token>/inference/retry`
+
+Queues Wadhwani inference again for failed image tasks in a mobile upload. Passing `task_ids` limits the retry to specific images; omitting it retries all failed task-linked images in the upload.
+
+Request:
+
+```json
+{
+  "task_ids": [123]
+}
+```
+
+Success response: `202 Accepted`
+
+```json
+{
+  "upload_token": "uuid",
+  "retry_job_token": "retry-job-uuid",
+  "queued_task_ids": [123],
+  "queued_count": 1
+}
+```
+
+Errors:
+- `400 inference_not_configured`: the upload has no task-linked images or the requested task IDs do not belong to this upload
+- `409 no_failed_inference`: no selected image currently has a failed inference run
 
 ## `GET /uploads/<upload_token>/images/<image_uuid>/thumbnail`
 

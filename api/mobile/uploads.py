@@ -11,6 +11,7 @@ from services.uploads import (
     get_mobile_upload_inference,
     get_mobile_upload_status,
     get_mobile_upload_status_by_idempotency_key,
+    retry_mobile_upload_inference,
     run_mobile_upload_post_commit,
 )
 from upload_profiles.service import UploadProfileError
@@ -84,6 +85,34 @@ def upload_inference(upload_token: str):
     try:
         with transaction_scope() as db:
             return jsonify(get_mobile_upload_inference(db=db, user_id=user_id, upload_token=upload_token))
+    except MobileUploadError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@mobile_api_bp.route("/uploads/<upload_token>/inference/retry", methods=["POST"])
+@token_auth_required
+def retry_upload_inference(upload_token: str):
+    user_id = _mobile_user_id()
+    if not user_id:
+        return jsonify({"error": "Invalid access token"}), 401
+    payload = request.get_json(silent=True) or {}
+    task_ids = payload.get("task_ids")
+    if task_ids is not None:
+        if not isinstance(task_ids, list):
+            return jsonify({"error": "invalid_task_ids", "message": "task_ids must be a list of task IDs."}), 400
+        try:
+            task_ids = [int(task_id) for task_id in task_ids]
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid_task_ids", "message": "task_ids must contain integer task IDs."}), 400
+    try:
+        with transaction_scope() as db:
+            payload = retry_mobile_upload_inference(
+                db=db,
+                user_id=user_id,
+                upload_token=upload_token,
+                requested_task_ids=task_ids,
+            )
+            return jsonify(payload), 202
     except MobileUploadError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 

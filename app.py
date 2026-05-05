@@ -799,36 +799,17 @@ def _register_utility_routes(app: Flask) -> None:
 
     @app.get("/mobile/download/android")
     def _mobile_android_apk_download():
-        root = _mobile_pwa_root()
-        return _send_mobile_download(
-            root,
-            "eim-uploader-inferencer.apk",
-            "application/vnd.android.package-archive",
-        )
+        return redirect(_mobile_android_release_url(), code=302)
 
     @app.get("/mobile/download/android-bundle")
     def _mobile_android_aab_download():
-        root = _mobile_pwa_root()
-        return _send_mobile_download(
-            root,
-            "eim-uploader-inferencer.aab",
-            "application/octet-stream",
-        )
+        return redirect(_mobile_android_release_url(), code=302)
 
-    def _send_mobile_download(root: Path, filename: str, mimetype: str):
-        relative_path = Path("downloads") / filename
-        file_path = (root / relative_path).resolve()
-        if not file_path.is_file() or root not in file_path.parents:
-            abort(404)
-        response = send_from_directory(
-            root,
-            str(relative_path),
-            as_attachment=True,
-            download_name=filename,
-            mimetype=mimetype,
+    def _mobile_android_release_url() -> str:
+        return str(
+            current_app.config.get("MOBILE_ANDROID_RELEASE_URL")
+            or "https://github.com/drguptavivek/fundus_glaucoma_mobile/releases/latest"
         )
-        response.cache_control.no_cache = True
-        return response
 
     @app.get("/mobile/")
     @app.get("/mobile/<path:requested_path>")

@@ -26,7 +26,7 @@ from upload_profiles.service import (
 from tests.helpers.factories import UserFactory
 
 
-JWT_SECRET = "test-mobile-uploads-secret"
+JWT_SECRET = "test-mobile-uploads-secret-32-chars"
 _SEQUENCE = count(1)
 
 
@@ -106,6 +106,7 @@ def test_mobile_upload_rejects_pregraded_kind(client, monkeypatch, mobile_upload
 def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, db_session, monkeypatch, mobile_upload_data):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    client.application.config["WTF_CSRF_ENABLED"] = True
 
     response = client.post(
         "/api/mobile/v1/uploads",
@@ -139,7 +140,17 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
         headers={"Authorization": f"Bearer {token}"},
     )
     assert status_response.status_code == 200
-    assert status_response.get_json()["items"][0]["source_type"] == "direct_image"
+    status_payload = status_response.get_json()
+    assert status_payload["items"][0]["source_type"] == "direct_image"
+    thumbnail_url = status_payload["items"][0]["thumbnail_url"]
+    assert thumbnail_url.startswith(f"/api/mobile/v1/uploads/{payload['upload_token']}/images/")
+
+    thumbnail_response = client.get(
+        thumbnail_url,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert thumbnail_response.status_code == 200
+    assert thumbnail_response.content_type.startswith("image/")
 
     replay_response = client.post(
         "/api/mobile/v1/uploads",
@@ -255,6 +266,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
 def test_mobile_upload_inference_returns_not_configured(client, monkeypatch, mobile_upload_data):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    client.application.config["WTF_CSRF_ENABLED"] = True
     job = Job(
         token="mobile-inference-token",
         status="completed",

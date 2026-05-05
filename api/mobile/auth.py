@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 
 from auth.utils import get_client_ip
 from db_transaction_manager import transaction_scope
@@ -51,6 +51,11 @@ def login():
             )
     except MobileAuthError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+    except RuntimeError as exc:
+        if "JWT_SECRET" not in str(exc) and "secret configured" not in str(exc):
+            raise
+        current_app.logger.error("Mobile auth secret configuration error: %s", exc)
+        return jsonify({"error": "server_configuration_error", "message": "Server configuration error"}), 500
 
 
 @mobile_api_bp.route("/auth/refresh", methods=["POST"])

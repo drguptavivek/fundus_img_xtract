@@ -569,6 +569,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(rate_limit_admin_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
+    csrf.exempt(mobile_api_bp)
     app.register_blueprint(mobile_api_bp)
     app.register_blueprint(docs_bp)
     app.register_blueprint(datasets_bp)

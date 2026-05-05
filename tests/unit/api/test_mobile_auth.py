@@ -85,6 +85,50 @@ def test_mobile_login_returns_token_shapes(client, db_session, monkeypatch):
     assert stored_session.refresh_token_hash == hash_refresh_token(payload["refresh_token"])
 
 
+def test_mobile_login_is_exempt_from_browser_csrf(client, db_session, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    client.application.config["WTF_CSRF_ENABLED"] = True
+    user, _, _ = _seed_mobile_user(db_session)
+
+    response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": "Test@2026",
+            "device_id": "device-no-csrf",
+            "device_name": "Mobile App",
+        },
+        headers={"Accept": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.content_type.startswith("application/json")
+    assert response.get_json()["token_type"] == "Bearer"
+
+
+def test_mobile_login_returns_json_when_jwt_secret_missing(client, db_session, monkeypatch):
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    user, _, _ = _seed_mobile_user(db_session)
+
+    response = client.post(
+        "/api/mobile/v1/auth/login",
+        json={
+            "username": user.username,
+            "password": "Test@2026",
+            "device_id": "device-missing-secret",
+            "device_name": "Mobile App",
+        },
+        headers={"Accept": "application/json"},
+    )
+
+    assert response.status_code == 500
+    assert response.content_type.startswith("application/json")
+    assert response.get_json() == {
+        "error": "server_configuration_error",
+        "message": "Server configuration error",
+    }
+
+
 def test_mobile_context_returns_user_hospital_and_token_shape(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, hospital, lab_unit = _seed_mobile_user(db_session)

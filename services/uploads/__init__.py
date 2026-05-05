@@ -3,9 +3,11 @@
 from .mobile import (
     MobileUploadError,
     create_mobile_upload,
+    get_mobile_direct_upload_thumbnail,
     get_mobile_upload_inference,
     get_mobile_upload_status,
     get_mobile_upload_status_by_idempotency_key,
+    run_mobile_upload_post_commit,
     serialize_mobile_upload_options,
 )
 from .direct import (
@@ -31,7 +33,9 @@ __all__ = [
     "direct_upload_response_payload",
     "enqueue_direct_upload_post_commit",
     "get_mobile_upload_inference",
+    "get_mobile_direct_upload_thumbnail",
     "get_mobile_upload_status",
     "get_mobile_upload_status_by_idempotency_key",
+    "run_mobile_upload_post_commit",
     "serialize_mobile_upload_options",
 ]

@@ -9,13 +9,24 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from flask import current_app
+from flask import current_app, send_file
 from sqlalchemy import select
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.utils import secure_filename
 
 from auth.utils import utcnow
-from models import AIInferenceRun, AIModelIntegration, EncounterSetImage, Job, JobItem, PatientEncounters, User
+from job_store import db_create_job
+from models import (
+    AIInferenceRun,
+    AIModelIntegration,
+    DIRECT_UPLOAD_DIR,
+    DirectImageUpload,
+    EncounterSetImage,
+    Job,
+    JobItem,
+    PatientEncounters,
+    User,
+)
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from .direct import (
     DirectUploadActor,
@@ -23,6 +34,7 @@ from .direct import (
     DirectUploadJobRequest,
     create_direct_upload_job,
     direct_upload_response_payload,
+    enqueue_direct_upload_post_commit,
 )
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.service import (
@@ -34,6 +46,9 @@ from upload_profiles.service import (
     validate_profile_upload_scope,
     validate_remedio_upload_scope,
 )
+from utils.celery_helpers import enqueue_task
+from utils.fileUtils import get_direct_thumbnail_serving_path
+from utils.log_sanitize import sanitize_log_value
 
 
 MOBILE_UPLOAD_KINDS = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
@@ -149,6 +164,29 @@ def get_mobile_upload_inference(*, db, user_id: int, upload_token: str) -> dict[
     }
 
 
+def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, image_uuid: str):
+    job = _scoped_job(db, user_id, upload_token)
+    allowed_uuids = {item.source_uuid for item in job.items if item.source_type == "direct_image" and item.source_uuid}
+    if image_uuid not in allowed_uuids:
+        raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
+    image = db.execute(select(DirectImageUpload).where(DirectImageUpload.uuid == image_uuid)).scalar_one_or_none()
+    if image is None or image.uploader_id != user_id:
+        raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
+
+    try:
+        thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(image.folder_rel, image.filename, "orig")
+        thumbnail_path = thumbnail_dir / thumbnail_filename
+        if thumbnail_path.exists():
+            return send_file(thumbnail_path, mimetype="image/jpeg", as_attachment=False)
+    except Exception:
+        current_app.logger.info("Mobile thumbnail missing for %s", sanitize_log_value(image_uuid))
+
+    image_path = DIRECT_UPLOAD_DIR / image.folder_rel / image.filename
+    if not image_path.exists():
+        raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
+    return send_file(image_path, as_attachment=False)
+
+
 def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
     profile_id = _required_int(form, "profile_id")
     project_id = _required_int(form, "project_id")
@@ -179,7 +217,61 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
         )
     except DirectUploadJobError as exc:
         raise MobileUploadError(exc.message, code=exc.code, status_code=exc.status_code) from exc
-    return direct_upload_response_payload(result)
+    payload = direct_upload_response_payload(result)
+    payload["_post_commit"] = {
+        "kind": "direct_image",
+        "user_id": actor.user_id,
+        "username": actor.username,
+        "remote_addr": actor.remote_addr,
+        "job_token": result.job.token,
+        "upload_ids": list(result.upload_ids_for_post_commit),
+        "hospital_id": result.hospital_id_for_post_commit,
+        "lab_unit_id": lab_unit_id,
+        "project_id": project_id,
+        "profile_id": profile_id,
+        "inference_task_ids": list(result.inference_task_ids_for_post_commit),
+    }
+    return payload
+
+
+def run_mobile_upload_post_commit(app, post_commit: dict[str, Any] | None) -> None:
+    if not post_commit or post_commit.get("kind") != "direct_image":
+        return
+    try:
+        enqueue_direct_upload_post_commit(
+            app,
+            user_id=int(post_commit["user_id"]),
+            upload_ids=tuple(int(upload_id) for upload_id in post_commit.get("upload_ids", [])),
+            job_token=str(post_commit["job_token"]),
+            hospital_id=post_commit.get("hospital_id"),
+        )
+    except Exception as exc:
+        app.logger.warning("Could not queue mobile direct upload post-processing: %s", sanitize_log_value(exc))
+
+    task_ids = [int(task_id) for task_id in post_commit.get("inference_task_ids", []) if task_id]
+    if not task_ids:
+        return
+    try:
+        inference_job_token = db_create_job(
+            [f"task:{task_id}" for task_id in task_ids],
+            [],
+            uploader_user_id=int(post_commit["user_id"]),
+            uploader_username=post_commit.get("username"),
+            uploader_ip=post_commit.get("remote_addr"),
+            lab_unit_id=post_commit.get("lab_unit_id"),
+            project_id=post_commit.get("project_id"),
+            upload_type="mobile_direct_image_inference",
+            upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+            upload_profile_id=post_commit.get("profile_id"),
+        )
+        enqueue_task(
+            "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task",
+            inference_job_token,
+            task_ids,
+            user_id=int(post_commit["user_id"]),
+        )
+    except Exception as exc:
+        app.logger.warning("Could not queue mobile direct upload inference: %s", sanitize_log_value(exc))
 
 
 def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
@@ -449,6 +541,11 @@ def _job_payload(job: Job) -> dict[str, Any]:
                 "source_type": item.source_type,
                 "source_id": item.source_id,
                 "source_uuid": item.source_uuid,
+                "thumbnail_url": (
+                    f"/api/mobile/v1/uploads/{job.token}/images/{item.source_uuid}/thumbnail"
+                    if item.source_type == "direct_image" and item.source_uuid
+                    else None
+                ),
                 "task_id": item.task_id,
                 "started_at": _iso(item.started_at),
                 "finished_at": _iso(item.finished_at),

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
 from services.uploads import (
     MobileUploadError,
     create_mobile_upload,
+    get_mobile_direct_upload_thumbnail,
     get_mobile_upload_inference,
     get_mobile_upload_status,
     get_mobile_upload_status_by_idempotency_key,
+    run_mobile_upload_post_commit,
 )
 from upload_profiles.service import UploadProfileError
 
@@ -32,7 +34,9 @@ def create_upload():
                 remote_addr=request.remote_addr,
             )
             status_code = 200 if payload.pop("_replayed", False) else 201
-            return jsonify(payload), status_code
+            post_commit = payload.pop("_post_commit", None)
+        run_mobile_upload_post_commit(current_app, post_commit)
+        return jsonify(payload), status_code
     except UploadProfileError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), 403
     except MobileUploadError as exc:
@@ -80,6 +84,24 @@ def upload_inference(upload_token: str):
     try:
         with transaction_scope() as db:
             return jsonify(get_mobile_upload_inference(db=db, user_id=user_id, upload_token=upload_token))
+    except MobileUploadError as exc:
+        return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
+
+
+@mobile_api_bp.route("/uploads/<upload_token>/images/<image_uuid>/thumbnail", methods=["GET"])
+@token_auth_required
+def upload_image_thumbnail(upload_token: str, image_uuid: str):
+    user_id = _mobile_user_id()
+    if not user_id:
+        return jsonify({"error": "Invalid access token"}), 401
+    try:
+        with transaction_scope() as db:
+            return get_mobile_direct_upload_thumbnail(
+                db=db,
+                user_id=user_id,
+                upload_token=upload_token,
+                image_uuid=image_uuid,
+            )
     except MobileUploadError as exc:
         return jsonify({"error": exc.code, "message": exc.message}), exc.status_code
 

@@ -54,6 +54,7 @@ class DirectUploadJobResult:
     inference_available: bool
     upload_ids_for_post_commit: tuple[int, ...] = ()
     hospital_id_for_post_commit: int | None = None
+    inference_task_ids_for_post_commit: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -190,6 +191,7 @@ def create_direct_upload_job(
         rejected_count=batch.error_count,
         inference_available=executable_workflow and any(item.task_id for item in batch.items),
         upload_ids_for_post_commit=tuple(item.upload_id for item in batch.items if item.upload_id),
+        inference_task_ids_for_post_commit=tuple(item.task_id for item in batch.items if executable_workflow and item.task_id),
     )
 
 
@@ -255,6 +257,7 @@ def create_web_direct_upload_from_form(*, db, user_id: int, username: str | None
         inference_available=result.inference_available,
         upload_ids_for_post_commit=result.upload_ids_for_post_commit,
         hospital_id_for_post_commit=lab_unit.hospital_id,
+        inference_task_ids_for_post_commit=result.inference_task_ids_for_post_commit,
     )
 
 

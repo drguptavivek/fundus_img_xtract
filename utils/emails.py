@@ -504,3 +504,27 @@ The System Administrator
             callback(success)
 
     return send_email(to_email, subject, body, reset_callback, sensitive=True)
+
+
+def send_password_reset_email_sync(
+    to_email: str,
+    username: str,
+    new_password: str,
+) -> bool:
+    """
+    Synchronously send a password reset confirmation email with the new password.
+    """
+    subject = "Your Password Has Been Reset"
+    body = f"""
+Hello {username},
+
+Your password has been reset successfully. Your new password is:
+
+{new_password}
+
+Please log in and change it after your next sign-in if required.
+
+Thank you,
+The System Administrator
+"""
+    return send_email_sync(to_email, subject, body, sensitive=True)

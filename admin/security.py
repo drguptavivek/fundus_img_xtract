@@ -5,7 +5,7 @@ from sqlalchemy import select, func
 from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password, generate_strong_password
-from utils.emails import send_password_reset_email
+from utils.emails import send_password_reset_email_sync
 from auth.route_analyzer import analyze_all_routes, get_role_usage_statistics, get_routes_by_role
 from models import User, Role
 from db_transaction_manager import transaction_scope, get_db_session
@@ -22,6 +22,8 @@ def change_password():
         username: str,
         email: str,
         generated_password: str | None = None,
+        email_attempted: bool = False,
+        email_sent: bool = False,
     ):
         if request.headers.get("HX-Request") or request.args.get("format") == "partial":
             return render_template(
@@ -30,6 +32,8 @@ def change_password():
                 username=username,
                 email=email,
                 generated_password=generated_password,
+                email_attempted=email_attempted,
+                email_sent=email_sent,
             )
         return render_template("admin/change_password.html", username=username, email=email)
 
@@ -58,18 +62,35 @@ def change_password():
             email = user.email or ""
             user_id = user.id
 
+        email_attempted = bool(email)
+        email_sent = False
         if email:
-            send_password_reset_email(email, username, generated_password)
+            email_sent = send_password_reset_email_sync(email, username, generated_password)
 
         if request.headers.get("HX-Request") or request.args.get("format") == "partial":
-            if email:
-                flash(f"Password updated for '{username}' and emailed to the user.", "success")
-                return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))
-            flash(
-                "Password reset. This user has no email address; copy the password and convey it securely.",
-                "warning",
+            if email_sent:
+                flash(
+                    f"Password updated for '{username}' and emailed to the user. Copy it if you also need to convey it manually.",
+                    "success",
+                )
+            elif email_attempted:
+                flash(
+                    "Password reset, but email delivery failed. Copy the password and convey it securely.",
+                    "warning",
+                )
+            else:
+                flash(
+                    "Password reset. This user has no email address; copy the password and convey it securely.",
+                    "warning",
+                )
+            return render_password_form(
+                user_id,
+                username,
+                email,
+                generated_password,
+                email_attempted,
+                email_sent,
             )
-            return render_password_form(user_id, username, email, generated_password)
 
         return render_template(
             "admin/password_reset_done.html",
@@ -77,6 +98,8 @@ def change_password():
                 "username": username,
                 "email": email,
                 "password": generated_password,
+                "email_attempted": email_attempted,
+                "email_sent": email_sent,
             },
         )
 

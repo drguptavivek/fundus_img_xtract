@@ -24,6 +24,7 @@ from upload_profiles.service import (
     UPLOAD_KIND_REMIDIO,
 )
 from tests.helpers.factories import UserFactory
+from utils.fileUtils import abs_from_parts, get_thumbnail_path_direct
 
 
 JWT_SECRET = "test-mobile-uploads-secret-32-chars"
@@ -151,6 +152,17 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     )
     assert thumbnail_response.status_code == 200
     assert thumbnail_response.content_type.startswith("image/")
+
+    source_path = abs_from_parts(upload.folder_rel, upload.filename, "orig")
+    thumbnail_path = get_thumbnail_path_direct(upload.folder_rel, upload.filename, "orig")
+    source_path.unlink(missing_ok=True)
+    thumbnail_path.unlink(missing_ok=True)
+    missing_file_status_response = client.get(
+        f"/api/mobile/v1/uploads/{payload['upload_token']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert missing_file_status_response.status_code == 200
+    assert missing_file_status_response.get_json()["items"][0]["thumbnail_url"] is None
 
     replay_response = client.post(
         "/api/mobile/v1/uploads",

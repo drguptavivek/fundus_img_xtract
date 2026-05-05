@@ -12,6 +12,7 @@ from typing import Any
 
 from flask import current_app, send_file
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.utils import secure_filename
 
@@ -580,14 +581,19 @@ def _upload_response(job: Job, *, upload_kind: str, accepted: int, rejected: int
 
 
 def _upload_response_from_job(job: Job) -> dict[str, Any]:
-    accepted = sum(1 for item in job.items if item.state in {"completed", "queued", "running"})
+    accepted = sum(
+        1 for item in job.items if item.state in {"completed", "queued", "running"}
+    )
     rejected = sum(1 for item in job.items if item.state == "error")
-    payload = _upload_response(job, upload_kind=job.upload_kind or "", accepted=accepted, rejected=rejected)
+    payload = _upload_response(
+        job, upload_kind=job.upload_kind or "", accepted=accepted, rejected=rejected
+    )
     payload["_replayed"] = True
     return payload
 
 
 def _job_payload(job: Job) -> dict[str, Any]:
+    thumbnail_urls = _available_direct_thumbnail_urls(job)
     return {
         "upload_token": job.token,
         "upload_kind": job.upload_kind,
@@ -606,11 +612,7 @@ def _job_payload(job: Job) -> dict[str, Any]:
                 "source_type": item.source_type,
                 "source_id": item.source_id,
                 "source_uuid": item.source_uuid,
-                "thumbnail_url": (
-                    f"/api/mobile/v1/uploads/{job.token}/images/{item.source_uuid}/thumbnail"
-                    if item.source_type == "direct_image" and item.source_uuid
-                    else None
-                ),
+                "thumbnail_url": thumbnail_urls.get(item.source_uuid),
                 "task_id": item.task_id,
                 "started_at": _iso(item.started_at),
                 "finished_at": _iso(item.finished_at),
@@ -618,6 +620,44 @@ def _job_payload(job: Job) -> dict[str, Any]:
             for item in job.items
         ],
     }
+
+
+def _available_direct_thumbnail_urls(job: Job) -> dict[str, str]:
+    image_ids = {
+        item.source_id
+        for item in job.items
+        if item.source_type == "direct_image" and item.source_id and item.source_uuid
+    }
+    if not image_ids:
+        return {}
+    db = object_session(job)
+    if db is None:
+        return {}
+    images = (
+        db.execute(
+            select(DirectImageUpload).where(DirectImageUpload.id.in_(image_ids))
+        )
+        .scalars()
+        .all()
+    )
+    urls: dict[str, str] = {}
+    for image in images:
+        if not _direct_image_available(image):
+            continue
+        urls[image.uuid] = f"/api/mobile/v1/uploads/{job.token}/images/{image.uuid}/thumbnail"
+    return urls
+
+
+def _direct_image_available(image: DirectImageUpload) -> bool:
+    try:
+        thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
+            image.folder_rel, image.filename, "orig"
+        )
+        if (thumbnail_dir / thumbnail_filename).exists():
+            return True
+    except Exception:
+        pass
+    return (DIRECT_UPLOAD_DIR / image.folder_rel / image.filename).exists()
 
 
 def _scoped_job(db, user_id: int, upload_token: str) -> Job:

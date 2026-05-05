@@ -502,19 +502,35 @@ def schedule_direct_upload_thumbnails(direct_upload_id: int, app, user_context: 
 
             # Schedule original image thumbnail if missing
             if direct_upload.filename and not direct_upload.thumbnail_filename:
-                image_references.append({
-                    'image_id': direct_upload.id,
-                    'folder_rel': direct_upload.folder_rel,
-                    'filename': direct_upload.filename
-                })
+                source_path = abs_from_parts(direct_upload.folder_rel, direct_upload.filename, "orig")
+                if source_path.exists():
+                    image_references.append({
+                        'image_id': direct_upload.id,
+                        'folder_rel': direct_upload.folder_rel,
+                        'filename': direct_upload.filename
+                    })
+                else:
+                    logger.info(
+                        "Skipping thumbnail for direct upload %s because source image is missing: %s",
+                        sanitize_log_value(direct_upload_id),
+                        sanitize_log_value(source_path),
+                    )
 
             # Schedule edited image thumbnail if missing
             if direct_upload.edited_filename and not direct_upload.edited_thumbnail_filename:
-                image_references.append({
-                    'image_id': direct_upload.id,
-                    'folder_rel': direct_upload.folder_rel,
-                    'edited_filename': direct_upload.edited_filename
-                })
+                source_path = abs_from_parts(direct_upload.folder_rel, direct_upload.edited_filename, "edited")
+                if source_path.exists():
+                    image_references.append({
+                        'image_id': direct_upload.id,
+                        'folder_rel': direct_upload.folder_rel,
+                        'edited_filename': direct_upload.edited_filename
+                    })
+                else:
+                    logger.info(
+                        "Skipping edited thumbnail for direct upload %s because source image is missing: %s",
+                        sanitize_log_value(direct_upload_id),
+                        sanitize_log_value(source_path),
+                    )
 
             if not image_references:
                 logger.warning(

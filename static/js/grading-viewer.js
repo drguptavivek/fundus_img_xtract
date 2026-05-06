@@ -41,11 +41,14 @@
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
   const VIEWER_SETTINGS_KEY = 'imggrViewerSettings';
   const VIEWER_PRESETS_KEY = 'imggrViewerPresets';
+  const VIEWER_ZOOM_KEY = 'imggrViewerZoom';
   const IMG_PAN_STEP = 28;
   const ZOOM_MIN = 40;
   const ZOOM_MAX = 500;
   const ZOOM_STEP = 20;
   const KEYBOARD_ZOOM_STEP = 5;
+  let viewerPresetsCache = null;
+  let viewerPresetsPromise = null;
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
@@ -74,12 +77,56 @@
 
   async function fetchViewerPresets() {
     try {
-      const response = await fetch('/api/viewer/presets');
-      if (response.ok) {
-        return await response.json();
-      }
-      return {};
+      if (viewerPresetsCache) return viewerPresetsCache;
+      if (viewerPresetsPromise) return await viewerPresetsPromise;
+      viewerPresetsPromise = fetch('/api/viewer/presets')
+        .then(async (response) => response.ok ? await response.json() : {})
+        .catch(() => ({}))
+        .finally(() => {
+          viewerPresetsPromise = null;
+        });
+      viewerPresetsCache = await viewerPresetsPromise;
+      return viewerPresetsCache || {};
     } catch(_) { return {}; }
+  }
+
+  function rememberViewerPreset(slotNumber, preset) {
+    viewerPresetsCache = { ...(viewerPresetsCache || {}) };
+    viewerPresetsCache[String(slotNumber)] = preset;
+  }
+
+  function forgetViewerPreset(slotNumber) {
+    if (!viewerPresetsCache) return;
+    viewerPresetsCache = { ...viewerPresetsCache };
+    delete viewerPresetsCache[String(slotNumber)];
+  }
+
+  function readViewerZoomState(imageUuid) {
+    if (!imageUuid) return null;
+    try {
+      const raw = window.sessionStorage?.getItem(`${VIEWER_ZOOM_KEY}:${imageUuid}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return {
+        zoom: clamp(Number(parsed.zoom) || 100, ZOOM_MIN, ZOOM_MAX),
+        panX: Number(parsed.panX) || 0,
+        panY: Number(parsed.panY) || 0,
+      };
+    } catch(_) {
+      return null;
+    }
+  }
+
+  function writeViewerZoomState(imageUuid, state) {
+    if (!imageUuid || !state) return;
+    try {
+      window.sessionStorage?.setItem(`${VIEWER_ZOOM_KEY}:${imageUuid}`, JSON.stringify({
+        zoom: clamp(Number(state.zoom) || 100, ZOOM_MIN, ZOOM_MAX),
+        panX: Number(state.panX) || 0,
+        panY: Number(state.panY) || 0,
+      }));
+    } catch(_) {}
   }
 
   async function saveViewerPreset(slotNumber, preset) {
@@ -109,6 +156,9 @@
         const errorText = await response.text();
         console.error('saveViewerPreset error response:', errorText);
       }
+      if (response.ok) {
+        rememberViewerPreset(slotNumber, preset);
+      }
       
       return response.ok;
     } catch(error) {
@@ -132,6 +182,9 @@
         method: 'DELETE',
         headers
       });
+      if (response.ok) {
+        forgetViewerPreset(slotNumber);
+      }
       return response.ok;
     } catch(_) { return false; }
   }
@@ -412,6 +465,13 @@
     let cdrRedrawTimer = null;
     let cdrBubble = null;
     let cdrBubbleTimer = null;
+
+    const savedZoomState = readViewerZoomState(uuid);
+    if (savedZoomState) {
+      currentZoom = savedZoomState.zoom;
+      imgPanX = savedZoomState.panX;
+      imgPanY = savedZoomState.panY;
+    }
 
     function isPanLocked() {
       return root?.dataset?.imggrPanLocked === 'true';
@@ -858,6 +918,11 @@
           loupeEnabled: loupeEnabled
         };
         window.localStorage?.setItem(VIEWER_SETTINGS_KEY, JSON.stringify(settings));
+        writeViewerZoomState(uuid, {
+          zoom: currentZoom,
+          panX: imgPanX,
+          panY: imgPanY,
+        });
       } catch(e) {
         console.error('Error saving viewer settings to localStorage:', e);
       }
@@ -2252,7 +2317,8 @@
       updateZoomControlLocks();
     }
 
-    // Zoom/pan are not persisted across images
+    // Zoom/pan are restored per image UUID so repeated partial renders of the
+    // same image do not reset the viewer.
 
     updateViewportSize();
     applyImagePan();

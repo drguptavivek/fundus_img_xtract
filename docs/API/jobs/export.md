@@ -20,6 +20,7 @@ Behavior:
 - The caller must either have access to the job’s lab unit or be the original uploader
 - Dataset exports require the dataset to still exist, be active, finalized, and contain selected tasks
 - Discrepancy exports are rebuilt from the stored `filters.json`
+- Generated Excel rows include grade timestamp columns for `resident_grade`, `resident2_grade`, `arbitrator_grade`, `review_grade`, `regrade_adj_grade`, and `ai_grade`. Timestamp columns use ISO 8601 strings and are named with the `_date` suffix, for example `resident_grade_date`.
 
 Success response:
 - `302` redirect back to the job status page

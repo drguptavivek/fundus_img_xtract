@@ -444,6 +444,58 @@ def _load_ai_model_meta(task_ids: Sequence[int]) -> Dict[int, Dict[str, Optional
     return meta
 
 
+def _format_export_datetime(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    try:
+        return str(value)
+    except Exception:
+        return None
+
+
+def _load_grade_dates(task_ids: Sequence[int]) -> Dict[int, Dict[str, Optional[str]]]:
+    if not task_ids:
+        return {}
+    roles = ("resident", "resident2", "arbitrator", "review", "regrade_adj", "ai")
+    with get_db_session() as db:
+        rows = (
+            db.query(
+                Grade.task_id,
+                Grade.role_slot,
+                Grade.ai_model_id,
+                Grade.created_at,
+                Grade.updated_at,
+            )
+            .filter(Grade.task_id.in_(task_ids), Grade.role_slot.in_(roles))
+            .order_by(
+                Grade.task_id.asc(),
+                Grade.role_slot.asc(),
+                Grade.ai_model_id.asc().nullsfirst(),
+                Grade.created_at.desc(),
+            )
+            .all()
+        )
+
+    dates: Dict[int, Dict[str, Optional[str]]] = {}
+    seen: set[tuple[int, str, Optional[int]]] = set()
+    for task_id, role_slot, ai_model_id, created_at, updated_at in rows:
+        key = (task_id, role_slot, ai_model_id if role_slot == "ai" else None)
+        if key in seen:
+            continue
+        seen.add(key)
+        grade_date = _format_export_datetime(updated_at or created_at)
+        task_dates = dates.setdefault(task_id, {})
+        if role_slot == "ai":
+            task_dates.setdefault("ai", grade_date)
+            if ai_model_id is not None:
+                task_dates[f"ai:{ai_model_id}"] = grade_date
+        else:
+            task_dates[role_slot] = grade_date
+    return dates
+
+
 def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
     if isinstance(details_json, str):
         try:
@@ -461,6 +513,7 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
             "impression": item.get("grade_name"),
             "comment": item.get("comment"),
             "selected_features": item.get("selected_features"),
+            "ai_model_id": item.get("ai_model_id"),
             "ai_model_name": item.get("ai_model_name"),
             "ai_model_version": item.get("ai_model_version"),
             "ai_probability": _extract_ai_probability(
@@ -501,6 +554,7 @@ def _build_task_payload(
 ) -> List[Dict[str, Any]]:
     task_ids = [r.task_id for r in rows]
     ai_model_meta = _load_ai_model_meta(task_ids) if task_ids else {}
+    grade_dates = _load_grade_dates(task_ids) if task_ids else {}
 
     data: List[Dict[str, Any]] = []
     for row in rows:
@@ -516,6 +570,11 @@ def _build_task_payload(
         ai_grade["ai_review_comments"] = row.ai_review_comments
         ai_grade["ai_review_statuses"] = row.ai_review_statuses
         grades["ai"] = ai_grade
+        row_grade_dates = grade_dates.get(row.task_id, {})
+        ai_model_id = ai_grade.get("ai_model_id")
+        ai_grade_date = row_grade_dates.get(f"ai:{ai_model_id}") if ai_model_id is not None else None
+        if ai_grade_date is None:
+            ai_grade_date = row_grade_dates.get("ai")
 
         has_review = "review" in grades
         image_uuid = row.encounter_file_uuid or row.direct_image_uuid or row.image_uuid
@@ -550,31 +609,37 @@ def _build_task_payload(
                 "final_plus_review": row.final_plus_review,
                 "has_review": "yes" if has_review else "no",
                 "resident_grade": grades.get("resident", {}).get("impression"),
+                "resident_grade_date": row_grade_dates.get("resident"),
                 "resident_comment": grades.get("resident", {}).get("comment"),
                 "resident_features_json": _serialize_features_json(
                     grades.get("resident", {}).get("selected_features")
                 ),
                 "resident2_grade": grades.get("resident2", {}).get("impression"),
+                "resident2_grade_date": row_grade_dates.get("resident2"),
                 "resident2_comment": grades.get("resident2", {}).get("comment"),
                 "resident2_features_json": _serialize_features_json(
                     grades.get("resident2", {}).get("selected_features")
                 ),
                 "arbitrator_grade": grades.get("arbitrator", {}).get("impression"),
+                "arbitrator_grade_date": row_grade_dates.get("arbitrator"),
                 "arbitrator_comment": grades.get("arbitrator", {}).get("comment"),
                 "arbitrator_features_json": _serialize_features_json(
                     grades.get("arbitrator", {}).get("selected_features")
                 ),
                 "review_grade": grades.get("review", {}).get("impression"),
+                "review_grade_date": row_grade_dates.get("review"),
                 "review_comment": grades.get("review", {}).get("comment"),
                 "review_features_json": _serialize_features_json(
                     grades.get("review", {}).get("selected_features")
                 ),
                 "regrade_adj_grade": grades.get("regrade_adj", {}).get("impression"),
+                "regrade_adj_grade_date": row_grade_dates.get("regrade_adj"),
                 "regrade_adj_comment": grades.get("regrade_adj", {}).get("comment"),
                 "regrade_adj_features_json": _serialize_features_json(
                     grades.get("regrade_adj", {}).get("selected_features")
                 ),
                 "ai_grade": ai_grade.get("impression"),
+                "ai_grade_date": ai_grade_date,
                 "ai_model_name": ai_grade.get("ai_model_name"),
                 "ai_model_version": ai_grade.get("ai_model_version"),
                 "ai_probability": ai_grade.get("ai_probability"),

@@ -14,8 +14,10 @@ from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.final_grade_basis import normalize_final_grade_basis
 from utils.hospital_scoping import apply_scoping
 from . import bp
-from .route_discrepancy_review import render_discrepancy_review
-from .task_review import AI_REVIEW_STATUS_LABELS
+from .route_discrepancy_review import (
+    AI_REVIEW_STATUS_FILTER_LABELS,
+    render_discrepancy_review,
+)
 
 
 @bp.route("/regrade-tasks", methods=["POST"])
@@ -98,7 +100,7 @@ def create_regrade_tasks():
             "ai_review_status": [
                 status
                 for status in request.form.getlist("ai_review_status")
-                if status in AI_REVIEW_STATUS_LABELS
+                if status in AI_REVIEW_STATUS_FILTER_LABELS
             ],
             "final_grade_basis": normalize_final_grade_basis(request.form.get("final_grade_basis")),
             "has_regrade": has_regrade,

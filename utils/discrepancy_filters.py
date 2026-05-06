@@ -13,6 +13,8 @@ from utils.final_grade_basis import (
 )
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
+AI_REVIEW_STATUS_MISSING = "missing"
+
 
 def build_discrepancy_filter_query(
     db,
@@ -178,18 +180,36 @@ def build_discrepancy_filter_query(
             params["ai_grade_names"] = valid_ai_grades
 
     if ai_review_statuses:
-        valid_statuses = [s for s in ai_review_statuses if s]
-        if valid_statuses:
+        valid_statuses = [
+            s for s in ai_review_statuses if s and s != AI_REVIEW_STATUS_MISSING
+        ]
+        include_missing_status = AI_REVIEW_STATUS_MISSING in ai_review_statuses
+        if valid_statuses or include_missing_status:
+            status_clauses = []
             if selected_ai_model_id is not None:
-                where_clauses.append(
-                    "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status' = ANY(:ai_review_statuses)"
-                )
+                selected_ai_review_status = "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status'"
+                if valid_statuses:
+                    status_clauses.append(
+                        f"{selected_ai_review_status} = ANY(:ai_review_statuses)"
+                    )
+                if include_missing_status:
+                    status_clauses.append(
+                        f"COALESCE(NULLIF({selected_ai_review_status}, ''), '') = ''"
+                    )
             else:
-                where_clauses.append(
-                    "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
-                    "WHERE kv.value->>'ai_review_status' = ANY(:ai_review_statuses))"
-                )
-            params["ai_review_statuses"] = valid_statuses
+                if valid_statuses:
+                    status_clauses.append(
+                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                        "WHERE kv.value->>'ai_review_status' = ANY(:ai_review_statuses))"
+                    )
+                if include_missing_status:
+                    status_clauses.append(
+                        "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                        "WHERE COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') = '')"
+                    )
+            where_clauses.append(f"({' OR '.join(status_clauses)})")
+            if valid_statuses:
+                params["ai_review_statuses"] = valid_statuses
 
     if final_grades:
         valid_final_grades = [g for g in final_grades if g]

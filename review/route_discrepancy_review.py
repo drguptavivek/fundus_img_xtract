@@ -26,7 +26,10 @@ from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
-from utils.discrepancy_filters import build_discrepancy_filter_query
+from utils.discrepancy_filters import (
+    AI_REVIEW_STATUS_MISSING,
+    build_discrepancy_filter_query,
+)
 from utils.final_grade_basis import (
     derive_final_grade_source,
     normalize_final_grade_basis,
@@ -35,6 +38,11 @@ from utils.final_grade_basis import (
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
+
+AI_REVIEW_STATUS_FILTER_LABELS = {
+    **AI_REVIEW_STATUS_LABELS,
+    AI_REVIEW_STATUS_MISSING: "Missing",
+}
 
 
 def render_discrepancy_review(
@@ -113,7 +121,7 @@ def render_discrepancy_review(
                 total_pages=0,
                 has_prev=False,
                 has_next=False,
-                ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+                ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
                 filters={},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
@@ -177,7 +185,7 @@ def render_discrepancy_review(
         ai_review_statuses = [
             status
             for status in request.args.getlist("ai_review_status")
-            if status in AI_REVIEW_STATUS_LABELS
+            if status in AI_REVIEW_STATUS_FILTER_LABELS
         ]
 
         # Restrict to lab units the user can access (via GradingTask.lab_unit_id)
@@ -196,6 +204,7 @@ def render_discrepancy_review(
                 total_pages=0,
                 has_prev=False,
                 has_next=False,
+                ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
                 filters={},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
@@ -240,7 +249,7 @@ def render_discrepancy_review(
                 total_pages=0,
                 has_prev=False,
                 has_next=False,
-                ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+                ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
                 filters=filters,
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
@@ -359,7 +368,7 @@ def render_discrepancy_review(
             total_pages=total_pages,
             has_prev=has_prev,
             has_next=has_next,
-            ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+            ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
             filters={
                 "disease_id": disease_id,
                 "lab_unit_id": lab_unit_id,
@@ -432,7 +441,9 @@ def discrepancy_export():
             
         # ... (ai_review_statuses extraction) ...
         ai_review_statuses = [
-            status for status in request.form.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
+            status
+            for status in request.form.getlist("ai_review_status")
+            if status in AI_REVIEW_STATUS_FILTER_LABELS
         ]
         final_grade_basis = normalize_final_grade_basis(request.form.get("final_grade_basis"))
         # ... (rest of filtering logic) ...

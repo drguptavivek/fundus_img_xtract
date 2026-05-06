@@ -126,6 +126,7 @@
                 resident_compare=filters.resident_compare,
                 ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
+                ai_review_status=filters.ai_review_status or [],
                 page=page-1) if has_prev else '#' }}"
               {% if has_prev %}hx-get="{{ url_for(review_route,
                 disease_id=filters.disease_id,
@@ -144,6 +145,7 @@
                 resident_compare=filters.resident_compare,
                 ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
+                ai_review_status=filters.ai_review_status or [],
                 page=page-1) }}"{% endif %}
               hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
               Previous
@@ -171,7 +173,8 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
-                    page=p) }}"
+                    ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                 hx-get="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
@@ -189,7 +192,8 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
-                    page=p) }}"
+                    ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                 hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                 {{ p }}
               </a>
@@ -222,7 +226,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=1) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=1) }}"
                   hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
@@ -242,7 +247,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=1) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=1) }}"
                   hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                   1
                 </a>
@@ -273,7 +279,8 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
-                    page=p) }}"
+                    ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                   hx-get="{{ url_for(review_route,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
@@ -291,7 +298,8 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                     ai_grade=filters.ai_grade or [],
-                    page=p) }}"
+                    ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                   hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                   {{ p }}
                 </a>
@@ -323,7 +331,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=total_pages) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=total_pages) }}"
                     hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
@@ -343,7 +352,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=total_pages) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=total_pages) }}"
                     hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                     {{ total_pages }}
                   </a>
@@ -368,6 +378,7 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
+                ai_review_status=filters.ai_review_status or [],
                 page=page+1) if has_next else '#' }}"
                     {% if has_next %}hx-get="{{ url_for(review_route,
                 disease_id=filters.disease_id,
@@ -386,6 +397,7 @@
                     resident_compare=filters.resident_compare,
                     ai_model_id=filters.ai_model_id or [],
                 ai_grade=filters.ai_grade or [],
+                ai_review_status=filters.ai_review_status or [],
                 page=page+1) }}"{% endif %}
                     hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                     Next
@@ -575,7 +587,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=page-1) if has_prev else '#' }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=page-1) if has_prev else '#' }}"
               {% if has_prev %}hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
@@ -593,7 +606,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=page-1) }}"{% endif %}
+                  ai_review_status=filters.ai_review_status or [],
+                page=page-1) }}"{% endif %}
               hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
               Previous
             </a>
@@ -621,7 +635,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=p) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                 hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
@@ -639,7 +654,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=p) }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=p) }}"
                 hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                 {{ p }}
               </a>
@@ -663,7 +679,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=page+1) if has_next else '#' }}"
+                  ai_review_status=filters.ai_review_status or [],
+                page=page+1) if has_next else '#' }}"
                 {% if has_next %}hx-get="{{ url_for(review_route,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
@@ -681,7 +698,8 @@
                   resident_compare=filters.resident_compare,
                   ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
-                  page=page+1) }}"{% endif %}
+                  ai_review_status=filters.ai_review_status or [],
+                page=page+1) }}"{% endif %}
                 hx-target="#discrepancyResults" hx-swap="outerHTML" hx-push-url="true">
                 Next
               </a>

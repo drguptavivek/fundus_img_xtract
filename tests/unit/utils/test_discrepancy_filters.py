@@ -49,3 +49,44 @@ def test_build_discrepancy_filter_query_allows_unresolved_for_double_match(monke
     assert "Unresolved" in params["final_grades"]
     assert "regrade_adj_grade_name" in where_sql
     assert "arbitrator_grade_name" in where_sql
+
+
+def test_build_discrepancy_filter_query_filters_missing_ai_review_status(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+
+    mv_name, where_sql, params, selected_ai_model_id = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {
+            "disease_id": 1,
+            "allowed_lab_units": [1],
+            "has_ai_grade": "yes",
+            "ai_review_status": ["missing"],
+        },
+    )
+
+    assert mv_name == "mv_test"
+    assert selected_ai_model_id is None
+    assert "jsonb_each(v.ai_models_json)" in where_sql
+    assert "COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') = ''" in where_sql
+    assert "ai_review_statuses" not in params
+
+
+def test_build_discrepancy_filter_query_combines_missing_and_explicit_ai_review_status(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+
+    _mv_name, where_sql, params, selected_ai_model_id = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {
+            "disease_id": 1,
+            "allowed_lab_units": [1],
+            "has_ai_grade": "yes",
+            "ai_model_id": ["7"],
+            "ai_review_status": ["ok", "missing"],
+        },
+    )
+
+    assert selected_ai_model_id == 7
+    assert "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status' = ANY(:ai_review_statuses)" in where_sql
+    assert "COALESCE(NULLIF((v.ai_models_json -> :ai_model_key) ->> 'ai_review_status', ''), '') = ''" in where_sql
+    assert " OR " in where_sql
+    assert params["ai_review_statuses"] == ["ok"]

@@ -537,7 +537,8 @@
                   review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
-                  ai_grade=filters.ai_grade or []
+                  ai_grade=filters.ai_grade or [],
+                  ai_review_status=filters.ai_review_status or []
                 ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
               {% elif task.consensus %}
               <span class="text-muted">Consensus not eligible</span>

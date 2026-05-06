@@ -144,28 +144,6 @@ def _serve_encounter_thumbnail(encounter_file: EncounterFile, zip_file: ZipFile,
         return _serve_encounter_image(encounter_file, zip_file, uuid)
 
 
-def _get_grading_task_context_for_image(db, uuid: str) -> tuple[int | None, int | None]:
-    """Return (lab_unit_id, disease_id) for a grading task linked to the image uuid."""
-    task = (
-        db.query(GradingTask)
-        .join(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
-        .filter(EncounterFile.uuid == uuid)
-        .first()
-    )
-    if not task:
-        task = (
-            db.query(GradingTask)
-            .join(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
-            .filter(DirectImageUpload.uuid == uuid)
-            .first()
-        )
-
-    if not task:
-        return None, None
-
-    return task.lab_unit_id, task.disease_id
-
-
 def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | None) -> bool:
     """Check if the user has any grading slot for the lab unit + disease."""
     if not user or not getattr(user, "is_authenticated", False):
@@ -190,6 +168,28 @@ def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | 
         )
         .first()
         is not None
+    )
+
+
+def _user_has_grading_access_to_image(db, user, uuid: str) -> bool:
+    """Check grading slot access across all tasks linked to an image UUID."""
+    tasks = (
+        db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+        .join(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+        .filter(EncounterFile.uuid == uuid)
+        .all()
+    )
+    if not tasks:
+        tasks = (
+            db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+            .join(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
+            .filter(DirectImageUpload.uuid == uuid)
+            .all()
+        )
+
+    return any(
+        _user_has_grading_slot(db, user, lab_unit_id, disease_id)
+        for lab_unit_id, disease_id in tasks
     )
 
 
@@ -515,8 +515,7 @@ def imgForGradingByUUID(uuid: str):
         abort(401)
 
     with transaction_scope() as db:
-        lab_unit_id, disease_id = _get_grading_task_context_for_image(db, uuid)
-        allow_grading_access = _user_has_grading_slot(db, current_user, lab_unit_id, disease_id)
+        allow_grading_access = _user_has_grading_access_to_image(db, current_user, uuid)
 
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)

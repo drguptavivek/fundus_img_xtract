@@ -725,9 +725,6 @@
         filter: currentRadio(),
         brightness: bright ? parseFloat(bright.value) : 1,
         contrast: contr ? parseFloat(contr.value) : 1,
-        zoom: currentZoom,
-        pan_x: imgPanX,
-        pan_y: imgPanY,
         loupe_enabled: loupeEnabled
       };
     }
@@ -753,18 +750,6 @@
         contr.value = clamp(preset.contrast, 0.5, 5);
       }
       
-      // Apply zoom and pan
-      if (preset.zoom !== undefined) {
-        currentZoom = clamp(preset.zoom, ZOOM_MIN, ZOOM_MAX);
-      }
-      if (preset.panX !== undefined) {
-        imgPanX = Number(preset.panX) || 0;
-      }
-      if (preset.panY !== undefined) {
-        imgPanY = Number(preset.panY) || 0;
-      }
-      clampPanToBounds();
-      
       // Apply loupe state
       if (preset.loupeEnabled !== undefined) {
         setLoupeEnabled(preset.loupeEnabled);
@@ -789,12 +774,10 @@
       const filterDisplay = modal.querySelector('#current-filter-display');
       const brightnessDisplay = modal.querySelector('#current-brightness-display');
       const contrastDisplay = modal.querySelector('#current-contrast-display');
-      const zoomDisplay = modal.querySelector('#current-zoom-display');
       
       if (filterDisplay) filterDisplay.textContent = currentSettings.filter || 'None';
       if (brightnessDisplay) brightnessDisplay.textContent = (currentSettings.brightness || 1).toFixed(2);
       if (contrastDisplay) contrastDisplay.textContent = (currentSettings.contrast || 1).toFixed(2);
-      if (zoomDisplay) zoomDisplay.textContent = `${currentSettings.zoom || 100}%`;
       
       // Update preset slots
       const slotsContainer = modal.querySelector('#preset-slots');
@@ -812,8 +795,7 @@
             presetInfo = `
               <strong>Filter:</strong> ${preset.filter || 'None'} |
               <strong>Bright:</strong> ${(preset.brightness || 1).toFixed(1)} |
-              <strong>Contrast:</strong> ${(preset.contrast || 1).toFixed(1)} |
-              <strong>Zoom:</strong> ${preset.zoom || 100}%
+              <strong>Contrast:</strong> ${(preset.contrast || 1).toFixed(1)}
             `;
           }
           

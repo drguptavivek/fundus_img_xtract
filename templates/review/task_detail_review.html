@@ -365,14 +365,12 @@
                   <button type="submit" name="action" value="save" class="btn btn-primary">
                     {% if existing_review_grade %}Update Review{% else %}Submit Review{% endif %}
                   </button>
-                  {% if next_task_id %}
-                  <button type="submit" name="action" value="save_next" class="btn btn-outline-primary">
+                  <button type="submit" name="action" value="save_next" class="btn btn-outline-primary" {% if not next_task_id %}disabled{% endif %}>
                     Save &amp; Next
                   </button>
-                  <button type="submit" name="action" value="cancel_next" class="btn btn-outline-secondary">
+                  <button type="submit" name="action" value="cancel_next" class="btn btn-outline-secondary" {% if not next_task_id %}disabled{% endif %}>
                     Cancel &amp; Next
                   </button>
-                  {% endif %}
                   <button type="button" class="btn btn-outline-secondary" id="review-clear">
                     Clear Selections
                   </button>

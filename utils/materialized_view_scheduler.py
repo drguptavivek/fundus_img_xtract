@@ -231,6 +231,64 @@ def refresh_materialized_view(app, schedule_time="manual"):
         return False
 
 
+def refresh_image_listing_views(
+    app,
+    disease_id: int | None = None,
+    schedule_time: str = "manual_image_listing",
+    include_all: bool = True,
+) -> bool:
+    """Refresh only image-listing materialized views used by review/search pages."""
+    start_time = datetime.now(pytz.UTC)
+    view_names = ["mvw_image_listing_all"] if include_all else []
+    with app.app_context():
+        if disease_id:
+            with transaction_scope() as db:
+                from utils.mvw_image_listing_v2 import get_mv_name_for_disease
+
+                view_names.append(get_mv_name_for_disease(db, int(disease_id)))
+        else:
+            view_names.extend(_load_per_disease_views(app))
+
+    seen = set()
+    ordered_view_names = []
+    for view_name in view_names:
+        if view_name not in seen:
+            ordered_view_names.append(view_name)
+            seen.add(view_name)
+
+    successful_refreshes = 0
+    for view_name in ordered_view_names:
+        view_start_time = datetime.now(pytz.UTC)
+        try:
+            logger.info(
+                "Refreshing Image Listing MV (%s) - Schedule: %s",
+                sanitize_log_value(view_name),
+                sanitize_log_value(schedule_time),
+            )
+            _refresh_single_view(app, view_name)
+            successful_refreshes += 1
+            logger.info(
+                "Successfully refreshed %s in %s seconds",
+                sanitize_log_value(view_name),
+                sanitize_log_value(f"{(datetime.now(pytz.UTC) - view_start_time).total_seconds():.2f}"),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to refresh image-listing MV %s",
+                sanitize_log_value(view_name),
+            )
+
+    success = successful_refreshes == len(ordered_view_names)
+    logger.info(
+        "Image-listing MV refresh completed: %s/%s views successful in %s seconds - Schedule: %s",
+        sanitize_log_value(successful_refreshes),
+        sanitize_log_value(len(ordered_view_names)),
+        sanitize_log_value(f"{(datetime.now(pytz.UTC) - start_time).total_seconds():.2f}"),
+        sanitize_log_value(schedule_time),
+    )
+    return success
+
+
 def run_scheduler_thread(app):
     """Main scheduler daemon thread following existing stuck task cleanup pattern.
 

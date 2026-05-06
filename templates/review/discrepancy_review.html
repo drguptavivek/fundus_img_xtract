@@ -1031,10 +1031,33 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.ASSETS_VERSION|default('') }}" defer></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+  console.log('[DiscrepancyReview] DOMContentLoaded', {
+    iso: new Date().toISOString(),
+    href: window.location.href
+  });
+  try {
+    const lastRefresh = sessionStorage.getItem('mvRefresh:lastResult');
+    if (lastRefresh) {
+      console.log('[MVRefresh] previous refresh result', JSON.parse(lastRefresh));
+      sessionStorage.removeItem('mvRefresh:lastResult');
+    }
+  } catch (error) {
+    console.warn('[MVRefresh] failed to read previous refresh result', error);
+  }
   if (window.MVRefresh) {
     MVRefresh.init({
       buttonSelector: '#mv-refresh-btn',
-      statusSelector: '#mv-refresh-status'
+      statusSelector: '#mv-refresh-status',
+      payload: {
+        scope: 'image_listing',
+        disease_id: {{ (filters.disease_id|default(none))|tojson }}
+      },
+      onSuccess: function() {
+        console.log('[MVRefresh] reload now', {
+          iso: new Date().toISOString()
+        });
+        window.location.reload();
+      }
     });
   }
   if (window.bootstrap) {

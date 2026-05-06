@@ -8,10 +8,19 @@ This handles ALL materialized views including:
 - mvw_amd_grading_pivot (AMD-specific pivoted data)
 """
 
+from time import perf_counter
+from urllib.parse import parse_qs, urlparse
+
 from flask import jsonify, request, current_app
 from auth.roles import roles_required
-from utils.materialized_view_scheduler import get_last_refresh_info, manual_refresh_now, get_scheduler_status
+from utils.materialized_view_scheduler import (
+    get_last_refresh_info,
+    get_scheduler_status,
+    manual_refresh_now,
+    refresh_image_listing_views,
+)
 from flask_login import login_required, current_user
+from utils.cache_invalidation import invalidate_discrepancy_review_cache
 from utils.log_sanitize import sanitize_log_value
 
 
@@ -198,10 +207,53 @@ def api_last_refresh():
 def manual_refresh():
     """Manual refresh trigger for all materialized views."""
     try:
-        result = manual_refresh_now(current_app)
+        started_at = perf_counter()
+        payload = request.get_json(silent=True) or {}
+        scope = payload.get("scope")
+        disease_id = payload.get("disease_id")
+        referrer = request.referrer or ""
+        parsed_referrer = urlparse(referrer)
+        if not scope and parsed_referrer.path.endswith("/review/discrepancy-review"):
+            scope = "image_listing"
+            disease_id = disease_id or (parse_qs(parsed_referrer.query).get("disease_id") or [None])[0]
+        current_app.logger.info(
+            "Materialized view refresh request received scope=%s disease_id=%s",
+            sanitize_log_value(scope or "full"),
+            sanitize_log_value(disease_id or ""),
+        )
+        if scope == "image_listing":
+            success = refresh_image_listing_views(
+                current_app,
+                disease_id=int(disease_id) if disease_id else None,
+                schedule_time="manual_image_listing",
+                include_all=not bool(disease_id),
+            )
+            result = {
+                "success": success,
+                "message": (
+                    "Image listing materialized views refreshed successfully"
+                    if success
+                    else "One or more image listing materialized views failed to refresh. Check logs for details."
+                ),
+            }
+        else:
+            result = manual_refresh_now(current_app)
+        if result.get("success"):
+            invalidate_discrepancy_review_cache()
+        duration_seconds = perf_counter() - started_at
+        current_app.logger.info(
+            "Materialized view refresh request completed scope=%s disease_id=%s success=%s duration_seconds=%.3f",
+            sanitize_log_value(scope or "full"),
+            sanitize_log_value(disease_id or ""),
+            sanitize_log_value(result.get("success")),
+            duration_seconds,
+        )
         return jsonify({
             'success': result['success'],
-            'message': result['message']
+            'message': result['message'],
+            'duration_seconds': round(duration_seconds, 3),
+            'scope': scope or "full",
+            'disease_id': int(disease_id) if disease_id else None,
         })
     except Exception as e:
         current_app.logger.exception("Error in manual refresh")

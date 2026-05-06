@@ -1,4 +1,4 @@
-from flask import render_template, request, flash, redirect, url_for, current_app
+from flask import render_template, request, flash, redirect, url_for
 from flask_login import current_user
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
@@ -6,7 +6,7 @@ import logging
 import json
 from json import JSONDecodeError
 import re
-import threading
+from urllib.parse import parse_qs, urlsplit
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -19,6 +19,7 @@ from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.review_navigation import get_next_review_tasks
+from utils.cache_invalidation import invalidate_discrepancy_review_cache
 from datetime import datetime, timezone
 from . import bp
 
@@ -86,23 +87,41 @@ def _submitted_action(default: str = "save") -> str:
     return default
 
 
-def _kick_off_mv_refresh(app) -> None:
-    """Trigger materialized view refresh asynchronously to avoid blocking response."""
+def _return_to_args(return_to: str | None) -> dict[str, list[str]]:
+    if not return_to:
+        return {}
     try:
-        from utils.materialized_view_scheduler import refresh_materialized_view
-    except Exception:
-        grades_logger.warning("Materialized view scheduler import failed", exc_info=True)
-        return
+        return parse_qs(urlsplit(return_to).query, keep_blank_values=True)
+    except ValueError:
+        return {}
 
-    def _worker():
-        try:
-            with app.app_context():
-                refresh_materialized_view(app, "manual")
-        except Exception:
-            grades_logger.warning("Materialized view refresh after review failed", exc_info=True)
 
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
+def _arg_or_return_to(
+    name: str,
+    return_to_args: dict[str, list[str]],
+    *,
+    type_=str,
+):
+    value = request.args.get(name, type=type_)
+    if value is not None:
+        return value
+    values = return_to_args.get(name, [])
+    if not values:
+        return None
+    raw_value = values[-1]
+    if raw_value == "":
+        return ""
+    try:
+        return type_(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _arglist_or_return_to(name: str, return_to_args: dict[str, list[str]]) -> list[str]:
+    values = request.args.getlist(name)
+    if values:
+        return values
+    return return_to_args.get(name, [])
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -148,10 +167,15 @@ def review_task_details(task_id: int):
         lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
         user_lab_unit_ids = [lu.id for lu in lu_query.all()]
         
-        # Get latest existing review grade if any (any reviewer)
+        # The grades table permits one review row per task/user. Use the
+        # current user's row for edits so we do not insert a duplicate.
         existing_review_grade = (
             db.query(Grade)
-            .filter(Grade.task_id == task_id, Grade.role_slot == "review")
+            .filter(
+                Grade.task_id == task_id,
+                Grade.grader_user_id == current_user.id,
+                Grade.role_slot == "review",
+            )
             .order_by(Grade.updated_at.desc().nullslast(), Grade.id.desc())
             .first()
         )
@@ -160,27 +184,36 @@ def review_task_details(task_id: int):
             existing_review_grade.selected_features_json if existing_review_grade else None
         )
 
-        ai_model_id_filter = request.args.get("ai_model_id", type=int)
         return_to = request.args.get("return_to")
+        return_to_query_args = _return_to_args(return_to)
+        ai_model_id_filter = _arg_or_return_to("ai_model_id", return_to_query_args, type_=int)
 
-        lab_unit_id_filter = request.args.get("lab_unit_id", type=int)
-        has_consensus = request.args.get("has_consensus")
-        has_review = request.args.get("has_review")
-        has_ai_grade = request.args.get("has_ai_grade")
-        resident_grades = request.args.getlist("resident_grade")
-        resident2_grades = request.args.getlist("resident2_grade")
-        arbitrator_grades = request.args.getlist("arbitrator_grade")
-        final_grades = request.args.getlist("final_grade")
-        ai_grades = request.args.getlist("ai_grade")
-        ai_review_statuses = request.args.getlist("ai_review_status")
-        final_grade_basis = request.args.get("final_grade_basis")
-        resident_compare = request.args.get("resident_compare")
+        lab_unit_id_filter = _arg_or_return_to("lab_unit_id", return_to_query_args, type_=int)
+        has_consensus = _arg_or_return_to("has_consensus", return_to_query_args)
+        has_review = _arg_or_return_to("has_review", return_to_query_args)
+        has_ai_grade = _arg_or_return_to("has_ai_grade", return_to_query_args)
+        resident_grades = _arglist_or_return_to("resident_grade", return_to_query_args)
+        resident2_grades = _arglist_or_return_to("resident2_grade", return_to_query_args)
+        arbitrator_grades = _arglist_or_return_to("arbitrator_grade", return_to_query_args)
+        regrade_grades = _arglist_or_return_to("regrade_grade", return_to_query_args)
+        review_grades = _arglist_or_return_to("review_grade", return_to_query_args)
+        final_grades = _arglist_or_return_to("final_grade", return_to_query_args)
+        ai_grades = _arglist_or_return_to("ai_grade", return_to_query_args)
+        ai_review_statuses = _arglist_or_return_to("ai_review_status", return_to_query_args)
+        final_grade_basis = _arg_or_return_to("final_grade_basis", return_to_query_args)
+        resident_compare = _arg_or_return_to("resident_compare", return_to_query_args)
+        consensus_method = _arg_or_return_to("consensus_method", return_to_query_args)
+        has_regrade = _arg_or_return_to("has_regrade", return_to_query_args)
+        has_arbitrator = _arg_or_return_to("has_arbitrator", return_to_query_args)
 
         navigation_params: dict[str, object] = {
             "disease_id": task.disease_id,
             "lab_unit_id": lab_unit_id_filter,
             "has_consensus": has_consensus,
+            "consensus_method": consensus_method,
             "has_review": has_review,
+            "has_regrade": has_regrade,
+            "has_arbitrator": has_arbitrator,
             "has_ai_grade": has_ai_grade,
             "final_grade_basis": final_grade_basis,
             "resident_compare": resident_compare,
@@ -191,6 +224,8 @@ def review_task_details(task_id: int):
             "resident_grade": resident_grades,
             "resident2_grade": resident2_grades,
             "arbitrator_grade": arbitrator_grades,
+            "regrade_grade": regrade_grades,
+            "review_grade": review_grades,
             "final_grade": final_grades,
             "ai_grade": ai_grades,
             "ai_review_status": ai_review_statuses,
@@ -205,14 +240,20 @@ def review_task_details(task_id: int):
             lab_unit_ids=list(user_lab_unit_ids),
             lab_unit_id=lab_unit_id_filter,
             has_consensus=has_consensus,
+            consensus_method=consensus_method,
             has_review=has_review,
+            has_regrade=has_regrade,
+            has_arbitrator=has_arbitrator,
             has_ai_grade=has_ai_grade,
             ai_model_id=ai_model_id_filter,
+            final_grade_basis=final_grade_basis,
             ai_grades=ai_grades or None,
             ai_review_statuses=ai_review_statuses or None,
             resident_grades=resident_grades or None,
             resident2_grades=resident2_grades or None,
             arbitrator_grades=arbitrator_grades or None,
+            regrade_grades=regrade_grades or None,
+            review_grades=review_grades or None,
             final_grades=final_grades or None,
             limit=50,
         )
@@ -508,12 +549,9 @@ def review_task_details(task_id: int):
                 )
 
             db.commit()
+            invalidate_discrepancy_review_cache()
             success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
             flash(success_message, 'success')
-            try:
-                _kick_off_mv_refresh(current_app._get_current_object())
-            except Exception:
-                grades_logger.warning("Post-review MV refresh trigger failed", exc_info=True)
             if return_to and is_safe_url(return_to):
                 if action in {"save_next", "cancel_next"} and effective_next_task_id:
                     return redirect(

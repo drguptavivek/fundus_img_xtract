@@ -401,7 +401,7 @@ def render_discrepancy_review(
 @cache.cached(
     timeout=600,
     key_prefix=lambda: (
-        "discrepancy-review:v2:"
+        "discrepancy-review:v3:"
         f"{current_user.id}:"
         f"{request.query_string.decode('utf-8')}:"
         f"hx={request.headers.get('HX-Request', 'false')}"

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from utils.discrepancy_filters import AI_REVIEW_STATUS_MISSING
+
 
 def get_next_review_tasks(
     db: Session,
@@ -20,6 +22,7 @@ def get_next_review_tasks(
     has_ai_grade: Optional[str] = None,
     ai_model_id: Optional[int] = None,
     ai_grades: Optional[List[str]] = None,
+    ai_review_statuses: Optional[List[str]] = None,
     resident_grades: Optional[List[str]] = None,
     resident2_grades: Optional[List[str]] = None,
     arbitrator_grades: Optional[List[str]] = None,
@@ -79,6 +82,27 @@ def get_next_review_tasks(
                 "WHERE elem->>'role_slot' = 'ai' AND elem->>'grade_name' = ANY(:ai_grade_names))"
             )
             params["ai_grade_names"] = valid_ai_grades
+
+    if ai_review_statuses:
+        valid_statuses = [
+            s for s in ai_review_statuses if s and s != AI_REVIEW_STATUS_MISSING
+        ]
+        include_missing_status = AI_REVIEW_STATUS_MISSING in ai_review_statuses
+        if valid_statuses or include_missing_status:
+            status_clauses = []
+            if valid_statuses:
+                status_clauses.append(
+                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
+                    "WHERE elem->>'role_slot' = 'ai' AND elem->>'ai_review_status' = ANY(:ai_review_statuses))"
+                )
+                params["ai_review_statuses"] = valid_statuses
+            if include_missing_status:
+                status_clauses.append(
+                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
+                    "WHERE elem->>'role_slot' = 'ai' "
+                    "AND COALESCE(NULLIF(elem->>'ai_review_status', ''), '') = '')"
+                )
+            where_clauses.append(f"({' OR '.join(status_clauses)})")
 
     for role, impressions in (
         ("resident", resident_grades),

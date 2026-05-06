@@ -78,6 +78,14 @@ def _apply_ai_influence_comment(comment: str | None, ai_influence: str | None) -
     return "\n".join(updated)
 
 
+def _submitted_action(default: str = "save") -> str:
+    for action in reversed(request.form.getlist("action")):
+        action = (action or "").strip()
+        if action:
+            return action
+    return default
+
+
 def _kick_off_mv_refresh(app) -> None:
     """Trigger materialized view refresh asynchronously to avoid blocking response."""
     try:
@@ -164,6 +172,9 @@ def review_task_details(task_id: int):
         arbitrator_grades = request.args.getlist("arbitrator_grade")
         final_grades = request.args.getlist("final_grade")
         ai_grades = request.args.getlist("ai_grade")
+        ai_review_statuses = request.args.getlist("ai_review_status")
+        final_grade_basis = request.args.get("final_grade_basis")
+        resident_compare = request.args.get("resident_compare")
 
         navigation_params: dict[str, object] = {
             "disease_id": task.disease_id,
@@ -171,6 +182,8 @@ def review_task_details(task_id: int):
             "has_consensus": has_consensus,
             "has_review": has_review,
             "has_ai_grade": has_ai_grade,
+            "final_grade_basis": final_grade_basis,
+            "resident_compare": resident_compare,
         }
         if ai_model_id_filter:
             navigation_params["ai_model_id"] = ai_model_id_filter
@@ -180,6 +193,7 @@ def review_task_details(task_id: int):
             "arbitrator_grade": arbitrator_grades,
             "final_grade": final_grades,
             "ai_grade": ai_grades,
+            "ai_review_status": ai_review_statuses,
         }.items():
             if values:
                 navigation_params[key] = values
@@ -195,6 +209,7 @@ def review_task_details(task_id: int):
             has_ai_grade=has_ai_grade,
             ai_model_id=ai_model_id_filter,
             ai_grades=ai_grades or None,
+            ai_review_statuses=ai_review_statuses or None,
             resident_grades=resident_grades or None,
             resident2_grades=resident2_grades or None,
             arbitrator_grades=arbitrator_grades or None,
@@ -249,7 +264,7 @@ def review_task_details(task_id: int):
             grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
             ai_influence = (request.form.get('ai_influence') or '').strip().lower()
-            action = request.form.get('action') or 'save'
+            action = _submitted_action()
             form_next_task_id = request.form.get('next_task_id', type=int)
             target_next_task_id = form_next_task_id or next_task_id
             raw_selected_features = request.form.getlist('selected_features')
@@ -592,6 +607,7 @@ def review_task_details(task_id: int):
             ai_model_id_filter=ai_model_id_filter,
             return_to=return_to,
             next_task_id=next_task_id,
+            task_detail_query_string=request.query_string.decode("utf-8"),
         )
 
 

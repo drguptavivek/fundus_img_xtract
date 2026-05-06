@@ -1,7 +1,7 @@
 ---
 title: Direct Upload Workflow
 description: Manual image upload and editing workflow for non-batch data.
-last_updated: 2026-01-23
+last_updated: 2026-05-06
 ---
 # Direct Upload Workflow
 
@@ -27,6 +27,9 @@ This workflow describes the process for users to manually upload specific images
     -   Calculates a **SHA-256** hash of the file content.
     -   Truncates the hash to 32 characters for database compatibility (stored in `file_hash`).
     -   Checks the `DirectImageUpload` table for matches solely via the **truncated hash** to detect duplicates.
+    -   Duplicate attempts do not create another `DirectImageUpload`; the current `JobItem` is marked `duplicate` and points to the canonical older image.
+    -   Duplicate attempts do not create `DirectImageVerify` rows, verification jobs, thumbnail jobs, metadata jobs, PII jobs, or uploader upload-count increments for the duplicate bytes.
+    -   For AI-enabled upload profiles, the duplicate item may reuse or queue Wadhwani AI inference for the canonical image task and current profile-linked model only.
 6.  **Image Processing & Storage**:
     -   **EXIF Stripping**: Discards all technical metadata by reconstructing pixels using `strip_exif_data`.
     -   **Disk Save**: Writes the cleaned original to a date-stamped folder in `orig/`.
@@ -69,7 +72,8 @@ sequenceDiagram
             
             alt Is Duplicate
                 WebServer->>FileSystem: Save to Dup Dir
-                WebServer->>JobSystem: Add Job Item (Error: Duplicate)
+                WebServer->>DB: Reuse/create canonical AI task only if profile workflow requires it
+                WebServer->>JobSystem: Add Job Item (Duplicate -> Canonical Image)
             else Is Unique
                 WebServer->>ImageProc: Strip EXIF Data
                 WebServer->>FileSystem: Save Original Image
@@ -111,5 +115,6 @@ sequenceDiagram
     -   **Validation**: Strict filename validation (sanitization) and MIME type checking (magic bytes).
     -   **Hashing**: Uses SHA-256 (truncated to 32 chars) to detect duplicates.
     -   **EXIF Stripping**: Removes potentially sensitive metadata from images before storage (`utils.image_processing.strip_exif_data`).
-4.  **Editing**: Users can edit images (e.g., crop, mask) after upload.
+4.  **Duplicate Handling**: A duplicate upload is job bookkeeping, not a new image ingestion. The job item remains visible to the uploader, points to the canonical image, and can expose the canonical thumbnail and current-profile Wadhwani AI result. Human verification and human grades are never copied or created for duplicates.
+5.  **Editing**: Users can edit images (e.g., crop, mask) after upload.
     -   Saving an edited image triggers a **re-extraction of metadata** and a **new PII detection job** specifically for the "edited" variant.

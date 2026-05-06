@@ -124,7 +124,7 @@ def create_direct_upload_web():
         hospital_id=hospital_id,
     )
 
-    messages = [("success", f"Submitted {result.accepted_count} image(s).")]
+    messages = [("success", f"Uploaded {result.uploaded_count}, duplicates {result.duplicate_count}, rejected {result.rejected_count}")]
     if result.rejected_count:
         messages.append(("warning", f"{result.rejected_count} image(s) could not be processed."))
 

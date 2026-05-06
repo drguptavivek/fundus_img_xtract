@@ -65,8 +65,49 @@ def test_direct_upload_web_api_creates_job_and_returns_workspace(client, login_u
     )
 
     assert response.status_code == 200
-    assert b"Submitted 1 image" in response.data
+    assert b"Uploaded 1, duplicates 0, rejected 0" in response.data
     assert b"Upload Status" in response.data
+
+
+def test_direct_upload_web_api_reports_duplicate_counts(client, login_user, db_session, direct_upload_web_data):
+    login_user(direct_upload_web_data["uploader"].username, "Test@2026")
+
+    first_response = client.post(
+        "/api/direct-uploads/uploads/web",
+        data={
+            "profile_id": str(direct_upload_web_data["profile"].id),
+            "hospital_id": str(direct_upload_web_data["hospital"].id),
+            "project_id": str(direct_upload_web_data["project"].id),
+            "lab_unit_id": str(direct_upload_web_data["lab"].id),
+            "disease_id": str(direct_upload_web_data["disease"].id),
+            "camera_id": str(direct_upload_web_data["camera"].id),
+            "area_id": str(direct_upload_web_data["area"].id),
+            "files": [(_png_file("web-duplicate.png"), "web-duplicate.png")],
+        },
+        headers={"HX-Request": "true"},
+        content_type="multipart/form-data",
+    )
+    assert first_response.status_code == 200
+
+    duplicate_response = client.post(
+        "/api/direct-uploads/uploads/web",
+        data={
+            "profile_id": str(direct_upload_web_data["profile"].id),
+            "hospital_id": str(direct_upload_web_data["hospital"].id),
+            "project_id": str(direct_upload_web_data["project"].id),
+            "lab_unit_id": str(direct_upload_web_data["lab"].id),
+            "disease_id": str(direct_upload_web_data["disease"].id),
+            "camera_id": str(direct_upload_web_data["camera"].id),
+            "area_id": str(direct_upload_web_data["area"].id),
+            "files": [(_png_file("web-duplicate-again.png"), "web-duplicate-again.png")],
+        },
+        headers={"HX-Request": "true"},
+        content_type="multipart/form-data",
+    )
+
+    assert duplicate_response.status_code == 200
+    assert b"Uploaded 0, duplicates 1, rejected 0" in duplicate_response.data
+    assert db_session.query(JobItem).filter_by(state="duplicate").count() == 1
 
 
 def test_direct_upload_workspace_shows_only_current_user_recent_jobs(client, login_user, db_session, direct_upload_web_data):

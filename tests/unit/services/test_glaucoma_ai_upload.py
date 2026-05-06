@@ -95,6 +95,40 @@ def test_glaucoma_ai_upload_enqueue_uses_existing_wadhwani_batch_task(monkeypatc
     assert queued[0].job_token == "job-token"
 
 
+def test_glaucoma_ai_upload_enqueue_skips_non_queueable_duplicate_tasks(monkeypatch):
+    captured = {}
+
+    def fake_create_job(filenames, rejected, **kwargs):
+        captured["filenames"] = filenames
+        return "job-token"
+
+    def fake_enqueue(task_name, *args, **kwargs):
+        captured["task_name"] = task_name
+
+    monkeypatch.setattr("services.glaucoma_ai_upload.db_create_job", fake_create_job)
+    monkeypatch.setattr("services.glaucoma_ai_upload.enqueue_task", fake_enqueue)
+
+    items = [
+        GlaucomaAIUploadItem(filename="new.jpg", status="success", message="created", task_id=10),
+        GlaucomaAIUploadItem(filename="duplicate.jpg", status="success", message="duplicate", task_id=20),
+    ]
+
+    queued = _enqueue_wadhwani_inference(
+        items,
+        user_id=1,
+        username="uploader",
+        remote_addr="127.0.0.1",
+        lab_unit_id=2,
+        project_id=3,
+        queueable_task_ids={10},
+    )
+
+    assert captured["filenames"] == ["task:10"]
+    assert queued[0].status == "queued"
+    assert queued[1].status == "success"
+    assert queued[1].job_token is None
+
+
 def test_glaucoma_ai_workflow_requires_selected_profile_linked_to_wadhwani(db_session):
     disease = Disease(name="Glaucoma Workflow Test")
     integration = db_session.query(AIModelIntegration).filter_by(provider=WADHWANI_PROVIDER).one_or_none()

@@ -51,8 +51,20 @@ class DirectUploadBatchResult:
     upload_profile: object
 
     @property
+    def uploaded_count(self) -> int:
+        return sum(1 for item in self.items if item.status == "success")
+
+    @property
+    def duplicate_count(self) -> int:
+        return sum(1 for item in self.items if item.status == "duplicate")
+
+    @property
+    def accepted_count(self) -> int:
+        return self.uploaded_count + self.duplicate_count
+
+    @property
     def success_count(self) -> int:
-        return sum(1 for item in self.items if item.status in {"success", "duplicate"})
+        return self.accepted_count
 
     @property
     def error_count(self) -> int:

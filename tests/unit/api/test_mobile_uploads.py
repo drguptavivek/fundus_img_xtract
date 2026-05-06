@@ -15,8 +15,10 @@ from models import (
     Area,
     Camera,
     Disease,
+    DiseaseGrading,
     DirectImageUpload,
     EncounterSetImage,
+    Grade,
     GradingTask,
     Hospital,
     Job,
@@ -24,6 +26,7 @@ from models import (
     LabUnit,
     PatientEncounters,
     Project,
+    User,
 )
 from upload_profiles.models import (
     UploadProfile,
@@ -147,6 +150,8 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     payload = response.get_json()
     assert payload["upload_kind"] == UPLOAD_KIND_DIRECT_IMAGE
     assert payload["accepted_count"] == 1
+    assert payload["uploaded_count"] == 1
+    assert payload["duplicate_count"] == 0
     assert payload["upload_token"]
 
     upload = db_session.query(DirectImageUpload).one()
@@ -198,7 +203,10 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     )
 
     assert replay_response.status_code == 200
-    assert replay_response.get_json()["upload_token"] == payload["upload_token"]
+    replay_payload = replay_response.get_json()
+    assert replay_payload["upload_token"] == payload["upload_token"]
+    assert replay_payload["uploaded_count"] == 1
+    assert replay_payload["duplicate_count"] == 0
     assert db_session.query(Job).count() == 1
     assert db_session.query(DirectImageUpload).count() == 1
 
@@ -208,6 +216,56 @@ def test_mobile_direct_upload_creates_job_and_stores_plain_text_remarks(client, 
     )
     assert lookup_response.status_code == 200
     assert lookup_response.get_json()["upload_token"] == payload["upload_token"]
+
+
+def test_mobile_direct_upload_duplicate_counts_as_duplicate_not_uploaded(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+
+    first_response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "direct-duplicate-first",
+            "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "disease_id": str(mobile_upload_data["disease"].id),
+            "camera_id": str(mobile_upload_data["camera"].id),
+            "area_id": str(mobile_upload_data["area"].id),
+            "files": [(_png_file("duplicate-eye.png"), "duplicate-eye.png")],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+    assert first_response.status_code == 201
+
+    duplicate_response = client.post(
+        "/api/mobile/v1/uploads",
+        data={
+            "profile_id": str(mobile_upload_data["profile"].id),
+            "idempotency_key": "direct-duplicate-second",
+            "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
+            "project_id": str(mobile_upload_data["project"].id),
+            "lab_unit_id": str(mobile_upload_data["lab"].id),
+            "disease_id": str(mobile_upload_data["disease"].id),
+            "camera_id": str(mobile_upload_data["camera"].id),
+            "area_id": str(mobile_upload_data["area"].id),
+            "files": [(_png_file("duplicate-eye-again.png"), "duplicate-eye-again.png")],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+        content_type="multipart/form-data",
+    )
+
+    assert duplicate_response.status_code == 201
+    payload = duplicate_response.get_json()
+    assert payload["accepted_count"] == 1
+    assert payload["uploaded_count"] == 0
+    assert payload["duplicate_count"] == 1
+    assert payload["rejected_count"] == 0
+    assert db_session.query(DirectImageUpload).count() == 1
+    duplicate_job = db_session.query(Job).filter_by(token=payload["upload_token"]).one()
+    assert duplicate_job.items[0].state == "duplicate"
 
 
 def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkeypatch, mobile_upload_data):
@@ -391,6 +449,55 @@ def test_mobile_upload_inference_returns_image_wise_status(client, db_session, m
     assert by_filename["pending.jpg"]["inference"]["status"] == "pending"
     assert by_filename["failed.jpg"]["inference"]["status"] == "failed"
     assert by_filename["failed.jpg"]["inference"]["error_message"] == "Remote Wadhwani API failed."
+
+
+def test_mobile_upload_inference_returns_existing_grade_for_duplicate_item(client, db_session, monkeypatch, mobile_upload_data):
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
+    job = _mobile_inference_job(db_session, mobile_upload_data)
+    task = _direct_image_task(db_session, mobile_upload_data, filename="canonical-duplicate.jpg")
+    model, _integration = _wadhwani_model(db_session)
+    ai_system = db_session.query(User).filter_by(username="ai_system").one()
+    grading = db_session.query(DiseaseGrading).filter_by(disease_id=mobile_upload_data["disease"].id).first()
+    db_session.add_all(
+        [
+            JobItem(
+                job=job,
+                filename="submitted-duplicate.jpg",
+                state="duplicate",
+                source_type="direct_image",
+                source_id=task.direct_image_upload_id,
+                source_uuid=task.direct_image.uuid,
+                task_id=task.id,
+            ),
+            Grade(
+                task_id=task.id,
+                grader_user_id=ai_system.id,
+                role_slot="ai",
+                disease_grading_id=grading.id,
+                ai_model_id=model.id,
+                comment="AI probability: 0.5480\nPredicted class name: Glaucoma Absent",
+                grade_name="Normal",
+                time_taken=0,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        f"/api/mobile/v1/uploads/{job.token}/inference",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "complete"
+    item = payload["items"][0]
+    assert item["state"] == "duplicate"
+    assert item["source_uuid"] == task.direct_image.uuid
+    assert item["inference"]["status"] == "success"
+    assert item["inference"]["confidence"] == 0.548
+    assert item["inference"]["predicted_class_name"] == "Glaucoma Absent"
 
 
 def test_mobile_upload_inference_retry_queues_specific_failed_image(client, db_session, monkeypatch, mobile_upload_data):

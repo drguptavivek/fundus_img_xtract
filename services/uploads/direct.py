@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
-from models import AIModelIntegration, AppSetting, Area, Camera, Disease, Hospital, Job, JobItem, LabUnit, User
+from models import AIInferenceRun, AIModelIntegration, AppSetting, Area, Camera, Disease, Grade, Hospital, Job, JobItem, LabUnit, User
 from services.direct_upload_service import (
     DEFAULT_DIRECT_MAX_FILE_SIZE_BYTES,
     DirectUploadSelection,
@@ -51,6 +51,8 @@ class DirectUploadJobRequest:
 @dataclass(frozen=True)
 class DirectUploadJobResult:
     job: Job
+    uploaded_count: int
+    duplicate_count: int
     accepted_count: int
     rejected_count: int
     inference_available: bool
@@ -116,7 +118,8 @@ def create_direct_upload_job(
     if is_mydriatic is None:
         is_mydriatic = profile.default_is_mydriatic
 
-    executable_workflow = profile_has_executable_direct_workflow(db, profile, disease_id=request.disease_id)
+    linked_wadhwani_model_id = linked_wadhwani_model_id_for_direct_workflow(db, profile, disease_id=request.disease_id)
+    executable_workflow = linked_wadhwani_model_id is not None
     selection = DirectUploadSelection(
         project_id=request.project_id,
         lab_unit_id=request.lab_unit_id,
@@ -193,17 +196,26 @@ def create_direct_upload_job(
         )
     db.flush()
 
+    inference_task_ids = tuple(
+        item.task_id for item in batch.items if executable_workflow and item.task_id
+    )
+    queueable_inference_task_ids = _queueable_wadhwani_task_ids(
+        db,
+        task_ids=inference_task_ids,
+        ai_model_id=linked_wadhwani_model_id,
+    )
+
     return DirectUploadJobResult(
         job=job,
-        accepted_count=batch.success_count,
+        uploaded_count=batch.uploaded_count,
+        duplicate_count=batch.duplicate_count,
+        accepted_count=batch.accepted_count,
         rejected_count=batch.error_count,
-    inference_available=executable_workflow and any(item.task_id for item in batch.items),
-    upload_ids_for_post_commit=tuple(
-        item.upload_id for item in batch.items if item.upload_id and item.status != "duplicate"
-    ),
-    inference_task_ids_for_post_commit=tuple(
-        item.task_id for item in batch.items if executable_workflow and item.task_id
-    ),
+        inference_available=executable_workflow and bool(inference_task_ids),
+        upload_ids_for_post_commit=tuple(
+            item.upload_id for item in batch.items if item.upload_id and item.status != "duplicate"
+        ),
+        inference_task_ids_for_post_commit=queueable_inference_task_ids,
     )
 
 
@@ -261,9 +273,11 @@ def create_web_direct_upload_from_form(*, db, user_id: int, username: str | None
     )
     if user.file_upload_count is None:
         user.file_upload_count = 0
-    user.file_upload_count += result.accepted_count
+    user.file_upload_count += result.uploaded_count
     return DirectUploadJobResult(
         job=result.job,
+        uploaded_count=result.uploaded_count,
+        duplicate_count=result.duplicate_count,
         accepted_count=result.accepted_count,
         rejected_count=result.rejected_count,
         inference_available=result.inference_available,
@@ -352,6 +366,8 @@ def direct_upload_response_payload(result: DirectUploadJobResult) -> dict[str, A
         "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
         "profile_id": result.job.upload_profile_id,
         "status": result.job.status,
+        "uploaded_count": result.uploaded_count,
+        "duplicate_count": result.duplicate_count,
         "accepted_count": result.accepted_count,
         "rejected_count": result.rejected_count,
         "inference_available": result.inference_available,
@@ -359,14 +375,57 @@ def direct_upload_response_payload(result: DirectUploadJobResult) -> dict[str, A
 
 
 def profile_has_executable_direct_workflow(db, profile, *, disease_id: int) -> bool:
+    return linked_wadhwani_model_id_for_direct_workflow(db, profile, disease_id=disease_id) is not None
+
+
+def linked_wadhwani_model_id_for_direct_workflow(db, profile, *, disease_id: int) -> int | None:
     executable_model_ids = _executable_ai_model_ids(db)
-    return any(
-        workflow.get("active", True)
+    workflow_model_ids = {
+        int(workflow.get("ai_model_id") or 0)
+        for workflow in profile.ai_workflows
+        if workflow.get("active", True)
         and workflow.get("upload_kind") == UPLOAD_KIND_DIRECT_IMAGE
         and workflow.get("disease_id") == disease_id
-        and int(workflow.get("ai_model_id") or 0) in executable_model_ids
-        for workflow in profile.ai_workflows
+    }
+    linked = sorted(workflow_model_ids.intersection(executable_model_ids))
+    return linked[0] if linked else None
+
+
+def _queueable_wadhwani_task_ids(db, *, task_ids: tuple[int, ...], ai_model_id: int | None) -> tuple[int, ...]:
+    if not task_ids or ai_model_id is None:
+        return ()
+    task_id_set = set(task_ids)
+    graded_task_ids = set(
+        db.execute(
+            select(Grade.task_id)
+            .where(Grade.task_id.in_(task_id_set))
+            .where(Grade.role_slot == "ai")
+            .where(Grade.ai_model_id == ai_model_id)
+        ).scalars()
     )
+    runs = (
+        db.execute(
+            select(AIInferenceRun)
+            .where(AIInferenceRun.task_id.in_(task_id_set))
+            .where(AIInferenceRun.ai_model_id == ai_model_id)
+            .order_by(AIInferenceRun.created_at.desc(), AIInferenceRun.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    latest_runs: dict[int, AIInferenceRun] = {}
+    for run in runs:
+        latest_runs.setdefault(run.task_id, run)
+
+    queueable: list[int] = []
+    for task_id in task_ids:
+        if task_id in graded_task_ids:
+            continue
+        latest_run = latest_runs.get(task_id)
+        if latest_run is not None and latest_run.status in {"queued", "running"}:
+            continue
+        queueable.append(task_id)
+    return tuple(queueable)
 
 
 class DirectUploadJobError(ValueError):

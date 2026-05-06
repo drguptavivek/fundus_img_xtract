@@ -53,6 +53,8 @@ Success response: `201 Created`. Replaying the same `idempotency_key` returns `2
   "upload_kind": "direct_image",
   "profile_id": 100,
   "status": "completed",
+  "uploaded_count": 1,
+  "duplicate_count": 0,
   "accepted_count": 1,
   "rejected_count": 0,
   "inference_available": false
@@ -64,6 +66,23 @@ Success response: `201 Created`. Replaying the same `idempotency_key` returns `2
 ### Direct Image
 
 Use for independent fundus image files.
+
+Direct-image duplicate detection is global by image content hash. A duplicate
+attempt does not create another `DirectImageUpload`, direct-image verification
+row, verification job, thumbnail job, metadata job, PII job, or uploader
+file-count increment. The upload job still returns a visible item with
+`state: "duplicate"` pointing to the canonical older image UUID/task. Its
+thumbnail and current-profile Wadhwani AI result may be returned because the
+caller submitted the same image bytes. If the canonical image lacks a usable AI
+grade for the Wadhwani model linked to the selected upload profile, the server
+may create/reuse the canonical disease task and queue or retry AI inference for
+that canonical image. Human grades are never copied by duplicate handling.
+
+Direct-image counts distinguish new images from duplicate links:
+- `uploaded_count`: newly created `DirectImageUpload` rows.
+- `duplicate_count`: duplicate attempts linked to canonical images.
+- `accepted_count`: uploaded plus duplicate items.
+- `rejected_count`: invalid or failed items.
 
 Required fields:
 - common fields above

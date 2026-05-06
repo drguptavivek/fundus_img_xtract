@@ -710,12 +710,23 @@ def _create_job(
     return job
 
 
-def _upload_response(job: Job, *, upload_kind: str, accepted: int, rejected: int) -> dict[str, Any]:
+def _upload_response(
+    job: Job,
+    *,
+    upload_kind: str,
+    accepted: int,
+    rejected: int,
+    uploaded: int | None = None,
+    duplicates: int = 0,
+) -> dict[str, Any]:
+    uploaded_count = accepted if uploaded is None else uploaded
     return {
         "upload_token": job.token,
         "upload_kind": upload_kind,
         "profile_id": job.upload_profile_id,
         "status": job.status,
+        "uploaded_count": uploaded_count,
+        "duplicate_count": duplicates,
         "accepted_count": accepted,
         "rejected_count": rejected,
         "inference_available": False,
@@ -723,12 +734,17 @@ def _upload_response(job: Job, *, upload_kind: str, accepted: int, rejected: int
 
 
 def _upload_response_from_job(job: Job) -> dict[str, Any]:
-    accepted = sum(
-        1 for item in job.items if item.state in {"completed", "queued", "running"}
-    )
+    uploaded = sum(1 for item in job.items if item.state in {"completed", "queued", "running"})
+    duplicates = sum(1 for item in job.items if item.state == "duplicate")
+    accepted = uploaded + duplicates
     rejected = sum(1 for item in job.items if item.state == "error")
     payload = _upload_response(
-        job, upload_kind=job.upload_kind or "", accepted=accepted, rejected=rejected
+        job,
+        upload_kind=job.upload_kind or "",
+        accepted=accepted,
+        rejected=rejected,
+        uploaded=uploaded,
+        duplicates=duplicates,
     )
     payload["_replayed"] = True
     return payload

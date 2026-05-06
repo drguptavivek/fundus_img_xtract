@@ -47,6 +47,16 @@ phase, project participates in upload authorization and tagging only; it is not
 yet the general authorization boundary for grading, verification, analytics,
 datasets, jobs, media, or search.
 
+Direct-image duplicates are detected globally by image content hash. A duplicate
+attempt must not create a new `DirectImageUpload`, `DirectImageVerify`,
+verification job, thumbnail job, metadata job, PII job, or uploader upload-count
+increment for the submitted duplicate bytes. The current upload job keeps a
+visible duplicate item pointing to the canonical older image. Because the caller
+submitted identical image bytes, APIs may return that canonical image's
+thumbnail, task, and current-profile Wadhwani AI result. AI reuse is
+model-specific to the Wadhwani model linked to the selected upload profile;
+human grades are never copied or created by duplicate handling.
+
 ### Grading
 
 Grading follows grading slots.

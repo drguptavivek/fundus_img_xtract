@@ -56,6 +56,11 @@ this document first.
 - Rule: A user may open upload forms, submit upload jobs, call upload helper APIs, or use upload eligibility selectors only when the user has the `fileUploader` role.
 - Rule: A user may submit a direct, Remidio ZIP, pregraded, or encounter-set upload only when the selected upload profile is active, assigned to the user, and matches the selected project, lab unit, disease, camera, area, mydriatic state, and upload kind.
 - Rule: Every accepted upload must persist the authorized project tag onto the created upload/image records so later migration to project-scoped access has a reliable data anchor.
+- Rule: Direct-image duplicate detection is global by image content hash. A duplicate attempt must not create a new `DirectImageUpload`.
+- Rule: A duplicate direct-image attempt must remain visible in the current upload job as a duplicate item that points to the canonical older `DirectImageUpload`.
+- Rule: Duplicate direct-image attempts must not create `DirectImageVerify` rows, verification jobs, thumbnail jobs, metadata jobs, PII jobs, or user upload-count increments for the submitted duplicate bytes.
+- Rule: Returning the canonical thumbnail, task, and AI result for duplicate content is allowed because the uploader submitted identical image bytes.
+- Rule: AI result reuse for duplicate direct images is model-specific and must use only the Wadhwani model linked to the current upload profile. Human grades must never be copied or created by duplicate handling.
 - Rule: Admin, local-admin, data-manager, and master-admin status do not create upload-profile access by themselves.
 - Rule: Upload profile management is allowed for `admin`, `local_admin`, or `data_manager` only within the manager's allowed lab-unit scope.
 - Rule: Selected uploaders for a profile must already be assigned to the profile lab unit.
@@ -176,6 +181,7 @@ These rules cover actions that currently have executable entries in `authz/polic
 
 - Rule: A user may create a direct image upload only when the user has the `fileUploader` role and has an active upload profile relationship matching the selected project, lab unit, disease, camera, area, and upload kind.
 - Rule: Direct-image upload creation must tag the created direct image with the same project that was authorized through the upload profile.
+- Rule: A duplicate direct-image creation attempt may create only job bookkeeping for the attempt and, if the current upload profile enables Wadhwani AI, canonical-image AI task/run/grade records needed for that current model. It must not create direct-image verification records or verification work.
 - Relationship source: `upload_profile`.
 - Resource: `upload_selection`.
 

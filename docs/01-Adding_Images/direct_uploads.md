@@ -40,7 +40,7 @@ The direct upload functionality allows authorized users to upload individual ima
 - Limits number of files to `DIRECT_UPLOAD_MAX_FILES` (default: 100) - This is a per-request limit, not a user quota
 - Checks file size against `DIRECT_UPLOAD_MAX_FILE_SIZE_MB` (default: 5MB)
 - Validates MIME type against `DIRECT_UPLOAD_ALLOWED_MIMETYPES` (default: image/jpeg,image/png)
-- Prevents duplicate uploads by checking MD5 hash
+- Prevents duplicate image ingestion by checking the truncated SHA-256 content hash
 - Enforces user lifetime upload quota if configured (`MAX_FILES_PER_UPLOAD`)
 
 **Processing Steps**:
@@ -52,7 +52,7 @@ The direct upload functionality allows authorized users to upload individual ima
    - Duplicate files directory
 4. Processes each file:
    - Validates file size and type
-   - Checks for duplicates using MD5 hash
+   - Checks for duplicates using the truncated SHA-256 content hash
    - Saves original files to the upload directory
    - Creates database entries for new files
    - Updates user's file upload count
@@ -144,7 +144,7 @@ The direct upload functionality allows authorized users to upload individual ima
 Files are stored in user-specific directories organized by date to prevent naming conflicts and provide better organization.
 
 ### Duplicate Prevention
-Files are checked for duplicates using MD5 hashing. Duplicate files are saved to a separate duplicates directory but are not added to the database.
+Files are checked for duplicates using a SHA-256 content hash truncated to the database `file_hash` length. Duplicate attempts do not create a new `DirectImageUpload`, `DirectImageVerify`, verification job, thumbnail job, metadata job, PII job, or uploader upload-count increment. The upload job still records a duplicate `JobItem` that points to the canonical older image so web, mobile, and PWA clients can show the duplicate item, canonical thumbnail, and any current-profile Wadhwani AI result. If that AI result is missing or failed for the current upload profile's linked Wadhwani model, the canonical image task can be queued or retried for AI inference. Human grades are never copied for duplicate handling.
 
 ### Upload Quotas
 Users have a persistent upload count (`file_upload_count`) that tracks the total number of files they have uploaded across all sessions. This count is stored in the database and incremented with each successful file upload.

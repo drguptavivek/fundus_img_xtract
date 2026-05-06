@@ -157,6 +157,7 @@ def process_glaucoma_ai_uploads(
         remote_addr=remote_addr,
         lab_unit_id=selection.lab_unit_id,
         project_id=selection.project_id,
+        queueable_task_ids=set(upload_result.inference_task_ids_for_post_commit),
     )
 
     if app is not None and any(item.upload_id for item in queued_items):
@@ -206,8 +207,15 @@ def _enqueue_wadhwani_inference(
     remote_addr: str | None,
     lab_unit_id: int,
     project_id: int,
+    queueable_task_ids: set[int] | None = None,
 ) -> list[GlaucomaAIUploadItem]:
-    task_ids = [item.task_id for item in items if item.status == "success" and item.task_id is not None]
+    task_ids = [
+        item.task_id
+        for item in items
+        if item.status == "success"
+        and item.task_id is not None
+        and (queueable_task_ids is None or item.task_id in queueable_task_ids)
+    ]
     if not task_ids:
         return items
 

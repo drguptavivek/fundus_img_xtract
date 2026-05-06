@@ -1,8 +1,17 @@
 # Glaucoma AI Upload API
 
-Uploads 1-10 direct fundus images through a selected Upload Profile, creates unverified direct-image records plus glaucoma tasks for AI processing, queues the linked Wadhwani glaucoma AI model, and returns upload/task identifiers immediately. Human grading still requires the normal verification workflow.
+Uploads 1-10 direct fundus images through a selected Upload Profile, creates unverified direct-image records plus glaucoma tasks for AI processing, queues the linked Wadhwani glaucoma AI model, and returns upload/task identifiers immediately. Human grading still requires the normal verification workflow for newly stored images.
 
 The browser page, this JWT API, and `/api/mobile/v1/uploads` all use the same direct-upload job service for direct-image persistence. They create `DirectImageUpload`, `Job`, `JobItem`, and `GradingTask` records through the shared service; endpoint differences are limited to authentication, response shape, and Wadhwani-specific enqueue/result presentation.
+
+Duplicate direct images are detected globally by content hash. A duplicate
+attempt does not create a new `DirectImageUpload`, direct-image verification
+row, verification job, thumbnail job, metadata job, PII job, or uploader
+file-count increment. The current upload job keeps a visible duplicate item
+pointing to the canonical older image. Because the caller submitted identical
+bytes, the API may return that canonical image's thumbnail, task, and AI result.
+AI reuse is limited to the Wadhwani model linked to the selected upload profile;
+human grades are never copied or created by duplicate handling.
 
 ## `POST /api/glaucoma-ai/uploads`
 
@@ -171,7 +180,7 @@ Status: `201 Created`
 - `401`: missing, expired, or invalid JWT.
 - `403`: inactive user or token roles do not permit upload/inference.
 - Per-file failures are returned in `items` with `status: "error"` or `status: "enqueue_failed"`.
-- Duplicate direct images are represented as successful links to the existing canonical `DirectImageUpload`. The upload job item stores the existing image UUID and task ID, so the caller can display the previous thumbnail and the latest or newly queued Wadhwani result.
+- Duplicate direct images are represented as links to the existing canonical `DirectImageUpload`. The upload job item stores the existing image UUID and task ID, so the caller can display the previous thumbnail and the latest, pending, or newly queued Wadhwani result for the selected profile's model.
 - Successful uploads are stored as unverified direct images with a glaucoma task for AI inference. Human grading remains blocked until the image is verified through the normal verification workflow.
 - Wadhwani inference runs asynchronously through `celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task`. Poll `/recent/results` or `/<image_uuid>/result` for `inference.status`; use `/recent/results` when avoiding media reloads.
 

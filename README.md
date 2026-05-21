@@ -211,7 +211,9 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current admin and upload-governance model for projects, reusable profiles, uploader assignments, Remidio ZIP defaults, and AI workflow bindings
+- [EncounterSetType Policy and Direction](docs/01-Adding_Images/encounter_set_types.md) - Planned encounter-set schema, metadata contracts, and phased delivery model
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
+- [EncounterSetTypes API](docs/API/encounter-set-types/README.md) - Project-scoped encounter-set type CRUD and metadata-schema contract
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
@@ -232,7 +234,9 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
 - [Comprehensive Direct Upload Workflow](docs/01-Adding_Images/comprehensive_direct_upload_workflow.md) - Complete individual image upload system
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current upload governance rules for direct, pre-graded, Remidio ZIP, encounter-set intake, and AI workflow binding
+- [EncounterSetType Policy and Direction](docs/01-Adding_Images/encounter_set_types.md) - Planned encounter-set schema, metadata contracts, and phased delivery model
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Completed project/profile design for direct, pregraded, Remedio ZIP, encounter-set intake, and AI workflow binding
+- [EncounterSetTypes API](docs/API/encounter-set-types/README.md) - Project-scoped encounter-set type CRUD and metadata-schema contract
 - [Pre-Graded Uploads](docs/01-Adding_Images/pre_graded.md)
 - [AI Grades Import Workflow (Excel Consumption)](docs/01-Adding_Images/comprehensive_ai_grades_import_workflow.md) - Excel file import for AI grades (consumption only)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)

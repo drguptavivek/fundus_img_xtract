@@ -452,6 +452,12 @@ class Project(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    encounter_set_types: Mapped[List["EncounterSetType"]] = relationship(
+        "EncounterSetType",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint("title", name="uq_projects_title"),
@@ -2762,3 +2768,4 @@ from upload_profiles.models import (  # noqa: E402,F401
     UploadProfileKind,
     PatientEncounterTargetDisease,
 )
+from encounter_set_types.models import EncounterSetType  # noqa: E402,F401

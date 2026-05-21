@@ -4,7 +4,7 @@
       <td>
         <div class="d-flex align-items-center" style="margin-left: {{ directory.level * 20 }}px;">
           {% if directory.has_subdirs %}
-            <button class="btn btn-sm btn-link p-0 me-1" onclick="toggleDirectory('{{ directory.path }}')">
+            <button type="button" class="btn btn-sm btn-link p-0 me-1" data-toggle-directory="{{ directory.path }}">
               {% if directory.expanded %}
                 <i class="bi bi-dash-square text-primary"></i>
               {% else %}
@@ -42,7 +42,7 @@
       </td>
       <td data-dir-path="{{ directory.path }}">
         {% if directory.has_subdirs %}
-          <button class="btn btn-sm btn-outline-primary" onclick="toggleDirectory('{{ directory.path }}')">
+          <button type="button" class="btn btn-sm btn-outline-primary" data-toggle-directory="{{ directory.path }}">
             {% if directory.expanded %}
               <i class="bi bi-dash-square"></i> Collapse
             {% else %}

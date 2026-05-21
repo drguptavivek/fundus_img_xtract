@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import render_template
+from flask import current_app, jsonify, render_template, request
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +25,8 @@ from models import (
     RemidioRoutingRule,
     RemidioSite,
 )
+from utils.log_sanitize import sanitize_log_value
+from zip_processor import cleanup_processed_zip_intake_files
 
 
 @roles_required("admin", "data_manager")
@@ -39,6 +41,64 @@ def remidio_workspace():
     """Render the HTMX workspace fragment after Remidio mutations."""
     with transaction_scope() as db:
         return render_template("admin/partials/remidio_workspace.html", **_context(db))
+
+
+@roles_required("admin", "data_manager")
+def stuck_remidio_uploads_status():
+    """Return a dry-run view of processed Remidio ZIPs still in intake."""
+    date_folder = request.args.get("date_folder") or None
+    limit = _parse_optional_int(request.args.get("limit"), default=None)
+    with transaction_scope() as db:
+        result = cleanup_processed_zip_intake_files(
+            db,
+            date_folder=date_folder,
+            dry_run=True,
+            limit=limit,
+        )
+    return jsonify({"success": True, "data": result})
+
+
+@roles_required("admin", "data_manager")
+def cleanup_stuck_remidio_uploads():
+    """Run the guarded cleanup for processed Remidio ZIPs still in intake."""
+    payload = request.get_json(silent=True) or request.form
+    date_folder = payload.get("date_folder") or None
+    limit = _parse_optional_int(payload.get("limit"), default=None)
+    dry_run = _parse_bool(payload.get("dry_run"), default=False)
+
+    current_app.logger.warning(
+        "Admin requested stuck Remidio ZIP cleanup dry_run=%s date_folder=%s limit=%s",
+        dry_run,
+        sanitize_log_value(date_folder),
+        limit,
+    )
+    with transaction_scope() as db:
+        result = cleanup_processed_zip_intake_files(
+            db,
+            date_folder=date_folder,
+            dry_run=dry_run,
+            limit=limit,
+        )
+    status_code = 200 if result["errors"] == 0 else 207
+    return jsonify({"success": result["errors"] == 0, "data": result}), status_code
+
+
+def _parse_optional_int(value, *, default: int | None) -> int | None:
+    if value in (None, ""):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(parsed, 0)
+
+
+def _parse_bool(value, *, default: bool) -> bool:
+    if value in (None, ""):
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _context(db) -> dict[str, Any]:

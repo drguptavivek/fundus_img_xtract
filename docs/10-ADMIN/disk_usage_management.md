@@ -45,9 +45,9 @@ For each directory, it shows:
 - The first-seen file with each MD5 hash is kept in the system
 - All extracted images and PDFs from duplicates remain in the system
 
-### 3. Delete Old Processed ZIP Files
+### 3. Preview/Delete Old Processed ZIP Files
 
-**Purpose**: Removes ZIP files that have already been processed and are older than 1 month.
+**Purpose**: Removes ZIP files that have already been processed, DB-confirmed, and retained past the configured age.
 
 **How processed ZIP files are stored**:
 - After successful processing, ZIP files are moved to `files/zips_upload_processed/`
@@ -55,20 +55,26 @@ For each directory, it shows:
 - The extracted images and PDFs are stored separately and remain in the system
 
 **Deletion criteria**:
-- Only ZIP files in directories older than 30 days are deleted
+- Only ZIP files in directories older than the retention-days value are eligible
 - The system checks the directory name (which contains the date) to determine age
+- `zip_files.zip_filename` must match the archive filename
+- A linked `patient_encounters` row must exist
+- At least one linked `encounter_files` or `encounter_file_pdfs` row must exist
+- No active ZIP job item may exist for that filename
 - Only the original ZIP files are deleted, not the extracted content
 
 **Deletion process**:
-1. Click the "Delete Old ZIP Files (>1 month)" button (appears only when old ZIP files exist)
-2. Confirm the action in the dialog
-3. All ZIP files in date directories older than 30 days are deleted
-4. Empty directories are removed
-5. A success message shows how many files were deleted, from which directories, and space freed
+1. Enter retention days and an optional scan limit
+2. Click "Preview ZIP Cleanup" to dry-run the DB-confirmed retention cleanup
+3. Review the preview counts for eligible, skipped, and errored files
+4. Click "Delete DB-Confirmed ZIPs" and confirm the action
+5. Eligible ZIP files are deleted and empty date directories are removed
 
 **Safety considerations**:
 - Only processed ZIP files are deleted - extracted images and PDFs remain intact
-- The button only appears when eligible files exist
+- Dry-run preview is available before deletion
+- Files without DB-confirmed ingestion are skipped
+- Files with active ZIP job items are skipped
 - Confirmation dialog prevents accidental deletion
 - Detailed logging of all deletions
 
@@ -83,7 +89,7 @@ For each directory, it shows:
 - Location: `files/zips_upload_processed/YYYY_MM_DD/`
 - Created when: ZIP files are successfully processed
 - Contains: Original ZIP files after processing
-- Deleted when: Older than 30 days via admin interface
+- Deleted when: DB-confirmed and older than the retention-days value via admin interface
 
 ### Extracted Content (Never deleted by these tools)
 - Images: `files/zip_upload_images/YYYY_MM_DD/`

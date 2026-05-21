@@ -1,0 +1,85 @@
+{% from "_forms.html" import csrf_field %}
+
+<div class="modal fade" id="processedZipCleanupModal" tabindex="-1" aria-labelledby="processedZipCleanupModalLabel" aria-hidden="true" data-processed-zip-cleanup-modal>
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title h5" id="processedZipCleanupModalLabel">Processed ZIP Cleanup Preview</h2>
+          <div class="small text-muted">DB-confirmed archives older than {{ retention_days }} days</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6 col-lg-3">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Scanned</div>
+              <div class="fs-5 fw-semibold">{{ result.scanned }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Eligible</div>
+              <div class="fs-5 fw-semibold">{{ result.eligible }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Estimated space</div>
+              <div class="fs-5 fw-semibold">{{ size_label }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Skipped / Errors</div>
+              <div class="fs-5 fw-semibold">{{ result.skipped }} / {{ result.errors }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>ZIP</th>
+                <th>Status</th>
+                <th>Reason</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in result['items'][:100] %}
+              <tr>
+                <td><code>{{ item.filename }}</code></td>
+                <td>{{ 'Ready' if item.status == 'eligible' else item.status }}</td>
+                <td>{{ 'DB confirmed' if item.reason == 'eligible' else item.reason or '-' }}</td>
+                <td>{{ item.size_bytes }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">No matching ZIP archives found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if result['items']|length > 100 %}
+        <div class="small text-muted mt-2">Showing first 100 rows.</div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <form method="POST"
+              action="{{ url_for('admin.delete_old_processed_zips') }}"
+              onsubmit="return confirm('Delete {{ result.eligible }} DB-confirmed processed ZIP archives? This cannot be undone.')">
+          {{ csrf_field() }}
+          <input type="hidden" name="retention_days" value="{{ retention_days }}">
+          <input type="hidden" name="limit" value="{{ limit or '' }}">
+          <input type="hidden" name="dry_run" value="false">
+          <button type="submit" class="btn btn-danger" {% if result.eligible == 0 %}disabled{% endif %}>Delete ZIPs</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

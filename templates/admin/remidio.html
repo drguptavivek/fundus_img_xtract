@@ -15,6 +15,57 @@
     A Remidio connection can feed multiple projects. Use routing rules to map each Remidio site custom identifier and device type to the local project, lab unit, camera, and optional default task disease.
   </div>
 
+  <div class="card shadow-sm mb-4" id="stuck-remidio-upload-cleanup"
+       data-status-url="{{ url_for('admin.stuck_remidio_uploads_status') }}"
+       data-cleanup-url="{{ url_for('admin.cleanup_stuck_remidio_uploads') }}"
+       data-csrf-token="{{ csrf_token() }}">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-semibold">Stale ZIP Intake Cleanup</div>
+        <div class="small text-muted">Processed Remidio ZIPs still present across intake folders</div>
+      </div>
+      <div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" type="button" data-stuck-remidio-scan>Scan</button>
+        <button class="btn btn-sm btn-danger" type="button" data-stuck-remidio-cleanup>Cleanup</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4 col-lg-3">
+          <label class="form-label" for="stuck-remidio-date-folder">Date folder filter</label>
+          <input class="form-control" id="stuck-remidio-date-folder" name="date_folder" placeholder="All folders">
+        </div>
+        <div class="col-md-3 col-lg-2">
+          <label class="form-label" for="stuck-remidio-limit">Limit</label>
+          <input class="form-control" id="stuck-remidio-limit" name="limit" type="number" min="0" placeholder="No limit">
+        </div>
+        <div class="col-md-5 col-lg-7">
+          <div class="d-flex flex-wrap gap-2" data-stuck-remidio-summary hidden>
+            <span class="badge text-bg-secondary">Scanned <span data-stuck-remidio-count="scanned">0</span></span>
+            <span class="badge text-bg-warning">Eligible <span data-stuck-remidio-count="eligible">0</span></span>
+            <span class="badge text-bg-success">Moved <span data-stuck-remidio-count="moved">0</span></span>
+            <span class="badge text-bg-secondary">Skipped <span data-stuck-remidio-count="skipped">0</span></span>
+            <span class="badge text-bg-danger">Errors <span data-stuck-remidio-count="errors">0</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="small mt-3" data-stuck-remidio-message></div>
+      <div class="table-responsive mt-3" data-stuck-remidio-results hidden>
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>ZIP</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Destination</th>
+            </tr>
+          </thead>
+          <tbody data-stuck-remidio-rows></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="remidio-admin-workspace">
     {% include "admin/partials/remidio_workspace.html" %}
   </div>
@@ -24,4 +75,5 @@
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-stuck-remidio-uploads.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 {% endblock %}

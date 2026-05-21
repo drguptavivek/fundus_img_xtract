@@ -19,6 +19,8 @@ Auth model:
 | `/admin/api/materialized-view/last-refresh` | `GET` | `{"success": true, "data": object}` |
 | `/admin/api/materialized-view/refresh` | `POST` | `{"success": bool, "message": str}` |
 | `/admin/api/materialized-view/schedule` | `GET` | `{"success": true, "data": object}` |
+| `/admin/stuck-remidio-uploads/status` | `GET` | Dry-run scan across all intake date folders by default; returns `{"success": true, "data": {"dry_run": true, "scanned": int, "eligible": int, "moved": 0, "skipped": int, "errors": int, "items": array}}` |
+| `/admin/stuck-remidio-uploads/cleanup` | `POST` | Guarded cleanup across all intake date folders by default; returns `{"success": bool, "data": {"dry_run": bool, "scanned": int, "eligible": int, "moved": int, "skipped": int, "errors": int, "items": array}}` |
 | `/admin/sequences/refresh` | `POST` | Redirects to the admin status page; not JSON. |
 
 ## Thumbnail and media maintenance

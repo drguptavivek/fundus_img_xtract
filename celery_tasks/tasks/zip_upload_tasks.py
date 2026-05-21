@@ -6,13 +6,55 @@ from celery.utils.log import get_task_logger
 
 from celery_app import celery_app
 from models import Session, EncounterFile, EncounterFilePDF
-from zip_processor import ingest_zip_atomic, MaliciousZipError
+from zip_processor import cleanup_processed_zip_intake_files, ingest_zip_atomic, MaliciousZipError
+from utils.log_sanitize import sanitize_log_value
 from utils.upload_processing import process_file_visual, process_file_data_pipeline
 from utils.fileUtils import get_upload_dirs
 from job_store import db_set_job_status, db_set_item_state, db_any_item_error
 from celery_job_store import db_add_job_items, check_and_complete_job
 
 logger = get_task_logger(__name__)
+
+
+@celery_app.task(
+    name="celery_tasks.tasks.zip_upload_tasks.cleanup_processed_zip_intake_files",
+    bind=True,
+    acks_late=True,
+)
+def cleanup_processed_zip_intake_files_task(
+    self,
+    date_folder: str | None = None,
+    dry_run: bool = True,
+    limit: int | None = None,
+) -> dict:
+    """
+    Manually archive stale ZIP intake files that are already confirmed ingested.
+
+    The underlying cleanup remains dry-run by default and only moves files after
+    confirming the zip_files row, encounter, extracted file rows, and absence of
+    active ZIP job items.
+    """
+    session = Session()
+    try:
+        result = cleanup_processed_zip_intake_files(
+            session,
+            date_folder=date_folder,
+            dry_run=dry_run,
+            limit=limit,
+        )
+        logger.info(
+            "Processed ZIP intake cleanup dry_run=%s date_folder=%s scanned=%s eligible=%s moved=%s skipped=%s errors=%s",
+            dry_run,
+            sanitize_log_value(date_folder),
+            result["scanned"],
+            result["eligible"],
+            result["moved"],
+            result["skipped"],
+            result["errors"],
+        )
+        return result
+    finally:
+        session.close()
 
 @celery_app.task(name="celery_tasks.tasks.zip_upload_tasks.process_zip_coordinator_task", bind=True, acks_late=True)
 def process_zip_coordinator_task(

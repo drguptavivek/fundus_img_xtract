@@ -2,7 +2,7 @@
 {% block title %}Disk Usage Analysis{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+<div class="container-fluid py-4" id="disk-usage-admin" data-disk-usage-url="{{ url_for('admin.disk_usage') }}">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0">Disk Usage Analysis</h1>
     <span class="small text-muted">Analyzing: files and logs directories</span>
@@ -59,7 +59,7 @@
       <div>
         {% if has_dupmd5 %}
         <form method="POST" action="{{ url_for('admin.delete_duplicates') }}" class="d-inline"
-              onsubmit="return confirm('Are you sure you want to delete all duplicate files from ALL dupmd5 directories? This action cannot be undone.')">
+              data-confirm-submit="Are you sure you want to delete all duplicate files from ALL dupmd5 directories? This action cannot be undone.">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-sm btn-danger me-2">
             <i class="bi bi-trash"></i> Delete All Duplicates
@@ -68,20 +68,37 @@
         {% endif %}
         {% if has_old_zips %}
         <form method="POST" action="{{ url_for('admin.delete_old_processed_zips') }}" class="d-inline"
-              onsubmit="return confirm('Are you sure you want to delete all processed ZIP files older than 1 month? This action cannot be undone.')">
+              data-processed-zip-preview-form
+              hx-post="{{ url_for('admin.delete_old_processed_zips') }}"
+              hx-target="#processed-zip-cleanup-modal-host"
+              hx-swap="innerHTML">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-warning me-2">
-            <i class="bi bi-archive"></i> Delete Old ZIP Files (>1 month)
-          </button>
+          <input type="hidden" name="response" value="modal">
+          <div class="d-inline-flex flex-wrap align-items-end gap-2 me-2">
+            <div>
+              <label class="form-label small mb-1" for="processed-zip-retention-days">Older than days</label>
+              <input type="number" class="form-control form-control-sm" id="processed-zip-retention-days" style="width: 7rem;" name="retention_days" min="1" value="30" aria-describedby="processed-zip-retention-help">
+            </div>
+            <div>
+              <label class="form-label small mb-1" for="processed-zip-limit">Max files</label>
+              <input type="number" class="form-control form-control-sm" id="processed-zip-limit" style="width: 7rem;" name="limit" min="0" placeholder="All" aria-describedby="processed-zip-retention-help">
+            </div>
+            <button type="submit" name="dry_run" value="true" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-search"></i> Preview ZIP Cleanup
+            </button>
+          </div>
+          <div class="small text-muted mt-1" id="processed-zip-retention-help">
+            Preview or delete processed ZIP archives older than the day threshold. Blank max files scans all; deletion still requires DB-confirmed ingestion and no active ZIP job.
+          </div>
         </form>
         {% endif %}
-        <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="expandAll()">
+        <button type="button" class="btn btn-sm btn-outline-secondary me-2" data-expand-all>
           <i class="bi bi-plus-square"></i> Expand All
         </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="collapseAll()">
+        <button type="button" class="btn btn-sm btn-outline-secondary me-2" data-collapse-all>
           <i class="bi bi-dash-square"></i> Collapse All
         </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-refresh-page>
           <i class="bi bi-arrow-clockwise"></i> Refresh
         </button>
       </div>
@@ -116,48 +133,32 @@
   </div>
 </div>
 
-{% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-function toggleDirectory(path) {
-  const url = new URL(window.location);
-  const expandedDirs = url.searchParams.get('expanded') ? url.searchParams.get('expanded').split(',') : [];
-  
-  const index = expandedDirs.indexOf(path);
-  if (index > -1) {
-    expandedDirs.splice(index, 1);
-  } else {
-    expandedDirs.push(path);
-  }
-  
-  if (expandedDirs.length > 0) {
-    url.searchParams.set('expanded', expandedDirs.join(','));
-  } else {
-    url.searchParams.delete('expanded');
-  }
-  
-  window.location.href = url.toString();
-}
+<div class="modal fade" id="processedZipCleanupLoadingModal" tabindex="-1" aria-labelledby="processedZipCleanupLoadingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title h5" id="processedZipCleanupLoadingModalLabel">Scanning Processed ZIPs</h2>
+          <div class="small text-muted">Checking archive files against DB-confirmed ingestion state.</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex align-items-center gap-3">
+          <div class="spinner-border text-warning" role="status" aria-hidden="true"></div>
+          <div>
+            <div class="fw-semibold">Preview is running</div>
+            <div class="small text-muted">The delete button will appear only after the DB checks complete.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="processed-zip-cleanup-modal-host"></div>
+{% endblock %}
 
-function expandAll() {
-  const allPaths = [];
-  document.querySelectorAll('[data-dir-path]').forEach(el => {
-    allPaths.push(el.getAttribute('data-dir-path'));
-  });
-  
-  const url = new URL(window.location);
-  if (allPaths.length > 0) {
-    url.searchParams.set('expanded', allPaths.join(','));
-  }
-  window.location.href = url.toString();
-}
-
-function collapseAll() {
-  const url = new URL(window.location);
-  url.searchParams.delete('expanded');
-  window.location.href = url.toString();
-}
-</script>
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-disk-usage.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 {% endblock %}

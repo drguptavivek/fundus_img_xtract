@@ -5,6 +5,7 @@ import zipfile
 import hashlib
 import re
 import shutil
+import logging
 from pathlib import Path
 from datetime import datetime, date as _date
 
@@ -23,6 +24,7 @@ from models import (
     PatientEncounters,
     EncounterFile,
     EncounterFilePDF,
+    JobItem,
     Camera,
     Session,
     BASE_DIR, 
@@ -32,11 +34,13 @@ from models import (
     PROCESSED_DIR,
     PROCESSING_ERROR_DIR,
 )
+from utils.log_sanitize import sanitize_log_value
 from uuid import uuid4
 
 # Path for log file
 LOG_FILE = BASE_DIR / os.getenv("ZIP_INGEST_LOG", "logs/zip_main_process_log.txt")
 MALICIOUS_LOG_FILE = BASE_DIR / os.getenv("MALICIOUS_UPLOAD_LOG", "logs/malicious_uploads.log")
+logger = logging.getLogger(__name__)
 
 # Only allow these extensions inside uploaded ZIPs
 ALLOWED_EXTS = {".pdf", ".jpg", ".jpeg"}
@@ -181,6 +185,148 @@ def daily_dup_dir() -> Path:
     ddir = files_root / f"dupmd5_{datetime.now():%Y-%m-%d}"
     ddir.mkdir(parents=True, exist_ok=True)
     return ddir
+
+
+ACTIVE_JOB_ITEM_STATES = {"queued", "processing", "running", "started"}
+
+
+def _processed_cleanup_destination(zip_path: Path) -> Path:
+    """Return a non-overwriting processed archive destination for an intake ZIP."""
+    destination_dir = PROCESSED_DIR / zip_path.parent.name
+    destination = destination_dir / zip_path.name
+    if not destination.exists():
+        return destination
+
+    for index in range(1, 10_000):
+        candidate = destination_dir / f"{zip_path.stem}.cleanup-{index}{zip_path.suffix}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"No available processed destination for {zip_path.name}")
+
+
+def _iter_zip_intake_files(date_folder: str | None = None) -> list[Path]:
+    if date_folder:
+        date_path = Path(date_folder)
+        if date_path.name != date_folder or date_path.is_absolute():
+            raise ValueError("date_folder must be a single intake folder name")
+        search_roots = [UPLOAD_DIR / date_folder]
+    else:
+        search_roots = [UPLOAD_DIR]
+
+    zip_paths: list[Path] = []
+    for root in search_roots:
+        if not root.exists():
+            continue
+        zip_paths.extend(
+            path
+            for path in root.rglob("*.zip")
+            if path.is_file() and not path.name.startswith("._")
+        )
+    return sorted(zip_paths)
+
+
+def _zip_intake_file_cleanup_status(session, zip_path: Path) -> tuple[bool, str, ZipFile | None]:
+    db_filename = clean_filename(zip_path.name)
+    zip_file = session.query(ZipFile).filter(ZipFile.zip_filename == db_filename).one_or_none()
+    if zip_file is None:
+        return False, "missing_zip_file_row", None
+
+    encounter = zip_file.patient_encounter
+    if encounter is None:
+        return False, "missing_patient_encounter", zip_file
+
+    if not encounter.encounter_files and not encounter.encounter_file_pdfs:
+        return False, "missing_extracted_encounter_file", zip_file
+
+    active_job_item = (
+        session.query(JobItem.id)
+        .filter(JobItem.filename.in_({zip_path.name, db_filename}))
+        .filter(JobItem.state.in_(ACTIVE_JOB_ITEM_STATES))
+        .first()
+    )
+    if active_job_item is not None:
+        return False, "active_job_item_exists", zip_file
+
+    return True, "eligible", zip_file
+
+
+def cleanup_processed_zip_intake_files(
+    session,
+    *,
+    date_folder: str | None = None,
+    dry_run: bool = True,
+    limit: int | None = None,
+) -> dict:
+    """
+    Move stale intake ZIP files to processed only after confirming ingestion in DB.
+
+    A ZIP is eligible only when it has a zip_files row, linked encounter, at
+    least one extracted image/PDF row, and no active job item for that ZIP.
+    """
+    zip_paths = _iter_zip_intake_files(date_folder)
+    if limit is not None:
+        zip_paths = zip_paths[: max(limit, 0)]
+
+    result = {
+        "dry_run": dry_run,
+        "date_folder": date_folder,
+        "scanned": 0,
+        "eligible": 0,
+        "moved": 0,
+        "skipped": 0,
+        "errors": 0,
+        "items": [],
+    }
+
+    for zip_path in zip_paths:
+        result["scanned"] += 1
+        item = {
+            "filename": zip_path.name,
+            "source": str(zip_path.relative_to(UPLOAD_DIR.parent)),
+            "status": "skipped",
+            "reason": None,
+            "destination": None,
+        }
+        try:
+            is_eligible, reason, zip_file = _zip_intake_file_cleanup_status(session, zip_path)
+            item["reason"] = reason
+            if not is_eligible:
+                result["skipped"] += 1
+                result["items"].append(item)
+                continue
+
+            result["eligible"] += 1
+            destination = _processed_cleanup_destination(zip_path)
+            item["destination"] = str(destination.relative_to(PROCESSED_DIR.parent))
+            if dry_run:
+                item["status"] = "eligible"
+                result["items"].append(item)
+                continue
+
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(zip_path), str(destination))
+            item["status"] = "moved"
+            result["moved"] += 1
+            logger.info(
+                "Moved processed intake ZIP %s to %s after DB confirmation zip_file_id=%s",
+                sanitize_log_value(zip_path.name),
+                sanitize_log_value(destination),
+                getattr(zip_file, "id", None),
+            )
+        except Exception as exc:
+            result["errors"] += 1
+            item["status"] = "error"
+            item["reason"] = type(exc).__name__
+            item["error"] = str(exc)
+            logger.error(
+                "Failed cleanup check/move for intake ZIP %s: %s",
+                sanitize_log_value(zip_path),
+                sanitize_log_value(exc),
+                exc_info=True,
+            )
+        result["items"].append(item)
+
+    return result
 
 
 # --- Main Processing Logic ---
@@ -855,9 +1001,17 @@ def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | N
             
             # Move ZIP to processed
             try:
+                daily_dirs['processed'].mkdir(parents=True, exist_ok=True)
                 shutil.move(str(zip_path), str(daily_dirs['processed'] / zip_path.name))
-            except Exception:
-                pass # Non-critical if move fails
+            except Exception as exc:
+                logger.warning(
+                    "Failed to move processed ZIP %s to %s: %s",
+                    sanitize_log_value(zip_path.name),
+                    sanitize_log_value(daily_dirs['processed'] / zip_path.name),
+                    sanitize_log_value(exc),
+                    exc_info=True,
+                )
+                log_status(zip_path.name, "MOVE_FAILED", str(exc))
             
             # Return IDs for async processing
             return ([f.id for f in files_to_add], [f.id for f in files_to_add_pdfs])
@@ -866,9 +1020,17 @@ def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | N
         session.rollback()
         # Move to error
         try:
+            daily_dirs['error'].mkdir(parents=True, exist_ok=True)
             shutil.move(str(zip_path), str(daily_dirs['error'] / zip_path.name))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error(
+                "Failed to move errored ZIP %s to %s: %s",
+                sanitize_log_value(zip_path.name),
+                sanitize_log_value(daily_dirs['error'] / zip_path.name),
+                sanitize_log_value(exc),
+                exc_info=True,
+            )
+            log_status(zip_path.name, "ERROR_MOVE_FAILED", str(exc))
         raise
 
 

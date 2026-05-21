@@ -13,6 +13,7 @@ def process_zip_job_task(
     saved_paths: list[str],
     user_id: int | None = None,
     hospital_id: int | None = None,
+    upload_context: dict | None = None,
 ) -> None:
     paths = [Path(p) for p in saved_paths]
-    process_zip_job(job_token, paths)
+    process_zip_job(job_token, paths, upload_context=upload_context)

@@ -1,5 +1,6 @@
 #main.py
 import os
+import json
 import zipfile
 import hashlib
 import re
@@ -129,6 +130,27 @@ def clean_filename(name: str) -> str:
     return re.sub(r"\s\(\d+\)", "", name)
 
 
+def _load_zip_upload_context(zip_path: Path, upload_context: dict | None = None) -> dict:
+    """Resolve durable upload scope for a ZIP, falling back to legacy sidecar metadata."""
+    context = dict(upload_context or {})
+    meta_path = UPLOAD_DIR.parent / "upload_meta" / f"{zip_path.name}.json"
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as mf:
+            sidecar_context = json.load(mf)
+        context = {**sidecar_context, **{key: value for key, value in context.items() if value is not None}}
+
+    required = ("lab_unit_id", "project_id", "camera_id", "default_disease_id")
+    missing = [name for name in required if not context.get(name)]
+    if missing:
+        raise ValueError(f"ZIP upload metadata is missing required scope: {', '.join(missing)}")
+
+    normalized = {}
+    for key in ("lab_unit_id", "project_id", "camera_id", "default_disease_id", "upload_profile_id"):
+        value = context.get(key)
+        normalized[key] = int(value) if value is not None else None
+    return normalized
+
+
 def parse_capture_date(s: str | None) -> _date | None:
     if not s:
         return None
@@ -162,7 +184,7 @@ def daily_dup_dir() -> Path:
 
 
 # --- Main Processing Logic ---
-def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
+def process_zip_file(zip_path: Path, session, upload_context: dict | None = None) -> tuple[list[str], str]:
     """
     Processes a single ZIP file, extracts metadata, and organizes files.
     Ensures the ZIP file is CLOSED before attempting to move it.
@@ -422,27 +444,12 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
             clean_name = clean_filename(zip_path.name)
             new_zip_file = ZipFile(zip_filename=clean_name, md5_hash=md5_hash)
             
-            # Read metadata to get lab unit information
-            lab_unit_id = None
-            camera_id = None
-            project_id = None
-            default_disease_id = None
-            try:
-                meta_dir = UPLOAD_DIR.parent / "upload_meta"
-                meta_path = meta_dir / f"{zip_path.name}.json"
-                if meta_path.exists():
-                    import json
-                    with open(meta_path, "r", encoding="utf-8") as mf:
-                        meta = json.load(mf)
-                        lab_unit_id = meta.get("lab_unit_id")
-                        camera_id = meta.get("camera_id")
-                        project_id = meta.get("project_id")
-                        default_disease_id = meta.get("default_disease_id")
-            except Exception:
-                pass  # If metadata is not available or invalid, continue without lab_unit_id
-
-            if not camera_id:
-                raise ValueError("ZIP upload metadata is missing camera_id")
+            context = _load_zip_upload_context(zip_path, upload_context)
+            lab_unit_id = context["lab_unit_id"]
+            camera_id = context["camera_id"]
+            project_id = context["project_id"]
+            default_disease_id = context["default_disease_id"]
+            upload_profile_id = context.get("upload_profile_id")
 
             camera = session.query(Camera).filter(
                 Camera.id == camera_id,
@@ -458,6 +465,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                 lab_unit_id=lab_unit_id,
                 project_id=project_id,
                 disease_id=default_disease_id,
+                upload_profile_id=upload_profile_id,
             )
             # Populate proper Date column when possible
             parsed_dt = parse_capture_date(capture_date)
@@ -661,7 +669,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
         # Do not return here; allow previous return or raised exceptions to propagate
 
 
-def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list[int]]:
+def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | None = None) -> tuple[list[int], list[int]]:
     """
     New Async Workflow Coordinator:
     1. Validates entire ZIP (All-or-Nothing).
@@ -698,27 +706,12 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
     extracted_images = [] # (path, uuid, encounter_file_obj)
     extracted_pdfs = []   # (path, uuid, encounter_file_pdf_obj)
     
-    # Get metadata for Lab Unit
-    lab_unit_id = None
-    camera_id = None
-    project_id = None
-    default_disease_id = None
-    try:
-        meta_dir = UPLOAD_DIR.parent / "upload_meta"
-        meta_path = meta_dir / f"{zip_path.name}.json"
-        if meta_path.exists():
-            import json
-            with open(meta_path, "r", encoding="utf-8") as mf:
-                meta = json.load(mf)
-                lab_unit_id = meta.get("lab_unit_id")
-                camera_id = meta.get("camera_id")
-                project_id = meta.get("project_id")
-                default_disease_id = meta.get("default_disease_id")
-    except Exception:
-        pass
-
-    if not camera_id:
-        raise ValueError("ZIP upload metadata is missing camera_id")
+    context = _load_zip_upload_context(zip_path, upload_context)
+    lab_unit_id = context["lab_unit_id"]
+    camera_id = context["camera_id"]
+    project_id = context["project_id"]
+    default_disease_id = context["default_disease_id"]
+    upload_profile_id = context.get("upload_profile_id")
 
     camera = session.query(Camera).filter(
         Camera.id == camera_id,
@@ -792,6 +785,7 @@ def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list
                 lab_unit_id=lab_unit_id,
                 project_id=project_id,
                 disease_id=default_disease_id,
+                upload_profile_id=upload_profile_id,
             )
             parsed_dt = parse_capture_date(capture_date)
             if parsed_dt:

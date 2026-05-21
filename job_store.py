@@ -134,3 +134,20 @@ def db_get_job_payload(job_token: str) -> dict | None:
                 for it in job.items
             ],
         }
+
+
+def db_get_job_upload_context(job_token: str) -> dict | None:
+    """Return durable upload context needed by async processors."""
+    with transaction_scope() as db:
+        job = db.query(Job).filter_by(token=job_token).first()
+        if not job:
+            return None
+        return {
+            "lab_unit_id": job.lab_unit_id,
+            "project_id": job.project_id,
+            "upload_profile_id": job.upload_profile_id,
+            "upload_kind": job.upload_kind,
+            "uploader_user_id": job.uploader_user_id,
+            "uploader_username": job.uploader_username,
+            "uploader_ip": job.uploader_ip,
+        }

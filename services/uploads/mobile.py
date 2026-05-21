@@ -22,6 +22,7 @@ from models import (
     AIInferenceRun,
     AIModelIntegration,
     DIRECT_UPLOAD_DIR,
+    UPLOAD_DIR,
     DirectImageUpload,
     EncounterSetImage,
     Grade,
@@ -443,7 +444,25 @@ def _create_direct_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDic
 
 
 def run_mobile_upload_post_commit(app, post_commit: dict[str, Any] | None) -> None:
-    if not post_commit or post_commit.get("kind") != "direct_image":
+    if not post_commit:
+        return
+    if post_commit.get("kind") == "remidio":
+        try:
+            from worker import queue_job
+
+            queue_job(
+                app,
+                str(post_commit["job_token"]),
+                [Path(path) for path in post_commit.get("saved_paths", [])],
+                user_id=int(post_commit["user_id"]),
+                hospital_id=post_commit.get("hospital_id"),
+                upload_context=post_commit.get("upload_context"),
+            )
+        except Exception as exc:
+            app.logger.warning("Could not queue mobile Remidio ZIP processing: %s", sanitize_log_value(exc))
+        return
+
+    if post_commit.get("kind") != "direct_image":
         return
     try:
         enqueue_direct_upload_post_commit(
@@ -506,13 +525,16 @@ def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDi
     )
     accepted = 0
     rejected = 0
+    saved_paths: list[str] = []
     for file in upload_files:
         valid, detail = _validate_zip_file(file)
         if valid:
             accepted += 1
             state = "queued"
             source_type = "remidio_zip"
-            filename = _save_mobile_zip(file)
+            saved_path = _save_mobile_zip(file)
+            saved_paths.append(str(saved_path))
+            filename = saved_path.name
         else:
             rejected += 1
             state = "error"
@@ -535,7 +557,24 @@ def _create_remidio_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDi
     elif rejected:
         job.status = "partial_error"
     db.flush()
-    return _upload_response(job, upload_kind=UPLOAD_KIND_REMIDIO, accepted=accepted, rejected=rejected)
+    payload = _upload_response(job, upload_kind=UPLOAD_KIND_REMIDIO, accepted=accepted, rejected=rejected)
+    if accepted:
+        payload["_post_commit"] = {
+            "kind": "remidio",
+            "user_id": actor.user_id,
+            "job_token": job.token,
+            "saved_paths": saved_paths,
+            "hospital_id": profile.hospital_id,
+            "upload_context": {
+                "hospital_id": profile.hospital_id,
+                "lab_unit_id": profile.lab_unit_id,
+                "project_id": profile.project_id,
+                "upload_profile_id": profile.profile_id,
+                "default_disease_id": profile.default_disease_id,
+                "camera_id": camera_id,
+            },
+        }
+    return payload
 
 
 def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: MultiDict, idempotency_key: str) -> dict[str, Any]:
@@ -864,16 +903,16 @@ def _validate_zip_file(file: FileStorage) -> tuple[bool, str]:
     return True, "ZIP queued for processing."
 
 
-def _save_mobile_zip(file: FileStorage) -> str:
+def _save_mobile_zip(file: FileStorage) -> Path:
     date_str = datetime.now(timezone.utc).strftime("%Y_%m_%d")
-    save_dir = Path(current_app.root_path) / "files" / "mobile_remidio_zips" / date_str
+    save_dir = UPLOAD_DIR / date_str
     save_dir.mkdir(parents=True, exist_ok=True)
     filename = secure_filename(file.filename or f"{uuid.uuid4().hex}.zip")
     target = save_dir / filename
     if target.exists():
         target = save_dir / f"{target.stem}-{uuid.uuid4().hex[:8]}{target.suffix}"
     file.save(str(target))
-    return target.name
+    return target
 
 
 def _encounter_json(form: MultiDict) -> dict[str, Any]:

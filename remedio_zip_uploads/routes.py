@@ -318,6 +318,7 @@ def upload_files():
                     "hospital_id": hospital_id,
                     "lab_unit_id": lab_unit_id,
                     "project_id": upload_profile.project_id,
+                    "upload_profile_id": upload_profile.profile_id,
                     "default_disease_id": upload_profile.default_disease_id,
                     "camera_id": camera_id,
                 }
@@ -348,13 +349,24 @@ def upload_files():
         lab_unit_id=lab_unit_id,
         project_id=upload_profile.project_id,
         upload_type="zip upload",
+        upload_kind=UPLOAD_KIND_REMIDIO,
+        upload_profile_id=upload_profile.profile_id,
     )
+    upload_context = {
+        "hospital_id": hospital_id,
+        "lab_unit_id": lab_unit_id,
+        "project_id": upload_profile.project_id,
+        "upload_profile_id": upload_profile.profile_id,
+        "default_disease_id": upload_profile.default_disease_id,
+        "camera_id": camera_id,
+    }
     queue_job(
         current_app,
         job_token,
         saved_paths,
         user_id=uploader_user_id,
         hospital_id=hospital_id,
+        upload_context=upload_context,
     )
 
     flash(f"Queued {len(saved_paths)} file(s) for processing. Rejected: {len(rejected)}", "info")

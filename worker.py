@@ -5,10 +5,10 @@ from models import Session
 from zip_processor import setup_environment,  process_zip_file
 from process_pdfs import process_all_pdfs_for_ocr
 from job_store import (
-    db_set_job_status, db_set_item_state, db_any_item_error,
+    db_set_job_status, db_set_item_state, db_any_item_error, db_get_job_upload_context,
 )
 
-def _process_one_zip(zip_path: Path) -> dict:
+def _process_one_zip(zip_path: Path, upload_context: dict | None = None) -> dict:
     """
     Reuse existing pipeline:
       - setup env & db
@@ -18,7 +18,7 @@ def _process_one_zip(zip_path: Path) -> dict:
     setup_environment()
     db = Session()
     try:
-        pdfs, status = process_zip_file(zip_path, db)
+        pdfs, status = process_zip_file(zip_path, db, upload_context=upload_context)
         
         # Handle different status values from process_zip_file
         if status == "duplicate":
@@ -40,12 +40,13 @@ def _process_one_zip(zip_path: Path) -> dict:
     finally:
         db.close()
 
-def process_zip_job(job_token: str, saved_paths: list[Path]):
+def process_zip_job(job_token: str, saved_paths: list[Path], upload_context: dict | None = None):
     db_set_job_status(job_token, "processing")
+    context = upload_context or db_get_job_upload_context(job_token)
     try:
         for p in saved_paths:
             db_set_item_state(job_token, p.name, "processing")
-            result = _process_one_zip(p)
+            result = _process_one_zip(p, upload_context=context)
             # Map statuses to appropriate job item states
             if result["status"] == "skipped" and "Duplicate file" in result.get("message", ""):
                 # Mark duplicate files as rejected (error state)
@@ -70,6 +71,7 @@ def queue_job(
     saved_paths: list[Path],
     user_id: int | None = None,
     hospital_id: int | None = None,
+    upload_context: dict | None = None,
 ):
     """
     Submit a job to the shared executor or Celery.
@@ -86,9 +88,10 @@ def queue_job(
                 job_token,
                 user_id=user_id,
                 hospital_id=hospital_id,
+                upload_context=upload_context,
             )
         return
 
     # Fallback to local executor (Legacy Synchronous/Threaded)
     executor = app.config["EXECUTOR"]
-    executor.submit(process_zip_job, job_token, saved_paths)
+    executor.submit(process_zip_job, job_token, saved_paths, upload_context)

@@ -268,8 +268,17 @@ def test_mobile_direct_upload_duplicate_counts_as_duplicate_not_uploaded(client,
     assert duplicate_job.items[0].state == "duplicate"
 
 
-def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkeypatch, mobile_upload_data):
+def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkeypatch, tmp_path, mobile_upload_data):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    queued = {}
+
+    def fake_queue_job(app, job_token, saved_paths, **kwargs):
+        queued["job_token"] = job_token
+        queued["saved_paths"] = saved_paths
+        queued["kwargs"] = kwargs
+
+    monkeypatch.setattr("worker.queue_job", fake_queue_job)
+    monkeypatch.setattr("services.uploads.mobile._save_mobile_zip", lambda file: tmp_path / (file.filename or "remidio.zip"))
     token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
 
     response = client.post(
@@ -292,6 +301,8 @@ def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkey
     assert payload["upload_kind"] == UPLOAD_KIND_REMIDIO
     assert payload["accepted_count"] == 1
     assert payload["status"] == "queued"
+    assert queued["kwargs"]["upload_context"]["project_id"] == mobile_upload_data["project"].id
+    assert queued["kwargs"]["upload_context"]["upload_profile_id"] == mobile_upload_data["profile"].id
 
 
 def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(client, db_session, monkeypatch, mobile_upload_data):

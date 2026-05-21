@@ -21,6 +21,7 @@ def process_zip_coordinator_task(
     job_token: str,
     user_id: int | None = None,
     hospital_id: int | None = None,
+    upload_context: dict | None = None,
 ) -> None:
     """
     Coordinator Task:
@@ -36,7 +37,7 @@ def process_zip_coordinator_task(
     try:
         # 1. Atomic Ingestion (Validate + Extract + DB)
         # This moves the ZIP to 'processed' or 'error' automatically
-        image_ids, pdf_ids = ingest_zip_atomic(zip_path, session)
+        image_ids, pdf_ids = ingest_zip_atomic(zip_path, session, upload_context=upload_context)
         
         total_files = len(image_ids) + len(pdf_ids)
         logger.info(f"Ingested {total_files} files from {zip_path.name}")

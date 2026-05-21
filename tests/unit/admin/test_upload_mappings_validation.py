@@ -143,7 +143,6 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
     db_session.add_all([manager, hospital, lab, project, disease, camera, area])
     db_session.flush()
     encounter_set_type = EncounterSetType(
-        project_id=project.id,
         name="EST Profile Type",
         code="est_profile_type",
         target_scheme_id=disease.id,

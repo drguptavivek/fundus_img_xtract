@@ -96,7 +96,7 @@ Profile create/update fields:
 - `disease_ids` repeated integers, required
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
-- `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active and belong to the selected project
+- `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active and its target scheme must be included in the profile's allowed target schemes
 - `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans
 - `camera_ids` repeated integers, required
@@ -147,7 +147,7 @@ Allowed diseases define valid disease targets for the profile. Direct and pre-gr
 
 Encounter-set upload does not use the Remidio default. When an encounter-set API request supplies `disease_id`, that disease must be allowed by the selected project/lab profile. When `disease_id` is missing, the encounter-set flow uses profile allowed diseases rather than Remidio defaults.
 
-When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes from the same project. Upload UI must require the uploader to select one of those types for the encounter. That selected type governs the encounter-level and image-level metadata schema and the single target evaluation scheme for the set.
+When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. Upload UI must require the uploader to select one of those types for the encounter. Project mapping stays on the Upload Profile. The selected type governs the encounter-level and image-level metadata schema and the single target evaluation scheme for the set.
 
 AI workflow bindings are valid only when the AI model is actively linked to the selected disease through `AIModelDisease`, and when the workflow upload kind is enabled on the profile.
 
@@ -165,7 +165,8 @@ Common user-facing errors include:
 - `Default disease is only used for Remedio ZIP profiles.`
 - `Select at least one EncounterSetType for encounter-set uploads.`
 - `EncounterSetTypes are only used when encounter-set uploads are allowed.`
-- `EncounterSetTypes must be active and belong to the selected project.`
+- `EncounterSetTypes must be active.`
+- `EncounterSetType target schemes must be included in allowed target schemes.`
 - `AI workflow disease and upload type must be included in the profile, and AI models must exist.`
 - `Selected user must be assigned to the profile lab unit.`
 - `Upload profile not found in your lab-unit scope.`

@@ -7,13 +7,14 @@ import re
 from typing import Any
 
 import db_transaction_manager
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from encounter_set_types.models import EncounterSetType
-from models import Disease, Project
+from models import Disease
 from upload_profiles.admin_service import MutationResult
+from upload_profiles.models import UploadProfileEncounterSetType
 from upload_profiles.service import manager_lab_unit_ids
 
 
@@ -37,7 +38,6 @@ _CODE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 @dataclass
 class EncounterSetTypeInput:
-    project_id: int | None
     name: str
     code: str
     target_scheme_id: int | None
@@ -49,25 +49,17 @@ class EncounterSetTypeInput:
 def list_encounter_set_types(
     manager_user_id: int,
     *,
-    project_id: int | None = None,
     include_inactive: bool = False,
 ) -> list[dict[str, Any]]:
-    """List encounter-set types in the manager's upload-profile project scope."""
+    """List reusable encounter-set types for managers with upload metadata scope."""
     with db_transaction_manager.transaction_scope() as db:
-        scoped_project_ids = _manager_project_ids(db, manager_user_id)
-        if not scoped_project_ids:
+        if not _has_manager_scope(manager_user_id):
             return []
         query = (
             select(EncounterSetType)
-            .where(EncounterSetType.project_id.in_(scoped_project_ids))
-            .options(
-                selectinload(EncounterSetType.project),
-                selectinload(EncounterSetType.target_scheme),
-            )
-            .order_by(EncounterSetType.project_id, EncounterSetType.active.desc(), EncounterSetType.name)
+            .options(selectinload(EncounterSetType.target_scheme))
+            .order_by(EncounterSetType.active.desc(), EncounterSetType.name)
         )
-        if project_id is not None:
-            query = query.where(EncounterSetType.project_id == project_id)
         if not include_inactive:
             query = query.where(EncounterSetType.active.is_(True))
         rows = db.execute(query).scalars().all()
@@ -91,12 +83,11 @@ def create_encounter_set_type(manager_user_id: int, dto: EncounterSetTypeInput) 
     if error:
         return MutationResult(False, error, 400)
     with db_transaction_manager.transaction_scope() as db:
-        if not _can_manage_project(db, manager_user_id, dto.project_id):
-            return MutationResult(False, "Project not found in your upload-profile scope.", 404)
+        if not _has_manager_scope(manager_user_id):
+            return MutationResult(False, "You are not assigned to any lab units for upload metadata management.", 403)
         if db.get(Disease, dto.target_scheme_id) is None:
             return MutationResult(False, "Target scheme not found.", 404)
         row = EncounterSetType(
-            project_id=dto.project_id,
             name=dto.name.strip(),
             code=dto.code.strip(),
             description=dto.description,
@@ -111,7 +102,7 @@ def create_encounter_set_type(manager_user_id: int, dto: EncounterSetTypeInput) 
             db.flush()
         except IntegrityError:
             db.rollback()
-            return MutationResult(False, "Encounter-set type code already exists for this project.", 400)
+            return MutationResult(False, "Encounter-set type code already exists.", 400)
         return MutationResult(
             True,
             "Encounter-set type created.",
@@ -128,11 +119,8 @@ def update_encounter_set_type(manager_user_id: int, type_id: int, dto: Encounter
         row = _get_scoped_type(db, manager_user_id, type_id)
         if row is None:
             return MutationResult(False, "Encounter-set type not found.", 404)
-        if not _can_manage_project(db, manager_user_id, dto.project_id):
-            return MutationResult(False, "Project not found in your upload-profile scope.", 404)
         if db.get(Disease, dto.target_scheme_id) is None:
             return MutationResult(False, "Target scheme not found.", 404)
-        row.project_id = dto.project_id
         row.name = dto.name.strip()
         row.code = dto.code.strip()
         row.description = dto.description
@@ -144,7 +132,7 @@ def update_encounter_set_type(manager_user_id: int, type_id: int, dto: Encounter
             db.flush()
         except IntegrityError:
             db.rollback()
-            return MutationResult(False, "Encounter-set type code already exists for this project.", 400)
+            return MutationResult(False, "Encounter-set type code already exists.", 400)
         return MutationResult(
             True,
             "Encounter-set type updated.",
@@ -166,9 +154,28 @@ def set_encounter_set_type_active(manager_user_id: int, type_id: int, active: bo
         )
 
 
+def delete_encounter_set_type(manager_user_id: int, type_id: int) -> MutationResult:
+    """Delete an encounter-set type only when no upload profile references it."""
+    with db_transaction_manager.transaction_scope() as db:
+        row = _get_scoped_type(db, manager_user_id, type_id)
+        if row is None:
+            return MutationResult(False, "Encounter-set type not found.", 404)
+        linked_profile_count = db.execute(
+            select(func.count(UploadProfileEncounterSetType.id)).where(
+                UploadProfileEncounterSetType.encounter_set_type_id == type_id
+            )
+        ).scalar_one()
+        if linked_profile_count:
+            return MutationResult(
+                False,
+                "Encounter-set type is linked to one or more upload profiles and cannot be deleted.",
+                400,
+            )
+        db.delete(row)
+        return MutationResult(True, "Encounter-set type deleted.")
+
+
 def validate_encounter_set_type_input(dto: EncounterSetTypeInput) -> str | None:
-    if not dto.project_id:
-        return "Project is required."
     if not (dto.name or "").strip():
         return "Encounter-set type name is required."
     if not (dto.code or "").strip():
@@ -217,13 +224,9 @@ def normalize_metadata_schema(raw_schema: Any) -> dict[str, Any]:
 
 
 def serialize_encounter_set_type(row: EncounterSetType) -> dict[str, Any]:
-    project = row.__dict__.get("project")
     target_scheme = row.__dict__.get("target_scheme")
     return {
         "id": row.id,
-        "project_id": row.project_id,
-        "project_title": project.title if project else None,
-        "project_code": project.code if project else None,
         "name": row.name,
         "code": row.code,
         "description": row.description,
@@ -268,8 +271,10 @@ def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
         options = _normalize_options(options, idx)
 
     return {
+        "field_definition_id": _optional_positive_int(field.get("field_definition_id"), idx),
         "key": key,
         "label": label,
+        "sctid": (str(field.get("sctid")).strip() if field.get("sctid") is not None else None) or None,
         "scope": scope,
         "type": field_type,
         "selection_mode": selection_mode,
@@ -311,36 +316,30 @@ def _bool_field(field: dict[str, Any], key: str, idx: int) -> bool:
     return value
 
 
-def _manager_project_ids(db, manager_user_id: int) -> set[int]:
-    if not manager_lab_unit_ids(manager_user_id):
-        return set()
-    return {row[0] for row in db.execute(select(Project.id).where(Project.active.is_(True))).all()}
+def _optional_positive_int(value: Any, idx: int) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"metadata_schema_json.fields[{idx}] field_definition_id must be an integer.") from exc
+    if parsed <= 0:
+        raise ValueError(f"metadata_schema_json.fields[{idx}] field_definition_id must be positive.")
+    return parsed
 
 
-def _can_manage_project(db, manager_user_id: int, project_id: int | None) -> bool:
-    if not project_id:
-        return False
-    project_row = db.execute(select(Project.id).where(Project.id == project_id, Project.active.is_(True))).first()
-    if not project_row:
-        return False
+def _has_manager_scope(manager_user_id: int) -> bool:
     return bool(manager_lab_unit_ids(manager_user_id))
 
 
 def _get_scoped_type(db, manager_user_id: int, type_id: int) -> EncounterSetType | None:
-    scoped_project_ids = _manager_project_ids(db, manager_user_id)
-    if not scoped_project_ids:
+    if not _has_manager_scope(manager_user_id):
         return None
     return (
         db.execute(
             select(EncounterSetType)
-            .where(
-                EncounterSetType.id == type_id,
-                EncounterSetType.project_id.in_(scoped_project_ids),
-            )
-            .options(
-                selectinload(EncounterSetType.project),
-                selectinload(EncounterSetType.target_scheme),
-            )
+            .where(EncounterSetType.id == type_id)
+            .options(selectinload(EncounterSetType.target_scheme))
         )
         .scalars()
         .one_or_none()

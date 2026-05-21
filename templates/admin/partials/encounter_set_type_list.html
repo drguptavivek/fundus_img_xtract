@@ -3,7 +3,6 @@
     <thead>
       <tr>
         <th>Type</th>
-        <th>Project</th>
         <th>Target Scheme</th>
         <th>Fields</th>
         <th>Status</th>
@@ -18,7 +17,6 @@
           <div class="fw-semibold">{{ row.name }}</div>
           <div class="small text-muted">{{ row.code }}</div>
         </td>
-        <td>{{ row.project_title or row.project_id }}</td>
         <td>{{ row.target_scheme_name or row.target_scheme_id }}</td>
         <td>
           <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "encounter")|list|length }} encounter</span>
@@ -37,7 +35,6 @@
                     type="button"
                     data-est-edit
                     data-action="{{ url_for('fundus_api.update_encounter_set_type', type_id=row.id) }}"
-                    data-project-id="{{ row.project_id }}"
                     data-target-scheme-id="{{ row.target_scheme_id }}"
                     data-name="{{ row.name }}"
                     data-code="{{ row.code }}"
@@ -58,11 +55,23 @@
               <button class="btn btn-outline-success" type="submit">Activate</button>
             </form>
             {% endif %}
+            <form method="post"
+                  action="{{ url_for('fundus_api.delete_encounter_set_type', type_id=row.id) }}"
+                  hx-post="{{ url_for('fundus_api.delete_encounter_set_type', type_id=row.id) }}"
+                  hx-swap="none"
+                  data-json-api-htmx
+                  data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}"
+                  data-json-api-reload-target="#encounter-set-type-list"
+                  data-est-delete-form>
+              {% from "_forms.html" import csrf_field %}
+              {{ csrf_field() }}
+              <button class="btn btn-outline-danger" type="submit">Delete</button>
+            </form>
           </div>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">No EncounterSetTypes configured.</td></tr>
+      <tr><td colspan="5" class="text-center text-muted py-4">No EncounterSetTypes configured.</td></tr>
       {% endfor %}
     </tbody>
   </table>

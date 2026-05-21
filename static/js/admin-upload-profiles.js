@@ -39,8 +39,6 @@
   function syncEncounterSetTypes(form) {
     const encounterKind = form.querySelector('[name="upload_kinds"][value="encounter_set"]');
     const section = form.querySelector('[data-upload-profile-encounter-set-types-section]');
-    const projectInput = form.querySelector('[name="project_id"]');
-    const selectedProjectId = projectInput ? String(projectInput.value || '') : '';
     if (!section) {
       return;
     }
@@ -48,11 +46,9 @@
     section.classList.toggle('d-none', !enabled);
     section.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
       const input = row.querySelector('input[type="checkbox"]');
-      const matchesProject = !selectedProjectId || String(row.dataset.projectId) === selectedProjectId;
-      row.classList.toggle('d-none', !matchesProject);
       if (input) {
-        input.disabled = !enabled || !matchesProject;
-        if (!enabled || !matchesProject) {
+        input.disabled = !enabled;
+        if (!enabled) {
           input.checked = false;
         }
       }
@@ -81,8 +77,7 @@
       [
         '[data-upload-profile-allow-mydriatic]',
         '[data-upload-profile-remedio-kind]',
-        '[name="upload_kinds"][value="encounter_set"]',
-        '[name="project_id"]'
+        '[name="upload_kinds"][value="encounter_set"]'
       ].forEach(function (selector) {
         const input = form.querySelector(selector);
         if (input && !input.dataset.uploadProfileBound) {

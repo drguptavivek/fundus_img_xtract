@@ -1,6 +1,6 @@
 # EncounterSetTypes API
 
-EncounterSetTypes are project-scoped configuration records for encounter-set intake. They define the metadata contract and target grading/evaluation scheme for a selected encounter-set type. They do not grant upload permission; upload authorization remains owned by Upload Profiles.
+EncounterSetTypes are reusable configuration records for encounter-set intake. They define the metadata contract and target grading/evaluation scheme for a selected encounter-set type. They do not grant upload permission or project mapping; upload authorization and project mapping remain owned by Upload Profiles.
 
 Admin configuration UI is available at `GET /admin/encounter-set-types`. The page route renders HTML only; create/update/activate/deactivate mutations use the JSON API below through HTMX.
 
@@ -9,7 +9,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 - Requires authenticated browser session.
 - Roles: `admin`, `local_admin`, or `data_manager`.
 - CSRF required for unsafe methods through form `csrf_token` or `X-CSRFToken`.
-- Management is scoped to projects that have at least one active Upload Profile in one of the manager's explicitly assigned lab units.
+- Management requires the manager to have at least one explicitly assigned lab unit.
 
 ## Endpoints
 
@@ -19,12 +19,12 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 - `POST|PATCH /api/encounter-set-types/<type_id>`
 - `POST /api/encounter-set-types/<type_id>/activate`
 - `POST /api/encounter-set-types/<type_id>/deactivate`
+- `POST /api/encounter-set-types/<type_id>/delete`
 
 ## Create/Update Fields
 
-- `project_id` integer, required
 - `name` string, required
-- `code` string, required, unique inside the project
+- `code` string, required, globally unique
 - `description` string, optional
 - `target_scheme_id` integer, required; points to `diseases.id` as the grading/evaluation scheme, not confirmed diagnosis
 - `metadata_schema_json` object, required, with a `fields` list
@@ -53,20 +53,42 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 
 Supported field properties:
 
-- `key`: stable field key, unique per `scope`
+- `key`: stable field key, unique within this EncounterSetType schema snapshot
+- `field_definition_id`: optional provenance link to a standalone upload metadata field master
 - `label`: display label
+- `sctid`: optional SNOMED CT ID snapshot
 - `scope`: `encounter` or `image`
 - `type`: `text`, `textarea`, `integer`, `decimal`, `date`, `datetime`, `boolean`, `select`, `phone`, or `email`
 - `selection_mode`: for select fields only, `single` or `multiple`
 - `options`: select choices as strings or `{ "value": "...", "label": "..." }` objects
 - `required_at_upload`: upload-time requiredness
-- `required_for_verification`: verification-time requiredness before grading task creation
+- `required_for_verification`: editable/required at verification before grading task creation
 - `visible_to_grader`: whether grader UIs may display the field
 - `is_pii`: whether PII handling/redaction rules apply
 
 Fields not required at upload may be completed during verification.
 
 The admin UI presents this schema as separate encounter-level and image-level field builders. It serializes those field rows into `metadata_schema_json` before posting to the API.
+
+## EncounterSet Grading Scheme
+
+The target grading scheme for an EncounterSetType must support both levels of grading when the workflow is an encounter-set grading workflow:
+
+- image-level grades for each task-eligible clinical image in the EncounterSet
+- encounter-level grade for the overall EncounterSet/encounter
+
+Resident and resident2 submissions are compared across both levels. If the configured grading rules detect a mismatch at either the image level or the encounter level, the EncounterSet grading task must escalate to an arbitrator. The arbitrator resolves the final grade.
+
+Supporting PDFs and document-images remain verification/reference assets only and must not receive image-level grading tasks.
+
+## Verification Discard Policy
+
+Verification is the gate before grading task creation. A verifier must be able to discard:
+
+- the entire EncounterSet
+- individual clinical images inside the EncounterSet
+
+If the EncounterSet is discarded, no grading task should be created for that encounter. If only individual images are discarded, those images must be excluded from grading while the remaining verified clinical images may proceed.
 
 ## File Classification Policy
 
@@ -98,7 +120,6 @@ Success:
   "message": "Encounter-set type created.",
   "encounter_set_type": {
     "id": 12,
-    "project_id": 3,
     "name": "Fundus Quick Set",
     "code": "fundus_quick",
     "target_scheme_id": 5,
@@ -127,7 +148,6 @@ curl -X POST /api/encounter-set-types \
   -H "X-CSRFToken: <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "project_id": 3,
     "name": "OSN Quick Capture",
     "code": "osn_quick_capture",
     "target_scheme_id": 8,

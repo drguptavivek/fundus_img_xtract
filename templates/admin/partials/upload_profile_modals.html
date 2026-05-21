@@ -51,14 +51,14 @@
           </div>
           <div class="col-12" data-upload-profile-encounter-set-types-section>
             <label class="form-label">Allowed EncounterSetTypes</label>
-            <div class="form-text mb-2">Required when encounter-set uploads are enabled. Each selected type must belong to the selected project.</div>
+            <div class="form-text mb-2">Required when encounter-set uploads are enabled. Project mapping remains on this upload profile.</div>
             <div class="border rounded p-2">
               {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
-              <div class="form-check mb-1" data-upload-profile-est-option data-project-id="{{ encounter_set_type.project_id }}">
+              <div class="form-check mb-1" data-upload-profile-est-option>
                 <input class="form-check-input" type="checkbox" name="encounter_set_type_ids" value="{{ encounter_set_type.id }}" id="encounter_set_type_{{ encounter_set_type.id }}">
                 <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}">
                   {{ encounter_set_type.name }}
-                  <span class="text-muted small">({{ encounter_set_type.project.title }} - {{ encounter_set_type.target_scheme.name }})</span>
+                  <span class="text-muted small">({{ encounter_set_type.target_scheme.name }})</span>
                 </label>
               </div>
               {% else %}

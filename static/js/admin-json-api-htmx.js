@@ -61,6 +61,11 @@
       return;
     }
 
+    if (event.detail.xhr.status >= 400) {
+      event.detail.shouldSwap = false;
+      return;
+    }
+
     event.detail.shouldSwap = false;
     const payload = parsePayload(event.detail.xhr);
     if (payload.success && refreshTarget(event.detail.elt)) {

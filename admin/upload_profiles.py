@@ -149,8 +149,8 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "encounter_set_types": (
             db.execute(
                 select(EncounterSetType)
-                .options(selectinload(EncounterSetType.project), selectinload(EncounterSetType.target_scheme))
-                .order_by(EncounterSetType.project_id, EncounterSetType.active.desc(), EncounterSetType.name)
+                .options(selectinload(EncounterSetType.target_scheme))
+                .order_by(EncounterSetType.active.desc(), EncounterSetType.name)
             )
             .scalars()
             .all()

@@ -16,10 +16,9 @@ from . import api_bp
 @api_bp.route("/encounter-set-types", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager")
 def list_encounter_set_types():
-    """List project-scoped encounter-set types visible to the manager."""
+    """List reusable encounter-set types visible to the manager."""
     rows = encounter_set_type_service.list_encounter_set_types(
         current_user.id,
-        project_id=to_int(request.args.get("project_id")),
         include_inactive=_bool_arg(request.args.get("include_inactive")),
     )
     return jsonify({"success": True, "encounter_set_types": rows})
@@ -69,10 +68,23 @@ def deactivate_encounter_set_type(type_id: int):
     return _json_result(encounter_set_type_service.set_encounter_set_type_active(current_user.id, type_id, False))
 
 
+@api_bp.route("/encounter-set-types/<int:type_id>/delete", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def delete_encounter_set_type(type_id: int):
+    """Delete an encounter-set type when it is not linked to upload profiles."""
+    return _json_result(encounter_set_type_service.delete_encounter_set_type(current_user.id, type_id))
+
+
+@api_bp.route("/encounter-set-types/<int:type_id>", methods=["DELETE"])
+@roles_required("admin", "local_admin", "data_manager")
+def delete_encounter_set_type_rest(type_id: int):
+    """REST delete alias for API clients."""
+    return _json_result(encounter_set_type_service.delete_encounter_set_type(current_user.id, type_id))
+
+
 def _input_from_request() -> encounter_set_type_service.EncounterSetTypeInput:
     data = _request_data()
     return encounter_set_type_service.EncounterSetTypeInput(
-        project_id=to_int(data.get("project_id")),
         name=str(data.get("name") or "").strip(),
         code=str(data.get("code") or "").strip(),
         description=(str(data.get("description")).strip() if data.get("description") is not None else None) or None,

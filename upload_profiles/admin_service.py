@@ -344,18 +344,19 @@ def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], p
     if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_type_ids:
         return "EncounterSetTypes are only used when encounter-set uploads are allowed."
     if encounter_set_type_ids:
-        valid_encounter_set_type_ids = {
-            row[0]
+        valid_encounter_set_types = {
+            row[0]: row[1]
             for row in db.execute(
-                select(EncounterSetType.id).where(
+                select(EncounterSetType.id, EncounterSetType.target_scheme_id).where(
                     EncounterSetType.id.in_(encounter_set_type_ids),
-                    EncounterSetType.project_id == profile_input.project_id,
                     EncounterSetType.active.is_(True),
                 )
             ).all()
         }
-        if valid_encounter_set_type_ids != encounter_set_type_ids:
-            return "EncounterSetTypes must be active and belong to the selected project."
+        if set(valid_encounter_set_types) != encounter_set_type_ids:
+            return "EncounterSetTypes must be active."
+        if not set(valid_encounter_set_types.values()).issubset(disease_ids):
+            return "EncounterSetType target schemes must be included in allowed target schemes."
     ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds))
     if ai_workflows is None:
         return "AI workflow disease and upload type must be included in the profile, and AI models must exist."

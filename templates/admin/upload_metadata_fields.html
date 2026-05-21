@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+{% block title %}Upload Metadata Fields{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Upload Metadata Fields</h1>
+      <p class="text-muted mb-0">Manage reusable patient, encounter, image, document, and upload-level metadata field masters.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a>
+      <button class="btn btn-primary" type="button" data-umf-new>Add Field</button>
+    </div>
+  </div>
+
+  <div class="row g-2 mb-4">
+    <div class="col-md-6 col-xl">
+      <div class="border rounded p-2 h-100">
+        <div class="fw-semibold">Patient</div>
+        <div class="small text-muted">Participant-level metadata that can persist across visits, such as UHID/MRN, sex, age, phone, or email.</div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="border rounded p-2 h-100">
+        <div class="fw-semibold">Encounter</div>
+        <div class="small text-muted">One visit/capture session for one patient, such as capture date, diagnosis known at upload, clinic ID, or remarks.</div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="border rounded p-2 h-100">
+        <div class="fw-semibold">Image</div>
+        <div class="small text-muted">Per-image metadata such as eye, view, gaze, modality, distance/close-up, montage, disk-centered, or macula-centered.</div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="border rounded p-2 h-100">
+        <div class="fw-semibold">Document</div>
+        <div class="small text-muted">Supporting documents and document-images, usually PII, such as referrals, reports, PDFs, labels, or consent images.</div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl">
+      <div class="border rounded p-2 h-100">
+        <div class="fw-semibold">Upload</div>
+        <div class="small text-muted">Metadata about the upload event or batch itself, such as source system, operator notes, import batch, or acquisition method.</div>
+      </div>
+    </div>
+  </div>
+
+  <section class="card shadow-sm" data-umf-dashboard>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>All Metadata Field Masters</span>
+      <button class="btn btn-sm btn-primary" type="button" data-umf-new>Add Field</button>
+    </div>
+    <div id="upload-metadata-field-list">
+      {% include "admin/partials/upload_metadata_field_list.html" %}
+    </div>
+  </section>
+
+  <section class="card shadow-sm d-none" id="upload-metadata-field-editor" data-umf-editor>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span data-umf-form-title>Create Metadata Field</span>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-umf-cancel>Back to list</button>
+    </div>
+    <div class="card-body">
+      <form method="post"
+            action="{{ url_for('fundus_api.create_upload_metadata_field_definition') }}"
+            hx-post="{{ url_for('fundus_api.create_upload_metadata_field_definition') }}"
+            hx-swap="none"
+            data-create-action="{{ url_for('fundus_api.create_upload_metadata_field_definition') }}"
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.upload_metadata_fields_list') }}"
+            data-json-api-reload-target="#upload-metadata-field-list"
+            data-umf-form>
+        {{ csrf_field() }}
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label" for="umf_scope">
+              Scope <span class="text-danger">*</span>
+              <span class="text-muted" data-bs-toggle="tooltip" title="Patient: participant-level; Encounter: visit/capture session; Image: per-image; Document: supporting files; Upload: upload event or batch.">?</span>
+            </label>
+            <select class="form-select" id="umf_scope" name="scope" required>
+              {% for scope in field_scopes %}
+              <option value="{{ scope }}">{{ scope|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="umf_key">Key <span class="text-danger">*</span></label>
+            <input class="form-control"
+                   id="umf_key"
+                   name="key"
+                   maxlength="100"
+                   required
+                   data-umf-key
+                   data-key-check-url="{{ url_for('fundus_api.check_upload_metadata_field_key') }}">
+            <div class="form-text">Internal code used by APIs and processing. Must be unique across all metadata fields.</div>
+            <div class="small mt-1" data-umf-key-status aria-live="polite"></div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="umf_label">Label <span class="text-danger">*</span></label>
+            <input class="form-control" id="umf_label" name="label" maxlength="150" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="umf_sctid">SNOMED CT ID</label>
+            <input class="form-control" id="umf_sctid" name="sctid" maxlength="32">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="umf_field_type">Type <span class="text-danger">*</span></label>
+            <select class="form-select" id="umf_field_type" name="field_type" data-umf-type required>
+              {% for field_type in field_types %}
+              <option value="{{ field_type }}">{{ field_type }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3" data-umf-select-only>
+            <label class="form-label" for="umf_selection_mode">Selection</label>
+            <select class="form-select" id="umf_selection_mode" name="selection_mode">
+              <option value="single">Single</option>
+              <option value="multiple">Multiple</option>
+            </select>
+          </div>
+          <div class="col-md-9" data-umf-select-only>
+            <input type="hidden" id="umf_options_json" name="options_json" data-umf-options-input>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">Options</label>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-umf-add-option title="Add option">+ Option</button>
+            </div>
+            <div class="vstack gap-1" data-umf-options-list></div>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="umf_description">Description</label>
+            <textarea class="form-control" id="umf_description" name="description" rows="2"></textarea>
+          </div>
+          <div class="col-12">
+            <div class="d-flex flex-wrap gap-3 border rounded p-3">
+              <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="required_at_upload_default" data-umf-required-upload> Required at upload</label>
+              <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="required_for_verification_default" data-umf-required-verification> Editable/required at verification</label>
+              <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="visible_to_grader_default" data-umf-visible-grader> Visible to grader</label>
+              <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_pii_default" data-umf-pii> PII</label>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+          <button class="btn btn-outline-secondary" type="button" data-umf-cancel>Cancel</button>
+          <button class="btn btn-primary" type="submit" data-umf-submit>Create Field</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-upload-metadata-fields.js') }}?v={{ v }}"></script>
+{% endblock %}

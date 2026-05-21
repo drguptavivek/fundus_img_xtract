@@ -8,7 +8,8 @@ from sqlalchemy import select
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from encounter_set_types import service as encounter_set_type_service
-from models import Disease, Project
+from models import Disease
+from upload_metadata import service as upload_metadata_service
 from upload_profiles.service import manager_lab_unit_ids
 
 
@@ -18,13 +19,20 @@ def _has_manager_scope() -> bool:
 
 def _context() -> dict:
     with transaction_scope() as db:
+        diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
         return {
-            "projects": db.execute(select(Project).where(Project.active.is_(True)).order_by(Project.title)).scalars().all(),
-            "diseases": db.execute(select(Disease).order_by(Disease.name)).scalars().all(),
+            "diseases": [
+                {
+                    "id": disease.id,
+                    "name": disease.name,
+                }
+                for disease in diseases
+            ],
             "encounter_set_types": encounter_set_type_service.list_encounter_set_types(
                 current_user.id,
                 include_inactive=True,
             ),
+            "field_definitions": upload_metadata_service.list_field_definitions(current_user.id, include_inactive=False),
         }
 
 

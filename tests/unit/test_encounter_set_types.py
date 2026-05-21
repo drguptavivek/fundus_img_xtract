@@ -72,6 +72,7 @@ def _valid_schema():
             {
                 "key": "eye_laterality",
                 "label": "Eye",
+                "sctid": "362503005",
                 "scope": "image",
                 "type": "select",
                 "selection_mode": "single",
@@ -122,7 +123,6 @@ def test_create_encounter_set_type_scoped_to_manager_project(db_session, encount
     result = create_encounter_set_type(
         encounter_set_type_scope["user"].id,
         EncounterSetTypeInput(
-            project_id=encounter_set_type_scope["project"].id,
             name="Fundus Quick Set",
             code=f"fundus_quick_{encounter_set_type_scope['suffix']}",
             description="Fast upload, verification later",

@@ -1,0 +1,69 @@
+<div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Project</th>
+        <th>Target Scheme</th>
+        <th>Fields</th>
+        <th>Status</th>
+        <th class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in encounter_set_types %}
+      {% set fields = row.metadata_schema_json.get('fields', []) %}
+      <tr>
+        <td>
+          <div class="fw-semibold">{{ row.name }}</div>
+          <div class="small text-muted">{{ row.code }}</div>
+        </td>
+        <td>{{ row.project_title or row.project_id }}</td>
+        <td>{{ row.target_scheme_name or row.target_scheme_id }}</td>
+        <td>
+          <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "encounter")|list|length }} encounter</span>
+          <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "image")|list|length }} image</span>
+        </td>
+        <td>
+          {% if row.active %}
+          <span class="badge text-bg-success">Active</span>
+          {% else %}
+          <span class="badge text-bg-secondary">Inactive</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-primary"
+                    type="button"
+                    data-est-edit
+                    data-action="{{ url_for('fundus_api.update_encounter_set_type', type_id=row.id) }}"
+                    data-project-id="{{ row.project_id }}"
+                    data-target-scheme-id="{{ row.target_scheme_id }}"
+                    data-name="{{ row.name }}"
+                    data-code="{{ row.code }}"
+                    data-description="{{ row.description or '' }}"
+                    data-schema="{{ row.metadata_schema_json|tojson|forceescape }}">
+              Edit
+            </button>
+            {% if row.active %}
+            <form method="post" hx-post="{{ url_for('fundus_api.deactivate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-type-list">
+              {% from "_forms.html" import csrf_field %}
+              {{ csrf_field() }}
+              <button class="btn btn-outline-secondary" type="submit">Deactivate</button>
+            </form>
+            {% else %}
+            <form method="post" hx-post="{{ url_for('fundus_api.activate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-type-list">
+              {% from "_forms.html" import csrf_field %}
+              {{ csrf_field() }}
+              <button class="btn btn-outline-success" type="submit">Activate</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted py-4">No EncounterSetTypes configured.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

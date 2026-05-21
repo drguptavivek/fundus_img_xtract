@@ -1,0 +1,1 @@
+"""Encounter-set domain package."""

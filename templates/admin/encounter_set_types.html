@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+{% block title %}EncounterSet Types{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">EncounterSet Types</h1>
+      <p class="text-muted mb-0">Define project-specific encounter and image metadata contracts before upload-profile wiring.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a>
+      <button class="btn btn-primary" type="button" data-est-new>Create Type</button>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    EncounterSetTypes define the target evaluation scheme and the encounter/image-level fields. Upload Profiles decide which configured types an uploader may use.
+  </div>
+
+  <div class="row g-4">
+    <div class="col-xl-5">
+      <section class="card shadow-sm" id="encounter-set-type-editor">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span data-est-form-title>Create EncounterSetType</span>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-est-reset>Reset</button>
+        </div>
+        <div class="card-body">
+          <form method="post"
+                action="{{ url_for('fundus_api.create_encounter_set_type') }}"
+                hx-post="{{ url_for('fundus_api.create_encounter_set_type') }}"
+                hx-swap="none"
+                data-create-action="{{ url_for('fundus_api.create_encounter_set_type') }}"
+                data-json-api-htmx
+                data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}"
+                data-json-api-reload-target="#encounter-set-type-list"
+                data-est-form>
+            {{ csrf_field() }}
+            <input type="hidden" name="metadata_schema_json" data-est-schema-input value='{"fields": []}'>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="est_project_id">Project <span class="text-danger">*</span></label>
+                <select class="form-select" id="est_project_id" name="project_id" required>
+                  <option value="">Select project</option>
+                  {% for project in projects %}
+                  <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="est_target_scheme_id">Target Scheme <span class="text-danger">*</span></label>
+                <select class="form-select" id="est_target_scheme_id" name="target_scheme_id" required>
+                  <option value="">Select scheme</option>
+                  {% for disease in diseases %}
+                  <option value="{{ disease.id }}">{{ disease.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="est_name">Name <span class="text-danger">*</span></label>
+                <input class="form-control" id="est_name" name="name" maxlength="150" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="est_code">Code <span class="text-danger">*</span></label>
+                <input class="form-control" id="est_code" name="code" maxlength="64" required>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="est_description">Description</label>
+                <textarea class="form-control" id="est_description" name="description" rows="2"></textarea>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+              <h2 class="h6 mb-0">Encounter-Level Fields</h2>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-field="encounter">Add Field</button>
+            </div>
+            <div class="vstack gap-2 mb-4" data-est-field-list="encounter"></div>
+
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+              <h2 class="h6 mb-0">Image-Level Fields</h2>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-field="image">Add Field</button>
+            </div>
+            <div class="vstack gap-2" data-est-field-list="image"></div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <button class="btn btn-outline-secondary" type="button" data-est-reset>Cancel</button>
+              <button class="btn btn-primary" type="submit" data-est-submit>Create Type</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+    <div class="col-xl-7">
+      <section class="card shadow-sm">
+        <div class="card-header">Configured EncounterSetTypes</div>
+        <div id="encounter-set-type-list">
+          {% include "admin/partials/encounter_set_type_list.html" %}
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/admin-encounter-set-types.js') }}?v={{ v }}"></script>
+{% endblock %}

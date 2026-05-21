@@ -14,7 +14,6 @@ from sqlalchemy.orm import selectinload
 from encounter_set_types.models import EncounterSetType
 from models import Disease, Project
 from upload_profiles.admin_service import MutationResult
-from upload_profiles.models import UploadProfile
 from upload_profiles.service import manager_lab_unit_ids
 
 
@@ -218,16 +217,18 @@ def normalize_metadata_schema(raw_schema: Any) -> dict[str, Any]:
 
 
 def serialize_encounter_set_type(row: EncounterSetType) -> dict[str, Any]:
+    project = row.__dict__.get("project")
+    target_scheme = row.__dict__.get("target_scheme")
     return {
         "id": row.id,
         "project_id": row.project_id,
-        "project_title": row.project.title if row.project else None,
-        "project_code": row.project.code if row.project else None,
+        "project_title": project.title if project else None,
+        "project_code": project.code if project else None,
         "name": row.name,
         "code": row.code,
         "description": row.description,
         "target_scheme_id": row.target_scheme_id,
-        "target_scheme_name": row.target_scheme.name if row.target_scheme else None,
+        "target_scheme_name": target_scheme.name if target_scheme else None,
         "metadata_schema_json": row.metadata_schema_json or {"fields": []},
         "active": row.active,
         "created_by_user_id": row.created_by_user_id,
@@ -311,36 +312,18 @@ def _bool_field(field: dict[str, Any], key: str, idx: int) -> bool:
 
 
 def _manager_project_ids(db, manager_user_id: int) -> set[int]:
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
-    if not scoped_lab_ids:
+    if not manager_lab_unit_ids(manager_user_id):
         return set()
-    return {
-        row[0]
-        for row in db.execute(
-            select(UploadProfile.project_id).where(
-                UploadProfile.lab_unit_id.in_(scoped_lab_ids),
-                UploadProfile.active.is_(True),
-            )
-        ).all()
-    }
+    return {row[0] for row in db.execute(select(Project.id).where(Project.active.is_(True))).all()}
 
 
 def _can_manage_project(db, manager_user_id: int, project_id: int | None) -> bool:
-    if not project_id or db.get(Project, project_id) is None:
+    if not project_id:
         return False
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
-    if not scoped_lab_ids:
+    project_row = db.execute(select(Project.id).where(Project.id == project_id, Project.active.is_(True))).first()
+    if not project_row:
         return False
-    return (
-        db.execute(
-            select(UploadProfile.id).where(
-                UploadProfile.project_id == project_id,
-                UploadProfile.lab_unit_id.in_(scoped_lab_ids),
-                UploadProfile.active.is_(True),
-            )
-        ).first()
-        is not None
-    )
+    return bool(manager_lab_unit_ids(manager_user_id))
 
 
 def _get_scoped_type(db, manager_user_id: int, type_id: int) -> EncounterSetType | None:

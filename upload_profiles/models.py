@@ -66,6 +66,12 @@ class UploadProfile(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    encounter_set_types: Mapped[List["UploadProfileEncounterSetType"]] = relationship(
+        "UploadProfileEncounterSetType",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint("lab_unit_id", "project_id", "name", name="uq_upload_profile_lab_project_name"),
@@ -201,6 +207,26 @@ class UploadProfileAIWorkflow(Base):
             "upload_kind IN ('direct_image','pregraded','remidio','encounter_set')",
             name="ck_upload_profile_ai_workflow_kind_valid",
         ),
+    )
+
+
+class UploadProfileEncounterSetType(Base):
+    """EncounterSetType allow-list for encounter-set upload profiles."""
+
+    __tablename__ = "upload_profile_encounter_set_types"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_profile_id: Mapped[int] = mapped_column(ForeignKey("upload_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    encounter_set_type_id: Mapped[int] = mapped_column(ForeignKey("encounter_set_types.id", ondelete="CASCADE"), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    profile: Mapped["UploadProfile"] = relationship("UploadProfile", back_populates="encounter_set_types")
+    encounter_set_type: Mapped["EncounterSetType"] = relationship("EncounterSetType")
+
+    __table_args__ = (
+        UniqueConstraint("upload_profile_id", "encounter_set_type_id", name="uq_upload_profile_encounter_set_type"),
+        Index("ix_upload_profile_est_profile_active", "upload_profile_id", "active"),
     )
 
 

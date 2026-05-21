@@ -1,10 +1,11 @@
 from contextlib import contextmanager
 
+from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
 from upload_profiles.models import UploadProfile, UploadProfileArea, UploadProfileCamera, UploadProfileDisease, UploadProfileKind
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO
 
 
 def test_validate_mydriatic_flags_rejects_no_allowed_scope():
@@ -114,8 +115,61 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             ai_workflows=[],
+            encounter_set_type_ids=[],
         ),
     )
 
     assert result.success is True
     assert sorted(row.area_id for row in profile.areas) == [area_one.id, area_two.id]
+
+
+def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr("upload_profiles.service.get_db_session", use_test_session)
+
+    manager = User(username="est_profile_manager", full_name="EST Profile Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="EST Profile Hospital")
+    lab = LabUnit(name="EST Profile Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    project = Project(title="EST Profile Project", code="EST_PROFILE", active=True)
+    disease = Disease(name="EST Profile Scheme")
+    camera = Camera(name="EST Profile Camera")
+    area = Area(name="EST Profile Area")
+    db_session.add_all([manager, hospital, lab, project, disease, camera, area])
+    db_session.flush()
+    encounter_set_type = EncounterSetType(
+        project_id=project.id,
+        name="EST Profile Type",
+        code="est_profile_type",
+        target_scheme_id=disease.id,
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add(encounter_set_type)
+    db_session.flush()
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="EncounterSet profile",
+            lab_unit_id=lab.id,
+            project_id=project.id,
+            disease_ids=[disease.id],
+            default_disease_ids=[],
+            camera_ids=[camera.id],
+            area_ids=[area.id],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            ai_workflows=[],
+            encounter_set_type_ids=[encounter_set_type.id],
+        ),
+    )
+
+    assert result.success is True

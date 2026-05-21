@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from db_transaction_manager import transaction_scope
+from encounter_set_types.models import EncounterSetType
 from models import AIModel, AIModelDisease, Project, ProjectInvestigator, user_lab_units
 from upload_profiles.models import (
     UploadProfile,
@@ -16,9 +17,10 @@ from upload_profiles.models import (
     UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
     UploadProfileKind,
 )
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO, manager_lab_unit_ids
+from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO, manager_lab_unit_ids
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class UploadProfileInput:
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
     ai_workflows: list[AIWorkflowInput]
+    encounter_set_type_ids: list[int]
     description: str | None = None
     user_ids: list[int] | None = None
 
@@ -264,6 +267,11 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
         duplicate.cameras = [UploadProfileCamera(camera_id=row.camera_id) for row in source.cameras]
         duplicate.areas = [UploadProfileArea(area_id=row.area_id) for row in source.areas]
         duplicate.upload_kinds = [UploadProfileKind(upload_kind=row.upload_kind) for row in source.upload_kinds]
+        duplicate.encounter_set_types = [
+            UploadProfileEncounterSetType(encounter_set_type_id=row.encounter_set_type_id, active=row.active)
+            for row in source.encounter_set_types
+            if row.active
+        ]
         db.add(duplicate)
         try:
             db.flush()
@@ -330,6 +338,24 @@ def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], p
         return "Select a default disease for Remidio ZIP ingestion."
     if UPLOAD_KIND_REMIDIO not in upload_kinds and default_ids:
         return "Default disease is only used for Remedio ZIP profiles."
+    encounter_set_type_ids = set(profile_input.encounter_set_type_ids)
+    if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not encounter_set_type_ids:
+        return "Select at least one EncounterSetType for encounter-set uploads."
+    if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_type_ids:
+        return "EncounterSetTypes are only used when encounter-set uploads are allowed."
+    if encounter_set_type_ids:
+        valid_encounter_set_type_ids = {
+            row[0]
+            for row in db.execute(
+                select(EncounterSetType.id).where(
+                    EncounterSetType.id.in_(encounter_set_type_ids),
+                    EncounterSetType.project_id == profile_input.project_id,
+                    EncounterSetType.active.is_(True),
+                )
+            ).all()
+        }
+        if valid_encounter_set_type_ids != encounter_set_type_ids:
+            return "EncounterSetTypes must be active and belong to the selected project."
     ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds))
     if ai_workflows is None:
         return "AI workflow disease and upload type must be included in the profile, and AI models must exist."
@@ -354,6 +380,10 @@ def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], p
     profile.cameras = [UploadProfileCamera(camera_id=camera_id) for camera_id in sorted(set(profile_input.camera_ids))]
     profile.areas = [UploadProfileArea(area_id=area_id) for area_id in sorted(set(profile_input.area_ids))]
     profile.upload_kinds = [UploadProfileKind(upload_kind=upload_kind) for upload_kind in upload_kinds]
+    profile.encounter_set_types = [
+        UploadProfileEncounterSetType(encounter_set_type_id=encounter_set_type_id, active=True)
+        for encounter_set_type_id in sorted(encounter_set_type_ids)
+    ]
     profile.ai_workflows = [
         UploadProfileAIWorkflow(
             disease_id=workflow.disease_id,
@@ -374,6 +404,7 @@ def _clear_profile_children(db, profile: UploadProfile, *, clear_assignments: bo
     profile.cameras = []
     profile.areas = []
     profile.upload_kinds = []
+    profile.encounter_set_types = []
     profile.ai_workflows = []
     db.flush()
 

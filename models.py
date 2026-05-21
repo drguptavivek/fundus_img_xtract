@@ -801,6 +801,7 @@ class PatientEncounters(Base):
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     encounter_set_images: Mapped[List["EncounterSetImage"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    encounter_set_attachments: Mapped[List["EncounterSetAttachment"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     encounter_file_pdfs: Mapped[List["EncounterFilePDF"]] = relationship(cascade="all, delete-orphan")
     dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
@@ -820,6 +821,10 @@ class EncounterSetImage(Base):
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     folder_rel: Mapped[str] = mapped_column(String(512), nullable=False)
     file_hash: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    asset_kind: Mapped[str] = mapped_column(String(32), default="clinical_image", nullable=False, server_default="clinical_image")
+    creates_task: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    is_pii: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    visible_to_grader: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     # Verification and PII masking fields
     is_anonymized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -848,9 +853,11 @@ class EncounterSetImage(Base):
     __table_args__ = (
         UniqueConstraint('patient_encounter_id', 'spatial_position', name='uq_encounter_set_image_position'),
         CheckConstraint('spatial_position >= 1 AND spatial_position <= 9', name='ck_encounter_set_image_position_range'),
+        CheckConstraint("asset_kind = 'clinical_image'", name="ck_encounter_set_image_asset_kind"),
         # S3 composite indexes for efficient queries
         Index("ix_esi_s3_config_uuid", "s3_config_id", "uuid"),
         Index("ix_esi_hospital_id", "hospital_id"),
+        Index("ix_esi_task_evidence", "patient_encounter_id", "asset_kind", "creates_task", "visible_to_grader"),
     )
 
 class EncounterFile(Base):
@@ -2765,7 +2772,9 @@ from upload_profiles.models import (  # noqa: E402,F401
     UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
     UploadProfileKind,
     PatientEncounterTargetDisease,
 )
 from encounter_set_types.models import EncounterSetType  # noqa: E402,F401
+from encounter_sets.models import EncounterSetAttachment  # noqa: E402,F401

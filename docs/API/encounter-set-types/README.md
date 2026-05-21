@@ -2,6 +2,8 @@
 
 EncounterSetTypes are project-scoped configuration records for encounter-set intake. They define the metadata contract and target grading/evaluation scheme for a selected encounter-set type. They do not grant upload permission; upload authorization remains owned by Upload Profiles.
 
+Admin configuration UI is available at `GET /admin/encounter-set-types`. The page route renders HTML only; create/update/activate/deactivate mutations use the JSON API below through HTMX.
+
 ## Auth
 
 - Requires authenticated browser session.
@@ -63,6 +65,8 @@ Supported field properties:
 - `is_pii`: whether PII handling/redaction rules apply
 
 Fields not required at upload may be completed during verification.
+
+The admin UI presents this schema as separate encounter-level and image-level field builders. It serializes those field rows into `metadata_schema_json` before posting to the API.
 
 ## File Classification Policy
 

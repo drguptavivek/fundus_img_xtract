@@ -96,6 +96,7 @@ Profile create/update fields:
 - `disease_ids` repeated integers, required
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
+- `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active and belong to the selected project
 - `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans
 - `camera_ids` repeated integers, required
@@ -120,6 +121,8 @@ curl -X POST /api/upload-profiles \
   -F "default_disease_ids=3" \
   -F "upload_kinds=remidio" \
   -F "upload_kinds=direct_image" \
+  -F "upload_kinds=encounter_set" \
+  -F "encounter_set_type_ids=9" \
   -F "camera_ids=7" \
   -F "area_ids=1" \
   -F "allow_mydriatic=on" \
@@ -144,6 +147,8 @@ Allowed diseases define valid disease targets for the profile. Direct and pre-gr
 
 Encounter-set upload does not use the Remidio default. When an encounter-set API request supplies `disease_id`, that disease must be allowed by the selected project/lab profile. When `disease_id` is missing, the encounter-set flow uses profile allowed diseases rather than Remidio defaults.
 
+When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes from the same project. Upload UI must require the uploader to select one of those types for the encounter. That selected type governs the encounter-level and image-level metadata schema and the single target evaluation scheme for the set.
+
 AI workflow bindings are valid only when the AI model is actively linked to the selected disease through `AIModelDisease`, and when the workflow upload kind is enabled on the profile.
 
 Mydriatic validation requires at least one allowed mydriatic state. `default_is_mydriatic` must point at an allowed state.
@@ -158,6 +163,9 @@ Common user-facing errors include:
 - `All selected uploaders must be assigned to the profile lab unit.`
 - `Select a default disease for Remidio ZIP ingestion.`
 - `Default disease is only used for Remedio ZIP profiles.`
+- `Select at least one EncounterSetType for encounter-set uploads.`
+- `EncounterSetTypes are only used when encounter-set uploads are allowed.`
+- `EncounterSetTypes must be active and belong to the selected project.`
 - `AI workflow disease and upload type must be included in the profile, and AI models must exist.`
 - `Selected user must be assigned to the profile lab unit.`
 - `Upload profile not found in your lab-unit scope.`
@@ -166,7 +174,7 @@ Errors use the same JSON envelope as successful responses, with `success=false`,
 
 ## Mobile Upload Options
 
-`GET /api/mobile/v1/upload-options` returns `profiles`. Each profile payload includes `profile_id`, `name`, `project_id`, `lab_unit_id`, `disease_ids`, `default_disease_ids`, `camera_ids`, `area_ids`, `upload_kinds`, `ai_workflows`, and mydriatic flags.
+`GET /api/mobile/v1/upload-options` returns `profiles`. Each profile payload includes `profile_id`, `name`, `project_id`, `lab_unit_id`, `disease_ids`, `default_disease_ids`, `camera_ids`, `area_ids`, `upload_kinds`, `encounter_set_type_ids`, `ai_workflows`, and mydriatic flags.
 
 Clients must submit `profile_id` where an upload endpoint accepts a concrete profile selection. Upload endpoints still revalidate project, lab, disease, camera, area, and mydriatic state server-side.
 

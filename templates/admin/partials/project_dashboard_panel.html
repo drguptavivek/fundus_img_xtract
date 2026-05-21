@@ -154,6 +154,7 @@
             {% set row_camera_ids = profile.cameras|map(attribute='camera_id')|list %}
             {% set row_area_ids = profile.areas|map(attribute='area_id')|list %}
             {% set row_upload_kinds = profile.upload_kinds|map(attribute='upload_kind')|list %}
+            {% set row_encounter_set_type_ids = profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type_id')|list %}
             {% set row_ai_workflows = [] %}
             {% for workflow in profile.ai_workflows if workflow.active %}
               {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind) %}
@@ -164,7 +165,12 @@
               <td>{{ profile.lab_unit.name }}</td>
               <td class="small">{{ profile.diseases|map(attribute='disease.name')|join(', ') }}</td>
               <td class="small">{{ profile.diseases|selectattr('is_default')|map(attribute='disease.name')|join(', ') or '-' }}</td>
-              <td class="small">{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</td>
+              <td class="small">
+                <div>{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</div>
+                {% if row_encounter_set_type_ids %}
+                <div class="text-muted">{{ profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type.name')|join(', ') }}</div>
+                {% endif %}
+              </td>
               <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
@@ -181,6 +187,7 @@
                     data-camera-ids="{{ row_camera_ids|join(',') }}"
                     data-area-ids="{{ row_area_ids|join(',') }}"
                     data-upload-kinds="{{ row_upload_kinds|join(',') }}"
+                    data-encounter-set-type-ids="{{ row_encounter_set_type_ids|join(',') }}"
                     data-ai-workflows="{{ row_ai_workflows|join(',') }}"
                     data-allow-mydriatic="{{ '1' if profile.allow_mydriatic else '0' }}"
                     data-allow-non-mydriatic="{{ '1' if profile.allow_non_mydriatic else '0' }}"

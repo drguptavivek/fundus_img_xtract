@@ -16,6 +16,7 @@ from upload_profiles.models import (
     UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
     UploadProfileKind,
 )
 
@@ -67,6 +68,7 @@ class UploadProfileDTO:
     area_ids: frozenset[int]
     upload_kinds: frozenset[str]
     ai_workflows: tuple[dict[str, Any], ...]
+    encounter_set_type_ids: frozenset[int]
     allow_mydriatic: bool
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
@@ -178,6 +180,7 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
                 selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
                 selectinload(UploadProfile.upload_kinds),
                 selectinload(UploadProfile.ai_workflows).selectinload(UploadProfileAIWorkflow.ai_model),
+                selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
             )
             .order_by(UploadProfile.project_id, UploadProfile.lab_unit_id, UploadProfile.name)
         )
@@ -394,6 +397,7 @@ def _profile_to_dto(profile: UploadProfile) -> UploadProfileDTO:
         area_ids=frozenset(row.area_id for row in profile.areas),
         upload_kinds=frozenset(row.upload_kind for row in profile.upload_kinds),
         ai_workflows=ai_workflows,
+        encounter_set_type_ids=frozenset(row.encounter_set_type_id for row in profile.encounter_set_types if row.active),
         allow_mydriatic=profile.allow_mydriatic,
         allow_non_mydriatic=profile.allow_non_mydriatic,
         default_is_mydriatic=profile.default_is_mydriatic,
@@ -465,6 +469,7 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
         "area_ids": sorted(profile.area_ids),
         "upload_kinds": sorted(profile.upload_kinds),
         "ai_workflows": list(profile.ai_workflows),
+        "encounter_set_type_ids": sorted(profile.encounter_set_type_ids),
         "allow_mydriatic": profile.allow_mydriatic,
         "allow_non_mydriatic": profile.allow_non_mydriatic,
         "default_is_mydriatic": profile.default_is_mydriatic,

@@ -14,6 +14,7 @@ from models import (
     AIModelDisease,
     Camera,
     Disease,
+    EncounterSetType,
     LabUnit,
     Project,
     ProjectInvestigator,
@@ -27,6 +28,7 @@ from upload_profiles.models import (
     UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
 )
 
 
@@ -72,6 +74,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
                 selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
                 selectinload(UploadProfile.ai_workflows),
+                selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
             )
             .order_by(UploadProfile.active.desc(), UploadProfile.project_id, UploadProfile.name)
         )
@@ -143,6 +146,15 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "diseases": db.execute(select(Disease).order_by(Disease.name)).scalars().all(),
         "cameras": db.execute(select(Camera).order_by(Camera.name)).scalars().all(),
         "areas": db.execute(select(Area).order_by(Area.name)).scalars().all(),
+        "encounter_set_types": (
+            db.execute(
+                select(EncounterSetType)
+                .options(selectinload(EncounterSetType.project), selectinload(EncounterSetType.target_scheme))
+                .order_by(EncounterSetType.project_id, EncounterSetType.active.desc(), EncounterSetType.name)
+            )
+            .scalars()
+            .all()
+        ),
         "ai_models_by_disease": ai_models_by_disease,
         "upload_profiles": upload_profiles,
         "investigators": investigators,

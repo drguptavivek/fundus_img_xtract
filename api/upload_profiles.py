@@ -43,6 +43,9 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         user_ids = upload_profile_service.to_int_list(form.getlist("user_ids") or form.getlist("user_id"))
     disease_ids = upload_profile_service.to_int_list(form.getlist("disease_ids") or form.getlist("disease_id"))
     default_disease_ids = upload_profile_service.to_int_list(form.getlist("default_disease_ids") or form.getlist("default_disease_id"))
+    encounter_set_type_ids = upload_profile_service.to_int_list(
+        form.getlist("encounter_set_type_ids") or form.getlist("encounter_set_type_id")
+    )
     ai_workflows = []
     for value in form.getlist("ai_workflows"):
         parts = value.split(":")
@@ -73,6 +76,7 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         allow_non_mydriatic=form.get("allow_non_mydriatic") == "on",
         default_is_mydriatic=form.get("default_is_mydriatic") == "on",
         ai_workflows=ai_workflows,
+        encounter_set_type_ids=encounter_set_type_ids,
         description=(form.get("description") or "").strip() or None,
     )
 

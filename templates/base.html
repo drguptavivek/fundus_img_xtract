@@ -168,7 +168,7 @@
 
           {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint == 'admin.upload_profiles_admin') else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint in ['admin.upload_profiles_admin', 'admin.encounter_set_types_admin']) else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Upload
             </a>
@@ -221,6 +221,10 @@
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'admin.upload_profiles_admin' %}active{% endif %}"
                   href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a>
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'admin.encounter_set_types_admin' %}active{% endif %}"
+                  href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a>
               </li>
               {% endif %}
               {% if current_user_has('fileUploader') %}
@@ -486,6 +490,7 @@
                 </a>
                 <ul class="dropdown-menu admin-submenu">
                   <li><a class="dropdown-item" href="{{ url_for('admin.upload_profiles_admin') }}#upload-profiles">Upload Profiles</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.remidio_admin') }}">Remidio Connections</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.task_backfill_admin') }}">Task Backfill</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.metadata_backfill_admin') }}">Metadata Backfill</a></li>
@@ -505,6 +510,7 @@
                   <li><a class="dropdown-item" href="{{ url_for('admin.list_disease_gradings') }}">Disease Gradings</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.linked_disease_gradings_list') }}">Linked Disease Gradings</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.manage_eligibility_users') }}">Grading Eligibility</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">AI Models</a></li>
                 </ul>

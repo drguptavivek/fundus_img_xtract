@@ -50,11 +50,11 @@
         </div>
         <div class="card-body">
             <ol class="mb-0">
-                <li>Update <code>requirements-web.txt</code> with fixed versions shown above</li>
-                <li>Rebuild the venv: <code>docker compose build web-venv-builder</code></li>
-                <li>Run venv builder: <code>docker compose up web-venv-builder -d</code></li>
-                <li>Restart web service: <code>docker compose up web -d</code></li>
-                <li>Verify: Refresh this page and confirm vulnerabilities are resolved</li>
+                <li>Update <code>pyproject.toml</code> or the shared dependency constraints with the fixed versions shown above.</li>
+                <li>Regenerate every container requirements file: <code>docker compose build requirements-exporter</code>, then <code>./scripts/export_requirements.sh</code>.</li>
+                <li>Refresh all runtime venv volumes with services stopped: <code>make refresh-venvs</code>.</li>
+                <li>Confirm web and Celery services restarted with the refreshed venvs: <code>docker compose ps web celery-ocr-worker celery-general-worker celery-beat</code>.</li>
+                <li>Verify: refresh this page and confirm vulnerabilities are resolved for every affected requirements file.</li>
             </ol>
         </div>
     </div>

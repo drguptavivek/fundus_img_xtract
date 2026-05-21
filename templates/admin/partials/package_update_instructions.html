@@ -60,25 +60,24 @@
                     </ul>
                 </li>
                 <li>Copy the updated file contents above and replace the entire file</li>
-                <li><strong>Regenerate requirements from pyproject:</strong>
+                <li><strong>Regenerate all container requirements from pyproject:</strong>
                     <ul class="mt-2">
+                        <li><code>docker compose build requirements-exporter</code></li>
                         <li><code>./scripts/export_requirements.sh</code></li>
                     </ul>
                 </li>
-                <li><strong>Rebuild venv builders:</strong>
+                <li><strong>Refresh all runtime venvs:</strong>
                     <ul class="mt-2">
-                        <li><code>docker compose build web-venv-builder</code></li>
-                        <li><code>docker compose build ocr-venv-builder</code></li>
-                        <li><code>docker compose build general-venv-builder</code></li>
-                        <li><code>docker compose build beat-venv-builder</code></li>
+                        <li><code>make refresh-venvs</code></li>
                     </ul>
                 </li>
-                <li>Restart services:
+                <li>Confirm all runtime services picked up the refreshed venvs:
                     <ul class="mt-2">
-                        <li><code>docker compose restart web celery-ocr celery-general celery-beat</code></li>
+                        <li><code>docker compose ps web celery-ocr-worker celery-general-worker celery-beat</code></li>
+                        <li><code>docker compose logs web celery-ocr-worker celery-general-worker celery-beat --tail=100</code></li>
                     </ul>
                 </li>
-                <li>Verify: Click "Refresh" to confirm updates are applied</li>
+                <li>Verify: click "Refresh" to confirm updates are applied across every affected requirements file.</li>
             </ol>
         </div>
     </div>

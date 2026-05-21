@@ -91,6 +91,7 @@ from .celery_schedule import (
     celery_schedule_delete,
 )
 from .upload_profiles import upload_profiles_admin, upload_project_create_workspace, upload_project_workspace, upload_projects_admin
+from .remidio import remidio_admin, remidio_workspace
 
 
 # Register routes with the blueprint
@@ -110,6 +111,8 @@ admin_bp.add_url_rule("/upload-profiles", view_func=upload_profiles_admin, metho
 admin_bp.add_url_rule("/upload-projects", view_func=upload_projects_admin, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project_create_workspace, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
+admin_bp.add_url_rule("/remidio", view_func=remidio_admin, methods=["GET"], endpoint="remidio_admin")
+admin_bp.add_url_rule("/remidio/workspace", view_func=remidio_workspace, methods=["GET"], endpoint="remidio_workspace")
 
 # Security routes (password and roles)
 admin_bp.add_url_rule("/change-password", view_func=change_password, methods=["GET", "POST"])

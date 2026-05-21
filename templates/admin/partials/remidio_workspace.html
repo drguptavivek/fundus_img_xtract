@@ -1,0 +1,429 @@
+{% from "_forms.html" import csrf_field %}
+
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Add Connection</div>
+      <div class="card-body">
+        <form method="post"
+              action="{{ url_for('fundus_api.create_remidio_connection') }}"
+              hx-post="{{ url_for('fundus_api.create_remidio_connection') }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+              data-json-api-reload-target="#remidio-admin-workspace">
+          {{ csrf_field() }}
+          <div class="mb-3">
+            <label class="form-label" for="remidio-name">Name</label>
+            <input class="form-control" id="remidio-name" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="remidio-base-url">Base URL</label>
+            <input class="form-control" id="remidio-base-url" name="base_url" value="https://remidio-backend-india.appspot.com" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="remidio-client-name">Client Name</label>
+            <input class="form-control" id="remidio-client-name" name="client_name" value="PACS_GATEWAY" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="remidio-client-token">Client Identification Token</label>
+            <input class="form-control" id="remidio-client-token" name="client_identification_token" required autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="remidio-email">Email</label>
+            <input class="form-control" id="remidio-email" name="email" type="email" required autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="remidio-password">Password</label>
+            <input class="form-control" id="remidio-password" name="password" type="password" required autocomplete="new-password">
+          </div>
+          <input type="hidden" name="active" value="true">
+          <button class="btn btn-primary w-100" type="submit">Create Connection</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Connections</span>
+        <span class="badge text-bg-secondary">{{ connections|length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Sites</th>
+              <th>Staged</th>
+              <th>Encounters</th>
+              <th>Last Auth</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for connection in connections %}
+            {% set stats = connection_stats.get(connection.id, {}) %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ connection.name }}</div>
+                <div class="small text-muted">{{ connection.base_url }}</div>
+              </td>
+              <td>{{ connection.sites|length }}</td>
+              <td>{{ stats.get('exams', 0) }}</td>
+              <td>{{ stats.get('encounters', 0) }}</td>
+              <td class="small">{{ connection.last_auth_token_at|user_datetime if connection.last_auth_token_at else '-' }}</td>
+              <td><span class="badge {{ 'text-bg-success' if connection.active else 'text-bg-secondary' }}">{{ 'Active' if connection.active else 'Inactive' }}</span></td>
+              <td class="text-end">
+                <div class="d-inline-flex flex-wrap gap-2 justify-content-end">
+                  <form method="post"
+                        action="{{ url_for('fundus_api.refresh_remidio_token', connection_id=connection.id) }}"
+                        hx-post="{{ url_for('fundus_api.refresh_remidio_token', connection_id=connection.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                        data-json-api-reload-target="#remidio-admin-workspace">
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-primary" type="submit">Test Connection</button>
+                  </form>
+                  <button class="btn btn-sm btn-outline-secondary"
+                          type="button"
+                          data-bs-toggle="collapse"
+                          data-bs-target="#remidio-connection-edit-{{ connection.id }}"
+                          aria-expanded="false"
+                          aria-controls="remidio-connection-edit-{{ connection.id }}">
+                    Edit
+                  </button>
+                  <form method="post"
+                        action="{{ url_for('fundus_api.sync_remidio_sites', connection_id=connection.id) }}"
+                        hx-post="{{ url_for('fundus_api.sync_remidio_sites', connection_id=connection.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                        data-json-api-reload-target="#remidio-admin-workspace">
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Sync Sites</button>
+                  </form>
+                  <form method="post"
+                        action="{{ url_for('fundus_api.patch_remidio_connection', connection_id=connection.id) }}"
+                        hx-post="{{ url_for('fundus_api.patch_remidio_connection', connection_id=connection.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                        data-json-api-reload-target="#remidio-admin-workspace">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="active" value="{{ 'false' if connection.active else 'true' }}">
+                    <button class="btn btn-sm {{ 'btn-outline-danger' if connection.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if connection.active else 'Activate' }}</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            <tr class="collapse" id="remidio-connection-edit-{{ connection.id }}">
+              <td colspan="7" class="bg-body-tertiary">
+                <form class="row g-3 align-items-end"
+                      method="post"
+                      action="{{ url_for('fundus_api.patch_remidio_connection', connection_id=connection.id) }}"
+                      hx-post="{{ url_for('fundus_api.patch_remidio_connection', connection_id=connection.id) }}"
+                      hx-swap="none"
+                      data-json-api-htmx
+                      data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                      data-json-api-reload-target="#remidio-admin-workspace">
+                  {{ csrf_field() }}
+                  <div class="col-md-4">
+                    <label class="form-label" for="connection-name-{{ connection.id }}">Name</label>
+                    <input class="form-control form-control-sm" id="connection-name-{{ connection.id }}" name="name" value="{{ connection.name }}" required>
+                  </div>
+                  <div class="col-md-5">
+                    <label class="form-label" for="connection-base-url-{{ connection.id }}">Base URL</label>
+                    <input class="form-control form-control-sm" id="connection-base-url-{{ connection.id }}" name="base_url" value="{{ connection.base_url }}" required>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label" for="connection-client-name-{{ connection.id }}">Client Name</label>
+                    <input class="form-control form-control-sm" id="connection-client-name-{{ connection.id }}" name="client_name" value="{{ connection.client_name }}" required>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label" for="connection-token-{{ connection.id }}">New Client Token</label>
+                    <input class="form-control form-control-sm" id="connection-token-{{ connection.id }}" name="client_identification_token" autocomplete="off" placeholder="Leave blank to keep current">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label" for="connection-email-{{ connection.id }}">New Email</label>
+                    <input class="form-control form-control-sm" id="connection-email-{{ connection.id }}" name="email" type="email" autocomplete="off" placeholder="Leave blank to keep current">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label" for="connection-password-{{ connection.id }}">New Password</label>
+                    <input class="form-control form-control-sm" id="connection-password-{{ connection.id }}" name="password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
+                  </div>
+                  <input type="hidden" name="active" value="{{ 'true' if connection.active else 'false' }}">
+                  <div class="col-12 d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#remidio-connection-edit-{{ connection.id }}">Cancel</button>
+                    <button class="btn btn-sm btn-primary" type="submit">Save Connection</button>
+                  </div>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No Remidio connections configured.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Remidio Sites</span>
+    <span class="small text-muted">Set the site custom identifier before routing or pulling exams by date.</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Connection</th>
+          <th>Remidio Site</th>
+          <th>Custom Identifier</th>
+          <th>Synced Data</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for site in sites %}
+        {% set stats = site_stats.get(site.id, {}) %}
+        <tr>
+          <td>{{ site.connection.name }}</td>
+          <td>
+            <div class="fw-semibold">{{ site.site_name or '-' }}</div>
+            <div class="small text-muted">ID {{ site.remidio_site_id }}{% if site.site_domain %} · {{ site.site_domain }}{% endif %}</div>
+          </td>
+          <td>
+            <form class="d-flex gap-2"
+                  method="post"
+                  action="{{ url_for('fundus_api.patch_remidio_site', site_id=site.id) }}"
+                  hx-post="{{ url_for('fundus_api.patch_remidio_site', site_id=site.id) }}"
+                  hx-swap="none"
+                  data-json-api-htmx
+                  data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                  data-json-api-reload-target="#remidio-admin-workspace">
+              {{ csrf_field() }}
+              <input class="form-control form-control-sm"
+                     name="site_custom_identifier"
+                     value="{{ site.site_custom_identifier or '' }}"
+                     placeholder="siteCustomIdentifier"
+                     {% if site.site_custom_identifier %}readonly{% endif %}
+                     data-remidio-site-custom-input>
+              <button class="btn btn-sm btn-outline-primary"
+                      type="{{ 'button' if site.site_custom_identifier else 'submit' }}"
+                      data-remidio-site-custom-button>{{ 'Edit' if site.site_custom_identifier else 'Save' }}</button>
+            </form>
+          </td>
+          <td class="small">
+            {{ stats.get('exams', 0) }} exams ·
+            {{ stats.get('encounters', 0) }} encounters ·
+            {{ stats.get('images', 0) }} images ·
+            {{ stats.get('pdfs', 0) }} PDFs ·
+            {{ stats.get('tasks', 0) }} tasks
+          </td>
+          <td><span class="badge {{ 'text-bg-success' if site.active else 'text-bg-secondary' }}">{{ 'Active' if site.active else 'Inactive' }}</span></td>
+          <td class="text-end">
+            <form method="post"
+                  action="{{ url_for('fundus_api.patch_remidio_site', site_id=site.id) }}"
+                  hx-post="{{ url_for('fundus_api.patch_remidio_site', site_id=site.id) }}"
+                  hx-swap="none"
+                  data-json-api-htmx
+                  data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                  data-json-api-reload-target="#remidio-admin-workspace">
+              {{ csrf_field() }}
+              <input type="hidden" name="active" value="{{ 'false' if site.active else 'true' }}">
+              <button class="btn btn-sm {{ 'btn-outline-danger' if site.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if site.active else 'Activate' }}</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No sites synced yet. Use Sync Sites on a connection.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  (function () {
+    document.querySelectorAll('[data-remidio-site-custom-button]').forEach(function (button) {
+      if (button.dataset.remidioSiteCustomBound === '1') {
+        return;
+      }
+      button.dataset.remidioSiteCustomBound = '1';
+      button.addEventListener('click', function (event) {
+        if (button.type === 'submit') {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        var form = button.closest('form');
+        var input = form ? form.querySelector('[data-remidio-site-custom-input]') : null;
+        if (!input) {
+          return;
+        }
+        input.removeAttribute('readonly');
+        input.focus();
+        input.select();
+        button.type = 'submit';
+        button.textContent = 'Save';
+      });
+    });
+  })();
+</script>
+
+<div class="row g-4 mt-1">
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Add Site/Device Routing Rule</div>
+      <div class="card-body">
+        <form method="post"
+              action="{{ url_for('fundus_api.upsert_remidio_routing_rule') }}"
+              hx-post="{{ url_for('fundus_api.upsert_remidio_routing_rule') }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+              data-json-api-reload-target="#remidio-admin-workspace">
+          {{ csrf_field() }}
+          <div class="mb-3">
+            <label class="form-label" for="rule-connection">Connection</label>
+            <select class="form-select" id="rule-connection" name="remidio_connection_id" required>
+              <option value="">Select connection</option>
+              {% for connection in connections if connection.active %}
+              <option value="{{ connection.id }}">{{ connection.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-site">Synced Site</label>
+            <select class="form-select" id="rule-site" name="remidio_site_id">
+              <option value="">Use custom identifier below</option>
+              {% for site in sites if site.active and site.site_custom_identifier %}
+              <option value="{{ site.id }}">{{ site.connection.name }} · {{ site.site_name or site.remidio_site_id }} · {{ site.site_custom_identifier }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-site-custom">Site Custom Identifier</label>
+            <input class="form-control" id="rule-site-custom" name="site_custom_identifier" placeholder="rpc_comoph_2">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-device">Remidio Device Type</label>
+            <input class="form-control" id="rule-device" name="remidio_device_type" placeholder="FOP" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-project">Target Project</label>
+            <select class="form-select" id="rule-project" name="project_id" required>
+              <option value="">Select project</option>
+              {% for project in projects if project.active %}
+              <option value="{{ project.id }}">{{ project.title }}{% if project.code %} ({{ project.code }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-lab">Target Lab Unit</label>
+            <select class="form-select" id="rule-lab" name="lab_unit_id" required>
+              <option value="">Select lab unit</option>
+              {% for lab_unit in lab_units %}
+              <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} · {{ lab_unit.hospital.name }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-camera">Camera</label>
+            <select class="form-select" id="rule-camera" name="camera_id" required>
+              <option value="">Select camera</option>
+              {% for camera in cameras %}
+              <option value="{{ camera.id }}">{{ camera.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="rule-disease">Default Task Disease</label>
+            <select class="form-select" id="rule-disease" name="default_disease_id">
+              <option value="">Save files only; no default task</option>
+              {% for disease in diseases %}
+              <option value="{{ disease.id }}">{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <input type="hidden" name="active" value="true">
+          <button class="btn btn-primary w-100" type="submit">Save Routing Rule</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Routing Rules</span>
+        <span class="badge text-bg-secondary">{{ rules|length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Connection</th>
+              <th>Site / Device</th>
+              <th>Target</th>
+              <th>Default Task</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rule in rules %}
+            <tr>
+              <td>{{ rule.connection.name }}</td>
+              <td>
+                <div class="fw-semibold">{{ rule.site_custom_identifier }}</div>
+                <div class="small text-muted">{{ rule.remidio_device_type }}</div>
+              </td>
+              <td class="small">
+                <div>{{ rule.project.title if rule.project else '-' }}</div>
+                <div class="text-muted">{{ rule.lab_unit.name if rule.lab_unit else '-' }} · {{ rule.camera.name if rule.camera else '-' }}</div>
+              </td>
+              <td>{{ rule.default_disease.name if rule.default_disease else 'None' }}</td>
+              <td><span class="badge {{ 'text-bg-success' if rule.active else 'text-bg-secondary' }}">{{ 'Active' if rule.active else 'Inactive' }}</span></td>
+              <td class="text-end">
+                <form method="post"
+                      action="{{ url_for('fundus_api.upsert_remidio_routing_rule') }}"
+                      hx-post="{{ url_for('fundus_api.upsert_remidio_routing_rule') }}"
+                      hx-swap="none"
+                      data-json-api-htmx
+                      data-json-api-reload-url="{{ url_for('admin.remidio_workspace') }}"
+                      data-json-api-reload-target="#remidio-admin-workspace">
+                  {{ csrf_field() }}
+                  <input type="hidden" name="remidio_connection_id" value="{{ rule.remidio_connection_id }}">
+                  <input type="hidden" name="remidio_site_id" value="{{ rule.remidio_site_id or '' }}">
+                  <input type="hidden" name="site_custom_identifier" value="{{ rule.site_custom_identifier }}">
+                  <input type="hidden" name="remidio_device_type" value="{{ rule.remidio_device_type }}">
+                  <input type="hidden" name="project_id" value="{{ rule.project_id }}">
+                  <input type="hidden" name="lab_unit_id" value="{{ rule.lab_unit_id }}">
+                  <input type="hidden" name="camera_id" value="{{ rule.camera_id }}">
+                  <input type="hidden" name="default_disease_id" value="{{ rule.default_disease_id or '' }}">
+                  <input type="hidden" name="active" value="{{ 'false' if rule.active else 'true' }}">
+                  <button class="btn btn-sm {{ 'btn-outline-danger' if rule.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if rule.active else 'Activate' }}</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">No routing rules configured.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

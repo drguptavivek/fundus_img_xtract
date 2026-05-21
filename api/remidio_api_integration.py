@@ -43,7 +43,7 @@ def create_remidio_connection():
         return _error_response(exc)
 
 
-@api_bp.route("/remidio/connections/<int:connection_id>", methods=["PATCH"])
+@api_bp.route("/remidio/connections/<int:connection_id>", methods=["PATCH", "POST"])
 @roles_required(*REMIDIO_ROLES)
 def patch_remidio_connection(connection_id: int):
     payload = _json_payload()
@@ -87,7 +87,7 @@ def list_remidio_sites(connection_id: int):
         return _error_response(exc)
 
 
-@api_bp.route("/remidio/sites/<int:site_id>", methods=["PATCH"])
+@api_bp.route("/remidio/sites/<int:site_id>", methods=["PATCH", "POST"])
 @roles_required(*REMIDIO_ROLES)
 def patch_remidio_site(site_id: int):
     payload = _json_payload()
@@ -174,7 +174,12 @@ def ingest_remidio_staged_files(connection_id: int):
 def _json_payload() -> dict:
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
-        return {}
+        payload = {}
+    if not payload and request.form:
+        payload = request.form.to_dict(flat=False)
+        for key, value in list(payload.items()):
+            if len(value) == 1:
+                payload[key] = value[0]
     return payload
 
 

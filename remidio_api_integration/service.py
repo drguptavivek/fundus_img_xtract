@@ -63,7 +63,7 @@ def create_connection(db: Session, payload: dict[str, Any]) -> RemidioConnection
         email_encrypted=encrypt_password_with_salt(_required_string(payload, "email"), salt),
         password_encrypted=encrypt_password_with_salt(_required_string(payload, "password"), salt),
         secret_salt=salt,
-        active=bool(payload.get("active", True)),
+        active=_optional_bool(payload.get("active"), default=True),
     )
     db.add(connection)
     db.flush()
@@ -83,17 +83,17 @@ def patch_connection(db: Session, connection_id: int, payload: dict[str, Any]) -
         connection.base_url = _normalize_base_url(payload.get("base_url") or DEFAULT_BASE_URL)
     if "client_name" in payload:
         connection.client_name = _required_string(payload, "client_name")
-    if "client_identification_token" in payload:
+    if "client_identification_token" in payload and _has_value(payload.get("client_identification_token")):
         connection.client_identification_token_encrypted = encrypt_password_with_salt(
             _required_string(payload, "client_identification_token"),
             connection.secret_salt,
         )
-    if "email" in payload:
+    if "email" in payload and _has_value(payload.get("email")):
         connection.email_encrypted = encrypt_password_with_salt(_required_string(payload, "email"), connection.secret_salt)
-    if "password" in payload:
+    if "password" in payload and _has_value(payload.get("password")):
         connection.password_encrypted = encrypt_password_with_salt(_required_string(payload, "password"), connection.secret_salt)
     if "active" in payload:
-        connection.active = bool(payload["active"])
+        connection.active = _optional_bool(payload.get("active"), default=True)
     connection.updated_at = utcnow()
     db.flush()
     return connection
@@ -141,7 +141,7 @@ def patch_site(db: Session, site_id: int, payload: dict[str, Any]) -> RemidioSit
         value = payload.get("site_custom_identifier")
         site.site_custom_identifier = str(value).strip() if value not in {None, ""} else None
     if "active" in payload:
-        site.active = bool(payload["active"])
+        site.active = _optional_bool(payload.get("active"), default=True)
     site.updated_at = utcnow()
     db.flush()
     return site
@@ -211,7 +211,7 @@ def upsert_routing_rule(db: Session, payload: dict[str, Any]) -> RemidioRoutingR
         db.add(rule)
     rule.remidio_site_id = site_id
     rule.default_disease_id = default_disease_id
-    rule.active = bool(payload.get("active", True))
+    rule.active = _optional_bool(payload.get("active"), default=True)
     rule.updated_at = utcnow()
     db.flush()
     return rule
@@ -373,6 +373,20 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         raise RemidioConfigError("Expected an integer identifier.")
+
+
+def _optional_bool(value: Any, *, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _has_value(value: Any) -> bool:
+    return value is not None and str(value).strip() != ""
 
 
 def _normalize_base_url(value: str) -> str:

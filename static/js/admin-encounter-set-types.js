@@ -260,7 +260,6 @@
   }
 
   function setFieldKeyStatus(card, message, state) {
-    const input = card.querySelector('[data-est-key]');
     const status = card.querySelector('[data-est-key-status]');
     if (status) {
       status.textContent = message || '';
@@ -272,9 +271,6 @@
       } else if (message) {
         status.classList.add('text-muted');
       }
-    }
-    if (input) {
-      input.setCustomValidity(state === 'invalid' ? (message || 'Field key is invalid.') : '');
     }
   }
 
@@ -309,33 +305,55 @@
     let valid = true;
     cards.forEach(function (card) {
       const key = card.querySelector('[data-est-key]')?.value.trim();
+      const label = card.querySelector('[data-est-label]')?.value.trim();
       const fieldDefinitionId = card.dataset.estFieldDefinitionId;
       const masterWithKey = key ? masterFields().find(function (field) {
         return field.key === key && String(field.id || '') !== String(fieldDefinitionId || '');
       }) : null;
+      let cardValid = true;
       if (!key) {
         setFieldKeyStatus(card, 'Key is required.', 'invalid');
-        valid = false;
+        cardValid = false;
       } else if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) {
         setFieldKeyStatus(card, 'Start with a letter; use letters, numbers, and underscores.', 'invalid');
-        valid = false;
+        cardValid = false;
       } else if ((counts.get(key) || 0) > 1) {
         setFieldKeyStatus(card, 'This key is already used in this EncounterSetType.', 'invalid');
-        valid = false;
+        cardValid = false;
       } else if (fieldDefinitionId && (masterCounts.get(fieldDefinitionId) || 0) > 1) {
         setFieldKeyStatus(card, 'This metadata master is already declared in this EncounterSetType.', 'invalid');
-        valid = false;
+        cardValid = false;
       } else if (masterWithKey && masterWithKey.scope !== card.dataset.estField) {
         setFieldKeyStatus(card, 'This key already exists as a ' + masterWithKey.scope + ' metadata master.', 'invalid');
-        valid = false;
+        cardValid = false;
       } else if (masterWithKey && !fieldDefinitionId) {
         setFieldKeyStatus(card, 'Existing metadata master will be linked on save. Select the suggestion to review details.', 'valid');
       } else {
         setFieldKeyStatus(card, 'Key is valid locally. Master uniqueness is checked separately.', 'valid');
       }
+      if (!label) {
+        cardValid = false;
+      }
+      card.dataset.estInvalid = cardValid ? '0' : '1';
+      valid = valid && cardValid;
       updateFieldSummary(card);
     });
     return valid;
+  }
+
+  function revealFirstInvalidField(current) {
+    const invalidCard = current.querySelector('[data-est-field][data-est-invalid="1"]');
+    if (!invalidCard) {
+      return false;
+    }
+    setCardExpanded(invalidCard, true);
+    const keyInput = invalidCard.querySelector('[data-est-key]');
+    const labelInput = invalidCard.querySelector('[data-est-label]');
+    const focusTarget = keyInput && !keyInput.value.trim() ? keyInput : (labelInput && !labelInput.value.trim() ? labelInput : keyInput);
+    if (focusTarget) {
+      focusTarget.focus();
+    }
+    return true;
   }
 
   function checkMasterKeyAvailability(card) {
@@ -463,7 +481,7 @@
     keyCol.className = 'col-md-3';
     keyCol.innerHTML = [
       '<label class="form-label small mb-1">Key <span class="text-danger">*</span></label>',
-      '<input class="form-control form-control-sm" maxlength="100" data-est-key required>',
+      '<input class="form-control form-control-sm" maxlength="100" data-est-key>',
       '<div class="form-text">Internal code. Globally unique in metadata masters and unique within this EncounterSetType.</div>',
       '<div class="small mt-1" data-est-key-status aria-live="polite"></div>',
       '<div class="mt-2 d-none" data-est-master-suggestions></div>'
@@ -472,7 +490,7 @@
 
     const labelCol = document.createElement('div');
     labelCol.className = 'col-md-3';
-    labelCol.innerHTML = '<label class="form-label small mb-1">Label <span class="text-danger">*</span></label><input class="form-control form-control-sm" maxlength="150" data-est-label required>';
+    labelCol.innerHTML = '<label class="form-label small mb-1">Label <span class="text-danger">*</span></label><input class="form-control form-control-sm" maxlength="150" data-est-label>';
     labelCol.querySelector('input').value = data.label || '';
 
     const orderCol = document.createElement('div');
@@ -772,6 +790,8 @@
         updateFieldSummary(card);
         serializeSchema();
         setCardExpanded(card, false);
+      } else if (card) {
+        revealFirstInvalidField(form() || document);
       }
       return;
     }
@@ -842,8 +862,8 @@
   document.body.addEventListener('htmx:beforeRequest', function (event) {
     if (event.detail.elt && event.detail.elt.matches && event.detail.elt.matches('[data-est-form]')) {
       if (!validateFieldKeys()) {
+        revealFirstInvalidField(event.detail.elt);
         event.preventDefault();
-        event.detail.elt.reportValidity();
         return;
       }
       serializeSchema();

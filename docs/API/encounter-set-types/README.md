@@ -40,7 +40,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
     {
       "key": "project_participant_id",
       "label": "Project Unique ID",
-      "scope": "encounter",
+      "scope": "patient",
       "type": "text",
       "required_at_upload": true,
       "required_for_verification": true,
@@ -57,7 +57,7 @@ Supported field properties:
 - `field_definition_id`: optional provenance link to a standalone upload metadata field master
 - `label`: display label
 - `sctid`: optional SNOMED CT ID snapshot
-- `scope`: `encounter` or `image`
+- `scope`: `patient`, `encounter`, `image`, `document`, or `upload`
 - `type`: `text`, `textarea`, `integer`, `decimal`, `date`, `datetime`, `boolean`, `select`, `phone`, or `email`
 - `selection_mode`: for select fields only, `single` or `multiple`
 - `options`: select choices as strings or `{ "value": "...", "label": "..." }` objects
@@ -68,7 +68,7 @@ Supported field properties:
 
 Fields not required at upload may be completed during verification.
 
-The admin UI presents this schema as separate encounter-level and image-level field builders. It serializes those field rows into `metadata_schema_json` before posting to the API.
+The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API.
 
 ## EncounterSet Grading Scheme
 
@@ -156,7 +156,7 @@ curl -X POST /api/encounter-set-types \
         {
           "key": "hospital_uhid",
           "label": "Hospital UHID / MRN",
-          "scope": "encounter",
+          "scope": "patient",
           "type": "text",
           "required_at_upload": false,
           "required_for_verification": false,

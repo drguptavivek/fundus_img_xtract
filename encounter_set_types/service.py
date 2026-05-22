@@ -30,7 +30,7 @@ SUPPORTED_FIELD_TYPES = {
     "phone",
     "email",
 }
-SUPPORTED_SCOPES = {"encounter", "image"}
+SUPPORTED_SCOPES = {"patient", "encounter", "image", "document", "upload"}
 SUPPORTED_SELECTION_MODES = {"single", "multiple"}
 _KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _CODE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -208,17 +208,14 @@ def normalize_metadata_schema(raw_schema: Any) -> dict[str, Any]:
     if not isinstance(fields, list):
         raise ValueError("metadata_schema_json.fields must be a list.")
     normalized_fields: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[str] = set()
     for idx, field in enumerate(fields, start=1):
         if not isinstance(field, dict):
             raise ValueError(f"metadata_schema_json.fields[{idx}] must be an object.")
         normalized = _normalize_field(field, idx)
-        identity = (normalized["scope"], normalized["key"])
-        if identity in seen:
-            raise ValueError(
-                f"metadata_schema_json.fields[{idx}] duplicates key '{normalized['key']}' in scope '{normalized['scope']}'."
-            )
-        seen.add(identity)
+        if normalized["key"] in seen:
+            raise ValueError(f"metadata_schema_json.fields[{idx}] duplicates key '{normalized['key']}'.")
+        seen.add(normalized["key"])
         normalized_fields.append(normalized)
     return {"fields": normalized_fields}
 
@@ -250,7 +247,7 @@ def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
         raise ValueError(f"metadata_schema_json.fields[{idx}] requires a label.")
     scope = str(field.get("scope") or "").strip()
     if scope not in SUPPORTED_SCOPES:
-        raise ValueError(f"metadata_schema_json.fields[{idx}] scope must be encounter or image.")
+        raise ValueError(f"metadata_schema_json.fields[{idx}] scope must be patient, encounter, image, document, or upload.")
     field_type = str(field.get("type") or "").strip()
     if field_type not in SUPPORTED_FIELD_TYPES:
         raise ValueError(f"metadata_schema_json.fields[{idx}] has unsupported type '{field_type}'.")

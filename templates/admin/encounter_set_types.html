@@ -1,6 +1,29 @@
 {% extends "base.html" %}
 {% from "_forms.html" import csrf_field %}
 {% block title %}EncounterSet Types{% endblock %}
+{% macro metadata_scope_card(scope, title, description, fields, label_suffix=False) %}
+<div class="card mb-4">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <h2 class="h6 mb-0">{{ title }}</h2>
+      <div class="small text-muted">{{ description }}</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <select class="form-select form-select-sm" data-est-master-select="{{ scope }}">
+        <option value="">Add from master</option>
+        {% for field in fields if field.scope == scope %}
+        <option value="{{ field.id }}" data-field="{{ field|tojson|forceescape }}">{{ field.label }}{% if label_suffix %} ({{ field.scope }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-master="{{ scope }}" title="Add selected master field">+</button>
+      <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-field="{{ scope }}" title="Add custom {{ title|lower }} field">+ Field</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="vstack gap-2" data-est-field-list="{{ scope }}"></div>
+  </div>
+</div>
+{% endmacro %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -47,8 +70,8 @@
             {{ csrf_field() }}
             <input type="hidden" name="metadata_schema_json" data-est-schema-input value='{"fields": []}'>
             <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label" for="est_target_scheme_id">Target Scheme <span class="text-danger">*</span></label>
+              <div class="col-md-4">
+                <label class="form-label" for="est_target_scheme_id">Target Grading scheme <span class="text-danger">*</span></label>
                 <select class="form-select" id="est_target_scheme_id" name="target_scheme_id" required>
                   <option value="">Select scheme</option>
                   {% for disease in diseases %}
@@ -56,12 +79,12 @@
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label" for="est_name">Name <span class="text-danger">*</span></label>
                 <input class="form-control" id="est_name" name="name" maxlength="150" required>
               </div>
-              <div class="col-md-6">
-                <label class="form-label" for="est_code">Code <span class="text-danger">*</span></label>
+              <div class="col-md-4">
+                <label class="form-label" for="est_code">Unique code <span class="text-danger">*</span></label>
                 <input class="form-control" id="est_code" name="code" maxlength="64" required>
               </div>
               <div class="col-12">
@@ -72,35 +95,11 @@
 
             <hr>
 
-            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-              <h2 class="h6 mb-0">Encounter-Level Fields</h2>
-              <div class="d-flex gap-2">
-                <select class="form-select form-select-sm" data-est-master-select="encounter">
-                  <option value="">Add from master</option>
-                  {% for field in field_definitions if field.scope in ["patient", "encounter"] %}
-                  <option value="{{ field.id }}" data-field="{{ field|tojson|forceescape }}">{{ field.label }} ({{ field.scope }})</option>
-                  {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-master="encounter" title="Add selected master field">+</button>
-                <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-field="encounter" title="Add custom encounter field">+ Field</button>
-              </div>
-            </div>
-            <div class="vstack gap-2 mb-4" data-est-field-list="encounter"></div>
-
-            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-              <h2 class="h6 mb-0">Image-Level Fields</h2>
-              <div class="d-flex gap-2">
-                <select class="form-select form-select-sm" data-est-master-select="image">
-                  <option value="">Add from master</option>
-                  {% for field in field_definitions if field.scope == "image" %}
-                  <option value="{{ field.id }}" data-field="{{ field|tojson|forceescape }}">{{ field.label }}</option>
-                  {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-master="image" title="Add selected master field">+</button>
-                <button class="btn btn-sm btn-outline-primary" type="button" data-est-add-field="image" title="Add custom image field">+ Field</button>
-              </div>
-            </div>
-            <div class="vstack gap-2" data-est-field-list="image"></div>
+            {{ metadata_scope_card("patient", "Patient", "Participant-level metadata that can persist across visits, such as UHID/MRN, sex, age, phone, or email.", field_definitions) }}
+            {{ metadata_scope_card("encounter", "Encounter", "One visit/capture session for one patient, such as capture date, diagnosis known at upload, clinic ID, or remarks.", field_definitions) }}
+            {{ metadata_scope_card("image", "Image", "Per-image metadata such as eye, view, gaze, modality, distance/close-up, montage, disk-centered, or macula-centered.", field_definitions) }}
+            {{ metadata_scope_card("document", "Document", "Supporting documents and document-images, usually PII, such as referrals, reports, PDFs, labels, or consent images.", field_definitions) }}
+            {{ metadata_scope_card("upload", "Upload", "Metadata about the upload event or batch itself, such as source system, operator notes, import batch, or acquisition method.", field_definitions) }}
 
             <div class="d-flex justify-content-end gap-2 mt-4">
               <button class="btn btn-outline-secondary" type="button" data-est-cancel>Cancel</button>

@@ -33,6 +33,13 @@ Date: 2026-05-21
   - `image`: per-image data such as eye, view, gaze, modality, red/red-free, montage, disc-centered, macula-centered.
   - `document`: supporting PDFs/document-images, generally PII.
   - `upload`: upload event or batch metadata.
+- EncounterSetType configuration owns five metadata cards matching those scopes:
+  - Patient
+  - Encounter
+  - Image
+  - Document
+  - Upload
+- Each EncounterSetType metadata card owns its fields and supports add/edit/remove with expandable field details.
 - Metadata field `key` is the internal stable machine-readable code.
 - Metadata field `key` must be globally unique across all metadata fields.
 - Metadata field `label` is the human-facing display label.
@@ -85,7 +92,7 @@ Date: 2026-05-21
 - Keep a dashboard/table first.
 - `Add` should replace the table with a full-width form.
 - Delete should remain safeguarded when linked to upload profiles.
-- Allow fields to be selected from metadata field masters.
+- Allow patient, encounter, image, document, and upload fields to be selected from metadata field masters.
 - Allow per-field flags:
   - required at upload
   - editable/required at verification

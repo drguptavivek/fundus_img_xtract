@@ -62,7 +62,7 @@ def _valid_schema():
             {
                 "key": "project_participant_id",
                 "label": "Project Unique ID",
-                "scope": "encounter",
+                "scope": "patient",
                 "type": "text",
                 "required_at_upload": True,
                 "required_for_verification": True,
@@ -94,26 +94,29 @@ def test_normalize_metadata_schema_accepts_select_options_and_defaults():
     assert schema["fields"][1]["selection_mode"] == "single"
 
 
-def test_normalize_metadata_schema_allows_same_key_in_different_scopes():
+def test_normalize_metadata_schema_accepts_all_metadata_scopes():
     schema = normalize_metadata_schema(
         {
             "fields": [
-                {"key": "remarks", "label": "Remarks", "scope": "encounter", "type": "textarea"},
-                {"key": "remarks", "label": "Image Remarks", "scope": "image", "type": "textarea"},
+                {"key": "patient_uhid", "label": "UHID", "scope": "patient", "type": "text"},
+                {"key": "capture_date", "label": "Capture Date", "scope": "encounter", "type": "date"},
+                {"key": "eye_laterality", "label": "Eye", "scope": "image", "type": "select", "options": ["OD", "OS"]},
+                {"key": "consent_image", "label": "Consent Image", "scope": "document", "type": "boolean"},
+                {"key": "source_batch", "label": "Source Batch", "scope": "upload", "type": "text"},
             ]
         }
     )
 
-    assert len(schema["fields"]) == 2
+    assert [field["scope"] for field in schema["fields"]] == ["patient", "encounter", "image", "document", "upload"]
 
 
-def test_normalize_metadata_schema_rejects_duplicate_key_per_scope():
+def test_normalize_metadata_schema_rejects_duplicate_key_across_schema():
     with pytest.raises(ValueError, match="duplicates key"):
         normalize_metadata_schema(
             {
                 "fields": [
                     {"key": "remarks", "label": "Remarks", "scope": "encounter", "type": "textarea"},
-                    {"key": "remarks", "label": "More Remarks", "scope": "encounter", "type": "textarea"},
+                    {"key": "remarks", "label": "Image Remarks", "scope": "image", "type": "textarea"},
                 ]
             }
         )

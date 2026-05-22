@@ -11,6 +11,7 @@
     'phone',
     'email'
   ];
+  const FIELD_SCOPES = ['patient', 'encounter', 'image', 'document', 'upload'];
 
   function form() {
     return document.querySelector('[data-est-form]');
@@ -82,24 +83,142 @@
     }
   }
 
-  function createFieldCard(scope, field) {
+  function fieldSummary(card) {
+    const label = card.querySelector('[data-est-label]')?.value.trim() || 'Untitled field';
+    const key = card.querySelector('[data-est-key]')?.value.trim() || 'missing_key';
+    const type = card.querySelector('[data-est-type]')?.value || 'text';
+    const sctid = card.querySelector('[data-est-sctid]')?.value.trim();
+    const requiredUpload = boolValue(card.querySelector('[data-est-required-upload]'));
+    const requiredVerification = boolValue(card.querySelector('[data-est-required-verification]'));
+    return {
+      label: label,
+      key: key,
+      type: type,
+      sctid: sctid,
+      requiredUpload: requiredUpload,
+      requiredVerification: requiredVerification
+    };
+  }
+
+  function updateFieldSummary(card) {
+    const summary = fieldSummary(card);
+    const title = card.querySelector('[data-est-field-summary-title]');
+    const meta = card.querySelector('[data-est-field-summary-meta]');
+    const flags = card.querySelector('[data-est-field-summary-flags]');
+    if (title) {
+      title.textContent = summary.label;
+    }
+    if (meta) {
+      meta.textContent = summary.key + ' · ' + summary.type + (summary.sctid ? ' · SNOMED CT ' + summary.sctid : '');
+    }
+    if (flags) {
+      flags.innerHTML = '';
+      if (summary.requiredUpload) {
+        flags.appendChild(summaryBadge('Upload required', 'text-bg-primary'));
+      }
+      if (summary.requiredVerification) {
+        flags.appendChild(summaryBadge('Verification editable/required', 'text-bg-info'));
+      }
+    }
+  }
+
+  function summaryBadge(text, className) {
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + className;
+    badge.textContent = text;
+    return badge;
+  }
+
+  function setFieldKeyStatus(card, message, state) {
+    const input = card.querySelector('[data-est-key]');
+    const status = card.querySelector('[data-est-key-status]');
+    if (status) {
+      status.textContent = message || '';
+      status.classList.remove('text-success', 'text-danger', 'text-muted');
+      if (state === 'valid') {
+        status.classList.add('text-success');
+      } else if (state === 'invalid') {
+        status.classList.add('text-danger');
+      } else if (message) {
+        status.classList.add('text-muted');
+      }
+    }
+    if (input) {
+      input.setCustomValidity(state === 'invalid' ? (message || 'Field key is invalid.') : '');
+    }
+  }
+
+  function validateFieldKeys() {
+    const current = form();
+    if (!current) {
+      return true;
+    }
+    const cards = Array.from(current.querySelectorAll('[data-est-field]'));
+    const counts = new Map();
+    cards.forEach(function (card) {
+      const key = card.querySelector('[data-est-key]')?.value.trim();
+      if (key) {
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    });
+    let valid = true;
+    cards.forEach(function (card) {
+      const key = card.querySelector('[data-est-key]')?.value.trim();
+      if (!key) {
+        setFieldKeyStatus(card, 'Key is required.', 'invalid');
+        valid = false;
+      } else if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) {
+        setFieldKeyStatus(card, 'Start with a letter; use letters, numbers, and underscores.', 'invalid');
+        valid = false;
+      } else if ((counts.get(key) || 0) > 1) {
+        setFieldKeyStatus(card, 'This key is already used in this EncounterSetType.', 'invalid');
+        valid = false;
+      } else {
+        setFieldKeyStatus(card, 'Key is valid for this EncounterSetType.', 'valid');
+      }
+      updateFieldSummary(card);
+    });
+    return valid;
+  }
+
+  function createFieldCard(scope, field, expanded) {
     const data = field || {};
     const card = document.createElement('div');
-    card.className = 'border rounded p-2';
+    card.className = 'card';
     card.dataset.estField = scope;
     card.dataset.estFieldDefinitionId = data.field_definition_id || '';
+    card.dataset.estExpanded = expanded ? '1' : '0';
+
+    const header = document.createElement('div');
+    header.className = 'card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-2';
+    header.innerHTML = [
+      '<div>',
+      '<div class="fw-semibold" data-est-field-summary-title>Untitled field</div>',
+      '<div class="small text-muted" data-est-field-summary-meta></div>',
+      '</div>',
+      '<div class="d-flex flex-wrap align-items-center gap-2">',
+      '<span class="d-flex flex-wrap gap-1" data-est-field-summary-flags></span>',
+      '<button class="btn btn-sm btn-outline-secondary" type="button" data-est-toggle-field>Edit</button>',
+      '<button class="btn btn-sm btn-outline-danger" type="button" data-est-remove-field>Remove</button>',
+      '</div>'
+    ].join('');
 
     const row = document.createElement('div');
-    row.className = 'row g-2 align-items-end';
+    row.className = 'row g-3 align-items-start';
 
     const keyCol = document.createElement('div');
     keyCol.className = 'col-md-3';
-    keyCol.innerHTML = '<label class="form-label small mb-1">Key</label><input class="form-control form-control-sm" data-est-key required>';
+    keyCol.innerHTML = [
+      '<label class="form-label small mb-1">Key <span class="text-danger">*</span></label>',
+      '<input class="form-control form-control-sm" maxlength="100" data-est-key required>',
+      '<div class="form-text">Internal code. Unique within this EncounterSetType.</div>',
+      '<div class="small mt-1" data-est-key-status aria-live="polite"></div>'
+    ].join('');
     keyCol.querySelector('input').value = data.key || '';
 
     const labelCol = document.createElement('div');
     labelCol.className = 'col-md-3';
-    labelCol.innerHTML = '<label class="form-label small mb-1">Label</label><input class="form-control form-control-sm" data-est-label required>';
+    labelCol.innerHTML = '<label class="form-label small mb-1">Label <span class="text-danger">*</span></label><input class="form-control form-control-sm" maxlength="150" data-est-label required>';
     labelCol.querySelector('input').value = data.label || '';
 
     const typeCol = document.createElement('div');
@@ -134,16 +253,11 @@
     sctidCol.innerHTML = '<label class="form-label small mb-1">SNOMED CT ID</label><input class="form-control form-control-sm" data-est-sctid>';
     sctidCol.querySelector('input').value = data.sctid || '';
 
-    const actionCol = document.createElement('div');
-    actionCol.className = 'col-md-12 text-end';
-    actionCol.innerHTML = '<button class="btn btn-sm btn-outline-danger" type="button" data-est-remove-field>Remove</button>';
-
     row.appendChild(keyCol);
     row.appendChild(labelCol);
     row.appendChild(typeCol);
     row.appendChild(selectionCol);
     row.appendChild(sctidCol);
-    row.appendChild(actionCol);
 
     const options = document.createElement('div');
     options.className = 'mt-2';
@@ -162,7 +276,7 @@
     });
 
     const flags = document.createElement('div');
-    flags.className = 'd-flex flex-wrap gap-3 mt-2 small';
+    flags.className = 'd-flex flex-wrap gap-3 mt-3 small';
     flags.innerHTML = [
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-upload> Required at upload</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-verification> Editable/required at verification</label>',
@@ -174,17 +288,26 @@
     flags.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
     flags.querySelector('[data-est-pii]').checked = Boolean(data.is_pii);
 
-    card.appendChild(row);
-    card.appendChild(options);
-    card.appendChild(flags);
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    body.dataset.estFieldDetails = '';
+    body.classList.toggle('d-none', !expanded);
+    body.appendChild(row);
+    body.appendChild(options);
+    body.appendChild(flags);
+
+    card.appendChild(header);
+    card.appendChild(body);
 
     function syncTypeState() {
       const isSelect = typeSelect.value === 'select';
       selectionSelect.disabled = !isSelect;
       options.classList.toggle('d-none', !isSelect);
+      updateFieldSummary(card);
     }
     typeSelect.addEventListener('change', syncTypeState);
     syncTypeState();
+    validateFieldKeys();
     return card;
   }
 
@@ -205,10 +328,11 @@
     };
   }
 
-  function addField(scope, field) {
+  function addField(scope, field, expanded) {
     const target = fieldList(scope);
     if (target) {
-      target.appendChild(createFieldCard(scope, field));
+      target.appendChild(createFieldCard(scope, field, expanded !== false));
+      validateFieldKeys();
     }
   }
 
@@ -229,7 +353,7 @@
     }
     document.querySelector('[data-est-form-title]').textContent = 'Create EncounterSetType';
     document.querySelector('[data-est-submit]').textContent = 'Create Type';
-    addField('encounter', {
+    addField('patient', {
       key: 'project_participant_id',
       label: 'Project Unique ID',
       type: 'text',
@@ -237,7 +361,7 @@
       required_for_verification: true,
       visible_to_grader: false,
       is_pii: false
-    });
+    }, true);
     if (window.htmx) {
       window.htmx.process(current);
     }
@@ -277,6 +401,7 @@
     if (!current) {
       return;
     }
+    validateFieldKeys();
     const fields = Array.from(current.querySelectorAll('[data-est-field]')).map(readField);
     current.querySelector('[data-est-schema-input]').value = JSON.stringify({ fields: fields });
   }
@@ -303,7 +428,7 @@
       schema = { fields: [] };
     }
     (schema.fields || []).forEach(function (field) {
-      addField(field.scope === 'image' ? 'image' : 'encounter', field);
+      addField(FIELD_SCOPES.includes(field.scope) ? field.scope : 'encounter', field, false);
     });
     document.querySelector('[data-est-form-title]').textContent = 'Edit EncounterSetType';
     document.querySelector('[data-est-submit]').textContent = 'Save Changes';
@@ -317,7 +442,7 @@
   document.addEventListener('click', function (event) {
     const addButton = event.target.closest('[data-est-add-field]');
     if (addButton) {
-      addField(addButton.dataset.estAddField);
+      addField(addButton.dataset.estAddField, null, true);
       return;
     }
     const addMasterButton = event.target.closest('[data-est-add-master]');
@@ -327,7 +452,7 @@
       const option = select && select.selectedOptions ? select.selectedOptions[0] : null;
       if (option && option.dataset.field) {
         try {
-          addField(scope, fieldFromMaster(scope, JSON.parse(option.dataset.field)));
+          addField(scope, fieldFromMaster(scope, JSON.parse(option.dataset.field)), true);
           select.value = '';
         } catch (error) {
           window.alert('Selected field master could not be added.');
@@ -337,6 +462,16 @@
     }
     if (event.target.closest('[data-est-remove-field]')) {
       event.target.closest('[data-est-field]')?.remove();
+      validateFieldKeys();
+      return;
+    }
+    if (event.target.closest('[data-est-toggle-field]')) {
+      const card = event.target.closest('[data-est-field]');
+      const details = card && card.querySelector('[data-est-field-details]');
+      if (details) {
+        details.classList.toggle('d-none');
+        event.target.textContent = details.classList.contains('d-none') ? 'Edit' : 'Done';
+      }
       return;
     }
     const addOptionButton = event.target.closest('[data-est-add-option]');
@@ -373,8 +508,25 @@
     }
   });
 
+  document.addEventListener('input', function (event) {
+    if (event.target.closest('[data-est-field]')) {
+      validateFieldKeys();
+    }
+  });
+
+  document.addEventListener('change', function (event) {
+    if (event.target.closest('[data-est-field]')) {
+      validateFieldKeys();
+    }
+  });
+
   document.body.addEventListener('htmx:beforeRequest', function (event) {
     if (event.detail.elt && event.detail.elt.matches && event.detail.elt.matches('[data-est-form]')) {
+      if (!validateFieldKeys()) {
+        event.preventDefault();
+        event.detail.elt.reportValidity();
+        return;
+      }
       serializeSchema();
     }
   });

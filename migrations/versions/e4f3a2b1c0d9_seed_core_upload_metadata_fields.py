@@ -244,19 +244,6 @@ FIELDS = [
     },
     {
         "scope": "image",
-        "key": "eye",
-        "label": "Eye",
-        "field_type": "select",
-        "selection_mode": "single",
-        "options_json": [
-            {"label": "OD / Right", "value": "OD"},
-            {"label": "OS / Left", "value": "OS"},
-            {"label": "OU / Both", "value": "OU"},
-            {"label": "Unknown", "value": "unknown"},
-        ],
-    },
-    {
-        "scope": "image",
         "key": "image_modality",
         "label": "Image Modality",
         "field_type": "select",

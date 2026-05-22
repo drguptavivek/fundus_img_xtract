@@ -294,6 +294,7 @@ def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: 
                 f"metadata_schema_json.fields[{idx}] scope must match the selected master field scope '{master.scope}'.",
                 400,
             )
+        _apply_master_definition_snapshot(field, master)
         return MutationResult(True, "Master field resolved.", payload={"field_definition_id": master.id})
 
     existing = db.execute(
@@ -306,6 +307,7 @@ def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: 
                 f"metadata_schema_json.fields[{idx}] key already exists as a {existing.scope} master field.",
                 400,
             )
+        _apply_master_definition_snapshot(field, existing)
         return MutationResult(True, "Master field resolved.", payload={"field_definition_id": existing.id})
 
     master = UploadMetadataFieldDefinition(
@@ -334,6 +336,21 @@ def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: 
         db.rollback()
         return MutationResult(False, f"metadata_schema_json.fields[{idx}] key already exists in metadata field masters.", 400)
     return MutationResult(True, "Master field created.", payload={"field_definition_id": master.id})
+
+
+def _apply_master_definition_snapshot(field: dict[str, Any], master: UploadMetadataFieldDefinition) -> None:
+    """Keep reusable field definition values canonical while preserving per-type usage settings."""
+    field["field_definition_id"] = master.id
+    field["key"] = master.key
+    field["label"] = master.label
+    field["sctid"] = master.sctid
+    field["scope"] = master.scope
+    field["type"] = master.field_type
+    field["selection_mode"] = master.selection_mode if master.field_type == "select" else None
+    field["options"] = master.options_json if master.field_type == "select" else None
+    field["description"] = master.description
+    field["validation_regex"] = master.validation_regex
+    field["validation_error_message"] = master.validation_error_message
 
 
 def serialize_encounter_set_type(row: EncounterSetType) -> dict[str, Any]:

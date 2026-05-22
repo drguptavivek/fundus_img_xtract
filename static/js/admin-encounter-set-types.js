@@ -467,9 +467,39 @@
     const isSelect = card.querySelector('[data-est-type]').value === 'select';
     card.querySelector('[data-est-selection-mode]').disabled = !isSelect;
     card.querySelector('[data-est-options-list]')?.closest('.mt-2')?.classList.toggle('d-none', !isSelect);
+    setMasterDefinitionLocked(card, Boolean(card.dataset.estFieldDefinitionId));
     renderMasterSuggestions(card);
     validateFieldKeys();
     updateFieldSummary(card);
+  }
+
+  function setMasterDefinitionLocked(card, locked) {
+    card.dataset.estMasterLocked = locked ? '1' : '0';
+    [
+      '[data-est-key]',
+      '[data-est-label]',
+      '[data-est-sctid]',
+      '[data-est-type]',
+      '[data-est-selection-mode]',
+      '[data-est-description]',
+      '[data-est-validation-regex]',
+      '[data-est-validation-error-message]',
+      '[data-est-option-value]',
+      '[data-est-add-option]',
+      '[data-est-remove-option]'
+    ].forEach(function (selector) {
+      card.querySelectorAll(selector).forEach(function (element) {
+        element.disabled = locked;
+      });
+    });
+    const lockNotice = card.querySelector('[data-est-master-lock-notice]');
+    if (lockNotice) {
+      lockNotice.classList.toggle('d-none', !locked);
+    }
+    const suggestions = card.querySelector('[data-est-master-suggestions]');
+    if (suggestions && locked) {
+      suggestions.classList.add('d-none');
+    }
   }
 
 
@@ -624,6 +654,11 @@
     body.className = 'card-body';
     body.dataset.estFieldDetails = '';
     body.classList.toggle('d-none', !expanded);
+    const lockNotice = document.createElement('div');
+    lockNotice.className = 'alert alert-light border small py-2 mb-3 d-none';
+    lockNotice.dataset.estMasterLockNotice = '';
+    lockNotice.textContent = 'Field definition is managed in Metadata Field Masters. Only order and per-EncounterSetType usage flags can be changed here.';
+    body.appendChild(lockNotice);
     body.appendChild(row);
     body.appendChild(descriptionBlock);
     body.appendChild(validationRow);
@@ -642,6 +677,7 @@
     }
     typeSelect.addEventListener('change', syncTypeState);
     syncTypeState();
+    setMasterDefinitionLocked(card, Boolean(card.dataset.estFieldDefinitionId));
     setCardExpanded(card, Boolean(expanded));
     validateFieldKeys();
     return card;

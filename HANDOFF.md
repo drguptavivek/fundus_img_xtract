@@ -45,7 +45,7 @@ Date: 2026-05-21
 - Metadata field `label` is the human-facing display label.
 - Metadata field `sctid` is optional SNOMED CT ID.
 - `Required at upload` means the uploader must provide the value before files are accepted.
-- `Editable/required at verification` means the verifier can correct the value and finalization may require it.
+- `Editable during verification` means the verifier can correct the value during the verification flow.
 
 ## Work Done
 

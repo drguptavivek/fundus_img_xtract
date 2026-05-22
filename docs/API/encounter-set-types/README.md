@@ -62,7 +62,7 @@ Supported field properties:
 - `selection_mode`: for select fields only, `single` or `multiple`
 - `options`: select choices as strings or `{ "value": "...", "label": "..." }` objects
 - `required_at_upload`: upload-time requiredness
-- `required_for_verification`: editable/required at verification before grading task creation
+- `required_for_verification`: editable during verification before grading task creation
 - `visible_to_grader`: whether grader UIs may display the field
 - `is_pii`: whether PII handling/redaction rules apply
 

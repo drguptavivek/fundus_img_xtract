@@ -21,7 +21,7 @@ Upload metadata field definitions are standalone master records. They are not ma
 - `selection_mode`: `single` or `multiple`, only for select fields
 - `options_json`: select options, one per line for forms or JSON array for API clients
 - `required_at_upload_default`
-- `required_for_verification_default`: editable/required at verification before finalization
+- `required_for_verification_default`: editable during verification before finalization
 - `visible_to_grader_default`
 - `is_pii_default`
 - `active`

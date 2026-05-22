@@ -117,7 +117,7 @@
         flags.appendChild(summaryBadge('Upload required', 'text-bg-primary'));
       }
       if (summary.requiredVerification) {
-        flags.appendChild(summaryBadge('Verification editable/required', 'text-bg-info'));
+        flags.appendChild(summaryBadge('Editable during verification', 'text-bg-info'));
       }
     }
   }
@@ -279,7 +279,7 @@
     flags.className = 'd-flex flex-wrap gap-3 mt-3 small';
     flags.innerHTML = [
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-upload> Required at upload</label>',
-      '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-verification> Editable/required at verification</label>',
+      '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-verification> Editable during verification</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-visible-grader> Visible to grader</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-pii> PII</label>'
     ].join('');

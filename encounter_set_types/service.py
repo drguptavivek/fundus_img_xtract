@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from encounter_set_types.models import EncounterSetType
 from models import Disease
+from upload_metadata.models import UploadMetadataFieldDefinition
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.models import UploadProfileEncounterSetType
 from upload_profiles.service import manager_lab_unit_ids
@@ -87,12 +88,15 @@ def create_encounter_set_type(manager_user_id: int, dto: EncounterSetTypeInput) 
             return MutationResult(False, "You are not assigned to any lab units for upload metadata management.", 403)
         if db.get(Disease, dto.target_scheme_id) is None:
             return MutationResult(False, "Target scheme not found.", 404)
+        schema_result = _schema_with_master_fields(db, manager_user_id, dto.metadata_schema_json)
+        if not schema_result.success:
+            return schema_result
         row = EncounterSetType(
             name=dto.name.strip(),
             code=dto.code.strip(),
             description=dto.description,
             target_scheme_id=dto.target_scheme_id,
-            metadata_schema_json=normalize_metadata_schema(dto.metadata_schema_json),
+            metadata_schema_json=schema_result.payload["metadata_schema_json"],
             active=dto.active,
             created_by_user_id=manager_user_id,
             updated_by_user_id=manager_user_id,
@@ -125,7 +129,10 @@ def update_encounter_set_type(manager_user_id: int, type_id: int, dto: Encounter
         row.code = dto.code.strip()
         row.description = dto.description
         row.target_scheme_id = dto.target_scheme_id
-        row.metadata_schema_json = normalize_metadata_schema(dto.metadata_schema_json)
+        schema_result = _schema_with_master_fields(db, manager_user_id, dto.metadata_schema_json)
+        if not schema_result.success:
+            return schema_result
+        row.metadata_schema_json = schema_result.payload["metadata_schema_json"]
         row.active = dto.active
         row.updated_by_user_id = manager_user_id
         try:
@@ -218,6 +225,77 @@ def normalize_metadata_schema(raw_schema: Any) -> dict[str, Any]:
         seen.add(normalized["key"])
         normalized_fields.append(normalized)
     return {"fields": normalized_fields}
+
+
+def _schema_with_master_fields(db, manager_user_id: int, raw_schema: Any) -> MutationResult:
+    """Normalize schema and ensure every field points to a master metadata field."""
+    try:
+        schema = normalize_metadata_schema(raw_schema)
+    except ValueError as exc:
+        return MutationResult(False, str(exc), 400)
+    for idx, field in enumerate(schema["fields"], start=1):
+        result = _resolve_master_field(db, manager_user_id, field, idx)
+        if not result.success:
+            return result
+        field["field_definition_id"] = result.payload["field_definition_id"]
+    return MutationResult(True, "Encounter-set metadata schema resolved.", payload={"metadata_schema_json": schema})
+
+
+def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: int) -> MutationResult:
+    field_definition_id = field.get("field_definition_id")
+    if field_definition_id:
+        master = db.get(UploadMetadataFieldDefinition, field_definition_id)
+        if master is None:
+            return MutationResult(False, f"metadata_schema_json.fields[{idx}] field_definition_id does not exist.", 400)
+        if master.key != field["key"]:
+            return MutationResult(
+                False,
+                f"metadata_schema_json.fields[{idx}] key must match the selected master field key '{master.key}'.",
+                400,
+            )
+        if master.scope != field["scope"]:
+            return MutationResult(
+                False,
+                f"metadata_schema_json.fields[{idx}] scope must match the selected master field scope '{master.scope}'.",
+                400,
+            )
+        return MutationResult(True, "Master field resolved.", payload={"field_definition_id": master.id})
+
+    existing = db.execute(
+        select(UploadMetadataFieldDefinition).where(UploadMetadataFieldDefinition.key == field["key"]).limit(1)
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.scope != field["scope"]:
+            return MutationResult(
+                False,
+                f"metadata_schema_json.fields[{idx}] key already exists as a {existing.scope} master field.",
+                400,
+            )
+        return MutationResult(True, "Master field resolved.", payload={"field_definition_id": existing.id})
+
+    master = UploadMetadataFieldDefinition(
+        scope=field["scope"],
+        key=field["key"],
+        label=field["label"],
+        sctid=field.get("sctid"),
+        field_type=field["type"],
+        selection_mode=field.get("selection_mode"),
+        options_json=field.get("options"),
+        required_at_upload_default=field["required_at_upload"],
+        required_for_verification_default=field["required_for_verification"],
+        visible_to_grader_default=field["visible_to_grader"],
+        is_pii_default=field["is_pii"],
+        active=True,
+        created_by_user_id=manager_user_id,
+        updated_by_user_id=manager_user_id,
+    )
+    db.add(master)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return MutationResult(False, f"metadata_schema_json.fields[{idx}] key already exists in metadata field masters.", 400)
+    return MutationResult(True, "Master field created.", payload={"field_definition_id": master.id})
 
 
 def serialize_encounter_set_type(row: EncounterSetType) -> dict[str, Any]:

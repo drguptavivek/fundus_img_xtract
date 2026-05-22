@@ -178,6 +178,7 @@
                     class="btn btn-sm btn-outline-primary"
                     type="button"
                     data-upload-profile-edit
+                    data-profile-id="{{ profile.id }}"
                     data-action="{{ url_for('fundus_api.update_upload_profile', profile_id=profile.id) }}"
                     data-name="{{ profile.name|e }}"
                     data-lab-unit-id="{{ profile.lab_unit_id }}"

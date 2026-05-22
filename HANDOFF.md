@@ -40,6 +40,8 @@ Date: 2026-05-21
   - Document
   - Upload
 - Each EncounterSetType metadata card owns its fields and supports add/edit/remove with expandable field details.
+- Every EncounterSetType metadata field must resolve to a standalone master metadata field, whether it was added from `/admin/upload-metadata-fields` or from `/admin/encounter-set-types`.
+- EncounterSetType stores a schema snapshot plus `field_definition_id`; it must not create private metadata fields outside the master table.
 - Metadata field `key` is the internal stable machine-readable code.
 - Metadata field `key` must be globally unique across all metadata fields.
 - Metadata field `label` is the human-facing display label.
@@ -145,3 +147,11 @@ Date: 2026-05-21
 - Add verification finalization tests.
 - Add EncounterSet grading tests covering image-level grades, encounter-level grades, and arbitrator escalation on resident/resident2 mismatch.
 - Keep feature API docs under `docs/API/`.
+## 2026-05-22 - Grading Schemes Admin Direction
+
+- Created local bead `fundus_img_xtract-1c6` and GitHub issue `#160` for the composite grading schemes admin UI.
+- Product decision: the UI may call the concept "Grading Scheme"; internally this continues to use the `Disease` model.
+- Current model remains `Disease -> DiseaseGrading -> GradingsFeatures`.
+- Implementation adds `/admin/grading-schemes` with a dashboard/detail/create/edit flow for scheme metadata.
+- Grade and feature add/edit now use full-width HTMX screens backed by `/api/grading-schemes/{scheme_id}/grades...`.
+- The legacy `/admin/disease-gradings` modal workflow remains available as a compatibility editor.

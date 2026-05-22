@@ -1,0 +1,222 @@
+{% from "_forms.html" import csrf_field %}
+{% set is_edit = mode == "edit" %}
+{% set scheme = grading_scheme or {} %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div>
+      <div class="fw-semibold">{{ "Edit" if is_edit else "Create" }} Grading Scheme</div>
+      <div class="small text-muted">Manage the Disease-backed scheme, grade labels, and feature options.</div>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary"
+            type="button"
+            hx-get="{{ url_for('admin.grading_schemes_list') }}"
+            hx-target="#grading-schemes-workspace"
+            hx-swap="innerHTML"
+            hx-push-url="{{ url_for('admin.grading_schemes_admin') }}">
+      Back
+    </button>
+  </div>
+  <div class="card-body">
+    <form method="post"
+          action="{{ url_for('fundus_api.update_grading_scheme', scheme_id=scheme.id) if is_edit else url_for('fundus_api.create_grading_scheme') }}"
+          hx-post="{{ url_for('fundus_api.update_grading_scheme', scheme_id=scheme.id) if is_edit else url_for('fundus_api.create_grading_scheme') }}"
+          hx-swap="none"
+          data-json-api-htmx
+          data-json-api-reload-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) if is_edit else url_for('admin.grading_schemes_list') }}"
+          data-json-api-reload-target="#grading-schemes-workspace"
+          data-json-api-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) if is_edit else url_for('admin.grading_schemes_admin') }}">
+      {{ csrf_field() }}
+      <div class="row g-3 align-items-end">
+        <div class="{{ 'col-lg-3' if is_edit else 'col-lg-6' }}">
+          <label class="form-label" for="grading-scheme-name">Scheme Name *</label>
+          <input class="form-control"
+                 id="grading-scheme-name"
+                 name="name"
+                 value="{{ scheme.name or '' }}"
+                 {% if scheme.is_core %}readonly{% endif %}
+                 required>
+          {% if scheme.is_core %}
+          <div class="form-text">Core schemes cannot be renamed.</div>
+          {% endif %}
+        </div>
+        <div class="{{ 'col-lg-2' if is_edit else 'col-lg-3' }}">
+          <label class="form-label" for="grading-scheme-scope">Scheme Scope *</label>
+          <select class="form-select" id="grading-scheme-scope" name="grading_scope" required data-scheme-scope-select data-original-scope="{{ scheme.grading_scope or 'image' }}">
+            <option value="image" {% if scheme.grading_scope != "encounter" %}selected{% endif %}>Image</option>
+            <option value="encounter" {% if scheme.grading_scope == "encounter" %}selected{% endif %}>Encounter</option>
+          </select>
+        </div>
+        {% if is_edit %}
+        <div class="col-lg-5">
+          <label class="form-label" for="grading-scheme-parent">
+            Parent Scheme for Linked Grading
+            <i class="fa-solid fa-circle-info text-muted ms-1"
+               data-bs-toggle="tooltip"
+               title="Only same-scope schemes can be linked as parent."></i>
+          </label>
+          <select class="form-select" id="grading-scheme-parent" name="parent_scheme_id" data-parent-scheme-select>
+            <option value="">No parent</option>
+            {% for candidate in scheme.parent_candidates %}
+            <option value="{{ candidate.id }}" {% if candidate.selected %}selected{% endif %}>{{ candidate.name }} ({{ "Encounter" if candidate.grading_scope == "encounter" else "Image" }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="{{ 'col-lg-2' if is_edit else 'col-lg-3' }}">
+          <button class="btn btn-primary w-100" type="submit">{{ "Save Changes" if is_edit else "Create Scheme" }}</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if is_edit %}
+<div class="card mt-3">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">Grades And Features</div>
+      <div class="small text-muted">Each grade saves independently. Use inactive instead of deleting historical labels.</div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="vstack gap-3">
+      {% for grade in scheme.grades %}
+      <form class="border rounded p-3 bg-primary-subtle"
+            method="post"
+            action="{{ url_for('fundus_api.update_grading_scheme_grade', scheme_id=scheme.id, grade_id=grade.id) }}"
+            hx-post="{{ url_for('fundus_api.update_grading_scheme_grade', scheme_id=scheme.id, grade_id=grade.id) }}"
+            hx-swap="none"
+            data-grade-editor
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) }}"
+            data-json-api-reload-target="#grading-schemes-workspace"
+            data-json-api-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) }}">
+        {{ csrf_field() }}
+        <div class="row g-2 align-items-end">
+          <div class="col-xl-3 col-lg-4">
+            <label class="form-label small mb-1">Grade Label *</label>
+            <input class="form-control form-control-sm" name="impression" value="{{ grade.impression }}" required>
+          </div>
+          <div class="col-xl-1 col-lg-2 col-md-3">
+            <label class="form-label small mb-1">Order</label>
+            <input class="form-control form-control-sm" name="display_order" type="number" value="{{ grade.display_order }}">
+          </div>
+          <div class="col-xl-2 col-lg-2 col-md-3">
+            <label class="form-label small mb-1">Status</label>
+            <select class="form-select form-select-sm" name="is_active">
+              <option value="1" {% if grade.is_active %}selected{% endif %}>Active</option>
+              <option value="0" {% if not grade.is_active %}selected{% endif %}>Inactive</option>
+            </select>
+          </div>
+          <div class="col-xl-5 col-lg-8">
+            <label class="form-label small mb-1">Guidelines</label>
+            <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Guidelines formatting">
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="bold"><i class="fa-solid fa-bold"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="italic"><i class="fa-solid fa-italic"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="ul"><i class="fa-solid fa-list-ul"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="ol"><i class="fa-solid fa-list-ol"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="clear"><i class="fa-solid fa-eraser"></i></button>
+            </div>
+            <textarea class="form-control form-control-sm" name="guidelines" rows="2" data-guidelines-editor>{{ grade.guidelines or '' }}</textarea>
+          </div>
+          <div class="col-xl-1 col-lg-4">
+            <button class="btn btn-sm btn-outline-primary w-100" type="submit">Save</button>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-2 mb-2">
+          <div class="small fw-semibold">Features</div>
+          <button class="btn btn-sm btn-outline-primary" type="button" data-add-grade-feature>
+            <i class="fa-solid fa-plus me-1"></i> Add Feature
+          </button>
+        </div>
+        <div data-grade-feature-list>
+          {% for feature in grade.features %}
+          <div class="row g-2 align-items-center mb-1" data-grade-feature-row>
+            <div class="col-md-1">
+              <input class="form-control form-control-sm" name="feature_sr_no" type="number" value="{{ feature.sr_no }}" aria-label="Feature order" data-grade-feature-order>
+            </div>
+            <div class="col-md-10">
+              <input class="form-control form-control-sm" name="feature_label" value="{{ feature.label }}" aria-label="Feature label" data-grade-feature-label>
+            </div>
+            <div class="col-md-1">
+              <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-grade-feature>Remove</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </form>
+      {% else %}
+      <div class="text-muted">No grades configured yet.</div>
+      {% endfor %}
+
+      <form class="border rounded p-3 bg-success-subtle"
+            method="post"
+            action="{{ url_for('fundus_api.create_grading_scheme_grade', scheme_id=scheme.id) }}"
+            hx-post="{{ url_for('fundus_api.create_grading_scheme_grade', scheme_id=scheme.id) }}"
+            hx-swap="none"
+            data-grade-editor
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) }}"
+            data-json-api-reload-target="#grading-schemes-workspace"
+            data-json-api-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) }}">
+        {{ csrf_field() }}
+        <div class="fw-semibold mb-2">Add New Grade</div>
+        <div class="row g-2 align-items-end">
+          <div class="col-xl-3 col-lg-4">
+            <label class="form-label small mb-1">Grade Label *</label>
+            <input class="form-control form-control-sm" name="impression" required>
+          </div>
+          <div class="col-xl-1 col-lg-2 col-md-3">
+            <label class="form-label small mb-1">Order</label>
+            <input class="form-control form-control-sm" name="display_order" type="number" value="{{ scheme.grade_count + 1 }}">
+          </div>
+          <div class="col-xl-2 col-lg-2 col-md-3">
+            <label class="form-label small mb-1">Status</label>
+            <select class="form-select form-select-sm" name="is_active">
+              <option value="1" selected>Active</option>
+              <option value="0">Inactive</option>
+            </select>
+          </div>
+          <div class="col-xl-5 col-lg-8">
+            <label class="form-label small mb-1">Guidelines</label>
+            <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Guidelines formatting">
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="bold"><i class="fa-solid fa-bold"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="italic"><i class="fa-solid fa-italic"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="ul"><i class="fa-solid fa-list-ul"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="ol"><i class="fa-solid fa-list-ol"></i></button>
+              <button class="btn btn-outline-secondary" type="button" data-guidelines-format="clear"><i class="fa-solid fa-eraser"></i></button>
+            </div>
+            <textarea class="form-control form-control-sm" name="guidelines" rows="2" data-guidelines-editor></textarea>
+          </div>
+          <div class="col-xl-1 col-lg-4">
+            <button class="btn btn-sm btn-primary w-100" type="submit">Create</button>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-2 mb-2">
+          <div class="small fw-semibold">Features</div>
+          <button class="btn btn-sm btn-outline-primary" type="button" data-add-grade-feature>
+            <i class="fa-solid fa-plus me-1"></i> Add Feature
+          </button>
+        </div>
+        <div data-grade-feature-list></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<template id="grade-feature-row-template">
+  <div class="row g-2 align-items-center mb-1" data-grade-feature-row>
+    <div class="col-md-1">
+      <input class="form-control form-control-sm" name="feature_sr_no" type="number" value="" aria-label="Feature order" data-grade-feature-order>
+    </div>
+    <div class="col-md-10">
+      <input class="form-control form-control-sm" name="feature_label" value="" aria-label="Feature label" data-grade-feature-label>
+    </div>
+    <div class="col-md-1">
+      <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-grade-feature>Remove</button>
+    </div>
+  </div>
+</template>
+{% endif %}

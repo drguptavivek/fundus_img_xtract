@@ -12,7 +12,7 @@
     </thead>
     <tbody>
       {% for row in field_definitions %}
-      <tr>
+      <tr data-umf-row data-search-text="{{ (row.label ~ ' ' ~ row.key)|lower }}" data-scope="{{ row.scope }}" data-type="{{ row.type }}">
         <td>
           <div class="fw-semibold">{{ row.label }}</div>
           <div class="small text-muted">{{ row.key }}</div>
@@ -76,8 +76,9 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="text-center text-muted py-4">No upload metadata field masters configured.</td></tr>
+      <tr data-umf-empty><td colspan="6" class="text-center text-muted py-4">No upload metadata field masters configured.</td></tr>
       {% endfor %}
+      <tr class="d-none" data-umf-no-filter-results><td colspan="6" class="text-center text-muted py-4">No metadata fields match the current filters.</td></tr>
     </tbody>
   </table>
 </div>

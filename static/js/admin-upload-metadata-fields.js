@@ -111,6 +111,51 @@
     }
   }
 
+  function filterInputs() {
+    return {
+      search: document.querySelector('[data-umf-filter-search]'),
+      scope: document.querySelector('[data-umf-filter-scope]'),
+      type: document.querySelector('[data-umf-filter-type]')
+    };
+  }
+
+  function applyFilters() {
+    const inputs = filterInputs();
+    const search = (inputs.search?.value || '').trim().toLowerCase();
+    const scope = inputs.scope?.value || '';
+    const type = inputs.type?.value || '';
+    const rows = Array.from(document.querySelectorAll('[data-umf-row]'));
+    let visibleCount = 0;
+    rows.forEach(function (row) {
+      const matchesSearch = !search || (row.dataset.searchText || '').includes(search);
+      const matchesScope = !scope || row.dataset.scope === scope;
+      const matchesType = !type || row.dataset.type === type;
+      const visible = matchesSearch && matchesScope && matchesType;
+      row.classList.toggle('d-none', !visible);
+      if (visible) {
+        visibleCount += 1;
+      }
+    });
+    const noResults = document.querySelector('[data-umf-no-filter-results]');
+    if (noResults) {
+      noResults.classList.toggle('d-none', visibleCount !== 0 || rows.length === 0);
+    }
+  }
+
+  function clearFilters() {
+    const inputs = filterInputs();
+    if (inputs.search) {
+      inputs.search.value = '';
+    }
+    if (inputs.scope) {
+      inputs.scope.value = '';
+    }
+    if (inputs.type) {
+      inputs.type.value = '';
+    }
+    applyFilters();
+  }
+
   function syncSelectFields(current) {
     const typeInput = current.querySelector('[data-umf-type]');
     const isSelect = Boolean(typeInput && typeInput.value === 'select');
@@ -171,7 +216,9 @@
     clearOptions(current);
     addOption(current, '');
     current.action = current.dataset.createAction;
+    current.dataset.submitUrl = current.dataset.createAction;
     current.setAttribute('hx-post', current.dataset.createAction);
+    current.setAttribute('data-hx-post', current.dataset.createAction);
     document.querySelector('[data-umf-form-title]').textContent = 'Create Metadata Field';
     document.querySelector('[data-umf-submit]').textContent = 'Create Field';
     syncSelectFields(current);
@@ -198,7 +245,9 @@
     resetForm();
     current.dataset.fieldId = button.dataset.fieldId || '';
     current.action = button.dataset.action;
+    current.dataset.submitUrl = button.dataset.action;
     current.setAttribute('hx-post', button.dataset.action);
+    current.setAttribute('data-hx-post', button.dataset.action);
     current.querySelector('[name="scope"]').value = button.dataset.scope || 'image';
     current.querySelector('[name="key"]').value = button.dataset.key || '';
     current.querySelector('[name="label"]').value = button.dataset.label || '';
@@ -224,6 +273,9 @@
     document.querySelector('[data-umf-submit]').textContent = 'Save Changes';
     syncSelectFields(current);
     checkKeyAvailability(current);
+    if (window.htmx) {
+      window.htmx.process(current);
+    }
     showEditor();
   }
 
@@ -247,6 +299,9 @@
         checkKeyAvailability(current);
       }
     }
+    if (event.target.closest('[data-umf-filter-scope], [data-umf-filter-type]')) {
+      applyFilters();
+    }
   });
 
   document.addEventListener('input', function (event) {
@@ -256,9 +311,16 @@
         debouncedKeyCheck(current);
       }
     }
+    if (event.target.closest('[data-umf-filter-search]')) {
+      applyFilters();
+    }
   });
 
   document.addEventListener('click', function (event) {
+    if (event.target.closest('[data-umf-filter-clear]')) {
+      clearFilters();
+      return;
+    }
     if (event.target.closest('[data-umf-new]')) {
       resetForm();
       showEditor();
@@ -289,7 +351,28 @@
 
   document.body.addEventListener('htmx:beforeRequest', function (event) {
     if (event.detail.elt && event.detail.elt.matches && event.detail.elt.matches('[data-umf-form]')) {
+      const targetUrl = event.detail.elt.dataset.submitUrl || event.detail.elt.getAttribute('hx-post') || event.detail.elt.getAttribute('data-hx-post') || event.detail.elt.action;
+      if (event.detail.requestConfig) {
+        event.detail.requestConfig.path = targetUrl;
+      }
+      if (event.detail.path !== undefined) {
+        event.detail.path = targetUrl;
+      }
       serializeOptions(event.detail.elt);
+    }
+  });
+
+  document.addEventListener('json-api:success', function (event) {
+    if (event.target && event.target.matches && event.target.matches('[data-umf-form]')) {
+      resetForm();
+      showDashboard();
+      window.setTimeout(applyFilters, 0);
+    }
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target && event.detail.target.matches && event.detail.target.matches('#upload-metadata-field-list')) {
+      applyFilters();
     }
   });
 })();

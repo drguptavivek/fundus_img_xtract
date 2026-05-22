@@ -1,0 +1,125 @@
+<div class="card">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">All Grading Schemes</div>
+      <div class="small text-muted">A scheme is stored internally as a Disease row.</div>
+    </div>
+    <button class="btn btn-sm btn-primary"
+            type="button"
+            hx-get="{{ url_for('admin.grading_scheme_new') }}"
+            hx-target="#grading-schemes-workspace"
+            hx-swap="innerHTML"
+            hx-push-url="{{ url_for('admin.grading_scheme_new') }}">
+      <i class="fa-solid fa-plus me-1"></i> Add
+    </button>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Scheme</th>
+          <th>Scope</th>
+          <th>Linked Schemes</th>
+          <th class="text-end">Grades</th>
+          <th class="text-end">Features</th>
+          <th class="text-end">Tasks</th>
+          <th class="text-end">Upload Profiles</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in grading_schemes %}
+        <tr{% if row.tree_depth %} class="table-light"{% endif %}>
+          <td>
+            <div class="fw-semibold{% if row.tree_depth %} ps-4{% endif %}">
+              {% if row.tree_depth %}
+              <i class="fa-solid fa-turn-up fa-rotate-90 text-muted me-1"></i>
+              {% endif %}
+              {{ row.name }}
+            </div>
+          </td>
+          <td>
+            {% if row.grading_scope == "encounter" %}
+            <span class="badge text-bg-primary">Encounter</span>
+            {% else %}
+            <span class="badge text-bg-secondary">Image</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.linkage.parent %}
+            <div class="small">
+              <span class="text-muted">Parent:</span>
+              <span class="fw-semibold">{{ row.linkage.parent.name }}</span>
+            </div>
+            {% endif %}
+            {% if row.linkage.children %}
+            <div class="small">
+              <span class="text-muted">Children:</span>
+              {% for child in row.linkage.children %}
+              <span class="badge text-bg-light border">{{ child.name }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% if not row.linkage.parent and not row.linkage.children %}
+            <span class="text-muted small">None</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <span class="fw-semibold">{{ row.grade_count }}</span>
+            <span class="small text-muted">({{ row.active_grade_count }} active)</span>
+          </td>
+          <td class="text-end">{{ row.feature_count }}</td>
+          <td class="text-end">{{ row.usage.get("tasks", 0) }}</td>
+          <td class="text-end">{{ row.usage.get("upload_profiles", 0) }}</td>
+          <td>
+            {% if row.is_core %}
+            <span class="badge text-bg-info">Core</span>
+            {% else %}
+            <span class="badge text-bg-success">Available</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-primary"
+                      type="button"
+                      hx-get="{{ url_for('admin.grading_scheme_detail', scheme_id=row.id) }}"
+                      hx-target="#grading-schemes-workspace"
+                      hx-swap="innerHTML"
+                      hx-push-url="{{ url_for('admin.grading_scheme_detail', scheme_id=row.id) }}">
+                View
+              </button>
+              <button class="btn btn-outline-secondary"
+                      type="button"
+                      hx-get="{{ url_for('admin.grading_scheme_edit', scheme_id=row.id) }}"
+                      hx-target="#grading-schemes-workspace"
+                      hx-swap="innerHTML"
+                      hx-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=row.id) }}">
+                Edit
+              </button>
+              {% if row.can_delete %}
+              <form method="post"
+                    hx-post="{{ url_for('fundus_api.delete_grading_scheme', scheme_id=row.id) }}"
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.grading_schemes_list') }}"
+                    data-json-api-reload-target="#grading-schemes-workspace"
+                    data-json-api-push-url="{{ url_for('admin.grading_schemes_admin') }}"
+                    onsubmit="return confirm('Delete this unused grading scheme?');">
+                {% from "_forms.html" import csrf_field %}
+                {{ csrf_field() }}
+                <button class="btn btn-outline-danger" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">No grading schemes configured.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,193 @@
+<div class="card mb-3">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">{{ grading_scheme.name }}</div>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-secondary"
+              type="button"
+              hx-get="{{ url_for('admin.grading_schemes_list') }}"
+              hx-target="#grading-schemes-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.grading_schemes_admin') }}">
+        Back
+      </button>
+      <button class="btn btn-outline-primary"
+              type="button"
+              hx-get="{{ url_for('admin.grading_scheme_edit', scheme_id=grading_scheme.id) }}"
+              hx-target="#grading-schemes-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=grading_scheme.id) }}">
+        Edit Scheme
+      </button>
+      {% if grading_scheme.can_delete %}
+      <form method="post"
+            hx-post="{{ url_for('fundus_api.delete_grading_scheme', scheme_id=grading_scheme.id) }}"
+            hx-swap="none"
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.grading_schemes_list') }}"
+            data-json-api-reload-target="#grading-schemes-workspace"
+            data-json-api-push-url="{{ url_for('admin.grading_schemes_admin') }}"
+            onsubmit="return confirm('Delete this unused grading scheme?');">
+        {% from "_forms.html" import csrf_field %}
+        {{ csrf_field() }}
+        <button class="btn btn-outline-danger" type="submit">Delete Scheme</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="row row-cols-2 row-cols-md-5 g-3">
+      <div class="col">
+        <div class="text-muted small">Scope</div>
+        {% if grading_scheme.grading_scope == "encounter" %}
+        <span class="badge text-bg-primary">Encounter</span>
+        {% else %}
+        <span class="badge text-bg-secondary">Image</span>
+        {% endif %}
+      </div>
+      <div class="col">
+        <div class="text-muted small">Grades</div>
+        <div class="fw-semibold">{{ grading_scheme.grade_count }} total, {{ grading_scheme.active_grade_count }} active</div>
+      </div>
+      <div class="col">
+        <div class="text-muted small">Features</div>
+        <div class="fw-semibold">{{ grading_scheme.feature_count }}</div>
+      </div>
+      <div class="col">
+        <div class="text-muted small">Tasks</div>
+        <div class="fw-semibold">{{ grading_scheme.usage.get("tasks", 0) }}</div>
+      </div>
+      <div class="col">
+        <div class="text-muted small">Upload Profiles</div>
+        {% if grading_scheme.associated_upload_profiles %}
+        <button class="btn btn-sm btn-outline-primary fw-semibold"
+                type="button"
+                data-upload-profile-popover
+                data-bs-toggle="popover"
+                data-bs-html="true"
+                data-bs-title="Associated upload profiles">
+          {{ grading_scheme.usage.get("upload_profiles", 0) }}
+        </button>
+        <template data-upload-profile-popover-content>
+          <div class="list-group list-group-flush">
+            {% for profile in grading_scheme.associated_upload_profiles %}
+            <a class="list-group-item list-group-item-action px-0 py-1"
+               href="{{ url_for('admin.upload_profiles_admin', profile_id=profile.id) }}">
+              <span class="fw-semibold">{{ profile.name }}</span>
+              <span class="text-muted small d-block">{{ profile.project_title }}{% if not profile.active %} · Inactive{% endif %}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </template>
+        {% else %}
+        <div class="fw-semibold">0</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="border-top mt-3 pt-3">
+      <div class="text-muted small mb-2">Linked Scheme Relationships</div>
+      {% if grading_scheme.linkage.parent or grading_scheme.linkage.children %}
+      <div class="d-flex flex-column gap-2">
+        {% if grading_scheme.linkage.parent %}
+        <div>
+          <span class="text-muted small">Parent:</span>
+          <span class="fw-semibold">{{ grading_scheme.linkage.parent.name }}</span>
+        </div>
+        {% endif %}
+        {% if grading_scheme.linkage.children %}
+        <div>
+          <span class="text-muted small">Children:</span>
+          <span class="d-inline-flex flex-wrap gap-1 align-middle">
+            {% for child in grading_scheme.linkage.children %}
+            <span class="badge text-bg-light border">{{ child.name }}</span>
+            {% endfor %}
+          </span>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="text-muted">This scheme is not part of an active linked-scheme hierarchy.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div>
+      <div class="fw-semibold">Grades And Features</div>
+      <div class="small text-muted">Add or edit grade labels and their selectable features.</div>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Grade</th>
+          <th class="text-end">Order</th>
+          <th>Status</th>
+          <th>Features</th>
+          <th>Guidelines</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for grade in grading_scheme.grades %}
+        <tr>
+          <td class="fw-semibold">{{ grade.impression }}</td>
+          <td class="text-end">{{ grade.display_order }}</td>
+          <td>
+            {% if grade.is_active %}
+            <span class="badge text-bg-success">Active</span>
+            {% else %}
+            <span class="badge text-bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if grade.features %}
+            <div class="d-flex flex-wrap gap-1">
+              {% for feature in grade.features %}
+              <span class="badge text-bg-light border">{{ feature.sr_no }}. {{ feature.label }}</span>
+              {% endfor %}
+            </div>
+            {% else %}
+            <span class="text-muted">No features</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if grade.guidelines %}
+            <div class="small">{{ grade.guidelines | safe }}</div>
+            {% else %}
+            <span class="text-muted">None</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">No grades configured for this scheme.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for key, label in [
+    ("tasks", "Tasks"),
+    ("direct_uploads", "Direct uploads"),
+    ("upload_profiles", "Upload profiles"),
+    ("encounter_targets", "Encounter targets"),
+    ("encounter_set_types", "EncounterSetTypes"),
+    ("eligibility_roles", "Eligibility roles"),
+    ("ai_models", "AI models"),
+    ("submitted_grades", "Submitted grades")
+  ] %}
+  <div class="col-sm-6 col-lg-3">
+    <div class="border rounded p-3 h-100">
+      <div class="small text-muted">{{ label }}</div>
+      <div class="fs-5 fw-semibold">{{ grading_scheme.usage.get(key, 0) }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

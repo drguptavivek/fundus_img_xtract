@@ -83,6 +83,76 @@
     }
   }
 
+  function clearOptions(container) {
+    const list = container.querySelector('[data-est-options-list]');
+    if (list) {
+      list.innerHTML = '';
+    }
+  }
+
+  function masterFields() {
+    const byId = new Map();
+    document.querySelectorAll('[data-est-master-select] option[data-field]').forEach(function (option) {
+      try {
+        const field = JSON.parse(option.dataset.field || '{}');
+        if (field.id) {
+          byId.set(String(field.id), field);
+        }
+      } catch (error) {
+        // Ignore malformed option payloads; server validation remains authoritative.
+      }
+    });
+    return Array.from(byId.values());
+  }
+
+  function matchingMasterFields(card) {
+    const key = card.querySelector('[data-est-key]')?.value.trim().toLowerCase() || '';
+    const label = card.querySelector('[data-est-label]')?.value.trim().toLowerCase() || '';
+    const term = key || label;
+    if (term.length < 2) {
+      return [];
+    }
+    return masterFields().filter(function (field) {
+      const fieldKey = String(field.key || '').toLowerCase();
+      const fieldLabel = String(field.label || '').toLowerCase();
+      return fieldKey.includes(term) || fieldLabel.includes(term) || (label && fieldLabel.includes(label));
+    }).slice(0, 6);
+  }
+
+  function renderMasterSuggestions(card) {
+    const box = card.querySelector('[data-est-master-suggestions]');
+    if (!box) {
+      return;
+    }
+    const matches = matchingMasterFields(card).filter(function (field) {
+      return String(field.id || '') !== String(card.dataset.estFieldDefinitionId || '');
+    });
+    box.innerHTML = '';
+    box.classList.toggle('d-none', matches.length === 0);
+    if (!matches.length) {
+      return;
+    }
+    const title = document.createElement('div');
+    title.className = 'small text-muted mb-1';
+    title.textContent = 'Matching metadata masters';
+    box.appendChild(title);
+    matches.forEach(function (field) {
+      const row = document.createElement('div');
+      row.className = 'd-flex flex-wrap justify-content-between align-items-center gap-2 border rounded p-2 mb-1';
+      row.innerHTML = [
+        '<div>',
+        '<div class="fw-semibold small"></div>',
+        '<div class="small text-muted"></div>',
+        '</div>',
+        '<button class="btn btn-sm btn-outline-primary" type="button" data-est-use-master-suggestion>Use</button>'
+      ].join('');
+      row.querySelector('.fw-semibold').textContent = field.label || field.key || 'Metadata field';
+      row.querySelector('.text-muted').textContent = [field.key, field.scope, field.type || field.field_type].filter(Boolean).join(' · ');
+      row.querySelector('[data-est-use-master-suggestion]').dataset.field = JSON.stringify(field);
+      box.appendChild(row);
+    });
+  }
+
   function fieldSummary(card) {
     const label = card.querySelector('[data-est-label]')?.value.trim() || 'Untitled field';
     const key = card.querySelector('[data-est-key]')?.value.trim() || 'missing_key';
@@ -148,6 +218,17 @@
     }
   }
 
+  function debounce(fn, wait) {
+    let timer = null;
+    return function () {
+      const args = arguments;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(function () {
+        fn.apply(null, args);
+      }, wait);
+    };
+  }
+
   function validateFieldKeys() {
     const current = form();
     if (!current) {
@@ -155,15 +236,23 @@
     }
     const cards = Array.from(current.querySelectorAll('[data-est-field]'));
     const counts = new Map();
+    const masterCounts = new Map();
     cards.forEach(function (card) {
       const key = card.querySelector('[data-est-key]')?.value.trim();
       if (key) {
         counts.set(key, (counts.get(key) || 0) + 1);
       }
+      if (card.dataset.estFieldDefinitionId) {
+        masterCounts.set(card.dataset.estFieldDefinitionId, (masterCounts.get(card.dataset.estFieldDefinitionId) || 0) + 1);
+      }
     });
     let valid = true;
     cards.forEach(function (card) {
       const key = card.querySelector('[data-est-key]')?.value.trim();
+      const fieldDefinitionId = card.dataset.estFieldDefinitionId;
+      const masterWithKey = key ? masterFields().find(function (field) {
+        return field.key === key && String(field.id || '') !== String(fieldDefinitionId || '');
+      }) : null;
       if (!key) {
         setFieldKeyStatus(card, 'Key is required.', 'invalid');
         valid = false;
@@ -173,13 +262,107 @@
       } else if ((counts.get(key) || 0) > 1) {
         setFieldKeyStatus(card, 'This key is already used in this EncounterSetType.', 'invalid');
         valid = false;
+      } else if (fieldDefinitionId && (masterCounts.get(fieldDefinitionId) || 0) > 1) {
+        setFieldKeyStatus(card, 'This metadata master is already declared in this EncounterSetType.', 'invalid');
+        valid = false;
+      } else if (masterWithKey && masterWithKey.scope !== card.dataset.estField) {
+        setFieldKeyStatus(card, 'This key already exists as a ' + masterWithKey.scope + ' metadata master.', 'invalid');
+        valid = false;
+      } else if (masterWithKey && !fieldDefinitionId) {
+        setFieldKeyStatus(card, 'Existing metadata master will be linked on save. Select the suggestion to review details.', 'valid');
       } else {
-        setFieldKeyStatus(card, 'Key is valid for this EncounterSetType.', 'valid');
+        setFieldKeyStatus(card, 'Key is valid locally. Master uniqueness is checked separately.', 'valid');
       }
       updateFieldSummary(card);
     });
     return valid;
   }
+
+  function checkMasterKeyAvailability(card) {
+    const current = form();
+    const input = card.querySelector('[data-est-key]');
+    const key = input ? input.value.trim() : '';
+    const url = current ? current.dataset.estKeyCheckUrl : '';
+    if (!url || !key || !/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) {
+      return;
+    }
+    if (!validateFieldKeys()) {
+      return;
+    }
+    const params = new URLSearchParams({ key: key });
+    if (card.dataset.estFieldDefinitionId) {
+      params.set('exclude_id', card.dataset.estFieldDefinitionId);
+    }
+    setFieldKeyStatus(card, 'Checking metadata master key...', 'pending');
+    window.fetch(url + '?' + params.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin'
+    }).then(function (response) {
+      return response.json();
+    }).then(function (payload) {
+      if (payload.available) {
+        setFieldKeyStatus(card, 'Key is globally available in metadata masters.', 'valid');
+      } else if (card.dataset.estFieldDefinitionId) {
+        setFieldKeyStatus(card, payload.message || 'Master key conflict.', 'invalid');
+      } else {
+        setFieldKeyStatus(card, 'This key already exists in metadata masters. Add it from master instead.', 'invalid');
+      }
+    }).catch(function () {
+      setFieldKeyStatus(card, 'Could not check metadata master key right now.', 'invalid');
+    });
+  }
+
+  const debouncedMasterKeyCheck = debounce(checkMasterKeyAvailability, 350);
+
+  function fieldPayloadFromMaster(field) {
+    return {
+      field_definition_id: field.id,
+      key: field.key,
+      label: field.label,
+      sctid: field.sctid || null,
+      scope: field.scope,
+      type: field.type || field.field_type || 'text',
+      selection_mode: field.selection_mode || 'single',
+      options: field.options || field.options_json || [],
+      required_at_upload: Boolean(field.required_at_upload_default),
+      required_for_verification: Boolean(field.required_for_verification_default),
+      visible_to_grader: Boolean(field.visible_to_grader_default),
+      is_pii: Boolean(field.is_pii_default)
+    };
+  }
+
+  function applyFieldPayload(card, data) {
+    card.dataset.estField = data.scope || card.dataset.estField;
+    card.dataset.estFieldDefinitionId = data.field_definition_id || '';
+    card.querySelector('[data-est-key]').value = data.key || '';
+    card.querySelector('[data-est-label]').value = data.label || '';
+    card.querySelector('[data-est-sctid]').value = data.sctid || '';
+    card.querySelector('[data-est-type]').value = data.type || 'text';
+    card.querySelector('[data-est-selection-mode]').value = data.selection_mode || 'single';
+    card.querySelector('[data-est-required-upload]').checked = Boolean(data.required_at_upload);
+    card.querySelector('[data-est-required-verification]').checked = Boolean(data.required_for_verification);
+    card.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
+    card.querySelector('[data-est-pii]').checked = Boolean(data.is_pii);
+    clearOptions(card);
+    const optionValues = Array.isArray(data.options) ? data.options.map(function (option) {
+      return typeof option === 'string' ? option : option.value || option.label || '';
+    }).filter(Boolean) : [];
+    (optionValues.length ? optionValues : ['']).forEach(function (value) {
+      addOption(card, value);
+    });
+    const targetList = fieldList(card.dataset.estField);
+    if (targetList && card.parentElement !== targetList) {
+      targetList.appendChild(card);
+    }
+    const isSelect = card.querySelector('[data-est-type]').value === 'select';
+    card.querySelector('[data-est-selection-mode]').disabled = !isSelect;
+    card.querySelector('[data-est-options-list]')?.closest('.mt-2')?.classList.toggle('d-none', !isSelect);
+    renderMasterSuggestions(card);
+    validateFieldKeys();
+    updateFieldSummary(card);
+  }
+
 
   function createFieldCard(scope, field, expanded) {
     const data = field || {};
@@ -211,8 +394,9 @@
     keyCol.innerHTML = [
       '<label class="form-label small mb-1">Key <span class="text-danger">*</span></label>',
       '<input class="form-control form-control-sm" maxlength="100" data-est-key required>',
-      '<div class="form-text">Internal code. Unique within this EncounterSetType.</div>',
-      '<div class="small mt-1" data-est-key-status aria-live="polite"></div>'
+      '<div class="form-text">Internal code. Globally unique in metadata masters and unique within this EncounterSetType.</div>',
+      '<div class="small mt-1" data-est-key-status aria-live="polite"></div>',
+      '<div class="mt-2 d-none" data-est-master-suggestions></div>'
     ].join('');
     keyCol.querySelector('input').value = data.key || '';
 
@@ -309,23 +493,6 @@
     syncTypeState();
     validateFieldKeys();
     return card;
-  }
-
-  function fieldFromMaster(scope, field) {
-    return {
-      field_definition_id: field.id,
-      key: field.key,
-      label: field.label,
-      sctid: field.sctid || null,
-      scope: scope,
-      type: field.type || field.field_type || 'text',
-      selection_mode: field.selection_mode || 'single',
-      options: field.options || field.options_json || [],
-      required_at_upload: Boolean(field.required_at_upload_default),
-      required_for_verification: Boolean(field.required_for_verification_default),
-      visible_to_grader: Boolean(field.visible_to_grader_default),
-      is_pii: Boolean(field.is_pii_default)
-    };
   }
 
   function addField(scope, field, expanded) {
@@ -452,7 +619,7 @@
       const option = select && select.selectedOptions ? select.selectedOptions[0] : null;
       if (option && option.dataset.field) {
         try {
-          addField(scope, fieldFromMaster(scope, JSON.parse(option.dataset.field)), true);
+          addField(scope, fieldPayloadFromMaster(JSON.parse(option.dataset.field)), true);
           select.value = '';
         } catch (error) {
           window.alert('Selected field master could not be added.');
@@ -483,6 +650,16 @@
       event.target.closest('[data-est-option-row]')?.remove();
       return;
     }
+    const suggestionButton = event.target.closest('[data-est-use-master-suggestion]');
+    if (suggestionButton) {
+      const card = suggestionButton.closest('[data-est-field]');
+      try {
+        applyFieldPayload(card, fieldPayloadFromMaster(JSON.parse(suggestionButton.dataset.field || '{}')));
+      } catch (error) {
+        window.alert('Selected metadata master could not be applied.');
+      }
+      return;
+    }
     if (event.target.closest('[data-est-new]')) {
       resetForm();
       showEditor();
@@ -509,14 +686,24 @@
   });
 
   document.addEventListener('input', function (event) {
-    if (event.target.closest('[data-est-field]')) {
+    const card = event.target.closest('[data-est-field]');
+    if (card) {
       validateFieldKeys();
+      renderMasterSuggestions(card);
+      if (event.target.closest('[data-est-key]')) {
+        debouncedMasterKeyCheck(card);
+      }
     }
   });
 
   document.addEventListener('change', function (event) {
-    if (event.target.closest('[data-est-field]')) {
+    const card = event.target.closest('[data-est-field]');
+    if (card) {
       validateFieldKeys();
+      renderMasterSuggestions(card);
+      if (event.target.closest('[data-est-key]')) {
+        checkMasterKeyAvailability(card);
+      }
     }
   });
 

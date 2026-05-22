@@ -54,7 +54,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 Supported field properties:
 
 - `key`: stable field key, unique within this EncounterSetType schema snapshot
-- `field_definition_id`: optional provenance link to a standalone upload metadata field master
+- `field_definition_id`: optional on input; required in stored snapshots. When omitted, create/update resolves the field against `upload_metadata_field_definitions` by global `key`, or creates a new active metadata master field.
 - `label`: display label
 - `sctid`: optional SNOMED CT ID snapshot
 - `scope`: `patient`, `encounter`, `image`, `document`, or `upload`
@@ -68,7 +68,7 @@ Supported field properties:
 
 Fields not required at upload may be completed during verification.
 
-The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API.
+The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API. Every field must resolve to a master metadata field, whether it was added from `/admin/upload-metadata-fields` or from the EncounterSetType editor.
 
 ## EncounterSet Grading Scheme
 

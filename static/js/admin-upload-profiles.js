@@ -162,6 +162,13 @@
         openEditor(button);
       });
     });
+    const profileId = new URLSearchParams(window.location.search).get('profile_id');
+    if (profileId) {
+      const profileButton = document.querySelector('[data-upload-profile-edit][data-profile-id="' + CSS.escape(profileId) + '"]');
+      if (profileButton) {
+        openEditor(profileButton);
+      }
+    }
     document.querySelectorAll('[data-upload-profile-editor-close]').forEach(function (button) {
       button.addEventListener('click', function () {
         button.closest('#upload-profile-editor-section')?.classList.add('d-none');

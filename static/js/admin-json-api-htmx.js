@@ -20,11 +20,43 @@
     const managed = managedElement(elt);
     const url = managed && managed.getAttribute('data-json-api-reload-url');
     const target = managed && managed.getAttribute('data-json-api-reload-target');
+    const pushUrl = managed && managed.getAttribute('data-json-api-push-url');
+    if (pushUrl && window.history && window.history.pushState) {
+      window.history.pushState({}, '', pushUrl);
+    }
     if (url && target && window.htmx) {
       window.htmx.ajax('GET', url, { target: target, swap: 'innerHTML' });
       return true;
     }
     return false;
+  }
+
+  function notifySuccess(elt, payload) {
+    const managed = managedElement(elt);
+    if (window.showFlashToast && payload.message) {
+      window.showFlashToast(payload.message, 'success');
+    }
+    if (managed) {
+      managed.dispatchEvent(new CustomEvent('json-api:success', {
+        bubbles: true,
+        detail: { payload: payload }
+      }));
+    }
+  }
+
+  function notifyFailure(elt, payload) {
+    const managed = managedElement(elt);
+    if (window.showFlashToast) {
+      window.showFlashToast(payload.error || payload.message || 'Request failed.', 'error');
+    } else {
+      window.alert(payload.error || payload.message || 'Request failed.');
+    }
+    if (managed) {
+      managed.dispatchEvent(new CustomEvent('json-api:error', {
+        bubbles: true,
+        detail: { payload: payload }
+      }));
+    }
   }
 
   function disableSubmit(elt, disabled) {
@@ -61,13 +93,18 @@
       return;
     }
 
+    const payload = parsePayload(event.detail.xhr);
     if (event.detail.xhr.status >= 400) {
       event.detail.shouldSwap = false;
+      event.detail.xhr._jsonApiHandled = true;
+      notifyFailure(event.detail.elt, payload);
       return;
     }
 
     event.detail.shouldSwap = false;
-    const payload = parsePayload(event.detail.xhr);
+    if (payload.success) {
+      notifySuccess(event.detail.elt, payload);
+    }
     if (payload.success && refreshTarget(event.detail.elt)) {
       return;
     }
@@ -79,14 +116,17 @@
       window.location.reload();
       return;
     }
-    window.alert(payload.error || payload.message || 'Request failed.');
+    notifyFailure(event.detail.elt, payload);
   });
 
   document.body.addEventListener('htmx:responseError', function (event) {
     if (!managedElement(event.detail.elt)) {
       return;
     }
+    if (event.detail.xhr._jsonApiHandled) {
+      return;
+    }
     const payload = parsePayload(event.detail.xhr);
-    window.alert(payload.error || payload.message || 'Request failed.');
+    notifyFailure(event.detail.elt, payload);
   });
 })();

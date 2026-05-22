@@ -15,6 +15,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET
+from upload_metadata.models import UploadMetadataFieldDefinition
 
 
 @pytest.fixture
@@ -135,6 +136,14 @@ def test_create_encounter_set_type_scoped_to_manager_project(db_session, encount
     )
 
     assert result.success is True
+    schema = result.payload["encounter_set_type"]["metadata_schema_json"]
+    assert all(field["field_definition_id"] for field in schema["fields"])
+    assert (
+        db_session.query(UploadMetadataFieldDefinition)
+        .filter(UploadMetadataFieldDefinition.key == "project_participant_id")
+        .one_or_none()
+        is not None
+    )
     payload = result.payload["encounter_set_type"]
     assert payload["code"] == f"fundus_quick_{encounter_set_type_scope['suffix']}"
     assert payload["created_by_user_id"] == encounter_set_type_scope["user"].id

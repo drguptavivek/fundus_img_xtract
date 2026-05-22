@@ -66,6 +66,7 @@
                 data-json-api-htmx
                 data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}"
                 data-json-api-reload-target="#encounter-set-type-list"
+                data-est-key-check-url="{{ url_for('fundus_api.check_upload_metadata_field_key') }}"
                 data-est-form>
             {{ csrf_field() }}
             <input type="hidden" name="metadata_schema_json" data-est-schema-input value='{"fields": []}'>

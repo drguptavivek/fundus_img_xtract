@@ -49,9 +49,38 @@
   </div>
 
   <section class="card shadow-sm" data-umf-dashboard>
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span>All Metadata Field Masters</span>
-      <button class="btn btn-sm btn-primary" type="button" data-umf-new>Add Field</button>
+    <div class="card-header">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <span>All Metadata Field Masters</span>
+        <button class="btn btn-sm btn-primary" type="button" data-umf-new>Add Field</button>
+      </div>
+      <div class="row g-2 align-items-end" data-umf-filters>
+        <div class="col-md-5">
+          <label class="form-label small mb-1" for="umf_filter_search">FieldName</label>
+          <input class="form-control form-control-sm" id="umf_filter_search" type="search" placeholder="Search field name or key" data-umf-filter-search>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1" for="umf_filter_scope">Scope</label>
+          <select class="form-select form-select-sm" id="umf_filter_scope" data-umf-filter-scope>
+            <option value="">All scopes</option>
+            {% for scope in field_scopes %}
+            <option value="{{ scope }}">{{ scope|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-1" for="umf_filter_type">Type</label>
+          <select class="form-select form-select-sm" id="umf_filter_type" data-umf-filter-type>
+            <option value="">All types</option>
+            {% for field_type in field_types %}
+            <option value="{{ field_type }}">{{ field_type }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-1">
+          <button class="btn btn-sm btn-outline-secondary w-100" type="button" data-umf-filter-clear>Clear</button>
+        </div>
+      </div>
     </div>
     <div id="upload-metadata-field-list">
       {% include "admin/partials/upload_metadata_field_list.html" %}
@@ -74,8 +103,8 @@
             data-json-api-reload-target="#upload-metadata-field-list"
             data-umf-form>
         {{ csrf_field() }}
-        <div class="row g-3">
-          <div class="col-md-3">
+        <div class="row g-3 align-items-start">
+          <div class="col-md-2">
             <label class="form-label" for="umf_scope">
               Scope <span class="text-danger">*</span>
               <span class="text-muted" data-bs-toggle="tooltip" title="Patient: participant-level; Encounter: visit/capture session; Image: per-image; Document: supporting files; Upload: upload event or batch.">?</span>
@@ -86,7 +115,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label" for="umf_key">Key <span class="text-danger">*</span></label>
             <input class="form-control"
                    id="umf_key"
@@ -102,11 +131,11 @@
             <label class="form-label" for="umf_label">Label <span class="text-danger">*</span></label>
             <input class="form-control" id="umf_label" name="label" maxlength="150" required>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label" for="umf_sctid">SNOMED CT ID</label>
             <input class="form-control" id="umf_sctid" name="sctid" maxlength="32">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label" for="umf_field_type">Type <span class="text-danger">*</span></label>
             <select class="form-select" id="umf_field_type" name="field_type" data-umf-type required>
               {% for field_type in field_types %}

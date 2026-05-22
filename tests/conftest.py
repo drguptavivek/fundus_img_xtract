@@ -24,6 +24,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from flask_login import FlaskLoginClient
+from urllib.parse import urlparse
 
 # Test database URL - uses dedicated test-db container
 # From inside docker, connect to 'test-db' service (not localhost)
@@ -32,9 +33,14 @@ TEST_DATABASE_URL = os.getenv(
     'TEST_DATABASE_URL',
     'postgresql://test_user:test_password_change_in_production@test-db:5432/fundus_test'
 )
+_parsed_test_db = urlparse(TEST_DATABASE_URL)
+if "test" not in (_parsed_test_db.path or "").lower():
+    raise RuntimeError("Refusing to run pytest: TEST_DATABASE_URL must point to a test database.")
 
-# Ensure all model and alembic imports resolve to the test DB.
-os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+# Ensure all model and alembic imports resolve to the test DB. Docker runtime
+# containers already set DATABASE_URL to the application database, so setdefault
+# is not safe for pytest.
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from models import Base
 

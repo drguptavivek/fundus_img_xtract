@@ -182,3 +182,257 @@ Date: 2026-05-21
   - Alembic heads check.
   - `git diff --check`.
 - Pytest was intentionally not run in this environment because it is connected to production DB unless explicitly switched to a test DB.
+
+## 2026-05-22 - Latest EncounterSetType Decisions
+
+- Metadata field masters are the source of truth for reusable field definitions.
+- In EncounterSetType edit, fields linked to metadata masters must not allow editing of definition attributes:
+  - key
+  - label
+  - SNOMED CT ID
+  - type
+  - selection mode
+  - options
+  - description
+  - validation regex
+  - validation error message
+- EncounterSetType edit may only customize per-type usage settings:
+  - display order
+  - required at upload
+  - editable during verification
+  - visible to grader
+  - PII
+- The service also canonicalizes linked master-field snapshots server-side so posted schema cannot override reusable master definitions.
+- `laterality` is the canonical image-level field for OD/OS/OU/unknown.
+- Duplicate seeded image field `eye` was removed from the seed list.
+- Migration `f5a4b3c2d1e0_deactivate_duplicate_eye_metadata_field.py` deactivates existing `eye` metadata master only if no EncounterSetType schema references it.
+- EncounterSetType schema export is available as JSON.
+
+## Next Work - Upload Profile and EncounterSetType Targeting
+
+### 1. Restructure Upload Profile Setup By Upload Kind
+
+- Upload Profiles should stop presenting one mixed target list for all upload kinds.
+- Profile configuration should be separated by upload type:
+  - direct image
+  - pregraded
+  - Remidio ZIP
+  - EncounterSet
+- Each upload kind should own its allowed/default target behavior:
+  - Direct image: allowed grading schemes plus default; uploader may select one.
+  - Pregraded: allowed grading schemes plus default; uploader may select one.
+  - Remidio ZIP: base/default target scheme; PDF/report processing may create additional automatic tasks as already designed.
+  - EncounterSet: selected EncounterSetTypes drive allowed targets.
+
+### 2. Add Image And Encounter Grading Schemes To EncounterSetType
+
+- EncounterSetType currently has one target grading scheme. This is not enough for the planned encounter-set grading workflow.
+- Add explicit EncounterSetType grading scheme configuration:
+  - image-level grading scheme(s)
+  - encounter-level grading scheme
+  - default image-level grading scheme when multiple image schemes are allowed
+- Image-level schemes are used for task-eligible clinical images.
+- Encounter-level scheme is used for the overall EncounterSet/encounter grade.
+- Supporting PDFs, reports, and document-images remain non-task assets and must not get image-level grading tasks.
+- Rationale:
+  - EncounterSets can contain mixed clinical image types in one patient encounter.
+  - Examples include external eye images plus fundus images, close-up plus distance views, or multiple disease/evaluation workflows within the same clinical encounter.
+  - Therefore a single EncounterSetType may need multiple allowed image-level grading schemes.
+  - When only one image-level scheme is configured, that scheme can be applied automatically to all task-eligible clinical images.
+  - When more than one image-level scheme is configured, the workflow must later provide a way for upload/verification to assign the actual image-level grading scheme per clinical image.
+  - A default image-level scheme should still be configured to reduce clicks and support fast just-in-time upload.
+  - Encounter-level grading remains separate because the whole encounter can need a final encounter grade in addition to image grades.
+
+### 3. Make Upload Profiles Use EncounterSetType Schemes As Targets
+
+- When an Upload Profile enables EncounterSet upload, it should select allowed EncounterSetTypes.
+- The EncounterSetType's configured image and encounter grading schemes should become the profile's EncounterSet targets.
+- The Upload Profile should not independently choose conflicting EncounterSet target diseases/schemes.
+- Save-time validation should enforce:
+  - every selected EncounterSetType is active
+  - the profile's EncounterSet target schemes match or include the selected EncounterSetType schemes
+  - no ambiguity between profile disease/target scheme and EncounterSetType grading scheme
+- Upload UI should then ask the uploader to choose an allowed EncounterSetType, not a free-floating disease/scheme.
+
+### 3A. Project Linkage Through Upload Profiles
+
+- EncounterSetType must remain reusable and project-neutral.
+- Do not add direct `project_id` mapping to EncounterSetType.
+- Project linkage belongs to Upload Profiles.
+- For EncounterSet uploads:
+  - Upload Profile selects allowed EncounterSetTypes.
+  - Upload Profile supplies project context to the upload job / staged EncounterSet.
+  - Verification and task creation inherit project from the Upload Profile / upload job context.
+- This allows the same EncounterSetType to be reused across multiple projects while each project controls:
+  - who can upload
+  - which sites/lab units are in scope
+  - which EncounterSetTypes are allowed
+  - source integration routing
+  - downstream task routing
+- Remedio ZIP/API routing should resolve to Upload Profile first, then EncounterSetType.
+- Save-time validation should ensure selected EncounterSetTypes and their configured grading schemes are compatible with the Upload Profile's project and allowed target configuration.
+
+### 4. Verification And Task Creation Follow-Up
+
+- Verification should use EncounterSetType metadata schema to render patient, encounter, image, document, and upload metadata fields.
+- Verifier can edit only fields configured as editable during verification.
+- Task creation should:
+  - create image-level tasks only for verified, non-discarded clinical images
+  - create encounter-level tasks for verified, non-discarded EncounterSets when an encounter scheme is configured
+  - exclude PDFs, reports, and document-images
+  - use EncounterSetType image/encounter grading scheme configuration, not uploader-provided disease text
+
+### 5. EncounterSetType Upload Asset Rules
+
+- EncounterSetType should define which asset classes are allowed for that type.
+- Clinical images:
+  - `allow_clinical_images`
+  - `min_clinical_images`
+  - `max_clinical_images`
+  - Min/max values should be optional.
+  - Limits should be validation rules, not rigid predeclared slots, because real-world projects may have missing images or more than one image for a view.
+- Documents:
+  - `allow_document_uploads`
+  - `allow_pdf_uploads`
+  - `allow_document_image_uploads`
+  - `max_documents`
+  - `max_pdfs`
+  - `max_document_images`
+- Reports, if separated from generic documents:
+  - `allow_report_uploads`
+  - `allow_report_pdfs`
+  - `allow_report_images`
+  - `max_reports`
+  - `max_report_pdfs`
+  - `max_report_images`
+- Documents, PDFs, report PDFs, report images, and document-images are PII by default and do not create grading tasks.
+- Task creation must use explicit asset classification, not MIME type alone, because a document-image may be a JPG/PNG but must not create a clinical grading task.
+- Rationale:
+  - Upload must remain quick and just-in-time.
+  - Verification/finalization can enforce stricter completeness rules.
+  - Some projects need document uploads, reports, consent images, referral slips, or labels; others should prohibit them.
+  - Clinical image counts vary by EncounterSetType and project, so rules must be configurable per EncounterSetType rather than hardcoded globally.
+
+### 6. Remedio ZIP Convergence Into EncounterSet Workflow
+
+- The longer-term direction is to fold Remedio ZIP behavior into the EncounterSet workflow instead of treating it as a completely separate ingestion path.
+- Remedio ZIP ingestion already contains encounter-like data:
+  - one patient/exam encounter
+  - clinical images
+  - PDFs/reports
+  - site/source metadata
+  - automatic DR/glaucoma report detection behavior
+- Future design should stage a Remedio ZIP as an EncounterSet-compatible upload package:
+  - create or map to an EncounterSet/EncounterSetType
+  - store clinical images as task-eligible assets only after verification
+  - store PDFs/reports as report/document assets
+  - preserve source Remedio identifiers and import metadata
+- The existing Remedio behavior where PDF/report processing can trigger additional DR/glaucoma tasks should be represented as automatic target derivation inside the EncounterSet-compatible pipeline.
+- The profile's Remedio ZIP base/default target still exists, but final task creation should eventually use:
+  - EncounterSetType image-level grading scheme rules
+  - EncounterSetType encounter-level grading scheme rules
+  - automatic report/PDF-derived task rules where applicable
+  - verification state and discard flags
+- Task creation may happen later, after upload and verification, not necessarily at ZIP ingestion time.
+- Rationale:
+  - This avoids maintaining two parallel concepts for encounter-style uploads.
+  - Remedio ZIP, manual EncounterSet upload, and future batch encounter ingestion all become variants of the same staged encounter package.
+  - It also keeps document/report assets out of image grading unless an explicit rule creates a task from validated clinical evidence.
+
+### 7. Remedio API Convergence Into EncounterSet Workflow
+
+- Remedio API integration should also converge into the EncounterSet workflow, but it is different from ZIP upload because it is source-system synchronization rather than user file upload.
+- A Remedio API exam should be treated as a candidate EncounterSet:
+  - one patient/exam encounter
+  - clinical images
+  - PDFs/reports
+  - site/source metadata
+  - Remedio patient/exam/image/report identifiers
+- Preserve source identifiers for idempotency:
+  - Remedio connection ID
+  - Remedio site ID/custom ID
+  - Remedio patient/MRN/custom patient ID
+  - Remedio exam ID
+  - Remedio image IDs
+  - Remedio report IDs
+- Re-pulling the same Remedio exam should update or reuse the same staged EncounterSet package and must not create duplicate patients, images, reports, or grading tasks.
+- API-pulled exams should enter the same staged/unverified EncounterSet pipeline:
+  - import source metadata
+  - download or stage clinical images
+  - download or stage PDFs/reports
+  - map metadata into patient, encounter, image, document, and upload scopes
+  - wait for verification/finalization before task creation
+- Remedio connection/site/routing rules should map the API exam to:
+  - an Upload Profile
+  - an allowed EncounterSetType
+  - source/import metadata
+- EncounterSetType should then drive:
+  - allowed asset classes
+  - image-level grading schemes
+  - encounter-level grading scheme
+  - metadata requirements
+  - count/validation rules
+  - verification requirements
+- Existing Remedio API/PDF-derived DR/glaucoma task behavior should become automatic target derivation inside the EncounterSet-compatible pipeline.
+- Automatic targets must still obey:
+  - verification state
+  - discarded EncounterSet flag
+  - discarded image flag
+  - asset classification
+  - EncounterSetType target scheme rules
+- Raw Remedio source payloads should be retained separately or as source metadata for audit/debugging.
+- Diagnosis, report content, and source-system inference details must not be visible to graders unless the relevant metadata is explicitly configured as grader-visible.
+- Update/re-pull policy needs a deliberate design:
+  - if the staged EncounterSet is not finalized, re-pull can update missing or changed source assets/metadata
+  - if verified/finalized, decide whether re-pull is blocked, creates a revision, or reopens verification
+  - task duplication must be prevented in all cases
+- Operationally, Remedio API ingestion should create or update a staged EncounterSet import job. Failures or partial downloads should leave clear warnings for verification instead of silently creating incomplete grading tasks.
+- Rationale:
+  - Remedio API, Remedio ZIP, manual EncounterSet upload, and future batch encounter imports should share one encounter staging and verification model.
+  - This reduces divergent task creation paths and makes verification/discard rules consistent across source systems.
+
+### 8. Remedio API Router / Routing Profile
+
+- A Remedio API Router is needed to route API-pulled encounters to the correct project context.
+- Ownership direction:
+  - Upload Profile remains the project/upload permission contract.
+  - Remedio API Routing Profile is the source-system routing contract.
+  - Remedio API Routing Profile links to Upload Profiles through ordered routing rules.
+- Recommended flow:
+  - `Remedio API Connection -> Remedio API Routing Profile -> Routing Rule -> Upload Profile -> EncounterSetType -> staged EncounterSet`
+- The router should select an Upload Profile first because Upload Profile owns:
+  - project mapping
+  - allowed upload kinds
+  - allowed EncounterSetTypes
+  - lab-unit/site/user scope
+  - target/task compatibility rules
+- The selected Upload Profile then constrains which EncounterSetTypes can be used.
+- Remedio API Routing Profile should not make EncounterSetType project-specific; it should choose a project-specific Upload Profile, and that profile controls allowed EncounterSetTypes.
+- Routing rule match inputs may include:
+  - Remedio connection
+  - Remedio site ID
+  - Remedio site custom ID
+  - exam date range
+  - camera/device type such as FOP or PRISTINE
+  - report availability or report type
+  - image modality metadata if available
+  - patient/MRN/exam ID prefix rules if needed
+  - fallback/default rule
+- Routing rule output should include:
+  - `upload_profile_id`
+  - optional `encounter_set_type_id` when the selected profile allows multiple EncounterSetTypes and the router can disambiguate
+  - priority/order
+  - active/inactive
+  - effective date range
+  - optional notes
+- Validation requirements:
+  - selected Upload Profile must allow Remedio API ingestion
+  - selected Upload Profile must be linked to the intended project
+  - selected EncounterSetType, if specified, must be allowed by that Upload Profile
+  - source-derived targets must be compatible with EncounterSetType image/encounter grading schemes
+  - overlapping active rules should either be blocked or resolved deterministically by priority
+- Example routing:
+  - Site `RPC_COMOPH_2` + Camera `FOP` + date range `2026-01-01..2026-06-30` -> Upload Profile `Project A FOP Screening`
+  - Site `RPC_COMOPH_2` + Camera `PRISTINE` -> Upload Profile `Project B PRISTINE Screening`
+  - Site `XYZ` + any camera -> Upload Profile `Project C`
+- This keeps Upload Profiles reusable for manual upload, Remedio ZIP, and Remedio API while still allowing Remedio API encounters to route to different projects by source-system attributes.

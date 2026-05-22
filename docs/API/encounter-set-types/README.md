@@ -16,6 +16,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 - `GET /api/encounter-set-types`
 - `POST /api/encounter-set-types`
 - `GET /api/encounter-set-types/<type_id>`
+- `GET /api/encounter-set-types/<type_id>/schema`
 - `POST|PATCH /api/encounter-set-types/<type_id>`
 - `POST /api/encounter-set-types/<type_id>/activate`
 - `POST /api/encounter-set-types/<type_id>/deactivate`
@@ -74,6 +75,12 @@ Fields not required at upload may be completed during verification.
 The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API. Every field must resolve to a master metadata field, whether it was added from `/admin/upload-metadata-fields` or from the EncounterSetType editor.
 
 Metadata masters provide defaults only. After a field is added to an EncounterSetType, `required_at_upload`, `required_for_verification`, `visible_to_grader`, and `is_pii` are stored in the EncounterSetType schema snapshot and may differ from the master defaults.
+
+## Schema Export
+
+`GET /api/encounter-set-types/<type_id>/schema` returns a portable schema-focused JSON payload containing EncounterSetType identity, target grading scheme, and `metadata_schema_json`.
+
+Add `?download=1` to receive the same schema as a JSON attachment from the admin dashboard export action.
 
 ## EncounterSet Grading Scheme
 

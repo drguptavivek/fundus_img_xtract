@@ -1,9 +1,11 @@
 """JSON API routes for EncounterSetType administration."""
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 from flask_login import current_user
 
 from auth.roles import roles_required
@@ -40,6 +42,24 @@ def create_encounter_set_type():
 def get_encounter_set_type(type_id: int):
     """Read one encounter-set type."""
     return _json_result(encounter_set_type_service.get_encounter_set_type(current_user.id, type_id))
+
+
+@api_bp.route("/encounter-set-types/<int:type_id>/schema", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager")
+def export_encounter_set_type_schema(type_id: int):
+    """Export one encounter-set type schema as JSON."""
+    result = encounter_set_type_service.export_encounter_set_type_schema(current_user.id, type_id)
+    if not result.success:
+        return _json_result(result)
+    schema = result.payload["schema"]
+    if _bool_arg(request.args.get("download")):
+        filename = _safe_json_filename(result.payload["filename"])
+        return Response(
+            json.dumps(schema, indent=2, sort_keys=True) + "\n",
+            mimetype="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    return jsonify({"success": True, "schema": schema})
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>", methods=["PATCH", "POST"])
@@ -114,6 +134,13 @@ def _json_result(result: MutationResult):
     if result.payload:
         payload.update(result.payload)
     return jsonify(payload), result.status_code
+
+
+def _safe_json_filename(filename: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", filename).strip("._")
+    if not cleaned:
+        return "encounter_set_type_schema.json"
+    return cleaned if cleaned.endswith(".json") else f"{cleaned}.json"
 
 
 def _bool_arg(value: str | None) -> bool:

@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from auth.utils import utcnow
 from encounter_set_types.models import EncounterSetType
 from models import Disease
 from upload_metadata.models import UploadMetadataFieldDefinition
@@ -76,6 +77,40 @@ def get_encounter_set_type(manager_user_id: int, type_id: int) -> MutationResult
             True,
             "Encounter-set type found.",
             payload={"encounter_set_type": serialize_encounter_set_type(row)},
+        )
+
+
+def export_encounter_set_type_schema(manager_user_id: int, type_id: int) -> MutationResult:
+    """Return a portable EncounterSetType schema export payload."""
+    with db_transaction_manager.transaction_scope() as db:
+        row = _get_scoped_type(db, manager_user_id, type_id)
+        if row is None:
+            return MutationResult(False, "Encounter-set type not found.", 404)
+        target_scheme = row.__dict__.get("target_scheme")
+        return MutationResult(
+            True,
+            "Encounter-set type schema exported.",
+            payload={
+                "schema": {
+                    "schema_type": "encounter_set_type",
+                    "schema_version": 1,
+                    "exported_at": utcnow().isoformat(),
+                    "encounter_set_type": {
+                        "id": row.id,
+                        "name": row.name,
+                        "code": row.code,
+                        "description": row.description,
+                        "active": row.active,
+                    },
+                    "target_scheme": {
+                        "id": row.target_scheme_id,
+                        "name": target_scheme.name if target_scheme else None,
+                        "grading_scope": target_scheme.grading_scope if target_scheme else None,
+                    },
+                    "metadata_schema_json": row.metadata_schema_json or {"fields": []},
+                },
+                "filename": f"{row.code or row.id}_encounter_set_type_schema.json",
+            },
         )
 
 

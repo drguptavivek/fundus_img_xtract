@@ -39,6 +39,11 @@
                     hx-push-url="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}">
               Edit
             </button>
+            <a class="btn btn-outline-dark"
+               href="{{ url_for('fundus_api.export_encounter_set_type_schema', type_id=row.id, download=1) }}"
+               title="Export schema JSON">
+              Export JSON
+            </a>
             {% if row.active %}
             <form method="post" hx-post="{{ url_for('fundus_api.deactivate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-types-workspace">
               {% from "_forms.html" import csrf_field %}

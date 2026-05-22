@@ -94,6 +94,29 @@
     return orders.length ? Math.max.apply(null, orders) + 1 : 1;
   }
 
+  function displayOrderValue(card) {
+    const value = Number(card.querySelector('[data-est-display-order]')?.value || 0);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function sortFieldList(scope) {
+    const target = fieldList(scope);
+    if (!target) {
+      return;
+    }
+    Array.from(target.querySelectorAll('[data-est-field]')).sort(function (left, right) {
+      const orderDiff = displayOrderValue(left) - displayOrderValue(right);
+      if (orderDiff !== 0) {
+        return orderDiff;
+      }
+      const leftLabel = left.querySelector('[data-est-label]')?.value || '';
+      const rightLabel = right.querySelector('[data-est-label]')?.value || '';
+      return leftLabel.localeCompare(rightLabel);
+    }).forEach(function (card) {
+      target.appendChild(card);
+    });
+  }
+
   function clearOptions(container) {
     const list = container.querySelector('[data-est-options-list]');
     if (list) {
@@ -594,7 +617,7 @@
     cardActions.className = 'd-flex justify-content-end gap-2 mt-3';
     cardActions.innerHTML = [
       '<button class="btn btn-sm btn-outline-secondary" type="button" data-est-collapse-field>Close</button>',
-      '<button class="btn btn-sm btn-primary" type="button" data-est-save-field>Save Field</button>'
+      '<button class="btn btn-sm btn-primary" type="button" data-est-save-field>Apply Field</button>'
     ].join('');
 
     const body = document.createElement('div');
@@ -628,6 +651,7 @@
     const target = fieldList(scope);
     if (target) {
       target.appendChild(createFieldCard(scope, field, expanded !== false));
+      sortFieldList(scope);
       validateFieldKeys();
     }
   }
@@ -736,6 +760,7 @@
       return;
     }
     validateFieldKeys();
+    FIELD_SCOPES.forEach(sortFieldList);
     const fields = Array.from(current.querySelectorAll('[data-est-field]')).map(readField);
     current.querySelector('[data-est-schema-input]').value = JSON.stringify({ fields: fields });
   }
@@ -842,6 +867,9 @@
     if (card) {
       validateFieldKeys();
       renderMasterSuggestions(card);
+      if (event.target.closest('[data-est-display-order]')) {
+        sortFieldList(card.dataset.estField);
+      }
       if (event.target.closest('[data-est-key]')) {
         debouncedMasterKeyCheck(card);
       }
@@ -859,14 +887,32 @@
     }
   });
 
-  document.body.addEventListener('htmx:beforeRequest', function (event) {
-    if (event.detail.elt && event.detail.elt.matches && event.detail.elt.matches('[data-est-form]')) {
-      if (!validateFieldKeys()) {
-        revealFirstInvalidField(event.detail.elt);
-        event.preventDefault();
-        return;
-      }
-      serializeSchema();
+  document.addEventListener('submit', function (event) {
+    const current = event.target && event.target.matches && event.target.matches('[data-est-form]') ? event.target : null;
+    if (!current) {
+      return;
+    }
+    if (!validateFieldKeys()) {
+      revealFirstInvalidField(current);
+      event.preventDefault();
+      return;
+    }
+    serializeSchema();
+  }, true);
+
+  document.body.addEventListener('htmx:configRequest', function (event) {
+    const current = event.detail.elt && event.detail.elt.matches && event.detail.elt.matches('[data-est-form]') ? event.detail.elt : null;
+    if (!current) {
+      return;
+    }
+    if (!validateFieldKeys()) {
+      revealFirstInvalidField(current);
+      event.preventDefault();
+      return;
+    }
+    serializeSchema();
+    if (event.detail.parameters) {
+      event.detail.parameters.metadata_schema_json = current.querySelector('[data-est-schema-input]').value;
     }
   });
 })();

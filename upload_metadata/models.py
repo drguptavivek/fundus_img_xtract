@@ -29,6 +29,8 @@ class UploadMetadataFieldDefinition(Base):
     selection_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     options_json: Mapped[list[dict[str, str]] | None] = mapped_column(JSONB, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_regex: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_error_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
     required_at_upload_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     required_for_verification_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     visible_to_grader_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")

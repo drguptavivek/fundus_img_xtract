@@ -33,23 +33,20 @@
           <div class="btn-group btn-group-sm">
             <button class="btn btn-outline-primary"
                     type="button"
-                    data-est-edit
-                    data-action="{{ url_for('fundus_api.update_encounter_set_type', type_id=row.id) }}"
-                    data-target-scheme-id="{{ row.target_scheme_id }}"
-                    data-name="{{ row.name }}"
-                    data-code="{{ row.code }}"
-                    data-description="{{ row.description or '' }}"
-                    data-schema="{{ row.metadata_schema_json|tojson|forceescape }}">
+                    hx-get="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}"
+                    hx-target="#encounter-set-types-workspace"
+                    hx-swap="innerHTML"
+                    hx-push-url="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}">
               Edit
             </button>
             {% if row.active %}
-            <form method="post" hx-post="{{ url_for('fundus_api.deactivate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-type-list">
+            <form method="post" hx-post="{{ url_for('fundus_api.deactivate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-types-workspace">
               {% from "_forms.html" import csrf_field %}
               {{ csrf_field() }}
               <button class="btn btn-outline-secondary" type="submit">Deactivate</button>
             </form>
             {% else %}
-            <form method="post" hx-post="{{ url_for('fundus_api.activate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-type-list">
+            <form method="post" hx-post="{{ url_for('fundus_api.activate_encounter_set_type', type_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}" data-json-api-reload-target="#encounter-set-types-workspace">
               {% from "_forms.html" import csrf_field %}
               {{ csrf_field() }}
               <button class="btn btn-outline-success" type="submit">Activate</button>
@@ -61,7 +58,7 @@
                   hx-swap="none"
                   data-json-api-htmx
                   data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}"
-                  data-json-api-reload-target="#encounter-set-type-list"
+                  data-json-api-reload-target="#encounter-set-types-workspace"
                   data-est-delete-form>
               {% from "_forms.html" import csrf_field %}
               {{ csrf_field() }}

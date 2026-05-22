@@ -255,6 +255,8 @@
     current.querySelector('[name="field_type"]').value = button.dataset.fieldType || 'text';
     current.querySelector('[name="selection_mode"]').value = button.dataset.selectionMode || 'single';
     current.querySelector('[name="description"]').value = button.dataset.description || '';
+    current.querySelector('[name="validation_regex"]').value = button.dataset.validationRegex || '';
+    current.querySelector('[name="validation_error_message"]').value = button.dataset.validationErrorMessage || '';
     try {
       clearOptions(current);
       const options = JSON.parse(button.dataset.options || '[]');

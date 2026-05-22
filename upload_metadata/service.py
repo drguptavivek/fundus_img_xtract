@@ -41,6 +41,8 @@ class FieldDefinitionInput:
     selection_mode: str | None = None
     options_json: list[dict[str, str]] | list[str] | None = None
     description: str | None = None
+    validation_regex: str | None = None
+    validation_error_message: str | None = None
     required_at_upload_default: bool = False
     required_for_verification_default: bool = False
     visible_to_grader_default: bool = False
@@ -84,6 +86,8 @@ def create_field_definition(manager_user_id: int, dto: FieldDefinitionInput) -> 
         selection_mode=_selection_mode(dto),
         options_json=_options(dto),
         description=dto.description,
+        validation_regex=(dto.validation_regex or "").strip() or None,
+        validation_error_message=(dto.validation_error_message or "").strip() or None,
         required_at_upload_default=dto.required_at_upload_default,
         required_for_verification_default=dto.required_for_verification_default,
         visible_to_grader_default=dto.visible_to_grader_default,
@@ -125,6 +129,8 @@ def update_field_definition(manager_user_id: int, field_id: int, dto: FieldDefin
         row.selection_mode = _selection_mode(dto)
         row.options_json = _options(dto)
         row.description = dto.description
+        row.validation_regex = (dto.validation_regex or "").strip() or None
+        row.validation_error_message = (dto.validation_error_message or "").strip() or None
         row.required_at_upload_default = dto.required_at_upload_default
         row.required_for_verification_default = dto.required_for_verification_default
         row.visible_to_grader_default = dto.visible_to_grader_default
@@ -196,6 +202,11 @@ def validate_field_definition_input(dto: FieldDefinitionInput) -> str | None:
             return str(exc)
     elif dto.selection_mode:
         return "Selection mode is only valid for select fields."
+    if dto.validation_regex:
+        try:
+            re.compile(dto.validation_regex)
+        except re.error as exc:
+            return f"Validation regex is invalid: {exc}."
     return None
 
 
@@ -210,6 +221,8 @@ def serialize_field_definition(row: UploadMetadataFieldDefinition) -> dict[str, 
         "selection_mode": row.selection_mode,
         "options": row.options_json,
         "description": row.description,
+        "validation_regex": row.validation_regex,
+        "validation_error_message": row.validation_error_message,
         "required_at_upload_default": row.required_at_upload_default,
         "required_for_verification_default": row.required_for_verification_default,
         "visible_to_grader_default": row.visible_to_grader_default,

@@ -55,6 +55,10 @@
         <div class="fw-semibold">{{ grading_scheme.feature_count }}</div>
       </div>
       <div class="col">
+        <div class="text-muted small">Priority Grades</div>
+        <div class="fw-semibold">{{ grading_scheme.prioritized_grade_count }}</div>
+      </div>
+      <div class="col">
         <div class="text-muted small">Tasks</div>
         <div class="fw-semibold">{{ grading_scheme.usage.get("tasks", 0) }}</div>
       </div>
@@ -127,6 +131,7 @@
           <th>Grade</th>
           <th class="text-end">Order</th>
           <th>Status</th>
+          <th>Priority</th>
           <th>Features</th>
           <th>Guidelines</th>
         </tr>
@@ -141,6 +146,13 @@
             <span class="badge text-bg-success">Active</span>
             {% else %}
             <span class="badge text-bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if grade.prioritize_for_task_selection %}
+            <span class="badge text-bg-warning">Prioritized</span>
+            {% else %}
+            <span class="text-muted small">No</span>
             {% endif %}
           </td>
           <td>
@@ -164,7 +176,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="text-center text-muted py-4">No grades configured for this scheme.</td>
+          <td colspan="6" class="text-center text-muted py-4">No grades configured for this scheme.</td>
         </tr>
         {% endfor %}
       </tbody>

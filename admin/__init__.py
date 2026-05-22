@@ -98,7 +98,7 @@ from .celery_schedule import (
     celery_schedule_delete,
 )
 from .upload_profiles import upload_profiles_admin, upload_project_create_workspace, upload_project_workspace, upload_projects_admin
-from .encounter_set_types import encounter_set_types_admin, encounter_set_types_list
+from .encounter_set_types import encounter_set_type_edit, encounter_set_type_new, encounter_set_types_admin, encounter_set_types_list
 from .upload_metadata import upload_metadata_fields_admin, upload_metadata_fields_list
 from .remidio import (
     cleanup_stuck_remidio_uploads,
@@ -124,6 +124,8 @@ admin_bp.add_url_rule("/users/<int:user_id>/mobile-sessions/<string:session_id>/
 admin_bp.add_url_rule("/upload-profiles", view_func=upload_profiles_admin, methods=["GET"])
 admin_bp.add_url_rule("/encounter-set-types", view_func=encounter_set_types_admin, methods=["GET"])
 admin_bp.add_url_rule("/encounter-set-types/list", view_func=encounter_set_types_list, methods=["GET"])
+admin_bp.add_url_rule("/encounter-set-types/new", view_func=encounter_set_type_new, methods=["GET"])
+admin_bp.add_url_rule("/encounter-set-types/<int:type_id>/edit", view_func=encounter_set_type_edit, methods=["GET"])
 admin_bp.add_url_rule("/upload-metadata-fields", view_func=upload_metadata_fields_admin, methods=["GET"])
 admin_bp.add_url_rule("/upload-metadata-fields/list", view_func=upload_metadata_fields_list, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects", view_func=upload_projects_admin, methods=["GET"])

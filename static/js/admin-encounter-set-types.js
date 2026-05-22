@@ -83,6 +83,17 @@
     }
   }
 
+  function nextDisplayOrder(scope) {
+    const target = fieldList(scope);
+    if (!target) {
+      return 1;
+    }
+    const orders = Array.from(target.querySelectorAll('[data-est-display-order]')).map(function (input) {
+      return Number(input.value || 0);
+    });
+    return orders.length ? Math.max.apply(null, orders) + 1 : 1;
+  }
+
   function clearOptions(container) {
     const list = container.querySelector('[data-est-options-list]');
     if (list) {
@@ -157,16 +168,28 @@
     const label = card.querySelector('[data-est-label]')?.value.trim() || 'Untitled field';
     const key = card.querySelector('[data-est-key]')?.value.trim() || 'missing_key';
     const type = card.querySelector('[data-est-type]')?.value || 'text';
+    const displayOrder = card.querySelector('[data-est-display-order]')?.value.trim() || '0';
     const sctid = card.querySelector('[data-est-sctid]')?.value.trim();
+    const description = card.querySelector('[data-est-description]')?.value.trim();
     const requiredUpload = boolValue(card.querySelector('[data-est-required-upload]'));
     const requiredVerification = boolValue(card.querySelector('[data-est-required-verification]'));
+    const visibleGrader = boolValue(card.querySelector('[data-est-visible-grader]'));
+    const isPii = boolValue(card.querySelector('[data-est-pii]'));
+    const options = Array.from(card.querySelectorAll('[data-est-option-value]')).map(function (input) {
+      return input.value.trim();
+    }).filter(Boolean);
     return {
       label: label,
       key: key,
       type: type,
+      displayOrder: displayOrder,
       sctid: sctid,
+      description: description,
+      options: options,
       requiredUpload: requiredUpload,
-      requiredVerification: requiredVerification
+      requiredVerification: requiredVerification,
+      visibleGrader: visibleGrader,
+      isPii: isPii
     };
   }
 
@@ -174,12 +197,20 @@
     const summary = fieldSummary(card);
     const title = card.querySelector('[data-est-field-summary-title]');
     const meta = card.querySelector('[data-est-field-summary-meta]');
+    const description = card.querySelector('[data-est-field-summary-description]');
+    const options = card.querySelector('[data-est-field-summary-options]');
     const flags = card.querySelector('[data-est-field-summary-flags]');
     if (title) {
       title.textContent = summary.label;
     }
     if (meta) {
-      meta.textContent = summary.key + ' · ' + summary.type + (summary.sctid ? ' · SNOMED CT ' + summary.sctid : '');
+      meta.textContent = 'Order ' + summary.displayOrder + ' · ' + summary.key + ' · ' + summary.type + (summary.sctid ? ' · SNOMED CT ' + summary.sctid : '');
+    }
+    if (description) {
+      description.textContent = summary.description || 'No description configured.';
+    }
+    if (options) {
+      options.textContent = summary.options.length ? 'Options: ' + summary.options.join(', ') : 'Options: none';
     }
     if (flags) {
       flags.innerHTML = '';
@@ -189,7 +220,27 @@
       if (summary.requiredVerification) {
         flags.appendChild(summaryBadge('Editable during verification', 'text-bg-info'));
       }
+      if (summary.visibleGrader) {
+        flags.appendChild(summaryBadge('Grader visible', 'text-bg-secondary'));
+      }
+      if (summary.isPii) {
+        flags.appendChild(summaryBadge('PII', 'text-bg-warning'));
+      }
     }
+  }
+
+  function setCardExpanded(card, expanded) {
+    const details = card && card.querySelector('[data-est-field-details]');
+    const toggle = card && card.querySelector('[data-est-toggle-field]');
+    if (!details) {
+      return;
+    }
+    card.dataset.estExpanded = expanded ? '1' : '0';
+    details.classList.toggle('d-none', !expanded);
+    if (toggle) {
+      toggle.textContent = expanded ? 'Close' : 'Edit';
+    }
+    updateFieldSummary(card);
   }
 
   function summaryBadge(text, className) {
@@ -323,8 +374,12 @@
       sctid: field.sctid || null,
       scope: field.scope,
       type: field.type || field.field_type || 'text',
+      display_order: field.display_order || nextDisplayOrder(field.scope),
       selection_mode: field.selection_mode || 'single',
       options: field.options || field.options_json || [],
+      description: field.description || '',
+      validation_regex: field.validation_regex || '',
+      validation_error_message: field.validation_error_message || '',
       required_at_upload: Boolean(field.required_at_upload_default),
       required_for_verification: Boolean(field.required_for_verification_default),
       visible_to_grader: Boolean(field.visible_to_grader_default),
@@ -339,7 +394,11 @@
     card.querySelector('[data-est-label]').value = data.label || '';
     card.querySelector('[data-est-sctid]').value = data.sctid || '';
     card.querySelector('[data-est-type]').value = data.type || 'text';
+    card.querySelector('[data-est-display-order]').value = data.display_order || nextDisplayOrder(data.scope || card.dataset.estField);
     card.querySelector('[data-est-selection-mode]').value = data.selection_mode || 'single';
+    card.querySelector('[data-est-description]').value = data.description || '';
+    card.querySelector('[data-est-validation-regex]').value = data.validation_regex || '';
+    card.querySelector('[data-est-validation-error-message]').value = data.validation_error_message || '';
     card.querySelector('[data-est-required-upload]').checked = Boolean(data.required_at_upload);
     card.querySelector('[data-est-required-verification]').checked = Boolean(data.required_for_verification);
     card.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
@@ -367,7 +426,7 @@
   function createFieldCard(scope, field, expanded) {
     const data = field || {};
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card bg-white border border-2 border-light-subtle shadow-sm';
     card.dataset.estField = scope;
     card.dataset.estFieldDefinitionId = data.field_definition_id || '';
     card.dataset.estExpanded = expanded ? '1' : '0';
@@ -378,6 +437,8 @@
       '<div>',
       '<div class="fw-semibold" data-est-field-summary-title>Untitled field</div>',
       '<div class="small text-muted" data-est-field-summary-meta></div>',
+      '<div class="small text-muted" data-est-field-summary-description></div>',
+      '<div class="small text-muted" data-est-field-summary-options></div>',
       '</div>',
       '<div class="d-flex flex-wrap align-items-center gap-2">',
       '<span class="d-flex flex-wrap gap-1" data-est-field-summary-flags></span>',
@@ -404,6 +465,11 @@
     labelCol.className = 'col-md-3';
     labelCol.innerHTML = '<label class="form-label small mb-1">Label <span class="text-danger">*</span></label><input class="form-control form-control-sm" maxlength="150" data-est-label required>';
     labelCol.querySelector('input').value = data.label || '';
+
+    const orderCol = document.createElement('div');
+    orderCol.className = 'col-md-1';
+    orderCol.innerHTML = '<label class="form-label small mb-1">Order</label><input class="form-control form-control-sm" type="number" min="0" data-est-display-order>';
+    orderCol.querySelector('input').value = data.display_order || nextDisplayOrder(scope);
 
     const typeCol = document.createElement('div');
     typeCol.className = 'col-md-2';
@@ -439,9 +505,33 @@
 
     row.appendChild(keyCol);
     row.appendChild(labelCol);
+    row.appendChild(orderCol);
     row.appendChild(typeCol);
     row.appendChild(selectionCol);
     row.appendChild(sctidCol);
+
+    const descriptionBlock = document.createElement('div');
+    descriptionBlock.className = 'mt-2';
+    descriptionBlock.innerHTML = [
+      '<label class="form-label small mb-1">Description</label>',
+      '<textarea class="form-control form-control-sm" rows="2" data-est-description></textarea>'
+    ].join('');
+    descriptionBlock.querySelector('[data-est-description]').value = data.description || '';
+
+    const validationRow = document.createElement('div');
+    validationRow.className = 'row g-3 mt-1';
+    validationRow.innerHTML = [
+      '<div class="col-md-6">',
+      '<label class="form-label small mb-1">Validation Regex</label>',
+      '<input class="form-control form-control-sm" data-est-validation-regex>',
+      '</div>',
+      '<div class="col-md-6">',
+      '<label class="form-label small mb-1">Validation Error Message</label>',
+      '<input class="form-control form-control-sm" maxlength="255" data-est-validation-error-message>',
+      '</div>'
+    ].join('');
+    validationRow.querySelector('[data-est-validation-regex]').value = data.validation_regex || '';
+    validationRow.querySelector('[data-est-validation-error-message]').value = data.validation_error_message || '';
 
     const options = document.createElement('div');
     options.className = 'mt-2';
@@ -462,6 +552,7 @@
     const flags = document.createElement('div');
     flags.className = 'd-flex flex-wrap gap-3 mt-3 small';
     flags.innerHTML = [
+      '<div class="w-100 text-muted">These settings are saved for this EncounterSetType and may differ from the metadata master defaults.</div>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-upload> Required at upload</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-verification> Editable during verification</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-visible-grader> Visible to grader</label>',
@@ -472,13 +563,23 @@
     flags.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
     flags.querySelector('[data-est-pii]').checked = Boolean(data.is_pii);
 
+    const cardActions = document.createElement('div');
+    cardActions.className = 'd-flex justify-content-end gap-2 mt-3';
+    cardActions.innerHTML = [
+      '<button class="btn btn-sm btn-outline-secondary" type="button" data-est-collapse-field>Close</button>',
+      '<button class="btn btn-sm btn-primary" type="button" data-est-save-field>Save Field</button>'
+    ].join('');
+
     const body = document.createElement('div');
     body.className = 'card-body';
     body.dataset.estFieldDetails = '';
     body.classList.toggle('d-none', !expanded);
     body.appendChild(row);
+    body.appendChild(descriptionBlock);
+    body.appendChild(validationRow);
     body.appendChild(options);
     body.appendChild(flags);
+    body.appendChild(cardActions);
 
     card.appendChild(header);
     card.appendChild(body);
@@ -491,6 +592,7 @@
     }
     typeSelect.addEventListener('change', syncTypeState);
     syncTypeState();
+    setCardExpanded(card, Boolean(expanded));
     validateFieldKeys();
     return card;
   }
@@ -503,32 +605,66 @@
     }
   }
 
+  function addDefaultMasterFields() {
+    const defaultKeys = [
+      'patient_name',
+      'patient_age_yrs',
+      'sex',
+      'hospital_UHID',
+      'project_unique_id_patient',
+      'date_of_visit',
+      'patient_diagnosis',
+      'normal_abnormal_status',
+      'encounter_remarks'
+    ];
+    const byKey = new Map();
+    masterFields().forEach(function (field) {
+      byKey.set(field.key, field);
+    });
+    defaultKeys.forEach(function (key) {
+      const field = byKey.get(key);
+      if (field) {
+        addField(field.scope, fieldPayloadFromMaster(field), false);
+      }
+    });
+  }
+
   function resetForm() {
     const current = form();
     if (!current) {
       return;
     }
     current.reset();
-    current.action = current.dataset.createAction;
-    current.setAttribute('hx-post', current.dataset.createAction);
     current.querySelectorAll('[data-est-field-list]').forEach(function (list) {
       list.innerHTML = '';
     });
-    const schemaInput = current.querySelector('[data-est-schema-input]');
-    if (schemaInput) {
-      schemaInput.value = '{"fields": []}';
+    initializeForm(current);
+    if (window.htmx) {
+      window.htmx.process(current);
     }
-    document.querySelector('[data-est-form-title]').textContent = 'Create EncounterSetType';
-    document.querySelector('[data-est-submit]').textContent = 'Create Type';
-    addField('patient', {
-      key: 'project_participant_id',
-      label: 'Project Unique ID',
-      type: 'text',
-      required_at_upload: true,
-      required_for_verification: true,
-      visible_to_grader: false,
-      is_pii: false
-    }, true);
+  }
+
+  function initializeForm(current) {
+    if (!current) {
+      return;
+    }
+    current.querySelectorAll('[data-est-field-list]').forEach(function (list) {
+      list.innerHTML = '';
+    });
+    let schema = { fields: [] };
+    try {
+      schema = JSON.parse(current.dataset.estInitialSchema || '{"fields": []}');
+    } catch (error) {
+      schema = { fields: [] };
+    }
+    if (schema.fields && schema.fields.length) {
+      schema.fields.forEach(function (field) {
+        addField(FIELD_SCOPES.includes(field.scope) ? field.scope : 'encounter', field, false);
+      });
+    } else if (current.dataset.estEditing !== '1') {
+      addDefaultMasterFields();
+    }
+    serializeSchema();
     if (window.htmx) {
       window.htmx.process(current);
     }
@@ -549,6 +685,10 @@
       sctid: card.querySelector('[data-est-sctid]').value.trim() || null,
       scope: card.dataset.estField,
       type: type,
+      display_order: Number(card.querySelector('[data-est-display-order]').value || 0),
+      description: card.querySelector('[data-est-description]').value.trim() || null,
+      validation_regex: card.querySelector('[data-est-validation-regex]').value.trim() || null,
+      validation_error_message: card.querySelector('[data-est-validation-error-message]').value.trim() || null,
       required_at_upload: boolValue(card.querySelector('[data-est-required-upload]')),
       required_for_verification: boolValue(card.querySelector('[data-est-required-verification]')),
       visible_to_grader: boolValue(card.querySelector('[data-est-visible-grader]')),
@@ -573,37 +713,8 @@
     current.querySelector('[data-est-schema-input]').value = JSON.stringify({ fields: fields });
   }
 
-  function openEditor(button) {
-    const current = form();
-    if (!current) {
-      return;
-    }
-    resetForm();
-    current.action = button.dataset.action;
-    current.setAttribute('hx-post', button.dataset.action);
-    current.querySelector('[name="target_scheme_id"]').value = button.dataset.targetSchemeId || '';
-    current.querySelector('[name="name"]').value = button.dataset.name || '';
-    current.querySelector('[name="code"]').value = button.dataset.code || '';
-    current.querySelector('[name="description"]').value = button.dataset.description || '';
-    current.querySelectorAll('[data-est-field-list]').forEach(function (list) {
-      list.innerHTML = '';
-    });
-    let schema = { fields: [] };
-    try {
-      schema = JSON.parse(button.dataset.schema || '{"fields": []}');
-    } catch (error) {
-      schema = { fields: [] };
-    }
-    (schema.fields || []).forEach(function (field) {
-      addField(FIELD_SCOPES.includes(field.scope) ? field.scope : 'encounter', field, false);
-    });
-    document.querySelector('[data-est-form-title]').textContent = 'Edit EncounterSetType';
-    document.querySelector('[data-est-submit]').textContent = 'Save Changes';
-    showEditor();
-  }
-
   document.addEventListener('DOMContentLoaded', function () {
-    resetForm();
+    initializeForm(form());
   });
 
   document.addEventListener('click', function (event) {
@@ -619,7 +730,7 @@
       const option = select && select.selectedOptions ? select.selectedOptions[0] : null;
       if (option && option.dataset.field) {
         try {
-          addField(scope, fieldPayloadFromMaster(JSON.parse(option.dataset.field)), true);
+          addField(scope, fieldPayloadFromMaster(JSON.parse(option.dataset.field)), false);
           select.value = '';
         } catch (error) {
           window.alert('Selected field master could not be added.');
@@ -634,10 +745,24 @@
     }
     if (event.target.closest('[data-est-toggle-field]')) {
       const card = event.target.closest('[data-est-field]');
-      const details = card && card.querySelector('[data-est-field-details]');
-      if (details) {
-        details.classList.toggle('d-none');
-        event.target.textContent = details.classList.contains('d-none') ? 'Edit' : 'Done';
+      if (card) {
+        setCardExpanded(card, card.dataset.estExpanded !== '1');
+      }
+      return;
+    }
+    if (event.target.closest('[data-est-collapse-field]')) {
+      const card = event.target.closest('[data-est-field]');
+      if (card) {
+        setCardExpanded(card, false);
+      }
+      return;
+    }
+    if (event.target.closest('[data-est-save-field]')) {
+      const card = event.target.closest('[data-est-field]');
+      if (card && validateFieldKeys()) {
+        updateFieldSummary(card);
+        serializeSchema();
+        setCardExpanded(card, false);
       }
       return;
     }
@@ -661,8 +786,6 @@
       return;
     }
     if (event.target.closest('[data-est-new]')) {
-      resetForm();
-      showEditor();
       return;
     }
     if (event.target.closest('[data-est-reset]')) {
@@ -670,8 +793,6 @@
       return;
     }
     if (event.target.closest('[data-est-cancel]')) {
-      resetForm();
-      showDashboard();
       return;
     }
     const deleteForm = event.target.closest('[data-est-delete-form]');
@@ -679,9 +800,11 @@
       event.preventDefault();
       return;
     }
-    const editButton = event.target.closest('[data-est-edit]');
-    if (editButton) {
-      openEditor(editButton);
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function (event) {
+    if (event.detail.target && event.detail.target.matches && event.detail.target.matches('#encounter-set-types-workspace')) {
+      initializeForm(form());
     }
   });
 

@@ -17,6 +17,7 @@
           <div class="fw-semibold">{{ row.label }}</div>
           <div class="small text-muted">{{ row.key }}</div>
           {% if row.sctid %}<div class="small text-muted">SNOMED CT: {{ row.sctid }}</div>{% endif %}
+          {% if row.validation_regex %}<div class="small text-muted">Regex validation configured</div>{% endif %}
         </td>
         <td>{{ row.scope|title }}</td>
         <td>
@@ -53,6 +54,8 @@
                     data-selection-mode="{{ row.selection_mode or '' }}"
                     data-options="{{ row.options|tojson|forceescape }}"
                     data-description="{{ row.description or '' }}"
+                    data-validation-regex="{{ row.validation_regex or '' }}"
+                    data-validation-error-message="{{ row.validation_error_message or '' }}"
                     data-required-upload="{{ '1' if row.required_at_upload_default else '0' }}"
                     data-required-verification="{{ '1' if row.required_for_verification_default else '0' }}"
                     data-visible-grader="{{ '1' if row.visible_to_grader_default else '0' }}"

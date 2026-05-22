@@ -162,6 +162,16 @@
             <label class="form-label" for="umf_description">Description</label>
             <textarea class="form-control" id="umf_description" name="description" rows="2"></textarea>
           </div>
+          <div class="col-md-6">
+            <label class="form-label" for="umf_validation_regex">Validation Regex</label>
+            <input class="form-control" id="umf_validation_regex" name="validation_regex">
+            <div class="form-text">Optional regular expression used to validate entered values.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="umf_validation_error_message">Validation Error Message</label>
+            <input class="form-control" id="umf_validation_error_message" name="validation_error_message" maxlength="255">
+            <div class="form-text">Shown when the value does not match the regex.</div>
+          </div>
           <div class="col-12">
             <div class="d-flex flex-wrap gap-3 border rounded p-3">
               <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="required_at_upload_default" data-umf-required-upload> Required at upload</label>

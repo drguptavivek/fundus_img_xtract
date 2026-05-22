@@ -281,6 +281,9 @@ def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: 
         field_type=field["type"],
         selection_mode=field.get("selection_mode"),
         options_json=field.get("options"),
+        description=field.get("description"),
+        validation_regex=field.get("validation_regex"),
+        validation_error_message=field.get("validation_error_message"),
         required_at_upload_default=field["required_at_upload"],
         required_for_verification_default=field["required_for_verification"],
         visible_to_grader_default=field["visible_to_grader"],
@@ -344,6 +347,17 @@ def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
         if field_type != "select":
             raise ValueError(f"metadata_schema_json.fields[{idx}] options are only valid for select fields.")
         options = _normalize_options(options, idx)
+    validation_regex = (str(field.get("validation_regex")).strip() if field.get("validation_regex") is not None else None) or None
+    validation_error_message = (
+        str(field.get("validation_error_message")).strip()
+        if field.get("validation_error_message") is not None
+        else None
+    ) or None
+    if validation_regex:
+        try:
+            re.compile(validation_regex)
+        except re.error as exc:
+            raise ValueError(f"metadata_schema_json.fields[{idx}] validation_regex is invalid: {exc}.") from exc
 
     return {
         "field_definition_id": _optional_positive_int(field.get("field_definition_id"), idx),
@@ -352,8 +366,12 @@ def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
         "sctid": (str(field.get("sctid")).strip() if field.get("sctid") is not None else None) or None,
         "scope": scope,
         "type": field_type,
+        "display_order": _non_negative_int(field.get("display_order"), idx),
         "selection_mode": selection_mode,
         "options": options,
+        "description": (str(field.get("description")).strip() if field.get("description") is not None else None) or None,
+        "validation_regex": validation_regex,
+        "validation_error_message": validation_error_message,
         "required_at_upload": _bool_field(field, "required_at_upload", idx),
         "required_for_verification": _bool_field(field, "required_for_verification", idx),
         "visible_to_grader": _bool_field(field, "visible_to_grader", idx),
@@ -400,6 +418,18 @@ def _optional_positive_int(value: Any, idx: int) -> int | None:
         raise ValueError(f"metadata_schema_json.fields[{idx}] field_definition_id must be an integer.") from exc
     if parsed <= 0:
         raise ValueError(f"metadata_schema_json.fields[{idx}] field_definition_id must be positive.")
+    return parsed
+
+
+def _non_negative_int(value: Any, idx: int) -> int:
+    if value in (None, ""):
+        return idx
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"metadata_schema_json.fields[{idx}] display_order must be an integer.") from exc
+    if parsed < 0:
+        raise ValueError(f"metadata_schema_json.fields[{idx}] display_order cannot be negative.")
     return parsed
 
 

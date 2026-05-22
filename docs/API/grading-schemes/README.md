@@ -27,6 +27,7 @@ Response:
       "grading_scope": "image",
       "grade_count": 5,
       "active_grade_count": 5,
+      "prioritized_grade_count": 1,
       "feature_count": 18,
       "is_core": true,
       "can_delete": false,
@@ -85,6 +86,8 @@ Validation:
 
 Returns one scheme with grade and feature details.
 
+Each grade includes `prioritize_for_task_selection`, which is a configuration flag only at this stage. It does not change current task query ordering.
+
 ### `PATCH|POST /api/grading-schemes/{scheme_id}`
 
 Updates scheme name and scope.
@@ -120,6 +123,7 @@ Request:
   "impression": "Mild NPDR",
   "display_order": 2,
   "is_active": true,
+  "prioritize_for_task_selection": false,
   "guidelines": "Optional grader-facing guidance",
   "features": [
     {"sr_no": 1, "label": "Microaneurysms"}
@@ -128,6 +132,8 @@ Request:
 ```
 
 Form submissions may send repeated `feature_sr_no` and `feature_label` fields.
+
+`prioritize_for_task_selection` is stored per grade within a grading scheme. It only declares that images already carrying that grade may be preferred by a future task-selection policy; current random task queries are unchanged.
 
 ### `PATCH|POST /api/grading-schemes/{scheme_id}/grades/{grade_id}`
 

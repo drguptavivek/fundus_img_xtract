@@ -20,6 +20,8 @@ Upload metadata field definitions are standalone master records. They are not ma
 - `field_type`: `text`, `textarea`, `integer`, `decimal`, `date`, `datetime`, `boolean`, `select`, `phone`, or `email`
 - `selection_mode`: `single` or `multiple`, only for select fields
 - `options_json`: select options, one per line for forms or JSON array for API clients
+- `validation_regex`: optional regular expression for validating field values
+- `validation_error_message`: optional user-facing message when regex validation fails
 - `required_at_upload_default`
 - `required_for_verification_default`: editable during verification before finalization
 - `visible_to_grader_default`
@@ -27,3 +29,5 @@ Upload metadata field definitions are standalone master records. They are not ma
 - `active`
 
 EncounterSetType fields may carry `field_definition_id` as provenance, but the type stores a schema snapshot so changes to the master do not silently alter configured upload contracts.
+
+The default flags on a metadata master are starting values only. EncounterSetType configuration can override required-at-upload, editable-during-verification, grader visibility, and PII per field.

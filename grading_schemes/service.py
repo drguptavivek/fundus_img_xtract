@@ -70,6 +70,7 @@ class GradeInput:
     impression: str
     display_order: int
     is_active: bool
+    prioritize_for_task_selection: bool
     guidelines: str | None
     features: list[GradeFeatureInput]
 
@@ -247,6 +248,7 @@ def create_grade(scheme_id: int, grade_input: GradeInput) -> MutationResult:
                 impression=grade_input.impression,
                 display_order=grade_input.display_order,
                 is_active=grade_input.is_active,
+                prioritize_for_task_selection=grade_input.prioritize_for_task_selection,
                 guidelines=_sanitize_guidelines_html(grade_input.guidelines),
             )
             db.add(grade)
@@ -280,6 +282,7 @@ def update_grade(scheme_id: int, grade_id: int, grade_input: GradeInput) -> Muta
             grade.impression = grade_input.impression
             grade.display_order = grade_input.display_order
             grade.is_active = grade_input.is_active
+            grade.prioritize_for_task_selection = grade_input.prioritize_for_task_selection
             grade.guidelines = _sanitize_guidelines_html(grade_input.guidelines)
             db.query(GradingsFeatures).filter(GradingsFeatures.disease_grading_id == grade.id).delete(synchronize_session=False)
             _replace_features(db, grade.id, grade_input.features)
@@ -466,6 +469,7 @@ def _scheme_summary(
 ) -> dict[str, Any]:
     grades = list(scheme.disease_gradings or [])
     active_grades = [grade for grade in grades if grade.is_active]
+    prioritized_grades = [grade for grade in grades if grade.prioritize_for_task_selection]
     feature_count = sum(len(grade.features or []) for grade in grades)
     linkage = (linkages or {}).get(scheme.id, _empty_linkage())
     associated_upload_profiles = (upload_profile_maps or {}).get(scheme.id, [])
@@ -475,6 +479,7 @@ def _scheme_summary(
         "grading_scope": scheme.grading_scope,
         "grade_count": len(grades),
         "active_grade_count": len(active_grades),
+        "prioritized_grade_count": len(prioritized_grades),
         "feature_count": feature_count,
         "is_core": scheme.id in CORE_SCHEME_IDS,
         "linkage": linkage,
@@ -505,6 +510,7 @@ def _scheme_detail(
             "impression": grade.impression,
             "display_order": grade.display_order,
             "is_active": grade.is_active,
+            "prioritize_for_task_selection": bool(grade.prioritize_for_task_selection),
             "guidelines": _sanitize_guidelines_html(grade.guidelines),
             "features": [
                 {

@@ -1,0 +1,98 @@
+{% from "_forms.html" import csrf_field %}
+{% from "admin/partials/encounter_set_type_macros.html" import metadata_scope_card %}
+{% if workspace == "new" or workspace == "edit" %}
+  <section class="card shadow-sm" id="encounter-set-type-editor" data-est-editor>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span data-est-form-title>{{ "Edit EncounterSetType" if workspace == "edit" else "Create EncounterSetType" }}</span>
+      <button class="btn btn-sm btn-outline-secondary"
+              type="button"
+              hx-get="{{ url_for('admin.encounter_set_types_list') }}"
+              hx-target="#encounter-set-types-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
+              data-est-cancel>
+        Back to list
+      </button>
+    </div>
+    <div class="card-body">
+      {% set editing = workspace == "edit" %}
+      {% set edit_row = edit_encounter_set_type if editing else {} %}
+      <form method="post"
+            action="{{ url_for('fundus_api.update_encounter_set_type', type_id=edit_row.id) if editing else url_for('fundus_api.create_encounter_set_type') }}"
+            hx-post="{{ url_for('fundus_api.update_encounter_set_type', type_id=edit_row.id) if editing else url_for('fundus_api.create_encounter_set_type') }}"
+            hx-swap="none"
+            data-create-action="{{ url_for('fundus_api.create_encounter_set_type') }}"
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.encounter_set_types_list') }}"
+            data-json-api-reload-target="#encounter-set-types-workspace"
+            data-json-api-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
+            data-est-key-check-url="{{ url_for('fundus_api.check_upload_metadata_field_key') }}"
+            data-est-initial-schema="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}"
+            data-est-editing="{{ '1' if editing else '0' }}"
+            data-est-form>
+        {{ csrf_field() }}
+        <input type="hidden" name="metadata_schema_json" data-est-schema-input value="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label" for="est_target_scheme_id">Target Grading scheme <span class="text-danger">*</span></label>
+            <select class="form-select" id="est_target_scheme_id" name="target_scheme_id" required>
+              <option value="">Select scheme</option>
+              {% for disease in diseases %}
+              <option value="{{ disease.id }}" {% if editing and edit_row.target_scheme_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="est_name">Name <span class="text-danger">*</span></label>
+            <input class="form-control" id="est_name" name="name" maxlength="150" value="{{ edit_row.name if editing else '' }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="est_code">Unique code <span class="text-danger">*</span></label>
+            <input class="form-control" id="est_code" name="code" maxlength="64" value="{{ edit_row.code if editing else '' }}" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="est_description">Description</label>
+            <textarea class="form-control" id="est_description" name="description" rows="2">{{ edit_row.description if editing and edit_row.description else '' }}</textarea>
+          </div>
+        </div>
+
+        <hr>
+
+        {{ metadata_scope_card("patient", "Patient", "Participant-level metadata that can persist across visits, such as UHID/MRN, sex, age, phone, or email.", field_definitions) }}
+        {{ metadata_scope_card("encounter", "Encounter", "One visit/capture session for one patient, such as capture date, diagnosis known at upload, clinic ID, or remarks.", field_definitions) }}
+        {{ metadata_scope_card("image", "Image", "Per-image metadata such as eye, view, gaze, modality, distance/close-up, montage, disk-centered, or macula-centered.", field_definitions) }}
+        {{ metadata_scope_card("document", "Document", "Supporting documents and document-images, usually PII, such as referrals, reports, PDFs, labels, or consent images.", field_definitions) }}
+        {{ metadata_scope_card("upload", "Upload", "Metadata about the upload event or batch itself, such as source system, operator notes, import batch, or acquisition method.", field_definitions) }}
+
+        <div class="d-flex justify-content-end gap-2 mt-4">
+          <button class="btn btn-outline-secondary"
+                  type="button"
+                  hx-get="{{ url_for('admin.encounter_set_types_list') }}"
+                  hx-target="#encounter-set-types-workspace"
+                  hx-swap="innerHTML"
+                  hx-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
+                  data-est-cancel>
+            Cancel
+          </button>
+          <button class="btn btn-primary" type="submit" data-est-submit>{{ "Save Changes" if editing else "Create Type" }}</button>
+        </div>
+      </form>
+    </div>
+  </section>
+{% else %}
+  <section class="card shadow-sm" data-est-dashboard>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>All EncounterSetTypes</span>
+      <button class="btn btn-sm btn-primary"
+              type="button"
+              hx-get="{{ url_for('admin.encounter_set_type_new') }}"
+              hx-target="#encounter-set-types-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.encounter_set_type_new') }}"
+              data-est-new>
+        Add Type
+      </button>
+    </div>
+    {% include "admin/partials/encounter_set_type_list.html" %}
+  </section>
+{% endif %}

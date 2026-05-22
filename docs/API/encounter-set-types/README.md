@@ -59,8 +59,11 @@ Supported field properties:
 - `sctid`: optional SNOMED CT ID snapshot
 - `scope`: `patient`, `encounter`, `image`, `document`, or `upload`
 - `type`: `text`, `textarea`, `integer`, `decimal`, `date`, `datetime`, `boolean`, `select`, `phone`, or `email`
+- `display_order`: per-EncounterSetType ordering number used by upload and verification UIs
 - `selection_mode`: for select fields only, `single` or `multiple`
 - `options`: select choices as strings or `{ "value": "...", "label": "..." }` objects
+- `validation_regex`: optional regular expression snapshot used to validate field values
+- `validation_error_message`: optional user-facing message when regex validation fails
 - `required_at_upload`: upload-time requiredness
 - `required_for_verification`: editable during verification before grading task creation
 - `visible_to_grader`: whether grader UIs may display the field
@@ -69,6 +72,8 @@ Supported field properties:
 Fields not required at upload may be completed during verification.
 
 The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API. Every field must resolve to a master metadata field, whether it was added from `/admin/upload-metadata-fields` or from the EncounterSetType editor.
+
+Metadata masters provide defaults only. After a field is added to an EncounterSetType, `required_at_upload`, `required_for_verification`, `visible_to_grader`, and `is_pii` are stored in the EncounterSetType schema snapshot and may differ from the master defaults.
 
 ## EncounterSet Grading Scheme
 

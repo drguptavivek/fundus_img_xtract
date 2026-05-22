@@ -21,6 +21,7 @@
           <th>Scope</th>
           <th>Linked Schemes</th>
           <th class="text-end">Grades</th>
+          <th class="text-end">Priority Grades</th>
           <th class="text-end">Features</th>
           <th class="text-end">Tasks</th>
           <th class="text-end">Upload Profiles</th>
@@ -69,6 +70,7 @@
             <span class="fw-semibold">{{ row.grade_count }}</span>
             <span class="small text-muted">({{ row.active_grade_count }} active)</span>
           </td>
+          <td class="text-end">{{ row.prioritized_grade_count }}</td>
           <td class="text-end">{{ row.feature_count }}</td>
           <td class="text-end">{{ row.usage.get("tasks", 0) }}</td>
           <td class="text-end">{{ row.usage.get("upload_profiles", 0) }}</td>

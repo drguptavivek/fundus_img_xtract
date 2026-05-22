@@ -155,3 +155,30 @@ Date: 2026-05-21
 - Implementation adds `/admin/grading-schemes` with a dashboard/detail/create/edit flow for scheme metadata.
 - Grade and feature add/edit now use full-width HTMX screens backed by `/api/grading-schemes/{scheme_id}/grades...`.
 - The legacy `/admin/disease-gradings` modal workflow remains available as a compatibility editor.
+
+## 2026-05-22 - Metadata Masters and EncounterSetType Configuration
+
+- Created local bead `fundus_img_xtract-rm6` and GitHub issue `#161`.
+- Added grade-level `prioritize_for_task_selection` capture on `DiseaseGrading`; no task-selection query changes are included yet.
+- Added regex validation metadata to upload metadata field masters:
+  - `validation_regex`
+  - `validation_error_message`
+- Seeded a clean core set of upload metadata field masters across patient, encounter, image, document, and upload scopes.
+- EncounterSetType metadata field settings are editable per type and are not inherited permanently from the master:
+  - required at upload
+  - editable during verification
+  - visible to grader
+  - PII
+  - display order
+- EncounterSetType creation now defaults in common patient/encounter fields while still allowing additional master fields.
+- EncounterSetType admin is URL-aware for HTMX navigation:
+  - `/admin/encounter-set-types`
+  - `/admin/encounter-set-types/new`
+  - `/admin/encounter-set-types/<id>/edit`
+- Standalone HTMX partials must import both CSRF and any macros they use. The EncounterSetType scope-card macro now lives in `templates/admin/partials/encounter_set_type_macros.html` so direct partial renders do not fail.
+- Verification performed:
+  - Python compile for touched modules and migrations.
+  - JavaScript syntax checks for EncounterSetType and upload metadata admin scripts.
+  - Alembic heads check.
+  - `git diff --check`.
+- Pytest was intentionally not run in this environment because it is connected to production DB unless explicitly switched to a test DB.

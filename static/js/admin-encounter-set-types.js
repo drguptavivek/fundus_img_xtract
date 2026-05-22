@@ -168,6 +168,7 @@
     const label = card.querySelector('[data-est-label]')?.value.trim() || 'Untitled field';
     const key = card.querySelector('[data-est-key]')?.value.trim() || 'missing_key';
     const type = card.querySelector('[data-est-type]')?.value || 'text';
+    const selectionMode = card.querySelector('[data-est-selection-mode]')?.value || 'single';
     const displayOrder = card.querySelector('[data-est-display-order]')?.value.trim() || '0';
     const sctid = card.querySelector('[data-est-sctid]')?.value.trim();
     const description = card.querySelector('[data-est-description]')?.value.trim();
@@ -182,6 +183,7 @@
       label: label,
       key: key,
       type: type,
+      selectionMode: selectionMode,
       displayOrder: displayOrder,
       sctid: sctid,
       description: description,
@@ -198,19 +200,26 @@
     const title = card.querySelector('[data-est-field-summary-title]');
     const meta = card.querySelector('[data-est-field-summary-meta]');
     const description = card.querySelector('[data-est-field-summary-description]');
-    const options = card.querySelector('[data-est-field-summary-options]');
     const flags = card.querySelector('[data-est-field-summary-flags]');
     if (title) {
-      title.textContent = summary.label;
+      title.textContent = summary.displayOrder + '. ' + summary.label;
     }
     if (meta) {
-      meta.textContent = 'Order ' + summary.displayOrder + ' · ' + summary.key + ' · ' + summary.type + (summary.sctid ? ' · SNOMED CT ' + summary.sctid : '');
+      let metaText = summary.type;
+      if (summary.type === 'select') {
+        metaText += ' - ' + summary.selectionMode;
+        if (summary.options.length) {
+          metaText += ' (' + summary.options.join(', ') + ')';
+        }
+      }
+      if (summary.sctid) {
+        metaText += ' · SNOMED CT ' + summary.sctid;
+      }
+      meta.textContent = metaText;
     }
     if (description) {
-      description.textContent = summary.description || 'No description configured.';
-    }
-    if (options) {
-      options.textContent = summary.options.length ? 'Options: ' + summary.options.join(', ') : 'Options: none';
+      description.textContent = summary.description || '';
+      description.classList.toggle('d-none', !summary.description);
     }
     if (flags) {
       flags.innerHTML = '';

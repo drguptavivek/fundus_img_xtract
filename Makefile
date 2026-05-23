@@ -144,7 +144,7 @@ logs-builders-tail: ## Follow last 200 venv builder log lines.
 
 .PHONY: backup
 backup: ## Run the host-based database backup script.
-	python3 ./scripts/backup_db.py
+	uv run scripts/backup_db.py
 
 .PHONY: alembic-head alembic-heads
 alembic-head: alembic-heads ## Alias for alembic-heads.

@@ -24,7 +24,7 @@ uv run scripts/list_backups.py
 - Example commands for backup/restore
 
 ### backup_db.py
-Creates a timestamped tar-gzipped SQL dump of the entire database.
+Creates timestamped tar-gzipped archives for the database and app code.
 
 **Usage:**
 ```bash
@@ -32,21 +32,20 @@ uv run scripts/backup_db.py
 ```
 
 **What it does:**
-1. Analyzes database and shows table record counts
-2. Creates a complete SQL dump of the database
-3. Compresses it with gzip
-4. Creates a tar archive with timestamp
-5. Stores it in the `backups/` directory
+1. Creates a complete SQL dump from the Docker Compose database service
+2. Compresses the SQL dump into a timestamped tar.gz archive
+3. Creates a timestamped app-code tar.gz archive
+4. Excludes local runtime data from the app archive, including `backups/`, `files/`, `logs/`, `tmp/`, `.venv/`, `.git/`, `__pycache__/`, and `REMIDIO_Samples/`
+5. Stores the archives and checksum file in `~/backups`
 
 **Output:**
-- Table record counts showing data volume
-- Backup file named: `db_backup_YYYYMMDD_HHMMSS.tar.gz`
-- Located in: `backups/` directory
-- Example: `backups/db_backup_20251103_103007.tar.gz`
+- Database archive named: `backup_YYYYMMDD_HHMMSS_db.tar.gz`
+- App archive named: `backup_YYYYMMDD_HHMMSS_app.tar.gz`
+- Checksum file named: `backup_YYYYMMDD_HHMMSS_checksums.md5`
+- Located in: `~/backups`
 
 **Supported databases:**
-- SQLite (default)
-- PostgreSQL
+- PostgreSQL through Docker Compose
 
 **Example output:**
 ```

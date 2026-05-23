@@ -3,7 +3,7 @@
 Script to create timestamped database and app backups on the host.
 
 USAGE:
-    python3 scripts/backup_db.py
+    uv run scripts/backup_db.py
 
 DESCRIPTION:
 This script creates a complete backup of the PostgreSQL database by:
@@ -11,7 +11,7 @@ This script creates a complete backup of the PostgreSQL database by:
 2. Writing the dump to ~/backups on the host
 3. Verifying gzip integrity and md5 checksums for both archives
 
-It also creates a tar.gz of the app code (excluding ./files and ./logs).
+It also creates a tar.gz of the app code, excluding local runtime data.
 
 Backup files:
 - backup_YYYYMMDD_HHMMSS_db.tar.gz
@@ -23,8 +23,23 @@ import hashlib
 import os
 import subprocess
 import tarfile
+import sys
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+
+
+APP_BACKUP_EXCLUDED_ROOTS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "REMIDIO_Samples",
+        "backups",
+        "files",
+        "logs",
+        "tmp",
+    }
+)
+APP_BACKUP_EXCLUDED_DIR_NAMES = frozenset({"__pycache__"})
 
 def compute_md5(file_path):
     """Compute md5 hash for a file."""
@@ -46,6 +61,17 @@ def verify_gzip(file_path):
     print(f"GZIP CHECK: {file_path.name}")
     subprocess.run(["gzip", "-t", str(file_path)], check=True)
     print(f"GZIP OK: {file_path.name}")
+
+def is_app_backup_excluded(member_name, repo_name):
+    """Return True when a tar member should be omitted from app backups."""
+    parts = PurePosixPath(member_name).parts
+    if parts and parts[0] == repo_name:
+        parts = parts[1:]
+    if not parts:
+        return False
+    if parts[0] in APP_BACKUP_EXCLUDED_ROOTS:
+        return True
+    return any(part in APP_BACKUP_EXCLUDED_DIR_NAMES for part in parts)
 
 def create_postgresql_backup(backup_dir, timestamp):
     """Create tar.gz backup for PostgreSQL database."""
@@ -90,27 +116,16 @@ def create_postgresql_backup(backup_dir, timestamp):
         return None
 
 def create_app_backup(backup_dir, timestamp):
-    """Create tar.gz backup of the app code excluding ./files and ./logs."""
+    """Create tar.gz backup of app code while excluding local runtime data."""
     tar_filename = f"backup_{timestamp}_app.tar.gz"
     tar_path = backup_dir / tar_filename
 
     repo_root = Path(__file__).resolve().parents[1]
     repo_name = repo_root.name
-    exclude_dirs = {
-        Path(repo_name) / ".git",
-        Path(repo_name) / ".venv",
-        Path(repo_name) / "backups",
-        Path(repo_name) / "files",
-        Path(repo_name) / "logs",
-        Path(repo_name) / "tmp",
-        Path(repo_name) / "__pycache__",
-    }
 
     def tar_filter(tarinfo):
-        path = Path(tarinfo.name)
-        for excluded in exclude_dirs:
-            if path == excluded or excluded in path.parents:
-                return None
+        if is_app_backup_excluded(tarinfo.name, repo_name):
+            return None
         return tarinfo
 
     try:

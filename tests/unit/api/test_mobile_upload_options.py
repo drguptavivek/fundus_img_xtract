@@ -6,9 +6,10 @@ import pytest
 
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, Role
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileKind,
@@ -199,18 +200,27 @@ def test_mobile_upload_options_strips_web_only_pregraded_kind(client, db_session
 def _add_profile(db_session, user_id, lab_unit_id, project_id, disease_id, camera_id, area_id):
     profile = UploadProfile(
         name=f"Mobile profile {user_id}-{project_id}-{lab_unit_id}",
-        lab_unit_id=lab_unit_id,
-        project_id=project_id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=user_id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease_id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera_id))
     profile.areas.append(UploadProfileArea(area_id=area_id))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
     db_session.add(profile)
+    db_session.flush()
+    project_profile = ProjectUploadProfile(project_id=project_id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=user_id,
+            lab_unit_id=lab_unit_id,
+            active=True,
+        )
+    )
     db_session.flush()
     return profile
 

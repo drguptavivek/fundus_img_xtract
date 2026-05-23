@@ -103,20 +103,9 @@
             </div>
           </div>
 
-          <div id="not-gradable-reasons" class="mt-3" style="display: none;">
-            <label class="form-label">Reason for Not Gradable</label>
-            <div class="d-flex flex-wrap gap-1">
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
-                data-reason="Disc not focussed">Disc not focussed</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
-                data-reason="Retina not focussed">Retina not focussed</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
-                data-reason="Disc not complete">Disc not complete</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
-                data-reason="Artefacts">Artefacts</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
-                data-reason="Other">Other</button>
-            </div>
+          <div class="mt-3" data-non-gradable-reasons style="display: none;">
+            <label class="form-label">Reason for Non-gradable</label>
+            <div class="d-flex flex-wrap gap-1" data-non-gradable-reason-list></div>
           </div>
 
           <div id="grading-instructions" class="mt-3 p-3 border rounded" style="display: none;">
@@ -145,6 +134,7 @@
     window.currentUserId = {{ current_user_id or 'null' }};
     window.currentSlot = "intra";
     window.featuresReadOnly = false;
+    window.nonGradableReasons = {{ (non_gradable_reasons or []) | tojson }};
     // Pass disease gradings with features to JavaScript
     window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
     // Pass existing selected features if available

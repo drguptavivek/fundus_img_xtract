@@ -28,6 +28,7 @@ Response:
       "grade_count": 5,
       "active_grade_count": 5,
       "prioritized_grade_count": 1,
+      "ungradable_grade_count": 1,
       "feature_count": 18,
       "is_core": true,
       "can_delete": false,
@@ -86,7 +87,12 @@ Validation:
 
 Returns one scheme with grade and feature details.
 
-Each grade includes `prioritize_for_task_selection`, which is a configuration flag only at this stage. It does not change current task query ordering.
+Each grade includes:
+
+- `prioritize_for_task_selection`, a configuration flag only at this stage. It does not change current task query ordering.
+- `is_ungradable`, which marks the grade as a non-gradable outcome for both image-scoped and encounter-scoped schemes. Grading UIs can use this flag to show the standard non-gradable reason buttons.
+
+The detail payload also includes `non_gradable_reasons`, the standard reason list shown by grading screens when an ungradable grade is selected.
 
 ### `PATCH|POST /api/grading-schemes/{scheme_id}`
 
@@ -124,6 +130,7 @@ Request:
   "display_order": 2,
   "is_active": true,
   "prioritize_for_task_selection": false,
+  "is_ungradable": false,
   "guidelines": "Optional grader-facing guidance",
   "features": [
     {"sr_no": 1, "label": "Microaneurysms"}
@@ -135,9 +142,23 @@ Form submissions may send repeated `feature_sr_no` and `feature_label` fields.
 
 `prioritize_for_task_selection` is stored per grade within a grading scheme. It only declares that images already carrying that grade may be preferred by a future task-selection policy; current random task queries are unchanged.
 
+`is_ungradable` is stored per grade within a grading scheme. It replaces brittle label-name matching such as checking for a literal "Not gradable" impression.
+
+Current standard non-gradable reasons are:
+
+- Poor focus
+- Motion blur
+- Poor exposure
+- Artifact or obstruction
+- Incomplete or wrong field
+- Wrong eye or view
+- Missing required image or view
+- Image/document mismatch
+- Other
+
 ### `PATCH|POST /api/grading-schemes/{scheme_id}/grades/{grade_id}`
 
-Updates the grade label, order, active state, guidelines, and feature list. The feature list is replaced as one unit.
+Updates the grade label, order, active state, ungradable flag, guidelines, and feature list. The feature list is replaced as one unit.
 
 `guidelines` accepts a small HTML allowlist used by the admin toolbar: `strong`, `b`, `em`, `i`, `ul`, `ol`, `li`, `br`, and `p`. All other tags and attributes are stripped or escaped server-side before storage/rendering.
 

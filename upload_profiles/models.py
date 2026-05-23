@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from auth.utils import utcnow
@@ -12,26 +13,23 @@ from models import Base
 
 
 class UploadProfile(Base):
-    """Reusable upload workflow profile assignable to many uploaders."""
+    """Reusable upload workflow template mapped to projects and uploaders."""
 
     __tablename__ = "upload_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
-    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     allow_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     allow_non_mydriatic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     default_is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    task_prioritization_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
-    project: Mapped["Project"] = relationship("Project", back_populates="upload_profiles")
-    assignments: Mapped[List["UploadProfileAssignment"]] = relationship(
-        "UploadProfileAssignment",
+    project_mappings: Mapped[List["ProjectUploadProfile"]] = relationship(
+        "ProjectUploadProfile",
         back_populates="profile",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -74,7 +72,6 @@ class UploadProfile(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("lab_unit_id", "project_id", "name", name="uq_upload_profile_lab_project_name"),
         CheckConstraint(
             "(allow_mydriatic = true) OR (allow_non_mydriatic = true)",
             name="ck_upload_profile_allows_any_mydriatic_state",
@@ -87,28 +84,63 @@ class UploadProfile(Base):
             "(default_is_mydriatic = true) OR (allow_non_mydriatic = true)",
             name="ck_upload_profile_default_nonmydriatic_allowed",
         ),
-        Index("ix_upload_profiles_lab_project_active", "lab_unit_id", "project_id", "active"),
+        Index("ix_upload_profiles_active_name", "active", "name"),
     )
 
 
-class UploadProfileAssignment(Base):
-    """Uploader assignment for a reusable upload profile."""
+class ProjectUploadProfile(Base):
+    """Project-level enablement for a reusable upload profile template."""
 
-    __tablename__ = "upload_profile_assignments"
+    __tablename__ = "project_upload_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     upload_profile_id: Mapped[int] = mapped_column(ForeignKey("upload_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    profile: Mapped["UploadProfile"] = relationship("UploadProfile", back_populates="assignments")
-    user: Mapped["User"] = relationship("User")
+    project: Mapped["Project"] = relationship("Project", back_populates="upload_profile_mappings")
+    profile: Mapped["UploadProfile"] = relationship("UploadProfile", back_populates="project_mappings")
+    assignments: Mapped[List["ProjectUploadProfileAssignment"]] = relationship(
+        "ProjectUploadProfileAssignment",
+        back_populates="project_profile",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
-        UniqueConstraint("upload_profile_id", "user_id", name="uq_upload_profile_assignment_user"),
-        Index("ix_upload_profile_assignments_user_active", "user_id", "active"),
+        UniqueConstraint("project_id", "upload_profile_id", name="uq_project_upload_profile"),
+        Index("ix_project_upload_profiles_project_active", "project_id", "active"),
+        Index("ix_project_upload_profiles_profile_active", "upload_profile_id", "active"),
+    )
+
+
+class ProjectUploadProfileAssignment(Base):
+    """Uploader and lab-unit assignment for one project-profile enablement."""
+
+    __tablename__ = "project_upload_profile_assignments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_upload_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("project_upload_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id", ondelete="CASCADE"), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project_profile: Mapped["ProjectUploadProfile"] = relationship("ProjectUploadProfile", back_populates="assignments")
+    user: Mapped["User"] = relationship("User")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+
+    __table_args__ = (
+        UniqueConstraint("project_upload_profile_id", "user_id", "lab_unit_id", name="uq_project_upload_profile_assignment"),
+        Index("ix_project_upload_profile_assignments_user_active", "user_id", "active"),
+        Index("ix_project_upload_profile_assignments_lab_active", "lab_unit_id", "active"),
     )
 
 

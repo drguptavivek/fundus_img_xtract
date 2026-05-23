@@ -28,19 +28,32 @@ def _investigator_input_from_request() -> upload_profile_service.InvestigatorCre
     )
 
 
-def _assignment_input_from_request() -> upload_profile_service.ProfileAssignmentInput:
+def _project_profile_input_from_request(project_id: int) -> upload_profile_service.ProjectProfileInput:
     form = request.form
-    return upload_profile_service.ProfileAssignmentInput(
-        profile_id=upload_profile_service.to_int(form.get("profile_id")),
+    return upload_profile_service.ProjectProfileInput(
+        project_id=project_id,
+        upload_profile_id=upload_profile_service.to_int(form.get("upload_profile_id") or form.get("profile_id")),
+    )
+
+
+def _project_profile_assignment_input_from_request() -> upload_profile_service.ProjectProfileAssignmentInput:
+    form = request.form
+    return upload_profile_service.ProjectProfileAssignmentInput(
+        project_upload_profile_id=upload_profile_service.to_int(form.get("project_upload_profile_id")),
         user_id=upload_profile_service.to_int(form.get("user_id")),
+        lab_unit_ids=upload_profile_service.to_int_list(form.getlist("lab_unit_ids") or form.getlist("lab_unit_id")),
+    )
+
+
+def _project_profile_assignment_remove_input_from_request() -> upload_profile_service.ProjectProfileAssignmentRemoveInput:
+    form = request.form
+    return upload_profile_service.ProjectProfileAssignmentRemoveInput(
+        assignment_id=upload_profile_service.to_int(form.get("assignment_id")),
     )
 
 
 def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
     form = request.form
-    user_ids = None
-    if "user_ids" in form or "user_id" in form:
-        user_ids = upload_profile_service.to_int_list(form.getlist("user_ids") or form.getlist("user_id"))
     disease_ids = upload_profile_service.to_int_list(form.getlist("disease_ids") or form.getlist("disease_id"))
     default_disease_ids = upload_profile_service.to_int_list(form.getlist("default_disease_ids") or form.getlist("default_disease_id"))
     encounter_set_type_ids = upload_profile_service.to_int_list(
@@ -64,19 +77,17 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
             )
     return upload_profile_service.UploadProfileInput(
         name=(form.get("name") or "").strip(),
-        user_ids=user_ids,
-        lab_unit_id=upload_profile_service.to_int(form.get("lab_unit_id")),
-        project_id=upload_profile_service.to_int(form.get("project_id")),
         disease_ids=disease_ids,
         default_disease_ids=default_disease_ids,
         camera_ids=upload_profile_service.to_int_list(form.getlist("camera_ids")),
         area_ids=upload_profile_service.to_int_list(form.getlist("area_ids")),
-        upload_kinds=form.getlist("upload_kinds") or ["direct_image"],
+        upload_kinds=form.getlist("upload_kinds"),
         allow_mydriatic=form.get("allow_mydriatic") == "on",
         allow_non_mydriatic=form.get("allow_non_mydriatic") == "on",
         default_is_mydriatic=form.get("default_is_mydriatic") == "on",
         ai_workflows=ai_workflows,
         encounter_set_type_ids=encounter_set_type_ids,
+        task_prioritization_json=form.get("task_prioritization_json") or None,
         description=(form.get("description") or "").strip() or None,
     )
 
@@ -123,16 +134,44 @@ def add_upload_profile_investigator():
 @roles_required("admin", "local_admin", "data_manager")
 def assign_upload_profile_user():
     """Assign a user to an upload profile through project governance."""
-    dto = _assignment_input_from_request()
-    return _json_result(upload_profile_service.assign_profile_user(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
+    dto = _project_profile_assignment_input_from_request()
+    return _json_result(upload_profile_service.assign_project_profile_user(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
 
 
 @api_bp.route("/upload-profiles/assignments/remove", methods=["POST"])
 @roles_required("admin", "local_admin", "data_manager")
 def remove_upload_profile_user():
     """Remove a user assignment from an upload profile."""
-    dto = _assignment_input_from_request()
-    return _json_result(upload_profile_service.remove_profile_user(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
+    dto = _project_profile_assignment_remove_input_from_request()
+    return _json_result(upload_profile_service.remove_project_profile_assignment(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
+
+
+@api_bp.route("/upload-profiles/projects/<int:project_id>/profiles", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def enable_upload_profile_for_project(project_id: int):
+    """Enable a reusable upload profile template for one project."""
+    dto = _project_profile_input_from_request(project_id)
+    return _json_result(upload_profile_service.enable_project_profile(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
+
+
+@api_bp.route("/upload-profiles/project-profiles/<int:project_upload_profile_id>/activate", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def activate_project_upload_profile(project_upload_profile_id: int):
+    """Reactivate an upload profile mapping for a project."""
+    return _json_result(
+        upload_profile_service.set_project_profile_active(current_user.id, project_upload_profile_id, True),
+        redirect_endpoint="admin.upload_projects_admin",
+    )
+
+
+@api_bp.route("/upload-profiles/project-profiles/<int:project_upload_profile_id>/deactivate", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def deactivate_project_upload_profile(project_upload_profile_id: int):
+    """Deactivate an upload profile mapping for a project."""
+    return _json_result(
+        upload_profile_service.set_project_profile_active(current_user.id, project_upload_profile_id, False),
+        redirect_endpoint="admin.upload_projects_admin",
+    )
 
 
 @api_bp.route("/upload-profiles", methods=["POST"])

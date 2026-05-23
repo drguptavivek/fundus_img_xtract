@@ -8,12 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
 from db_transaction_manager import get_db_session
+from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
 from models import Area, Camera, LabUnit, Project, User, user_lab_units
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileAIWorkflow,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
@@ -53,6 +55,8 @@ class UploadProfileDTO:
     """Detached-safe upload profile with allowed option IDs."""
 
     profile_id: int
+    project_upload_profile_id: int
+    assignment_id: int | None
     name: str
     description: str | None
     project_id: int
@@ -69,6 +73,8 @@ class UploadProfileDTO:
     upload_kinds: frozenset[str]
     ai_workflows: tuple[dict[str, Any], ...]
     encounter_set_type_ids: frozenset[int]
+    encounter_set_types: tuple[dict[str, Any], ...]
+    task_prioritization_json: dict[str, Any]
     allow_mydriatic: bool
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
@@ -160,35 +166,65 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
     explicit_labs = explicit_lab_unit_ids(db, user_id)
     if not explicit_labs:
         return []
-    profiles = (
+    assignments = (
         db.execute(
-            select(UploadProfile)
-            .join(UploadProfileAssignment, UploadProfileAssignment.upload_profile_id == UploadProfile.id)
-            .join(Project, UploadProfile.project_id == Project.id)
+            select(ProjectUploadProfileAssignment)
+            .join(ProjectUploadProfile, ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id)
+            .join(UploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+            .join(Project, ProjectUploadProfile.project_id == Project.id)
             .where(
-                UploadProfileAssignment.user_id == user_id,
-                UploadProfileAssignment.active.is_(True),
-                UploadProfile.lab_unit_id.in_(explicit_labs),
+                ProjectUploadProfileAssignment.user_id == user_id,
+                ProjectUploadProfileAssignment.lab_unit_id.in_(explicit_labs),
+                ProjectUploadProfileAssignment.active.is_(True),
+                ProjectUploadProfile.active.is_(True),
                 UploadProfile.active.is_(True),
                 Project.active.is_(True),
             )
             .options(
-                selectinload(UploadProfile.project),
-                selectinload(UploadProfile.lab_unit),
-                selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
-                selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
-                selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
-                selectinload(UploadProfile.upload_kinds),
-                selectinload(UploadProfile.ai_workflows).selectinload(UploadProfileAIWorkflow.ai_model),
-                selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
+                selectinload(ProjectUploadProfileAssignment.lab_unit),
+                selectinload(ProjectUploadProfileAssignment.project_profile).selectinload(ProjectUploadProfile.project),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.diseases)
+                .selectinload(UploadProfileDisease.disease),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.cameras)
+                .selectinload(UploadProfileCamera.camera),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.areas)
+                .selectinload(UploadProfileArea.area),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.upload_kinds),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.ai_workflows)
+                .selectinload(UploadProfileAIWorkflow.ai_model),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
+                .selectinload(EncounterSetType.encounter_grading_scheme),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
+                .selectinload(EncounterSetType.image_grading_schemes)
+                .selectinload(EncounterSetTypeImageGradingScheme.disease),
             )
-            .order_by(UploadProfile.project_id, UploadProfile.lab_unit_id, UploadProfile.name)
+            .order_by(ProjectUploadProfile.project_id, ProjectUploadProfileAssignment.lab_unit_id, UploadProfile.name)
         )
         .scalars()
         .unique()
         .all()
     )
-    return [_profile_to_dto(profile) for profile in profiles]
+    return [_assignment_to_dto(assignment) for assignment in assignments]
 
 
 def get_user_upload_options(db: OrmSession, user_id: int) -> UploadOptions:
@@ -285,6 +321,8 @@ def validate_profile_upload_scope(
     *,
     profile_id: int,
     upload_kind: str,
+    project_id: int | None = None,
+    lab_unit_id: int | None = None,
     disease_id: int | None = None,
     camera_id: int | None = None,
     area_id: int | None = None,
@@ -292,8 +330,22 @@ def validate_profile_upload_scope(
 ) -> UploadProfileDTO:
     """Validate a concrete upload profile selection."""
     profiles = [profile for profile in get_user_upload_profiles(db, user_id) if profile.profile_id == profile_id]
+    if project_id is not None:
+        profiles = [profile for profile in profiles if profile.project_id == project_id]
+    if lab_unit_id is not None:
+        profiles = [profile for profile in profiles if profile.lab_unit_id == lab_unit_id]
     if not profiles:
         raise UploadProfileError("Selected upload profile is not assigned to this user.", code="profile_not_found")
+    if project_id is None and len({profile.project_id for profile in profiles}) > 1:
+        raise UploadProfileError(
+            "Selected upload profile is assigned to more than one project. Include project_id.",
+            code="profile_project_ambiguous",
+        )
+    if lab_unit_id is None and len({profile.lab_unit_id for profile in profiles}) > 1:
+        raise UploadProfileError(
+            "Selected upload profile is assigned to more than one lab unit. Include lab_unit_id.",
+            code="profile_lab_ambiguous",
+        )
     profile = profiles[0]
     if upload_kind not in profile.upload_kinds:
         raise UploadProfileError("Selected upload profile does not allow this upload type.", code="upload_kind_not_allowed")
@@ -366,7 +418,25 @@ def _select_default_profile(profiles: list[UploadProfileDTO]) -> UploadProfileDT
     return with_defaults[0]
 
 
-def _profile_to_dto(profile: UploadProfile) -> UploadProfileDTO:
+def _assignment_to_dto(assignment: ProjectUploadProfileAssignment) -> UploadProfileDTO:
+    project_profile = assignment.project_profile
+    return _profile_to_dto(
+        project_profile.profile,
+        project=project_profile.project,
+        lab_unit=assignment.lab_unit,
+        project_upload_profile_id=project_profile.id,
+        assignment_id=assignment.id,
+    )
+
+
+def _profile_to_dto(
+    profile: UploadProfile,
+    *,
+    project: Project,
+    lab_unit: LabUnit,
+    project_upload_profile_id: int,
+    assignment_id: int | None,
+) -> UploadProfileDTO:
     disease_names = {row.disease_id: row.disease.name for row in profile.diseases}
     ai_workflows = tuple(
         {
@@ -382,14 +452,16 @@ def _profile_to_dto(profile: UploadProfile) -> UploadProfileDTO:
     )
     return UploadProfileDTO(
         profile_id=profile.id,
+        project_upload_profile_id=project_upload_profile_id,
+        assignment_id=assignment_id,
         name=profile.name,
         description=profile.description,
-        project_id=profile.project_id,
-        project_title=profile.project.title,
-        project_code=profile.project.code,
-        lab_unit_id=profile.lab_unit_id,
-        lab_unit_name=profile.lab_unit.name,
-        hospital_id=profile.lab_unit.hospital_id,
+        project_id=project.id,
+        project_title=project.title,
+        project_code=project.code,
+        lab_unit_id=lab_unit.id,
+        lab_unit_name=lab_unit.name,
+        hospital_id=lab_unit.hospital_id,
         disease_ids=frozenset(row.disease_id for row in profile.diseases),
         disease_names=disease_names,
         default_disease_ids=frozenset(row.disease_id for row in profile.diseases if row.is_default),
@@ -398,6 +470,12 @@ def _profile_to_dto(profile: UploadProfile) -> UploadProfileDTO:
         upload_kinds=frozenset(row.upload_kind for row in profile.upload_kinds),
         ai_workflows=ai_workflows,
         encounter_set_type_ids=frozenset(row.encounter_set_type_id for row in profile.encounter_set_types if row.active),
+        encounter_set_types=tuple(
+            _encounter_set_type_payload(row.encounter_set_type)
+            for row in profile.encounter_set_types
+            if row.active and row.encounter_set_type
+        ),
+        task_prioritization_json=profile.task_prioritization_json or {},
         allow_mydriatic=profile.allow_mydriatic,
         allow_non_mydriatic=profile.allow_non_mydriatic,
         default_is_mydriatic=profile.default_is_mydriatic,
@@ -457,12 +535,14 @@ def _build_upload_options_from_payloads(options: UploadOptions, profiles: list[d
 def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
     return {
         "profile_id": profile.profile_id,
+        "project_upload_profile_id": profile.project_upload_profile_id,
+        "assignment_id": profile.assignment_id,
         "name": profile.name,
         "description": profile.description,
         "project_id": profile.project_id,
         "lab_unit_id": profile.lab_unit_id,
         "disease_ids": sorted(profile.disease_ids),
-        "disease_id": profile.disease_id,
+        "disease_id": profile.disease_id if profile.disease_ids else None,
         "default_disease_ids": sorted(profile.default_disease_ids),
         "default_disease_id": profile.default_disease_id,
         "camera_ids": sorted(profile.camera_ids),
@@ -470,7 +550,37 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
         "upload_kinds": sorted(profile.upload_kinds),
         "ai_workflows": list(profile.ai_workflows),
         "encounter_set_type_ids": sorted(profile.encounter_set_type_ids),
+        "encounter_set_types": list(profile.encounter_set_types),
+        "task_prioritization_json": profile.task_prioritization_json,
         "allow_mydriatic": profile.allow_mydriatic,
         "allow_non_mydriatic": profile.allow_non_mydriatic,
         "default_is_mydriatic": profile.default_is_mydriatic,
+    }
+
+
+def _encounter_set_type_payload(row: Any) -> dict[str, Any]:
+    image_schemes = [
+        {
+            "id": scheme.disease_id,
+            "name": scheme.disease.name if scheme.disease else None,
+            "is_default": scheme.is_default,
+            "display_order": scheme.display_order,
+        }
+        for scheme in sorted(
+            [scheme for scheme in row.image_grading_schemes if scheme.active],
+            key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
+        )
+    ]
+    default_image_scheme = next((scheme for scheme in image_schemes if scheme["is_default"]), image_schemes[0] if len(image_schemes) == 1 else None)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "code": row.code,
+        "image_grading_schemes": image_schemes,
+        "default_image_grading_scheme": default_image_scheme,
+        "encounter_grading_scheme": {
+            "id": row.encounter_grading_scheme_id,
+            "name": row.encounter_grading_scheme.name if row.encounter_grading_scheme else None,
+        },
+        "asset_rules_json": row.asset_rules_json or {},
     }

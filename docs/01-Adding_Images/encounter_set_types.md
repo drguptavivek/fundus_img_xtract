@@ -15,7 +15,7 @@ This order intentionally avoids exposing partial behavior to users before the va
 
 ## Core policy
 
-`EncounterSetType` is a project-scoped configuration object that defines the required structure of an encounter-set payload and the metadata expected for verification and downstream grading.
+`EncounterSetType` is a reusable project-neutral configuration object that defines the required structure of an encounter-set payload and the metadata expected for verification and downstream grading.
 
 It is intentionally separate from:
 
@@ -29,7 +29,7 @@ Those concerns belong to `UploadProfile`.
 
 ### 1) `EncounterSetType` scope
 
-- `EncounterSetType` belongs to exactly one project.
+- `EncounterSetType` does not belong directly to a project.
 - It defines encounter set shape (required metadata fields, permitted file groups, and workflow behavior).
 - It is reused across encounter sets that share the same clinical intake schema.
 - It may be used by multiple upload profiles over time.
@@ -51,7 +51,11 @@ At upload time, the uploader selects one allowed `EncounterSetType` for the curr
 
 ## Key domain rule: task target is a scheme, not diagnosis
 
-`EncounterSetType.target_scheme_id` identifies the grading workflow / disease evaluation scheme that should be applied.
+`EncounterSetType` identifies the grading workflow / disease evaluation schemes that should be applied:
+
+- image-level grading scheme(s) for task-eligible clinical images
+- one default image-level grading scheme
+- one encounter-level grading scheme for the whole encounter
 
 This is not a confirmed clinical diagnosis.
 It is an operational target used to drive:
@@ -172,15 +176,15 @@ They may be surfaced only if a protocol explicitly allows it. Any exception must
 - Core API surfaces should expose EncounterSetType definitions for selection and validation.
 - Upload API should require profile-scoped `EncounterSetType` selection and enforce profile-type compatibility.
 - Verification endpoints should enforce field-level and type-level rules from the selected type.
-- Grading services should read the selected `EncounterSetType` and `target_scheme_id` when creating tasks and generating review context.
+- Grading services should read the selected `EncounterSetType` image and encounter grading schemes when creating tasks and generating review context.
 
 ## Minimal policy checklist
 
-- [ ] EncounterSetType is project-scoped and defines data/metadata shape
+- [ ] EncounterSetType is project-neutral and defines data/metadata shape
 - [ ] UploadProfile controls who can upload and broad constraints
 - [ ] UploadProfile can authorize multiple EncounterSetTypes
 - [ ] Upload selects one allowed type per attempt
-- [ ] `target_scheme_id` drives workflow, not diagnosis
+- [ ] configured image and encounter grading schemes drive workflow, not diagnosis
 - [ ] One encounter set = one patient + one encounter
 - [ ] Fast upload creates pending items first
 - [ ] Verification approves and then creates tasks

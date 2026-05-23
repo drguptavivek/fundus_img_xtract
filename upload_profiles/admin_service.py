@@ -2,19 +2,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, Project, ProjectInvestigator, user_lab_units
+from models import AIModel, AIModelDisease, LabUnit, Project, ProjectInvestigator, User
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileAIWorkflow,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
@@ -46,12 +49,6 @@ class InvestigatorCreateInput:
 
 
 @dataclass(frozen=True)
-class ProfileAssignmentInput:
-    profile_id: int | None
-    user_id: int | None
-
-
-@dataclass(frozen=True)
 class AIWorkflowInput:
     disease_id: int
     ai_model_id: int
@@ -61,8 +58,6 @@ class AIWorkflowInput:
 @dataclass(frozen=True)
 class UploadProfileInput:
     name: str
-    lab_unit_id: int | None
-    project_id: int | None
     disease_ids: list[int]
     default_disease_ids: list[int]
     camera_ids: list[int]
@@ -73,8 +68,26 @@ class UploadProfileInput:
     default_is_mydriatic: bool
     ai_workflows: list[AIWorkflowInput]
     encounter_set_type_ids: list[int]
+    task_prioritization_json: dict[str, Any] | None = None
     description: str | None = None
-    user_ids: list[int] | None = None
+
+
+@dataclass(frozen=True)
+class ProjectProfileInput:
+    project_id: int | None
+    upload_profile_id: int | None
+
+
+@dataclass(frozen=True)
+class ProjectProfileAssignmentInput:
+    project_upload_profile_id: int | None
+    user_id: int | None
+    lab_unit_ids: list[int]
+
+
+@dataclass(frozen=True)
+class ProjectProfileAssignmentRemoveInput:
+    assignment_id: int | None
 
 
 def to_int(value: str | None) -> int | None:
@@ -154,73 +167,123 @@ def add_investigator(investigator_input: InvestigatorCreateInput) -> MutationRes
             return MutationResult(False, "Duplicate or invalid project investigator configuration.", 400)
 
 
-def assign_profile_user(manager_user_id: int, assignment_input: ProfileAssignmentInput) -> MutationResult:
-    if not assignment_input.profile_id or not assignment_input.user_id:
-        return MutationResult(False, "Upload profile and user are required.", 400)
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+def enable_project_profile(manager_user_id: int, profile_input: ProjectProfileInput) -> MutationResult:
+    if not profile_input.project_id or not profile_input.upload_profile_id:
+        return MutationResult(False, "Project and upload profile are required.", 400)
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
-        profile = db.get(UploadProfile, assignment_input.profile_id)
-        if not profile or profile.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Upload profile not found in your lab-unit scope.", 404)
-        if not _user_has_lab_unit(db, assignment_input.user_id, profile.lab_unit_id):
-            return MutationResult(False, "Selected user must be assigned to the profile lab unit.", 400)
-        assignment = (
+        project = db.get(Project, profile_input.project_id)
+        profile = db.get(UploadProfile, profile_input.upload_profile_id)
+        if not project or not profile:
+            return MutationResult(False, "Project or upload profile not found.", 404)
+        mapping = (
             db.execute(
-                select(UploadProfileAssignment).where(
-                    UploadProfileAssignment.upload_profile_id == profile.id,
-                    UploadProfileAssignment.user_id == assignment_input.user_id,
+                select(ProjectUploadProfile).where(
+                    ProjectUploadProfile.project_id == project.id,
+                    ProjectUploadProfile.upload_profile_id == profile.id,
                 )
             )
             .scalars()
             .one_or_none()
         )
-        if assignment:
-            assignment.active = True
+        if mapping:
+            mapping.active = True
         else:
-            assignment = UploadProfileAssignment(
-                upload_profile_id=profile.id,
-                user_id=assignment_input.user_id,
-                active=True,
-            )
-            db.add(assignment)
+            mapping = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+            db.add(mapping)
         try:
             db.flush()
-            return MutationResult(True, "User assigned to upload profile.", payload={"assignment_id": assignment.id})
+            return MutationResult(True, "Upload profile enabled for project.", payload={"project_upload_profile_id": mapping.id})
         except IntegrityError:
             db.rollback()
-            return MutationResult(False, "Duplicate or invalid upload profile assignment.", 400)
+            return MutationResult(False, "Duplicate or invalid project upload profile mapping.", 400)
 
 
-def remove_profile_user(manager_user_id: int, assignment_input: ProfileAssignmentInput) -> MutationResult:
-    if not assignment_input.profile_id or not assignment_input.user_id:
-        return MutationResult(False, "Upload profile and user are required.", 400)
+def set_project_profile_active(manager_user_id: int, project_upload_profile_id: int, active: bool) -> MutationResult:
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
+    with transaction_scope() as db:
+        mapping = db.get(ProjectUploadProfile, project_upload_profile_id)
+        if not mapping:
+            return MutationResult(False, "Project upload profile mapping not found.", 404)
+        mapping.active = active
+        return MutationResult(
+            True,
+            "Upload profile enabled for project." if active else "Upload profile disabled for project.",
+            payload={"project_upload_profile_id": mapping.id},
+        )
+
+
+def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectProfileAssignmentInput) -> MutationResult:
+    if not assignment_input.project_upload_profile_id or not assignment_input.user_id or not assignment_input.lab_unit_ids:
+        return MutationResult(False, "Project profile, user, and lab unit are required.", 400)
+    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+    requested_lab_ids = set(assignment_input.lab_unit_ids)
+    if not requested_lab_ids.issubset(scoped_lab_ids):
+        return MutationResult(False, "You cannot assign upload access outside your lab-unit scope.", 403)
+    with transaction_scope() as db:
+        project_profile = db.get(ProjectUploadProfile, assignment_input.project_upload_profile_id)
+        if not project_profile or not project_profile.active:
+            return MutationResult(False, "Project upload profile mapping not found or inactive.", 404)
+        lab_error = _validate_user_lab_assignment(db, assignment_input.user_id, requested_lab_ids)
+        if lab_error:
+            return MutationResult(False, lab_error, 400)
+        last_assignment: ProjectUploadProfileAssignment | None = None
+        for lab_unit_id in sorted(requested_lab_ids):
+            assignment = (
+                db.execute(
+                    select(ProjectUploadProfileAssignment).where(
+                        ProjectUploadProfileAssignment.project_upload_profile_id == project_profile.id,
+                        ProjectUploadProfileAssignment.user_id == assignment_input.user_id,
+                        ProjectUploadProfileAssignment.lab_unit_id == lab_unit_id,
+                    )
+                )
+                .scalars()
+                .one_or_none()
+            )
+            if assignment:
+                assignment.active = True
+            else:
+                assignment = ProjectUploadProfileAssignment(
+                    project_upload_profile_id=project_profile.id,
+                    user_id=assignment_input.user_id,
+                    lab_unit_id=lab_unit_id,
+                    active=True,
+                )
+                db.add(assignment)
+            last_assignment = assignment
+        try:
+            db.flush()
+            return MutationResult(
+                True,
+                "User assigned to project upload profile.",
+                payload={"assignment_id": last_assignment.id if last_assignment else None},
+            )
+        except IntegrityError:
+            db.rollback()
+            return MutationResult(False, "Duplicate or invalid project upload profile assignment.", 400)
+
+
+def remove_project_profile_assignment(manager_user_id: int, assignment_input: ProjectProfileAssignmentRemoveInput) -> MutationResult:
+    if not assignment_input.assignment_id:
+        return MutationResult(False, "Assignment is required.", 400)
     scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
     with transaction_scope() as db:
-        profile = db.get(UploadProfile, assignment_input.profile_id)
-        if not profile or profile.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Upload profile not found in your lab-unit scope.", 404)
-        assignment = (
-            db.execute(
-                select(UploadProfileAssignment).where(
-                    UploadProfileAssignment.upload_profile_id == profile.id,
-                    UploadProfileAssignment.user_id == assignment_input.user_id,
-                )
-            )
-            .scalars()
-            .one_or_none()
-        )
-        if not assignment:
-            return MutationResult(False, "Upload profile assignment not found.", 404)
+        assignment = db.get(ProjectUploadProfileAssignment, assignment_input.assignment_id)
+        if not assignment or assignment.lab_unit_id not in scoped_lab_ids:
+            return MutationResult(False, "Project upload profile assignment not found in your lab-unit scope.", 404)
         assignment.active = False
-        return MutationResult(True, "User removed from upload profile.", payload={"assignment_id": assignment.id})
+        return MutationResult(True, "User removed from project upload profile.", payload={"assignment_id": assignment.id})
 
 
 def create_profile(manager_user_id: int, profile_input: UploadProfileInput) -> MutationResult:
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     profile = UploadProfile(active=True)
     with transaction_scope() as db:
         try:
-            validation_error = _apply_profile_input(db, profile, scoped_lab_ids, profile_input)
+            validation_error = _apply_profile_input(db, profile, profile_input)
             if validation_error:
                 return MutationResult(False, validation_error, 400)
             db.add(profile)
@@ -232,13 +295,14 @@ def create_profile(manager_user_id: int, profile_input: UploadProfileInput) -> M
 
 
 def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadProfileInput) -> MutationResult:
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
         profile = db.get(UploadProfile, profile_id)
-        if not profile or profile.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Upload profile not found in your lab-unit scope.", 404)
+        if not profile:
+            return MutationResult(False, "Upload profile not found.", 404)
         try:
-            validation_error = _apply_profile_input(db, profile, scoped_lab_ids, profile_input)
+            validation_error = _apply_profile_input(db, profile, profile_input)
             if validation_error:
                 return MutationResult(False, validation_error, 400)
             return MutationResult(True, "Upload profile updated.", payload={"profile_id": profile.id})
@@ -248,16 +312,16 @@ def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadP
 
 
 def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
         source = db.get(UploadProfile, profile_id)
-        if not source or source.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Upload profile not found in your lab-unit scope.", 404)
+        if not source:
+            return MutationResult(False, "Upload profile not found.", 404)
         duplicate = UploadProfile(
             name=f"{source.name} Copy",
             description=source.description,
-            lab_unit_id=source.lab_unit_id,
-            project_id=source.project_id,
+            task_prioritization_json=source.task_prioritization_json,
             allow_mydriatic=source.allow_mydriatic,
             allow_non_mydriatic=source.allow_non_mydriatic,
             default_is_mydriatic=source.default_is_mydriatic,
@@ -278,58 +342,45 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
             return MutationResult(True, "Upload profile duplicated.", payload={"profile_id": duplicate.id})
         except IntegrityError:
             db.rollback()
-            return MutationResult(False, "Duplicate profile name already exists for this project and lab unit.", 400)
+            return MutationResult(False, "Duplicate or invalid upload profile configuration.", 400)
 
 
 def set_profile_active(manager_user_id: int, profile_id: int, active: bool) -> MutationResult:
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
+    if not manager_lab_unit_ids(manager_user_id):
+        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
         profile = db.get(UploadProfile, profile_id)
-        if not profile or profile.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Upload profile not found in your lab-unit scope.", 404)
+        if not profile:
+            return MutationResult(False, "Upload profile not found.", 404)
         profile.active = active
         return MutationResult(True, "Upload profile activated." if active else "Upload profile deactivated.", payload={"profile_id": profile.id})
 
 
-def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], profile_input: UploadProfileInput) -> str | None:
-    if (
-        not profile_input.name
-        or not profile_input.lab_unit_id
-        or not profile_input.project_id
-        or not profile_input.disease_ids
-        or not profile_input.camera_ids
-        or not profile_input.area_ids
-    ):
-        return "Profile name, lab unit, project, diseases, cameras, and sites are required."
-    if profile_input.lab_unit_id not in scoped_lab_ids:
-        return "You cannot manage upload profiles outside your assigned lab units."
-    mydriatic_error = validate_mydriatic_flags(
-        allow_mydriatic=profile_input.allow_mydriatic,
-        allow_non_mydriatic=profile_input.allow_non_mydriatic,
-        default_is_mydriatic=profile_input.default_is_mydriatic,
-    )
-    if mydriatic_error:
-        return mydriatic_error
+def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfileInput) -> str | None:
+    if not profile_input.name:
+        return "Profile name is required."
 
-    valid_user_ids: set[int] | None = None
-    if profile_input.user_ids is not None:
-        requested_user_ids = set(profile_input.user_ids)
-        if requested_user_ids:
-            valid_user_ids = {
-                row[0]
-                for row in db.execute(
-                    select(user_lab_units.c.user_id).where(
-                        user_lab_units.c.lab_unit_id == profile_input.lab_unit_id,
-                        user_lab_units.c.user_id.in_(requested_user_ids),
-                    )
-                ).all()
-            }
-        else:
-            valid_user_ids = set()
-        if valid_user_ids != requested_user_ids:
-            return "All selected uploaders must be assigned to the profile lab unit."
-
-    upload_kinds = sorted(set(profile_input.upload_kinds or [UPLOAD_KIND_DIRECT_IMAGE]))
+    if not profile_input.upload_kinds:
+        return "Select at least one upload type."
+    upload_kinds = sorted(set(profile_input.upload_kinds))
+    if not set(upload_kinds).issubset({UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}):
+        return "Unsupported upload type selected."
+    disease_required_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO}
+    clinical_upload_enabled = bool(set(upload_kinds).intersection(disease_required_kinds))
+    if clinical_upload_enabled and not profile_input.disease_ids:
+        return "Allowed diseases are required for direct image, pregraded, and Remidio ZIP uploads."
+    if clinical_upload_enabled and (not profile_input.camera_ids or not profile_input.area_ids):
+        return "Cameras and sites are required for direct image, pregraded, and Remidio ZIP uploads."
+    if clinical_upload_enabled:
+        mydriatic_error = validate_mydriatic_flags(
+            allow_mydriatic=profile_input.allow_mydriatic,
+            allow_non_mydriatic=profile_input.allow_non_mydriatic,
+            default_is_mydriatic=profile_input.default_is_mydriatic,
+        )
+        if mydriatic_error:
+            return mydriatic_error
+    elif profile_input.disease_ids:
+        return "Allowed diseases are only used for direct image, pregraded, and Remidio ZIP uploads."
     default_ids = set(profile_input.default_disease_ids)
     disease_ids = set(profile_input.disease_ids)
     if default_ids and not default_ids.issubset(disease_ids):
@@ -344,42 +395,45 @@ def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], p
     if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_type_ids:
         return "EncounterSetTypes are only used when encounter-set uploads are allowed."
     if encounter_set_type_ids:
-        valid_encounter_set_types = {
-            row[0]: row[1]
-            for row in db.execute(
-                select(EncounterSetType.id, EncounterSetType.target_scheme_id).where(
-                    EncounterSetType.id.in_(encounter_set_type_ids),
-                    EncounterSetType.active.is_(True),
-                )
-            ).all()
-        }
-        if set(valid_encounter_set_types) != encounter_set_type_ids:
+        valid_encounter_set_types = (
+            db.execute(
+                select(EncounterSetType)
+                .where(EncounterSetType.id.in_(encounter_set_type_ids), EncounterSetType.active.is_(True))
+            )
+            .scalars()
+            .all()
+        )
+        if {row.id for row in valid_encounter_set_types} != encounter_set_type_ids:
             return "EncounterSetTypes must be active."
-        if not set(valid_encounter_set_types.values()).issubset(disease_ids):
-            return "EncounterSetType target schemes must be included in allowed target schemes."
+    prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
+    if not prioritization_result.success:
+        return prioritization_result.message
     ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds))
     if ai_workflows is None:
         return "AI workflow disease and upload type must be included in the profile, and AI models must exist."
 
     profile.name = profile_input.name
     profile.description = profile_input.description
-    profile.lab_unit_id = profile_input.lab_unit_id
-    profile.project_id = profile_input.project_id
-    profile.allow_mydriatic = profile_input.allow_mydriatic
-    profile.allow_non_mydriatic = profile_input.allow_non_mydriatic
-    profile.default_is_mydriatic = profile_input.default_is_mydriatic
+    profile.task_prioritization_json = prioritization_result.payload["task_prioritization_json"]
+    profile.allow_mydriatic = profile_input.allow_mydriatic if clinical_upload_enabled else False
+    profile.allow_non_mydriatic = profile_input.allow_non_mydriatic if clinical_upload_enabled else True
+    profile.default_is_mydriatic = profile_input.default_is_mydriatic if clinical_upload_enabled else False
 
     if profile.id is not None:
-        _clear_profile_children(db, profile, clear_assignments=valid_user_ids is not None)
+        _clear_profile_children(db, profile)
 
-    if valid_user_ids is not None:
-        profile.assignments = [UploadProfileAssignment(user_id=user_id, active=True) for user_id in sorted(valid_user_ids)]
     profile.diseases = [
         UploadProfileDisease(disease_id=disease_id, is_default=disease_id in default_ids)
         for disease_id in sorted(disease_ids)
     ]
-    profile.cameras = [UploadProfileCamera(camera_id=camera_id) for camera_id in sorted(set(profile_input.camera_ids))]
-    profile.areas = [UploadProfileArea(area_id=area_id) for area_id in sorted(set(profile_input.area_ids))]
+    profile.cameras = [
+        UploadProfileCamera(camera_id=camera_id)
+        for camera_id in sorted(set(profile_input.camera_ids if clinical_upload_enabled else []))
+    ]
+    profile.areas = [
+        UploadProfileArea(area_id=area_id)
+        for area_id in sorted(set(profile_input.area_ids if clinical_upload_enabled else []))
+    ]
     profile.upload_kinds = [UploadProfileKind(upload_kind=upload_kind) for upload_kind in upload_kinds]
     profile.encounter_set_types = [
         UploadProfileEncounterSetType(encounter_set_type_id=encounter_set_type_id, active=True)
@@ -397,10 +451,59 @@ def _apply_profile_input(db, profile: UploadProfile, scoped_lab_ids: set[int], p
     return None
 
 
-def _clear_profile_children(db, profile: UploadProfile, *, clear_assignments: bool) -> None:
+def normalize_task_prioritization(raw_config: Any, upload_kinds: set[str]) -> MutationResult:
+    defaults = {
+        "active": False,
+        "prioritize_abnormal_encounters": False,
+        "prioritize_ai_abnormal_images": False,
+        "normal_sampling_percent": 100,
+        "normal_sampling_strategy": "random",
+        "priority_source_order": ["encounter_abnormal", "ai_abnormal"],
+        "apply_to_upload_kinds": sorted(upload_kinds),
+    }
+    if raw_config in (None, ""):
+        return MutationResult(True, "Task prioritization normalized.", payload={"task_prioritization_json": defaults})
+    if isinstance(raw_config, str):
+        try:
+            raw_config = json.loads(raw_config)
+        except json.JSONDecodeError:
+            return MutationResult(False, "Task prioritization must be valid JSON.", 400)
+    if not isinstance(raw_config, dict):
+        return MutationResult(False, "Task prioritization must be an object.", 400)
+    config = defaults | raw_config
+    for key in ("active", "prioritize_abnormal_encounters", "prioritize_ai_abnormal_images"):
+        config[key] = _bool_value(config.get(key))
+    try:
+        config["normal_sampling_percent"] = int(config.get("normal_sampling_percent", 100))
+    except (TypeError, ValueError):
+        return MutationResult(False, "Normal sampling percent must be between 0 and 100.", 400)
+    if config["normal_sampling_percent"] < 0 or config["normal_sampling_percent"] > 100:
+        return MutationResult(False, "Normal sampling percent must be between 0 and 100.", 400)
+    if config.get("normal_sampling_strategy") != "random":
+        return MutationResult(False, "Only random normal sampling strategy is supported now.", 400)
+    source_order = config.get("priority_source_order")
+    if not isinstance(source_order, list) or not all(item in {"encounter_abnormal", "ai_abnormal"} for item in source_order):
+        return MutationResult(False, "Priority source order must contain encounter_abnormal and/or ai_abnormal.", 400)
+    apply_kinds = config.get("apply_to_upload_kinds") or []
+    if not isinstance(apply_kinds, list):
+        return MutationResult(False, "Prioritization upload kinds must be a list.", 400)
+    apply_kinds = sorted(set(str(item) for item in apply_kinds))
+    if not set(apply_kinds).issubset(upload_kinds):
+        return MutationResult(False, "Prioritization upload kinds must be enabled for the profile.", 400)
+    config["apply_to_upload_kinds"] = apply_kinds
+    return MutationResult(True, "Task prioritization normalized.", payload={"task_prioritization_json": config})
+
+
+def _bool_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _clear_profile_children(db, profile: UploadProfile) -> None:
     """Flush deleted child rows before replacement inserts hit unique constraints."""
-    if clear_assignments:
-        profile.assignments = []
     profile.diseases = []
     profile.cameras = []
     profile.areas = []
@@ -410,16 +513,34 @@ def _clear_profile_children(db, profile: UploadProfile, *, clear_assignments: bo
     db.flush()
 
 
-def _user_has_lab_unit(db, user_id: int, lab_unit_id: int) -> bool:
-    return (
+def _validate_user_lab_assignment(db, user_id: int | None, lab_unit_ids: set[int]) -> str | None:
+    if not user_id:
+        return "User is required."
+    user = (
         db.execute(
-            select(user_lab_units.c.user_id).where(
-                user_lab_units.c.user_id == user_id,
-                user_lab_units.c.lab_unit_id == lab_unit_id,
-            )
-        ).first()
-        is not None
+            select(User)
+            .options(selectinload(User.lab_units))
+            .where(User.id == user_id, User.is_active.is_(True))
+        )
+        .scalars()
+        .one_or_none()
     )
+    if not user:
+        return "Selected user is not active."
+    labs = (
+        db.execute(select(LabUnit).where(LabUnit.id.in_(lab_unit_ids)))
+        .scalars()
+        .all()
+    )
+    if {lab.id for lab in labs} != lab_unit_ids:
+        return "Selected lab unit was not found."
+    user_lab_ids = {lab.id for lab in user.lab_units or []}
+    if not lab_unit_ids.issubset(user_lab_ids):
+        return "Selected user must be explicitly assigned to every selected lab unit."
+    user_hospital_id = getattr(user, "hospital_id", None)
+    if any(lab.hospital_id != user_hospital_id for lab in labs):
+        return "Selected lab units must belong to the user's hospital."
+    return None
 
 
 def _valid_ai_workflows(
@@ -429,8 +550,13 @@ def _valid_ai_workflows(
     upload_kinds: set[str],
 ) -> list[AIWorkflowInput] | None:
     deduped: dict[tuple[int, int, str], AIWorkflowInput] = {}
+    disease_target_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO}
     for workflow in workflow_inputs:
-        if workflow.disease_id not in disease_ids or workflow.upload_kind not in upload_kinds:
+        if (
+            workflow.disease_id not in disease_ids
+            or workflow.upload_kind not in upload_kinds
+            or workflow.upload_kind not in disease_target_kinds
+        ):
             return None
         deduped[(workflow.disease_id, workflow.ai_model_id, workflow.upload_kind)] = workflow
     if not deduped:

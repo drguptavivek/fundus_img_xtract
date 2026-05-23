@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import BinaryIO
 
 import magic
@@ -16,6 +17,7 @@ from utils.filename_validation import validate_upload_filename
 from utils.utils2 import uniquify
 
 
+logger = logging.getLogger(__name__)
 DEFAULT_DIRECT_ALLOWED_MIMETYPES = {"image/jpeg", "image/png"}
 DEFAULT_DIRECT_MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
 
@@ -389,8 +391,8 @@ def _read_file_bytes(file: BinaryIO) -> bytes:
     data = file.read()
     try:
         file.seek(0)
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError):
+        logger.debug("Uploaded file stream could not be rewound after byte read.", exc_info=True)
     return data
 
 

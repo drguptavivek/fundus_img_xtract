@@ -1,8 +1,8 @@
 # Upload Profiles API
 
-Reusable upload profiles define project, lab unit, diseases, camera/site scope, mydriatic scope, upload kinds, and optional AI workflow bindings. Admin pages render under `/admin/upload-profiles` and `/admin/upload-projects`; mutations use JSON/HTMX-capable APIs under `/api/upload-profiles`.
+Reusable upload profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for grading targets, asset rules, and metadata. Admin pages render under `/admin/upload-profiles` and `/admin/upload-projects`; mutations use JSON/HTMX-capable APIs under `/api/upload-profiles`.
 
-Project governance owns investigator metadata and profile-to-uploader assignment. Upload Profiles own upload authorization rules.
+Project governance owns investigator metadata, project-to-profile enablement, and uploader plus lab-unit assignment. Upload Profiles own reusable upload workflow rules.
 
 ## Auth
 
@@ -40,6 +40,9 @@ Error:
 - `POST /api/upload-profiles/projects`
 - `POST|PATCH /api/upload-profiles/projects/<project_id>`
 - `POST /api/upload-profiles/investigators`
+- `POST /api/upload-profiles/projects/<project_id>/profiles`
+- `POST /api/upload-profiles/project-profiles/<project_upload_profile_id>/activate`
+- `POST /api/upload-profiles/project-profiles/<project_upload_profile_id>/deactivate`
 - `POST /api/upload-profiles/assignments`
 - `POST /api/upload-profiles/assignments/remove`
 - `POST /api/upload-profiles`
@@ -91,23 +94,33 @@ Profile create/update fields:
 
 - `name` string, required
 - `description` string, optional
-- `lab_unit_id` integer, required and in caller scope
-- `project_id` integer, required
-- `disease_ids` repeated integers, required
+- `disease_ids` repeated integers, required only when one of `direct_image`, `pregraded`, or `remidio` is enabled
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
-- `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active and its target scheme must be included in the profile's allowed target schemes
-- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile
-- `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans
-- `camera_ids` repeated integers, required
-- `area_ids` repeated integers, required
+- `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active
+- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile. Encounter-set grading targets come from EncounterSetTypes, so V1 rejects encounter-set AI workflow bindings here.
+- `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans, used only when `direct_image`, `pregraded`, or `remidio` is enabled
+- `camera_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
+- `area_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
 
-Duplicate copies profile options and workflow settings, but not user assignments.
+Duplicate copies profile options and workflow settings, but not project mappings or user assignments.
+
+Project profile enablement fields for `/api/upload-profiles/projects/<project_id>/profiles`:
+
+- `upload_profile_id` integer, required
+
+This creates or reactivates one `project_upload_profiles` mapping.
 
 Assignment fields for `/api/upload-profiles/assignments` and `/api/upload-profiles/assignments/remove`:
 
-- `profile_id` integer, required and in caller lab-unit scope
-- `user_id` integer, required and assigned to the profile lab unit
+- Create assignment:
+  - `project_upload_profile_id` integer, required
+  - `user_id` integer, required and active
+  - `lab_unit_ids` repeated integers, required and all within caller scope
+- Remove assignment:
+  - `assignment_id` integer, required and in caller lab-unit scope
+
+Assignment validation requires each selected lab unit to be explicitly assigned to the user and to belong to the user's hospital.
 
 Example profile create:
 
@@ -115,8 +128,6 @@ Example profile create:
 curl -X POST /api/upload-profiles \
   -H "X-CSRFToken: <token>" \
   -F "name=AIIMS Glaucoma Remidio" \
-  -F "project_id=4" \
-  -F "lab_unit_id=2" \
   -F "disease_ids=3" \
   -F "default_disease_ids=3" \
   -F "upload_kinds=remidio" \
@@ -130,54 +141,74 @@ curl -X POST /api/upload-profiles \
   -F "ai_workflows=3:5:remidio"
 ```
 
+Example project-profile enablement:
+
+```bash
+curl -X POST /api/upload-profiles/projects/4/profiles \
+  -H "X-CSRFToken: <token>" \
+  -F "upload_profile_id=12"
+```
+
 Example uploader assignment:
 
 ```bash
 curl -X POST /api/upload-profiles/assignments \
   -H "X-CSRFToken: <token>" \
-  -F "profile_id=12" \
-  -F "user_id=44"
+  -F "project_upload_profile_id=7" \
+  -F "user_id=44" \
+  -F "lab_unit_ids=2"
 ```
 
 ## Upload Rule Semantics
 
-Allowed diseases define valid disease targets for the profile. Direct and pre-graded uploads still use the disease selected on their upload forms.
+Allowed diseases define valid disease targets for direct image, pregraded, and Remidio ZIP upload streams. Direct and pregraded uploads still use the disease selected on their upload forms.
 
 `default_disease_ids` is only for Remidio ZIP ingestion because the Remidio ZIP form does not collect disease. A Remidio-capable profile must provide a default disease, and a non-Remidio profile must not set one.
 
-Encounter-set upload does not use the Remidio default. When an encounter-set API request supplies `disease_id`, that disease must be allowed by the selected project/lab profile. When `disease_id` is missing, the encounter-set flow uses profile allowed diseases rather than Remidio defaults.
+Encounter-set upload does not use the Remidio default and should not ask for a free-floating disease target. The selected EncounterSetType provides image-level and encounter-level grading schemes. An upload profile that enables only encounter-set uploads can therefore have no `disease_ids`.
 
-When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. Upload UI must require the uploader to select one of those types for the encounter. Project mapping stays on the Upload Profile. The selected type governs the encounter-level and image-level metadata schema and the single target evaluation scheme for the set.
+When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. Upload UI must require the uploader to select one of those types for the encounter. Project mapping is via `project_upload_profiles`, not directly on the reusable profile template. The selected type governs the metadata schema, asset rules, image grading scheme(s), and encounter grading scheme.
 
-AI workflow bindings are valid only when the AI model is actively linked to the selected disease through `AIModelDisease`, and when the workflow upload kind is enabled on the profile.
+Camera/site/mydriatic profile fields are not required for EncounterSet-only profiles and are ignored if no clinical image/ZIP mode is enabled. If EncounterSet workflows need camera, site, acquisition method, mydriatic state, or similar capture details, configure those as upload metadata fields on the EncounterSetType.
 
-Mydriatic validation requires at least one allowed mydriatic state. `default_is_mydriatic` must point at an allowed state.
+`task_prioritization_json` is capture-only in this phase. It may record abnormal encounter prioritization, AI-abnormal prioritization, normal sampling percent, sampling strategy, source order, applicable upload kinds, and active state. It does not change task selection behavior yet.
+
+AI workflow bindings are valid only when the AI model is actively linked to the selected disease through `AIModelDisease`, when the workflow upload kind is enabled on the profile, and when the upload kind is one of `direct_image`, `pregraded`, or `remidio`.
+
+Mydriatic validation runs only for direct image, pregraded, and Remedio ZIP modes. In those modes at least one mydriatic state must be allowed, and `default_is_mydriatic` must point at an allowed state.
 
 ## Validation Errors
 
 Common user-facing errors include:
 
 - `Project title and code are required.`
-- `Profile name, lab unit, project, diseases, cameras, and sites are required.`
-- `You cannot manage upload profiles outside your assigned lab units.`
-- `All selected uploaders must be assigned to the profile lab unit.`
+- `Profile name is required.`
+- `Select at least one upload type.`
+- `Unsupported upload type selected.`
+- `Allowed diseases are required for direct image, pregraded, and Remidio ZIP uploads.`
+- `Cameras and sites are required for direct image, pregraded, and Remidio ZIP uploads.`
+- `Allowed diseases are only used for direct image, pregraded, and Remidio ZIP uploads.`
+- `You cannot assign upload access outside your lab-unit scope.`
+- `Selected user must be explicitly assigned to every selected lab unit.`
+- `Selected lab units must belong to the user's hospital.`
 - `Select a default disease for Remidio ZIP ingestion.`
 - `Default disease is only used for Remedio ZIP profiles.`
 - `Select at least one EncounterSetType for encounter-set uploads.`
 - `EncounterSetTypes are only used when encounter-set uploads are allowed.`
 - `EncounterSetTypes must be active.`
-- `EncounterSetType target schemes must be included in allowed target schemes.`
+- `Normal sampling percent must be between 0 and 100.`
+- `Prioritization upload kinds must be enabled for the profile.`
 - `AI workflow disease and upload type must be included in the profile, and AI models must exist.`
-- `Selected user must be assigned to the profile lab unit.`
-- `Upload profile not found in your lab-unit scope.`
+- `Project upload profile mapping not found or inactive.`
+- `Upload profile not found.`
 
 Errors use the same JSON envelope as successful responses, with `success=false`, `message`, and `error`.
 
 ## Mobile Upload Options
 
-`GET /api/mobile/v1/upload-options` returns `profiles`. Each profile payload includes `profile_id`, `name`, `project_id`, `lab_unit_id`, `disease_ids`, `default_disease_ids`, `camera_ids`, `area_ids`, `upload_kinds`, `encounter_set_type_ids`, `ai_workflows`, and mydriatic flags.
+`GET /api/mobile/v1/upload-options` returns `profiles`. Each profile payload includes `profile_id`, `project_upload_profile_id`, `assignment_id`, `name`, `project_id`, `lab_unit_id`, `disease_ids`, `default_disease_ids`, `camera_ids`, `area_ids`, `upload_kinds`, `encounter_set_type_ids`, `encounter_set_types`, `task_prioritization_json`, `ai_workflows`, and mydriatic flags.
 
-Clients must submit `profile_id` where an upload endpoint accepts a concrete profile selection. Upload endpoints still revalidate project, lab, disease, camera, area, and mydriatic state server-side.
+Clients must submit `profile_id` where an upload endpoint accepts a concrete profile selection. Upload endpoints still revalidate project, lab, and the mode-specific fields required by that upload kind server-side.
 
 ## Service Ownership
 

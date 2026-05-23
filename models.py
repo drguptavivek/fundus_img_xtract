@@ -446,8 +446,8 @@ class Project(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    upload_profiles: Mapped[List["UploadProfile"]] = relationship(
-        "UploadProfile",
+    upload_profile_mappings: Mapped[List["ProjectUploadProfile"]] = relationship(
+        "ProjectUploadProfile",
         back_populates="project",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -714,6 +714,7 @@ class DiseaseGrading(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     prioritize_for_task_selection: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    is_ungradable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     guidelines: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     disease: Mapped["Disease"] = relationship("Disease", back_populates="disease_gradings")
     features: Mapped[List["GradingsFeatures"]] = relationship("GradingsFeatures", back_populates="disease_grading", cascade="all, delete-orphan")
@@ -2760,10 +2761,11 @@ class PackageUpdateScan(Base):
 # Import feature-specific model modules so their tables are registered on
 # Base.metadata while keeping this root model file from growing indefinitely.
 from upload_profiles.models import (  # noqa: E402,F401
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileAIWorkflow,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
@@ -2771,5 +2773,6 @@ from upload_profiles.models import (  # noqa: E402,F401
     PatientEncounterTargetDisease,
 )
 from encounter_set_types.models import EncounterSetType  # noqa: E402,F401
+from encounter_set_types.models import EncounterSetTypeImageGradingScheme  # noqa: E402,F401
 from upload_metadata.models import UploadMetadataFieldDefinition  # noqa: E402,F401
 from encounter_sets.models import EncounterSetAttachment  # noqa: E402,F401

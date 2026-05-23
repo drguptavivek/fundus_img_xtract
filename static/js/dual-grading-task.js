@@ -24,6 +24,18 @@ const STORAGE = {
     TIMEOUT: 3600000 // 1 hour in milliseconds
 };
 
+const DEFAULT_NON_GRADABLE_REASONS = [
+    'Poor focus',
+    'Motion blur',
+    'Poor exposure',
+    'Artifact or obstruction',
+    'Incomplete or wrong field',
+    'Wrong eye or view',
+    'Missing required image or view',
+    'Image/document mismatch',
+    'Other'
+];
+
 // Wait for DOM and required data to be ready
 document.addEventListener('DOMContentLoaded', function() {
     // Ensure required global variables are set
@@ -37,6 +49,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize all components
     DualGradingTask.init();
     FeaturesDisplay.init();
+    NonGradableReasons.init();
     
     // Scroll to top of image viewer card on page load
     scrollToImageCard();
@@ -300,11 +313,13 @@ const DualGradingTask = (function() {
 
             // Update features display based on selected grading
             FeaturesDisplay.updateFeatures(gradingId);
+            NonGradableReasons.update(gradingId);
 
             // Save selection to localStorage
             saveSelectionToStorage(gradingId);
         } else {
             instructionsDiv.style.display = 'none';
+            NonGradableReasons.hide();
         }
     }
 
@@ -320,6 +335,7 @@ const DualGradingTask = (function() {
             }
         });
         instructionsDiv.style.display = 'none';
+        NonGradableReasons.hide();
         clearSelectionFromStorage();
         
         // Clear comments box
@@ -394,8 +410,10 @@ const DualGradingTask = (function() {
             }
 
             FeaturesDisplay.updateFeatures(gradingId);
+            NonGradableReasons.update(gradingId);
         } else {
             instructionsDiv.style.display = 'none';
+            NonGradableReasons.hide();
 
             // Hide features section when no option is selected
             const featuresSection = document.getElementById(DOM_ELEMENTS.FEATURES_SECTION);
@@ -668,5 +686,84 @@ const FeaturesDisplay = (function() {
     return {
         init,
         updateFeatures,
+    };
+})();
+
+const NonGradableReasons = (function() {
+    let panel, list, commentTextarea;
+    let diseaseGradingsWithFeatures = [];
+
+    function init() {
+        panel = document.querySelector('[data-non-gradable-reasons]');
+        list = panel ? panel.querySelector('[data-non-gradable-reason-list]') : null;
+        commentTextarea = document.getElementById(DOM_ELEMENTS.COMMENT_TEXTAREA);
+        diseaseGradingsWithFeatures = Array.isArray(window.diseaseGradingsWithFeatures)
+            ? window.diseaseGradingsWithFeatures
+            : [];
+
+        const checked = document.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (checked) {
+            update(Number(checked.value));
+        } else {
+            hide();
+        }
+    }
+
+    function standardReasons() {
+        return Array.isArray(window.nonGradableReasons) && window.nonGradableReasons.length
+            ? window.nonGradableReasons
+            : DEFAULT_NON_GRADABLE_REASONS;
+    }
+
+    function update(gradingId) {
+        if (!panel || !list) {
+            return;
+        }
+        const selectedGrading = diseaseGradingsWithFeatures.find((grading) => grading.id === gradingId);
+        if (!selectedGrading || !selectedGrading.is_ungradable) {
+            hide();
+            return;
+        }
+        renderReasonButtons();
+        panel.style.display = 'block';
+    }
+
+    function hide() {
+        if (panel) {
+            panel.style.display = 'none';
+        }
+    }
+
+    function renderReasonButtons() {
+        list.innerHTML = '';
+        standardReasons().forEach((reason) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-outline-secondary btn-sm';
+            button.textContent = reason;
+            button.addEventListener('click', () => appendReason(reason));
+            list.appendChild(button);
+        });
+    }
+
+    function appendReason(reason) {
+        if (!commentTextarea || commentTextarea.disabled) {
+            return;
+        }
+        const line = 'Non-gradable: ' + reason;
+        const currentValue = commentTextarea.value || '';
+        if (currentValue.includes(line)) {
+            return;
+        }
+        commentTextarea.value = currentValue.trim()
+            ? currentValue.replace(/\s+$/, '') + '\n' + line
+            : line;
+        commentTextarea.focus();
+    }
+
+    return {
+        init,
+        update,
+        hide,
     };
 })();

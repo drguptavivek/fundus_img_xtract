@@ -2,7 +2,7 @@
 
 This document describes the current upload governance system implemented in `upload_profiles/`, `admin/upload_profiles.py`, `api/upload_profiles.py`, the admin templates, and the shared upload-profile JavaScript helpers.
 
-The system replaces one-off per-user upload mappings with reusable upload profiles. A profile defines what can be uploaded; a project groups profiles and governance metadata; profile assignments grant upload access to users.
+The system replaces one-off per-user upload mappings with reusable upload profiles. A profile defines what can be uploaded; a project enables reusable profiles; project-profile assignments grant upload access to users for specific lab units.
 
 ## Concepts
 
@@ -24,7 +24,7 @@ The admin Projects page shows PIs and other investigators so managers can unders
 
 ### Upload Profile
 
-An upload profile is the reusable rule set that controls upload intake. It belongs to one project and one lab unit, has a unique name within that project/lab unit, and defines:
+An upload profile is the reusable rule set that controls upload intake. It is a workflow template and no longer belongs directly to one project or one lab unit. It defines:
 
 - allowed upload kinds
 - allowed diseases
@@ -39,9 +39,9 @@ Profiles are managed on `/admin/upload-profiles`.
 
 ### Project Profile Users / Uploaders
 
-Uploaders are users assigned to an upload profile through `upload_profile_assignments`. Assignment is active/inactive and constrained by lab-unit scope.
+Projects enable reusable profiles through `project_upload_profiles`. Uploaders are assigned through `project_upload_profile_assignments`, which stores the enabled project profile, user, and lab unit. Assignment is active/inactive and constrained by lab-unit scope.
 
-A user can upload only through active profiles assigned to them. The upload forms and mobile upload-options API derive their project, disease, camera, site, mydriatic, and AI workflow options from those active assignments.
+A user can upload only through active project-profile assignments for lab units explicitly assigned to that user. The upload forms and mobile upload-options API derive their project, lab unit, disease, camera, site, mydriatic, EncounterSetType, and AI workflow options from those active assignments.
 
 ## Upload Rules
 
@@ -116,7 +116,7 @@ AI model to disease compatibility is modeled separately through `AIModelDisease`
 - allowed camera and site selection
 - mydriatic scope controls
 
-The add/edit form is intentionally profile-only. Users are not assigned while creating the profile. Uploaders are assigned later in project management.
+The add/edit form is intentionally profile-only. Users are not assigned while creating the profile. Uploaders are assigned later in project management after a reusable profile has been enabled for a project.
 
 ### Projects Page
 
@@ -126,6 +126,7 @@ The add/edit form is intentionally profile-only. Users are not assigned while cr
 - inspect PIs and investigators
 - add project investigators
 - inspect project upload profiles
+- enable or disable reusable profiles for a project
 - assign or remove uploaders from project profiles
 
 The page uses HTMX workspaces for lower/right-side project details. Project creation and project detail fragments are rendered by admin page routes, while mutations are sent to JSON APIs.
@@ -134,7 +135,7 @@ The page uses HTMX workspaces for lower/right-side project details. Project crea
 
 Domain logic lives in the `upload_profiles` package:
 
-- `upload_profiles/models.py` owns profile-related ORM models.
+- `upload_profiles/models.py` owns profile-related ORM models, including reusable profiles, project-profile mappings, and project-profile lab assignments.
 - `upload_profiles/service.py` owns upload option DTOs, uploader-facing scope validation, and detached-safe profile payloads.
 - `upload_profiles/admin_service.py` owns admin DTOs, validation, project/profile mutations, assignment mutations, and AI workflow validation.
 
@@ -157,7 +158,7 @@ Upload forms use `static/js/upload-profile-options.js` to filter visible project
 - Management is scoped to explicitly assigned lab units through `manager_lab_unit_ids()`.
 - Upload use is scoped to active profile assignments and the user's explicit lab units.
 - Admin-style roles do not create a broad upload-profile management override outside assigned lab units.
-- Assignment APIs verify that the selected user belongs to the profile lab unit.
+- Assignment APIs verify that the selected user is explicitly linked to every requested lab unit and that those lab units belong to the user's hospital.
 - Services return DTOs and safe mutation results rather than exposing live ORM rows across route boundaries.
 - Upload routes revalidate profile, upload kind, disease, camera, area, and mydriatic state server-side; UI filtering is only a convenience layer.
 

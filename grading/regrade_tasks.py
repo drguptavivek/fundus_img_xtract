@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from models import (
     Consensus,
     Disease,
@@ -439,6 +440,7 @@ def regrade_task_detail(regrade_task_id: int):
                     "id": grading.id,
                     "impression": grading.impression,
                     "display_order": grading.display_order,
+                    "is_ungradable": bool(grading.is_ungradable),
                     "guidelines": grading.guidelines,
                     "features": [
                         {
@@ -500,6 +502,7 @@ def regrade_task_detail(regrade_task_id: int):
             allow_revision=allow_revision,
             current_user_id=getattr(current_user, "id", None),
             current_slot="regrade_adj",
+            non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
             is_admin=is_admin,
             regrade_adjudicators=regrade_adjudicators,
         )

@@ -8,6 +8,18 @@ const LINKED_CLASSES = {
     SELECTED_ICON: 'sel-icon'
 };
 
+const LINKED_DEFAULT_NON_GRADABLE_REASONS = [
+    'Poor focus',
+    'Motion blur',
+    'Poor exposure',
+    'Artifact or obstruction',
+    'Incomplete or wrong field',
+    'Wrong eye or view',
+    'Missing required image or view',
+    'Image/document mismatch',
+    'Other'
+];
+
 document.addEventListener('DOMContentLoaded', function() {
     if (!window.linkedGradingData) {
         return;
@@ -169,6 +181,8 @@ function initPanel(panel) {
     const instructionsContent = panel.querySelector('[data-instructions-content]');
     const featuresSection = panel.querySelector('[data-features-section]');
     const featuresContainer = panel.querySelector('[data-features-container]');
+    const nonGradablePanel = panel.querySelector('[data-non-gradable-reasons]');
+    const nonGradableList = panel.querySelector('[data-non-gradable-reason-list]');
     const clearButton = panel.querySelector('[data-clear-selection]');
 
     const existingSelection = normalizeExistingFeatures(panelData.existingSelectedFeatures);
@@ -199,11 +213,13 @@ function initPanel(panel) {
             }
 
             updateFeatures(panelData, gradingId, featuresSection, featuresContainer, existingSelection);
+            updateNonGradableReasons(panelData, gradingId, nonGradablePanel, nonGradableList, panel);
         } else if (instructions) {
             instructions.style.display = 'none';
             if (featuresSection) {
                 featuresSection.style.display = 'none';
             }
+            hideNonGradableReasons(nonGradablePanel);
         }
     }
 
@@ -218,6 +234,7 @@ function initPanel(panel) {
             if (featuresSection) {
                 featuresSection.style.display = 'none';
             }
+            hideNonGradableReasons(nonGradablePanel);
             syncIcons();
         });
     }
@@ -261,6 +278,58 @@ function normalizeExistingFeatures(rawSelection) {
     });
 
     return normalized;
+}
+
+function standardNonGradableReasons() {
+    return Array.isArray(window.nonGradableReasons) && window.nonGradableReasons.length
+        ? window.nonGradableReasons
+        : LINKED_DEFAULT_NON_GRADABLE_REASONS;
+}
+
+function updateNonGradableReasons(panelData, gradingId, nonGradablePanel, nonGradableList, panel) {
+    if (!nonGradablePanel || !nonGradableList) {
+        return;
+    }
+    const gradingData = Array.isArray(panelData.features)
+        ? panelData.features.find(grading => grading.id === gradingId)
+        : null;
+    if (!gradingData || !gradingData.is_ungradable) {
+        hideNonGradableReasons(nonGradablePanel);
+        return;
+    }
+
+    nonGradableList.innerHTML = '';
+    standardNonGradableReasons().forEach(reason => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-outline-secondary btn-sm';
+        button.textContent = reason;
+        button.addEventListener('click', () => appendNonGradableReason(panel, reason));
+        nonGradableList.appendChild(button);
+    });
+    nonGradablePanel.style.display = 'block';
+}
+
+function hideNonGradableReasons(nonGradablePanel) {
+    if (nonGradablePanel) {
+        nonGradablePanel.style.display = 'none';
+    }
+}
+
+function appendNonGradableReason(panel, reason) {
+    const textarea = panel ? panel.querySelector('textarea[name^="comment_"]') : null;
+    if (!textarea || textarea.disabled) {
+        return;
+    }
+    const line = 'Non-gradable: ' + reason;
+    const currentValue = textarea.value || '';
+    if (currentValue.includes(line)) {
+        return;
+    }
+    textarea.value = currentValue.trim()
+        ? currentValue.replace(/\s+$/, '') + '\n' + line
+        : line;
+    textarea.focus();
 }
 
 function updateFeatures(panelData, gradingId, featuresSection, featuresContainer, existingSelection) {

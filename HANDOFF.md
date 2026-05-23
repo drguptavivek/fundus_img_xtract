@@ -8,9 +8,9 @@ Date: 2026-05-21
 - One EncounterSet belongs to one patient and one encounter/capture session.
 - EncounterSetType is reusable and is not mapped directly to a project.
 - Project mapping belongs in Upload Profiles.
-- Upload Profiles decide allowed upload kinds, project linkage, allowed target schemes, and allowed EncounterSetTypes.
-- EncounterSetType has one enforced target grading scheme.
-- Upload Profiles that enable an EncounterSetType must include that type's target scheme in the profile's allowed schemes.
+- Upload Profiles decide allowed upload kinds, project linkage, direct/pregraded/Remedio target schemes, and allowed EncounterSetTypes.
+- EncounterSetType has explicit image-level grading scheme(s), one default image-level scheme, and one encounter-level grading scheme.
+- Upload Profiles that enable EncounterSet upload use selected EncounterSetTypes as the EncounterSet target source.
 - Disease/target scheme should not be duplicated ambiguously between profile and EncounterSetType.
 - Direct image and pregraded uploads may allow multiple target schemes with a default and optional uploader override.
 - Remidio ZIP has a base target scheme; existing PDF detection may still create additional DR/glaucoma tasks.
@@ -210,6 +210,11 @@ Date: 2026-05-21
 
 ## Next Work - Upload Profile and EncounterSetType Targeting
 
+- Tracking:
+  - Bead: `fundus_img_xtract-6wy`
+  - GitHub issue: `#162 Stabilize EncounterSetType V1 code/API contract`
+  - GitHub Project item: `PVTI_lAHOAC3I5s4BYTytzgtlzJM`
+
 ### 1. Restructure Upload Profile Setup By Upload Kind
 
 - Upload Profiles should stop presenting one mixed target list for all upload kinds.
@@ -233,6 +238,39 @@ Date: 2026-05-21
   - default image-level grading scheme when multiple image schemes are allowed
 - Image-level schemes are used for task-eligible clinical images.
 - Encounter-level scheme is used for the overall EncounterSet/encounter grade.
+
+## 2026-05-23 - Upload Profile Governance Refactor Direction
+
+- A production backup was created before continuing this work:
+  - DB: `/home/eyeimg/backups/backup_20260523_072235_db.tar.gz`
+  - App: `/home/eyeimg/backups/backup_20260523_072235_app.tar.gz`
+- Upload Profiles are being refactored into reusable workflow templates.
+- `UploadProfile` should no longer own `project_id` or `lab_unit_id`.
+- Project/profile linkage belongs in `project_upload_profiles`.
+- Uploader/lab access belongs in `project_upload_profile_assignments`.
+- Assignment rule:
+  - selected lab units must be in the manager's explicit lab-unit scope.
+  - selected lab units must already be explicitly assigned to the target user.
+  - selected lab units must belong to the user's hospital.
+- Upload payloads should remain backward compatible for clients:
+  - profile payload includes `profile_id`, `project_id`, and `lab_unit_id`.
+  - these are derived from assignment context, not stored directly on `UploadProfile`.
+  - new payload fields `project_upload_profile_id` and `assignment_id` identify the governance mapping and concrete assignment.
+- `/admin/upload-profiles` is the reusable template CRUD surface only.
+- `/admin/upload-projects` is the project governance surface:
+  - create/edit project.
+  - add project investigators.
+  - enable/disable reusable upload profiles for a project.
+  - assign users and scoped lab units to enabled project profiles.
+- Existing `jobs.upload_profile_id` and `patient_encounters.upload_profile_id` continue pointing to reusable `upload_profiles.id`.
+- Direct image upload still stores `project_id` and `lab_unit_id` on the upload row from the selected assignment context. No extra direct-image audit-only `upload_profile_id` was added because that was explicitly deferred.
+- Remidio ZIP routing still needs a later routing profile:
+  - Remidio API data may need project/profile routing by connection, site ID/custom ID, camera type such as FOP/PRISTINE, date windows, and other metadata.
+  - Upload Profile should eventually link to a Remidio API routing profile rather than trying to encode API routing in the reusable upload template itself.
+- EncounterSet linkage remains via Upload Profile:
+  - profile enables allowed EncounterSetTypes.
+  - EncounterSetType owns image-level schemes, default image scheme, encounter-level scheme, metadata schema, and asset rules.
+  - project linkage comes from the project-profile mapping.
 - Supporting PDFs, reports, and document-images remain non-task assets and must not get image-level grading tasks.
 - Rationale:
   - EncounterSets can contain mixed clinical image types in one patient encounter.
@@ -436,3 +474,35 @@ Date: 2026-05-21
   - Site `RPC_COMOPH_2` + Camera `PRISTINE` -> Upload Profile `Project B PRISTINE Screening`
   - Site `XYZ` + any camera -> Upload Profile `Project C`
 - This keeps Upload Profiles reusable for manual upload, Remedio ZIP, and Remedio API while still allowing Remedio API encounters to route to different projects by source-system attributes.
+
+### 9. Upload Profile Abnormal Prioritization Policy
+
+- Upload Profiles need an optional prioritization policy for downstream human grading.
+- This belongs at the Upload Profile level, not EncounterSetType, because it is a project/workstream sampling and task-routing policy.
+- EncounterSetType defines what can be uploaded and what grading schemes apply.
+- Upload Profile defines how aggressively the resulting task stream should prioritize abnormal or suspicious cases for a project.
+- This is separate from grade-level prioritization:
+  - `DiseaseGrading.prioritize_for_task_selection` captures whether a specific grade inside a grading scheme should be considered priority.
+  - Upload Profile abnormal prioritization captures whether this project/workstream prioritizes abnormal encounters or AI-abnormal images during task creation/selection.
+- Planned Upload Profile-level fields:
+  - `prioritize_abnormal_encounters`: whether encounters marked abnormal at encounter metadata/verification level should be prioritized.
+  - `prioritize_ai_abnormal_images`: whether images flagged abnormal/suspicious by AI inference should be prioritized.
+  - `normal_sampling_percent`: percent of normal/non-suspicious images that should still receive human grading.
+  - `normal_sampling_strategy`: random initially; later may support stratified sampling by site, camera, date, or EncounterSetType.
+  - `priority_source_order`: deterministic ordering when multiple priority sources exist, for example encounter abnormal first, then AI abnormal.
+  - `apply_to_upload_kinds`: direct image, pregraded, Remedio ZIP, Remedio API, EncounterSet, or all supported kinds.
+  - `active`: enables or disables the policy without deleting it.
+- Planned behavior:
+  - If no prioritization policy is configured, existing task creation behavior remains unchanged.
+  - Abnormal encounters should push all eligible clinical images for grading unless stricter per-scheme rules are later introduced.
+  - AI-abnormal or AI-suspicious images should be prioritized for human grading when the profile enables that behavior.
+  - Normal images should still be sampled according to `normal_sampling_percent`.
+  - Example: `normal_sampling_percent = 10` means abnormal/suspicious images are included, while only 10% of normal images are selected for human grading.
+- This policy must not use diagnosis text shown to graders. It may use hidden encounter metadata or AI inference flags, but those values remain hidden unless explicitly configured as grader-visible.
+- Task creation/selection should persist an auditable reason for inclusion or deprioritization, for example:
+  - `encounter_abnormal`
+  - `ai_abnormal`
+  - `normal_sampled`
+  - `mandatory_by_scheme`
+  - `manual_override`
+- This policy should be implemented after the EncounterSetType target-scheme and Upload Profile restructuring, because the policy depends on knowing the selected Upload Profile, project context, upload kind, EncounterSetType, and task-eligible clinical assets.

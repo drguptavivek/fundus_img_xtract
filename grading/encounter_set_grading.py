@@ -11,6 +11,7 @@ Features:
 from flask import render_template, redirect, url_for, request, jsonify, abort, flash
 from flask_login import login_required, current_user
 from auth.roles import roles_required
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from models import PatientEncounters, EncounterSetImage, GradingTask, Disease, DiseaseGrading, Grade
 from db_transaction_manager import transaction_scope
 from utils.log_sanitize import sanitize_log_value
@@ -83,7 +84,8 @@ def encounter_set_grading(uuid):
             disease=disease,
             grading_labels=grading_labels,
             existing_grade=existing_grade,
-            not_gradable_count=not_gradable_count
+            not_gradable_count=not_gradable_count,
+            non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
         )
 
 

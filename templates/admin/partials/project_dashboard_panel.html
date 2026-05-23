@@ -96,13 +96,20 @@
             </tr>
           </thead>
           <tbody>
-            {% for profile in upload_profiles %}
+            {% for mapping in project_profile_mappings %}
+            {% set profile = mapping.profile %}
             <tr>
-              <td>{{ profile.project.title }}</td>
+              <td>{{ mapping.project.title }}</td>
               <td>{{ profile.name }}</td>
-              <td>{{ profile.lab_unit.name }}</td>
               <td class="small">
-                {% for assignment in profile.assignments if assignment.active %}
+                {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
+                  {{ assignment.lab_unit.name }}{% if not loop.last %}, {% endif %}
+                {% else %}
+                  -
+                {% endfor %}
+              </td>
+              <td class="small">
+                {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
                 <form class="d-inline"
                       method="post"
                       action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
@@ -110,16 +117,15 @@
                       hx-swap="none"
                       data-json-api-htmx>
                   {{ csrf_field() }}
-                  <input type="hidden" name="profile_id" value="{{ profile.id }}">
-                  <input type="hidden" name="user_id" value="{{ assignment.user_id }}">
-                  <button class="btn btn-sm btn-link p-0 align-baseline" type="submit">{{ assignment.user.username }}</button>{% if not loop.last %}, {% endif %}
+                  <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
+                  <button class="btn btn-sm btn-link p-0 align-baseline" type="submit">{{ assignment.user.username }}{% if assignment.lab_unit %} / {{ assignment.lab_unit.name }}{% endif %}</button>{% if not loop.last %}, {% endif %}
                 </form>
                 {% else %}
                 -
                 {% endfor %}
               </td>
               <td class="small">{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</td>
-              <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
+              <td><span class="badge {{ 'bg-success' if mapping.active and profile.active else 'bg-secondary' }}">{{ 'Active' if mapping.active and profile.active else 'Inactive' }}</span></td>
             </tr>
             {% else %}
             <tr><td colspan="6" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
@@ -144,7 +150,7 @@
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
-              <th>Name</th><th>Project</th><th>Lab Unit</th><th>Diseases</th><th>Remidio ZIP Default</th><th>Types</th><th>Status</th><th></th>
+              <th>Name</th><th>Projects</th><th>Uploaders</th><th>Diseases</th><th>EncounterSetTypes</th><th>Remidio ZIP Default</th><th>Types</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -161,15 +167,33 @@
             {% endfor %}
             <tr>
               <td>{{ profile.name }}</td>
-              <td>{{ profile.project.title }}</td>
-              <td>{{ profile.lab_unit.name }}</td>
-              <td class="small">{{ profile.diseases|map(attribute='disease.name')|join(', ') }}</td>
+              <td class="small">
+                {% for mapping in profile.project_mappings if mapping.active %}
+                  {{ mapping.project.title }}{% if not loop.last %}, {% endif %}
+                {% else %}
+                  -
+                {% endfor %}
+              </td>
+              <td class="small">
+                {% set active_uploader_count = namespace(value=0) %}
+                {% for mapping in profile.project_mappings if mapping.active %}
+                  {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
+                    {% set active_uploader_count.value = active_uploader_count.value + 1 %}
+                  {% endfor %}
+                {% endfor %}
+                {{ active_uploader_count.value }}
+              </td>
+              <td class="small">{{ profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}</td>
+              <td class="small">
+                {% if row_encounter_set_type_ids %}
+                  {{ profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type.name')|join(', ') }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
               <td class="small">{{ profile.diseases|selectattr('is_default')|map(attribute='disease.name')|join(', ') or '-' }}</td>
               <td class="small">
-                <div>{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</div>
-                {% if row_encounter_set_type_ids %}
-                <div class="text-muted">{{ profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type.name')|join(', ') }}</div>
-                {% endif %}
+                {{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}
               </td>
               <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
               <td class="text-end">
@@ -181,8 +205,7 @@
                     data-profile-id="{{ profile.id }}"
                     data-action="{{ url_for('fundus_api.update_upload_profile', profile_id=profile.id) }}"
                     data-name="{{ profile.name|e }}"
-                    data-lab-unit-id="{{ profile.lab_unit_id }}"
-                    data-project-id="{{ profile.project_id }}"
+                    data-description="{{ profile.description|default('', true)|e }}"
                     data-disease-ids="{{ row_disease_ids|join(',') }}"
                     data-default-disease-ids="{{ row_default_disease_ids|join(',') }}"
                     data-camera-ids="{{ row_camera_ids|join(',') }}"
@@ -225,7 +248,7 @@
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
+            <tr><td colspan="9" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
             {% endfor %}
           </tbody>
         </table>

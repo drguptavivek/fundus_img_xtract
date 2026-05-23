@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
-from encounter_set_types.models import EncounterSetType
+from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme, default_asset_rules
 from models import Disease
 from upload_metadata.models import UploadMetadataFieldDefinition
 from upload_profiles.admin_service import MutationResult
@@ -42,8 +42,11 @@ _CODE_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 class EncounterSetTypeInput:
     name: str
     code: str
-    target_scheme_id: int | None
+    image_grading_scheme_ids: list[int]
+    default_image_grading_scheme_id: int | None
+    encounter_grading_scheme_id: int | None
     metadata_schema_json: dict[str, Any]
+    asset_rules_json: dict[str, Any] | None = None
     description: str | None = None
     active: bool = True
 
@@ -59,7 +62,10 @@ def list_encounter_set_types(
             return []
         query = (
             select(EncounterSetType)
-            .options(selectinload(EncounterSetType.target_scheme))
+            .options(
+                selectinload(EncounterSetType.encounter_grading_scheme),
+                selectinload(EncounterSetType.image_grading_schemes).selectinload(EncounterSetTypeImageGradingScheme.disease),
+            )
             .order_by(EncounterSetType.active.desc(), EncounterSetType.name)
         )
         if not include_inactive:
@@ -86,7 +92,6 @@ def export_encounter_set_type_schema(manager_user_id: int, type_id: int) -> Muta
         row = _get_scoped_type(db, manager_user_id, type_id)
         if row is None:
             return MutationResult(False, "Encounter-set type not found.", 404)
-        target_scheme = row.__dict__.get("target_scheme")
         return MutationResult(
             True,
             "Encounter-set type schema exported.",
@@ -102,11 +107,10 @@ def export_encounter_set_type_schema(manager_user_id: int, type_id: int) -> Muta
                         "description": row.description,
                         "active": row.active,
                     },
-                    "target_scheme": {
-                        "id": row.target_scheme_id,
-                        "name": target_scheme.name if target_scheme else None,
-                        "grading_scope": target_scheme.grading_scope if target_scheme else None,
-                    },
+                    "image_grading_schemes": _serialize_image_grading_schemes(row),
+                    "default_image_grading_scheme": _serialize_default_image_scheme(row),
+                    "encounter_grading_scheme": _serialize_disease(row.encounter_grading_scheme),
+                    "asset_rules_json": row.asset_rules_json or default_asset_rules(),
                     "metadata_schema_json": row.metadata_schema_json or {"fields": []},
                 },
                 "filename": f"{row.code or row.id}_encounter_set_type_schema.json",
@@ -121,8 +125,12 @@ def create_encounter_set_type(manager_user_id: int, dto: EncounterSetTypeInput) 
     with db_transaction_manager.transaction_scope() as db:
         if not _has_manager_scope(manager_user_id):
             return MutationResult(False, "You are not assigned to any lab units for upload metadata management.", 403)
-        if db.get(Disease, dto.target_scheme_id) is None:
-            return MutationResult(False, "Target scheme not found.", 404)
+        scheme_result = _validate_grading_schemes(db, dto)
+        if not scheme_result.success:
+            return scheme_result
+        asset_rules_result = normalize_asset_rules(dto.asset_rules_json)
+        if not asset_rules_result.success:
+            return asset_rules_result
         schema_result = _schema_with_master_fields(db, manager_user_id, dto.metadata_schema_json)
         if not schema_result.success:
             return schema_result
@@ -130,12 +138,14 @@ def create_encounter_set_type(manager_user_id: int, dto: EncounterSetTypeInput) 
             name=dto.name.strip(),
             code=dto.code.strip(),
             description=dto.description,
-            target_scheme_id=dto.target_scheme_id,
+            encounter_grading_scheme_id=dto.encounter_grading_scheme_id,
             metadata_schema_json=schema_result.payload["metadata_schema_json"],
+            asset_rules_json=asset_rules_result.payload["asset_rules_json"],
             active=dto.active,
             created_by_user_id=manager_user_id,
             updated_by_user_id=manager_user_id,
         )
+        _replace_image_grading_schemes(row, scheme_result.payload["image_scheme_ids"], scheme_result.payload["default_image_scheme_id"])
         db.add(row)
         try:
             db.flush()
@@ -158,18 +168,24 @@ def update_encounter_set_type(manager_user_id: int, type_id: int, dto: Encounter
         row = _get_scoped_type(db, manager_user_id, type_id)
         if row is None:
             return MutationResult(False, "Encounter-set type not found.", 404)
-        if db.get(Disease, dto.target_scheme_id) is None:
-            return MutationResult(False, "Target scheme not found.", 404)
+        scheme_result = _validate_grading_schemes(db, dto)
+        if not scheme_result.success:
+            return scheme_result
+        asset_rules_result = normalize_asset_rules(dto.asset_rules_json)
+        if not asset_rules_result.success:
+            return asset_rules_result
         row.name = dto.name.strip()
         row.code = dto.code.strip()
         row.description = dto.description
-        row.target_scheme_id = dto.target_scheme_id
+        row.encounter_grading_scheme_id = dto.encounter_grading_scheme_id
         schema_result = _schema_with_master_fields(db, manager_user_id, dto.metadata_schema_json)
         if not schema_result.success:
             return schema_result
         row.metadata_schema_json = schema_result.payload["metadata_schema_json"]
+        row.asset_rules_json = asset_rules_result.payload["asset_rules_json"]
         row.active = dto.active
         row.updated_by_user_id = manager_user_id
+        _replace_image_grading_schemes(row, scheme_result.payload["image_scheme_ids"], scheme_result.payload["default_image_scheme_id"])
         try:
             db.flush()
         except IntegrityError:
@@ -187,6 +203,24 @@ def set_encounter_set_type_active(manager_user_id: int, type_id: int, active: bo
         row = _get_scoped_type(db, manager_user_id, type_id)
         if row is None:
             return MutationResult(False, "Encounter-set type not found.", 404)
+        if active:
+            image_scheme_ids = [scheme.disease_id for scheme in row.image_grading_schemes if scheme.active]
+            validation = _validate_grading_schemes(
+                db,
+                EncounterSetTypeInput(
+                    name=row.name,
+                    code=row.code,
+                    image_grading_scheme_ids=image_scheme_ids,
+                    default_image_grading_scheme_id=_default_image_scheme_id(row),
+                    encounter_grading_scheme_id=row.encounter_grading_scheme_id,
+                    metadata_schema_json=row.metadata_schema_json,
+                    asset_rules_json=row.asset_rules_json,
+                    active=True,
+                    description=row.description,
+                ),
+            )
+            if not validation.success:
+                return validation
         row.active = active
         row.updated_by_user_id = manager_user_id
         return MutationResult(
@@ -224,8 +258,11 @@ def validate_encounter_set_type_input(dto: EncounterSetTypeInput) -> str | None:
         return "Encounter-set type code is required."
     if not _CODE_RE.match(dto.code.strip()):
         return "Encounter-set type code may contain only letters, numbers, underscores, hyphens, and dots."
-    if not dto.target_scheme_id:
-        return "Target scheme is required."
+    if dto.active:
+        if not dto.image_grading_scheme_ids:
+            return "At least one image grading scheme is required for an active EncounterSetType."
+        if not dto.encounter_grading_scheme_id:
+            return "Encounter grading scheme is required for an active EncounterSetType."
     try:
         normalize_metadata_schema(dto.metadata_schema_json)
     except ValueError as exc:
@@ -260,6 +297,104 @@ def normalize_metadata_schema(raw_schema: Any) -> dict[str, Any]:
         seen.add(normalized["key"])
         normalized_fields.append(normalized)
     return {"fields": normalized_fields}
+
+
+def normalize_asset_rules(raw_rules: Any) -> MutationResult:
+    """Validate and normalize EncounterSetType asset permission rules."""
+    rules = default_asset_rules()
+    if raw_rules in (None, ""):
+        return MutationResult(True, "Asset rules normalized.", payload={"asset_rules_json": rules})
+    if isinstance(raw_rules, str):
+        try:
+            raw_rules = json.loads(raw_rules)
+        except json.JSONDecodeError:
+            return MutationResult(False, "asset_rules_json must be valid JSON.", 400)
+    if not isinstance(raw_rules, dict):
+        return MutationResult(False, "asset_rules_json must be an object.", 400)
+
+    bool_keys = {
+        "allow_clinical_images",
+        "allow_document_uploads",
+        "allow_pdf_uploads",
+        "allow_document_image_uploads",
+        "allow_report_uploads",
+        "allow_report_pdfs",
+        "allow_report_images",
+    }
+    int_keys = {
+        "min_clinical_images",
+        "max_clinical_images",
+        "max_documents",
+        "max_pdfs",
+        "max_document_images",
+        "max_reports",
+    }
+    for key, value in raw_rules.items():
+        if key not in rules:
+            return MutationResult(False, f"asset_rules_json contains unsupported key '{key}'.", 400)
+        if key in bool_keys:
+            rules[key] = _coerce_bool(value)
+        elif key in int_keys:
+            try:
+                rules[key] = _optional_non_negative_int(value, key)
+            except ValueError as exc:
+                return MutationResult(False, str(exc), 400)
+    min_images = rules.get("min_clinical_images")
+    max_images = rules.get("max_clinical_images")
+    if min_images is not None and max_images is not None and min_images > max_images:
+        return MutationResult(False, "min_clinical_images cannot be greater than max_clinical_images.", 400)
+    return MutationResult(True, "Asset rules normalized.", payload={"asset_rules_json": rules})
+
+
+def _validate_grading_schemes(db, dto: EncounterSetTypeInput) -> MutationResult:
+    image_scheme_ids = sorted(set(dto.image_grading_scheme_ids or []))
+    default_image_scheme_id = dto.default_image_grading_scheme_id
+    if dto.active and not image_scheme_ids:
+        return MutationResult(False, "At least one image grading scheme is required for an active EncounterSetType.", 400)
+    if dto.active and not dto.encounter_grading_scheme_id:
+        return MutationResult(False, "Encounter grading scheme is required for an active EncounterSetType.", 400)
+    if not image_scheme_ids and default_image_scheme_id:
+        return MutationResult(False, "Default image grading scheme must be one of the image grading schemes.", 400)
+    if len(image_scheme_ids) == 1:
+        default_image_scheme_id = image_scheme_ids[0]
+    elif image_scheme_ids and default_image_scheme_id not in image_scheme_ids:
+        return MutationResult(False, "Default image grading scheme must be one of the image grading schemes.", 400)
+
+    disease_ids = set(image_scheme_ids)
+    if dto.encounter_grading_scheme_id:
+        disease_ids.add(dto.encounter_grading_scheme_id)
+    diseases = {
+        row.id: row
+        for row in db.execute(select(Disease).where(Disease.id.in_(disease_ids or {-1}))).scalars().all()
+    }
+    missing = disease_ids - set(diseases)
+    if missing:
+        return MutationResult(False, "One or more grading schemes were not found.", 404)
+    image_scope_errors = [diseases[disease_id].name for disease_id in image_scheme_ids if diseases[disease_id].grading_scope != "image"]
+    if image_scope_errors:
+        return MutationResult(False, "Image grading schemes must have image scope: " + ", ".join(image_scope_errors), 400)
+    if dto.encounter_grading_scheme_id and diseases[dto.encounter_grading_scheme_id].grading_scope != "encounter":
+        return MutationResult(False, "Encounter grading scheme must have encounter scope.", 400)
+    return MutationResult(
+        True,
+        "Grading schemes validated.",
+        payload={
+            "image_scheme_ids": image_scheme_ids,
+            "default_image_scheme_id": default_image_scheme_id,
+        },
+    )
+
+
+def _replace_image_grading_schemes(row: EncounterSetType, image_scheme_ids: list[int], default_image_scheme_id: int | None) -> None:
+    row.image_grading_schemes = [
+        EncounterSetTypeImageGradingScheme(
+            disease_id=disease_id,
+            is_default=disease_id == default_image_scheme_id,
+            display_order=index,
+            active=True,
+        )
+        for index, disease_id in enumerate(image_scheme_ids, start=1)
+    ]
 
 
 def _schema_with_master_fields(db, manager_user_id: int, raw_schema: Any) -> MutationResult:
@@ -354,21 +489,67 @@ def _apply_master_definition_snapshot(field: dict[str, Any], master: UploadMetad
 
 
 def serialize_encounter_set_type(row: EncounterSetType) -> dict[str, Any]:
-    target_scheme = row.__dict__.get("target_scheme")
     return {
         "id": row.id,
         "name": row.name,
         "code": row.code,
         "description": row.description,
-        "target_scheme_id": row.target_scheme_id,
-        "target_scheme_name": target_scheme.name if target_scheme else None,
+        "image_grading_schemes": _serialize_image_grading_schemes(row),
+        "default_image_grading_scheme": _serialize_default_image_scheme(row),
+        "default_image_grading_scheme_id": _default_image_scheme_id(row),
+        "image_grading_scheme_ids": [item["id"] for item in _serialize_image_grading_schemes(row)],
+        "encounter_grading_scheme": _serialize_disease(row.encounter_grading_scheme),
+        "encounter_grading_scheme_id": row.encounter_grading_scheme_id,
         "metadata_schema_json": row.metadata_schema_json or {"fields": []},
+        "asset_rules_json": row.asset_rules_json or default_asset_rules(),
         "active": row.active,
         "created_by_user_id": row.created_by_user_id,
         "updated_by_user_id": row.updated_by_user_id,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+def _serialize_disease(disease: Disease | None) -> dict[str, Any] | None:
+    if disease is None:
+        return None
+    return {"id": disease.id, "name": disease.name, "grading_scope": disease.grading_scope}
+
+
+def _active_image_scheme_rows(row: EncounterSetType) -> list[EncounterSetTypeImageGradingScheme]:
+    return sorted(
+        [scheme for scheme in row.image_grading_schemes if scheme.active],
+        key=lambda scheme: (scheme.display_order, scheme.disease.name if scheme.disease else "", scheme.disease_id),
+    )
+
+
+def _serialize_image_grading_schemes(row: EncounterSetType) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": scheme.disease_id,
+            "name": scheme.disease.name if scheme.disease else None,
+            "grading_scope": scheme.disease.grading_scope if scheme.disease else "image",
+            "is_default": scheme.is_default,
+            "display_order": scheme.display_order,
+        }
+        for scheme in _active_image_scheme_rows(row)
+    ]
+
+
+def _default_image_scheme_id(row: EncounterSetType) -> int | None:
+    for scheme in _active_image_scheme_rows(row):
+        if scheme.is_default:
+            return scheme.disease_id
+    schemes = _active_image_scheme_rows(row)
+    return schemes[0].disease_id if len(schemes) == 1 else None
+
+
+def _serialize_default_image_scheme(row: EncounterSetType) -> dict[str, Any] | None:
+    default_id = _default_image_scheme_id(row)
+    for scheme in _serialize_image_grading_schemes(row):
+        if scheme["id"] == default_id:
+            return scheme
+    return None
 
 
 def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
@@ -485,6 +666,26 @@ def _non_negative_int(value: Any, idx: int) -> int:
     return parsed
 
 
+def _optional_non_negative_int(value: Any, key: str) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key} must be a non-negative integer.") from exc
+    if parsed < 0:
+        raise ValueError(f"{key} must be a non-negative integer.")
+    return parsed
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _has_manager_scope(manager_user_id: int) -> bool:
     return bool(manager_lab_unit_ids(manager_user_id))
 
@@ -496,7 +697,10 @@ def _get_scoped_type(db, manager_user_id: int, type_id: int) -> EncounterSetType
         db.execute(
             select(EncounterSetType)
             .where(EncounterSetType.id == type_id)
-            .options(selectinload(EncounterSetType.target_scheme))
+            .options(
+                selectinload(EncounterSetType.encounter_grading_scheme),
+                selectinload(EncounterSetType.image_grading_schemes).selectinload(EncounterSetTypeImageGradingScheme.disease),
+            )
         )
         .scalars()
         .one_or_none()

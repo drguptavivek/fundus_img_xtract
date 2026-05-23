@@ -2,9 +2,10 @@ import pytest
 
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileKind,
@@ -36,20 +37,29 @@ def upload_profile_entities(db_session):
 
     profile = UploadProfile(
         name="Default profile",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         allow_mydriatic=False,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
         active=True,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=user.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_REMIDIO))
     db_session.add(profile)
+    db_session.flush()
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=user.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
     db_session.commit()
     return {
         "user": user,

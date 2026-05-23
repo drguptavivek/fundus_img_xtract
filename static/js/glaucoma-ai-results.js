@@ -8,6 +8,19 @@
     return Number.isFinite(value) ? value : null;
   }
 
+  function selectedProfileContext(form) {
+    var input = form.querySelector('input[name="profile_id"]:checked');
+    if (!input) return { profileId: null, projectUploadProfileId: null };
+    var profileId = Number(input.value);
+    var projectUploadProfileId = Number(input.dataset.projectUploadProfileId || 0);
+    return {
+      profileId: Number.isFinite(profileId) ? profileId : null,
+      projectUploadProfileId: Number.isFinite(projectUploadProfileId) && projectUploadProfileId > 0
+        ? projectUploadProfileId
+        : null
+    };
+  }
+
   function setGroupRadio(form, name, value) {
     form.querySelectorAll('input[name="' + name + '"]').forEach(function (input) {
       input.checked = String(input.value) === String(value);
@@ -64,9 +77,12 @@
     }
     if (!Array.isArray(profiles) || profiles.length === 0) return;
 
-    var selectedProfileId = selectedNumber(form, "profile_id");
+    var selectedProfile = selectedProfileContext(form);
     var matches = profiles.filter(function (profile) {
-      return !selectedProfileId || Number(profile.profile_id) === selectedProfileId;
+      if (selectedProfile.projectUploadProfileId) {
+        return Number(profile.project_upload_profile_id) === selectedProfile.projectUploadProfileId;
+      }
+      return !selectedProfile.profileId || Number(profile.profile_id) === selectedProfile.profileId;
     });
     if (matches.length === 1) {
       var profile = matches[0];

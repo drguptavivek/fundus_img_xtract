@@ -23,13 +23,15 @@ from models import (
 )
 from upload_profiles.service import manager_lab_unit_ids
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
 )
+from encounter_set_types.models import EncounterSetTypeImageGradingScheme
 
 
 def _manager_lab_unit_ids() -> set[int]:
@@ -65,18 +67,49 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
     upload_profiles = (
         db.execute(
             select(UploadProfile)
-            .where(UploadProfile.lab_unit_id.in_(scoped_lab_ids))
             .options(
-                selectinload(UploadProfile.assignments).selectinload(UploadProfileAssignment.user),
-                selectinload(UploadProfile.project),
-                selectinload(UploadProfile.lab_unit),
+                selectinload(UploadProfile.project_mappings).selectinload(ProjectUploadProfile.project),
+                selectinload(UploadProfile.project_mappings)
+                .selectinload(ProjectUploadProfile.assignments)
+                .selectinload(ProjectUploadProfileAssignment.user),
+                selectinload(UploadProfile.project_mappings)
+                .selectinload(ProjectUploadProfile.assignments)
+                .selectinload(ProjectUploadProfileAssignment.lab_unit),
                 selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
                 selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
                 selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
                 selectinload(UploadProfile.ai_workflows),
                 selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
+                .selectinload(EncounterSetType.encounter_grading_scheme),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
+                .selectinload(EncounterSetType.image_grading_schemes)
+                .selectinload(EncounterSetTypeImageGradingScheme.disease),
             )
-            .order_by(UploadProfile.active.desc(), UploadProfile.project_id, UploadProfile.name)
+            .order_by(UploadProfile.active.desc(), UploadProfile.name)
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    project_profile_mappings = (
+        db.execute(
+            select(ProjectUploadProfile)
+            .options(
+                selectinload(ProjectUploadProfile.project),
+                selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
+                selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
+                selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
+                selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.upload_kinds),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type),
+                selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.user),
+                selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.lab_unit),
+            )
+            .order_by(ProjectUploadProfile.project_id, ProjectUploadProfile.active.desc(), ProjectUploadProfile.upload_profile_id)
         )
         .scalars()
         .unique()
@@ -114,6 +147,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
     project_cards = []
     for project in projects:
         active_investigators = [investigator for investigator in investigators if investigator.project_id == project.id and investigator.active]
+        project_mappings = [mapping for mapping in project_profile_mappings if mapping.project_id == project.id]
         pi_names = [
             investigator.user.full_name or investigator.user.username
             for investigator in active_investigators
@@ -124,15 +158,19 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 "project": project,
                 "pi_names": pi_names,
                 "investigator_count": len(active_investigators),
-                "mapping_count": sum(
-                    1 for profile in upload_profiles if profile.project_id == project.id and profile.active
-                ),
+                "mapping_count": sum(1 for mapping in project_mappings if mapping.active and mapping.profile and mapping.profile.active),
                 "uploader_count": len(
                     {
                         assignment.user_id
-                        for profile in upload_profiles
-                        for assignment in profile.assignments
-                        if profile.project_id == project.id and profile.active and assignment.active
+                        for mapping in project_mappings
+                        for assignment in mapping.assignments
+                        if (
+                            mapping.active
+                            and mapping.profile
+                            and mapping.profile.active
+                            and assignment.active
+                            and assignment.lab_unit_id in scoped_lab_ids
+                        )
                     }
                 ),
             }
@@ -140,6 +178,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
 
     return {
         "lab_units": lab_units,
+        "scoped_lab_ids": scoped_lab_ids,
         "users": users,
         "projects": projects,
         "project_cards": project_cards,
@@ -149,7 +188,10 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "encounter_set_types": (
             db.execute(
                 select(EncounterSetType)
-                .options(selectinload(EncounterSetType.target_scheme))
+                .options(
+                    selectinload(EncounterSetType.encounter_grading_scheme),
+                    selectinload(EncounterSetType.image_grading_schemes).selectinload(EncounterSetTypeImageGradingScheme.disease),
+                )
                 .order_by(EncounterSetType.active.desc(), EncounterSetType.name)
             )
             .scalars()
@@ -157,6 +199,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         ),
         "ai_models_by_disease": ai_models_by_disease,
         "upload_profiles": upload_profiles,
+        "project_profile_mappings": project_profile_mappings,
         "investigators": investigators,
     }
 
@@ -205,9 +248,12 @@ def upload_project_workspace(project_id: int):
         context["project_investigators"] = [
             investigator for investigator in context["investigators"] if investigator.project_id == project_id and investigator.active
         ]
-        context["project_profiles"] = [
-            profile for profile in context["upload_profiles"] if profile.project_id == project_id
+        context["project_profile_mappings"] = [
+            mapping for mapping in context["project_profile_mappings"] if mapping.project_id == project_id
         ]
+        context["enabled_profile_ids"] = {
+            mapping.upload_profile_id for mapping in context["project_profile_mappings"] if mapping.active
+        }
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
         return render_template("admin/partials/project_detail_panel.html", **context)
 

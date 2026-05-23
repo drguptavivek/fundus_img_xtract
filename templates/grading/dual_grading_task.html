@@ -233,6 +233,11 @@
                       %}>{{ panel.existing_grade.comment if panel.existing_grade and panel.existing_grade.comment else '' }}</textarea>
                   </div>
 
+                  <div class="mb-2" data-non-gradable-reasons style="display: none;">
+                    <label class="form-label">Reason for Non-gradable</label>
+                    <div class="d-flex flex-wrap gap-1" data-non-gradable-reason-list></div>
+                  </div>
+
                   <div class="d-flex justify-content-between gap-2">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-clear-selection>Clear</button>
                   </div>
@@ -280,6 +285,11 @@
             <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if
               revision_read_only or (task.state=="final" and not is_arbitrator_revising_recent) %}disabled{% endif
               %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
+          </div>
+
+          <div class="mb-2" data-non-gradable-reasons style="display: none;">
+            <label class="form-label">Reason for Non-gradable</label>
+            <div class="d-flex flex-wrap gap-1" data-non-gradable-reason-list></div>
           </div>
 
           {% if not revision_read_only and (task.state != "final" or is_arbitrator_revising_recent) %}
@@ -396,6 +406,7 @@
     window.currentSlot = "{{ current_slot or '' }}";
     window.featuresReadOnly = {{ (task.state == "final" and not is_arbitrator_revising_recent) | tojson}};
     window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
+    window.nonGradableReasons = {{ (non_gradable_reasons or []) | tojson }};
     {% if existing_selected_features %}
     window.existingSelectedFeatures = {{ existing_selected_features | tojson}};
     {% else %}

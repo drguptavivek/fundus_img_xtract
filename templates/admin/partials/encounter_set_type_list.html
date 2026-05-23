@@ -3,7 +3,7 @@
     <thead>
       <tr>
         <th>Type</th>
-        <th>Target Scheme</th>
+        <th>Grading Schemes</th>
         <th>Fields</th>
         <th>Status</th>
         <th class="text-end">Actions</th>
@@ -17,7 +17,20 @@
           <div class="fw-semibold">{{ row.name }}</div>
           <div class="small text-muted">{{ row.code }}</div>
         </td>
-        <td>{{ row.target_scheme_name or row.target_scheme_id }}</td>
+        <td>
+          <div class="small">
+            <span class="text-muted">Image:</span>
+            {% for scheme in row.image_grading_schemes %}
+              <span class="badge text-bg-light border">{{ scheme.name }}{% if scheme.is_default %} default{% endif %}</span>
+            {% else %}
+              <span class="text-muted">None</span>
+            {% endfor %}
+          </div>
+          <div class="small mt-1">
+            <span class="text-muted">Encounter:</span>
+            {{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else "None" }}
+          </div>
+        </td>
         <td>
           <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "encounter")|list|length }} encounter</span>
           <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "image")|list|length }} image</span>
@@ -31,6 +44,14 @@
         </td>
         <td class="text-end">
           <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary"
+                    type="button"
+                    hx-get="{{ url_for('admin.encounter_set_type_view', type_id=row.id) }}"
+                    hx-target="#encounter-set-types-workspace"
+                    hx-swap="innerHTML"
+                    hx-push-url="{{ url_for('admin.encounter_set_type_view', type_id=row.id) }}">
+              View
+            </button>
             <button class="btn btn-outline-primary"
                     type="button"
                     hx-get="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}"

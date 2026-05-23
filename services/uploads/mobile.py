@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 import zipfile
@@ -56,6 +57,7 @@ from utils.fileUtils import get_direct_thumbnail_serving_path
 from utils.log_sanitize import sanitize_log_value
 
 
+logger = logging.getLogger(__name__)
 MOBILE_UPLOAD_KINDS = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
 MAX_REMARKS_LENGTH = 1000
 AI_PROBABILITY_PATTERN = re.compile(r"AI probability:\s*([0-9.]+)")
@@ -593,6 +595,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         actor.user_id,
         profile_id=profile_id,
         upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
+        project_id=project_id,
+        lab_unit_id=lab_unit_id,
         disease_id=disease_ids[0] if len(disease_ids) == 1 else None,
     )
     if profile.project_id != project_id or profile.lab_unit_id != lab_unit_id:
@@ -648,6 +652,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
             actor.user_id,
             profile_id=profile_id,
             upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
+            project_id=project_id,
+            lab_unit_id=lab_unit_id,
             camera_id=camera_id,
             area_id=area_id,
             is_mydriatic=is_mydriatic,
@@ -853,7 +859,7 @@ def _direct_image_available(image: DirectImageUpload) -> bool:
         if (thumbnail_dir / thumbnail_filename).exists():
             return True
     except Exception:
-        pass
+        logger.debug("Unable to resolve thumbnail path for direct image %s", sanitize_log_value(image.uuid), exc_info=True)
     return (DIRECT_UPLOAD_DIR / image.folder_rel / image.filename).exists()
 
 

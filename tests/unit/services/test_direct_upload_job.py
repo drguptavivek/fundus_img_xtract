@@ -11,10 +11,11 @@ from services.uploads.direct import DirectUploadActor, DirectUploadJobRequest, c
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileAIWorkflow,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileKind,
@@ -23,6 +24,21 @@ from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
 
 
 _SEQUENCE = count(1)
+
+
+def _assign_profile(db_session, *, profile: UploadProfile, project: Project, lab: LabUnit, user: User) -> None:
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=user.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.flush()
 
 
 def test_direct_upload_service_creates_job_items_and_upload_records(db_session, core_test_data):
@@ -47,20 +63,18 @@ def test_direct_upload_service_creates_job_items_and_upload_records(db_session, 
     )
     profile = UploadProfile(
         name=f"Direct Service Profile {suffix}",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
     db_session.add(profile)
     db_session.flush()
+    _assign_profile(db_session, profile=profile, project=project, lab=lab, user=uploader)
 
     result = create_direct_upload_job(
         db=db_session,
@@ -127,14 +141,11 @@ def test_direct_upload_duplicate_links_existing_image_and_task(db_session, core_
     )
     profile = UploadProfile(
         name=f"Direct Duplicate Profile {suffix}",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
@@ -158,6 +169,7 @@ def test_direct_upload_duplicate_links_existing_image_and_task(db_session, core_
     )
     db_session.add(profile)
     db_session.flush()
+    _assign_profile(db_session, profile=profile, project=project, lab=lab, user=uploader)
 
     first = create_direct_upload_job(
         db=db_session,
@@ -224,14 +236,11 @@ def test_direct_upload_duplicate_does_not_create_verification_or_requeue_running
     )
     profile = UploadProfile(
         name=f"Direct Duplicate Verify Profile {suffix}",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
@@ -255,6 +264,7 @@ def test_direct_upload_duplicate_does_not_create_verification_or_requeue_running
     )
     db_session.add(profile)
     db_session.flush()
+    _assign_profile(db_session, profile=profile, project=project, lab=lab, user=uploader)
 
     first = create_direct_upload_job(
         db=db_session,
@@ -329,14 +339,11 @@ def test_direct_upload_duplicate_with_existing_current_model_grade_is_not_queued
     )
     profile = UploadProfile(
         name=f"Direct Duplicate Grade Profile {suffix}",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
@@ -360,6 +367,7 @@ def test_direct_upload_duplicate_with_existing_current_model_grade_is_not_queued
     )
     db_session.add(profile)
     db_session.flush()
+    _assign_profile(db_session, profile=profile, project=project, lab=lab, user=uploader)
 
     first = create_direct_upload_job(
         db=db_session,

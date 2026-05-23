@@ -174,11 +174,15 @@ The system is designed to "upsert" the grading record, meaning it updates the ex
 - The grading page prominently features an **advanced image viewer** which, based on the project's conventions, includes controls for fullscteen, R, G, B, Y, H and none filters, brightness, and contrast, with keyboard navigation allowing for detailed examination of the fundus image. 
 - The **grading form** itself uses large, color-coded  buttons for quick selection of a clinical impression like "Normal" or "Glaucoma Suspect." If an image is deemed "Not gradable," a  secondary list of buttons appears to let the user specify the reason. 
 
-- When a user selects the "Not gradable" option during grading, a list of predefined reasons appears as clickable buttons. The reasons are:
-   * Disc not focussed
-   * Retina not focussed
-   * Disc not complete
-   * Artefacts
+- When a user selects a grade configured as non-gradable, a list of predefined reasons appears as clickable buttons. The reasons are:
+   * Poor focus
+   * Motion blur
+   * Poor exposure
+   * Artifact or obstruction
+   * Incomplete or wrong field
+   * Wrong eye or view
+   * Missing required image or view
+   * Image/document mismatch
    * Other
 
   Clicking one of these buttons automatically appends that reason to the "Remarks" text field, providing a quick and standardized way to explain why the image could not be assessed. Text in that field can be edited anytime. The data is saved in as it is form.

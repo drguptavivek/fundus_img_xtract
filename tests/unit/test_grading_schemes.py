@@ -52,6 +52,7 @@ def test_grading_scheme_detail_counts_grades_and_features(app, db_session):
     assert payload["grade_count"] == 1
     assert payload["feature_count"] == 1
     assert payload["grades"][0]["prioritize_for_task_selection"] is False
+    assert payload["grades"][0]["is_ungradable"] is False
     assert payload["grades"][0]["features"][0]["label"] == "No abnormality"
 
 
@@ -109,6 +110,7 @@ def test_create_and_update_grade_replaces_features(app, db_session):
             display_order=1,
             is_active=True,
             prioritize_for_task_selection=True,
+            is_ungradable=True,
             guidelines="Initial guideline",
             features=[GradeFeatureInput(sr_no=1, label="Feature A")],
         ),
@@ -120,6 +122,7 @@ def test_create_and_update_grade_replaces_features(app, db_session):
     detail = get_grading_scheme(disease.id).payload["grading_scheme"]
     assert detail["grades"][0]["features"][0]["label"] == "Feature A"
     assert detail["grades"][0]["prioritize_for_task_selection"] is True
+    assert detail["grades"][0]["is_ungradable"] is True
 
     update_result = update_grade(
         disease.id,
@@ -129,6 +132,7 @@ def test_create_and_update_grade_replaces_features(app, db_session):
             display_order=2,
             is_active=False,
             prioritize_for_task_selection=False,
+            is_ungradable=False,
             guidelines=None,
             features=[GradeFeatureInput(sr_no=1, label="Feature B")],
         ),
@@ -140,4 +144,5 @@ def test_create_and_update_grade_replaces_features(app, db_session):
     assert updated["display_order"] == 2
     assert updated["is_active"] is False
     assert updated["prioritize_for_task_selection"] is False
+    assert updated["is_ungradable"] is False
     assert [feature["label"] for feature in updated["features"]] == ["Feature B"]

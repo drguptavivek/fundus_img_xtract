@@ -73,48 +73,6 @@
   </div>
 </div>
 
-<div class="modal fade" id="assignProfileUserModal" tabindex="-1" aria-labelledby="assignProfileUserModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post"
-            action="{{ url_for('fundus_api.assign_upload_profile_user') }}"
-            hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
-            hx-swap="none"
-            data-json-api-htmx>
-        {{ csrf_field() }}
-        <div class="modal-header">
-          <h5 class="modal-title" id="assignProfileUserModalLabel">Assign User To Upload Profile</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label" for="assignment_profile_id">Upload Profile</label>
-            <select class="form-select" id="assignment_profile_id" name="profile_id" required>
-              <option value="">Select upload profile</option>
-              {% for profile in upload_profiles if profile.active %}
-              <option value="{{ profile.id }}">{{ profile.project.title }} - {{ profile.name }} ({{ profile.lab_unit.name }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-0">
-            <label class="form-label" for="assignment_user_id">User</label>
-            <select class="form-select" id="assignment_user_id" name="user_id" required>
-              <option value="">Select user</option>
-              {% for user in users %}
-              <option value="{{ user.id }}">{{ user.full_name or user.username }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" type="submit">Assign User</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
 <div class="modal fade" id="addInvestigatorModal" tabindex="-1" aria-labelledby="addInvestigatorModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

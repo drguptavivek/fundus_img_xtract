@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from models import IntraRaterTask, IntraRaterGrade, GradingsFeatures, ImageMetadata
 from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
 from utils.dualGradingGetNextTasks import (
@@ -117,6 +118,7 @@ def intra_rater_task(task_uuid: str):
                     "id": grading.id,
                     "impression": grading.impression,
                     "display_order": grading.display_order,
+                    "is_ungradable": bool(grading.is_ungradable),
                     "guidelines": grading.guidelines,
                     "features": [
                         {
@@ -162,6 +164,7 @@ def intra_rater_task(task_uuid: str):
             resume_slot=resume_slot,
             resume_disease_id=effective_resume_disease_id,
             start_time_iso=start_time_iso,
+            non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
             current_user_id=getattr(current_user, "id", None),
         )
 

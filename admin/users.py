@@ -27,9 +27,10 @@ from models import (
     LoginAttempt,
 )
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
 )
@@ -98,18 +99,27 @@ def _build_user_detail_context(db, user_id: int) -> dict | None:
     ).scalars().all()
 
     upload_profile_rows = db.execute(
-        select(UploadProfile)
-        .join(UploadProfileAssignment, UploadProfileAssignment.upload_profile_id == UploadProfile.id)
+        select(ProjectUploadProfileAssignment)
+        .join(ProjectUploadProfile, ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id)
+        .join(UploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
         .options(
-            selectinload(UploadProfile.project),
-            selectinload(UploadProfile.lab_unit).selectinload(LabUnit.hospital),
-            selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
-            selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
-            selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
-            selectinload(UploadProfile.assignments),
+            selectinload(ProjectUploadProfileAssignment.lab_unit).selectinload(LabUnit.hospital),
+            selectinload(ProjectUploadProfileAssignment.project_profile).selectinload(ProjectUploadProfile.project),
+            selectinload(ProjectUploadProfileAssignment.project_profile)
+            .selectinload(ProjectUploadProfile.profile)
+            .selectinload(UploadProfile.diseases)
+            .selectinload(UploadProfileDisease.disease),
+            selectinload(ProjectUploadProfileAssignment.project_profile)
+            .selectinload(ProjectUploadProfile.profile)
+            .selectinload(UploadProfile.cameras)
+            .selectinload(UploadProfileCamera.camera),
+            selectinload(ProjectUploadProfileAssignment.project_profile)
+            .selectinload(ProjectUploadProfile.profile)
+            .selectinload(UploadProfile.areas)
+            .selectinload(UploadProfileArea.area),
         )
-        .where(UploadProfileAssignment.user_id == user_id)
-        .order_by(UploadProfile.active.desc(), UploadProfile.project_id.asc(), UploadProfile.lab_unit_id.asc(), UploadProfile.name.asc())
+        .where(ProjectUploadProfileAssignment.user_id == user_id)
+        .order_by(ProjectUploadProfileAssignment.active.desc(), ProjectUploadProfile.project_id.asc(), ProjectUploadProfileAssignment.lab_unit_id.asc(), UploadProfile.name.asc())
     ).scalars().unique().all()
 
     login_attempts = db.execute(

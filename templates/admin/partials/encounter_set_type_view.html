@@ -1,0 +1,180 @@
+{% set row = edit_encounter_set_type %}
+{% set schema = row.metadata_schema_json or {'fields': []} %}
+{% set fields = schema.get('fields', []) %}
+{% set assets = row.asset_rules_json or {} %}
+{% set scope_labels = {
+  'patient': 'Patient',
+  'encounter': 'Encounter',
+  'image': 'Image',
+  'document': 'Document',
+  'upload': 'Upload'
+} %}
+
+<section class="card shadow-sm" id="encounter-set-type-view" data-est-view>
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <div class="fw-semibold">{{ row.name }}</div>
+      <div class="small text-muted">{{ row.code }}</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-sm btn-outline-secondary"
+              type="button"
+              hx-get="{{ url_for('admin.encounter_set_types_list') }}"
+              hx-target="#encounter-set-types-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.encounter_set_types_admin') }}">
+        Back to list
+      </button>
+      <a class="btn btn-sm btn-outline-dark"
+         href="{{ url_for('fundus_api.export_encounter_set_type_schema', type_id=row.id, download=1) }}">
+        Export JSON
+      </a>
+      <button class="btn btn-sm btn-primary"
+              type="button"
+              hx-get="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}"
+              hx-target="#encounter-set-types-workspace"
+              hx-swap="innerHTML"
+              hx-push-url="{{ url_for('admin.encounter_set_type_edit', type_id=row.id) }}">
+        Edit
+      </button>
+    </div>
+  </div>
+
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Status</div>
+          <span class="badge {{ 'text-bg-success' if row.active else 'text-bg-secondary' }}">{{ 'Active' if row.active else 'Inactive' }}</span>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Image Schemes</div>
+          <div class="fw-semibold">{{ row.image_grading_schemes|length }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Encounter Scheme</div>
+          <div class="fw-semibold text-truncate">{{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else 'None' }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Metadata Fields</div>
+          <div class="fw-semibold">{{ fields|length }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if row.description %}
+    <div class="alert alert-light border py-2">{{ row.description }}</div>
+    {% endif %}
+
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100">
+          <div class="fw-semibold mb-2">Grading schemes</div>
+          <div class="small text-muted mb-1">Image-level</div>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for scheme in row.image_grading_schemes %}
+            <span class="badge text-bg-light border">
+              {{ scheme.name }}{% if scheme.is_default %} · default{% endif %}
+            </span>
+            {% else %}
+            <span class="text-muted small">No image grading schemes configured.</span>
+            {% endfor %}
+          </div>
+          <div class="small text-muted mb-1">Encounter-level</div>
+          <div>{{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else 'No encounter grading scheme configured.' }}</div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100">
+          <div class="fw-semibold mb-2">Allowed assets</div>
+          <div class="row g-2 small">
+            <div class="col-md-4">
+              <div class="text-muted">Images</div>
+              <div>{{ 'Allowed' if assets.get('allow_clinical_images') else 'Not allowed' }}</div>
+              <div class="text-muted">Min {{ assets.get('min_clinical_images') if assets.get('min_clinical_images') is not none else '-' }} · Max {{ assets.get('max_clinical_images') if assets.get('max_clinical_images') is not none else '-' }}</div>
+            </div>
+            <div class="col-md-4">
+              <div class="text-muted">Documents</div>
+              <div>{{ 'Allowed' if assets.get('allow_document_uploads') else 'Not allowed' }}</div>
+              <div class="text-muted">
+                Types:
+                {% set doc_types = [] %}
+                {% if assets.get('allow_pdf_uploads') %}{% set _ = doc_types.append('PDF') %}{% endif %}
+                {% if assets.get('allow_document_image_uploads') %}{% set _ = doc_types.append('Image') %}{% endif %}
+                {{ doc_types|join(', ') if doc_types else '-' }}
+              </div>
+              <div class="text-muted">Max {{ assets.get('max_documents') if assets.get('max_documents') is not none else '-' }}</div>
+            </div>
+            <div class="col-md-4">
+              <div class="text-muted">Reports</div>
+              <div>{{ 'Allowed' if assets.get('allow_report_uploads') else 'Not allowed' }}</div>
+              <div class="text-muted">
+                Types:
+                {% set report_types = [] %}
+                {% if assets.get('allow_report_pdfs') %}{% set _ = report_types.append('PDF') %}{% endif %}
+                {% if assets.get('allow_report_images') %}{% set _ = report_types.append('Image') %}{% endif %}
+                {{ report_types|join(', ') if report_types else '-' }}
+              </div>
+              <div class="text-muted">Max {{ assets.get('max_reports') if assets.get('max_reports') is not none else '-' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <div class="fw-semibold mb-2">Metadata fields</div>
+      <div class="row g-3">
+        {% for scope, label in scope_labels.items() %}
+        {% set scoped_fields = fields|selectattr('scope', 'equalto', scope)|sort(attribute='display_order')|list %}
+        <div class="col-xl-6">
+          <div class="border rounded h-100">
+            <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom bg-light">
+              <div class="fw-semibold">{{ label }}</div>
+              <span class="badge text-bg-secondary">{{ scoped_fields|length }}</span>
+            </div>
+            <div class="p-2">
+              {% for field in scoped_fields %}
+              <div class="border rounded p-2 mb-2">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                  <div>
+                    <div class="fw-semibold">{{ field.display_order }}. {{ field.label }}</div>
+                    <div class="small text-muted">{{ field.key }} · {{ field.type }}{% if field.selection_mode %} · {{ field.selection_mode }}{% endif %}</div>
+                  </div>
+                  <div class="d-flex flex-wrap gap-1">
+                    {% if field.required_at_upload %}<span class="badge text-bg-primary">Upload required</span>{% endif %}
+                    {% if field.required_for_verification %}<span class="badge text-bg-info">Editable in verification</span>{% endif %}
+                    {% if field.visible_to_grader %}<span class="badge text-bg-secondary">Grader visible</span>{% endif %}
+                    {% if field.is_pii %}<span class="badge text-bg-warning">PII</span>{% endif %}
+                  </div>
+                </div>
+                {% if field.description %}
+                <div class="small mt-1">{{ field.description }}</div>
+                {% endif %}
+                {% if field.options %}
+                <div class="small text-muted mt-1">
+                  Options:
+                  {% for option in field.options %}
+                    {{ option.label if option.label is defined else option.value if option.value is defined else option }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </div>
+              {% else %}
+              <div class="text-muted small p-2">No {{ label|lower }} fields configured.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>

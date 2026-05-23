@@ -22,6 +22,7 @@
           <th>Linked Schemes</th>
           <th class="text-end">Grades</th>
           <th class="text-end">Priority Grades</th>
+          <th class="text-end">Ungradable Grades</th>
           <th class="text-end">Features</th>
           <th class="text-end">Tasks</th>
           <th class="text-end">Upload Profiles</th>
@@ -71,6 +72,7 @@
             <span class="small text-muted">({{ row.active_grade_count }} active)</span>
           </td>
           <td class="text-end">{{ row.prioritized_grade_count }}</td>
+          <td class="text-end">{{ row.ungradable_grade_count }}</td>
           <td class="text-end">{{ row.feature_count }}</td>
           <td class="text-end">{{ row.usage.get("tasks", 0) }}</td>
           <td class="text-end">{{ row.usage.get("upload_profiles", 0) }}</td>
@@ -118,7 +120,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="9" class="text-center text-muted py-4">No grading schemes configured.</td>
+          <td colspan="11" class="text-center text-muted py-4">No grading schemes configured.</td>
         </tr>
         {% endfor %}
       </tbody>

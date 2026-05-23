@@ -22,6 +22,7 @@ from upload_profiles.service import (
     validate_remedio_upload_scope,
 )
 from utils.jobUtils import get_recent_zip_uploads
+from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import get_db_session
 
 
@@ -74,12 +75,12 @@ def _uniquify(dest_dir: Path, filename: str) -> Path:
 
 def _file_size_bytes(file_storage) -> int:
     # Prefer reported content_length when available
-    try:
-        cl = getattr(file_storage, "content_length", None)
-        if cl is not None:
+    cl = getattr(file_storage, "content_length", None)
+    if cl is not None:
+        try:
             return int(cl)
-    except Exception:
-        pass
+        except (TypeError, ValueError):
+            current_app.logger.debug("Ignoring invalid upload content_length: %s", sanitize_log_value(cl))
     # Fallback: measure underlying stream without disturbing current position
     stream = file_storage.stream
     pos = stream.tell()
@@ -297,8 +298,8 @@ def upload_files():
             # ensure stream is at start before saving
             try:
                 f.stream.seek(0)
-            except Exception:
-                pass
+            except (OSError, ValueError):
+                current_app.logger.debug("Could not rewind ZIP upload stream for %s", sanitize_log_value(fname), exc_info=True)
             f.save(str(save_path))
             saved_paths.append(save_path)
 
@@ -325,8 +326,11 @@ def upload_files():
                 with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
                     json.dump(meta, mf, ensure_ascii=False)
             except Exception:
-                # Metadata logging should not block upload; ignore errors
-                pass
+                current_app.logger.warning(
+                    "Could not write ZIP upload metadata for %s",
+                    sanitize_log_value(save_path.name),
+                    exc_info=True,
+                )
         except Exception as ex:
             rejected.append(f"{fname} (save failed: {ex})")
 

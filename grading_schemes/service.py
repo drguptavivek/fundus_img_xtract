@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import get_db_session, transaction_scope
-from encounter_set_types.models import EncounterSetType
+from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
 from models import (
     AIModelDisease,
     DirectImageUpload,
@@ -31,6 +31,7 @@ from models import (
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.models import (
     PatientEncounterTargetDisease,
+    ProjectUploadProfile,
     UploadProfile,
     UploadProfileDisease,
 )
@@ -49,6 +50,17 @@ EXTERNAL_USAGE_KEYS = frozenset(
         "ai_models",
         "submitted_grades",
     }
+)
+STANDARD_NON_GRADABLE_REASONS = (
+    "Poor focus",
+    "Motion blur",
+    "Poor exposure",
+    "Artifact or obstruction",
+    "Incomplete or wrong field",
+    "Wrong eye or view",
+    "Missing required image or view",
+    "Image/document mismatch",
+    "Other",
 )
 
 
@@ -71,6 +83,7 @@ class GradeInput:
     display_order: int
     is_active: bool
     prioritize_for_task_selection: bool
+    is_ungradable: bool
     guidelines: str | None
     features: list[GradeFeatureInput]
 
@@ -249,6 +262,7 @@ def create_grade(scheme_id: int, grade_input: GradeInput) -> MutationResult:
                 display_order=grade_input.display_order,
                 is_active=grade_input.is_active,
                 prioritize_for_task_selection=grade_input.prioritize_for_task_selection,
+                is_ungradable=grade_input.is_ungradable,
                 guidelines=_sanitize_guidelines_html(grade_input.guidelines),
             )
             db.add(grade)
@@ -283,6 +297,7 @@ def update_grade(scheme_id: int, grade_id: int, grade_input: GradeInput) -> Muta
             grade.display_order = grade_input.display_order
             grade.is_active = grade_input.is_active
             grade.prioritize_for_task_selection = grade_input.prioritize_for_task_selection
+            grade.is_ungradable = grade_input.is_ungradable
             grade.guidelines = _sanitize_guidelines_html(grade_input.guidelines)
             db.query(GradingsFeatures).filter(GradingsFeatures.disease_grading_id == grade.id).delete(synchronize_session=False)
             _replace_features(db, grade.id, grade_input.features)
@@ -470,6 +485,7 @@ def _scheme_summary(
     grades = list(scheme.disease_gradings or [])
     active_grades = [grade for grade in grades if grade.is_active]
     prioritized_grades = [grade for grade in grades if grade.prioritize_for_task_selection]
+    ungradable_grades = [grade for grade in grades if grade.is_ungradable]
     feature_count = sum(len(grade.features or []) for grade in grades)
     linkage = (linkages or {}).get(scheme.id, _empty_linkage())
     associated_upload_profiles = (upload_profile_maps or {}).get(scheme.id, [])
@@ -480,6 +496,7 @@ def _scheme_summary(
         "grade_count": len(grades),
         "active_grade_count": len(active_grades),
         "prioritized_grade_count": len(prioritized_grades),
+        "ungradable_grade_count": len(ungradable_grades),
         "feature_count": feature_count,
         "is_core": scheme.id in CORE_SCHEME_IDS,
         "linkage": linkage,
@@ -511,6 +528,7 @@ def _scheme_detail(
             "display_order": grade.display_order,
             "is_active": grade.is_active,
             "prioritize_for_task_selection": bool(grade.prioritize_for_task_selection),
+            "is_ungradable": bool(grade.is_ungradable),
             "guidelines": _sanitize_guidelines_html(grade.guidelines),
             "features": [
                 {
@@ -523,6 +541,7 @@ def _scheme_detail(
         }
         for grade in sorted(grades, key=lambda item: (item.display_order, item.id))
     ]
+    summary["non_gradable_reasons"] = list(STANDARD_NON_GRADABLE_REASONS)
     summary["parent_candidates"] = _parent_candidates(db, scheme.id, scheme.grading_scope, linkages or {})
     return summary
 
@@ -616,12 +635,14 @@ def _upload_profile_maps(db, scheme_ids: set[int]) -> dict[int, list[dict[str, A
             UploadProfile.id,
             UploadProfile.name,
             UploadProfile.active,
-            Project.title.label("project_title"),
+            func.coalesce(func.string_agg(Project.title, ", "), "Unmapped").label("project_title"),
         )
         .join(UploadProfile, UploadProfile.id == UploadProfileDisease.upload_profile_id)
-        .join(Project, Project.id == UploadProfile.project_id)
+        .outerjoin(ProjectUploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+        .outerjoin(Project, Project.id == ProjectUploadProfile.project_id)
         .where(UploadProfileDisease.disease_id.in_(scheme_ids))
-        .order_by(UploadProfile.active.desc(), Project.title, UploadProfile.name)
+        .group_by(UploadProfileDisease.disease_id, UploadProfile.id, UploadProfile.name, UploadProfile.active)
+        .order_by(UploadProfile.active.desc(), UploadProfile.name)
     ).all()
     profiles_by_scheme = {scheme_id: [] for scheme_id in scheme_ids}
     for scheme_id, profile_id, profile_name, active, project_title in rows:
@@ -747,9 +768,21 @@ def _usage_counts(db, *, scheme_ids: set[int] | None = None) -> dict[int, dict[s
     _merge_count(
         usage,
         db.execute(
-            select(EncounterSetType.target_scheme_id, func.count(EncounterSetType.id))
-            .where(EncounterSetType.target_scheme_id.in_(ids))
-            .group_by(EncounterSetType.target_scheme_id)
+            select(EncounterSetType.encounter_grading_scheme_id, func.count(EncounterSetType.id))
+            .where(EncounterSetType.encounter_grading_scheme_id.in_(ids))
+            .group_by(EncounterSetType.encounter_grading_scheme_id)
+        ).all(),
+        "encounter_set_types",
+    )
+    _merge_count(
+        usage,
+        db.execute(
+            select(EncounterSetTypeImageGradingScheme.disease_id, func.count(EncounterSetTypeImageGradingScheme.id))
+            .where(
+                EncounterSetTypeImageGradingScheme.disease_id.in_(ids),
+                EncounterSetTypeImageGradingScheme.active.is_(True),
+            )
+            .group_by(EncounterSetTypeImageGradingScheme.disease_id)
         ).all(),
         "encounter_set_types",
     )
@@ -811,4 +844,4 @@ def _empty_usage() -> dict[str, int]:
 def _merge_count(usage: dict[int, dict[str, int]], rows, key: str) -> None:
     for scheme_id, count in rows:
         if scheme_id in usage:
-            usage[scheme_id][key] = int(count or 0)
+            usage[scheme_id][key] += int(count or 0)

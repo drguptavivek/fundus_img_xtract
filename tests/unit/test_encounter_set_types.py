@@ -28,22 +28,21 @@ def encounter_set_type_scope(db_session):
     lab = LabUnit(name=f"EST Lab {suffix}", hospital=hospital)
     user.lab_units.append(lab)
     project = Project(title=f"EST Project {suffix}", code=f"EST_{suffix}", active=True)
-    disease = Disease(name=f"Fundus Evaluation {suffix}")
+    image_scheme = Disease(name=f"Fundus Evaluation Image {suffix}", grading_scope="image")
+    encounter_scheme = Disease(name=f"Fundus Evaluation Encounter {suffix}", grading_scope="encounter")
     camera = Camera(name=f"EST Camera {suffix}")
     area = Area(name=f"EST Area {suffix}")
-    db_session.add_all([role, user, hospital, lab, project, disease, camera, area])
+    db_session.add_all([role, user, hospital, lab, project, image_scheme, encounter_scheme, camera, area])
     db_session.flush()
 
     profile = UploadProfile(
         name="EST Profile",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
         active=True,
     )
-    profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=False))
+    profile.diseases.append(UploadProfileDisease(disease_id=image_scheme.id, is_default=False))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
@@ -52,7 +51,8 @@ def encounter_set_type_scope(db_session):
     return {
         "user": user,
         "project": project,
-        "disease": disease,
+        "image_scheme": image_scheme,
+        "encounter_scheme": encounter_scheme,
         "suffix": suffix,
     }
 
@@ -130,7 +130,9 @@ def test_create_encounter_set_type_scoped_to_manager_project(db_session, encount
             name="Fundus Quick Set",
             code=f"fundus_quick_{encounter_set_type_scope['suffix']}",
             description="Fast upload, verification later",
-            target_scheme_id=encounter_set_type_scope["disease"].id,
+            image_grading_scheme_ids=[encounter_set_type_scope["image_scheme"].id],
+            default_image_grading_scheme_id=encounter_set_type_scope["image_scheme"].id,
+            encounter_grading_scheme_id=encounter_set_type_scope["encounter_scheme"].id,
             metadata_schema_json=_valid_schema(),
         ),
     )
@@ -161,7 +163,9 @@ def test_encounter_set_type_api_create_and_get(client, db_session, encounter_set
             "project_id": encounter_set_type_scope["project"].id,
             "name": "Fundus API Set",
             "code": f"fundus_api_{encounter_set_type_scope['suffix']}",
-            "target_scheme_id": encounter_set_type_scope["disease"].id,
+            "image_grading_scheme_ids": [encounter_set_type_scope["image_scheme"].id],
+            "default_image_grading_scheme_id": encounter_set_type_scope["image_scheme"].id,
+            "encounter_grading_scheme_id": encounter_set_type_scope["encounter_scheme"].id,
             "metadata_schema_json": _valid_schema(),
         },
     )
@@ -188,7 +192,9 @@ def test_encounter_set_type_api_rejects_invalid_schema(client, encounter_set_typ
             "project_id": encounter_set_type_scope["project"].id,
             "name": "Bad API Set",
             "code": f"bad_api_{encounter_set_type_scope['suffix']}",
-            "target_scheme_id": encounter_set_type_scope["disease"].id,
+            "image_grading_scheme_ids": [encounter_set_type_scope["image_scheme"].id],
+            "default_image_grading_scheme_id": encounter_set_type_scope["image_scheme"].id,
+            "encounter_grading_scheme_id": encounter_set_type_scope["encounter_scheme"].id,
             "metadata_schema_json": {
                 "fields": [
                     {

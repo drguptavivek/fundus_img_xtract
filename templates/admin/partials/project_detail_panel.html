@@ -102,9 +102,37 @@
       </div>
 
       <div class="col-12">
-        <h3 class="h6">Profiles And Uploaders</h3>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">Profiles And Uploaders</h3>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Reusable Profiles</a>
+        </div>
+        <form class="border rounded p-3 mb-3"
+              method="post"
+              action="{{ url_for('fundus_api.enable_upload_profile_for_project', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.enable_upload_profile_for_project', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <div class="row g-2 align-items-end">
+            <div class="col-md-9">
+              <label class="form-label" for="project_upload_profile_id">Enable Upload Profile Template</label>
+              <select class="form-select" id="project_upload_profile_id" name="upload_profile_id" required>
+                <option value="">Select reusable upload profile</option>
+                {% for profile in upload_profiles if profile.active and profile.id not in enabled_profile_ids %}
+                <option value="{{ profile.id }}">{{ profile.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3 text-end">
+              <button class="btn btn-outline-primary w-100" type="submit">Enable Profile</button>
+            </div>
+          </div>
+        </form>
         <div class="row g-3">
-          {% for profile in project_profiles %}
+          {% for mapping in project_profile_mappings %}
+          {% set profile = mapping.profile %}
           <div class="col-lg-6">
             <div class="border rounded p-3 h-100">
               <div class="d-flex justify-content-between align-items-start gap-2">
@@ -113,17 +141,67 @@
                        title="Diseases: {{ profile.diseases|map(attribute='disease.name')|join(', ') }}&#10;Upload types: {{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}&#10;Cameras: {{ profile.cameras|map(attribute='camera.name')|join(', ') }}&#10;Sites: {{ profile.areas|map(attribute='area.name')|join(', ') }}">
                     {{ profile.name }}
                   </div>
-                  <div class="small text-muted">{{ profile.lab_unit.name }}</div>
+                  <div class="small text-muted">
+                    {{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}
+                  </div>
                 </div>
-                <span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge {{ 'bg-success' if mapping.active and profile.active else 'bg-secondary' }}">{{ 'Active' if mapping.active and profile.active else 'Inactive' }}</span>
+                  {% if mapping.active %}
+                  <form method="post"
+                        action="{{ url_for('fundus_api.deactivate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
+                        hx-post="{{ url_for('fundus_api.deactivate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                        data-json-api-reload-target="#project-detail-workspace">
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Disable</button>
+                  </form>
+                  {% else %}
+                  <form method="post"
+                        action="{{ url_for('fundus_api.activate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
+                        hx-post="{{ url_for('fundus_api.activate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                        data-json-api-reload-target="#project-detail-workspace">
+                    {{ csrf_field() }}
+                    <button class="btn btn-sm btn-outline-success" type="submit">Enable</button>
+                  </form>
+                  {% endif %}
+                </div>
               </div>
-              <div class="small mt-2">
-                <span class="text-muted">Uploaders:</span>
-                {% for assignment in profile.assignments if assignment.active %}
-                  {{ assignment.user.full_name or assignment.user.username }}{% if not loop.last %}, {% endif %}
-                {% else %}
-                  -
-                {% endfor %}
+              <div class="small text-muted mt-2">
+                Diseases: {{ profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}
+              </div>
+              <div class="table-responsive mt-2">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>
+                  <tbody>
+                    {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
+                    <tr>
+                      <td>{{ assignment.user.full_name or assignment.user.username }}</td>
+                      <td>{{ assignment.lab_unit.name }}</td>
+                      <td class="text-end">
+                        <form method="post"
+                              action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                              hx-post="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                              hx-swap="none"
+                              data-json-api-htmx
+                              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                              data-json-api-reload-target="#project-detail-workspace">
+                          {{ csrf_field() }}
+                          <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                        </form>
+                      </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-muted text-center py-2">No uploaders assigned.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
               </div>
               <form class="row g-2 align-items-end mt-2"
                     method="post"
@@ -134,21 +212,32 @@
                     data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
                     data-json-api-reload-target="#project-detail-workspace">
                 {{ csrf_field() }}
-                <input type="hidden" name="profile_id" value="{{ profile.id }}">
+                <input type="hidden" name="project_upload_profile_id" value="{{ mapping.id }}">
                 <div class="col-md-5">
-                  <label class="form-label" for="profile_user_search_{{ profile.id }}">Search User</label>
-                  <input class="form-control" id="profile_user_search_{{ profile.id }}" type="search" placeholder="Type name or username" data-user-search="profile_user_id_{{ profile.id }}">
+                  <label class="form-label" for="profile_user_search_{{ mapping.id }}">Search User</label>
+                  <input class="form-control" id="profile_user_search_{{ mapping.id }}" type="search" placeholder="Type name or username" data-user-search="profile_user_id_{{ mapping.id }}">
                 </div>
-                <div class="col-md-5">
-                  <label class="form-label" for="profile_user_id_{{ profile.id }}">Matched User</label>
-                  <select class="form-select" id="profile_user_id_{{ profile.id }}" name="user_id" required>
+                <div class="col-md-4">
+                  <label class="form-label" for="profile_user_id_{{ mapping.id }}">Matched User</label>
+                  <select class="form-select" id="profile_user_id_{{ mapping.id }}" name="user_id" required data-project-profile-user-select data-lab-target="profile_lab_ids_{{ mapping.id }}">
                     <option value="">Select user</option>
                     {% for user in users %}
-                    <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
+                    <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}" data-lab-ids="{{ user.lab_units|map(attribute='id')|join(',') }}">{{ user.full_name or user.username }}</option>
                     {% endfor %}
                   </select>
                 </div>
-                <div class="col-md-2 text-end">
+                <div class="col-md-3">
+                  <label class="form-label">Lab Unit</label>
+                  <div class="border rounded p-2" id="profile_lab_ids_{{ mapping.id }}" style="max-height: 7rem; overflow:auto;">
+                    {% for lab_unit in lab_units %}
+                    <div class="form-check mb-1" data-project-profile-lab-row data-lab-id="{{ lab_unit.id }}">
+                      <input class="form-check-input" type="checkbox" name="lab_unit_ids" value="{{ lab_unit.id }}" id="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">
+                      <label class="form-check-label small" for="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                <div class="col-12 text-end">
                   <button class="btn btn-outline-primary w-100" type="submit">Add</button>
                 </div>
               </form>
@@ -156,7 +245,7 @@
           </div>
           {% else %}
           <div class="col-12">
-            <div class="border rounded text-center text-muted py-4">No upload profiles configured for this project.</div>
+            <div class="border rounded text-center text-muted py-4">No upload profile templates enabled for this project.</div>
           </div>
           {% endfor %}
         </div>

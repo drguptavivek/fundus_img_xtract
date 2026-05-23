@@ -2,8 +2,11 @@
 
 <section id="upload-profile-editor-section" class="mt-4 d-none">
   <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span data-upload-profile-editor-title>Add/Edit Upload Profile</span>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-semibold" data-upload-profile-editor-title>Add/Edit Upload Profile</div>
+        <div class="small text-muted">Choose upload modes first. Each mode then shows only the configuration it uses.</div>
+      </div>
       <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-profile-editor-close>Close</button>
     </div>
     <div class="card-body">
@@ -15,132 +18,251 @@
             data-json-api-htmx
             data-upload-profile-editor>
         {{ csrf_field() }}
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label" for="profile_name">Profile Name <span class="text-danger">*</span></label>
-            <input class="form-control" id="profile_name" name="name" maxlength="150" required>
+
+        <div class="border rounded p-3 mb-4 bg-light-subtle">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h6 mb-0">Profile Identity</h2>
+            <span class="badge text-bg-light border">Required</span>
           </div>
-          <div class="col-md-4">
-            <label class="form-label" for="mapping_lab_unit_id">Lab Unit <span class="text-danger">*</span></label>
-            <select class="form-select" id="mapping_lab_unit_id" name="lab_unit_id" required>
-              <option value="">Select lab unit</option>
-              {% for lab_unit in lab_units %}
-              <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} - {{ lab_unit.hospital.name }}{% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label" for="mapping_project_id">Project <span class="text-danger">*</span></label>
-            <select class="form-select" id="mapping_project_id" name="project_id" required>
-              <option value="">Select project</option>
-              {% for project in projects if project.active %}
-              <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Allowed Upload Types <span class="text-danger">*</span></label>
-            <div class="d-flex flex-wrap gap-3 border rounded p-2">
-              {% for value, label, checked in [('direct_image', 'Direct image', true), ('pregraded', 'Pregraded', false), ('remidio', 'Remedio ZIP', false), ('encounter_set', 'Encounter set', false)] %}
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="checkbox" id="kind_{{ value }}" name="upload_kinds" value="{{ value }}" {% if checked %}checked{% endif %} {% if value == 'remidio' %}data-upload-profile-remedio-kind{% endif %}>
-                <label class="form-check-label" for="kind_{{ value }}">{{ label }}</label>
-              </div>
-              {% endfor %}
+          <div class="row g-3">
+            <div class="col-lg-4">
+              <label class="form-label" for="profile_name">Profile Name <span class="text-danger">*</span></label>
+              <input class="form-control" id="profile_name" name="name" maxlength="150" required>
+            </div>
+            <div class="col-lg-8">
+              <label class="form-label" for="profile_description">Description</label>
+              <textarea class="form-control" id="profile_description" name="description" rows="2" maxlength="1000"></textarea>
             </div>
           </div>
-          <div class="col-12" data-upload-profile-encounter-set-types-section>
-            <label class="form-label">Allowed EncounterSetTypes</label>
-            <div class="form-text mb-2">Required when encounter-set uploads are enabled. Project mapping remains on this upload profile.</div>
-            <div class="border rounded p-2">
-              {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
-              <div class="form-check mb-1" data-upload-profile-est-option>
-                <input class="form-check-input" type="checkbox" name="encounter_set_type_ids" value="{{ encounter_set_type.id }}" id="encounter_set_type_{{ encounter_set_type.id }}">
-                <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}">
-                  {{ encounter_set_type.name }}
-                  <span class="text-muted small">({{ encounter_set_type.target_scheme.name }})</span>
-                </label>
-              </div>
-              {% else %}
-              <div class="text-muted small">No active EncounterSetTypes configured yet.</div>
-              {% endfor %}
+        </div>
+
+        <div class="border rounded p-3 mb-4">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+              <h2 class="h6 mb-1">Upload Modes <span class="text-danger">*</span></h2>
+              <div class="small text-muted">Enable one or more modes. Disabled modes do not submit their configuration.</div>
             </div>
+            <div class="small" data-upload-profile-editor-summary>1 mode enabled</div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Mydriatic Scope <span class="text-danger">*</span></label>
-            <div class="d-flex flex-wrap gap-3 border rounded p-2">
-              <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="allow_mydriatic" name="allow_mydriatic" data-upload-profile-allow-mydriatic><label class="form-check-label" for="allow_mydriatic">Allow mydriatic</label></div>
-              <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="allow_non_mydriatic" name="allow_non_mydriatic" checked><label class="form-check-label" for="allow_non_mydriatic">Allow non-mydriatic</label></div>
-              <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="default_is_mydriatic" name="default_is_mydriatic" data-upload-profile-default-mydriatic><label class="form-check-label" for="default_is_mydriatic">Default is mydriatic</label></div>
-            </div>
-          </div>
-          <div class="col-12">
-            <label class="form-label">Allowed Diseases And AI Inference Workflows <span class="text-danger">*</span></label>
-            <div class="form-text mb-2">
-              Allowed diseases define which disease workstreams this profile can create uploads and tasks for. Default for Remidio ZIP is used only for Remidio ZIP ingestion because that upload form does not collect disease; direct, pre-graded, and encounter-set uploads use the disease provided by their upload request, or all allowed diseases when encounter-set omits disease.
-            </div>
-            <div class="border rounded p-2">
-              {% for disease in diseases %}
-              <div class="border rounded p-2 mb-2" data-upload-profile-disease-row>
-                <div class="d-flex flex-wrap gap-3 align-items-center">
+          <div class="row g-3">
+            {% for value, label, help_text, checked in [
+              ('direct_image', 'Direct Image', 'Single clinical image upload with a chosen target grading scheme.', true),
+              ('pregraded', 'Pregraded', 'Clinical image upload with an existing grade attached.', false),
+              ('remidio', 'Remedio ZIP', 'ZIP ingestion with one base target and PDF/report-driven extras.', false),
+              ('encounter_set', 'EncounterSet', 'One patient encounter with configured assets and metadata.', false)
+            ] %}
+            <div class="col-md-6 col-xl-3">
+              <label class="border rounded p-3 h-100 w-100 d-block bg-body" data-upload-profile-mode-card data-upload-kind="{{ value }}">
+                <div class="d-flex justify-content-between align-items-start gap-2">
                   <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" name="disease_ids" value="{{ disease.id }}" id="disease_{{ disease.id }}" data-upload-profile-disease-toggle>
-                    <label class="form-check-label fw-semibold" for="disease_{{ disease.id }}">{{ disease.name }}</label>
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="kind_{{ value }}"
+                           name="upload_kinds"
+                           value="{{ value }}"
+                           {% if checked %}checked{% endif %}
+                           {% if value == 'remidio' %}data-upload-profile-remedio-kind{% endif %}
+                           data-upload-profile-kind>
+                    <span class="form-check-label fw-semibold">{{ label }}</span>
                   </div>
-                  <div class="form-check mb-0">
-                    <input class="form-check-input" type="radio" name="default_disease_ids" value="{{ disease.id }}" id="default_disease_{{ disease.id }}" data-upload-profile-dependent data-upload-profile-remedio-default>
-                    <label class="form-check-label" for="default_disease_{{ disease.id }}">Default for Remidio ZIP</label>
-                  </div>
+                  <span class="badge text-bg-secondary" data-upload-profile-mode-status>Off</span>
                 </div>
-                {% set disease_ai_models = ai_models_by_disease.get(disease.id, []) %}
-                {% if disease_ai_models %}
-                <div class="mt-2 ps-3 border-start">
-                  <div class="small text-muted mb-1">Enable AI inference workflow</div>
-                  {% for model in disease_ai_models %}
-                  <div class="mb-1">
-                    <div class="small fw-semibold">
-                      {{ model.name }} {{ model.version }}
-                      {% if model.integration and model.integration.provider == 'wadhwani_glaucoma' %}
-                      <span class="badge text-bg-info ms-1">Wadhwani</span>
-                      {% endif %}
+                <div class="small text-muted mt-2">{{ help_text }}</div>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="border rounded p-3 mb-4" data-upload-profile-clinical-section>
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <h2 class="h6 mb-1">Direct Image / Pregraded / Remedio ZIP Configuration</h2>
+              <div class="small text-muted">
+                These modes use profile-level grading targets, cameras, sites, and mydriatic scope. EncounterSet uploads do not use this section.
+              </div>
+            </div>
+            <span class="badge text-bg-warning" data-upload-profile-clinical-status>Needs configuration</span>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-lg-4">
+              <div class="border rounded p-2 h-100 bg-light-subtle">
+                <div class="fw-semibold small">Direct Image</div>
+                <div class="small text-muted">Uploader selects from the allowed target pool when uploading.</div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="border rounded p-2 h-100 bg-light-subtle">
+                <div class="fw-semibold small">Pregraded</div>
+                <div class="small text-muted">Uses the same allowed target pool, with pre-existing grading data.</div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="border rounded p-2 h-100 bg-light-subtle">
+                <div class="fw-semibold small">Remedio ZIP</div>
+                <div class="small text-muted">Requires one base target. PDF/report detection may create additional tasks.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3" data-upload-profile-disease-section>
+            <label class="form-label">Target Grading Schemes <span class="text-danger" data-upload-profile-disease-required>*</span></label>
+            <div class="form-text mb-2">
+              This is the shared allowed target pool for Direct Image, Pregraded, and Remedio ZIP in the current profile model.
+            </div>
+            <div class="row g-2">
+              {% for disease in diseases %}
+              <div class="col-md-6 col-xl-4">
+                <div class="border rounded p-2 h-100" data-upload-profile-disease-row>
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" name="disease_ids" value="{{ disease.id }}" id="disease_{{ disease.id }}" data-upload-profile-disease-toggle>
+                      <label class="form-check-label fw-semibold" for="disease_{{ disease.id }}">{{ disease.name }}</label>
                     </div>
-                    <div class="d-flex flex-wrap gap-3">
-                      {% for kind, kind_label in [('direct_image', 'Direct image'), ('pregraded', 'Pregraded'), ('remidio', 'Remedio ZIP'), ('encounter_set', 'Encounter set')] %}
-                      <div class="form-check form-check-inline mb-0">
-                        <input class="form-check-input" type="checkbox" name="ai_workflows" value="{{ disease.id }}:{{ model.id }}:{{ kind }}" id="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}" data-upload-profile-dependent>
-                        <label class="form-check-label" for="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}">{{ kind_label }}</label>
+                    {% if disease.grading_scope %}
+                    <span class="badge text-bg-light border">{{ disease.grading_scope|replace('_', ' ')|title }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="form-check mt-2 d-none" data-upload-profile-remedio-default-wrap>
+                    <input class="form-check-input" type="radio" name="default_disease_ids" value="{{ disease.id }}" id="default_disease_{{ disease.id }}" data-upload-profile-dependent data-upload-profile-remedio-default>
+                    <label class="form-check-label" for="default_disease_{{ disease.id }}">Base target for Remedio ZIP</label>
+                  </div>
+                  {% set disease_ai_models = ai_models_by_disease.get(disease.id, []) %}
+                  {% if disease_ai_models %}
+                  <details class="mt-2 small">
+                    <summary class="text-muted">AI inference workflows</summary>
+                    <div class="mt-2 ps-2 border-start">
+                      {% for model in disease_ai_models %}
+                      <div class="mb-2">
+                        <div class="fw-semibold">
+                          {{ model.name }} {{ model.version }}
+                          {% if model.integration and model.integration.provider == 'wadhwani_glaucoma' %}
+                          <span class="badge text-bg-info ms-1">Wadhwani</span>
+                          {% endif %}
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 mt-1">
+                          {% for kind, kind_label in [('direct_image', 'Direct'), ('pregraded', 'Pregraded'), ('remidio', 'Remedio ZIP')] %}
+                          <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="ai_workflows"
+                                   value="{{ disease.id }}:{{ model.id }}:{{ kind }}"
+                                   id="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}"
+                                   data-upload-profile-dependent
+                                   data-upload-profile-ai-kind="{{ kind }}">
+                            <label class="form-check-label" for="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}">{{ kind_label }}</label>
+                          </div>
+                          {% endfor %}
+                        </div>
                       </div>
                       {% endfor %}
                     </div>
-                  </div>
-                  {% endfor %}
+                  </details>
+                  {% endif %}
                 </div>
-                {% endif %}
               </div>
               {% else %}
-              <div class="text-muted small">No diseases configured.</div>
+              <div class="col-12">
+                <div class="text-muted small border rounded p-3">No grading schemes configured.</div>
+              </div>
               {% endfor %}
             </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Allowed Cameras <span class="text-danger">*</span></label>
-            <div class="d-flex flex-wrap gap-3 border rounded p-2">
-              {% for camera in cameras %}
-              <div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="camera_ids" value="{{ camera.id }}" id="camera_{{ camera.id }}"><label class="form-check-label" for="camera_{{ camera.id }}">{{ camera.name }}</label></div>
-              {% endfor %}
+
+          <div class="row g-3">
+            <div class="col-lg-4">
+              <label class="form-label">Mydriatic Scope <span class="text-danger">*</span></label>
+              <div class="border rounded p-2">
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" id="allow_mydriatic" name="allow_mydriatic" data-upload-profile-allow-mydriatic data-upload-profile-clinical-dependent>
+                  <label class="form-check-label" for="allow_mydriatic">Allow mydriatic</label>
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" id="allow_non_mydriatic" name="allow_non_mydriatic" checked data-upload-profile-clinical-dependent>
+                  <label class="form-check-label" for="allow_non_mydriatic">Allow non-mydriatic</label>
+                </div>
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" id="default_is_mydriatic" name="default_is_mydriatic" data-upload-profile-default-mydriatic data-upload-profile-clinical-dependent>
+                  <label class="form-check-label" for="default_is_mydriatic">Default is mydriatic</label>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <label class="form-label">Allowed Cameras <span class="text-danger">*</span></label>
+              <div class="border rounded p-2" style="max-height: 16rem; overflow: auto;">
+                {% for camera in cameras %}
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" name="camera_ids" value="{{ camera.id }}" id="camera_{{ camera.id }}" data-upload-profile-clinical-dependent>
+                  <label class="form-check-label" for="camera_{{ camera.id }}">{{ camera.name }}</label>
+                </div>
+                {% else %}
+                <div class="text-muted small">No cameras configured.</div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <label class="form-label">Allowed Sites <span class="text-danger">*</span></label>
+              <div class="border rounded p-2" style="max-height: 16rem; overflow: auto;">
+                {% for area in areas %}
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" name="area_ids" value="{{ area.id }}" id="area_{{ area.id }}" data-upload-profile-clinical-dependent>
+                  <label class="form-check-label" for="area_{{ area.id }}">{{ area.name }}</label>
+                </div>
+                {% else %}
+                <div class="text-muted small">No sites configured.</div>
+                {% endfor %}
+              </div>
             </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Allowed Sites <span class="text-danger">*</span></label>
-            <div class="d-flex flex-wrap gap-3 border rounded p-2">
-              {% for area in areas %}
-              <div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="area_ids" value="{{ area.id }}" id="area_{{ area.id }}"><label class="form-check-label" for="area_{{ area.id }}">{{ area.name }}</label></div>
-              {% endfor %}
+        </div>
+
+        <div class="border rounded p-3 mb-4" data-upload-profile-encounter-set-types-section>
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <h2 class="h6 mb-1">EncounterSet Configuration</h2>
+              <div class="small text-muted">
+                EncounterSet uploads get grading schemes, asset rules, cameras/sites if needed, and metadata from the selected EncounterSetTypes.
+              </div>
             </div>
+            <span class="badge text-bg-warning" data-upload-profile-est-status>Needs EncounterSetType</span>
           </div>
-          <div class="col-12 text-end">
-            <button class="btn btn-primary" type="submit" data-upload-profile-submit-label>Create Profile</button>
+          <label class="form-label">Allowed EncounterSetTypes <span class="text-danger" data-upload-profile-est-required>*</span></label>
+          <div class="row g-2">
+            {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
+            <div class="col-md-6 col-xl-4" data-upload-profile-est-option>
+              <div class="border rounded p-2 h-100">
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" name="encounter_set_type_ids" value="{{ encounter_set_type.id }}" id="encounter_set_type_{{ encounter_set_type.id }}">
+                  <label class="form-check-label fw-semibold" for="encounter_set_type_{{ encounter_set_type.id }}">{{ encounter_set_type.name }}</label>
+                </div>
+                <div class="small text-muted">
+                  <div>
+                    <span class="fw-semibold">Image:</span>
+                    {% for scheme in encounter_set_type.image_grading_schemes if scheme.active %}
+                      {{ scheme.disease.name }}{% if scheme.is_default %} default{% endif %}{% if not loop.last %}, {% endif %}
+                    {% else %}
+                      none
+                    {% endfor %}
+                  </div>
+                  <div>
+                    <span class="fw-semibold">Encounter:</span>
+                    {{ encounter_set_type.encounter_grading_scheme.name if encounter_set_type.encounter_grading_scheme else "none" }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="col-12">
+              <div class="text-muted small border rounded p-3">No active EncounterSetTypes configured yet.</div>
+            </div>
+            {% endfor %}
           </div>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3">
+          <div class="small text-muted" data-upload-profile-save-hint>Select at least one upload mode and complete the highlighted section.</div>
+          <button class="btn btn-primary" type="submit" data-upload-profile-submit-label>Create Profile</button>
         </div>
       </form>
     </div>

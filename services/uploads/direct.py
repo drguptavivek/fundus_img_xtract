@@ -104,6 +104,8 @@ def create_direct_upload_job(
             actor.user_id,
             profile_id=request.profile_id,
             upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+            project_id=request.project_id,
+            lab_unit_id=request.lab_unit_id,
             disease_id=request.disease_id,
             camera_id=request.camera_id,
             area_id=request.area_id,

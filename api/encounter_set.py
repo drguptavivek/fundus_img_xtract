@@ -408,16 +408,18 @@ def upload_encounter_set_image():
     except (TypeError, ValueError):
         return jsonify({"error": "Upload token is missing lab_unit_id"}), 403
     profile_id_raw = request.form.get("upload_profile_id") or request.form.get("profile_id")
+    project_id_raw = request.form.get("project_id")
     disease_id_raw = request.form.get("disease_id")
     camera_id_raw = request.form.get("camera_id")
     area_id_raw = request.form.get("area_id")
     try:
         upload_profile_id = int(profile_id_raw) if profile_id_raw else None
+        project_id = int(project_id_raw) if project_id_raw else None
         disease_id = int(disease_id_raw) if disease_id_raw else None
         camera_id = int(camera_id_raw) if camera_id_raw else None
         area_id = int(area_id_raw) if area_id_raw else None
     except (TypeError, ValueError):
-        return jsonify({"error": "Invalid upload_profile_id, disease_id, camera_id, or area_id"}), 400
+        return jsonify({"error": "Invalid upload_profile_id, project_id, disease_id, camera_id, or area_id"}), 400
     is_mydriatic = (request.form.get("is_mydriatic") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     if not uploader_user_id:
@@ -468,6 +470,8 @@ def upload_encounter_set_image():
                 uploader_user_id,
                 profile_id=upload_profile_id,
                 upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
+                project_id=project_id,
+                lab_unit_id=lab_unit_id,
                 disease_id=disease_id,
                 camera_id=camera_id,
                 area_id=area_id,

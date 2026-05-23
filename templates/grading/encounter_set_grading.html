@@ -85,6 +85,7 @@
 {% endblock %}
 
 {% block content %}
+{% from "_forms.html" import csrf_field %}
 <div class="container-fluid py-4">
     <!-- Task Info -->
     <div class="row mb-3">
@@ -177,6 +178,7 @@
         <!-- Grading Form (4 columns) -->
         <div class="col-lg-4">
             <form id="gradingForm" action="{{ url_for('grading.encounter_set_submit') }}" method="POST">
+                {{ csrf_field() }}
                 <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
                 <input type="hidden" name="slot" value="{{ request.args.get('slot', 'resident') }}">
 
@@ -191,7 +193,7 @@
                             <select class="form-select form-select-sm" id="label_id" name="label_id" required>
                                 <option value="">-- Select Grade --</option>
                                 {% for label in grading_labels %}
-                                <option value="{{ label.id }}">{{ label.impression }}</option>
+                                <option value="{{ label.id }}" data-is-ungradable="{{ 'true' if label.is_ungradable else 'false' }}">{{ label.impression }}</option>
                                 {% endfor %}
                             </select>
                             <div class="form-text">
@@ -204,6 +206,15 @@
                             <label for="comment" class="form-label">Comment (Optional)</label>
                             <textarea class="form-control form-control-sm" id="comment" name="comment"
                                       rows="3" placeholder="Add any observations..."></textarea>
+                        </div>
+
+                        <div class="mb-3" id="nonGradableReasons" style="display:none;">
+                            <label class="form-label">Reason for Non-gradable</label>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for reason in non_gradable_reasons %}
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-non-gradable-reason="{{ reason }}">{{ reason }}</button>
+                                {% endfor %}
+                            </div>
                         </div>
 
                         <!-- Submit Button -->
@@ -249,6 +260,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const syncStatus = document.getElementById('syncStatus');
     const resetZoomBtn = document.getElementById('resetZoom');
     const closeViewerBtn = document.getElementById('closeViewer');
+    const labelSelect = document.getElementById('label_id');
+    const nonGradableReasons = document.getElementById('nonGradableReasons');
+    const commentTextarea = document.getElementById('comment');
 
     let syncEnabled = true;
     let activeSlot = null;
@@ -278,6 +292,33 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.classList.remove('active');
         });
     });
+
+    if (labelSelect && nonGradableReasons) {
+        labelSelect.addEventListener('change', function() {
+            const option = labelSelect.options[labelSelect.selectedIndex];
+            nonGradableReasons.style.display = option && option.dataset.isUngradable === 'true' ? 'block' : 'none';
+        });
+    }
+
+    if (nonGradableReasons && commentTextarea) {
+        nonGradableReasons.querySelectorAll('[data-non-gradable-reason]').forEach(button => {
+            button.addEventListener('click', function() {
+                const reason = button.dataset.nonGradableReason;
+                if (!reason) {
+                    return;
+                }
+                const line = 'Non-gradable: ' + reason;
+                const currentValue = commentTextarea.value || '';
+                if (currentValue.includes(line)) {
+                    return;
+                }
+                commentTextarea.value = currentValue.trim()
+                    ? currentValue.replace(/\s+$/, '') + '\n' + line
+                    : line;
+                commentTextarea.focus();
+            });
+        });
+    }
 
     // Click on grid slot to view image
     syncGrid.querySelectorAll('.sync-grid-slot.has-image').forEach(slot => {

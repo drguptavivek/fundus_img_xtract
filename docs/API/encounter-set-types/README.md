@@ -1,6 +1,6 @@
 # EncounterSetTypes API
 
-EncounterSetTypes are reusable configuration records for encounter-set intake. They define the metadata contract and target grading/evaluation scheme for a selected encounter-set type. They do not grant upload permission or project mapping; upload authorization and project mapping remain owned by Upload Profiles.
+EncounterSetTypes are reusable configuration records for encounter-set intake. They define the metadata contract, image-level grading schemes, encounter-level grading scheme, and allowed asset classes for a selected encounter-set type. They do not grant upload permission or project mapping; upload authorization and project mapping remain owned by Upload Profiles.
 
 Admin configuration UI is available at `GET /admin/encounter-set-types`. The page route renders HTML only; create/update/activate/deactivate mutations use the JSON API below through HTMX.
 
@@ -27,9 +27,14 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
 - `name` string, required
 - `code` string, required, globally unique
 - `description` string, optional
-- `target_scheme_id` integer, required; points to `diseases.id` as the grading/evaluation scheme, not confirmed diagnosis
+- `image_grading_scheme_ids` list of integers, required for active types; each must point to an image-scoped `diseases.id`
+- `default_image_grading_scheme_id` integer, required when multiple image schemes are selected; auto-selected when exactly one image scheme is selected
+- `encounter_grading_scheme_id` integer, required for active types; must point to an encounter-scoped `diseases.id`
+- `asset_rules_json` object, optional; defaults to clinical images only
 - `metadata_schema_json` object, required, with a `fields` list
 - `active` boolean, optional, defaults to true
+
+`Disease.grading_scope` is the source of truth for image vs encounter scheme validation.
 
 ## Metadata Schema
 
@@ -78,16 +83,17 @@ Metadata masters provide defaults only. After a field is added to an EncounterSe
 
 ## Schema Export
 
-`GET /api/encounter-set-types/<type_id>/schema` returns a portable schema-focused JSON payload containing EncounterSetType identity, target grading scheme, and `metadata_schema_json`.
+`GET /api/encounter-set-types/<type_id>/schema` returns a portable schema-focused JSON payload containing EncounterSetType identity, image grading schemes, default image grading scheme, encounter grading scheme, asset rules, and `metadata_schema_json`.
 
 Add `?download=1` to receive the same schema as a JSON attachment from the admin dashboard export action.
 
-## EncounterSet Grading Scheme
+## EncounterSet Grading Schemes
 
-The target grading scheme for an EncounterSetType must support both levels of grading when the workflow is an encounter-set grading workflow:
+EncounterSetType records configure both levels of grading:
 
-- image-level grades for each task-eligible clinical image in the EncounterSet
-- encounter-level grade for the overall EncounterSet/encounter
+- one or more image-level grading schemes for task-eligible clinical images
+- one default image-level grading scheme
+- one encounter-level grading scheme for the overall EncounterSet/encounter
 
 Resident and resident2 submissions are compared across both levels. If the configured grading rules detect a mismatch at either the image level or the encounter level, the EncounterSet grading task must escalate to an arbitrator. The arbitrator resolves the final grade.
 
@@ -122,6 +128,13 @@ The future EncounterSet upload service should persist supporting documents/docum
 
 Task creation must query only verified assets with `asset_kind = "clinical_image"` and `creates_task = true`. It must not use MIME type or image extension as the task-creation filter, because document images can also be valid JPG/PNG files.
 
+`asset_rules_json` captures the type-level allow/max/min policy for the upload UI and future enforcement:
+
+- `allow_clinical_images`, `min_clinical_images`, `max_clinical_images`
+- `allow_document_uploads`, `allow_pdf_uploads`, `allow_document_image_uploads`
+- `max_documents`, `max_pdfs`, `max_document_images`
+- `allow_report_uploads`, `allow_report_pdfs`, `allow_report_images`, `max_reports`
+
 ## Response Shape
 
 Success:
@@ -134,7 +147,11 @@ Success:
     "id": 12,
     "name": "Fundus Quick Set",
     "code": "fundus_quick",
-    "target_scheme_id": 5,
+    "image_grading_schemes": [{"id": 5, "name": "OSN Image", "is_default": true}],
+    "default_image_grading_scheme_id": 5,
+    "encounter_grading_scheme": {"id": 9, "name": "OSN Encounter", "grading_scope": "encounter"},
+    "encounter_grading_scheme_id": 9,
+    "asset_rules_json": {"allow_clinical_images": true},
     "metadata_schema_json": {"fields": []},
     "active": true
   }
@@ -162,7 +179,14 @@ curl -X POST /api/encounter-set-types \
   -d '{
     "name": "OSN Quick Capture",
     "code": "osn_quick_capture",
-    "target_scheme_id": 8,
+    "image_grading_scheme_ids": [8],
+    "default_image_grading_scheme_id": 8,
+    "encounter_grading_scheme_id": 18,
+    "asset_rules_json": {
+      "allow_clinical_images": true,
+      "allow_document_uploads": true,
+      "allow_pdf_uploads": true
+    },
     "metadata_schema_json": {
       "fields": [
         {

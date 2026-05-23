@@ -30,31 +30,5 @@
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ v }}"></script>
-{% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-  document.addEventListener('DOMContentLoaded', function () {
-    document.body.addEventListener('input', function (event) {
-      const input = event.target.closest('[data-user-search]');
-      if (!input) {
-        return;
-      }
-      const select = document.getElementById(input.dataset.userSearch);
-      if (!select) {
-        return;
-      }
-      const query = input.value.trim().toLowerCase();
-      select.querySelectorAll('option').forEach(function (option) {
-        if (!option.value) {
-          option.hidden = false;
-          return;
-        }
-        const text = (option.dataset.searchText || option.textContent || '').toLowerCase();
-        option.hidden = query && text.indexOf(query) === -1;
-      });
-    });
-  });
-</script>
+<script src="{{ url_for('static', filename='js/admin-upload-profiles.js') }}?v={{ v }}"></script>
 {% endblock %}

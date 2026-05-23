@@ -82,6 +82,7 @@ def _grade_input_from_request() -> grading_scheme_service.GradeInput:
         display_order=_int_value(data.get("display_order"), default=0),
         is_active=_bool_value(data.get("is_active"), default=True),
         prioritize_for_task_selection=_bool_value(data.get("prioritize_for_task_selection"), default=False),
+        is_ungradable=_bool_value(data.get("is_ungradable"), default=False),
         guidelines=(str(data.get("guidelines")).strip() if data.get("guidelines") is not None else None) or None,
         features=_feature_inputs(data),
     )

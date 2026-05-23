@@ -12,6 +12,15 @@
       <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_projects_admin') }}">
         Projects
       </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.encounter_set_types_admin') }}">
+        EncounterSet Types
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.grading_schemes_admin') }}">
+        Grading Schemes
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_metadata_fields_admin') }}">
+        Upload Metadata Fields
+      </a>
       <button class="btn btn-primary" type="button" data-upload-profile-add>
         Add Upload Profile
       </button>
@@ -19,7 +28,7 @@
   </div>
 
   <div class="alert alert-info">
-    Upload permission is granted only by active upload profiles assigned to a user in Manage Projects. Profiles define upload types, diseases, AI workflows, cameras, sites, and mydriatic scope.
+    Upload permission is granted only by active upload profiles assigned to a user in Manage Projects. Direct image, pregraded, and Remedio ZIP modes use profile-level target/camera/site settings; EncounterSet mode uses selected EncounterSetTypes for targets, assets, and metadata.
   </div>
 
 {% include "admin/partials/project_dashboard_workspace.html" %}

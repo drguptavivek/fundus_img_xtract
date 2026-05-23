@@ -270,7 +270,8 @@
     card.dataset.estExpanded = expanded ? '1' : '0';
     details.classList.toggle('d-none', !expanded);
     if (toggle) {
-      toggle.textContent = expanded ? 'Close' : 'Edit';
+      const readonly = card.closest('[data-est-form]')?.dataset.estReadonly === '1';
+      toggle.textContent = expanded ? 'Close' : (readonly ? 'View' : 'Edit');
     }
     updateFieldSummary(card);
   }
@@ -751,10 +752,96 @@
     } else if (current.dataset.estEditing !== '1') {
       addDefaultMasterFields();
     }
+    initializeAssetRules(current);
+    syncDefaultImageSchemeOptions(current);
     serializeSchema();
+    applyReadonlyMode(current);
     if (window.htmx) {
       window.htmx.process(current);
     }
+  }
+
+  function applyReadonlyMode(current) {
+    if (!current || current.dataset.estReadonly !== '1') {
+      return;
+    }
+    current.querySelectorAll('input, select, textarea').forEach(function (input) {
+      if (input.type !== 'hidden') {
+        input.disabled = true;
+      }
+    });
+    current.querySelectorAll([
+      '[data-est-add-field]',
+      '[data-est-add-master]',
+      '[data-est-remove-field]',
+      '[data-est-save-field]',
+      '[data-est-remove-option]',
+      '[data-est-add-option]',
+      '[data-est-master-suggestions]'
+    ].join(',')).forEach(function (element) {
+      element.classList.add('d-none');
+    });
+    current.querySelectorAll('[data-est-toggle-field]').forEach(function (button) {
+      button.textContent = button.closest('[data-est-field]')?.dataset.estExpanded === '1' ? 'Close' : 'View';
+    });
+  }
+
+  function selectedImageSchemeChoices(current) {
+    return Array.from(current.querySelectorAll('[data-est-image-scheme]:checked')).map(function (input) {
+      const label = input.closest('label');
+      return {
+        value: input.value,
+        label: label ? label.textContent.trim() : input.value
+      };
+    });
+  }
+
+  function syncDefaultImageSchemeOptions(current) {
+    if (!current) {
+      return;
+    }
+    const select = current.querySelector('[data-est-default-image-scheme]');
+    if (!select) {
+      return;
+    }
+    const previous = select.value;
+    const choices = selectedImageSchemeChoices(current);
+    select.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = choices.length === 1 ? 'Auto-selected because one image scheme is selected' : 'Select default image grading scheme';
+    select.appendChild(placeholder);
+
+    choices.forEach(function (choice) {
+      select.appendChild(makeOption(choice.value, choice.label, previous));
+    });
+
+    if (choices.length === 1) {
+      select.value = choices[0].value;
+    } else if (choices.some(function (choice) { return choice.value === previous; })) {
+      select.value = previous;
+    } else {
+      select.value = '';
+    }
+    select.disabled = choices.length === 0 || current.dataset.estReadonly === '1';
+  }
+
+  function syncAssetGroups(current) {
+    if (!current) {
+      return;
+    }
+    current.querySelectorAll('[data-est-asset-group-toggle]').forEach(function (toggle) {
+      const groupName = toggle.dataset.estAssetGroupToggle;
+      const group = current.querySelector('[data-est-asset-group="' + groupName + '"]');
+      if (!group) {
+        return;
+      }
+      group.classList.toggle('opacity-50', !toggle.checked);
+      group.querySelectorAll('input, select, textarea').forEach(function (input) {
+        input.disabled = !toggle.checked || current.dataset.estReadonly === '1';
+      });
+    });
   }
 
   function parseOptions(text) {
@@ -799,6 +886,62 @@
     FIELD_SCOPES.forEach(sortFieldList);
     const fields = Array.from(current.querySelectorAll('[data-est-field]')).map(readField);
     current.querySelector('[data-est-schema-input]').value = JSON.stringify({ fields: fields });
+  }
+
+  function initializeAssetRules(current) {
+    if (!current) {
+      return;
+    }
+    let rules = {};
+    try {
+      rules = JSON.parse(current.dataset.estInitialAssetRules || '{}');
+    } catch (error) {
+      rules = {};
+    }
+    current.querySelectorAll('[data-est-asset-bool]').forEach(function (input) {
+      const key = input.dataset.estAssetBool;
+      if (Object.prototype.hasOwnProperty.call(rules, key)) {
+        input.checked = Boolean(rules[key]);
+      }
+    });
+    current.querySelectorAll('[data-est-asset-int]').forEach(function (input) {
+      const key = input.dataset.estAssetInt;
+      input.value = rules[key] === null || rules[key] === undefined ? '' : String(rules[key]);
+    });
+    syncAssetGroups(current);
+    serializeAssetRules();
+  }
+
+  function serializeAssetRules() {
+    const current = form();
+    if (!current) {
+      return;
+    }
+    const rules = {};
+    current.querySelectorAll('[data-est-asset-bool]').forEach(function (input) {
+      rules[input.dataset.estAssetBool] = Boolean(input.checked);
+    });
+    current.querySelectorAll('[data-est-asset-int]').forEach(function (input) {
+      const value = input.value.trim();
+      rules[input.dataset.estAssetInt] = value === '' ? null : Number(value);
+    });
+    current.querySelectorAll('[data-est-asset-group-toggle]').forEach(function (toggle) {
+      const groupName = toggle.dataset.estAssetGroupToggle;
+      const group = current.querySelector('[data-est-asset-group="' + groupName + '"]');
+      if (!group || toggle.checked) {
+        return;
+      }
+      group.querySelectorAll('[data-est-asset-bool]').forEach(function (input) {
+        rules[input.dataset.estAssetBool] = false;
+      });
+      group.querySelectorAll('[data-est-asset-int]').forEach(function (input) {
+        rules[input.dataset.estAssetInt] = null;
+      });
+    });
+    const input = current.querySelector('[data-est-asset-rules-input]');
+    if (input) {
+      input.value = JSON.stringify(rules);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -910,6 +1053,9 @@
         debouncedMasterKeyCheck(card);
       }
     }
+    if (event.target.closest('[data-est-asset-int]')) {
+      serializeAssetRules();
+    }
   });
 
   document.addEventListener('change', function (event) {
@@ -920,6 +1066,14 @@
       if (event.target.closest('[data-est-key]')) {
         checkMasterKeyAvailability(card);
       }
+    }
+    if (event.target.closest('[data-est-asset-bool], [data-est-asset-int]')) {
+      syncAssetGroups(form());
+      serializeAssetRules();
+    }
+    if (event.target.closest('[data-est-image-scheme]')) {
+      syncDefaultImageSchemeOptions(form());
+      applyReadonlyMode(form());
     }
   });
 
@@ -934,6 +1088,9 @@
       return;
     }
     serializeSchema();
+    serializeAssetRules();
+    syncDefaultImageSchemeOptions(current);
+    applyReadonlyMode(current);
   }, true);
 
   document.body.addEventListener('htmx:configRequest', function (event) {
@@ -947,8 +1104,12 @@
       return;
     }
     serializeSchema();
+    serializeAssetRules();
+    syncDefaultImageSchemeOptions(current);
+    applyReadonlyMode(current);
     if (event.detail.parameters) {
       event.detail.parameters.metadata_schema_json = current.querySelector('[data-est-schema-input]').value;
+      event.detail.parameters.asset_rules_json = current.querySelector('[data-est-asset-rules-input]').value;
     }
   });
 })();

@@ -28,12 +28,14 @@
   <div class="form-label">Upload Profile</div>
   <div class="d-flex flex-wrap gap-2">
     {% for profile in profiles %}
-    {% set input_id = 'profile_id_' ~ profile.profile_id %}
+    {% set input_id = 'profile_id_' ~ profile.profile_id ~ '_' ~ (profile.project_upload_profile_id or profile.assignment_id or loop.index) %}
     <input class="btn-check"
            type="radio"
            name="profile_id"
            id="{{ input_id }}"
            value="{{ profile.profile_id }}"
+           data-project-upload-profile-id="{{ profile.project_upload_profile_id }}"
+           data-assignment-id="{{ profile.assignment_id or '' }}"
            autocomplete="off"
            required
            {% if profiles|length == 1 %}checked{% endif %}>

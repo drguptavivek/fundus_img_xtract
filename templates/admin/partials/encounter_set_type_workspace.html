@@ -1,9 +1,13 @@
 {% from "_forms.html" import csrf_field %}
 {% from "admin/partials/encounter_set_type_macros.html" import metadata_scope_card %}
-{% if workspace == "new" or workspace == "edit" %}
+{% if workspace == "view" %}
+  {% include "admin/partials/encounter_set_type_view.html" %}
+{% elif workspace in ["new", "edit"] %}
   <section class="card shadow-sm" id="encounter-set-type-editor" data-est-editor>
     <div class="card-header d-flex justify-content-between align-items-center">
-      <span data-est-form-title>{{ "Edit EncounterSetType" if workspace == "edit" else "Create EncounterSetType" }}</span>
+      <span data-est-form-title>
+        {{ "Edit EncounterSetType" if workspace == "edit" else "Create EncounterSetType" }}
+      </span>
       <button class="btn btn-sm btn-outline-secondary"
               type="button"
               hx-get="{{ url_for('admin.encounter_set_types_list') }}"
@@ -28,20 +32,14 @@
             data-json-api-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
             data-est-key-check-url="{{ url_for('fundus_api.check_upload_metadata_field_key') }}"
             data-est-initial-schema="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}"
+            data-est-initial-asset-rules="{{ (edit_row.asset_rules_json if editing else {})|tojson|forceescape }}"
             data-est-editing="{{ '1' if editing else '0' }}"
             data-est-form>
         {{ csrf_field() }}
+        <input type="hidden" name="active" value="{{ '1' if (not editing or edit_row.active) else '0' }}">
         <input type="hidden" name="metadata_schema_json" data-est-schema-input value="{{ (edit_row.metadata_schema_json if editing else {'fields': []})|tojson|forceescape }}">
+        <input type="hidden" name="asset_rules_json" data-est-asset-rules-input value="{{ (edit_row.asset_rules_json if editing else {})|tojson|forceescape }}">
         <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label" for="est_target_scheme_id">Target Grading scheme <span class="text-danger">*</span></label>
-            <select class="form-select" id="est_target_scheme_id" name="target_scheme_id" required>
-              <option value="">Select scheme</option>
-              {% for disease in diseases %}
-              <option value="{{ disease.id }}" {% if editing and edit_row.target_scheme_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
           <div class="col-md-4">
             <label class="form-label" for="est_name">Name <span class="text-danger">*</span></label>
             <input class="form-control" id="est_name" name="name" maxlength="150" value="{{ edit_row.name if editing else '' }}" required>
@@ -53,6 +51,137 @@
           <div class="col-12">
             <label class="form-label" for="est_description">Description</label>
             <textarea class="form-control" id="est_description" name="description" rows="2">{{ edit_row.description if editing and edit_row.description else '' }}</textarea>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-lg-7">
+            <label class="form-label">Image grading schemes <span class="text-danger">*</span></label>
+            <div class="border rounded p-2 vstack gap-1" data-est-image-schemes>
+              {% set selected_image_ids = edit_row.image_grading_scheme_ids if editing else [] %}
+              {% for disease in diseases if disease.grading_scope == "image" %}
+                <label class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" name="image_grading_scheme_ids" value="{{ disease.id }}" {% if disease.id in selected_image_ids %}checked{% endif %} data-est-image-scheme>
+                  <span class="form-check-label">{{ disease.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <label class="form-label" for="est_default_image_grading_scheme_id">Default image grading scheme</label>
+            <select class="form-select" id="est_default_image_grading_scheme_id" name="default_image_grading_scheme_id" data-est-default-image-scheme>
+              <option value="">Auto when one image scheme is selected</option>
+              {% for disease in diseases if disease.grading_scope == "image" %}
+              <option value="{{ disease.id }}" {% if editing and edit_row.default_image_grading_scheme_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+            <label class="form-label mt-3" for="est_encounter_grading_scheme_id">Encounter grading scheme <span class="text-danger">*</span></label>
+            <select class="form-select" id="est_encounter_grading_scheme_id" name="encounter_grading_scheme_id" required>
+              <option value="">Select encounter scheme</option>
+              {% for disease in diseases if disease.grading_scope == "encounter" %}
+              <option value="{{ disease.id }}" {% if editing and edit_row.encounter_grading_scheme_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="fw-semibold mb-2">Allowed assets</div>
+          <div class="row g-3">
+            <div class="col-lg-4">
+              <div class="border rounded p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">Images</div>
+                    <div class="small text-muted">Clinical images that may create grading tasks.</div>
+                  </div>
+                  <label class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_clinical_images" data-est-asset-group-toggle="images" checked>
+                    <span class="visually-hidden">Allow images</span>
+                  </label>
+                </div>
+                <div class="row g-2 mt-2" data-est-asset-group="images">
+                  <div class="col-6">
+                    <label class="form-label small mb-1">Minimum</label>
+                    <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="min_clinical_images">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1">Maximum</label>
+                    <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="max_clinical_images">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="border rounded p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">Documents</div>
+                    <div class="small text-muted">Supporting PII documents that never create grading tasks.</div>
+                  </div>
+                  <label class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_document_uploads" data-est-asset-group-toggle="documents">
+                    <span class="visually-hidden">Allow documents</span>
+                  </label>
+                </div>
+                <div class="vstack gap-2 mt-2" data-est-asset-group="documents">
+                  <div class="d-flex flex-wrap gap-3">
+                    <label class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_pdf_uploads">
+                      <span class="form-check-label">PDF</span>
+                    </label>
+                    <label class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_document_image_uploads">
+                      <span class="form-check-label">Image</span>
+                    </label>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label small mb-1">Max PDFs</label>
+                      <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="max_pdfs">
+                    </div>
+                    <div class="col-6">
+                      <label class="form-label small mb-1">Max images</label>
+                      <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="max_document_images">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small mb-1">Max documents total</label>
+                      <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="max_documents">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="border rounded p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                  <div>
+                    <div class="fw-semibold">Reports</div>
+                    <div class="small text-muted">Clinical reports stored as supporting assets.</div>
+                  </div>
+                  <label class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_report_uploads" data-est-asset-group-toggle="reports">
+                    <span class="visually-hidden">Allow reports</span>
+                  </label>
+                </div>
+                <div class="vstack gap-2 mt-2" data-est-asset-group="reports">
+                  <div class="d-flex flex-wrap gap-3">
+                    <label class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_report_pdfs">
+                      <span class="form-check-label">PDF</span>
+                    </label>
+                    <label class="form-check mb-0">
+                      <input class="form-check-input" type="checkbox" data-est-asset-bool="allow_report_images">
+                      <span class="form-check-label">Image</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label class="form-label small mb-1">Max reports total</label>
+                    <input class="form-control form-control-sm" type="number" min="0" data-est-asset-int="max_reports">
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -72,7 +201,7 @@
                   hx-swap="innerHTML"
                   hx-push-url="{{ url_for('admin.encounter_set_types_admin') }}"
                   data-est-cancel>
-            Cancel
+            Back to list
           </button>
           <button class="btn btn-primary" type="submit" data-est-submit>{{ "Save Changes" if editing else "Create Type" }}</button>
         </div>

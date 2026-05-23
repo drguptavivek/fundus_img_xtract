@@ -37,7 +37,7 @@
     </div>
   </div>
   <div class="card-body">
-    <div class="row row-cols-2 row-cols-md-5 g-3">
+    <div class="row row-cols-2 row-cols-md-6 g-3">
       <div class="col">
         <div class="text-muted small">Scope</div>
         {% if grading_scheme.grading_scope == "encounter" %}
@@ -57,6 +57,10 @@
       <div class="col">
         <div class="text-muted small">Priority Grades</div>
         <div class="fw-semibold">{{ grading_scheme.prioritized_grade_count }}</div>
+      </div>
+      <div class="col">
+        <div class="text-muted small">Ungradable Grades</div>
+        <div class="fw-semibold">{{ grading_scheme.ungradable_grade_count }}</div>
       </div>
       <div class="col">
         <div class="text-muted small">Tasks</div>
@@ -132,6 +136,7 @@
           <th class="text-end">Order</th>
           <th>Status</th>
           <th>Priority</th>
+          <th>Meaning</th>
           <th>Features</th>
           <th>Guidelines</th>
         </tr>
@@ -156,6 +161,13 @@
             {% endif %}
           </td>
           <td>
+            {% if grade.is_ungradable %}
+            <span class="badge text-bg-danger">Ungradable</span>
+            {% else %}
+            <span class="text-muted small">Gradable</span>
+            {% endif %}
+          </td>
+          <td>
             {% if grade.features %}
             <div class="d-flex flex-wrap gap-1">
               {% for feature in grade.features %}
@@ -176,13 +188,29 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-4">No grades configured for this scheme.</td>
+          <td colspan="7" class="text-center text-muted py-4">No grades configured for this scheme.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+{% if grading_scheme.ungradable_grade_count %}
+<div class="card mb-3">
+  <div class="card-header">
+    <div class="fw-semibold">Standard Non-gradable Reasons</div>
+    <div class="small text-muted">Shown by grading screens when an ungradable grade is selected.</div>
+  </div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2">
+      {% for reason in grading_scheme.non_gradable_reasons %}
+      <span class="badge text-bg-light border">{{ reason }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="row g-3">
   {% for key, label in [

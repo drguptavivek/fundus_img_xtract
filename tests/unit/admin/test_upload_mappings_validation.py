@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from encounter_set_types.models import EncounterSetType
+from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
@@ -85,8 +85,6 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
 
     profile = UploadProfile(
         name="Editable profile",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         allow_mydriatic=False,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
@@ -104,8 +102,6 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
         profile.id,
         UploadProfileInput(
             name="Editable profile",
-            lab_unit_id=lab.id,
-            project_id=project.id,
             disease_ids=[disease.id],
             default_disease_ids=[disease.id],
             camera_ids=[camera.id],
@@ -137,17 +133,21 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
     lab = LabUnit(name="EST Profile Lab", hospital=hospital)
     manager.lab_units.append(lab)
     project = Project(title="EST Profile Project", code="EST_PROFILE", active=True)
-    disease = Disease(name="EST Profile Scheme")
+    disease = Disease(name="EST Profile Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="EST Profile Encounter Scheme", grading_scope="encounter")
     camera = Camera(name="EST Profile Camera")
     area = Area(name="EST Profile Area")
-    db_session.add_all([manager, hospital, lab, project, disease, camera, area])
+    db_session.add_all([manager, hospital, lab, project, disease, encounter_scheme, camera, area])
     db_session.flush()
     encounter_set_type = EncounterSetType(
         name="EST Profile Type",
         code="est_profile_type",
-        target_scheme_id=disease.id,
+        encounter_grading_scheme_id=encounter_scheme.id,
         metadata_schema_json={"fields": []},
         active=True,
+    )
+    encounter_set_type.image_grading_schemes.append(
+        EncounterSetTypeImageGradingScheme(disease_id=disease.id, is_default=True, display_order=1, active=True)
     )
     db_session.add(encounter_set_type)
     db_session.flush()
@@ -156,12 +156,10 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
         manager.id,
         UploadProfileInput(
             name="EncounterSet profile",
-            lab_unit_id=lab.id,
-            project_id=project.id,
-            disease_ids=[disease.id],
+            disease_ids=[],
             default_disease_ids=[],
-            camera_ids=[camera.id],
-            area_ids=[area.id],
+            camera_ids=[],
+            area_ids=[],
             upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
             allow_mydriatic=False,
             allow_non_mydriatic=True,

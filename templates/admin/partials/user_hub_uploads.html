@@ -49,17 +49,25 @@
             <tr>
               <th>Project</th>
               <th>Lab unit</th>
-              <th>Disease</th>
+              <th>Profile</th>
+              <th>Target schemes</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {% for row in mapping_rows %}
               <tr>
-                <td>{{ row.project.title if row.project else 'Unknown project' }}</td>
+                <td>{{ row.project_profile.project.title if row.project_profile and row.project_profile.project else 'Unknown project' }}</td>
                 <td>{{ row.lab_unit.name if row.lab_unit else 'Unknown lab unit' }}</td>
-                <td>{{ row.disease.name if row.disease else 'Unknown disease' }}</td>
-                <td>{% if row.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+                <td>{{ row.project_profile.profile.name if row.project_profile and row.project_profile.profile else 'Unknown profile' }}</td>
+                <td class="small">
+                  {% if row.project_profile and row.project_profile.profile %}
+                    {{ row.project_profile.profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{% if row.active and row.project_profile and row.project_profile.active %}<span class="badge text-bg-success">Active</span>{% else %}<span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>

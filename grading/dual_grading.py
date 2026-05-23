@@ -12,6 +12,7 @@ from json import JSONDecodeError
 from datetime import datetime, timedelta, timezone
  
 from auth.roles import roles_required
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from models import (
     Session,
     GradingTask,
@@ -201,6 +202,7 @@ def revise_grading(grade_id: int):
                         "id": grading.id,
                         "impression": grading.impression,
                         "display_order": grading.display_order,
+                        "is_ungradable": bool(grading.is_ungradable),
                         "guidelines": grading.guidelines,
                         "features": [
                             {
@@ -272,6 +274,7 @@ def revise_grading(grade_id: int):
                 revision_status_message=None if revision_editable else (
                     eligibility_result["message"] if not eligibility_result["eligible"] else state_message
                 ),
+                non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
                 current_user_id=getattr(current_user, "id", None)
             ))
             
@@ -449,6 +452,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             "id": grading.id,
                             "impression": grading.impression,
                             "display_order": grading.display_order,
+                            "is_ungradable": bool(grading.is_ungradable),
                             "guidelines": grading.guidelines,
                             "features": [
                                 {
@@ -770,6 +774,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 linked_followup=linked_followup,
                 linked_followup_disease_id=linked_followup_disease_id,
                 image_metadata=image_metadata,
+                non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)

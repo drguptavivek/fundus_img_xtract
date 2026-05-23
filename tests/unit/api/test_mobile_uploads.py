@@ -29,9 +29,10 @@ from models import (
     User,
 )
 from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileArea,
-    UploadProfileAssignment,
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileKind,
@@ -73,14 +74,11 @@ def mobile_upload_data(db_session, core_test_data):
     )
     profile = UploadProfile(
         name=f"EIM Mobile Profile {suffix}",
-        lab_unit_id=lab.id,
-        project_id=project.id,
         active=True,
         allow_mydriatic=True,
         allow_non_mydriatic=True,
         default_is_mydriatic=False,
     )
-    profile.assignments.append(UploadProfileAssignment(user_id=uploader.id, active=True))
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
@@ -89,6 +87,18 @@ def mobile_upload_data(db_session, core_test_data):
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_PREGRADED))
     db_session.add(profile)
+    db_session.flush()
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
     db_session.flush()
 
     return {

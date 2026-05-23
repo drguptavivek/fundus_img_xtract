@@ -25,6 +25,7 @@ def _context() -> dict:
                 {
                     "id": disease.id,
                     "name": disease.name,
+                    "grading_scope": disease.grading_scope,
                 }
                 for disease in diseases
             ],
@@ -81,6 +82,23 @@ def encounter_set_type_edit(type_id: int):
         return render_template("admin/partials/encounter_set_type_message.html", message=result.message, category="danger"), result.status_code
     context = _context()
     context["workspace"] = "edit"
+    context["edit_encounter_set_type"] = result.payload["encounter_set_type"]
+    if request.headers.get("HX-Request") == "true":
+        return render_template("admin/partials/encounter_set_type_workspace.html", **context)
+    return render_template("admin/encounter_set_types.html", **context)
+
+
+@roles_required("admin", "local_admin", "data_manager")
+def encounter_set_type_view(type_id: int):
+    """Render read-only EncounterSetType detail workspace."""
+    if not _has_manager_scope():
+        flash("You are not assigned to any lab units for EncounterSetType management.", "warning")
+        return redirect(url_for("admin.users_list"))
+    result = encounter_set_type_service.get_encounter_set_type(current_user.id, type_id)
+    if not result.success:
+        return render_template("admin/partials/encounter_set_type_message.html", message=result.message, category="danger"), result.status_code
+    context = _context()
+    context["workspace"] = "view"
     context["edit_encounter_set_type"] = result.payload["encounter_set_type"]
     if request.headers.get("HX-Request") == "true":
         return render_template("admin/partials/encounter_set_type_workspace.html", **context)

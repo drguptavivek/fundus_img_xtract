@@ -175,6 +175,104 @@
               <div class="small text-muted mt-2">
                 Diseases: {{ profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}
               </div>
+              {% if profile.automated_remidio_populated %}
+              <div class="alert alert-info py-2 mt-2 mb-2 small">
+                Automated Remidio API profile. It receives data through API source bindings and does not require uploader assignments.
+              </div>
+              <div class="table-responsive mt-2">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>API source</th><th>Lab unit</th><th>Camera</th><th>Date window</th><th></th></tr></thead>
+                  <tbody>
+                    {% for binding in mapping.remidio_api_bindings if binding.active %}
+                    <tr>
+                      <td>
+                        <div class="fw-semibold">{{ binding.source_rule.site_custom_identifier if binding.source_rule else '-' }}</div>
+                        <div class="small text-muted">{{ binding.source_rule.remidio_device_type if binding.source_rule else '-' }}</div>
+                      </td>
+                      <td>{{ binding.lab_unit.name if binding.lab_unit else '-' }}</td>
+                      <td>{{ binding.camera.name if binding.camera else '-' }}</td>
+                      <td class="small">{{ binding.active_from_date }} to {{ binding.active_to_date or 'open' }}</td>
+                      <td class="text-end">
+                        <form method="post"
+                              action="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
+                              hx-post="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
+                              hx-swap="none"
+                              data-json-api-htmx
+                              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                              data-json-api-reload-target="#project-detail-workspace">
+                          {{ csrf_field() }}
+                          <input type="hidden" name="id" value="{{ binding.id }}">
+                          <input type="hidden" name="project_upload_profile_id" value="{{ binding.project_upload_profile_id }}">
+                          <input type="hidden" name="remidio_api_source_rule_id" value="{{ binding.remidio_api_source_rule_id }}">
+                          <input type="hidden" name="lab_unit_id" value="{{ binding.lab_unit_id }}">
+                          <input type="hidden" name="camera_id" value="{{ binding.camera_id }}">
+                          <input type="hidden" name="active_from_date" value="{{ binding.active_from_date }}">
+                          <input type="hidden" name="active_to_date" value="{{ binding.active_to_date or '' }}">
+                          <input type="hidden" name="active" value="false">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Deactivate</button>
+                        </form>
+                      </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted text-center py-2">No Remidio API sources bound.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <form class="row g-2 align-items-end mt-2"
+                    method="post"
+                    action="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
+                    hx-post="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                    data-json-api-reload-target="#project-detail-workspace">
+                {{ csrf_field() }}
+                <input type="hidden" name="project_upload_profile_id" value="{{ mapping.id }}">
+                <input type="hidden" name="active" value="true">
+                <div class="col-md-4">
+                  <label class="form-label" for="remidio_api_source_rule_{{ mapping.id }}">API Source</label>
+                  <select class="form-select" id="remidio_api_source_rule_{{ mapping.id }}" name="remidio_api_source_rule_id" required>
+                    <option value="">Select source</option>
+                    {% for source_rule in remidio_api_source_rules if source_rule.active %}
+                    <option value="{{ source_rule.id }}">
+                      {{ source_rule.connection.name if source_rule.connection else 'Connection' }} ·
+                      {{ source_rule.site_custom_identifier }} · {{ source_rule.remidio_device_type }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" for="remidio_api_lab_{{ mapping.id }}">Lab Unit</label>
+                  <select class="form-select" id="remidio_api_lab_{{ mapping.id }}" name="lab_unit_id" required>
+                    <option value="">Select lab unit</option>
+                    {% for lab_unit in lab_units %}
+                    <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} · {{ lab_unit.hospital.name }}{% endif %}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" for="remidio_api_camera_{{ mapping.id }}">Camera</label>
+                  <select class="form-select" id="remidio_api_camera_{{ mapping.id }}" name="camera_id" required>
+                    <option value="">Select camera</option>
+                    {% for camera in cameras %}
+                    <option value="{{ camera.id }}">{{ camera.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label" for="remidio_api_from_{{ mapping.id }}">From</label>
+                  <input class="form-control" id="remidio_api_from_{{ mapping.id }}" type="date" name="active_from_date" required>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="remidio_api_to_{{ mapping.id }}">To</label>
+                  <input class="form-control" id="remidio_api_to_{{ mapping.id }}" type="date" name="active_to_date">
+                </div>
+                <div class="col-md-8 text-end">
+                  <button class="btn btn-outline-primary w-100" type="submit">Bind Remidio API Source</button>
+                </div>
+              </form>
+              {% else %}
               <div class="table-responsive mt-2">
                 <table class="table table-sm align-middle mb-0">
                   <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>
@@ -241,6 +339,7 @@
                   <button class="btn btn-outline-primary w-100" type="submit">Add</button>
                 </div>
               </form>
+              {% endif %}
             </div>
           </div>
           {% else %}

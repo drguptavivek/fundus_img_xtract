@@ -197,6 +197,7 @@
             {% endfor %}
             {% set row_encounter_set_names = [] %}
             {% set row_encounter_set_configs = [] %}
+            {% set row_encounter_set_target_summaries = [] %}
             {% for encounter_config in profile.encounter_set_types if encounter_config.active %}
               {% if encounter_config.encounter_set_type %}
                 {% set _ = row_encounter_set_names.append(encounter_config.encounter_set_type.name) %}
@@ -207,6 +208,12 @@
                   {% set _ = row_image_scheme_names.append(image_scheme.disease.name) %}
                 {% endif %}
               {% endfor %}
+              {% set _ = row_encounter_set_target_summaries.append({
+                'encounter_set_type_name': encounter_config.encounter_set_type.name if encounter_config.encounter_set_type else '',
+                'image_grading_scheme_names': row_image_scheme_names,
+                'default_image_grading_scheme_name': encounter_config.default_image_grading_scheme.name if encounter_config.default_image_grading_scheme else '',
+                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else ''
+              }) %}
               {% set _ = row_encounter_set_configs.append({
                 'encounter_set_type_id': encounter_config.encounter_set_type_id,
                 'encounter_set_type_name': encounter_config.encounter_set_type.name if encounter_config.encounter_set_type else '',
@@ -230,6 +237,7 @@
               'projects': row_project_names,
               'uploaders': active_uploader_count.value,
               'clinical_targets': row_clinical_target_names,
+              'encounter_set_targets': row_encounter_set_target_summaries,
               'remidio_defaults': row_remidio_default_names,
               'cameras': row_camera_names,
               'sites': row_area_names,
@@ -237,19 +245,49 @@
               'encounter_set_types': row_encounter_set_names,
               'encounter_set_configs': row_encounter_set_configs,
               'ai_workflow_count': row_ai_workflows|length,
+              'automated_remidio_populated': profile.automated_remidio_populated,
               'allow_mydriatic': profile.allow_mydriatic,
               'allow_non_mydriatic': profile.allow_non_mydriatic,
               'default_is_mydriatic': profile.default_is_mydriatic
             } %}
             <tr>
-              <td>{{ profile.name }}</td>
+              <td>
+                <div class="fw-semibold">{{ profile.name }}</div>
+                {% if profile.automated_remidio_populated %}
+                <span class="badge text-bg-info">Automated Remidio API</span>
+                {% endif %}
+              </td>
               <td class="small">
                 {{ row_project_names|join(', ') or '-' }}
               </td>
               <td class="small">
-                {{ active_uploader_count.value }}
+                {% if profile.automated_remidio_populated %}
+                  <span class="badge text-bg-light border">Automated</span>
+                {% else %}
+                  {{ active_uploader_count.value }}
+                {% endif %}
               </td>
-              <td class="small">{{ row_clinical_target_names|join(', ') or '-' }}</td>
+              <td class="small">
+                {% if row_clinical_target_names %}
+                  <div><span class="text-muted">Clinical:</span> {{ row_clinical_target_names|join(', ') }}</div>
+                {% endif %}
+                {% if row_encounter_set_target_summaries %}
+                  <div class="{{ 'mt-1' if row_clinical_target_names else '' }}">
+                    <span class="text-muted">EncounterSet:</span>
+                    {% for target_summary in row_encounter_set_target_summaries %}
+                    <div class="ps-2">
+                      {{ target_summary.encounter_set_type_name or 'EncounterSetType' }}:
+                      image {{ target_summary.image_grading_scheme_names|join(', ') or '-' }};
+                      default {{ target_summary.default_image_grading_scheme_name or '-' }};
+                      encounter {{ target_summary.encounter_grading_scheme_name or '-' }}
+                    </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if not row_clinical_target_names and not row_encounter_set_target_summaries %}
+                  -
+                {% endif %}
+              </td>
               <td class="small">
                 {% if row_encounter_set_type_ids %}
                   {{ row_encounter_set_names|join(', ') or '-' }}
@@ -287,6 +325,7 @@
                     data-encounter-set-type-ids="{{ row_encounter_set_type_ids|join(',') }}"
                     data-encounter-set-configs="{{ row_encounter_set_configs|tojson|forceescape }}"
                     data-ai-workflows="{{ row_ai_workflows|join(',') }}"
+                    data-automated-remidio-populated="{{ '1' if profile.automated_remidio_populated else '0' }}"
                     data-allow-mydriatic="{{ '1' if profile.allow_mydriatic else '0' }}"
                     data-allow-non-mydriatic="{{ '1' if profile.allow_non_mydriatic else '0' }}"
                     data-default-is-mydriatic="{{ '1' if profile.default_is_mydriatic else '0' }}"

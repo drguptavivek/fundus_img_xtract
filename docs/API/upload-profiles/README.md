@@ -94,6 +94,7 @@ Profile create/update fields:
 
 - `name` string, required
 - `description` string, optional
+- `automated_remidio_populated` checkbox-style boolean; when true, this profile is for Remidio API auto-populated EncounterSets only
 - `disease_ids` repeated integers, required only when one of `direct_image`, `pregraded`, or `remidio` is enabled
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
@@ -124,6 +125,8 @@ Assignment fields for `/api/upload-profiles/assignments` and `/api/upload-profil
   - `assignment_id` integer, required and in caller lab-unit scope
 
 Assignment validation requires each selected lab unit to be explicitly assigned to the user and to belong to the user's hospital.
+
+Automated Remidio API profiles are not assigned to human uploaders. After enabling such a profile for a project, bind Remidio API source rules to that project-profile mapping through `/api/remidio/api-bindings` or the project detail UI.
 
 Example profile create:
 
@@ -178,6 +181,15 @@ When `encounter_set` is enabled, the profile must allow one or more active Encou
 
 Camera/site/mydriatic profile fields are not required for EncounterSet-only profiles and are ignored if no clinical image/ZIP mode is enabled. If EncounterSet workflows need camera, site, acquisition method, mydriatic state, or similar capture details, configure those as upload metadata fields on the EncounterSetType.
 
+Automated Remidio API-populated profiles are a stricter EncounterSet-only subset:
+
+- `automated_remidio_populated=true`
+- `upload_kinds` must be exactly `encounter_set`
+- the selected EncounterSetTypes must include the active `remidio_api_standard` type
+- every selected Remidio EncounterSet mapping must have image grading schemes and one default image scheme
+- direct image, pregraded, and Remidio ZIP upload kinds are rejected
+- user assignment is rejected; routing uses API source bindings on the project-profile mapping
+
 `task_prioritization_json` is capture-only in this phase. It may record abnormal encounter prioritization, AI-abnormal prioritization, normal sampling percent, sampling strategy, source order, applicable upload kinds, and active state. It does not change task selection behavior yet.
 
 AI workflow bindings are valid only when the AI model is actively linked to the selected disease through `AIModelDisease`, when the workflow upload kind is enabled on the profile, and when the upload kind is one of `direct_image`, `pregraded`, or `remidio`.
@@ -195,7 +207,10 @@ Common user-facing errors include:
 - `Allowed diseases are required for direct image, pregraded, and Remidio ZIP uploads.`
 - `Cameras and sites are required for direct image, pregraded, and Remidio ZIP uploads.`
 - `Allowed diseases are only used for direct image, pregraded, and Remidio ZIP uploads.`
+- `Automated Remidio API profiles must allow only EncounterSet uploads.`
+- `Automated Remidio API profiles must include the Remidio API Standard EncounterSetType.`
 - `You cannot assign upload access outside your lab-unit scope.`
+- `Automated Remidio API profiles are populated by source bindings and cannot be assigned to users.`
 - `Selected user must be explicitly assigned to every selected lab unit.`
 - `Selected lab units must belong to the user's hospital.`
 - `Select a default disease for Remidio ZIP ingestion.`

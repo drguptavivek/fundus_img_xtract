@@ -9,8 +9,9 @@ Date: 2026-05-21
 - EncounterSetType is reusable and is not mapped directly to a project.
 - Project mapping belongs in Upload Profiles.
 - Upload Profiles decide allowed upload kinds, project linkage, direct/pregraded/Remedio target schemes, and allowed EncounterSetTypes.
-- EncounterSetType has explicit image-level grading scheme(s), one default image-level scheme, and one encounter-level grading scheme.
-- Upload Profiles that enable EncounterSet upload use selected EncounterSetTypes as the EncounterSet target source.
+- Upload Profiles are now Upload & Grading Profiles: for each selected EncounterSetType, the profile mapping owns image-level grading scheme(s), one default image-level scheme, and an optional encounter-level grading scheme.
+- EncounterSetType stays grading-scheme-neutral. It owns metadata schema and asset rules; project/workflow-specific grading targets belong to the Upload Profile's EncounterSetType configuration.
+- Upload Profiles that enable EncounterSet upload use selected EncounterSetTypes for metadata/assets and profile-level EncounterSetType scheme configuration for task targets.
 - Disease/target scheme should not be duplicated ambiguously between profile and EncounterSetType.
 - Direct image and pregraded uploads may allow multiple target schemes with a default and optional uploader override.
 - Remidio ZIP has a base target scheme; existing PDF detection may still create additional DR/glaucoma tasks.
@@ -42,6 +43,7 @@ Date: 2026-05-21
 - Each EncounterSetType metadata card owns its fields and supports add/edit/remove with expandable field details.
 - Every EncounterSetType metadata field must resolve to a standalone master metadata field, whether it was added from `/admin/upload-metadata-fields` or from `/admin/encounter-set-types`.
 - EncounterSetType stores a schema snapshot plus `field_definition_id`; it must not create private metadata fields outside the master table.
+- Raw Remidio API source metadata in the database preserves patient identity, clinical text, source URL/path fields, and source identifiers for controlled audit/mapping. Credential-like values such as auth tokens, passwords, signed auth headers, and JWTs are still redacted.
 - Metadata field `key` is the internal stable machine-readable code.
 - Metadata field `key` must be globally unique across all metadata fields.
 - Metadata field `label` is the human-facing display label.
@@ -69,6 +71,17 @@ Date: 2026-05-21
 - Updated API docs for upload metadata, EncounterSetTypes, and upload profiles.
 - Added navbar entries for EncounterSet Types and Upload Metadata Fields.
 - Created GitHub issue plan target: `#155 Add EncounterSet just-in-time upload UI`.
+- Added Remidio API source routing as a separate workflow from Remidio ZIP routing:
+  - API source rule: Remidio connection + site custom identifier + device type.
+  - API binding: source rule + enabled project upload profile + lab unit + camera + active date window.
+  - Active API bindings cannot overlap by date for the same source rule.
+  - API-fetched images/documents are routed into EncounterSet-compatible patient encounters.
+- Added automated Remidio API Upload Profile mode:
+  - must be EncounterSet-only.
+  - must include the seeded `remidio_api_standard` EncounterSetType.
+  - must define at least one image grading scheme and one default image grading scheme for that Remidio EncounterSetType.
+  - cannot be assigned to manual upload users.
+- Added Remidio API ingest path that creates EncounterSet clinical images and non-task PDF/report attachments, stores Remidio metadata JSON, and records profile target schemes for later verification/task creation.
 
 ## Production Caveats
 
@@ -264,13 +277,19 @@ Date: 2026-05-21
   - assign users and scoped lab units to enabled project profiles.
 - Existing `jobs.upload_profile_id` and `patient_encounters.upload_profile_id` continue pointing to reusable `upload_profiles.id`.
 - Direct image upload still stores `project_id` and `lab_unit_id` on the upload row from the selected assignment context. No extra direct-image audit-only `upload_profile_id` was added because that was explicitly deferred.
-- Remidio ZIP routing still needs a later routing profile:
-  - Remidio API data may need project/profile routing by connection, site ID/custom ID, camera type such as FOP/PRISTINE, date windows, and other metadata.
-  - Upload Profile should eventually link to a Remidio API routing profile rather than trying to encode API routing in the reusable upload template itself.
+- Remidio ZIP defaults and Remidio API routing are separate:
+  - Remidio ZIP uses the Upload Profile's `default_disease_ids` because ZIP upload does not collect a disease/scheme on the form.
+  - Remidio API-fetched data uses API source rules and project-profile bindings, not the ZIP default.
+  - API source rule: Remidio connection + site custom identifier + Remidio device type such as FOP/PRISTINE.
+  - API binding: source rule + enabled project upload profile + lab unit + camera + date window.
+  - API bindings cannot overlap by date for the same source rule.
+  - Automated Remidio API Upload Profiles must be EncounterSet-only, must include `remidio_api_standard`, and must not allow direct image, pregraded, or Remidio ZIP upload kinds.
+  - Automated Remidio API Upload Profiles are not assigned to users; they are populated through API source bindings.
 - EncounterSet linkage remains via Upload Profile:
   - profile enables allowed EncounterSetTypes.
   - EncounterSetType owns image-level schemes, default image scheme, encounter-level scheme, metadata schema, and asset rules.
   - project linkage comes from the project-profile mapping.
+  - Remidio API ingestion now creates EncounterSet images and non-task attachments, then stores target diseases from the routed Upload Profile for later verification/task creation.
 - Supporting PDFs, reports, and document-images remain non-task assets and must not get image-level grading tasks.
 - Rationale:
   - EncounterSets can contain mixed clinical image types in one patient encounter.
@@ -506,3 +525,52 @@ Date: 2026-05-21
   - `mandatory_by_scheme`
   - `manual_override`
 - This policy should be implemented after the EncounterSetType target-scheme and Upload Profile restructuring, because the policy depends on knowing the selected Upload Profile, project context, upload kind, EncounterSetType, and task-eligible clinical assets.
+
+## What Next
+
+### Immediate Deployment Step
+
+- Apply migration `f2a3b4c5d6e7_add_remidio_api_profile_routing.py` with `uv run alembic upgrade head`.
+- Current verified state before this handoff:
+  - Alembic head: `f2a3b4c5d6e7`
+  - current app DB revision observed during verification: `f1a2b3c4d5e6`
+- After migration, restart/reload the web process so the new ORM columns and Remidio API routing tables are available to the running app.
+
+### Configure Remidio API Routing
+
+- Create/confirm automated Remidio API Upload Profiles:
+  - must be EncounterSet-only.
+  - must include `remidio_api_standard`.
+  - must have one or more image grading schemes and one default image grading scheme for that EncounterSetType.
+  - must not have manual user assignments.
+- In Remidio admin, create API source rules by connection, site custom identifier, and device type.
+- In Upload Projects, bind each API source rule to the intended project upload profile, lab unit, camera, and date window.
+- Confirm there are no active overlapping bindings for the same API source rule.
+
+### Verify Remidio API Ingestion End To End
+
+- Pull a small known Remidio API exam set into staged rows.
+- Run dry-run ingest first and confirm each image/report resolves to exactly one binding.
+- Run real ingest for one known exam and verify:
+  - one EncounterSet-style patient encounter is created/reused.
+  - clinical images become `EncounterSetImage` rows with `creates_task=true`.
+  - PDFs/reports become `EncounterSetAttachment` rows with `creates_task=false`.
+  - Remidio image/report source rows link to the created EncounterSet assets.
+  - patient, encounter, image, and report metadata JSON contains unredacted clinical/source fields, with credentials still redacted.
+
+### Next Code Work
+
+- Build verification UI support for Remidio API EncounterSets:
+  - render the `remidio_api_standard` metadata schema.
+  - allow verifier edits only where the profile/type configuration allows it.
+  - allow verifier discard at encounter and image level.
+- Add task creation from verified EncounterSets:
+  - image tasks only for verified, non-discarded clinical images.
+  - encounter task when an encounter-level scheme is configured.
+  - no tasks from PDFs, reports, or document-images.
+  - use Upload Profile EncounterSetType grading scheme configuration, not free-text diagnosis.
+- Add a re-pull/update policy for Remidio API exams:
+  - update missing source assets before verification.
+  - prevent duplicate assets/tasks.
+  - decide how finalized EncounterSets behave on re-pull.
+- Later, converge Remidio ZIP into the same staged EncounterSet verification/task pipeline.

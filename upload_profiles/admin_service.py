@@ -24,7 +24,13 @@ from upload_profiles.models import (
     UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
 )
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO, manager_lab_unit_ids
+from upload_profiles.service import (
+    UPLOAD_KIND_DIRECT_IMAGE,
+    UPLOAD_KIND_ENCOUNTER_SET,
+    UPLOAD_KIND_PREGRADED,
+    UPLOAD_KIND_REMIDIO,
+    manager_lab_unit_ids,
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,7 @@ class UploadProfileInput:
     allow_mydriatic: bool
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
+    automated_remidio_populated: bool
     ai_workflows: list[AIWorkflowInput]
     encounter_set_configs: list[EncounterSetProfileInput]
     task_prioritization_json: dict[str, Any] | None = None
@@ -235,6 +242,8 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
         project_profile = db.get(ProjectUploadProfile, assignment_input.project_upload_profile_id)
         if not project_profile or not project_profile.active:
             return MutationResult(False, "Project upload profile mapping not found or inactive.", 404)
+        if project_profile.profile and project_profile.profile.automated_remidio_populated:
+            return MutationResult(False, "Automated Remidio API profiles do not use uploader assignments.", 400)
         lab_error = _validate_user_lab_assignment(db, assignment_input.user_id, requested_lab_ids)
         if lab_error:
             return MutationResult(False, lab_error, 400)
@@ -334,6 +343,7 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
             allow_mydriatic=source.allow_mydriatic,
             allow_non_mydriatic=source.allow_non_mydriatic,
             default_is_mydriatic=source.default_is_mydriatic,
+            automated_remidio_populated=source.automated_remidio_populated,
             active=True,
         )
         duplicate.diseases = [UploadProfileDisease(disease_id=row.disease_id, is_default=row.is_default) for row in source.diseases]
@@ -387,9 +397,11 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     if not profile_input.upload_kinds:
         return "Select at least one upload type."
     upload_kinds = sorted(set(profile_input.upload_kinds))
-    if not set(upload_kinds).issubset({UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}):
+    if not set(upload_kinds).issubset({UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}):
         return "Unsupported upload type selected."
-    disease_required_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO}
+    if profile_input.automated_remidio_populated and set(upload_kinds) != {UPLOAD_KIND_ENCOUNTER_SET}:
+        return "Automated Remidio API profiles must allow only EncounterSet uploads."
+    disease_required_kinds = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO}
     clinical_upload_enabled = bool(set(upload_kinds).intersection(disease_required_kinds))
     if clinical_upload_enabled and not profile_input.disease_ids:
         return "Allowed diseases are required for direct image, pregraded, and Remidio ZIP uploads."
@@ -421,6 +433,19 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     encounter_set_error = _validate_encounter_set_configs(db, encounter_set_configs)
     if encounter_set_error:
         return encounter_set_error
+    if profile_input.automated_remidio_populated:
+        remidio_type_ids = {
+            row_id
+            for row_id in db.execute(
+                select(EncounterSetType.id).where(
+                    EncounterSetType.id.in_(encounter_set_configs.keys()),
+                    EncounterSetType.code == "remidio_api_standard",
+                    EncounterSetType.active.is_(True),
+                )
+            ).scalars().all()
+        }
+        if not remidio_type_ids:
+            return "Automated Remidio API profiles must include the Remidio API Standard EncounterSetType."
     prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
     if not prioritization_result.success:
         return prioritization_result.message
@@ -430,6 +455,7 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
 
     profile.name = profile_input.name
     profile.description = profile_input.description
+    profile.automated_remidio_populated = profile_input.automated_remidio_populated
     profile.task_prioritization_json = prioritization_result.payload["task_prioritization_json"]
     profile.allow_mydriatic = profile_input.allow_mydriatic if clinical_upload_enabled else False
     profile.allow_non_mydriatic = profile_input.allow_non_mydriatic if clinical_upload_enabled else True

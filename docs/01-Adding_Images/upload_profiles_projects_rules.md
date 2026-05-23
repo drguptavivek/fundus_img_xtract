@@ -37,6 +37,8 @@ An upload profile is the reusable rule set that controls upload intake. It is a 
 
 Profiles are managed on `/admin/upload-profiles`.
 
+An Upload Profile can also be marked as an automated Remidio API-populated profile. That profile type is EncounterSet-only, must include the `remidio_api_standard` EncounterSetType, and is not assigned to human uploaders. Project routing is done by Remidio API source bindings on the enabled project-profile mapping.
+
 ### Project Profile Users / Uploaders
 
 Projects enable reusable profiles through `project_upload_profiles`. Uploaders are assigned through `project_upload_profile_assignments`, which stores the enabled project profile, user, and lab unit. Assignment is active/inactive and constrained by lab-unit scope.
@@ -69,6 +71,14 @@ Encounter-set upload validation accepts an explicit `disease_id` when supplied. 
 Remidio ZIP upload does not collect a disease on the upload form. The profile default is therefore used as the disease/task target for that ingestion path. The admin service requires a default disease when `remidio` is enabled and rejects default diseases when `remidio` is not enabled.
 
 This default should not be interpreted as the default disease for direct upload, pre-graded upload, or encounter-set upload when a disease value is provided.
+
+Remidio API-fetched data does not use this ZIP default. API-fetched encounters are routed by:
+
+- a Remidio API source rule: connection, site custom identifier, and device type such as FOP or PRISTINE
+- a project-profile binding: project upload profile, lab unit, camera, and date window
+- the automated Remidio API Upload Profile: EncounterSetType plus image/encounter grading schemes
+
+Those API bindings are intentionally separate from any Remidio ZIP upload defaults.
 
 ### Allowed Sites / Areas
 

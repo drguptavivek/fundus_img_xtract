@@ -4,36 +4,38 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
+import logging
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from auth.utils import utcnow
 from models import (
-    GradingTask,
-    EncounterFile,
-    EncounterFilePDF,
-    IMAGE_DIR,
-    PDF_DIR,
+    BASE_DIR,
+    EncounterSetAttachment,
+    EncounterSetImage,
     PatientEncounters,
     RemidioExam,
     RemidioImage,
     RemidioReport,
-    RemidioRoutingRule,
 )
-from utils.image_metadata import extract_image_metadata, upsert_image_metadata
+from upload_profiles.models import PatientEncounterTargetDisease
 from utils.image_processing import generate_thumbnail, get_thumbnail_filename, strip_exif_data
 from utils.log_sanitize import sanitize_log_value
 
 from .client import RemidioClient
-from .errors import RemidioConfigError, RemidioRemoteError
+from .errors import RemidioConfigError, RemidioIntegrationError, RemidioRemoteError
+from .mapper import map_exam_payload
+from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiExamEncounter
+from .routing import resolve_binding_for_image
 
 
 MAX_FILE_BYTES = 100 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,7 +67,6 @@ def ingest_staged_files(
 ) -> dict[str, Any]:
     include_images = _bool(payload.get("include_images"), default=True)
     include_reports = _bool(payload.get("include_reports"), default=True)
-    create_tasks = _bool(payload.get("create_tasks"), default=True)
     dry_run = _bool(payload.get("dry_run"), default=False)
     limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
 
@@ -80,7 +81,6 @@ def ingest_staged_files(
             exam=exam,
             include_images=include_images,
             include_reports=include_reports,
-            create_tasks=create_tasks,
             dry_run=dry_run,
             summary=summary,
         )
@@ -129,8 +129,18 @@ def _select_exams(db: Session, *, connection_id: int, payload: dict[str, Any], l
     if pending_only:
         query = query.filter(
             (RemidioExam.patient_encounter_id.is_(None))
-            | RemidioExam.images.any(RemidioImage.encounter_file_id.is_(None))
-            | RemidioExam.reports.any(RemidioReport.encounter_file_pdf_id.is_(None))
+            | RemidioExam.images.any(
+                and_(
+                    RemidioImage.encounter_file_id.is_(None),
+                    RemidioImage.encounter_set_image_id.is_(None),
+                )
+            )
+            | RemidioExam.reports.any(
+                and_(
+                    RemidioReport.encounter_file_pdf_id.is_(None),
+                    RemidioReport.encounter_set_attachment_id.is_(None),
+                )
+            )
         )
 
     return query.order_by(RemidioExam.exam_date.asc().nullslast(), RemidioExam.id.asc()).limit(limit).all()
@@ -143,7 +153,6 @@ def _ingest_exam(
     exam: RemidioExam,
     include_images: bool,
     include_reports: bool,
-    create_tasks: bool,
     dry_run: bool,
     summary: IngestSummary,
 ) -> dict[str, Any]:
@@ -155,10 +164,8 @@ def _ingest_exam(
         "reports": [],
     }
 
-    route_cache: dict[str, RemidioRoutingRule | None] = {}
-    encounter = db.get(PatientEncounters, exam.patient_encounter_id) if exam.patient_encounter_id else None
-    if encounter is not None:
-        summary.encounters_reused += 1
+    mapped_metadata = map_exam_payload(exam.raw_json or {}, site_custom_identifier=_site_identifier(exam))
+    encounters_by_binding: dict[int, PatientEncounters] = {}
 
     if include_images:
         for image in exam.images:
@@ -168,17 +175,13 @@ def _ingest_exam(
                 client=client,
                 exam=exam,
                 image=image,
-                encounter=encounter,
-                route_cache=route_cache,
-                create_tasks=create_tasks,
+                mapped_metadata=mapped_metadata,
+                encounters_by_binding=encounters_by_binding,
                 dry_run=dry_run,
                 summary=summary,
             )
-            if encounter is None and image_result.get("patient_encounter_id") and not dry_run:
-                encounter = db.get(PatientEncounters, image_result["patient_encounter_id"])
-                exam.patient_encounter_id = encounter.id if encounter else None
-                detail["patient_encounter_id"] = exam.patient_encounter_id
-                summary.encounters_created += 1
+            if image_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
+                detail["patient_encounter_id"] = image_result["patient_encounter_id"]
             detail["images"].append(image_result)
 
     if include_reports:
@@ -189,16 +192,13 @@ def _ingest_exam(
                 client=client,
                 exam=exam,
                 report=report,
-                encounter=encounter,
-                route_cache=route_cache,
+                mapped_metadata=mapped_metadata,
+                encounters_by_binding=encounters_by_binding,
                 dry_run=dry_run,
                 summary=summary,
             )
-            if encounter is None and report_result.get("patient_encounter_id") and not dry_run:
-                encounter = db.get(PatientEncounters, report_result["patient_encounter_id"])
-                exam.patient_encounter_id = encounter.id if encounter else None
-                detail["patient_encounter_id"] = exam.patient_encounter_id
-                summary.encounters_created += 1
+            if report_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
+                detail["patient_encounter_id"] = report_result["patient_encounter_id"]
             detail["reports"].append(report_result)
 
     return detail
@@ -210,78 +210,80 @@ def _ingest_image(
     client: RemidioClient,
     exam: RemidioExam,
     image: RemidioImage,
-    encounter: PatientEncounters | None,
-    route_cache: dict[str, RemidioRoutingRule | None],
-    create_tasks: bool,
+    mapped_metadata,
+    encounters_by_binding: dict[int, PatientEncounters],
     dry_run: bool,
     summary: IngestSummary,
 ) -> dict[str, Any]:
+    if image.encounter_set_image_id:
+        summary.images_skipped += 1
+        return {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_set_image_id": image.encounter_set_image_id}
     if image.encounter_file_id:
         summary.images_skipped += 1
         return {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_file_id": image.encounter_file_id}
 
-    rule = _resolve_rule(db, exam=exam, device_type=image.device_type, route_cache=route_cache)
-    if rule is None:
+    binding = resolve_binding_for_image(db, exam=exam, device_type=image.device_type)
+    if binding is None:
         summary.route_errors += 1
         summary.images_skipped += 1
-        image.download_error = "No active unique routing rule for Remidio site/device."
+        image.download_error = "No active unique Remidio API project binding for site/device/date."
         return {"remidio_image_id": image.remidio_image_id, "status": "no_route"}
 
-    if encounter is not None and (encounter.project_id != rule.project_id or encounter.lab_unit_id != rule.lab_unit_id):
-        summary.route_errors += 1
-        summary.images_skipped += 1
-        image.download_error = "Image route conflicts with the existing encounter route."
-        return {"remidio_image_id": image.remidio_image_id, "status": "route_conflict"}
-
     if dry_run:
-        return {"remidio_image_id": image.remidio_image_id, "status": "would_download", "project_id": rule.project_id, "lab_unit_id": rule.lab_unit_id}
+        project_profile = binding.project_profile
+        return {
+            "remidio_image_id": image.remidio_image_id,
+            "status": "would_download",
+            "project_id": project_profile.project_id,
+            "upload_profile_id": project_profile.upload_profile_id,
+            "lab_unit_id": binding.lab_unit_id,
+        }
 
-    encounter = encounter or _create_encounter(db, exam, rule)
+    encounter = _encounter_for_binding(db, exam, binding, mapped_metadata, encounters_by_binding, summary)
     try:
         content, content_type = client.download_file(_source_url(image), max_bytes=MAX_FILE_BYTES)
         extension = _image_extension(content, content_type, image.remidio_path)
         safe_content = _strip_image_exif(content)
         filename = f"{uuid4()}{extension}"
-        target_path = _dated_dir(IMAGE_DIR, exam) / filename
+        folder_rel = _encounter_set_folder_rel(encounter)
+        target_path = BASE_DIR / folder_rel / filename
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(safe_content)
-        thumbnail_filename = _generate_thumbnail(target_path, filename)
-        encounter_file = EncounterFile(
-            patient_encounter_id=encounter.id,
-            filename=filename,
-            file_type="image",
+        thumbnail_filename = _generate_encounter_set_thumbnail(target_path, filename)
+        image_metadata = _image_metadata(mapped_metadata, image.remidio_image_id)
+        set_image = EncounterSetImage(
             uuid=str(uuid4()),
-            eye_side=_normalize_eye_side(image.laterality),
-            lab_unit_id=rule.lab_unit_id,
-            camera_id=rule.camera_id,
-            project_id=rule.project_id,
-            hospital_id=rule.lab_unit.hospital_id if rule.lab_unit else None,
+            patient_encounter_id=encounter.id,
+            spatial_position=_next_spatial_position(db, encounter.id),
+            original_filename=filename,
+            folder_rel=folder_rel,
+            asset_kind="clinical_image",
+            creates_task=True,
+            is_pii=False,
+            visible_to_grader=True,
+            project_id=encounter.project_id,
+            camera_id=binding.camera_id,
+            hospital_id=binding.lab_unit.hospital_id if binding.lab_unit else None,
             thumbnail_filename=thumbnail_filename,
+            metadata_json=image_metadata,
         )
-        db.add(encounter_file)
+        db.add(set_image)
         db.flush()
-        _store_image_metadata(db, encounter_file, content=safe_content)
 
-        image.encounter_file_id = encounter_file.id
+        image.encounter_set_image_id = set_image.id
         image.downloaded_at = utcnow()
         image.download_error = None
         db.flush()
         summary.images_downloaded += 1
 
-        if create_tasks and rule.default_disease_id is not None:
-            created = _create_task_if_missing(db, encounter_file.id, rule.default_disease_id, rule.lab_unit_id)
-            if created:
-                summary.tasks_created += 1
-            else:
-                summary.tasks_reused += 1
-
         return {
             "remidio_image_id": image.remidio_image_id,
             "status": "downloaded",
             "patient_encounter_id": encounter.id,
-            "encounter_file_id": encounter_file.id,
+            "encounter_set_image_id": set_image.id,
             "filename": filename,
         }
-    except Exception as exc:
+    except (OSError, RemidioIntegrationError, UnidentifiedImageError) as exc:
         summary.download_errors += 1
         summary.images_skipped += 1
         image.download_error = str(sanitize_log_value(exc))[:1000]
@@ -294,52 +296,66 @@ def _ingest_report(
     client: RemidioClient,
     exam: RemidioExam,
     report: RemidioReport,
-    encounter: PatientEncounters | None,
-    route_cache: dict[str, RemidioRoutingRule | None],
+    mapped_metadata,
+    encounters_by_binding: dict[int, PatientEncounters],
     dry_run: bool,
     summary: IngestSummary,
 ) -> dict[str, Any]:
+    if report.encounter_set_attachment_id:
+        summary.reports_skipped += 1
+        return {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_set_attachment_id": report.encounter_set_attachment_id}
     if report.encounter_file_pdf_id:
         summary.reports_skipped += 1
         return {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_file_pdf_id": report.encounter_file_pdf_id}
 
-    rule = _resolve_report_rule(db, exam=exam, route_cache=route_cache)
-    if rule is None:
+    binding = _resolve_report_binding(db, exam=exam, report=report)
+    if binding is None:
         summary.route_errors += 1
         summary.reports_skipped += 1
-        report.download_error = "No active unique routing rule for Remidio report."
+        report.download_error = "No active unique Remidio API project binding for report."
         return {"remidio_report_id": report.remidio_report_id, "status": "no_route"}
 
-    if encounter is not None and (encounter.project_id != rule.project_id or encounter.lab_unit_id != rule.lab_unit_id):
-        summary.route_errors += 1
-        summary.reports_skipped += 1
-        report.download_error = "Report route conflicts with the existing encounter route."
-        return {"remidio_report_id": report.remidio_report_id, "status": "route_conflict"}
-
     if dry_run:
-        return {"remidio_report_id": report.remidio_report_id, "status": "would_download", "project_id": rule.project_id, "lab_unit_id": rule.lab_unit_id}
+        project_profile = binding.project_profile
+        return {
+            "remidio_report_id": report.remidio_report_id,
+            "status": "would_download",
+            "project_id": project_profile.project_id,
+            "upload_profile_id": project_profile.upload_profile_id,
+            "lab_unit_id": binding.lab_unit_id,
+        }
 
-    encounter = encounter or _create_encounter(db, exam, rule)
+    encounter = _encounter_for_binding(db, exam, binding, mapped_metadata, encounters_by_binding, summary)
     try:
         content, content_type = client.download_file(_source_url(report), max_bytes=MAX_FILE_BYTES)
         if not _looks_like_pdf(content, content_type, report.remidio_path):
             raise RemidioRemoteError("Downloaded Remidio report is not a PDF.")
         filename = f"{uuid4()}.pdf"
-        target_path = _dated_dir(PDF_DIR, exam) / filename
+        folder_rel = f"{_encounter_set_folder_rel(encounter)}/attachments"
+        target_path = BASE_DIR / folder_rel / filename
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(content)
-        pdf = EncounterFilePDF(
+        attachment = EncounterSetAttachment(
             patient_encounter_id=encounter.id,
-            filename=filename,
-            file_type="pdf",
             uuid=str(uuid4()),
-            lab_unit_id=rule.lab_unit_id,
-            project_id=rule.project_id,
-            hospital_id=rule.lab_unit.hospital_id if rule.lab_unit else None,
+            asset_kind="pdf",
+            original_filename=filename,
+            stored_filename=filename,
+            folder_rel=folder_rel,
+            mime_type="application/pdf",
+            file_size_bytes=len(content),
+            is_pii=True,
+            visible_to_grader=False,
+            creates_task=False,
+            project_id=encounter.project_id,
+            upload_profile_id=encounter.upload_profile_id,
+            hospital_id=binding.lab_unit.hospital_id if binding.lab_unit else None,
+            metadata_json=_report_metadata(mapped_metadata, report.remidio_report_id),
         )
-        db.add(pdf)
+        db.add(attachment)
         db.flush()
 
-        report.encounter_file_pdf_id = pdf.id
+        report.encounter_set_attachment_id = attachment.id
         report.downloaded_at = utcnow()
         report.download_error = None
         db.flush()
@@ -348,90 +364,135 @@ def _ingest_report(
             "remidio_report_id": report.remidio_report_id,
             "status": "downloaded",
             "patient_encounter_id": encounter.id,
-            "encounter_file_pdf_id": pdf.id,
+            "encounter_set_attachment_id": attachment.id,
             "filename": filename,
         }
-    except Exception as exc:
+    except (OSError, RemidioIntegrationError) as exc:
         summary.download_errors += 1
         summary.reports_skipped += 1
         report.download_error = str(sanitize_log_value(exc))[:1000]
         return {"remidio_report_id": report.remidio_report_id, "status": "download_error", "error": report.download_error}
 
 
-def _resolve_rule(
+def _resolve_report_binding(
     db: Session,
     *,
     exam: RemidioExam,
-    device_type: str | None,
-    route_cache: dict[str, RemidioRoutingRule | None],
-) -> RemidioRoutingRule | None:
-    normalized_device = (device_type or "").strip().upper()
-    site_identifier = _site_identifier(exam)
-    if not site_identifier or not normalized_device:
-        return None
-    cache_key = f"{site_identifier}:{normalized_device}"
-    if cache_key in route_cache:
-        return route_cache[cache_key]
-    rules = (
-        db.query(RemidioRoutingRule)
-        .options(selectinload(RemidioRoutingRule.lab_unit))
+    report: RemidioReport,
+) -> ProjectUploadProfileRemidioApiBinding | None:
+    linked_ids = _linked_report_image_ids(report)
+    bindings: dict[int, ProjectUploadProfileRemidioApiBinding] = {}
+    if linked_ids:
+        linked_images = [image for image in exam.images if image.remidio_image_id in linked_ids]
+        for image in linked_images:
+            binding = resolve_binding_for_image(db, exam=exam, device_type=image.device_type)
+            if binding is not None:
+                bindings[binding.id] = binding
+    else:
+        for device_type in exam.device_types or []:
+            binding = resolve_binding_for_image(db, exam=exam, device_type=device_type)
+            if binding is not None:
+                bindings[binding.id] = binding
+    return next(iter(bindings.values())) if len(bindings) == 1 else None
+
+
+def _encounter_for_binding(
+    db: Session,
+    exam: RemidioExam,
+    binding: ProjectUploadProfileRemidioApiBinding,
+    mapped_metadata,
+    encounters_by_binding: dict[int, PatientEncounters],
+    summary: IngestSummary,
+) -> PatientEncounters:
+    if binding.id in encounters_by_binding:
+        return encounters_by_binding[binding.id]
+    association = (
+        db.query(RemidioApiExamEncounter)
+        .options(selectinload(RemidioApiExamEncounter.patient_encounter))
         .filter(
-            RemidioRoutingRule.remidio_connection_id == exam.remidio_connection_id,
-            RemidioRoutingRule.site_custom_identifier == site_identifier,
-            RemidioRoutingRule.remidio_device_type == normalized_device,
-            RemidioRoutingRule.active.is_(True),
+            RemidioApiExamEncounter.remidio_exam_id == exam.id,
+            RemidioApiExamEncounter.project_upload_profile_id == binding.project_upload_profile_id,
+            RemidioApiExamEncounter.remidio_api_binding_id == binding.id,
         )
-        .all()
+        .one_or_none()
     )
-    route_cache[cache_key] = rules[0] if len(rules) == 1 else None
-    return route_cache[cache_key]
+    if association is not None:
+        summary.encounters_reused += 1
+        encounters_by_binding[binding.id] = association.patient_encounter
+        return association.patient_encounter
+
+    encounter = _create_encounter(db, exam, binding, mapped_metadata)
+    db.add(
+        RemidioApiExamEncounter(
+            remidio_exam_id=exam.id,
+            patient_encounter_id=encounter.id,
+            project_upload_profile_id=binding.project_upload_profile_id,
+            remidio_api_binding_id=binding.id,
+        )
+    )
+    if exam.patient_encounter_id is None:
+        exam.patient_encounter_id = encounter.id
+    _upsert_target_diseases(db, encounter, binding)
+    db.flush()
+    summary.encounters_created += 1
+    encounters_by_binding[binding.id] = encounter
+    return encounter
 
 
-def _resolve_report_rule(db: Session, *, exam: RemidioExam, route_cache: dict[str, RemidioRoutingRule | None]) -> RemidioRoutingRule | None:
-    for device_type in exam.device_types or []:
-        rule = _resolve_rule(db, exam=exam, device_type=device_type, route_cache=route_cache)
-        if rule is not None:
-            return rule
-    return None
-
-
-def _create_encounter(db: Session, exam: RemidioExam, rule: RemidioRoutingRule) -> PatientEncounters:
+def _create_encounter(
+    db: Session,
+    exam: RemidioExam,
+    binding: ProjectUploadProfileRemidioApiBinding,
+    mapped_metadata,
+) -> PatientEncounters:
+    project_profile = binding.project_profile
+    default_target_id = _default_image_scheme_id(binding)
     encounter = PatientEncounters(
         uuid=str(uuid4()),
-        is_set_based=False,
+        is_set_based=True,
         name=_encounter_patient_name(exam),
         patient_id=exam.remidio_patient_mrn or exam.remidio_patient_id or f"remidio-{exam.remidio_exam_id}",
         capture_date=_capture_date_string(exam),
         capture_date_dt=_capture_date(exam),
-        lab_unit_id=rule.lab_unit_id,
-        project_id=rule.project_id,
-        disease_id=rule.default_disease_id,
+        lab_unit_id=binding.lab_unit_id,
+        project_id=project_profile.project_id,
+        upload_profile_id=project_profile.upload_profile_id,
+        disease_id=default_target_id,
+        metadata_json={
+            "patient": mapped_metadata.patient,
+            "encounter": mapped_metadata.encounter,
+            "remidio_exam_row_id": exam.id,
+            "remidio_exam_id": exam.remidio_exam_id,
+            "remidio_api_binding_id": binding.id,
+            "project_upload_profile_id": binding.project_upload_profile_id,
+        },
     )
     db.add(encounter)
     db.flush()
-    exam.patient_encounter_id = encounter.id
     return encounter
 
 
-def _create_task_if_missing(db: Session, encounter_file_id: int, disease_id: int, lab_unit_id: int) -> bool:
-    existing = db.execute(
-        select(GradingTask).where(
-            GradingTask.encounter_file_id == encounter_file_id,
-            GradingTask.disease_id == disease_id,
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        return False
-    db.add(
-        GradingTask(
-            encounter_file_id=encounter_file_id,
-            disease_id=disease_id,
-            lab_unit_id=lab_unit_id,
-            state="pending",
-        )
-    )
-    db.flush()
-    return True
+def _upsert_target_diseases(db: Session, encounter: PatientEncounters, binding: ProjectUploadProfileRemidioApiBinding) -> None:
+    target_defaults = _target_disease_defaults(binding)
+    if not target_defaults:
+        return
+    existing = {
+        row[0]
+        for row in db.execute(
+            select(PatientEncounterTargetDisease.disease_id).where(
+                PatientEncounterTargetDisease.patient_encounter_id == encounter.id
+            )
+        ).all()
+    }
+    for disease_id, is_default in target_defaults.items():
+        if disease_id not in existing:
+            db.add(
+                PatientEncounterTargetDisease(
+                    patient_encounter_id=encounter.id,
+                    disease_id=disease_id,
+                    is_default=is_default,
+                )
+            )
 
 
 def _source_url(row: RemidioImage | RemidioReport) -> str:
@@ -447,20 +508,94 @@ def _source_url(row: RemidioImage | RemidioReport) -> str:
     raise RemidioConfigError("Remidio file row has no download URL.")
 
 
+def _linked_report_image_ids(report: RemidioReport) -> set[str]:
+    raw = report.raw_json or {}
+    if not isinstance(raw, dict):
+        return set()
+    values = raw.get("imageIds") or raw.get("image_ids") or raw.get("linkedImageIds")
+    if not isinstance(values, list):
+        return set()
+    return {str(value).strip() for value in values if str(value).strip()}
+
+
+def _target_disease_defaults(binding: ProjectUploadProfileRemidioApiBinding) -> dict[int, bool]:
+    config = _remidio_profile_config(binding)
+    if config is None:
+        return {}
+    defaults: dict[int, bool] = {}
+    for scheme in config.image_grading_schemes:
+        if scheme.active:
+            defaults[scheme.disease_id] = scheme.disease_id == config.default_image_grading_scheme_id
+    if config.encounter_grading_scheme_id:
+        defaults.setdefault(config.encounter_grading_scheme_id, False)
+    return defaults
+
+
+def _default_image_scheme_id(binding: ProjectUploadProfileRemidioApiBinding) -> int | None:
+    config = _remidio_profile_config(binding)
+    return config.default_image_grading_scheme_id if config else None
+
+
+def _remidio_profile_config(binding: ProjectUploadProfileRemidioApiBinding):
+    profile = binding.project_profile.profile if binding.project_profile else None
+    if not profile:
+        return None
+    for config in profile.encounter_set_types:
+        if config.active and config.encounter_set_type and config.encounter_set_type.code == "remidio_api_standard":
+            return config
+    return None
+
+
+def _image_metadata(mapped_metadata, remidio_image_id: str) -> dict[str, Any]:
+    for image in mapped_metadata.images:
+        if image.source_image_id == remidio_image_id:
+            return image.metadata
+    return {"remidio_image_id": remidio_image_id}
+
+
+def _report_metadata(mapped_metadata, remidio_report_id: str) -> dict[str, Any]:
+    for report in mapped_metadata.reports:
+        if report.source_report_id == remidio_report_id:
+            return report.metadata
+    return {"remidio_report_id": remidio_report_id}
+
+
+def _next_spatial_position(db: Session, patient_encounter_id: int) -> int:
+    current_max = (
+        db.execute(
+            select(func.max(EncounterSetImage.spatial_position)).where(
+                EncounterSetImage.patient_encounter_id == patient_encounter_id
+            )
+        ).scalar()
+        or 0
+    )
+    return int(current_max) + 1
+
+
+def _encounter_set_folder_rel(encounter: PatientEncounters) -> str:
+    date_str = utcnow().strftime("%Y_%m_%d")
+    return f"files/encounter_sets/{date_str}/{encounter.id}"
+
+
+def _generate_encounter_set_thumbnail(image_path: Path, filename: str) -> str | None:
+    try:
+        thumbnail_filename = get_thumbnail_filename(filename)
+        thumbnail_dir = image_path.parent / "thumbnails"
+        thumbnail_dir.mkdir(parents=True, exist_ok=True)
+        if generate_thumbnail(image_path, thumbnail_dir / thumbnail_filename):
+            return thumbnail_filename
+    except (OSError, UnidentifiedImageError) as exc:
+        logger.info("Remidio EncounterSet thumbnail generation failed: %s", sanitize_log_value(exc))
+        return None
+    return None
+
+
 def _site_identifier(exam: RemidioExam) -> str | None:
     if exam.site_custom_identifier:
         return exam.site_custom_identifier
     if exam.site and exam.site.site_custom_identifier:
         return exam.site.site_custom_identifier
     return None
-
-
-def _dated_dir(root: Path, exam: RemidioExam) -> Path:
-    dt = exam.exam_date or utcnow()
-    date_str = dt.strftime("%Y_%m_%d")
-    path = root / date_str
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _image_extension(content: bytes, content_type: str | None, path: str | None) -> str:
@@ -493,32 +628,9 @@ def _image_extension(content: bytes, content_type: str | None, path: str | None)
 def _strip_image_exif(content: bytes) -> bytes:
     try:
         return strip_exif_data(content)
-    except Exception:
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        logger.info("Remidio image EXIF strip failed; storing original bytes: %s", sanitize_log_value(exc))
         return content
-
-
-def _generate_thumbnail(image_path: Path, filename: str) -> str | None:
-    try:
-        thumbnail_filename = get_thumbnail_filename(filename)
-        if generate_thumbnail(image_path, image_path.parent / thumbnail_filename):
-            return thumbnail_filename
-    except Exception:
-        return None
-    return None
-
-
-def _store_image_metadata(db: Session, encounter_file: EncounterFile, *, content: bytes) -> None:
-    try:
-        metadata = extract_image_metadata(image_bytes=content, file_size_bytes=len(content))
-        upsert_image_metadata(
-            db,
-            image_uuid=str(encounter_file.uuid),
-            image_variant="orig",
-            encounter_file_id=encounter_file.id,
-            metadata=metadata,
-        )
-    except Exception:
-        return
 
 
 def _looks_like_pdf(content: bytes, content_type: str | None, path: str | None) -> bool:
@@ -528,15 +640,6 @@ def _looks_like_pdf(content: bytes, content_type: str | None, path: str | None) 
     if content_type == "application/pdf":
         return True
     return Path((path or "").split("?", 1)[0]).suffix.lower() == ".pdf"
-
-
-def _normalize_eye_side(value: str | None) -> str | None:
-    normalized = (value or "").strip().upper()
-    if normalized in {"RIGHT", "R", "OD"}:
-        return "right"
-    if normalized in {"LEFT", "L", "OS"}:
-        return "left"
-    return None
 
 
 def _capture_date(exam: RemidioExam) -> date | None:

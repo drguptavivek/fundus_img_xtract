@@ -110,6 +110,7 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
             allow_mydriatic=False,
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
+            automated_remidio_populated=False,
             ai_workflows=[],
             encounter_set_configs=[],
         ),
@@ -160,6 +161,7 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
             allow_mydriatic=False,
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
+            automated_remidio_populated=False,
             ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(

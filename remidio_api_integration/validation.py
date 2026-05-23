@@ -12,9 +12,7 @@ from .schemas import RemidioExamPayload, RemidioImagePayload, RemidioReportPaylo
 
 
 JWT_RE = re.compile(r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
-PII_KEYS = {"email", "employeeId", "firstName", "lastName", "dateOfBirth"}
 SECRET_KEY_PARTS = ("authorization", "auth", "token", "password", "signature", "googleaccessid")
-URL_KEYS = {"url", "downloadUrl", "downloadURL", "signedUrl", "signedURL"}
 
 
 def normalize_date(value: str) -> str:
@@ -63,17 +61,13 @@ def require_list_data(body: Any) -> list[Any]:
 
 
 def sanitize_for_storage(value: Any, *, key: str | None = None) -> Any:
-    """Remove obvious secrets and direct identity values from stored raw snapshots."""
+    """Preserve source payloads for DB storage while removing credentials."""
     if isinstance(value, dict):
         return {str(k): sanitize_for_storage(v, key=str(k)) for k, v in value.items()}
     if isinstance(value, list):
         return [sanitize_for_storage(item, key=key) for item in value]
     if isinstance(value, str):
         key_lower = (key or "").lower()
-        if key in PII_KEYS:
-            return "[redacted]"
-        if key in URL_KEYS:
-            return "[redacted-url]"
         if any(part in key_lower for part in SECRET_KEY_PARTS):
             return "[redacted]"
         if JWT_RE.match(value.strip()):

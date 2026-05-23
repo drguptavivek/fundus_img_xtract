@@ -21,6 +21,7 @@ from models import (
     User,
     user_lab_units,
 )
+from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from upload_profiles.service import manager_lab_unit_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -118,6 +119,14 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.user),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.lab_unit),
+                selectinload(ProjectUploadProfile.remidio_api_bindings)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+                .selectinload(RemidioApiSourceRule.connection),
+                selectinload(ProjectUploadProfile.remidio_api_bindings)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+                .selectinload(RemidioApiSourceRule.site),
+                selectinload(ProjectUploadProfile.remidio_api_bindings).selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
+                selectinload(ProjectUploadProfile.remidio_api_bindings).selectinload(ProjectUploadProfileRemidioApiBinding.camera),
             )
             .order_by(ProjectUploadProfile.project_id, ProjectUploadProfile.active.desc(), ProjectUploadProfile.upload_profile_id)
         )
@@ -207,6 +216,15 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "upload_profiles": upload_profiles,
         "project_profile_mappings": project_profile_mappings,
         "investigators": investigators,
+        "remidio_api_source_rules": (
+            db.execute(
+                select(RemidioApiSourceRule)
+                .options(selectinload(RemidioApiSourceRule.connection), selectinload(RemidioApiSourceRule.site))
+                .order_by(RemidioApiSourceRule.active.desc(), RemidioApiSourceRule.site_custom_identifier, RemidioApiSourceRule.remidio_device_type)
+            )
+            .scalars()
+            .all()
+        ),
     }
 
 

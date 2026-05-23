@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 
 from flask import jsonify, request
+from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
+from remidio_api_integration import routing as api_routing
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioIntegrationError
 from utils.log_sanitize import sanitize_log_value
@@ -18,6 +20,7 @@ from . import api_bp
 
 logger = logging.getLogger("api.remidio_api_integration")
 REMIDIO_ROLES = ("admin", "data_manager")
+REMIDIO_BINDING_ROLES = ("admin", "local_admin", "data_manager")
 
 
 @api_bp.route("/remidio/connections", methods=["GET"])
@@ -134,6 +137,62 @@ def upsert_remidio_routing_rule():
             return jsonify({"success": True, "data": data}), 201
     except IntegrityError:
         return jsonify({"success": False, "error": "Remidio routing rule conflicts with an existing record."}), 409
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-source-rules", methods=["GET"])
+@roles_required(*REMIDIO_ROLES)
+def list_remidio_api_source_rules():
+    connection_id = _optional_int_arg("connection_id")
+    with transaction_scope() as db:
+        return jsonify({"success": True, "data": api_routing.list_api_source_rules(db, connection_id=connection_id)})
+
+
+@api_bp.route("/remidio/api-source-rules", methods=["POST"])
+@roles_required(*REMIDIO_ROLES)
+def upsert_remidio_api_source_rule():
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            rule = api_routing.upsert_api_source_rule(db, payload)
+            data = next(item for item in api_routing.list_api_source_rules(db) if item["id"] == rule.id)
+            return jsonify({"success": True, "data": data}), 201
+    except IntegrityError:
+        return jsonify({"success": False, "error": "Remidio API source rule conflicts with an existing active rule."}), 409
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-bindings", methods=["GET"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def list_remidio_api_bindings():
+    project_upload_profile_id = _optional_int_arg("project_upload_profile_id")
+    source_rule_id = _optional_int_arg("source_rule_id")
+    with transaction_scope() as db:
+        return jsonify(
+            {
+                "success": True,
+                "data": api_routing.list_api_bindings(
+                    db,
+                    project_upload_profile_id=project_upload_profile_id,
+                    source_rule_id=source_rule_id,
+                ),
+            }
+        )
+
+
+@api_bp.route("/remidio/api-bindings", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def upsert_remidio_api_binding():
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            binding = api_routing.upsert_api_binding(db, payload, manager_user_id=current_user.id)
+            data = next(item for item in api_routing.list_api_bindings(db) if item["id"] == binding.id)
+            return jsonify({"success": True, "data": data}), 201
+    except IntegrityError:
+        return jsonify({"success": False, "error": "Remidio API binding conflicts with an existing active date window."}), 409
     except RemidioIntegrationError as exc:
         return _error_response(exc)
 

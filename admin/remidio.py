@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from flask import current_app, jsonify, render_template, request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
@@ -22,9 +22,10 @@ from models import (
     RemidioExam,
     RemidioImage,
     RemidioReport,
-    RemidioRoutingRule,
     RemidioSite,
 )
+from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
+from upload_profiles.models import ProjectUploadProfile
 from utils.log_sanitize import sanitize_log_value
 from zip_processor import cleanup_processed_zip_intake_files
 
@@ -107,10 +108,6 @@ def _context(db) -> dict[str, Any]:
             select(RemidioConnection)
             .options(
                 selectinload(RemidioConnection.sites),
-                selectinload(RemidioConnection.routing_rules).selectinload(RemidioRoutingRule.project),
-                selectinload(RemidioConnection.routing_rules).selectinload(RemidioRoutingRule.lab_unit),
-                selectinload(RemidioConnection.routing_rules).selectinload(RemidioRoutingRule.camera),
-                selectinload(RemidioConnection.routing_rules).selectinload(RemidioRoutingRule.default_disease),
             )
             .order_by(RemidioConnection.active.desc(), RemidioConnection.name)
         )
@@ -130,16 +127,20 @@ def _context(db) -> dict[str, Any]:
     )
     rules = (
         db.execute(
-            select(RemidioRoutingRule)
+            select(RemidioApiSourceRule)
             .options(
-                selectinload(RemidioRoutingRule.connection),
-                selectinload(RemidioRoutingRule.site),
-                selectinload(RemidioRoutingRule.project),
-                selectinload(RemidioRoutingRule.lab_unit),
-                selectinload(RemidioRoutingRule.camera),
-                selectinload(RemidioRoutingRule.default_disease),
+                selectinload(RemidioApiSourceRule.connection),
+                selectinload(RemidioApiSourceRule.site),
+                selectinload(RemidioApiSourceRule.bindings)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.project_profile)
+                .selectinload(ProjectUploadProfile.project),
+                selectinload(RemidioApiSourceRule.bindings)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.project_profile)
+                .selectinload(ProjectUploadProfile.profile),
+                selectinload(RemidioApiSourceRule.bindings).selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
+                selectinload(RemidioApiSourceRule.bindings).selectinload(ProjectUploadProfileRemidioApiBinding.camera),
             )
-            .order_by(RemidioRoutingRule.active.desc(), RemidioRoutingRule.remidio_connection_id, RemidioRoutingRule.site_custom_identifier)
+            .order_by(RemidioApiSourceRule.active.desc(), RemidioApiSourceRule.remidio_connection_id, RemidioApiSourceRule.site_custom_identifier)
         )
         .scalars()
         .unique()
@@ -177,8 +178,18 @@ def _site_stats(db) -> dict[int, dict[str, int]]:
                 RemidioExam.remidio_site_id,
                 func.count(func.distinct(RemidioExam.id)),
                 func.count(func.distinct(PatientEncounters.id)),
-                func.count(func.distinct(EncounterFile.id)),
-                func.count(func.distinct(EncounterFilePDF.id)),
+                func.count(func.distinct(RemidioImage.id)).filter(
+                    or_(
+                        RemidioImage.encounter_file_id.is_not(None),
+                        RemidioImage.encounter_set_image_id.is_not(None),
+                    )
+                ),
+                func.count(func.distinct(RemidioReport.id)).filter(
+                    or_(
+                        RemidioReport.encounter_file_pdf_id.is_not(None),
+                        RemidioReport.encounter_set_attachment_id.is_not(None),
+                    )
+                ),
                 func.count(func.distinct(GradingTask.id)),
             )
             .outerjoin(PatientEncounters, PatientEncounters.id == RemidioExam.patient_encounter_id)

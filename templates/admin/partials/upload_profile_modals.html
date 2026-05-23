@@ -58,6 +58,8 @@
             <dl class="row small mb-0">
               <dt class="col-sm-4">Targets</dt>
               <dd class="col-sm-8" data-upload-profile-view-targets>-</dd>
+              <dt class="col-sm-4">EncounterSet targets</dt>
+              <dd class="col-sm-8" data-upload-profile-view-est-targets>-</dd>
               <dt class="col-sm-4">Remedio default</dt>
               <dd class="col-sm-8" data-upload-profile-view-remidio-defaults>-</dd>
               <dt class="col-sm-4">Cameras</dt>
@@ -114,6 +116,19 @@
             <div class="col-lg-8">
               <label class="form-label" for="profile_description">Description</label>
               <textarea class="form-control" id="profile_description" name="description" rows="2" maxlength="1000"></textarea>
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input"
+                       type="checkbox"
+                       id="profile_automated_remidio_populated"
+                       name="automated_remidio_populated"
+                       data-upload-profile-automated-remidio>
+                <label class="form-check-label fw-semibold" for="profile_automated_remidio_populated">Automated Remidio API-populated profile</label>
+                <div class="form-text">
+                  Uses Remidio API source bindings only. This mode is EncounterSet-only and is not available for manual uploaders.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -382,7 +397,10 @@
 
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3">
           <div class="small text-muted" data-upload-profile-save-hint>Select at least one upload mode and complete the highlighted section.</div>
-          <button class="btn btn-primary" type="submit" data-upload-profile-submit-label>Create Profile</button>
+          <div class="d-inline-flex gap-2">
+            <button class="btn btn-outline-secondary" type="button" data-upload-profile-editor-cancel>Cancel</button>
+            <button class="btn btn-primary" type="submit" data-upload-profile-submit-label>Create Profile</button>
+          </div>
         </div>
       </form>
     </div>

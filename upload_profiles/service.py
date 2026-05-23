@@ -75,6 +75,7 @@ class UploadProfileDTO:
     encounter_set_type_ids: frozenset[int]
     encounter_set_types: tuple[dict[str, Any], ...]
     task_prioritization_json: dict[str, Any]
+    automated_remidio_populated: bool
     allow_mydriatic: bool
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
@@ -178,6 +179,7 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
                 ProjectUploadProfileAssignment.active.is_(True),
                 ProjectUploadProfile.active.is_(True),
                 UploadProfile.active.is_(True),
+                UploadProfile.automated_remidio_populated.is_(False),
                 Project.active.is_(True),
             )
             .options(
@@ -494,6 +496,7 @@ def _profile_to_dto(
             if row.active and row.encounter_set_type
         ),
         task_prioritization_json=profile.task_prioritization_json or {},
+        automated_remidio_populated=profile.automated_remidio_populated,
         allow_mydriatic=profile.allow_mydriatic,
         allow_non_mydriatic=profile.allow_non_mydriatic,
         default_is_mydriatic=profile.default_is_mydriatic,
@@ -570,6 +573,7 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
         "encounter_set_type_ids": sorted(profile.encounter_set_type_ids),
         "encounter_set_types": list(profile.encounter_set_types),
         "task_prioritization_json": profile.task_prioritization_json,
+        "automated_remidio_populated": profile.automated_remidio_populated,
         "allow_mydriatic": profile.allow_mydriatic,
         "allow_non_mydriatic": profile.allow_non_mydriatic,
         "default_is_mydriatic": profile.default_is_mydriatic,

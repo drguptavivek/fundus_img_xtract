@@ -14,12 +14,15 @@ Local Remidio tables use integer primary keys.
 
 - `remidio_connections`: encrypted Remidio account credentials and client headers.
 - `remidio_sites`: sites returned by `getSites`; `site_custom_identifier` is manually configured because Remidio does not return it.
-- `remidio_routing_rules`: maps `connection + site_custom_identifier + remidio_device_type` to `project + lab_unit + camera + optional default_disease`.
+- `remidio_api_source_rules`: Remidio API source selectors keyed by `connection + site_custom_identifier + remidio_device_type`.
+- `project_upload_profile_remidio_api_bindings`: date-windowed bindings from one API source rule to one enabled project upload profile, lab unit, and camera.
+- `remidio_routing_rules`: legacy direct Remidio API routing table retained for compatibility. It is not used by the new EncounterSet upload-profile workflow.
 - `remidio_exams`: source exam metadata keyed by `connection + remidio_exam_id`.
-- `remidio_images`: source image metadata keyed by local `remidio_exam_id + remidio_image_id`; once downloaded, `encounter_file_id` links to the local image file row.
-- `remidio_reports`: report/PDF/AI report metadata keyed by local `remidio_exam_id + remidio_report_id + report_type`; once downloaded, `encounter_file_pdf_id` links to the local PDF row.
+- `remidio_images`: source image metadata keyed by local `remidio_exam_id + remidio_image_id`; once downloaded through the new workflow, `encounter_set_image_id` links to the local EncounterSet image row.
+- `remidio_reports`: report/PDF/AI report metadata keyed by local `remidio_exam_id + remidio_report_id + report_type`; once downloaded through the new workflow, `encounter_set_attachment_id` links to the local non-task attachment row.
+- `remidio_api_exam_encounters`: duplicate-safe association from one staged Remidio exam to one routed EncounterSet.
 
-If `default_disease_id` is null, ingestion stores source metadata only and does not create default grading tasks.
+Remidio ZIP uploads remain separate. ZIP task defaults are configured on Upload & Grading Profiles with `default_disease_ids` and are not controlled by Remidio API source rules.
 
 ## Endpoints
 
@@ -99,11 +102,11 @@ Calls Remidio `GET /api/gateway/getSites` and upserts sites by `connection + rem
 
 The identifier must be copied manually from Remidio dashboard site settings.
 
-### List Routing Rules
+### Legacy Routing Rules
+
+These endpoints are retained for compatibility with the older direct Remidio API ingestion design. New Remidio API routed EncounterSet workflows should use API Source Rules plus API Bindings below.
 
 `GET /api/remidio/routing-rules?connection_id=1&project_id=1`
-
-### Create Or Update Routing Rule
 
 `POST /api/remidio/routing-rules`
 
@@ -122,6 +125,76 @@ The identifier must be copied manually from Remidio dashboard site settings.
 ```
 
 `remidio_device_type` is normalized to uppercase. Typical values from live testing are `FOP` and `PRISTINE`.
+
+### List API Source Rules
+
+`GET /api/remidio/api-source-rules?connection_id=1`
+
+Response rows include active project/profile bindings for display:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 4,
+      "remidio_connection_id": 1,
+      "connection_name": "r.pcenter",
+      "site_custom_identifier": "rpc_comoph_2",
+      "remidio_device_type": "PRISTINE",
+      "active": true,
+      "bindings": []
+    }
+  ]
+}
+```
+
+### Create Or Update API Source Rule
+
+`POST /api/remidio/api-source-rules`
+
+```json
+{
+  "id": 4,
+  "remidio_connection_id": 1,
+  "remidio_site_id": 2,
+  "site_custom_identifier": "rpc_comoph_2",
+  "remidio_device_type": "PRISTINE",
+  "active": true
+}
+```
+
+An active source rule is unique by connection, site custom identifier, and device type.
+
+### List API Bindings
+
+`GET /api/remidio/api-bindings?project_upload_profile_id=7&source_rule_id=4`
+
+### Create Or Update API Binding
+
+`POST /api/remidio/api-bindings`
+
+```json
+{
+  "project_upload_profile_id": 7,
+  "remidio_api_source_rule_id": 4,
+  "lab_unit_id": 2,
+  "camera_id": 8,
+  "active_from_date": "2026-04-01",
+  "active_to_date": null,
+  "active": true
+}
+```
+
+Binding validation requires:
+
+- the target project-profile mapping is active
+- the Upload Profile is marked `automated_remidio_populated`
+- the Upload Profile allows only `encounter_set`
+- the Upload Profile includes the seeded `remidio_api_standard` EncounterSetType
+- the Remidio EncounterSet mapping has image grading schemes and one default image grading scheme
+- the lab unit is within the caller's management scope
+- active date windows do not overlap for the same API source rule
 
 ### Pull Exams By Date
 
@@ -185,9 +258,11 @@ Calls Remidio `GET /api/gateway/getPatientWithLastExam/{siteIdentifier}/{mrn}`. 
 Downloads file bytes for staged Remidio rows and creates normal EyeImageManager rows:
 
 - `PatientEncounters` for each Remidio exam.
-- `EncounterFile` for each downloaded image under `IMAGE_DIR/YYYY_MM_DD/`.
-- `EncounterFilePDF` for each downloaded PDF/report under `PDF_DIR/YYYY_MM_DD/`.
-- Optional `GradingTask` for each downloaded image when the matched routing rule has `default_disease_id`.
+- `EncounterSetImage` for each downloaded clinical image under `files/encounter_sets/YYYY_MM_DD/<encounter_id>/`.
+- `EncounterSetAttachment` for each downloaded report/PDF under `files/encounter_sets/YYYY_MM_DD/<encounter_id>/attachments/`.
+- `PatientEncounterTargetDisease` rows for image and encounter grading schemes configured on the routed Upload Profile.
+
+The new workflow does not create grading tasks at Remidio API fetch time. Task creation remains a later verification/finalization step so documents, reports, discarded encounters, and non-gradable images do not leak into grading.
 
 Request:
 
@@ -200,7 +275,6 @@ Request:
   "pending_only": true,
   "include_images": true,
   "include_reports": true,
-  "create_tasks": true,
   "dry_run": false
 }
 ```
@@ -229,7 +303,7 @@ Response:
       "reports_seen": 1,
       "reports_downloaded": 1,
       "reports_skipped": 0,
-      "tasks_created": 8,
+      "tasks_created": 0,
       "tasks_reused": 0,
       "route_errors": 0,
       "download_errors": 0
@@ -245,9 +319,11 @@ The downloader only fetches absolute signed `http(s)` links from Remidio `path`/
 - Connection name must be unique.
 - Connection secrets are required on create and encrypted at rest.
 - `site_custom_identifier` is required for date-range pulls and routing rules.
+- New Remidio API source rules are unique by active `connection + site_custom_identifier + remidio_device_type`.
+- New Remidio API project/profile bindings cannot overlap by date for the same API source.
 - `remidio_exam_id` is scoped by `remidio_connection_id`.
 - `remidio_image_id` and `remidio_report_id` are scoped through the local Remidio exam row.
-- Raw Remidio snapshots are stored with obvious tokens, signed URLs, and direct identity fields redacted.
+- Raw Remidio snapshots preserve source identity, clinical text, and signed/source URL fields for controlled DB storage. Credential-like fields such as auth tokens, passwords, and JWTs are still redacted.
 
 ## Current Limits
 

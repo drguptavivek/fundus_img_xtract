@@ -5,16 +5,27 @@ from uuid import uuid4
 from PIL import Image
 
 from models import (
-    EncounterFile,
-    EncounterFilePDF,
+    Disease,
+    EncounterSetAttachment,
+    EncounterSetImage,
+    EncounterSetType,
     Project,
     RemidioConnection,
     RemidioExam,
     RemidioImage,
     RemidioReport,
-    RemidioRoutingRule,
 )
+from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remidio_api_integration.ingest import ingest_staged_files
+from upload_profiles.models import (
+    PatientEncounterTargetDisease,
+    ProjectUploadProfile,
+    UploadProfile,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileKind,
+)
+from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET
 
 
 class FakeRemidioClient:
@@ -27,12 +38,10 @@ class FakeRemidioClient:
         return output.getvalue(), "image/jpeg"
 
 
-def test_ingest_staged_files_creates_encounter_image_pdf_and_task(db_session, core_test_data, tmp_path, monkeypatch):
+def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_session, core_test_data, tmp_path, monkeypatch):
     from remidio_api_integration import ingest as ingest_module
-    from models import GradingTask
 
-    monkeypatch.setattr(ingest_module, "IMAGE_DIR", tmp_path / "images")
-    monkeypatch.setattr(ingest_module, "PDF_DIR", tmp_path / "pdfs")
+    monkeypatch.setattr(ingest_module, "BASE_DIR", tmp_path)
 
     project = Project(
         title=f"Remidio Test Project {uuid4()}",
@@ -55,17 +64,59 @@ def test_ingest_staged_files_creates_encounter_image_pdf_and_task(db_session, co
     db_session.add(connection)
     db_session.flush()
 
-    rule = RemidioRoutingRule(
+    encounter_scheme = Disease(name=f"Remidio Encounter Scheme {uuid4()}", grading_scope="encounter")
+    encounter_set_type = db_session.query(EncounterSetType).filter_by(code="remidio_api_standard").one_or_none()
+    if encounter_set_type is None:
+        encounter_set_type = EncounterSetType(
+            name=f"Remidio API Standard {uuid4()}",
+            code="remidio_api_standard",
+            metadata_schema_json={"fields": []},
+            active=True,
+        )
+    upload_profile = UploadProfile(
+        name=f"Automated Remidio API Profile {uuid4()}",
+        automated_remidio_populated=True,
+        allow_mydriatic=False,
+        allow_non_mydriatic=True,
+        default_is_mydriatic=False,
+        active=True,
+    )
+    upload_profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
+    upload_profile.encounter_set_types.append(
+        UploadProfileEncounterSetType(
+            encounter_set_type=encounter_set_type,
+            encounter_grading_scheme=encounter_scheme,
+            default_image_grading_scheme_id=core_test_data["dr"].id,
+            active=True,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypeImageGradingScheme(
+                    disease_id=core_test_data["dr"].id,
+                    is_default=True,
+                    display_order=1,
+                    active=True,
+                )
+            ],
+        )
+    )
+    project_profile = ProjectUploadProfile(project=project, profile=upload_profile, active=True)
+    source_rule = RemidioApiSourceRule(
         remidio_connection_id=connection.id,
         site_custom_identifier="rpc_test",
         remidio_device_type="FOP",
-        project_id=project.id,
-        lab_unit_id=core_test_data["lab_unit"].id,
-        camera_id=core_test_data["camera"].id,
-        default_disease_id=core_test_data["dr"].id,
         active=True,
     )
-    db_session.add(rule)
+    db_session.add_all([encounter_scheme, encounter_set_type, upload_profile, project_profile, source_rule])
+    db_session.flush()
+
+    binding = ProjectUploadProfileRemidioApiBinding(
+        project_upload_profile_id=project_profile.id,
+        remidio_api_source_rule_id=source_rule.id,
+        lab_unit_id=core_test_data["lab_unit"].id,
+        camera_id=core_test_data["camera"].id,
+        active_from_date=datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        active=True,
+    )
+    db_session.add(binding)
 
     exam = RemidioExam(
         remidio_connection_id=connection.id,
@@ -114,18 +165,28 @@ def test_ingest_staged_files_creates_encounter_image_pdf_and_task(db_session, co
     assert result["summary"]["encounters_created"] == 1
     assert result["summary"]["images_downloaded"] == 1
     assert result["summary"]["reports_downloaded"] == 1
-    assert result["summary"]["tasks_created"] == 1
+    assert result["summary"]["tasks_created"] == 0
     assert exam.patient_encounter_id is not None
-    assert image.encounter_file_id is not None
-    assert report.encounter_file_pdf_id is not None
+    assert image.encounter_set_image_id is not None
+    assert report.encounter_set_attachment_id is not None
 
-    encounter_file = db_session.get(EncounterFile, image.encounter_file_id)
-    pdf = db_session.get(EncounterFilePDF, report.encounter_file_pdf_id)
-    assert encounter_file.project_id == project.id
-    assert encounter_file.lab_unit_id == core_test_data["lab_unit"].id
-    assert encounter_file.camera_id == core_test_data["camera"].id
-    assert encounter_file.eye_side == "right"
-    assert pdf.project_id == project.id
-    assert (tmp_path / "images" / "2026_04_01" / encounter_file.filename).exists()
-    assert (tmp_path / "pdfs" / "2026_04_01" / pdf.filename).exists()
-    assert db_session.query(GradingTask).filter_by(encounter_file_id=encounter_file.id).count() == 1
+    encounter_image = db_session.get(EncounterSetImage, image.encounter_set_image_id)
+    attachment = db_session.get(EncounterSetAttachment, report.encounter_set_attachment_id)
+    assert encounter_image.project_id == project.id
+    assert encounter_image.camera_id == core_test_data["camera"].id
+    assert encounter_image.hospital_id == core_test_data["lab_unit"].hospital_id
+    assert encounter_image.asset_kind == "clinical_image"
+    assert encounter_image.creates_task is True
+    assert encounter_image.metadata_json["remidio_image_id"] == "image-1"
+    assert attachment.project_id == project.id
+    assert attachment.upload_profile_id == upload_profile.id
+    assert attachment.asset_kind == "pdf"
+    assert attachment.creates_task is False
+    assert (tmp_path / encounter_image.folder_rel / encounter_image.original_filename).exists()
+    assert (tmp_path / attachment.folder_rel / attachment.stored_filename).exists()
+    assert (
+        db_session.query(PatientEncounterTargetDisease)
+        .filter_by(patient_encounter_id=exam.patient_encounter_id, disease_id=core_test_data["dr"].id, is_default=True)
+        .count()
+        == 1
+    )

@@ -3,7 +3,7 @@ from datetime import timezone
 import pytest
 
 from remidio_api_integration.errors import RemidioValidationError
-from remidio_api_integration.validation import extract_exam_payloads, normalize_date, require_token
+from remidio_api_integration.validation import extract_exam_payloads, normalize_date, require_token, sanitize_for_storage
 
 
 def test_normalize_date_accepts_remidio_and_iso_formats():
@@ -20,7 +20,7 @@ def test_require_token_accepts_direct_data_token():
     assert require_token({"status": {"statusCode": "OK"}, "data": "token-value"}) == "token-value"
 
 
-def test_extract_exam_payloads_maps_exam_images_reports_and_redacts_raw_pii():
+def test_extract_exam_payloads_maps_exam_images_reports_and_preserves_raw_metadata():
     payloads = extract_exam_payloads(
         [
             {
@@ -80,8 +80,9 @@ def test_extract_exam_payloads_maps_exam_images_reports_and_redacts_raw_pii():
     assert exam.exam_date is not None
     assert exam.exam_date.tzinfo == timezone.utc
     assert exam.device_types == ["FOP"]
-    assert exam.raw_json["patientDetails"]["firstName"] == "[redacted]"
-    assert exam.raw_json["patientDetails"]["lastName"] == "[redacted]"
+    assert exam.raw_json["patientDetails"]["firstName"] == "Hidden"
+    assert exam.raw_json["patientDetails"]["lastName"] == "Patient"
+    assert exam.raw_json["images"]["fopImages"]["STANDARD"][0]["path"] == "org/site/patient/exam/FOP/images/file"
 
     assert len(exam.images) == 1
     image = exam.images[0]
@@ -96,3 +97,21 @@ def test_extract_exam_payloads_maps_exam_images_reports_and_redacts_raw_pii():
     assert report.remidio_report_id == "4523900784345088"
     assert report.report_type == "mediosAIReport"
     assert report.generated_at is not None
+
+
+def test_sanitize_for_storage_redacts_credentials_but_not_source_identity():
+    stored = sanitize_for_storage(
+        {
+            "firstName": "Visible",
+            "email": "person@example.org",
+            "path": "https://example.org/signed/path?X-Goog-Signature=value",
+            "clientAuthToken": "secret-token",
+            "nested": {"accessToken": "secret-access"},
+        }
+    )
+
+    assert stored["firstName"] == "Visible"
+    assert stored["email"] == "person@example.org"
+    assert stored["path"].startswith("https://example.org/signed/path")
+    assert stored["clientAuthToken"] == "[redacted]"
+    assert stored["nested"]["accessToken"] == "[redacted]"

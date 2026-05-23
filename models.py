@@ -651,6 +651,7 @@ class RemidioImage(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     remidio_exam_id: Mapped[int] = mapped_column(ForeignKey("remidio_exams.id", ondelete="CASCADE"), nullable=False, index=True)
     encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_files.id", ondelete="SET NULL"), nullable=True, index=True)
+    encounter_set_image_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_set_images.id", ondelete="SET NULL"), nullable=True, index=True)
     remidio_image_id: Mapped[str] = mapped_column(String(64), nullable=False)
     device_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     image_bucket: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -670,6 +671,7 @@ class RemidioImage(Base):
 
     exam: Mapped["RemidioExam"] = relationship("RemidioExam", back_populates="images")
     encounter_file: Mapped["EncounterFile | None"] = relationship("EncounterFile")
+    encounter_set_image: Mapped["EncounterSetImage | None"] = relationship("EncounterSetImage")
 
     __table_args__ = (
         UniqueConstraint("remidio_exam_id", "remidio_image_id", name="uq_remidio_image_exam_image_id"),
@@ -685,6 +687,7 @@ class RemidioReport(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     remidio_exam_id: Mapped[int] = mapped_column(ForeignKey("remidio_exams.id", ondelete="CASCADE"), nullable=False, index=True)
     encounter_file_pdf_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_file_pdfs.id", ondelete="SET NULL"), nullable=True, index=True)
+    encounter_set_attachment_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_set_attachments.id", ondelete="SET NULL"), nullable=True, index=True)
     remidio_report_id: Mapped[str] = mapped_column(String(64), nullable=False)
     report_type: Mapped[str] = mapped_column(String(64), nullable=False)
     report_local_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -699,6 +702,7 @@ class RemidioReport(Base):
 
     exam: Mapped["RemidioExam"] = relationship("RemidioExam", back_populates="reports")
     encounter_file_pdf: Mapped["EncounterFilePDF | None"] = relationship("EncounterFilePDF")
+    encounter_set_attachment: Mapped["EncounterSetAttachment | None"] = relationship("EncounterSetAttachment")
 
     __table_args__ = (
         UniqueConstraint("remidio_exam_id", "remidio_report_id", "report_type", name="uq_remidio_report_exam_report_type"),
@@ -792,6 +796,7 @@ class PatientEncounters(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
@@ -834,6 +839,7 @@ class EncounterSetImage(Base):
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True, index=True)
     is_mydriatic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
     s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
     s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
@@ -847,7 +853,7 @@ class EncounterSetImage(Base):
 
     __table_args__ = (
         UniqueConstraint('patient_encounter_id', 'spatial_position', name='uq_encounter_set_image_position'),
-        CheckConstraint('spatial_position >= 1 AND spatial_position <= 9', name='ck_encounter_set_image_position_range'),
+        CheckConstraint('spatial_position >= 1', name='ck_encounter_set_image_position_positive'),
         CheckConstraint("asset_kind = 'clinical_image'", name="ck_encounter_set_image_asset_kind"),
         # S3 composite indexes for efficient queries
         Index("ix_esi_s3_config_uuid", "s3_config_id", "uuid"),
@@ -2776,3 +2782,8 @@ from upload_profiles.models import (  # noqa: E402,F401
 from encounter_set_types.models import EncounterSetType  # noqa: E402,F401
 from upload_metadata.models import UploadMetadataFieldDefinition  # noqa: E402,F401
 from encounter_sets.models import EncounterSetAttachment  # noqa: E402,F401
+from remidio_api_integration.models import (  # noqa: E402,F401
+    RemidioApiExamEncounter,
+    ProjectUploadProfileRemidioApiBinding,
+    RemidioApiSourceRule,
+)

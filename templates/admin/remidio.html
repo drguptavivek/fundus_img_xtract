@@ -6,13 +6,13 @@
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">Remidio Connections</h1>
-      <p class="text-muted mb-0">Manage Remidio accounts, synced sites, and site/device routing into projects.</p>
+      <p class="text-muted mb-0">Manage Remidio API accounts, synced sites, and API source rules.</p>
     </div>
     <a class="btn btn-outline-secondary" href="{{ url_for('admin.admin_status') }}">Admin Status</a>
   </div>
 
   <div class="alert alert-info">
-    A Remidio connection can feed multiple projects. Use routing rules to map each Remidio site custom identifier and device type to the local project, lab unit, camera, and optional default task disease.
+    A Remidio API source rule identifies a connection, site custom identifier, and device type. Project, lab unit, camera, date window, and workflow are bound from Project Upload Profiles.
   </div>
 
   <div class="card shadow-sm mb-4" id="stuck-remidio-upload-cleanup"

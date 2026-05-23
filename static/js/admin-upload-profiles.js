@@ -17,6 +17,10 @@
     });
   }
 
+  function automatedRemidioEnabled(form) {
+    return Boolean(form.querySelector('[data-upload-profile-automated-remidio]')?.checked);
+  }
+
   function checkedCount(form, selector) {
     return form.querySelectorAll(selector + ':checked:not(:disabled)').length;
   }
@@ -136,6 +140,23 @@
     }
     syncMydriaticDefaults(form);
     syncZipDefault(form);
+  }
+
+  function syncAutomatedRemidioMode(form) {
+    const automated = automatedRemidioEnabled(form);
+    form.querySelectorAll('[data-upload-profile-kind]').forEach(function (input) {
+      if (!automated) {
+        input.disabled = false;
+        return;
+      }
+      if (input.value === 'encounter_set') {
+        input.checked = true;
+        input.disabled = false;
+      } else {
+        input.checked = false;
+        input.disabled = true;
+      }
+    });
   }
 
   function syncEncounterSetTypes(form) {
@@ -308,6 +329,7 @@
   }
 
   function syncForm(form) {
+    syncAutomatedRemidioMode(form);
     syncClinicalSection(form);
     syncEncounterSetTypes(form);
     syncModeCards(form);
@@ -356,6 +378,20 @@
   function displayValue(values) {
     const list = Array.isArray(values) ? values.filter(Boolean) : [];
     return list.length ? list.join(', ') : '-';
+  }
+
+  function renderEncounterSetTargetSummary(targets) {
+    const list = Array.isArray(targets) ? targets : [];
+    if (!list.length) {
+      return '-';
+    }
+    return list.map(function (target) {
+      const name = target.encounter_set_type_name || 'EncounterSetType';
+      return name
+        + ': image ' + displayValue(target.image_grading_scheme_names)
+        + '; default ' + (target.default_image_grading_scheme_name || '-')
+        + '; encounter ' + (target.encounter_grading_scheme_name || '-');
+    }).join(' | ');
   }
 
   function kindLabel(kind) {
@@ -459,6 +495,10 @@
     if (directKind) {
       directKind.checked = true;
     }
+    const automatedRemidio = form.querySelector('[data-upload-profile-automated-remidio]');
+    if (automatedRemidio) {
+      automatedRemidio.checked = false;
+    }
     const allowNonMydriatic = form.querySelector('input[name="allow_non_mydriatic"]');
     if (allowNonMydriatic) {
       allowNonMydriatic.checked = true;
@@ -475,9 +515,14 @@
     setText(section, '[data-upload-profile-view-title]', summary.name || 'Upload & Grading Profile');
     setText(section, '[data-upload-profile-view-description]', summary.description || 'No description configured.');
     setText(section, '[data-upload-profile-view-projects]', displayValue(summary.projects));
-    setText(section, '[data-upload-profile-view-uploaders]', String(summary.uploaders || 0));
+    setText(
+      section,
+      '[data-upload-profile-view-uploaders]',
+      summary.automated_remidio_populated ? 'Automated Remidio API' : String(summary.uploaders || 0)
+    );
     setText(section, '[data-upload-profile-view-ai-workflows]', String(summary.ai_workflow_count || 0));
     setText(section, '[data-upload-profile-view-targets]', displayValue(summary.clinical_targets));
+    setText(section, '[data-upload-profile-view-est-targets]', renderEncounterSetTargetSummary(summary.encounter_set_targets));
     setText(section, '[data-upload-profile-view-remidio-defaults]', displayValue(summary.remidio_defaults));
     setText(section, '[data-upload-profile-view-cameras]', displayValue(summary.cameras));
     setText(section, '[data-upload-profile-view-sites]', displayValue(summary.sites));
@@ -527,6 +572,10 @@
     if (isEdit) {
       form.querySelector('[name="name"]').value = button.dataset.name || '';
       form.querySelector('[name="description"]').value = button.dataset.description || '';
+      const automatedRemidio = form.querySelector('[data-upload-profile-automated-remidio]');
+      if (automatedRemidio) {
+        automatedRemidio.checked = button.dataset.automatedRemidioPopulated === '1';
+      }
       setCheckedValues(form, 'disease_ids', splitIds(button.dataset.diseaseIds));
       setCheckedValues(form, 'default_disease_ids', splitIds(button.dataset.defaultDiseaseIds));
       setCheckedValues(form, 'camera_ids', splitIds(button.dataset.cameraIds));
@@ -664,7 +713,7 @@
       });
       button.dataset.uploadProfileNavBound = 'true';
     });
-    root.querySelectorAll('[data-upload-profile-editor-close], [data-upload-profile-view-close]').forEach(function (button) {
+    root.querySelectorAll('[data-upload-profile-editor-close], [data-upload-profile-editor-cancel], [data-upload-profile-view-close]').forEach(function (button) {
       if (button.dataset.uploadProfileCloseBound) {
         return;
       }

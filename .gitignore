@@ -101,8 +101,8 @@ docker-compose.override.yml
 /files/*
 /uploads/*
 
-# Local sample/reference data available to Codex but never committed.
-PRISTINE_Samples/
+# Local Remidio sample/reference data available to Codex but never committed.
+REMIDIO_Samples/
 
 /tmp/*.*/*.*
 /tmp/*.*

@@ -30,8 +30,8 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
 )
-from encounter_set_types.models import EncounterSetTypeImageGradingScheme
 
 
 def _manager_lab_unit_ids() -> set[int]:
@@ -81,12 +81,12 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(UploadProfile.ai_workflows),
                 selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
                 selectinload(UploadProfile.encounter_set_types)
-                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
-                .selectinload(EncounterSetType.encounter_grading_scheme),
+                .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
                 selectinload(UploadProfile.encounter_set_types)
-                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
-                .selectinload(EncounterSetType.image_grading_schemes)
-                .selectinload(EncounterSetTypeImageGradingScheme.disease),
+                .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
             )
             .order_by(UploadProfile.active.desc(), UploadProfile.name)
         )
@@ -106,6 +106,16 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.encounter_set_type),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.user),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.lab_unit),
             )
@@ -188,10 +198,6 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "encounter_set_types": (
             db.execute(
                 select(EncounterSetType)
-                .options(
-                    selectinload(EncounterSetType.encounter_grading_scheme),
-                    selectinload(EncounterSetType.image_grading_schemes).selectinload(EncounterSetTypeImageGradingScheme.disease),
-                )
                 .order_by(EncounterSetType.active.desc(), EncounterSetType.name)
             )
             .scalars()

@@ -143,14 +143,14 @@
   <div class="col-12" id="upload-profiles">
     <div class="card shadow-sm h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Upload Profiles</span>
+        <span>Upload & Grading Profiles</span>
         <button class="btn btn-sm btn-outline-primary" type="button" data-upload-profile-add>Add Profile</button>
       </div>
       <div class="table-responsive">
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
-              <th>Name</th><th>Projects</th><th>Uploaders</th><th>Diseases</th><th>EncounterSetTypes</th><th>Remidio ZIP Default</th><th>Types</th><th>Status</th><th></th>
+              <th>Name</th><th>Projects</th><th>Uploaders</th><th>Clinical Targets</th><th>EncounterSetTypes</th><th>Remidio ZIP Default</th><th>Types</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -161,43 +161,116 @@
             {% set row_area_ids = profile.areas|map(attribute='area_id')|list %}
             {% set row_upload_kinds = profile.upload_kinds|map(attribute='upload_kind')|list %}
             {% set row_encounter_set_type_ids = profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type_id')|list %}
+            {% set row_project_names = [] %}
+            {% for mapping in profile.project_mappings if mapping.active %}
+              {% set _ = row_project_names.append(mapping.project.title) %}
+            {% endfor %}
+            {% set row_clinical_target_names = [] %}
+            {% for disease_link in profile.diseases %}
+              {% if disease_link.disease %}
+                {% set _ = row_clinical_target_names.append(disease_link.disease.name) %}
+              {% endif %}
+            {% endfor %}
+            {% set row_remidio_default_names = [] %}
+            {% for disease_link in profile.diseases if disease_link.is_default %}
+              {% if disease_link.disease %}
+                {% set _ = row_remidio_default_names.append(disease_link.disease.name) %}
+              {% endif %}
+            {% endfor %}
+            {% set row_camera_names = [] %}
+            {% for camera_link in profile.cameras %}
+              {% if camera_link.camera %}
+                {% set _ = row_camera_names.append(camera_link.camera.name) %}
+              {% endif %}
+            {% endfor %}
+            {% set row_area_names = [] %}
+            {% for area_link in profile.areas %}
+              {% if area_link.area %}
+                {% set _ = row_area_names.append(area_link.area.name) %}
+              {% endif %}
+            {% endfor %}
+            {% set active_uploader_count = namespace(value=0) %}
+            {% for mapping in profile.project_mappings if mapping.active %}
+              {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
+                {% set active_uploader_count.value = active_uploader_count.value + 1 %}
+              {% endfor %}
+            {% endfor %}
+            {% set row_encounter_set_names = [] %}
+            {% set row_encounter_set_configs = [] %}
+            {% for encounter_config in profile.encounter_set_types if encounter_config.active %}
+              {% if encounter_config.encounter_set_type %}
+                {% set _ = row_encounter_set_names.append(encounter_config.encounter_set_type.name) %}
+              {% endif %}
+              {% set row_image_scheme_names = [] %}
+              {% for image_scheme in encounter_config.image_grading_schemes if image_scheme.active %}
+                {% if image_scheme.disease %}
+                  {% set _ = row_image_scheme_names.append(image_scheme.disease.name) %}
+                {% endif %}
+              {% endfor %}
+              {% set _ = row_encounter_set_configs.append({
+                'encounter_set_type_id': encounter_config.encounter_set_type_id,
+                'encounter_set_type_name': encounter_config.encounter_set_type.name if encounter_config.encounter_set_type else '',
+                'image_grading_scheme_ids': encounter_config.image_grading_schemes|selectattr('active')|map(attribute='disease_id')|list,
+                'image_grading_scheme_names': row_image_scheme_names,
+                'default_image_grading_scheme_id': encounter_config.default_image_grading_scheme_id,
+                'default_image_grading_scheme_name': encounter_config.default_image_grading_scheme.name if encounter_config.default_image_grading_scheme else '',
+                'encounter_grading_scheme_id': encounter_config.encounter_grading_scheme_id,
+                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else ''
+              }) %}
+            {% endfor %}
             {% set row_ai_workflows = [] %}
             {% for workflow in profile.ai_workflows if workflow.active %}
               {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind) %}
             {% endfor %}
+            {% set row_profile_summary = {
+              'id': profile.id,
+              'name': profile.name,
+              'description': profile.description,
+              'active': profile.active,
+              'projects': row_project_names,
+              'uploaders': active_uploader_count.value,
+              'clinical_targets': row_clinical_target_names,
+              'remidio_defaults': row_remidio_default_names,
+              'cameras': row_camera_names,
+              'sites': row_area_names,
+              'upload_kinds': row_upload_kinds,
+              'encounter_set_types': row_encounter_set_names,
+              'encounter_set_configs': row_encounter_set_configs,
+              'ai_workflow_count': row_ai_workflows|length,
+              'allow_mydriatic': profile.allow_mydriatic,
+              'allow_non_mydriatic': profile.allow_non_mydriatic,
+              'default_is_mydriatic': profile.default_is_mydriatic
+            } %}
             <tr>
               <td>{{ profile.name }}</td>
               <td class="small">
-                {% for mapping in profile.project_mappings if mapping.active %}
-                  {{ mapping.project.title }}{% if not loop.last %}, {% endif %}
-                {% else %}
-                  -
-                {% endfor %}
+                {{ row_project_names|join(', ') or '-' }}
               </td>
               <td class="small">
-                {% set active_uploader_count = namespace(value=0) %}
-                {% for mapping in profile.project_mappings if mapping.active %}
-                  {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
-                    {% set active_uploader_count.value = active_uploader_count.value + 1 %}
-                  {% endfor %}
-                {% endfor %}
                 {{ active_uploader_count.value }}
               </td>
-              <td class="small">{{ profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}</td>
+              <td class="small">{{ row_clinical_target_names|join(', ') or '-' }}</td>
               <td class="small">
                 {% if row_encounter_set_type_ids %}
-                  {{ profile.encounter_set_types|selectattr('active')|map(attribute='encounter_set_type.name')|join(', ') }}
+                  {{ row_encounter_set_names|join(', ') or '-' }}
                 {% else %}
                   -
                 {% endif %}
               </td>
-              <td class="small">{{ profile.diseases|selectattr('is_default')|map(attribute='disease.name')|join(', ') or '-' }}</td>
+              <td class="small">{{ row_remidio_default_names|join(', ') or '-' }}</td>
               <td class="small">
                 {{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}
               </td>
               <td><span class="badge {{ 'bg-success' if profile.active else 'bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
               <td class="text-end">
                 <div class="d-inline-flex gap-2">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    data-upload-profile-view
+                    data-profile-id="{{ profile.id }}"
+                    data-profile-summary="{{ row_profile_summary|tojson|forceescape }}"
+                  >View</button>
                   <button
                     class="btn btn-sm btn-outline-primary"
                     type="button"
@@ -212,6 +285,7 @@
                     data-area-ids="{{ row_area_ids|join(',') }}"
                     data-upload-kinds="{{ row_upload_kinds|join(',') }}"
                     data-encounter-set-type-ids="{{ row_encounter_set_type_ids|join(',') }}"
+                    data-encounter-set-configs="{{ row_encounter_set_configs|tojson|forceescape }}"
                     data-ai-workflows="{{ row_ai_workflows|join(',') }}"
                     data-allow-mydriatic="{{ '1' if profile.allow_mydriatic else '0' }}"
                     data-allow-non-mydriatic="{{ '1' if profile.allow_non_mydriatic else '0' }}"

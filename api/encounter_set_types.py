@@ -10,7 +10,7 @@ from flask_login import current_user
 
 from auth.roles import roles_required
 from encounter_set_types import service as encounter_set_type_service
-from upload_profiles.admin_service import MutationResult, to_int, to_int_list
+from upload_profiles.admin_service import MutationResult
 
 from . import api_bp
 
@@ -108,9 +108,6 @@ def _input_from_request() -> encounter_set_type_service.EncounterSetTypeInput:
         name=str(data.get("name") or "").strip(),
         code=str(data.get("code") or "").strip(),
         description=(str(data.get("description")).strip() if data.get("description") is not None else None) or None,
-        image_grading_scheme_ids=_ids_from_data(data, "image_grading_scheme_ids", "image_grading_scheme_id"),
-        default_image_grading_scheme_id=to_int(data.get("default_image_grading_scheme_id")),
-        encounter_grading_scheme_id=to_int(data.get("encounter_grading_scheme_id")),
         metadata_schema_json=data.get("metadata_schema_json") or {"fields": []},
         asset_rules_json=data.get("asset_rules_json"),
         active=_bool_value(data.get("active"), default=True),
@@ -126,19 +123,7 @@ def _request_data() -> dict[str, Any]:
         data["metadata_schema_json"] = request.form.get("metadata_schema_json")
     if "asset_rules_json" in data:
         data["asset_rules_json"] = request.form.get("asset_rules_json")
-    data["image_grading_scheme_ids"] = request.form.getlist("image_grading_scheme_ids") or request.form.getlist("image_grading_scheme_id")
     return data
-
-
-def _ids_from_data(data: dict[str, Any], plural_key: str, singular_key: str) -> list[int]:
-    raw = data.get(plural_key)
-    if raw is None:
-        raw = data.get(singular_key)
-    if isinstance(raw, list):
-        return to_int_list([str(item) for item in raw])
-    if raw in (None, ""):
-        return []
-    return to_int_list([str(raw)])
 
 
 def _json_result(result: MutationResult):

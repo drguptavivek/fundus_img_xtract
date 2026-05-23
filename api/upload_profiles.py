@@ -59,6 +59,21 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
     encounter_set_type_ids = upload_profile_service.to_int_list(
         form.getlist("encounter_set_type_ids") or form.getlist("encounter_set_type_id")
     )
+    encounter_set_configs = [
+        upload_profile_service.EncounterSetProfileInput(
+            encounter_set_type_id=encounter_set_type_id,
+            image_grading_scheme_ids=upload_profile_service.to_int_list(
+                form.getlist(f"encounter_set_type_{encounter_set_type_id}_image_grading_scheme_ids")
+            ),
+            default_image_grading_scheme_id=upload_profile_service.to_int(
+                form.get(f"encounter_set_type_{encounter_set_type_id}_default_image_grading_scheme_id")
+            ),
+            encounter_grading_scheme_id=upload_profile_service.to_int(
+                form.get(f"encounter_set_type_{encounter_set_type_id}_encounter_grading_scheme_id")
+            ),
+        )
+        for encounter_set_type_id in encounter_set_type_ids
+    ]
     ai_workflows = []
     for value in form.getlist("ai_workflows"):
         parts = value.split(":")
@@ -86,7 +101,7 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         allow_non_mydriatic=form.get("allow_non_mydriatic") == "on",
         default_is_mydriatic=form.get("default_is_mydriatic") == "on",
         ai_workflows=ai_workflows,
-        encounter_set_type_ids=encounter_set_type_ids,
+        encounter_set_configs=encounter_set_configs,
         task_prioritization_json=form.get("task_prioritization_json") or None,
         description=(form.get("description") or "").strip() or None,
     )

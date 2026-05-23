@@ -29,6 +29,7 @@ from utils.hospital_scoping import apply_scoping
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UploadProfileError,
+    encounter_set_grading_scheme_ids,
     validate_profile_upload_scope,
 )
 
@@ -424,11 +425,6 @@ def upload_encounter_set_image():
 
     if not uploader_user_id:
         return jsonify({"error": "Upload token is not associated with a user"}), 403
-    uploader_user = db.execute(
-        select(User).where(User.id == uploader_user_id).options(selectinload(User.roles))
-    ).scalar_one_or_none()
-    if uploader_user is None or not uploader_user.has_role("fileUploader"):
-        return jsonify({"error": "Forbidden", "message": "Encounter set uploads require the fileUploader role"}), 403
     if not upload_profile_id:
         return jsonify({"error": "Missing upload_profile_id"}), 400
     if not camera_id or not area_id:
@@ -464,6 +460,12 @@ def upload_encounter_set_image():
     encounter_uuid = request.form.get("encounter_uuid")
     
     with transaction_scope() as db:
+        uploader_user = db.execute(
+            select(User).where(User.id == uploader_user_id).options(selectinload(User.roles))
+        ).scalar_one_or_none()
+        if uploader_user is None or not uploader_user.has_role("fileUploader"):
+            return jsonify({"error": "Forbidden", "message": "Encounter set uploads require the fileUploader role"}), 403
+
         try:
             upload_profile = validate_profile_upload_scope(
                 db,
@@ -481,7 +483,7 @@ def upload_encounter_set_image():
             return jsonify({"error": exc.code, "message": exc.message}), 403
         if upload_profile.lab_unit_id != lab_unit_id:
             return jsonify({"error": "profile_lab_mismatch", "message": "Upload profile is not valid for this token lab unit."}), 403
-        target_disease_ids = [disease_id] if disease_id else sorted(upload_profile.disease_ids)
+        target_disease_ids = [disease_id] if disease_id else sorted(encounter_set_grading_scheme_ids(upload_profile))
 
         if encounter_uuid:
             encounter = db.query(PatientEncounters).filter_by(uuid=encounter_uuid).first()

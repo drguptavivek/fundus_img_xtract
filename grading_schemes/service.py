@@ -15,7 +15,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import get_db_session, transaction_scope
-from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
 from models import (
     AIModelDisease,
     DirectImageUpload,
@@ -34,6 +33,8 @@ from upload_profiles.models import (
     ProjectUploadProfile,
     UploadProfile,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
 )
 
 VALID_SCOPES = frozenset({"image", "encounter"})
@@ -629,6 +630,9 @@ def _empty_linkage() -> dict[str, Any]:
 def _upload_profile_maps(db, scheme_ids: set[int]) -> dict[int, list[dict[str, Any]]]:
     if not scheme_ids:
         return {}
+    profiles_by_scheme = {scheme_id: [] for scheme_id in scheme_ids}
+    seen: set[tuple[int, int]] = set()
+
     rows = db.execute(
         select(
             UploadProfileDisease.disease_id,
@@ -644,8 +648,82 @@ def _upload_profile_maps(db, scheme_ids: set[int]) -> dict[int, list[dict[str, A
         .group_by(UploadProfileDisease.disease_id, UploadProfile.id, UploadProfile.name, UploadProfile.active)
         .order_by(UploadProfile.active.desc(), UploadProfile.name)
     ).all()
-    profiles_by_scheme = {scheme_id: [] for scheme_id in scheme_ids}
     for scheme_id, profile_id, profile_name, active, project_title in rows:
+        seen.add((scheme_id, profile_id))
+        profiles_by_scheme.setdefault(scheme_id, []).append(
+            {
+                "id": profile_id,
+                "name": profile_name,
+                "active": bool(active),
+                "project_title": project_title,
+            }
+        )
+    encounter_rows = db.execute(
+        select(
+            UploadProfileEncounterSetType.encounter_grading_scheme_id,
+            UploadProfile.id,
+            UploadProfile.name,
+            UploadProfile.active,
+            func.coalesce(func.string_agg(Project.title, ", "), "Unmapped").label("project_title"),
+        )
+        .join(UploadProfile, UploadProfile.id == UploadProfileEncounterSetType.upload_profile_id)
+        .outerjoin(ProjectUploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+        .outerjoin(Project, Project.id == ProjectUploadProfile.project_id)
+        .where(
+            UploadProfileEncounterSetType.encounter_grading_scheme_id.in_(scheme_ids),
+            UploadProfileEncounterSetType.active.is_(True),
+        )
+        .group_by(
+            UploadProfileEncounterSetType.encounter_grading_scheme_id,
+            UploadProfile.id,
+            UploadProfile.name,
+            UploadProfile.active,
+        )
+        .order_by(UploadProfile.active.desc(), UploadProfile.name)
+    ).all()
+    for scheme_id, profile_id, profile_name, active, project_title in encounter_rows:
+        if (scheme_id, profile_id) in seen:
+            continue
+        seen.add((scheme_id, profile_id))
+        profiles_by_scheme.setdefault(scheme_id, []).append(
+            {
+                "id": profile_id,
+                "name": profile_name,
+                "active": bool(active),
+                "project_title": project_title,
+            }
+        )
+    image_rows = db.execute(
+        select(
+            UploadProfileEncounterSetTypeImageGradingScheme.disease_id,
+            UploadProfile.id,
+            UploadProfile.name,
+            UploadProfile.active,
+            func.coalesce(func.string_agg(Project.title, ", "), "Unmapped").label("project_title"),
+        )
+        .join(
+            UploadProfileEncounterSetType,
+            UploadProfileEncounterSetType.id == UploadProfileEncounterSetTypeImageGradingScheme.upload_profile_encounter_set_type_id,
+        )
+        .join(UploadProfile, UploadProfile.id == UploadProfileEncounterSetType.upload_profile_id)
+        .outerjoin(ProjectUploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+        .outerjoin(Project, Project.id == ProjectUploadProfile.project_id)
+        .where(
+            UploadProfileEncounterSetTypeImageGradingScheme.disease_id.in_(scheme_ids),
+            UploadProfileEncounterSetTypeImageGradingScheme.active.is_(True),
+            UploadProfileEncounterSetType.active.is_(True),
+        )
+        .group_by(
+            UploadProfileEncounterSetTypeImageGradingScheme.disease_id,
+            UploadProfile.id,
+            UploadProfile.name,
+            UploadProfile.active,
+        )
+        .order_by(UploadProfile.active.desc(), UploadProfile.name)
+    ).all()
+    for scheme_id, profile_id, profile_name, active, project_title in image_rows:
+        if (scheme_id, profile_id) in seen:
+            continue
         profiles_by_scheme.setdefault(scheme_id, []).append(
             {
                 "id": profile_id,
@@ -768,21 +846,32 @@ def _usage_counts(db, *, scheme_ids: set[int] | None = None) -> dict[int, dict[s
     _merge_count(
         usage,
         db.execute(
-            select(EncounterSetType.encounter_grading_scheme_id, func.count(EncounterSetType.id))
-            .where(EncounterSetType.encounter_grading_scheme_id.in_(ids))
-            .group_by(EncounterSetType.encounter_grading_scheme_id)
+            select(UploadProfileEncounterSetType.encounter_grading_scheme_id, func.count(UploadProfileEncounterSetType.id))
+            .where(
+                UploadProfileEncounterSetType.encounter_grading_scheme_id.in_(ids),
+                UploadProfileEncounterSetType.active.is_(True),
+            )
+            .group_by(UploadProfileEncounterSetType.encounter_grading_scheme_id)
         ).all(),
         "encounter_set_types",
     )
     _merge_count(
         usage,
         db.execute(
-            select(EncounterSetTypeImageGradingScheme.disease_id, func.count(EncounterSetTypeImageGradingScheme.id))
-            .where(
-                EncounterSetTypeImageGradingScheme.disease_id.in_(ids),
-                EncounterSetTypeImageGradingScheme.active.is_(True),
+            select(
+                UploadProfileEncounterSetTypeImageGradingScheme.disease_id,
+                func.count(UploadProfileEncounterSetTypeImageGradingScheme.id),
             )
-            .group_by(EncounterSetTypeImageGradingScheme.disease_id)
+            .join(
+                UploadProfileEncounterSetType,
+                UploadProfileEncounterSetType.id == UploadProfileEncounterSetTypeImageGradingScheme.upload_profile_encounter_set_type_id,
+            )
+            .where(
+                UploadProfileEncounterSetTypeImageGradingScheme.disease_id.in_(ids),
+                UploadProfileEncounterSetTypeImageGradingScheme.active.is_(True),
+                UploadProfileEncounterSetType.active.is_(True),
+            )
+            .group_by(UploadProfileEncounterSetTypeImageGradingScheme.disease_id)
         ).all(),
         "encounter_set_types",
     )

@@ -51,7 +51,7 @@ At upload time, the uploader selects one allowed `EncounterSetType` for the curr
 
 ## Key domain rule: task target is a scheme, not diagnosis
 
-`EncounterSetType` identifies the grading workflow / disease evaluation schemes that should be applied:
+The Upload & Grading Profile mapping for an `EncounterSetType` identifies the grading workflow / disease evaluation schemes that should be applied:
 
 - image-level grading scheme(s) for task-eligible clinical images
 - one default image-level grading scheme
@@ -173,15 +173,15 @@ They may be surfaced only if a protocol explicitly allows it. Any exception must
 
 ## Planned API and integration behavior
 
-- Core API surfaces should expose EncounterSetType definitions for selection and validation.
-- Upload API should require profile-scoped `EncounterSetType` selection and enforce profile-type compatibility.
+- Core API surfaces should expose EncounterSetType definitions for metadata/asset selection and validation.
+- Upload API should require profile-scoped `EncounterSetType` selection and enforce profile-type grading compatibility.
 - Verification endpoints should enforce field-level and type-level rules from the selected type.
-- Grading services should read the selected `EncounterSetType` image and encounter grading schemes when creating tasks and generating review context.
+- Grading services should read the selected Upload & Grading Profile's EncounterSetType image and encounter grading schemes when creating tasks and generating review context.
 
 ## Minimal policy checklist
 
 - [ ] EncounterSetType is project-neutral and defines data/metadata shape
-- [ ] UploadProfile controls who can upload and broad constraints
+- [ ] UploadProfile controls who can upload, broad constraints, and grading scheme targets
 - [ ] UploadProfile can authorize multiple EncounterSetTypes
 - [ ] Upload selects one allowed type per attempt
 - [ ] configured image and encounter grading schemes drive workflow, not diagnosis

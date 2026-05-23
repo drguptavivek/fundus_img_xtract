@@ -50,14 +50,14 @@
       </div>
       <div class="col-md-3">
         <div class="border rounded p-3 h-100">
-          <div class="small text-muted">Image Schemes</div>
-          <div class="fw-semibold">{{ row.image_grading_schemes|length }}</div>
+          <div class="small text-muted">Image Fields</div>
+          <div class="fw-semibold">{{ fields|selectattr('scope', 'equalto', 'image')|list|length }}</div>
         </div>
       </div>
       <div class="col-md-3">
         <div class="border rounded p-3 h-100">
-          <div class="small text-muted">Encounter Scheme</div>
-          <div class="fw-semibold text-truncate">{{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else 'None' }}</div>
+          <div class="small text-muted">Document Fields</div>
+          <div class="fw-semibold">{{ fields|selectattr('scope', 'equalto', 'document')|list|length }}</div>
         </div>
       </div>
       <div class="col-md-3">
@@ -73,25 +73,7 @@
     {% endif %}
 
     <div class="row g-3">
-      <div class="col-lg-6">
-        <div class="border rounded p-3 h-100">
-          <div class="fw-semibold mb-2">Grading schemes</div>
-          <div class="small text-muted mb-1">Image-level</div>
-          <div class="d-flex flex-wrap gap-2 mb-3">
-            {% for scheme in row.image_grading_schemes %}
-            <span class="badge text-bg-light border">
-              {{ scheme.name }}{% if scheme.is_default %} · default{% endif %}
-            </span>
-            {% else %}
-            <span class="text-muted small">No image grading schemes configured.</span>
-            {% endfor %}
-          </div>
-          <div class="small text-muted mb-1">Encounter-level</div>
-          <div>{{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else 'No encounter grading scheme configured.' }}</div>
-        </div>
-      </div>
-
-      <div class="col-lg-6">
+      <div class="col-12">
         <div class="border rounded p-3 h-100">
           <div class="fw-semibold mb-2">Allowed assets</div>
           <div class="row g-2 small">

@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
 from db_transaction_manager import get_db_session
-from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
 from models import Area, Camera, LabUnit, Project, User, user_lab_units
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -19,6 +18,7 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
 )
 
@@ -209,14 +209,16 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
                 selectinload(ProjectUploadProfileAssignment.project_profile)
                 .selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
-                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
-                .selectinload(EncounterSetType.encounter_grading_scheme),
+                .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
                 selectinload(ProjectUploadProfileAssignment.project_profile)
                 .selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
-                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
-                .selectinload(EncounterSetType.image_grading_schemes)
-                .selectinload(EncounterSetTypeImageGradingScheme.disease),
+                .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
             )
             .order_by(ProjectUploadProfile.project_id, ProjectUploadProfileAssignment.lab_unit_id, UploadProfile.name)
         )
@@ -309,9 +311,9 @@ def validate_encounter_set_upload_scope(
         if UPLOAD_KIND_ENCOUNTER_SET in profile.upload_kinds
     ]
     if disease_id is not None:
-        profiles = [profile for profile in profiles if disease_id in profile.disease_ids]
+        profiles = [profile for profile in profiles if disease_id in encounter_set_grading_scheme_ids(profile)]
     if not profiles:
-        raise UploadProfileError("Selected project, lab unit, or disease is not allowed for encounter-set upload.", code="profile_not_found")
+        raise UploadProfileError("Selected project, lab unit, or grading scheme is not allowed for encounter-set upload.", code="profile_not_found")
     return profiles[0]
 
 
@@ -349,13 +351,16 @@ def validate_profile_upload_scope(
     profile = profiles[0]
     if upload_kind not in profile.upload_kinds:
         raise UploadProfileError("Selected upload profile does not allow this upload type.", code="upload_kind_not_allowed")
-    if disease_id is not None and disease_id not in profile.disease_ids:
+    clinical_upload = upload_kind in {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO}
+    if clinical_upload and disease_id is not None and disease_id not in profile.disease_ids:
         raise UploadProfileError("Selected disease is not allowed for this upload profile.", code="disease_not_allowed")
-    if camera_id is not None and camera_id not in profile.camera_ids:
+    if not clinical_upload and disease_id is not None and disease_id not in encounter_set_grading_scheme_ids(profile):
+        raise UploadProfileError("Selected grading scheme is not allowed for this encounter-set profile.", code="disease_not_allowed")
+    if clinical_upload and camera_id is not None and camera_id not in profile.camera_ids:
         raise UploadProfileError("Selected camera is not allowed for this upload profile.", code="camera_not_allowed")
-    if area_id is not None and area_id not in profile.area_ids:
+    if clinical_upload and area_id is not None and area_id not in profile.area_ids:
         raise UploadProfileError("Selected site is not allowed for this upload profile.", code="area_not_allowed")
-    if is_mydriatic is not None:
+    if clinical_upload and is_mydriatic is not None:
         _validate_mydriatic(profile, is_mydriatic)
     return profile
 
@@ -406,6 +411,19 @@ def _validate_mydriatic(profile: UploadProfileDTO, is_mydriatic: bool) -> None:
         raise UploadProfileError("Mydriatic uploads are not allowed for this profile.", code="mydriatic_not_allowed")
     if not is_mydriatic and not profile.allow_non_mydriatic:
         raise UploadProfileError("Non-mydriatic uploads are not allowed for this profile.", code="non_mydriatic_not_allowed")
+
+
+def encounter_set_grading_scheme_ids(profile: UploadProfileDTO) -> set[int]:
+    """Return all grading scheme IDs configured for EncounterSet uploads in this profile."""
+    scheme_ids: set[int] = set()
+    for config in profile.encounter_set_types:
+        encounter_scheme = config.get("encounter_grading_scheme") or {}
+        if encounter_scheme.get("id"):
+            scheme_ids.add(encounter_scheme["id"])
+        for image_scheme in config.get("image_grading_schemes") or []:
+            if image_scheme.get("id"):
+                scheme_ids.add(image_scheme["id"])
+    return scheme_ids
 
 
 def _select_default_profile(profiles: list[UploadProfileDTO]) -> UploadProfileDTO:
@@ -471,7 +489,7 @@ def _profile_to_dto(
         ai_workflows=ai_workflows,
         encounter_set_type_ids=frozenset(row.encounter_set_type_id for row in profile.encounter_set_types if row.active),
         encounter_set_types=tuple(
-            _encounter_set_type_payload(row.encounter_set_type)
+            _encounter_set_type_payload(row)
             for row in profile.encounter_set_types
             if row.active and row.encounter_set_type
         ),
@@ -558,7 +576,8 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
     }
 
 
-def _encounter_set_type_payload(row: Any) -> dict[str, Any]:
+def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str, Any]:
+    encounter_set_type = row.encounter_set_type
     image_schemes = [
         {
             "id": scheme.disease_id,
@@ -571,16 +590,20 @@ def _encounter_set_type_payload(row: Any) -> dict[str, Any]:
             key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
         )
     ]
-    default_image_scheme = next((scheme for scheme in image_schemes if scheme["is_default"]), image_schemes[0] if len(image_schemes) == 1 else None)
+    default_image_scheme = next(
+        (scheme for scheme in image_schemes if scheme["id"] == row.default_image_grading_scheme_id),
+        next((scheme for scheme in image_schemes if scheme["is_default"]), image_schemes[0] if len(image_schemes) == 1 else None),
+    )
     return {
-        "id": row.id,
-        "name": row.name,
-        "code": row.code,
+        "id": encounter_set_type.id,
+        "mapping_id": row.id,
+        "name": encounter_set_type.name,
+        "code": encounter_set_type.code,
         "image_grading_schemes": image_schemes,
         "default_image_grading_scheme": default_image_scheme,
         "encounter_grading_scheme": {
             "id": row.encounter_grading_scheme_id,
             "name": row.encounter_grading_scheme.name if row.encounter_grading_scheme else None,
         },
-        "asset_rules_json": row.asset_rules_json or {},
+        "asset_rules_json": encounter_set_type.asset_rules_json or {},
     }

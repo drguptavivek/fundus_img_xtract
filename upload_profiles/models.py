@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -243,22 +243,65 @@ class UploadProfileAIWorkflow(Base):
 
 
 class UploadProfileEncounterSetType(Base):
-    """EncounterSetType allow-list for encounter-set upload profiles."""
+    """EncounterSetType workflow configuration for encounter-set upload profiles."""
 
     __tablename__ = "upload_profile_encounter_set_types"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     upload_profile_id: Mapped[int] = mapped_column(ForeignKey("upload_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     encounter_set_type_id: Mapped[int] = mapped_column(ForeignKey("encounter_set_types.id", ondelete="CASCADE"), nullable=False, index=True)
+    encounter_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
+    default_image_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     profile: Mapped["UploadProfile"] = relationship("UploadProfile", back_populates="encounter_set_types")
     encounter_set_type: Mapped["EncounterSetType"] = relationship("EncounterSetType")
+    encounter_grading_scheme: Mapped["Disease | None"] = relationship("Disease", foreign_keys=[encounter_grading_scheme_id])
+    default_image_grading_scheme: Mapped["Disease | None"] = relationship("Disease", foreign_keys=[default_image_grading_scheme_id])
+    image_grading_schemes: Mapped[List["UploadProfileEncounterSetTypeImageGradingScheme"]] = relationship(
+        "UploadProfileEncounterSetTypeImageGradingScheme",
+        back_populates="profile_encounter_set_type",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="UploadProfileEncounterSetTypeImageGradingScheme.display_order",
+    )
 
     __table_args__ = (
         UniqueConstraint("upload_profile_id", "encounter_set_type_id", name="uq_upload_profile_encounter_set_type"),
         Index("ix_upload_profile_est_profile_active", "upload_profile_id", "active"),
+    )
+
+
+class UploadProfileEncounterSetTypeImageGradingScheme(Base):
+    """Image-level grading scheme allow-list for one upload-profile EncounterSetType mapping."""
+
+    __tablename__ = "upload_profile_est_image_grading_schemes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_profile_encounter_set_type_id: Mapped[int] = mapped_column(
+        ForeignKey("upload_profile_encounter_set_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    profile_encounter_set_type: Mapped["UploadProfileEncounterSetType"] = relationship(
+        "UploadProfileEncounterSetType",
+        back_populates="image_grading_schemes",
+    )
+    disease: Mapped["Disease"] = relationship("Disease")
+
+    __table_args__ = (
+        UniqueConstraint("upload_profile_encounter_set_type_id", "disease_id", name="uq_up_est_image_grading_scheme"),
+        Index("ix_up_est_img_scheme_mapping_active", "upload_profile_encounter_set_type_id", "active"),
+        Index("ix_up_est_img_scheme_default", "upload_profile_encounter_set_type_id", "is_default"),
     )
 
 

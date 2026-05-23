@@ -3,8 +3,8 @@
     <thead>
       <tr>
         <th>Type</th>
-        <th>Grading Schemes</th>
         <th>Fields</th>
+        <th>Assets</th>
         <th>Status</th>
         <th class="text-end">Actions</th>
       </tr>
@@ -18,22 +18,15 @@
           <div class="small text-muted">{{ row.code }}</div>
         </td>
         <td>
-          <div class="small">
-            <span class="text-muted">Image:</span>
-            {% for scheme in row.image_grading_schemes %}
-              <span class="badge text-bg-light border">{{ scheme.name }}{% if scheme.is_default %} default{% endif %}</span>
-            {% else %}
-              <span class="text-muted">None</span>
-            {% endfor %}
-          </div>
-          <div class="small mt-1">
-            <span class="text-muted">Encounter:</span>
-            {{ row.encounter_grading_scheme.name if row.encounter_grading_scheme else "None" }}
-          </div>
-        </td>
-        <td>
           <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "encounter")|list|length }} encounter</span>
           <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "image")|list|length }} image</span>
+          <span class="badge text-bg-secondary">{{ fields|selectattr("scope", "equalto", "document")|list|length }} document</span>
+        </td>
+        <td class="small">
+          {% set assets = row.asset_rules_json or {} %}
+          <span class="badge {{ 'text-bg-success' if assets.get('allow_clinical_images') else 'text-bg-light border' }}">Images</span>
+          <span class="badge {{ 'text-bg-success' if assets.get('allow_document_uploads') else 'text-bg-light border' }}">Documents</span>
+          <span class="badge {{ 'text-bg-success' if assets.get('allow_report_uploads') else 'text-bg-light border' }}">Reports</span>
         </td>
         <td>
           {% if row.active %}

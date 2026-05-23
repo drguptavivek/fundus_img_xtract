@@ -1,10 +1,92 @@
 {% from "_forms.html" import csrf_field %}
 
+<section id="upload-profile-view-section" class="mt-4 d-none" data-upload-profile-view-section>
+  <div class="card shadow-sm">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-semibold" data-upload-profile-view-title>Upload & Grading Profile</div>
+        <div class="small text-muted">Read-only profile configuration and workflow summary.</div>
+      </div>
+      <div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" type="button" data-upload-profile-view-edit>Edit</button>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-profile-view-close>Close</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+          <div class="small text-muted">Description</div>
+          <div data-upload-profile-view-description>-</div>
+        </div>
+        <div class="col-lg-4">
+          <div class="small text-muted">Status</div>
+          <span class="badge text-bg-secondary" data-upload-profile-view-status>Inactive</span>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6 col-xl-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted">Projects</div>
+            <div class="fw-semibold" data-upload-profile-view-projects>-</div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted">Uploaders</div>
+            <div class="fw-semibold" data-upload-profile-view-uploaders>0</div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted">Upload modes</div>
+            <div class="d-flex flex-wrap gap-1 mt-1" data-upload-profile-view-kinds></div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-muted">AI workflows</div>
+            <div class="fw-semibold" data-upload-profile-view-ai-workflows>0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-xl-6">
+          <div class="border rounded p-3 h-100">
+            <div class="fw-semibold mb-2">Clinical Upload Configuration</div>
+            <dl class="row small mb-0">
+              <dt class="col-sm-4">Targets</dt>
+              <dd class="col-sm-8" data-upload-profile-view-targets>-</dd>
+              <dt class="col-sm-4">Remedio default</dt>
+              <dd class="col-sm-8" data-upload-profile-view-remidio-defaults>-</dd>
+              <dt class="col-sm-4">Cameras</dt>
+              <dd class="col-sm-8" data-upload-profile-view-cameras>-</dd>
+              <dt class="col-sm-4">Sites</dt>
+              <dd class="col-sm-8" data-upload-profile-view-sites>-</dd>
+              <dt class="col-sm-4">Mydriatic</dt>
+              <dd class="col-sm-8" data-upload-profile-view-mydriatic>-</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="col-xl-6">
+          <div class="border rounded p-3 h-100">
+            <div class="fw-semibold mb-2">EncounterSet Configuration</div>
+            <div class="vstack gap-2" data-upload-profile-view-encounter-sets>
+              <div class="text-muted small">No EncounterSetTypes configured.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="upload-profile-editor-section" class="mt-4 d-none">
   <div class="card shadow-sm">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
-        <div class="fw-semibold" data-upload-profile-editor-title>Add/Edit Upload Profile</div>
+        <div class="fw-semibold" data-upload-profile-editor-title>Add/Edit Upload & Grading Profile</div>
         <div class="small text-muted">Choose upload modes first. Each mode then shows only the configuration it uses.</div>
       </div>
       <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-profile-editor-close>Close</button>
@@ -222,32 +304,70 @@
             <div>
               <h2 class="h6 mb-1">EncounterSet Configuration</h2>
               <div class="small text-muted">
-                EncounterSet uploads get grading schemes, asset rules, cameras/sites if needed, and metadata from the selected EncounterSetTypes.
+                EncounterSetTypes provide metadata and asset rules. This profile defines the encounter grading scheme and one or more image grading schemes for each selected type.
               </div>
             </div>
             <span class="badge text-bg-warning" data-upload-profile-est-status>Needs EncounterSetType</span>
           </div>
-          <label class="form-label">Allowed EncounterSetTypes <span class="text-danger" data-upload-profile-est-required>*</span></label>
+          <label class="form-label">Allowed EncounterSetTypes And Grading <span class="text-danger" data-upload-profile-est-required>*</span></label>
           <div class="row g-2">
             {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
-            <div class="col-md-6 col-xl-4" data-upload-profile-est-option>
+            <div class="col-12" data-upload-profile-est-option data-upload-profile-est-id="{{ encounter_set_type.id }}">
               <div class="border rounded p-2 h-100">
-                <div class="form-check mb-2">
-                  <input class="form-check-input" type="checkbox" name="encounter_set_type_ids" value="{{ encounter_set_type.id }}" id="encounter_set_type_{{ encounter_set_type.id }}">
-                  <label class="form-check-label fw-semibold" for="encounter_set_type_{{ encounter_set_type.id }}">{{ encounter_set_type.name }}</label>
-                </div>
-                <div class="small text-muted">
-                  <div>
-                    <span class="fw-semibold">Image:</span>
-                    {% for scheme in encounter_set_type.image_grading_schemes if scheme.active %}
-                      {{ scheme.disease.name }}{% if scheme.is_default %} default{% endif %}{% if not loop.last %}, {% endif %}
-                    {% else %}
-                      none
-                    {% endfor %}
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="encounter_set_type_ids"
+                           value="{{ encounter_set_type.id }}"
+                           id="encounter_set_type_{{ encounter_set_type.id }}"
+                           data-upload-profile-est-toggle>
+                    <label class="form-check-label fw-semibold" for="encounter_set_type_{{ encounter_set_type.id }}">{{ encounter_set_type.name }}</label>
+                    <div class="small text-muted">{{ encounter_set_type.code }}</div>
                   </div>
-                  <div>
-                    <span class="fw-semibold">Encounter:</span>
-                    {{ encounter_set_type.encounter_grading_scheme.name if encounter_set_type.encounter_grading_scheme else "none" }}
+                  <span class="badge text-bg-light border">{{ (encounter_set_type.metadata_schema_json.get('fields', []) if encounter_set_type.metadata_schema_json else [])|length }} metadata fields</span>
+                </div>
+
+                <div class="row g-2" data-upload-profile-est-config>
+                  <div class="col-lg-5">
+                    <label class="form-label small mb-1">Image grading schemes <span class="text-danger">*</span></label>
+                    <div class="border rounded p-2" style="max-height: 12rem; overflow: auto;">
+                      {% for disease in diseases if disease.grading_scope == "image" %}
+                      <div class="form-check mb-1">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
+                               value="{{ disease.id }}"
+                               id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
+                               data-upload-profile-est-image-scheme>
+                        <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
+                      </div>
+                      {% else %}
+                      <div class="text-muted small">No image-scoped grading schemes configured.</div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div class="col-lg-3">
+                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_default_image_scheme">Default image scheme <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm"
+                            id="encounter_set_type_{{ encounter_set_type.id }}_default_image_scheme"
+                            name="encounter_set_type_{{ encounter_set_type.id }}_default_image_grading_scheme_id"
+                            data-upload-profile-est-default-image-scheme>
+                      <option value="">Select image schemes first</option>
+                    </select>
+                    <div class="form-text">Used as the default when upload or verification does not choose a more specific image scheme.</div>
+                  </div>
+                  <div class="col-lg-4">
+                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme">Encounter grading scheme <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm"
+                            id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
+                            name="encounter_set_type_{{ encounter_set_type.id }}_encounter_grading_scheme_id"
+                            data-upload-profile-est-encounter-scheme>
+                      <option value="">Select encounter scheme</option>
+                      {% for disease in diseases if disease.grading_scope == "encounter" %}
+                      <option value="{{ disease.id }}">{{ disease.name }}</option>
+                      {% endfor %}
+                    </select>
                   </div>
                 </div>
               </div>

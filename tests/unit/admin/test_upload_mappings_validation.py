@@ -1,9 +1,9 @@
 from contextlib import contextmanager
 
-from encounter_set_types.models import EncounterSetType, EncounterSetTypeImageGradingScheme
+from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
-from upload_profiles.admin_service import ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
+from upload_profiles.admin_service import EncounterSetProfileInput, ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
 from upload_profiles.models import UploadProfile, UploadProfileArea, UploadProfileCamera, UploadProfileDisease, UploadProfileKind
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO
 
@@ -111,7 +111,7 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             ai_workflows=[],
-            encounter_set_type_ids=[],
+            encounter_set_configs=[],
         ),
     )
 
@@ -142,12 +142,8 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
     encounter_set_type = EncounterSetType(
         name="EST Profile Type",
         code="est_profile_type",
-        encounter_grading_scheme_id=encounter_scheme.id,
         metadata_schema_json={"fields": []},
         active=True,
-    )
-    encounter_set_type.image_grading_schemes.append(
-        EncounterSetTypeImageGradingScheme(disease_id=disease.id, is_default=True, display_order=1, active=True)
     )
     db_session.add(encounter_set_type)
     db_session.flush()
@@ -165,7 +161,14 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             ai_workflows=[],
-            encounter_set_type_ids=[encounter_set_type.id],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[disease.id],
+                    default_image_grading_scheme_id=disease.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                )
+            ],
         ),
     )
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, LabUnit, Project, ProjectInvestigator, User
+from models import AIModel, AIModelDisease, Disease, LabUnit, Project, ProjectInvestigator, User
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -21,6 +21,7 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO, manager_lab_unit_ids
@@ -56,6 +57,14 @@ class AIWorkflowInput:
 
 
 @dataclass(frozen=True)
+class EncounterSetProfileInput:
+    encounter_set_type_id: int
+    image_grading_scheme_ids: list[int]
+    default_image_grading_scheme_id: int | None
+    encounter_grading_scheme_id: int | None
+
+
+@dataclass(frozen=True)
 class UploadProfileInput:
     name: str
     disease_ids: list[int]
@@ -67,7 +76,7 @@ class UploadProfileInput:
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
     ai_workflows: list[AIWorkflowInput]
-    encounter_set_type_ids: list[int]
+    encounter_set_configs: list[EncounterSetProfileInput]
     task_prioritization_json: dict[str, Any] | None = None
     description: str | None = None
 
@@ -332,7 +341,22 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
         duplicate.areas = [UploadProfileArea(area_id=row.area_id) for row in source.areas]
         duplicate.upload_kinds = [UploadProfileKind(upload_kind=row.upload_kind) for row in source.upload_kinds]
         duplicate.encounter_set_types = [
-            UploadProfileEncounterSetType(encounter_set_type_id=row.encounter_set_type_id, active=row.active)
+            UploadProfileEncounterSetType(
+                encounter_set_type_id=row.encounter_set_type_id,
+                encounter_grading_scheme_id=row.encounter_grading_scheme_id,
+                default_image_grading_scheme_id=row.default_image_grading_scheme_id,
+                active=row.active,
+                image_grading_schemes=[
+                    UploadProfileEncounterSetTypeImageGradingScheme(
+                        disease_id=scheme.disease_id,
+                        is_default=scheme.is_default,
+                        display_order=scheme.display_order,
+                        active=scheme.active,
+                    )
+                    for scheme in row.image_grading_schemes
+                    if scheme.active
+                ],
+            )
             for row in source.encounter_set_types
             if row.active
         ]
@@ -389,22 +413,14 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         return "Select a default disease for Remidio ZIP ingestion."
     if UPLOAD_KIND_REMIDIO not in upload_kinds and default_ids:
         return "Default disease is only used for Remedio ZIP profiles."
-    encounter_set_type_ids = set(profile_input.encounter_set_type_ids)
-    if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not encounter_set_type_ids:
+    encounter_set_configs = _normalize_encounter_set_configs(profile_input.encounter_set_configs)
+    if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not encounter_set_configs:
         return "Select at least one EncounterSetType for encounter-set uploads."
-    if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_type_ids:
+    if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_configs:
         return "EncounterSetTypes are only used when encounter-set uploads are allowed."
-    if encounter_set_type_ids:
-        valid_encounter_set_types = (
-            db.execute(
-                select(EncounterSetType)
-                .where(EncounterSetType.id.in_(encounter_set_type_ids), EncounterSetType.active.is_(True))
-            )
-            .scalars()
-            .all()
-        )
-        if {row.id for row in valid_encounter_set_types} != encounter_set_type_ids:
-            return "EncounterSetTypes must be active."
+    encounter_set_error = _validate_encounter_set_configs(db, encounter_set_configs)
+    if encounter_set_error:
+        return encounter_set_error
     prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
     if not prioritization_result.success:
         return prioritization_result.message
@@ -436,8 +452,22 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     ]
     profile.upload_kinds = [UploadProfileKind(upload_kind=upload_kind) for upload_kind in upload_kinds]
     profile.encounter_set_types = [
-        UploadProfileEncounterSetType(encounter_set_type_id=encounter_set_type_id, active=True)
-        for encounter_set_type_id in sorted(encounter_set_type_ids)
+        UploadProfileEncounterSetType(
+            encounter_set_type_id=config.encounter_set_type_id,
+            encounter_grading_scheme_id=config.encounter_grading_scheme_id,
+            default_image_grading_scheme_id=config.default_image_grading_scheme_id,
+            active=True,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypeImageGradingScheme(
+                    disease_id=disease_id,
+                    is_default=disease_id == config.default_image_grading_scheme_id,
+                    display_order=index,
+                    active=True,
+                )
+                for index, disease_id in enumerate(config.image_grading_scheme_ids, start=1)
+            ],
+        )
+        for config in sorted(encounter_set_configs.values(), key=lambda item: item.encounter_set_type_id)
     ]
     profile.ai_workflows = [
         UploadProfileAIWorkflow(
@@ -448,6 +478,73 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         )
         for workflow in ai_workflows
     ]
+    return None
+
+
+def _normalize_encounter_set_configs(configs: list[EncounterSetProfileInput]) -> dict[int, EncounterSetProfileInput]:
+    normalized: dict[int, EncounterSetProfileInput] = {}
+    for config in configs:
+        if not config.encounter_set_type_id:
+            continue
+        image_scheme_ids = sorted(set(config.image_grading_scheme_ids))
+        default_image_scheme_id = config.default_image_grading_scheme_id
+        if len(image_scheme_ids) == 1:
+            default_image_scheme_id = image_scheme_ids[0]
+        normalized[config.encounter_set_type_id] = EncounterSetProfileInput(
+            encounter_set_type_id=config.encounter_set_type_id,
+            image_grading_scheme_ids=image_scheme_ids,
+            default_image_grading_scheme_id=default_image_scheme_id,
+            encounter_grading_scheme_id=config.encounter_grading_scheme_id,
+        )
+    return normalized
+
+
+def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileInput]) -> str | None:
+    if not configs:
+        return None
+    encounter_set_type_ids = set(configs)
+    valid_encounter_set_type_ids = set(
+        db.execute(
+            select(EncounterSetType.id).where(
+                EncounterSetType.id.in_(encounter_set_type_ids),
+                EncounterSetType.active.is_(True),
+            )
+        ).scalars().all()
+    )
+    if valid_encounter_set_type_ids != encounter_set_type_ids:
+        return "EncounterSetTypes must be active."
+
+    disease_ids: set[int] = set()
+    for config in configs.values():
+        if not config.image_grading_scheme_ids:
+            return "Select at least one image grading scheme for every selected EncounterSetType."
+        if not config.encounter_grading_scheme_id:
+            return "Select an encounter grading scheme for every selected EncounterSetType."
+        if not config.default_image_grading_scheme_id:
+            return "Select a default image grading scheme for every selected EncounterSetType."
+        if config.default_image_grading_scheme_id not in config.image_grading_scheme_ids:
+            return "Default image grading scheme must be one of the selected image grading schemes."
+        disease_ids.update(config.image_grading_scheme_ids)
+        disease_ids.add(config.encounter_grading_scheme_id)
+
+    diseases = {row.id: row for row in db.execute(select(Disease).where(Disease.id.in_(disease_ids))).scalars().all()}
+    if set(diseases) != disease_ids:
+        return "One or more grading schemes were not found."
+    image_scope_errors = sorted(
+        diseases[disease_id].name
+        for config in configs.values()
+        for disease_id in config.image_grading_scheme_ids
+        if diseases[disease_id].grading_scope != "image"
+    )
+    if image_scope_errors:
+        return "Image grading schemes must have image scope: " + ", ".join(image_scope_errors)
+    encounter_scope_errors = sorted(
+        diseases[config.encounter_grading_scheme_id].name
+        for config in configs.values()
+        if diseases[config.encounter_grading_scheme_id].grading_scope != "encounter"
+    )
+    if encounter_scope_errors:
+        return "Encounter grading schemes must have encounter scope: " + ", ".join(encounter_scope_errors)
     return None
 
 

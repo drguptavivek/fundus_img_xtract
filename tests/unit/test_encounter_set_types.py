@@ -1,4 +1,5 @@
 import pytest
+from contextlib import contextmanager
 from uuid import uuid4
 
 from encounter_set_types.service import (
@@ -51,6 +52,7 @@ def encounter_set_type_scope(db_session):
     return {
         "user": user,
         "project": project,
+        "lab_id": lab.id,
         "image_scheme": image_scheme,
         "encounter_scheme": encounter_scheme,
         "suffix": suffix,
@@ -123,16 +125,24 @@ def test_normalize_metadata_schema_rejects_duplicate_key_across_schema():
         )
 
 
-def test_create_encounter_set_type_scoped_to_manager_project(db_session, encounter_set_type_scope):
+def test_create_encounter_set_type_scoped_to_manager_project(db_session, encounter_set_type_scope, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(
+        "encounter_set_types.service.manager_lab_unit_ids",
+        lambda manager_user_id: {encounter_set_type_scope["lab_id"]},
+    )
+    monkeypatch.setattr("encounter_set_types.service.db_transaction_manager.transaction_scope", use_test_session)
+
     result = create_encounter_set_type(
         encounter_set_type_scope["user"].id,
         EncounterSetTypeInput(
             name="Fundus Quick Set",
             code=f"fundus_quick_{encounter_set_type_scope['suffix']}",
             description="Fast upload, verification later",
-            image_grading_scheme_ids=[encounter_set_type_scope["image_scheme"].id],
-            default_image_grading_scheme_id=encounter_set_type_scope["image_scheme"].id,
-            encounter_grading_scheme_id=encounter_set_type_scope["encounter_scheme"].id,
             metadata_schema_json=_valid_schema(),
         ),
     )
@@ -163,9 +173,6 @@ def test_encounter_set_type_api_create_and_get(client, db_session, encounter_set
             "project_id": encounter_set_type_scope["project"].id,
             "name": "Fundus API Set",
             "code": f"fundus_api_{encounter_set_type_scope['suffix']}",
-            "image_grading_scheme_ids": [encounter_set_type_scope["image_scheme"].id],
-            "default_image_grading_scheme_id": encounter_set_type_scope["image_scheme"].id,
-            "encounter_grading_scheme_id": encounter_set_type_scope["encounter_scheme"].id,
             "metadata_schema_json": _valid_schema(),
         },
     )
@@ -192,9 +199,6 @@ def test_encounter_set_type_api_rejects_invalid_schema(client, encounter_set_typ
             "project_id": encounter_set_type_scope["project"].id,
             "name": "Bad API Set",
             "code": f"bad_api_{encounter_set_type_scope['suffix']}",
-            "image_grading_scheme_ids": [encounter_set_type_scope["image_scheme"].id],
-            "default_image_grading_scheme_id": encounter_set_type_scope["image_scheme"].id,
-            "encounter_grading_scheme_id": encounter_set_type_scope["encounter_scheme"].id,
             "metadata_schema_json": {
                 "fields": [
                     {

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Upload Profiles{% endblock %}
+{% block title %}Upload & Grading Profiles{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
-      <h1 class="h3 mb-1">Upload Profiles</h1>
-      <p class="text-muted mb-0">Create, edit, duplicate, activate, and deactivate reusable upload profiles.</p>
+      <h1 class="h3 mb-1">Upload & Grading Profiles</h1>
+      <p class="text-muted mb-0">Create reusable profiles that define allowed upload modes and the grading workflows they create.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_projects_admin') }}">
@@ -28,7 +28,7 @@
   </div>
 
   <div class="alert alert-info">
-    Upload permission is granted only by active upload profiles assigned to a user in Manage Projects. Direct image, pregraded, and Remedio ZIP modes use profile-level target/camera/site settings; EncounterSet mode uses selected EncounterSetTypes for targets, assets, and metadata.
+    Upload permission is granted only by active profiles assigned to a user in Manage Projects. Direct image, pregraded, and Remedio ZIP modes use profile-level target/camera/site settings; EncounterSet mode uses EncounterSetTypes for metadata/assets and profile-level grading schemes for tasks.
   </div>
 
 {% include "admin/partials/project_dashboard_workspace.html" %}

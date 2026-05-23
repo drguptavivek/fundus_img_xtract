@@ -1,5 +1,7 @@
 (function () {
   const CLINICAL_KINDS = ['direct_image', 'pregraded', 'remidio'];
+  const PROFILE_MODE_PARAM = 'mode';
+  const PROFILE_ID_PARAM = 'profile_id';
 
   function kindInput(form, kind) {
     return form.querySelector('[name="upload_kinds"][value="' + kind + '"]');
@@ -25,6 +27,43 @@
     }
     badge.textContent = text;
     badge.className = 'badge ' + className;
+  }
+
+  function setUrlState(mode, profileId, replace) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete(PROFILE_MODE_PARAM);
+    url.searchParams.delete(PROFILE_ID_PARAM);
+    if (mode && mode !== 'list') {
+      url.searchParams.set(PROFILE_MODE_PARAM, mode);
+      if (profileId) {
+        url.searchParams.set(PROFILE_ID_PARAM, String(profileId));
+      }
+    }
+    if (url.href === window.location.href) {
+      return;
+    }
+    const state = { uploadProfileMode: mode || 'list', profileId: profileId || null };
+    if (replace) {
+      window.history.replaceState(state, '', url);
+    } else {
+      window.history.pushState(state, '', url);
+    }
+  }
+
+  function hideEditor() {
+    document.getElementById('upload-profile-editor-section')?.classList.add('d-none');
+  }
+
+  function hideView() {
+    document.getElementById('upload-profile-view-section')?.classList.add('d-none');
+  }
+
+  function closeProfilePanels(updateUrl) {
+    hideEditor();
+    hideView();
+    if (updateUrl !== false) {
+      setUrlState('list');
+    }
   }
 
   function syncDiseaseRow(row, form) {
@@ -106,7 +145,7 @@
       section.classList.toggle('d-none', !enabled);
     }
     form.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
-      const input = row.querySelector('input[type="checkbox"]');
+      const input = row.querySelector('[data-upload-profile-est-toggle]');
       if (!input) {
         return;
       }
@@ -114,6 +153,20 @@
       if (!enabled) {
         input.checked = false;
       }
+      const rowEnabled = enabled && input.checked;
+      row.classList.toggle('border-primary', rowEnabled);
+      row.classList.toggle('bg-primary-subtle', rowEnabled);
+      row.querySelectorAll('[data-upload-profile-est-config] input, [data-upload-profile-est-config] select').forEach(function (field) {
+        field.disabled = !rowEnabled;
+        if (!rowEnabled) {
+          if (field.type === 'checkbox' || field.type === 'radio') {
+            field.checked = false;
+          } else {
+            field.value = '';
+          }
+        }
+      });
+      syncEncounterSetDefaultImageScheme(row);
     });
   }
 
@@ -134,7 +187,49 @@
   }
 
   function encounterSetComplete(form) {
-    return checkedCount(form, '[name="encounter_set_type_ids"]') > 0;
+    const selectedRows = Array.from(form.querySelectorAll('[data-upload-profile-est-option]')).filter(function (row) {
+      const input = row.querySelector('[data-upload-profile-est-toggle]');
+      return Boolean(input && input.checked && !input.disabled);
+    });
+    if (selectedRows.length === 0) {
+      return false;
+    }
+    return selectedRows.every(function (row) {
+      return row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)').length > 0
+        && Boolean(row.querySelector('[data-upload-profile-est-default-image-scheme]')?.value)
+        && Boolean(row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value);
+    });
+  }
+
+  function syncEncounterSetDefaultImageScheme(row) {
+    const select = row.querySelector('[data-upload-profile-est-default-image-scheme]');
+    if (!select) {
+      return;
+    }
+    const previous = select.value || select.dataset.pendingValue || '';
+    const choices = Array.from(row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)')).map(function (input) {
+      const label = row.querySelector('label[for="' + input.id + '"]');
+      return { value: input.value, label: label ? label.textContent.trim() : input.value };
+    });
+    select.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = choices.length ? 'Select default image scheme' : 'Select image schemes first';
+    select.appendChild(placeholder);
+    choices.forEach(function (choice) {
+      const option = document.createElement('option');
+      option.value = choice.value;
+      option.textContent = choice.label;
+      select.appendChild(option);
+    });
+    if (choices.length === 1) {
+      select.value = choices[0].value;
+    } else if (choices.some(function (choice) { return choice.value === previous; })) {
+      select.value = previous;
+    } else {
+      select.value = '';
+    }
+    select.dataset.pendingValue = '';
   }
 
   function syncModeCards(form) {
@@ -250,6 +345,109 @@
     });
   }
 
+  function parseJson(value, fallback) {
+    try {
+      return value ? JSON.parse(value) : fallback;
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  function displayValue(values) {
+    const list = Array.isArray(values) ? values.filter(Boolean) : [];
+    return list.length ? list.join(', ') : '-';
+  }
+
+  function kindLabel(kind) {
+    const labels = {
+      direct_image: 'Direct image',
+      pregraded: 'Pregraded',
+      remedio: 'Remedio ZIP',
+      encounter_set: 'EncounterSet'
+    };
+    return labels[kind] || kind;
+  }
+
+  function setText(root, selector, value) {
+    const element = root.querySelector(selector);
+    if (element) {
+      element.textContent = value || '-';
+    }
+  }
+
+  function renderKindBadges(container, kinds) {
+    if (!container) {
+      return;
+    }
+    container.innerHTML = '';
+    const list = Array.isArray(kinds) ? kinds : [];
+    if (!list.length) {
+      const empty = document.createElement('span');
+      empty.className = 'text-muted small';
+      empty.textContent = '-';
+      container.appendChild(empty);
+      return;
+    }
+    list.forEach(function (kind) {
+      const badge = document.createElement('span');
+      badge.className = 'badge text-bg-light border';
+      badge.textContent = kindLabel(kind);
+      container.appendChild(badge);
+    });
+  }
+
+  function renderEncounterSetView(container, configs) {
+    if (!container) {
+      return;
+    }
+    container.innerHTML = '';
+    const list = Array.isArray(configs) ? configs : [];
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-muted small';
+      empty.textContent = 'No EncounterSetTypes configured.';
+      container.appendChild(empty);
+      return;
+    }
+    list.forEach(function (config) {
+      const card = document.createElement('div');
+      card.className = 'border rounded p-2 bg-light-subtle';
+      const title = document.createElement('div');
+      title.className = 'fw-semibold';
+      title.textContent = config.encounter_set_type_name || ('EncounterSetType #' + config.encounter_set_type_id);
+      const details = document.createElement('div');
+      details.className = 'small text-muted mt-1';
+      details.textContent = 'Image: ' + displayValue(config.image_grading_scheme_names)
+        + ' · Default: ' + (config.default_image_grading_scheme_name || '-')
+        + ' · Encounter: ' + (config.encounter_grading_scheme_name || '-');
+      card.appendChild(title);
+      card.appendChild(details);
+      container.appendChild(card);
+    });
+  }
+
+  function applyEncounterSetConfigs(form, configs) {
+    configs.forEach(function (config) {
+      const estId = String(config.encounter_set_type_id || '');
+      if (!estId) {
+        return;
+      }
+      const row = form.querySelector('[data-upload-profile-est-option][data-upload-profile-est-id="' + estId + '"]');
+      if (!row) {
+        return;
+      }
+      setCheckedValues(form, 'encounter_set_type_' + estId + '_image_grading_scheme_ids', (config.image_grading_scheme_ids || []).map(String));
+      const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
+      if (encounterSelect) {
+        encounterSelect.value = config.encounter_grading_scheme_id ? String(config.encounter_grading_scheme_id) : '';
+      }
+      const defaultSelect = row.querySelector('[data-upload-profile-est-default-image-scheme]');
+      if (defaultSelect) {
+        defaultSelect.dataset.pendingValue = config.default_image_grading_scheme_id ? String(config.default_image_grading_scheme_id) : '';
+      }
+    });
+  }
+
   function resetEditorForm(form) {
     form.reset();
     form.dataset.uploadProfileMydriaticTouched = '';
@@ -267,19 +465,60 @@
     }
   }
 
-  function openEditor(button) {
+  function openView(button, options) {
+    const section = document.getElementById('upload-profile-view-section');
+    if (!section) {
+      return;
+    }
+    const summary = parseJson(button.dataset.profileSummary, {});
+    hideEditor();
+    setText(section, '[data-upload-profile-view-title]', summary.name || 'Upload & Grading Profile');
+    setText(section, '[data-upload-profile-view-description]', summary.description || 'No description configured.');
+    setText(section, '[data-upload-profile-view-projects]', displayValue(summary.projects));
+    setText(section, '[data-upload-profile-view-uploaders]', String(summary.uploaders || 0));
+    setText(section, '[data-upload-profile-view-ai-workflows]', String(summary.ai_workflow_count || 0));
+    setText(section, '[data-upload-profile-view-targets]', displayValue(summary.clinical_targets));
+    setText(section, '[data-upload-profile-view-remidio-defaults]', displayValue(summary.remidio_defaults));
+    setText(section, '[data-upload-profile-view-cameras]', displayValue(summary.cameras));
+    setText(section, '[data-upload-profile-view-sites]', displayValue(summary.sites));
+    const mydriatic = [
+      summary.allow_mydriatic ? 'Mydriatic allowed' : null,
+      summary.allow_non_mydriatic ? 'Non-mydriatic allowed' : null,
+      summary.default_is_mydriatic ? 'Default: mydriatic' : 'Default: non-mydriatic'
+    ].filter(Boolean);
+    setText(section, '[data-upload-profile-view-mydriatic]', displayValue(mydriatic));
+    setBadge(
+      section.querySelector('[data-upload-profile-view-status]'),
+      summary.active ? 'Active' : 'Inactive',
+      summary.active ? 'text-bg-success' : 'text-bg-secondary'
+    );
+    renderKindBadges(section.querySelector('[data-upload-profile-view-kinds]'), summary.upload_kinds);
+    renderEncounterSetView(section.querySelector('[data-upload-profile-view-encounter-sets]'), summary.encounter_set_configs);
+    const editButton = section.querySelector('[data-upload-profile-view-edit]');
+    if (editButton) {
+      editButton.dataset.profileId = String(summary.id || button.dataset.profileId || '');
+    }
+    section.classList.remove('d-none');
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!options || options.updateUrl !== false) {
+      setUrlState('view', summary.id || button.dataset.profileId);
+    }
+  }
+
+  function openEditor(button, options) {
     const section = document.getElementById('upload-profile-editor-section');
     const form = section?.querySelector('[data-upload-profile-editor]');
     if (!section || !form) {
       return;
     }
     const isEdit = button.matches('[data-upload-profile-edit]');
+    hideView();
     resetEditorForm(form);
     form.action = isEdit ? button.dataset.action : form.dataset.createAction;
     form.setAttribute('hx-post', form.action);
     const title = section.querySelector('[data-upload-profile-editor-title]');
     if (title) {
-      title.textContent = isEdit ? 'Edit Upload Profile' : 'Add Upload Profile';
+      title.textContent = isEdit ? 'Edit Upload & Grading Profile' : 'Add Upload & Grading Profile';
     }
     const submitLabel = section.querySelector('[data-upload-profile-submit-label]');
     if (submitLabel) {
@@ -295,6 +534,7 @@
       setCheckedValues(form, 'upload_kinds', splitIds(button.dataset.uploadKinds));
       setCheckedValues(form, 'encounter_set_type_ids', splitIds(button.dataset.encounterSetTypeIds));
       setCheckedValues(form, 'ai_workflows', splitIds(button.dataset.aiWorkflows));
+      applyEncounterSetConfigs(form, parseJson(button.dataset.encounterSetConfigs, []));
       form.querySelector('[name="allow_mydriatic"]').checked = button.dataset.allowMydriatic === '1';
       form.querySelector('[name="allow_non_mydriatic"]').checked = button.dataset.allowNonMydriatic === '1';
       form.querySelector('[name="default_is_mydriatic"]').checked = button.dataset.defaultIsMydriatic === '1';
@@ -307,6 +547,9 @@
     }
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     form.querySelector('[name="name"]')?.focus({ preventScroll: true });
+    if (!options || options.updateUrl !== false) {
+      setUrlState(isEdit ? 'edit' : 'new', isEdit ? button.dataset.profileId : null);
+    }
   }
 
   function syncProjectProfileLabRows(select) {
@@ -358,26 +601,101 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    initEditors(document);
-    initProjectProfileLabFilters(document);
-    document.querySelectorAll('[data-upload-profile-add], [data-upload-profile-edit]').forEach(function (button) {
+  function profileButton(selector, profileId) {
+    if (!profileId) {
+      return null;
+    }
+    return document.querySelector(selector + '[data-profile-id="' + CSS.escape(String(profileId)) + '"]');
+  }
+
+  function applyUrlState(replaceLegacy) {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get(PROFILE_MODE_PARAM);
+    const profileId = params.get(PROFILE_ID_PARAM);
+    if (mode === 'new') {
+      const addButton = document.querySelector('[data-upload-profile-add]');
+      if (addButton) {
+        openEditor(addButton, { updateUrl: false });
+        if (replaceLegacy) {
+          setUrlState('new', null, true);
+        }
+      }
+      return;
+    }
+    if (mode === 'edit') {
+      const editButton = profileButton('[data-upload-profile-edit]', profileId);
+      if (editButton) {
+        openEditor(editButton, { updateUrl: false });
+        if (replaceLegacy) {
+          setUrlState('edit', profileId, true);
+        }
+      }
+      return;
+    }
+    if (mode === 'view' || (!mode && profileId)) {
+      const viewButton = profileButton('[data-upload-profile-view]', profileId);
+      if (viewButton) {
+        openView(viewButton, { updateUrl: false });
+        if (replaceLegacy) {
+          setUrlState('view', profileId, true);
+        }
+      }
+      return;
+    }
+    closeProfilePanels(false);
+  }
+
+  function bindProfileNavigation(root) {
+    root.querySelectorAll('[data-upload-profile-add], [data-upload-profile-edit]').forEach(function (button) {
+      if (button.dataset.uploadProfileNavBound) {
+        return;
+      }
       button.addEventListener('click', function () {
         openEditor(button);
       });
+      button.dataset.uploadProfileNavBound = 'true';
     });
-    const profileId = new URLSearchParams(window.location.search).get('profile_id');
-    if (profileId) {
-      const profileButton = document.querySelector('[data-upload-profile-edit][data-profile-id="' + CSS.escape(profileId) + '"]');
-      if (profileButton) {
-        openEditor(profileButton);
+    root.querySelectorAll('[data-upload-profile-view]').forEach(function (button) {
+      if (button.dataset.uploadProfileNavBound) {
+        return;
       }
-    }
-    document.querySelectorAll('[data-upload-profile-editor-close]').forEach(function (button) {
       button.addEventListener('click', function () {
-        button.closest('#upload-profile-editor-section')?.classList.add('d-none');
+        openView(button);
       });
+      button.dataset.uploadProfileNavBound = 'true';
     });
+    root.querySelectorAll('[data-upload-profile-editor-close], [data-upload-profile-view-close]').forEach(function (button) {
+      if (button.dataset.uploadProfileCloseBound) {
+        return;
+      }
+      button.addEventListener('click', function () {
+        closeProfilePanels(true);
+      });
+      button.dataset.uploadProfileCloseBound = 'true';
+    });
+    root.querySelectorAll('[data-upload-profile-view-edit]').forEach(function (button) {
+      if (button.dataset.uploadProfileViewEditBound) {
+        return;
+      }
+      button.addEventListener('click', function () {
+        const editButton = profileButton('[data-upload-profile-edit]', button.dataset.profileId);
+        if (editButton) {
+          openEditor(editButton);
+        }
+      });
+      button.dataset.uploadProfileViewEditBound = 'true';
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    initEditors(document);
+    initProjectProfileLabFilters(document);
+    bindProfileNavigation(document);
+    applyUrlState(true);
+  });
+
+  window.addEventListener('popstate', function () {
+    applyUrlState(false);
   });
 
   document.body.addEventListener('input', function (event) {
@@ -389,6 +707,15 @@
 
   document.body.addEventListener('htmx:afterSwap', function (event) {
     initProjectProfileLabFilters(event.detail.target || document);
+    bindProfileNavigation(event.detail.target || document);
+    applyUrlState(false);
+  });
+
+  document.body.addEventListener('json-api:success', function (event) {
+    if (event.target.closest('[data-upload-profile-editor]')) {
+      setUrlState('list', null, true);
+      closeProfilePanels(false);
+    }
   });
 
   document.body.addEventListener('htmx:beforeRequest', function (event) {

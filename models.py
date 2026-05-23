@@ -2769,10 +2769,10 @@ from upload_profiles.models import (  # noqa: E402,F401
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
     PatientEncounterTargetDisease,
 )
 from encounter_set_types.models import EncounterSetType  # noqa: E402,F401
-from encounter_set_types.models import EncounterSetTypeImageGradingScheme  # noqa: E402,F401
 from upload_metadata.models import UploadMetadataFieldDefinition  # noqa: E402,F401
 from encounter_sets.models import EncounterSetAttachment  # noqa: E402,F401

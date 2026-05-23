@@ -81,7 +81,7 @@
           <div class="list-group list-group-flush">
             {% for profile in grading_scheme.associated_upload_profiles %}
             <a class="list-group-item list-group-item-action px-0 py-1"
-               href="{{ url_for('admin.upload_profiles_admin', profile_id=profile.id) }}">
+               href="{{ url_for('admin.upload_profiles_admin', mode='view', profile_id=profile.id) }}">
               <span class="fw-semibold">{{ profile.name }}</span>
               <span class="text-muted small d-block">{{ profile.project_title }}{% if not profile.active %} · Inactive{% endif %}</span>
             </a>

@@ -23,6 +23,7 @@ SUPPORTED_FIELD_TYPES = {
     "date",
     "datetime",
     "boolean",
+    "json",
     "select",
     "phone",
     "email",
@@ -74,7 +75,7 @@ def create_field_definition(manager_user_id: int, dto: FieldDefinitionInput) -> 
     if not key_status.payload.get("available"):
         return MutationResult(
             False,
-            str(key_status.payload.get("message") or "Upload metadata field key already exists."),
+            "Upload metadata field key already exists.",
             key_status.status_code if not key_status.success else 400,
         )
     row = UploadMetadataFieldDefinition(
@@ -114,7 +115,7 @@ def update_field_definition(manager_user_id: int, field_id: int, dto: FieldDefin
     if not key_status.payload.get("available"):
         return MutationResult(
             False,
-            str(key_status.payload.get("message") or "Upload metadata field key already exists."),
+            "Upload metadata field key already exists.",
             key_status.status_code if not key_status.success else 400,
         )
     with db_transaction_manager.transaction_scope() as db:

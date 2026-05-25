@@ -86,6 +86,7 @@ class UploadProfileInput:
     encounter_set_configs: list[EncounterSetProfileInput]
     task_prioritization_json: dict[str, Any] | None = None
     description: str | None = None
+    allow_remidio_zip_encounter_set: bool = False
 
 
 @dataclass(frozen=True)
@@ -344,6 +345,7 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
             allow_non_mydriatic=source.allow_non_mydriatic,
             default_is_mydriatic=source.default_is_mydriatic,
             automated_remidio_populated=source.automated_remidio_populated,
+            allow_remidio_zip_encounter_set=source.allow_remidio_zip_encounter_set,
             active=True,
         )
         duplicate.diseases = [UploadProfileDisease(disease_id=row.disease_id, is_default=row.is_default) for row in source.diseases]
@@ -401,6 +403,10 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         return "Unsupported upload type selected."
     if profile_input.automated_remidio_populated and set(upload_kinds) != {UPLOAD_KIND_ENCOUNTER_SET}:
         return "Automated Remidio API profiles must allow only EncounterSet uploads."
+    if profile_input.allow_remidio_zip_encounter_set and UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds:
+        return "Remidio ZIP EncounterSet uploads require EncounterSet upload mode."
+    if profile_input.automated_remidio_populated and profile_input.allow_remidio_zip_encounter_set:
+        return "Automated Remidio API profiles cannot also allow manual Remidio ZIP uploads."
     disease_required_kinds = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO}
     clinical_upload_enabled = bool(set(upload_kinds).intersection(disease_required_kinds))
     if clinical_upload_enabled and not profile_input.disease_ids:
@@ -456,6 +462,11 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     profile.name = profile_input.name
     profile.description = profile_input.description
     profile.automated_remidio_populated = profile_input.automated_remidio_populated
+    profile.allow_remidio_zip_encounter_set = (
+        profile_input.allow_remidio_zip_encounter_set
+        if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not profile_input.automated_remidio_populated
+        else False
+    )
     profile.task_prioritization_json = prioritization_result.payload["task_prioritization_json"]
     profile.allow_mydriatic = profile_input.allow_mydriatic if clinical_upload_enabled else False
     profile.allow_non_mydriatic = profile_input.allow_non_mydriatic if clinical_upload_enabled else True

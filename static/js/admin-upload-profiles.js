@@ -21,6 +21,10 @@
     return Boolean(form.querySelector('[data-upload-profile-automated-remidio]')?.checked);
   }
 
+  function remidioZipEncounterSetInput(form) {
+    return form.querySelector('[data-upload-profile-remidio-zip-encounter-set]');
+  }
+
   function checkedCount(form, selector) {
     return form.querySelectorAll(selector + ':checked:not(:disabled)').length;
   }
@@ -144,6 +148,13 @@
 
   function syncAutomatedRemidioMode(form) {
     const automated = automatedRemidioEnabled(form);
+    const remidioZipEncounterSet = remidioZipEncounterSetInput(form);
+    if (remidioZipEncounterSet) {
+      remidioZipEncounterSet.disabled = automated || !isKindEnabled(form, 'encounter_set');
+      if (remidioZipEncounterSet.disabled) {
+        remidioZipEncounterSet.checked = false;
+      }
+    }
     form.querySelectorAll('[data-upload-profile-kind]').forEach(function (input) {
       if (!automated) {
         input.disabled = false;
@@ -499,6 +510,11 @@
     if (automatedRemidio) {
       automatedRemidio.checked = false;
     }
+    const remidioZipEncounterSet = remidioZipEncounterSetInput(form);
+    if (remidioZipEncounterSet) {
+      remidioZipEncounterSet.checked = false;
+      remidioZipEncounterSet.disabled = false;
+    }
     const allowNonMydriatic = form.querySelector('input[name="allow_non_mydriatic"]');
     if (allowNonMydriatic) {
       allowNonMydriatic.checked = true;
@@ -575,6 +591,10 @@
       const automatedRemidio = form.querySelector('[data-upload-profile-automated-remidio]');
       if (automatedRemidio) {
         automatedRemidio.checked = button.dataset.automatedRemidioPopulated === '1';
+      }
+      const remidioZipEncounterSet = remidioZipEncounterSetInput(form);
+      if (remidioZipEncounterSet) {
+        remidioZipEncounterSet.checked = button.dataset.allowRemidioZipEncounterSet === '1';
       }
       setCheckedValues(form, 'disease_ids', splitIds(button.dataset.diseaseIds));
       setCheckedValues(form, 'default_disease_ids', splitIds(button.dataset.defaultDiseaseIds));

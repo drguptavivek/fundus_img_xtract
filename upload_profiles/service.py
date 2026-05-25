@@ -76,6 +76,7 @@ class UploadProfileDTO:
     encounter_set_types: tuple[dict[str, Any], ...]
     task_prioritization_json: dict[str, Any]
     automated_remidio_populated: bool
+    allow_remidio_zip_encounter_set: bool
     allow_mydriatic: bool
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
@@ -315,6 +316,7 @@ def validate_encounter_set_upload_scope(
     project_id: int,
     lab_unit_id: int,
     disease_id: int | None = None,
+    require_remidio_zip_enabled: bool = False,
 ) -> UploadProfileDTO:
     """Validate encounter-set upload scope and return the target profile."""
     profiles = [
@@ -322,9 +324,16 @@ def validate_encounter_set_upload_scope(
         for profile in _candidate_profiles(db, user_id, project_id=project_id, lab_unit_id=lab_unit_id)
         if UPLOAD_KIND_ENCOUNTER_SET in profile.upload_kinds
     ]
+    if require_remidio_zip_enabled:
+        profiles = [profile for profile in profiles if profile.allow_remidio_zip_encounter_set]
     if disease_id is not None:
         profiles = [profile for profile in profiles if disease_id in encounter_set_grading_scheme_ids(profile)]
     if not profiles:
+        if require_remidio_zip_enabled:
+            raise UploadProfileError(
+                "Selected project and lab unit do not allow Remidio ZIP EncounterSet upload.",
+                code="profile_not_found",
+            )
         raise UploadProfileError("Selected project, lab unit, or grading scheme is not allowed for encounter-set upload.", code="profile_not_found")
     return profiles[0]
 
@@ -507,6 +516,7 @@ def _profile_to_dto(
         ),
         task_prioritization_json=profile.task_prioritization_json or {},
         automated_remidio_populated=profile.automated_remidio_populated,
+        allow_remidio_zip_encounter_set=profile.allow_remidio_zip_encounter_set,
         allow_mydriatic=profile.allow_mydriatic,
         allow_non_mydriatic=profile.allow_non_mydriatic,
         default_is_mydriatic=profile.default_is_mydriatic,
@@ -584,6 +594,7 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
         "encounter_set_types": list(profile.encounter_set_types),
         "task_prioritization_json": profile.task_prioritization_json,
         "automated_remidio_populated": profile.automated_remidio_populated,
+        "allow_remidio_zip_encounter_set": profile.allow_remidio_zip_encounter_set,
         "allow_mydriatic": profile.allow_mydriatic,
         "allow_non_mydriatic": profile.allow_non_mydriatic,
         "default_is_mydriatic": profile.default_is_mydriatic,

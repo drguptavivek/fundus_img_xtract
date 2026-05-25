@@ -8,10 +8,10 @@ The ZIP upload functionality allows authorized users to upload ZIP archives cont
 
 The upload form supports two Remidio ZIP processing modes:
 
-- **EncounterSet**: default mode for current Remidio ZIP downloads. The selected project/lab assignment must allow an EncounterSet UploadProfile. JPG/JPEG files become `EncounterSetImage` clinical task evidence and PDFs become `EncounterSetAttachment` supporting report documents with `creates_task=false`.
+- **EncounterSet**: default mode for current Remidio ZIP downloads. The selected project/lab assignment must allow an EncounterSet UploadProfile with **Allow Remidio ZIPs as EncounterSets** explicitly enabled. JPG/JPEG files become `EncounterSetImage` clinical task evidence and PDFs become `EncounterSetAttachment` supporting report documents with `creates_task=false`.
 - **Legacy Remidio**: the older ZIP flow that requires a ZIP-enabled camera and creates legacy `EncounterFile` / `EncounterFilePDF` rows.
 
-EncounterSet ZIPs use existing EncounterSetType, UploadProfile, and ProjectUploadProfile mappings. The ZIP processor does not create a new profile model.
+EncounterSet ZIPs use existing EncounterSetType, UploadProfile, and ProjectUploadProfile mappings. The ZIP processor does not create a new profile model, but it does require the profile-level Remidio ZIP EncounterSet flag so generic EncounterSet profiles are not silently reused for Remidio ZIP intake.
 
 ### EncounterSet ZIP Metadata Rules
 

@@ -133,11 +133,14 @@
     var ingestModeInput = form.querySelector('[name="ingest_mode"]:checked');
     var requiredKind = ingestModeInput && ingestModeInput.value === "legacy_remidio" ? "remidio" : "encounter_set";
     var modeProfiles = profiles.filter(function (profile) {
-      return !Array.isArray(profile.upload_kinds) || profile.upload_kinds.indexOf(requiredKind) !== -1;
+      if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
+      if (requiredKind === "encounter_set" && !profile.allow_remidio_zip_encounter_set) return false;
+      return true;
     });
 
     var matches = modeProfiles.filter(function (profile) {
       if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
+      if (requiredKind === "encounter_set" && !profile.allow_remidio_zip_encounter_set) return false;
       if (projectId && Number(profile.project_id) !== projectId) return false;
       if (labUnitId && Number(profile.lab_unit_id) !== labUnitId) return false;
       if (requiredKind === "remidio" && cameraId && Array.isArray(profile.camera_ids) && profile.camera_ids.indexOf(cameraId) === -1) return false;

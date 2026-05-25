@@ -273,6 +273,11 @@
                 </div>
               </form>
               {% else %}
+              {% if profile.allow_remidio_zip_encounter_set %}
+              <div class="alert alert-primary py-2 mt-2 mb-2 small">
+                Remidio ZIP EncounterSet upload is explicitly enabled for this profile.
+              </div>
+              {% endif %}
               <div class="table-responsive mt-2">
                 <table class="table table-sm align-middle mb-0">
                   <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>

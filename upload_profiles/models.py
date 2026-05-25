@@ -24,6 +24,7 @@ class UploadProfile(Base):
     allow_non_mydriatic: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     default_is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     automated_remidio_populated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    allow_remidio_zip_encounter_set: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     task_prioritization_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

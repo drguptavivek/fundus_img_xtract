@@ -95,6 +95,7 @@ Profile create/update fields:
 - `name` string, required
 - `description` string, optional
 - `automated_remidio_populated` checkbox-style boolean; when true, this profile is for Remidio API auto-populated EncounterSets only
+- `allow_remidio_zip_encounter_set` checkbox-style boolean; when true, manual Remidio PRISTINE/FOP ZIP uploads may use this EncounterSet profile. Requires `encounter_set` upload kind and cannot be combined with `automated_remidio_populated`.
 - `disease_ids` repeated integers, required only when one of `direct_image`, `pregraded`, or `remidio` is enabled
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
@@ -139,6 +140,7 @@ curl -X POST /api/upload-profiles \
   -F "upload_kinds=remidio" \
   -F "upload_kinds=direct_image" \
   -F "upload_kinds=encounter_set" \
+  -F "allow_remidio_zip_encounter_set=on" \
   -F "encounter_set_type_ids=9" \
   -F "encounter_set_type_9_image_grading_scheme_ids=8" \
   -F "encounter_set_type_9_image_grading_scheme_ids=11" \

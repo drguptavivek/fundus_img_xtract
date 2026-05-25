@@ -4,8 +4,22 @@ from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import EncounterSetProfileInput, ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
-from upload_profiles.models import UploadProfile, UploadProfileArea, UploadProfileCamera, UploadProfileDisease, UploadProfileKind
-from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO
+from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
+    UploadProfile,
+    UploadProfileArea,
+    UploadProfileCamera,
+    UploadProfileDisease,
+    UploadProfileKind,
+)
+from upload_profiles.service import (
+    UPLOAD_KIND_DIRECT_IMAGE,
+    UPLOAD_KIND_ENCOUNTER_SET,
+    UPLOAD_KIND_REMIDIO,
+    UploadProfileError,
+    validate_encounter_set_upload_scope,
+)
 
 
 def test_validate_mydriatic_flags_rejects_no_allowed_scope():
@@ -175,3 +189,164 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
     )
 
     assert result.success is True
+
+
+def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr("upload_profiles.service.get_db_session", use_test_session)
+
+    manager = User(username="remidio_zip_manager", full_name="Remidio ZIP Manager", password_hash="x", is_active=True)
+    uploader = User(username="remidio_zip_uploader", full_name="Remidio ZIP Uploader", password_hash="x", is_active=True)
+    hospital = Hospital(name="Remidio ZIP Hospital")
+    lab = LabUnit(name="Remidio ZIP Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    uploader.lab_units.append(lab)
+    project = Project(title="Remidio ZIP Project", code="REMZIP", active=True)
+    image_scheme = Disease(name="Remidio ZIP Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="Remidio ZIP Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Remidio ZIP EncounterSet",
+        code="remidio_zip_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Remidio ZIP EncounterSet profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            allow_remidio_zip_encounter_set=True,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="Remidio ZIP EncounterSet profile").one()
+    assert profile.allow_remidio_zip_encounter_set is True
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    resolved = validate_encounter_set_upload_scope(
+        db_session,
+        uploader.id,
+        project_id=project.id,
+        lab_unit_id=lab.id,
+        require_remidio_zip_enabled=True,
+    )
+
+    assert resolved.profile_id == profile.id
+
+
+def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr("upload_profiles.service.get_db_session", use_test_session)
+
+    manager = User(username="generic_est_manager", full_name="Generic EST Manager", password_hash="x", is_active=True)
+    uploader = User(username="generic_est_uploader", full_name="Generic EST Uploader", password_hash="x", is_active=True)
+    hospital = Hospital(name="Generic EST Hospital")
+    lab = LabUnit(name="Generic EST Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    uploader.lab_units.append(lab)
+    project = Project(title="Generic EST Project", code="GENEST", active=True)
+    image_scheme = Disease(name="Generic EST Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="Generic EST Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Generic EncounterSet",
+        code="generic_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Generic EncounterSet profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="Generic EncounterSet profile").one()
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    try:
+        validate_encounter_set_upload_scope(
+            db_session,
+            uploader.id,
+            project_id=project.id,
+            lab_unit_id=lab.id,
+            require_remidio_zip_enabled=True,
+        )
+    except UploadProfileError as exc:
+        assert exc.code == "profile_not_found"
+    else:
+        raise AssertionError("Generic EncounterSet profiles must not allow Remidio ZIP upload")

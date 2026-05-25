@@ -246,6 +246,7 @@
               'encounter_set_configs': row_encounter_set_configs,
               'ai_workflow_count': row_ai_workflows|length,
               'automated_remidio_populated': profile.automated_remidio_populated,
+              'allow_remidio_zip_encounter_set': profile.allow_remidio_zip_encounter_set,
               'allow_mydriatic': profile.allow_mydriatic,
               'allow_non_mydriatic': profile.allow_non_mydriatic,
               'default_is_mydriatic': profile.default_is_mydriatic
@@ -255,6 +256,9 @@
                 <div class="fw-semibold">{{ profile.name }}</div>
                 {% if profile.automated_remidio_populated %}
                 <span class="badge text-bg-info">Automated Remidio API</span>
+                {% endif %}
+                {% if profile.allow_remidio_zip_encounter_set %}
+                <span class="badge text-bg-primary">Remidio ZIP EncounterSet</span>
                 {% endif %}
               </td>
               <td class="small">
@@ -326,6 +330,7 @@
                     data-encounter-set-configs="{{ row_encounter_set_configs|tojson|forceescape }}"
                     data-ai-workflows="{{ row_ai_workflows|join(',') }}"
                     data-automated-remidio-populated="{{ '1' if profile.automated_remidio_populated else '0' }}"
+                    data-allow-remidio-zip-encounter-set="{{ '1' if profile.allow_remidio_zip_encounter_set else '0' }}"
                     data-allow-mydriatic="{{ '1' if profile.allow_mydriatic else '0' }}"
                     data-allow-non-mydriatic="{{ '1' if profile.allow_non_mydriatic else '0' }}"
                     data-default-is-mydriatic="{{ '1' if profile.default_is_mydriatic else '0' }}"

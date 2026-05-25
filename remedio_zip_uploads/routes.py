@@ -270,6 +270,7 @@ def upload_files():
                     current_user.id,
                     project_id=project_id,
                     lab_unit_id=lab_unit_id,
+                    require_remidio_zip_enabled=True,
                 )
             else:
                 upload_profile = validate_remedio_upload_scope(

@@ -83,6 +83,15 @@ def process_zip_coordinator_task(
         
         total_files = len(image_ids) + len(pdf_ids)
         logger.info(f"Ingested {total_files} files from {zip_path.name}")
+
+        if (upload_context or {}).get("ingest_mode") == "encounter_set":
+            db_set_item_state(job_token, zip_path.name, "ok", f"Created EncounterSet with {len(image_ids)} image(s) and {len(pdf_ids)} attachment(s)")
+            if db_any_item_error(job_token):
+                db_set_job_status(job_token, "error", error="One or more files failed")
+            else:
+                db_set_job_status(job_token, "done")
+            check_and_complete_job(job_token)
+            return
         
         if total_files == 0:
              db_set_job_status(job_token, "done")

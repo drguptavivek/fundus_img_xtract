@@ -4,6 +4,43 @@
 
 The ZIP upload functionality allows authorized users to upload ZIP archives containing retinal fundus images and associated PDF reports. These files are then processed in the background to extract images, perform OCR, and populate the database.
 
+## Remidio ZIP Ingest Modes
+
+The upload form supports two Remidio ZIP processing modes:
+
+- **EncounterSet**: default mode for current Remidio ZIP downloads. The selected project/lab assignment must allow an EncounterSet UploadProfile. JPG/JPEG files become `EncounterSetImage` clinical task evidence and PDFs become `EncounterSetAttachment` supporting report documents with `creates_task=false`.
+- **Legacy Remidio**: the older ZIP flow that requires a ZIP-enabled camera and creates legacy `EncounterFile` / `EncounterFilePDF` rows.
+
+EncounterSet ZIPs use existing EncounterSetType, UploadProfile, and ProjectUploadProfile mappings. The ZIP processor does not create a new profile model.
+
+### EncounterSet ZIP Metadata Rules
+
+The patient folder name inside the ZIP is the primary identity source and must follow:
+
+```text
+<patient_name>_<mrn>_<capture_date>
+```
+
+The parser stores:
+
+- `PatientEncounters.name` from all folder segments before the final two segments
+- `PatientEncounters.patient_id` from the second-last segment
+- `PatientEncounters.capture_date` and `capture_date_dt` from the last segment when parseable
+- `metadata_json.source_identity = "zip_folder_name"`
+
+Camera type is inferred from ZIP structure:
+
+- images under a `fop/` path segment -> `FOP`
+- images directly under the patient folder -> `PRISTINE`
+- both patterns -> `mixed` and `needs_review`
+- no recognized image pattern -> `unknown`
+
+PDFs are optional. When present, they are classified from filename/path hints as FOP DR, FOP glaucoma, PRISTINE, FOP generic, or unknown report attachments. Missing age/gender metadata does not block upload or verification.
+
+### EncounterSet Task Creation
+
+After EncounterSet verification, pending grading tasks are created from the encounter target diseases configured by the selected UploadProfile mapping. The clinical images remain the grading evidence. PDF attachments can inform metadata/report type, but PDFs never create grading tasks directly.
+
 ## Routes
 
 ### GET `/upload_files`

@@ -130,21 +130,28 @@
     var cameraId = numberValue('[name="camera_id"]', form);
     var diseaseId = numberValue('[name="disease_id"]', form);
     var areaId = numberValue('[name="area_id"]', form);
+    var ingestModeInput = form.querySelector('[name="ingest_mode"]:checked');
+    var requiredKind = ingestModeInput && ingestModeInput.value === "legacy_remidio" ? "remidio" : "encounter_set";
+    var modeProfiles = profiles.filter(function (profile) {
+      return !Array.isArray(profile.upload_kinds) || profile.upload_kinds.indexOf(requiredKind) !== -1;
+    });
 
-    var matches = profiles.filter(function (profile) {
+    var matches = modeProfiles.filter(function (profile) {
+      if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
       if (projectId && Number(profile.project_id) !== projectId) return false;
       if (labUnitId && Number(profile.lab_unit_id) !== labUnitId) return false;
-      if (cameraId && Array.isArray(profile.camera_ids) && profile.camera_ids.indexOf(cameraId) === -1) return false;
+      if (requiredKind === "remidio" && cameraId && Array.isArray(profile.camera_ids) && profile.camera_ids.indexOf(cameraId) === -1) return false;
       if (diseaseId && Array.isArray(profile.disease_ids) && profile.disease_ids.indexOf(diseaseId) === -1) return false;
       if (areaId && Array.isArray(profile.area_ids) && profile.area_ids.indexOf(areaId) === -1) return false;
       return true;
     });
 
-    var projectIds = scalarIdsFor(profiles, "project_id");
-    var labIds = scalarIdsFor(matches.length ? matches : profiles, "lab_unit_id");
-    var cameraIds = idsFor(matches.length ? matches : profiles, "camera_ids");
-    var diseaseIds = idsFor(matches.length ? matches : profiles, "disease_ids");
-    var areaIds = idsFor(matches.length ? matches : profiles, "area_ids");
+    var optionProfiles = matches.length ? matches : modeProfiles;
+    var projectIds = scalarIdsFor(modeProfiles, "project_id");
+    var labIds = scalarIdsFor(optionProfiles, "lab_unit_id");
+    var cameraIds = requiredKind === "remidio" ? idsFor(optionProfiles, "camera_ids") : new Set();
+    var diseaseIds = idsFor(optionProfiles, "disease_ids");
+    var areaIds = idsFor(optionProfiles, "area_ids");
 
     form.querySelectorAll('[name="project_id"]').forEach(function (input) {
       setRadioVisible(input, projectIds.has(Number(input.value)));
@@ -159,6 +166,11 @@
     form.querySelectorAll('select[name="camera_id"] option').forEach(function (option) {
       setOptionVisible(option, !option.value || cameraIds.has(Number(option.value)));
     });
+    form.querySelectorAll('select[name="camera_id"]').forEach(function (select) {
+      select.required = requiredKind === "remidio";
+      select.disabled = requiredKind !== "remidio";
+      if (requiredKind !== "remidio") select.value = "";
+    });
     form.querySelectorAll('[name="disease_id"]').forEach(function (input) {
       setRadioVisible(input, diseaseIds.has(Number(input.value)));
     });
@@ -166,9 +178,9 @@
       setRadioVisible(input, areaIds.has(Number(input.value)));
     });
 
-    updateMydriatic(form, matches.length ? matches : profiles);
+    updateMydriatic(form, optionProfiles);
     var submit = form.querySelector('[type="submit"]');
-    if (submit) submit.disabled = profiles.length === 0;
+    if (submit) submit.disabled = modeProfiles.length === 0;
   }
 
   function initForm(form) {

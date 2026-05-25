@@ -242,6 +242,16 @@ def get_user_upload_options_for_kind(db: OrmSession, user_id: int, upload_kind: 
     return _build_upload_options(db, profiles)
 
 
+def get_user_upload_options_for_kinds(db: OrmSession, user_id: int, upload_kinds: set[str]) -> UploadOptions:
+    """Return UI-ready upload options for profiles that allow any selected upload kind."""
+    profiles = [
+        profile
+        for profile in get_user_upload_profiles(db, user_id)
+        if profile.upload_kinds.intersection(upload_kinds)
+    ]
+    return _build_upload_options(db, profiles)
+
+
 def filter_upload_options(
     db: OrmSession,
     options: UploadOptions,

@@ -29,11 +29,21 @@
 
           {% if not upload_profiles %}
           <div class="alert alert-warning">
-            No Remedio ZIP upload profile is configured for your account. Ask an admin to assign an active profile with the Remedio upload type, project, lab unit, ZIP-enabled camera, and disease defaults.
+            No Remedio ZIP or EncounterSet upload profile is configured for your account. Ask an admin to assign an active profile with project and lab-unit access.
           </div>
           {% endif %}
 
           <fieldset {% if not upload_profiles %}disabled{% endif %}>
+
+          <div class="mb-3">
+            <label class="form-label">Ingest Mode <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2">
+              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_encounter_set" value="encounter_set" autocomplete="off" checked>
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="ingest_mode_encounter_set">EncounterSet</label>
+              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_legacy" value="legacy_remidio" autocomplete="off">
+              <label class="btn btn-outline-secondary btn-sm rounded-pill px-3" for="ingest_mode_legacy">Legacy Remidio</label>
+            </div>
+          </div>
 
           <div class="mb-3">
             <label class="form-label">Project <span class="text-danger">*</span></label>
@@ -72,7 +82,7 @@
 
           <div class="mb-3">
             <label for="camera_id" class="form-label">Camera <span class="text-danger">*</span></label>
-            <select class="form-select" id="camera_id" name="camera_id" required>
+            <select class="form-select" id="camera_id" name="camera_id">
               <option value="">Select ZIP-enabled camera</option>
               {% for camera in zip_cameras %}
               <option value="{{ camera.id }}">{{ camera.name }}</option>

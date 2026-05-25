@@ -24,6 +24,8 @@ from models import (
     PatientEncounters,
     EncounterFile,
     EncounterFilePDF,
+    EncounterSetImage,
+    EncounterSetAttachment,
     JobItem,
     Camera,
     Session,
@@ -34,6 +36,9 @@ from models import (
     PROCESSED_DIR,
     PROCESSING_ERROR_DIR,
 )
+from upload_profiles.models import PatientEncounterTargetDisease
+from auth.utils import utcnow
+from utils.image_processing import generate_thumbnail, get_thumbnail_filename, strip_exif_data
 from utils.log_sanitize import sanitize_log_value
 from uuid import uuid4
 
@@ -143,12 +148,15 @@ def _load_zip_upload_context(zip_path: Path, upload_context: dict | None = None)
             sidecar_context = json.load(mf)
         context = {**sidecar_context, **{key: value for key, value in context.items() if value is not None}}
 
-    required = ("lab_unit_id", "project_id", "camera_id", "default_disease_id")
+    ingest_mode = context.get("ingest_mode")
+    required = ("lab_unit_id", "project_id", "default_disease_id")
+    if ingest_mode != "encounter_set":
+        required = (*required, "camera_id")
     missing = [name for name in required if not context.get(name)]
     if missing:
         raise ValueError(f"ZIP upload metadata is missing required scope: {', '.join(missing)}")
 
-    normalized = {}
+    normalized = dict(context)
     for key in ("lab_unit_id", "project_id", "camera_id", "default_disease_id", "upload_profile_id"):
         value = context.get(key)
         normalized[key] = int(value) if value is not None else None
@@ -235,7 +243,12 @@ def _zip_intake_file_cleanup_status(session, zip_path: Path) -> tuple[bool, str,
     if encounter is None:
         return False, "missing_patient_encounter", zip_file
 
-    if not encounter.encounter_files and not encounter.encounter_file_pdfs:
+    if (
+        not encounter.encounter_files
+        and not encounter.encounter_file_pdfs
+        and not encounter.encounter_set_images
+        and not encounter.encounter_set_attachments
+    ):
         return False, "missing_extracted_encounter_file", zip_file
 
     active_job_item = (
@@ -342,6 +355,10 @@ def process_zip_file(zip_path: Path, session, upload_context: dict | None = None
         - "duplicate" for duplicate files
         - "error" for processing errors
     """
+    if (upload_context or {}).get("ingest_mode") == "encounter_set":
+        ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
+        return ([], "ok")
+
     def safe_move(src: Path, dst: Path, attempts: int = 5):
         # Small retry helper for Windows lock shenanigans
         import time
@@ -830,7 +847,10 @@ def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | N
         MaliciousZipError: If validation fails.
         Exception: For other errors.
     """
-    
+    if (upload_context or {}).get("ingest_mode") == "encounter_set":
+        summary = ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
+        return summary["encounter_set_image_ids"], summary["encounter_set_attachment_ids"]
+
     # 1. Validation & Setup
     if not zipfile.is_zipfile(zip_path):
         raise MaliciousZipError("Not a valid ZIP file")
@@ -1032,6 +1052,307 @@ def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | N
             )
             log_status(zip_path.name, "ERROR_MOVE_FAILED", str(exc))
         raise
+
+
+def ingest_remidio_zip_as_encounter_set(zip_path: Path, session: Session, upload_context: dict | None = None) -> dict:
+    """
+    Ingest a Remidio ZIP as an EncounterSet.
+
+    Current ZIP contracts:
+    - patient folder name is <patient_name>_<mrn>_<capture_date>
+    - FOP clinical images live under a fop/ path segment
+    - PRISTINE clinical images live directly under the patient folder
+    - PDFs are report/document attachments, never grading-task evidence
+    """
+    if not zipfile.is_zipfile(zip_path):
+        raise MaliciousZipError("Not a valid ZIP file")
+
+    daily_dirs = get_daily_dirs()
+    md5_hash = calculate_md5(zip_path)
+    existing = session.query(ZipFile).filter_by(md5_hash=md5_hash).first()
+    if existing:
+        dup_dir = daily_dup_dir()
+        try:
+            shutil.move(str(zip_path), str(dup_dir / zip_path.name))
+        except Exception:
+            pass
+        return {
+            "patient_encounter_id": None,
+            "encounter_set_image_ids": [],
+            "encounter_set_attachment_ids": [],
+            "status": "duplicate",
+        }
+
+    context = _load_zip_upload_context(zip_path, upload_context)
+    lab_unit_id = context["lab_unit_id"]
+    project_id = context["project_id"]
+    upload_profile_id = context.get("upload_profile_id")
+    target_disease_ids = [int(value) for value in context.get("target_disease_ids") or []]
+
+    image_ids: list[int] = []
+    attachment_ids: list[int] = []
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            members = _validated_remidio_zip_members(zf)
+            patient_dir = _patient_folder_from_members(members)
+            patient_name, patient_id, capture_date = _parse_patient_folder(patient_dir.name)
+            image_members = [info for info in members if Path(info.filename).suffix.lower() in {".jpg", ".jpeg"}]
+            pdf_members = [info for info in members if Path(info.filename).suffix.lower() == ".pdf"]
+            camera_type, camera_flags = _infer_camera_type(patient_dir, image_members)
+            pdf_types = [_classify_pdf_member(info, fallback_camera_type=camera_type) for info in pdf_members]
+
+            zip_file = ZipFile(zip_filename=clean_filename(zip_path.name), md5_hash=md5_hash)
+            session.add(zip_file)
+            encounter = PatientEncounters(
+                name=patient_name,
+                patient_id=patient_id,
+                capture_date=capture_date,
+                capture_date_dt=parse_capture_date(capture_date),
+                lab_unit_id=lab_unit_id,
+                project_id=project_id,
+                upload_profile_id=upload_profile_id,
+                disease_id=target_disease_ids[0] if len(target_disease_ids) == 1 else None,
+                is_set_based=True,
+                metadata_json={
+                    "source_kind": "remidio_zip",
+                    "source_identity": "zip_folder_name",
+                    "source_zip_filename": zip_path.name,
+                    "source_patient_folder": str(patient_dir),
+                    "camera_type": camera_type,
+                    "camera_inference": camera_flags,
+                    "report_types": sorted({item for item in pdf_types if item}),
+                    "age": None,
+                    "gender": None,
+                },
+            )
+            zip_file.patient_encounter = encounter
+            session.flush()
+
+            for disease_id in target_disease_ids:
+                session.add(
+                    PatientEncounterTargetDisease(
+                        patient_encounter_id=encounter.id,
+                        disease_id=disease_id,
+                        is_default=False,
+                    )
+                )
+
+            folder_rel = f"files/encounter_sets/{utcnow().strftime('%Y_%m_%d')}/{encounter.id}"
+            image_dir = BASE_DIR / folder_rel
+            image_dir.mkdir(parents=True, exist_ok=True)
+            for position, member_info in enumerate(image_members, start=1):
+                source_path = Path(member_info.filename)
+                ext = source_path.suffix.lower()
+                stored_filename = f"{uuid4()}{ext}"
+                target_path = image_dir / stored_filename
+                with zf.open(member_info) as source:
+                    content = source.read()
+                safe_content = strip_exif_data(content)
+                target_path.write_bytes(safe_content)
+                thumbnail_filename = _generate_encounter_set_zip_thumbnail(target_path, stored_filename)
+                image_camera_type = _camera_type_for_image(patient_dir, member_info)
+                image = EncounterSetImage(
+                    uuid=str(uuid4()),
+                    patient_encounter_id=encounter.id,
+                    spatial_position=position,
+                    original_filename=stored_filename,
+                    folder_rel=folder_rel,
+                    file_hash=hashlib.md5(safe_content).hexdigest(),
+                    asset_kind="clinical_image",
+                    creates_task=True,
+                    is_pii=False,
+                    visible_to_grader=True,
+                    project_id=project_id,
+                    camera_id=context.get("camera_id"),
+                    hospital_id=context.get("hospital_id"),
+                    thumbnail_filename=thumbnail_filename,
+                    metadata_json={
+                        "source_kind": "remidio_zip",
+                        "source_zip_filename": zip_path.name,
+                        "source_path": str(source_path),
+                        "source_folder": str(source_path.parent),
+                        "camera_type": image_camera_type,
+                    },
+                    created_at=utcnow(),
+                )
+                session.add(image)
+                session.flush()
+                image_ids.append(image.id)
+
+            attachment_dir_rel = f"{folder_rel}/attachments"
+            attachment_dir = BASE_DIR / attachment_dir_rel
+            attachment_dir.mkdir(parents=True, exist_ok=True)
+            for member_info, report_type in zip(pdf_members, pdf_types):
+                source_path = Path(member_info.filename)
+                stored_filename = f"{uuid4()}.pdf"
+                target_path = attachment_dir / stored_filename
+                with zf.open(member_info) as source:
+                    content = source.read()
+                target_path.write_bytes(content)
+                attachment = EncounterSetAttachment(
+                    patient_encounter_id=encounter.id,
+                    uuid=str(uuid4()),
+                    asset_kind="pdf",
+                    original_filename=source_path.name,
+                    stored_filename=stored_filename,
+                    folder_rel=attachment_dir_rel,
+                    mime_type="application/pdf",
+                    file_size_bytes=len(content),
+                    file_hash=hashlib.md5(content).hexdigest(),
+                    is_pii=True,
+                    visible_to_grader=False,
+                    creates_task=False,
+                    project_id=project_id,
+                    upload_profile_id=upload_profile_id,
+                    hospital_id=context.get("hospital_id"),
+                    metadata_json={
+                        "source_kind": "remidio_zip",
+                        "source_zip_filename": zip_path.name,
+                        "source_path": str(source_path),
+                        "report_type": report_type,
+                        "camera_type": camera_type,
+                    },
+                    created_at=utcnow(),
+                )
+                session.add(attachment)
+                session.flush()
+                attachment_ids.append(attachment.id)
+
+            if not image_ids:
+                raise ValueError("Remidio EncounterSet ZIP contains no clinical JPG/JPEG images.")
+
+            session.commit()
+            daily_dirs["processed"].mkdir(parents=True, exist_ok=True)
+            shutil.move(str(zip_path), str(daily_dirs["processed"] / zip_path.name))
+            try:
+                log_status(zip_path.name, "SUCCESS_ENCOUNTER_SET")
+            except OSError as exc:
+                logger.warning("Could not write ZIP EncounterSet ingest log for %s: %s", sanitize_log_value(zip_path.name), sanitize_log_value(exc))
+            return {
+                "patient_encounter_id": encounter.id,
+                "encounter_set_image_ids": image_ids,
+                "encounter_set_attachment_ids": attachment_ids,
+                "status": "ok",
+            }
+    except Exception:
+        session.rollback()
+        try:
+            daily_dirs["error"].mkdir(parents=True, exist_ok=True)
+            shutil.move(str(zip_path), str(daily_dirs["error"] / zip_path.name))
+        except Exception as exc:
+            logger.error(
+                "Failed to move errored EncounterSet ZIP %s: %s",
+                sanitize_log_value(zip_path.name),
+                sanitize_log_value(exc),
+                exc_info=True,
+            )
+        raise
+
+
+def _validated_remidio_zip_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    members: list[zipfile.ZipInfo] = []
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        inner_name = info.filename
+        if inner_name.startswith("__MACOSX/") or Path(inner_name).name.startswith("._"):
+            continue
+        path = Path(inner_name)
+        if inner_name.startswith("/") or any(part == ".." for part in path.parts):
+            raise MaliciousZipError(f"Path traversal detected: {inner_name}")
+        ext = path.suffix.lower()
+        if ext not in ALLOWED_EXTS:
+            raise MaliciousZipError(f"Disallowed file extension: {inner_name}")
+        detected = _sniff_member_type(zf, info)
+        if ext == ".pdf" and detected != "pdf":
+            raise MaliciousZipError(f"Type mismatch (expected PDF): {inner_name}")
+        if ext in {".jpg", ".jpeg"} and detected != "jpg":
+            raise MaliciousZipError(f"Type mismatch (expected JPG): {inner_name}")
+        members.append(info)
+    return members
+
+
+def _patient_folder_from_members(members: list[zipfile.ZipInfo]) -> Path:
+    for info in members:
+        parts = Path(info.filename).parts
+        for index, part in enumerate(parts[:-1]):
+            if len(part.split("_")) >= 3:
+                return Path(*parts[: index + 1])
+    raise ValueError("No directory matching the 'Name_ID_Date' format found.")
+
+
+def _parse_patient_folder(folder_name: str) -> tuple[str, str, str]:
+    parts = [part for part in folder_name.rstrip("/").split("_") if part]
+    if len(parts) < 3:
+        raise ValueError("Patient folder must match '<patient_name>_<mrn>_<capture_date>'.")
+    capture_date = parts[-1]
+    patient_id = parts[-2]
+    patient_name = " ".join(parts[:-2]).strip()
+    if not patient_name or not patient_id or not capture_date:
+        raise ValueError("Patient folder is missing patient name, MRN, or capture date.")
+    return patient_name, patient_id, capture_date
+
+
+def _infer_camera_type(patient_dir: Path, image_members: list[zipfile.ZipInfo]) -> tuple[str, dict]:
+    has_fop = False
+    has_direct = False
+    for info in image_members:
+        rel_parts = _relative_parts_under_patient(patient_dir, Path(info.filename))
+        if any(part.lower() == "fop" for part in rel_parts[:-1]):
+            has_fop = True
+        elif len(rel_parts) == 1:
+            has_direct = True
+    if has_fop and has_direct:
+        return "mixed", {"has_fop_folder_images": True, "has_direct_patient_folder_images": True, "needs_review": True}
+    if has_fop:
+        return "FOP", {"has_fop_folder_images": True, "has_direct_patient_folder_images": False}
+    if has_direct:
+        return "PRISTINE", {"has_fop_folder_images": False, "has_direct_patient_folder_images": True}
+    return "unknown", {"has_fop_folder_images": False, "has_direct_patient_folder_images": False, "needs_review": True}
+
+
+def _camera_type_for_image(patient_dir: Path, info: zipfile.ZipInfo) -> str:
+    rel_parts = _relative_parts_under_patient(patient_dir, Path(info.filename))
+    if any(part.lower() == "fop" for part in rel_parts[:-1]):
+        return "FOP"
+    if len(rel_parts) == 1:
+        return "PRISTINE"
+    return "unknown"
+
+
+def _relative_parts_under_patient(patient_dir: Path, source_path: Path) -> tuple[str, ...]:
+    parts = source_path.parts
+    patient_parts = patient_dir.parts
+    for index in range(0, len(parts) - len(patient_parts) + 1):
+        if parts[index : index + len(patient_parts)] == patient_parts:
+            return parts[index + len(patient_parts) :]
+    return parts
+
+
+def _classify_pdf_member(info: zipfile.ZipInfo, *, fallback_camera_type: str) -> str:
+    text = " ".join(Path(info.filename).parts).lower()
+    if "glaucoma" in text or "gma" in text:
+        return "fop_glaucoma_report"
+    if "diabetic" in text or "retinopathy" in text or re.search(r"(^|[^a-z0-9])dr([^a-z0-9]|$)", text):
+        return "fop_dr_report"
+    if "pristine" in text or fallback_camera_type == "PRISTINE":
+        return "pristine_report"
+    if fallback_camera_type == "FOP":
+        return "fop_report"
+    return "unknown_report"
+
+
+def _generate_encounter_set_zip_thumbnail(image_path: Path, filename: str) -> str | None:
+    try:
+        thumbnail_filename = get_thumbnail_filename(filename)
+        thumbnail_dir = image_path.parent / "thumbnails"
+        thumbnail_dir.mkdir(parents=True, exist_ok=True)
+        if generate_thumbnail(image_path, thumbnail_dir / thumbnail_filename):
+            return thumbnail_filename
+    except Exception as exc:
+        logger.info("EncounterSet ZIP thumbnail generation failed: %s", sanitize_log_value(exc))
+    return None
 
 
 # --- Main Execution ---

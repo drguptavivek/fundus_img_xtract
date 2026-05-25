@@ -1,7 +1,8 @@
 from flask import render_template, abort, current_app, flash, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from auth.roles import roles_required
-from models import PatientEncounters, EncounterSetImage, Disease
+from models import GradingTask, PatientEncounters, EncounterSetImage, Disease
+from upload_profiles.models import PatientEncounterTargetDisease
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
@@ -215,11 +216,48 @@ def finalize_verification(uuid):
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = utcnow()
 
-        # TODO: Trigger GradingTask creation
-        # This will depend on the disease and lab unit
+        created_tasks = _create_verified_encounter_set_tasks(db, encounter)
 
-        flash(f"Encounter set {encounter.name} verified successfully.", "success")
+        task_message = f" Created {created_tasks} grading task(s)." if created_tasks else ""
+        flash(f"Encounter set {encounter.name} verified successfully.{task_message}", "success")
         return redirect(url_for("verify_encounter_set.index"))
+
+
+def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> int:
+    """Create pending grading tasks for verified EncounterSet target diseases."""
+    target_disease_ids = {
+        row[0]
+        for row in db.query(PatientEncounterTargetDisease.disease_id)
+        .filter(PatientEncounterTargetDisease.patient_encounter_id == encounter.id)
+        .all()
+    }
+    if not target_disease_ids and encounter.disease_id:
+        target_disease_ids = {encounter.disease_id}
+
+    created = 0
+    for disease_id in sorted(target_disease_ids):
+        existing = (
+            db.query(GradingTask.id)
+            .filter(
+                GradingTask.patient_encounter_id == encounter.id,
+                GradingTask.disease_id == disease_id,
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(
+            GradingTask(
+                patient_encounter_id=encounter.id,
+                disease_id=disease_id,
+                lab_unit_id=encounter.lab_unit_id,
+                state="pending",
+            )
+        )
+        created += 1
+    if created:
+        db.flush()
+    return created
 
 
 @bp.route("/edit/<uuid>", methods=["GET"])

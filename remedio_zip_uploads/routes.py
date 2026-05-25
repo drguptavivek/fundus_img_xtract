@@ -16,10 +16,13 @@ from . import bp
 from auth.roles import roles_required
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from upload_profiles.service import (
+    UPLOAD_KIND_ENCOUNTER_SET,
     UPLOAD_KIND_REMIDIO,
     UploadProfileError,
-    get_user_upload_options_for_kind,
+    encounter_set_grading_scheme_ids,
+    get_user_upload_options_for_kinds,
     validate_remedio_upload_scope,
+    validate_encounter_set_upload_scope,
 )
 from utils.jobUtils import get_recent_zip_uploads
 from utils.log_sanitize import sanitize_log_value
@@ -109,7 +112,11 @@ def upload_form():
     from db_transaction_manager import transaction_scope
 
     with transaction_scope() as db:
-        upload_options = get_user_upload_options_for_kind(db, current_user.id, UPLOAD_KIND_REMIDIO)
+        upload_options = get_user_upload_options_for_kinds(
+            db,
+            current_user.id,
+            {UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET},
+        )
         lab_units = (
             db.query(LabUnit)
             .options(selectinload(LabUnit.hospital))
@@ -208,18 +215,23 @@ def upload_files():
         per_file_max = _get_int_setting(db, "PER_FILE_MAX_BYTES", "PER_FILE_MAX_BYTES", per_file_default, min_value=1)
         max_files = _get_int_setting(db, "MAX_FILES_PER_UPLOAD", "MAX_FILES_PER_UPLOAD", max_files_default, min_value=1)
 
+    ingest_mode = (request.form.get("ingest_mode") or "encounter_set").strip()
+    if ingest_mode not in {"encounter_set", "legacy_remidio"}:
+        flash("Invalid ZIP ingest mode.", "danger")
+        return redirect(url_for("remedio_zip_uploads.upload_form"))
+
     # Validate hospital and lab unit selection
     try:
         hospital_id = int(request.form.get("hospital_id", 0))
         project_id = int(request.form.get("project_id", 0))
         lab_unit_id = int(request.form.get("lab_unit_id", 0))
-        camera_id = int(request.form.get("camera_id", 0))
+        camera_id = int(request.form.get("camera_id", 0) or 0)
     except (ValueError, TypeError):
         flash("Invalid hospital, project, lab unit, or camera selection.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
-    if hospital_id <= 0 or project_id <= 0 or lab_unit_id <= 0 or camera_id <= 0:
-        flash("Please select a hospital, project, lab unit, and ZIP-enabled camera.", "danger")
+    if hospital_id <= 0 or project_id <= 0 or lab_unit_id <= 0 or (ingest_mode == "legacy_remidio" and camera_id <= 0):
+        flash("Please select a hospital, project, lab unit, and required camera.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
     allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
@@ -233,15 +245,17 @@ def upload_files():
             LabUnit.id == lab_unit_id,
             LabUnit.hospital_id == hospital_id
         ).first()
-        camera = db.query(Camera).filter(
-            Camera.id == camera_id,
-            Camera.is_zip_upload_enabled.is_(True),
-        ).first()
+        camera = None
+        if camera_id:
+            camera = db.query(Camera).filter(
+                Camera.id == camera_id,
+                Camera.is_zip_upload_enabled.is_(True),
+            ).first()
         
         if not lab_unit:
             flash("Invalid hospital/lab unit combination.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
-        if not camera:
+        if ingest_mode == "legacy_remidio" and not camera:
             flash("Please select a ZIP-enabled camera.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
             
@@ -250,16 +264,25 @@ def upload_files():
             flash("You don't have access to the selected lab unit.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
         try:
-            upload_profile = validate_remedio_upload_scope(
-                db,
-                current_user.id,
-                project_id=project_id,
-                lab_unit_id=lab_unit_id,
-                camera_id=camera_id,
-            )
+            if ingest_mode == "encounter_set":
+                upload_profile = validate_encounter_set_upload_scope(
+                    db,
+                    current_user.id,
+                    project_id=project_id,
+                    lab_unit_id=lab_unit_id,
+                )
+            else:
+                upload_profile = validate_remedio_upload_scope(
+                    db,
+                    current_user.id,
+                    project_id=project_id,
+                    lab_unit_id=lab_unit_id,
+                    camera_id=camera_id,
+                )
         except UploadProfileError as exc:
             flash(exc.message, "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
+        target_disease_ids = sorted(encounter_set_grading_scheme_ids(upload_profile)) if ingest_mode == "encounter_set" else []
 
     files = request.files.getlist("files")
     if not files:
@@ -321,7 +344,9 @@ def upload_files():
                     "project_id": upload_profile.project_id,
                     "upload_profile_id": upload_profile.profile_id,
                     "default_disease_id": upload_profile.default_disease_id,
-                    "camera_id": camera_id,
+                    "camera_id": camera_id or None,
+                    "ingest_mode": ingest_mode,
+                    "target_disease_ids": target_disease_ids,
                 }
                 with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
                     json.dump(meta, mf, ensure_ascii=False)
@@ -353,7 +378,7 @@ def upload_files():
         lab_unit_id=lab_unit_id,
         project_id=upload_profile.project_id,
         upload_type="zip upload",
-        upload_kind=UPLOAD_KIND_REMIDIO,
+        upload_kind=UPLOAD_KIND_ENCOUNTER_SET if ingest_mode == "encounter_set" else UPLOAD_KIND_REMIDIO,
         upload_profile_id=upload_profile.profile_id,
     )
     upload_context = {
@@ -362,7 +387,9 @@ def upload_files():
         "project_id": upload_profile.project_id,
         "upload_profile_id": upload_profile.profile_id,
         "default_disease_id": upload_profile.default_disease_id,
-        "camera_id": camera_id,
+        "camera_id": camera_id or None,
+        "ingest_mode": ingest_mode,
+        "target_disease_ids": target_disease_ids,
     }
     queue_job(
         current_app,

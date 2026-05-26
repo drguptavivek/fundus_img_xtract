@@ -228,6 +228,7 @@ def pull_exams_by_date(db: Session, connection_id: int, payload: dict[str, Any])
         start_date=start_date,
         end_date=end_date,
         site_custom_identifier=site_custom_identifier,
+        include_file_paths=True,
     )
     data = require_list_data(body)
     exam_payloads = extract_exam_payloads(data, site_custom_identifier=site_custom_identifier, pull_source="getExamsByDate")

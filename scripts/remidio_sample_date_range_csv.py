@@ -54,6 +54,7 @@ def main() -> int:
         start_date=start_date,
         end_date=end_date,
         site_custom_identifier=args.site_custom_id,
+        include_file_paths=True,
     )
     exams = require_list_data(payload)
 

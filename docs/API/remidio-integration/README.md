@@ -209,7 +209,7 @@ Binding validation requires:
 }
 ```
 
-Calls Remidio `GET /api/gateway/getExamsByDate/{startDate}/{endDate}/{siteCustomIdentifier}`. Dates may be `YYYY-MM-DD` or `DD-MM-YYYY`; Remidio is called with `DD-MM-YYYY`.
+Calls Remidio `GET /api/gateway/getExamsByDate/{startDate}/{endDate}/{siteCustomIdentifier}?includeFilePaths=true`. Dates may be `YYYY-MM-DD` or `DD-MM-YYYY`; Remidio is called with `DD-MM-YYYY`. The `includeFilePaths=true` query parameter is required so Remidio returns one-hour signed HTTPS URLs in `path` and `thumbnailPath` fields for images and reports; without it, Remidio returns raw storage object keys that cannot be downloaded by this integration.
 
 Response:
 
@@ -312,7 +312,7 @@ Response:
 }
 ```
 
-The downloader only fetches absolute signed `http(s)` links from Remidio `path`/`downloadUrl` fields. If Remidio returns only a storage object key, the row is left staged with `download_error` instead of guessing an undocumented download endpoint.
+The downloader only fetches absolute signed `http(s)` links from Remidio `path`/`downloadUrl` fields. Date-range pulls request `includeFilePaths=true` before staging rows, and `getQueueItem` is expected to return signed URLs inline. If Remidio returns only a storage object key, the row is left staged with `download_error` instead of guessing an undocumented download endpoint.
 
 ## Validation
 

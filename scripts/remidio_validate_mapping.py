@@ -150,6 +150,7 @@ def main() -> int:
         start_date=start_date,
         end_date=end_date,
         site_custom_identifier=args.site_custom_id,
+        include_file_paths=True,
     )
     exams = [exam for exam in require_list_data(payload) if isinstance(exam, dict)]
     contract = load_contract()

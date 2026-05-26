@@ -119,6 +119,7 @@ Not-found output shape:
 `GET /api/gateway/getExamsByDate/{startDate}/{endDate}/{siteCustomId}`
 
 - Dates are `DD-MM-YYYY`.
+- Add `?includeFilePaths=true` when files must be downloaded. With this flag, Remidio populates `path` and `thumbnailPath` with one-hour signed `https://storage.googleapis.com/...` URLs for images, doctor reports, AI reports, and videos. Without it, those fields may be raw GCS object keys.
 - Numeric `siteId` failed.
 - Visible `siteName` failed.
 - This endpoint appears to need true Remidio dashboard `siteCustomIdentifier`.
@@ -126,7 +127,7 @@ Not-found output shape:
 - All three returned HTTP `200` with `data: []` for `30-04-2026`.
 - For `21-04-2026` to `30-04-2026`, `rpc_comoph_2` returned 6 exams; `rpc_comoph_1` and `rpc_comoph_4` returned empty arrays.
 - Non-empty exam records include `patientDetails`, `examDetails`, `images`, `report`, `creatingUser`, `orderingProvider`, and `reportingDoctor`.
-- Observed `rpc_comoph_2` records used `deviceType: ["PRISTINE"]`, `pristineImages`, and some records included report objects with `leftEyeDiagnosis`, `rightEyeDiagnosis`, `referRequired`, `imageIds`, and signed report `path`.
+- Observed `rpc_comoph_2` records used `deviceType: ["PRISTINE"]`, `pristineImages`, and some records included report objects with `leftEyeDiagnosis`, `rightEyeDiagnosis`, `referRequired`, `imageIds`, and report `path`.
 
 Non-empty output shape:
 

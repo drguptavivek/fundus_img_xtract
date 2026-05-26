@@ -48,14 +48,22 @@ class RemidioClient:
     def get_queue_item(self) -> dict[str, Any]:
         return self._request("GET", "/api/gateway/getQueueItem", headers=self._gateway_headers())
 
-    def get_exams_by_date(self, *, start_date: str, end_date: str, site_custom_identifier: str) -> dict[str, Any]:
+    def get_exams_by_date(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        site_custom_identifier: str,
+        include_file_paths: bool = False,
+    ) -> dict[str, Any]:
         path = (
             "/api/gateway/getExamsByDate/"
             f"{quote(start_date, safe='')}/"
             f"{quote(end_date, safe='')}/"
             f"{quote(site_custom_identifier, safe='')}"
         )
-        return self._request("GET", path, headers=self._gateway_headers(include_bearer=True))
+        params = {"includeFilePaths": "true"} if include_file_paths else None
+        return self._request("GET", path, headers=self._gateway_headers(include_bearer=True), params=params)
 
     def get_patient_with_last_exam(self, *, site_identifier: str, mrn: str) -> dict[str, Any]:
         path = (

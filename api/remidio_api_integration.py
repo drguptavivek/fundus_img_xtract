@@ -197,6 +197,73 @@ def upsert_remidio_api_binding():
         return _error_response(exc)
 
 
+@api_bp.route("/remidio/api-routing-profiles", methods=["GET"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def list_remidio_api_routing_profiles():
+    project_id = _optional_int_arg("project_id")
+    with transaction_scope() as db:
+        return jsonify({"success": True, "data": api_routing.list_routing_profiles(db, project_id=project_id)})
+
+
+@api_bp.route("/remidio/api-routing-profiles", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def upsert_remidio_api_routing_profile():
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            profile = api_routing.upsert_routing_profile(db, payload)
+            data = next(item for item in api_routing.list_routing_profiles(db) if item["id"] == profile.id)
+            return jsonify({"success": True, "data": data, "message": "Remidio API routing profile saved."}), 201
+    except IntegrityError:
+        return jsonify({"success": False, "error": "Remidio API routing profile conflicts with an existing profile."}), 409
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-routing-rules", methods=["GET"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def list_remidio_api_routing_rules():
+    project_id = _optional_int_arg("project_id")
+    with transaction_scope() as db:
+        profiles = api_routing.list_routing_profiles(db, project_id=project_id)
+        routes = [route for profile in profiles for route in profile["routes"]]
+        return jsonify({"success": True, "data": routes})
+
+
+@api_bp.route("/remidio/api-routing-rules", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def upsert_remidio_api_routing_rule():
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            binding = api_routing.upsert_routing_profile_route(db, payload, manager_user_id=current_user.id)
+            data = next(item for item in api_routing.list_api_bindings(db) if item["id"] == binding.id)
+            return jsonify({"success": True, "data": data, "message": "Remidio API routing rule saved."}), 201
+    except IntegrityError:
+        return jsonify({"success": False, "error": "Remidio API routing rule conflicts with an existing active date window."}), 409
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-routing-profiles/<int:routing_profile_id>/sync", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def sync_remidio_api_routing_profile(routing_profile_id: int):
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            data = service.create_routing_profile_sync_job(
+                db,
+                routing_profile_id=routing_profile_id,
+                payload=payload,
+                requested_by_user_id=current_user.id,
+                requested_by_username=current_user.username,
+            )
+        service.enqueue_routing_profile_sync_job(data["job_id"], user_id=current_user.id)
+        return jsonify({"success": True, "data": data, "message": "Remidio API sync job queued."}), 202
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
 @api_bp.route("/remidio/connections/<int:connection_id>/pull/exams-by-date", methods=["POST"])
 @roles_required(*REMIDIO_ROLES)
 def pull_remidio_exams_by_date(connection_id: int):

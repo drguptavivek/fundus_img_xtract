@@ -340,7 +340,10 @@
           <label class="form-label">Allowed EncounterSetTypes And Grading <span class="text-danger" data-upload-profile-est-required>*</span></label>
           <div class="row g-2">
             {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
-            <div class="col-12" data-upload-profile-est-option data-upload-profile-est-id="{{ encounter_set_type.id }}">
+            <div class="col-12"
+                 data-upload-profile-est-option
+                 data-upload-profile-est-id="{{ encounter_set_type.id }}"
+                 data-upload-profile-est-code="{{ encounter_set_type.code }}">
               <div class="border rounded p-2 h-100">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
                   <div class="form-check mb-0">

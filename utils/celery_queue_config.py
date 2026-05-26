@@ -19,6 +19,7 @@ CELERY_TASK_ROUTES = {
     "celery_tasks.tasks.wadhwani_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.maintenance_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.mv_tasks.*": {"queue": "maintenance"},
+    "celery_tasks.tasks.remidio_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.s3_tasks.*": {"queue": "s3_sync"},
     "celery_tasks.tasks.zip_upload_tasks.process_zip_coordinator_task": {"queue": "zip_ocr"},
     "celery_tasks.tasks.zip_upload_tasks.process_image_thumbnail_task": {"queue": "thumbnails"},

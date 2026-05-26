@@ -190,7 +190,7 @@
               {% endif %}
             {% endfor %}
             {% set active_uploader_count = namespace(value=0) %}
-            {% for mapping in profile.project_mappings if mapping.active %}
+            {% for mapping in profile.project_mappings if mapping.active and not profile.automated_remidio_populated %}
               {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
                 {% set active_uploader_count.value = active_uploader_count.value + 1 %}
               {% endfor %}

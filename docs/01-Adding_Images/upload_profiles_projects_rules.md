@@ -37,7 +37,7 @@ An upload profile is the reusable rule set that controls upload intake. It is a 
 
 Profiles are managed on `/admin/upload-profiles`.
 
-An Upload Profile can also be marked as an automated Remidio API-populated profile. That profile type is EncounterSet-only, must include the `remidio_api_standard` EncounterSetType, and is not assigned to human uploaders. Project routing is done by Remidio API source bindings on the enabled project-profile mapping.
+An Upload Profile can also be marked as an automated Remidio API-populated profile. Manual profiles may remain multi-mode, but automated Remidio API profiles are exclusive: EncounterSet-only, `remidio_api_standard` EncounterSetType required, no Remidio ZIP EncounterSet flag, and no human uploader assignments. Project routing is done from the Remidio API Routing dashboard, where a project-owned routing profile maps source routes to an automated project-profile mapping.
 
 ### Project Profile Users / Uploaders
 

@@ -57,7 +57,6 @@ def upsert_exam_payloads(db: Session, *, connection_id: int, payloads: list[Remi
                 remidio_exam_id=payload.remidio_exam_id,
             )
             db.add(exam)
-            db.flush()
         else:
             summary.exams_updated += 1
 

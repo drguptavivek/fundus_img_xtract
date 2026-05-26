@@ -172,6 +172,7 @@
 
   function syncEncounterSetTypes(form) {
     const enabled = isKindEnabled(form, 'encounter_set');
+    const automated = automatedRemidioEnabled(form);
     const section = form.querySelector('[data-upload-profile-encounter-set-types-section]');
     if (section) {
       section.classList.toggle('d-none', !enabled);
@@ -182,6 +183,10 @@
         return;
       }
       input.disabled = !enabled;
+      if (automated) {
+        input.checked = row.dataset.uploadProfileEstCode === 'remidio_api_standard';
+        input.disabled = row.dataset.uploadProfileEstCode !== 'remidio_api_standard';
+      }
       if (!enabled) {
         input.checked = false;
       }

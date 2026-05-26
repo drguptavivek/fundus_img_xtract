@@ -2,25 +2,33 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session, selectinload
 
 from auth.utils import utcnow
+from db_transaction_manager import get_db_session
 from models import (
     Camera,
     Disease,
+    Job,
+    JobItem,
     LabUnit,
     Project,
     RemidioConnection,
     RemidioRoutingRule,
     RemidioSite,
 )
+from upload_profiles.service import manager_lab_unit_ids
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
+from utils.log_sanitize import sanitize_log_value
 
 from .client import RemidioClient
 from .errors import RemidioConfigError
 from .ingest import ingest_staged_files
+from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiRoutingProfile
 from .persistence import upsert_exam_payloads, upsert_sites
 from .schemas import RemidioExamPayload, RemidioSecrets, UpsertSummary
 from .validation import (
@@ -35,6 +43,8 @@ from .validation import (
 
 DEFAULT_BASE_URL = "https://remidio-backend-india.appspot.com"
 DEFAULT_CLIENT_NAME = "PACS_GATEWAY"
+REMIDIO_API_SYNC_TASK_NAME = "celery_tasks.tasks.remidio_tasks.run_remidio_api_routing_profile_sync_task"
+REMIDIO_API_SYNC_ITEM_SOURCE = "remidio_api_routing_profile"
 
 
 def list_connections(db: Session, *, project_id: int | None = None) -> list[dict[str, Any]]:
@@ -270,6 +280,221 @@ def ingest_connection_files(db: Session, connection_id: int, payload: dict[str, 
     return ingest_staged_files(db, connection_id=connection.id, client=client, payload=payload)
 
 
+def create_routing_profile_sync_job(
+    db: Session,
+    *,
+    routing_profile_id: int,
+    payload: dict[str, Any],
+    requested_by_user_id: int | None = None,
+    requested_by_username: str | None = None,
+) -> dict[str, Any]:
+    routing_profile = _load_routing_profile_for_sync(db, routing_profile_id)
+    _require_sync_lab_scope(db, routing_profile, requested_by_user_id)
+    if not any(route.active and route.source_rule and route.source_rule.active for route in routing_profile.routes):
+        raise RemidioConfigError("No active Remidio API routes are available for this routing profile.")
+    start_date = normalize_date(_required_string(payload, "start_date"))
+    end_date = normalize_date(_required_string(payload, "end_date"))
+    limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
+    route_ids = _optional_int_list(payload.get("route_ids"))
+    dry_run = _optional_bool(payload.get("dry_run"), default=False)
+
+    job = Job(
+        token=f"remidio-api-sync-{uuid4()}",
+        status="queued",
+        upload_type="remidio api routing sync",
+        upload_kind="encounter_set",
+        project_id=routing_profile.project_id,
+        uploader_user_id=requested_by_user_id,
+        uploader_username=requested_by_username,
+    )
+    db.add(job)
+    db.flush()
+    item_payload = {
+        "routing_profile_id": routing_profile.id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "limit": limit,
+        "route_ids": route_ids,
+        "dry_run": dry_run,
+    }
+    item = JobItem(
+        job_id=job.id,
+        filename=f"Remidio API sync: {routing_profile.name}",
+        state="queued",
+        detail=json.dumps(item_payload),
+        uploader_user_id=requested_by_user_id,
+        uploader_username=requested_by_username,
+        source_type=REMIDIO_API_SYNC_ITEM_SOURCE,
+        source_id=routing_profile.id,
+    )
+    db.add(item)
+    db.flush()
+    return {"job_id": job.id, "job_token": job.token, "job_item_id": item.id, "routing_profile_id": routing_profile.id}
+
+
+def enqueue_routing_profile_sync_job(job_id: int, *, user_id: int | None = None, hospital_id: int | None = None) -> None:
+    from utils.celery_helpers import celery_enabled, enqueue_task
+
+    if celery_enabled():
+        enqueue_task(REMIDIO_API_SYNC_TASK_NAME, job_id, user_id=user_id, hospital_id=hospital_id)
+        return
+    run_routing_profile_sync_job(job_id)
+
+
+def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
+    with get_db_session() as db:
+        job = db.get(Job, job_id)
+        if job is None:
+            return {"job_id": job_id, "status": "missing"}
+        item = (
+            db.query(JobItem)
+            .filter(JobItem.job_id == job.id, JobItem.source_type == REMIDIO_API_SYNC_ITEM_SOURCE)
+            .order_by(JobItem.id.asc())
+            .first()
+        )
+        if item is None:
+            job.status = "failed"
+            job.error = "Remidio API sync job item not found."
+            job.updated_at = utcnow()
+            db.add(job)
+            db.commit()
+            return {"job_id": job_id, "status": "failed", "error": job.error}
+        try:
+            payload = json.loads(item.detail or "{}")
+        except json.JSONDecodeError as exc:
+            job.status = "failed"
+            item.state = "failed"
+            item.detail = f"Invalid Remidio API sync payload: {sanitize_log_value(exc)}"
+            item.finished_at = utcnow()
+            job.error = item.detail
+            job.updated_at = utcnow()
+            db.add_all([job, item])
+            db.commit()
+            return {"job_id": job_id, "status": "failed", "error": job.error}
+
+        job.status = "processing"
+        item.state = "processing"
+        item.started_at = utcnow()
+        job.updated_at = utcnow()
+        db.add_all([job, item])
+        db.commit()
+
+    try:
+        result = _run_routing_profile_sync_payload(payload)
+        with get_db_session() as db:
+            job = db.get(Job, job_id)
+            item = (
+                db.query(JobItem)
+                .filter(JobItem.job_id == job_id, JobItem.source_type == REMIDIO_API_SYNC_ITEM_SOURCE)
+                .order_by(JobItem.id.asc())
+                .first()
+            )
+            if job:
+                job.status = "completed"
+                job.error = None
+                job.updated_at = utcnow()
+                db.add(job)
+            if item:
+                item.state = "completed"
+                item.detail = json.dumps(result)
+                item.finished_at = utcnow()
+                db.add(item)
+            db.commit()
+        return result
+    except Exception as exc:  # noqa: BLE001
+        error = str(sanitize_log_value(exc))[:1000]
+        with get_db_session() as db:
+            job = db.get(Job, job_id)
+            item = (
+                db.query(JobItem)
+                .filter(JobItem.job_id == job_id, JobItem.source_type == REMIDIO_API_SYNC_ITEM_SOURCE)
+                .order_by(JobItem.id.asc())
+                .first()
+            )
+            if job:
+                job.status = "failed"
+                job.error = error
+                job.updated_at = utcnow()
+                db.add(job)
+            if item:
+                item.state = "failed"
+                item.detail = error
+                item.finished_at = utcnow()
+                db.add(item)
+            db.commit()
+        raise
+
+
+def _run_routing_profile_sync_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    routing_profile_id = _required_int(payload, "routing_profile_id")
+    start_date = _required_string(payload, "start_date")
+    end_date = _required_string(payload, "end_date")
+    limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
+    route_ids = set(_optional_int_list(payload.get("route_ids")) or [])
+    dry_run = _optional_bool(payload.get("dry_run"), default=False)
+
+    summaries: list[dict[str, Any]] = []
+    with get_db_session() as db:
+        routing_profile = _load_routing_profile_for_sync(db, routing_profile_id)
+        routes = [route for route in routing_profile.routes if route.active and route.source_rule and route.source_rule.active]
+        if route_ids:
+            routes = [route for route in routes if route.id in route_ids]
+        if not routes:
+            raise RemidioConfigError("No active Remidio API routes are available for this routing profile.")
+
+        grouped: dict[tuple[int, str], list[ProjectUploadProfileRemidioApiBinding]] = {}
+        for route in routes:
+            key = (route.source_rule.remidio_connection_id, route.source_rule.site_custom_identifier)
+            grouped.setdefault(key, []).append(route)
+
+        for (connection_id, site_custom_identifier), group_routes in grouped.items():
+            pull_result = pull_exams_by_date(
+                db,
+                connection_id,
+                {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "site_custom_identifier": site_custom_identifier,
+                    "dry_run": dry_run,
+                },
+            )
+            ingest_result = None
+            if not dry_run:
+                ingest_result = ingest_connection_files(
+                    db,
+                    connection_id,
+                    {
+                        "site_custom_identifier": site_custom_identifier,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "limit": limit,
+                        "pending_only": True,
+                        "include_images": True,
+                        "include_reports": True,
+                        "remidio_api_binding_ids": [route.id for route in group_routes],
+                    },
+                )
+            summaries.append(
+                {
+                    "connection_id": connection_id,
+                    "site_custom_identifier": site_custom_identifier,
+                    "route_ids": [route.id for route in group_routes],
+                    "pull": pull_result,
+                    "ingest": ingest_result,
+                }
+            )
+        db.commit()
+
+    return {
+        "routing_profile_id": routing_profile_id,
+        "dry_run": dry_run,
+        "start_date": start_date,
+        "end_date": end_date,
+        "limit": limit,
+        "groups": summaries,
+    }
+
+
 def _secrets(connection: RemidioConnection) -> RemidioSecrets:
     return RemidioSecrets(
         base_url=connection.base_url,
@@ -278,6 +503,34 @@ def _secrets(connection: RemidioConnection) -> RemidioSecrets:
         email=decrypt_password_with_salt(connection.email_encrypted, connection.secret_salt),
         password=decrypt_password_with_salt(connection.password_encrypted, connection.secret_salt),
     )
+
+
+def _load_routing_profile_for_sync(db: Session, routing_profile_id: int) -> RemidioApiRoutingProfile:
+    routing_profile = (
+        db.query(RemidioApiRoutingProfile)
+        .options(
+            selectinload(RemidioApiRoutingProfile.project),
+            selectinload(RemidioApiRoutingProfile.routes)
+            .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule),
+            selectinload(RemidioApiRoutingProfile.routes)
+            .selectinload(ProjectUploadProfileRemidioApiBinding.project_profile),
+            selectinload(RemidioApiRoutingProfile.routes).selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
+        )
+        .filter(RemidioApiRoutingProfile.id == routing_profile_id)
+        .one_or_none()
+    )
+    if routing_profile is None or not routing_profile.active:
+        raise RemidioConfigError("Remidio API routing profile was not found or inactive.")
+    return routing_profile
+
+
+def _require_sync_lab_scope(db: Session, routing_profile: RemidioApiRoutingProfile, user_id: int | None) -> None:
+    if user_id is None:
+        return
+    scoped_lab_ids = manager_lab_unit_ids(user_id)
+    route_lab_ids = {route.lab_unit_id for route in routing_profile.routes if route.active}
+    if route_lab_ids and not route_lab_ids.issubset(scoped_lab_ids):
+        raise RemidioConfigError("You cannot sync Remidio API routes outside your lab-unit scope.")
 
 
 def _dry_run_summary(payloads: list[RemidioExamPayload]) -> UpsertSummary:
@@ -374,6 +627,17 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         raise RemidioConfigError("Expected an integer identifier.")
+
+
+def _optional_int_list(value: Any) -> list[int] | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, list):
+        raise RemidioConfigError("Expected a list of integer identifiers.")
+    try:
+        return [int(item) for item in value]
+    except (TypeError, ValueError) as exc:
+        raise RemidioConfigError("Expected a list of integer identifiers.") from exc
 
 
 def _optional_bool(value: Any, *, default: bool) -> bool:

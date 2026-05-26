@@ -187,6 +187,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                             mapping.active
                             and mapping.profile
                             and mapping.profile.active
+                            and not mapping.profile.automated_remidio_populated
                             and assignment.active
                             and assignment.lab_unit_id in scoped_lab_ids
                         )

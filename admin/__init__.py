@@ -102,6 +102,8 @@ from .encounter_set_types import encounter_set_type_edit, encounter_set_type_new
 from .upload_metadata import upload_metadata_fields_admin, upload_metadata_fields_list
 from .remidio import (
     cleanup_stuck_remidio_uploads,
+    remidio_api_routing_dashboard,
+    remidio_api_routing_workspace,
     remidio_admin,
     remidio_workspace,
     stuck_remidio_uploads_status,
@@ -134,6 +136,18 @@ admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project
 admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
 admin_bp.add_url_rule("/remidio", view_func=remidio_admin, methods=["GET"], endpoint="remidio_admin")
 admin_bp.add_url_rule("/remidio/workspace", view_func=remidio_workspace, methods=["GET"], endpoint="remidio_workspace")
+admin_bp.add_url_rule(
+    "/remidio/api-routing-rules",
+    view_func=remidio_api_routing_dashboard,
+    methods=["GET"],
+    endpoint="remidio_api_routing_dashboard",
+)
+admin_bp.add_url_rule(
+    "/remidio/api-routing-rules/workspace",
+    view_func=remidio_api_routing_workspace,
+    methods=["GET"],
+    endpoint="remidio_api_routing_workspace",
+)
 admin_bp.add_url_rule(
     "/stuck-remidio-uploads/status",
     view_func=stuck_remidio_uploads_status,

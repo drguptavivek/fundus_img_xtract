@@ -8,11 +8,37 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import List
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from auth.utils import utcnow
 from models import Base
+
+
+class RemidioApiRoutingProfile(Base):
+    """Project-owned grouping for Remidio API source routes."""
+
+    __tablename__ = "remidio_api_routing_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project")
+    routes: Mapped[List["ProjectUploadProfileRemidioApiBinding"]] = relationship(
+        "ProjectUploadProfileRemidioApiBinding",
+        back_populates="routing_profile",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_remidio_api_routing_profile_project_name"),
+        Index("ix_remidio_api_routing_profiles_project_active", "project_id", "active"),
+    )
 
 
 class RemidioApiSourceRule(Base):
@@ -63,6 +89,10 @@ class ProjectUploadProfileRemidioApiBinding(Base):
     __tablename__ = "project_upload_profile_remidio_api_bindings"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    routing_profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("remidio_api_routing_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     project_upload_profile_id: Mapped[int] = mapped_column(
         ForeignKey("project_upload_profiles.id", ondelete="CASCADE"),
         nullable=False,
@@ -79,6 +109,7 @@ class ProjectUploadProfileRemidioApiBinding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
+    routing_profile: Mapped["RemidioApiRoutingProfile | None"] = relationship("RemidioApiRoutingProfile", back_populates="routes")
     project_profile: Mapped["ProjectUploadProfile"] = relationship("ProjectUploadProfile", back_populates="remidio_api_bindings")
     source_rule: Mapped[RemidioApiSourceRule] = relationship("RemidioApiSourceRule", back_populates="bindings")
     lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
@@ -90,6 +121,7 @@ class ProjectUploadProfileRemidioApiBinding(Base):
             name="ck_pup_remidio_api_binding_date_order",
         ),
         Index("ix_pup_remidio_api_binding_project_profile", "project_upload_profile_id"),
+        Index("ix_pup_remidio_api_binding_route_profile", "routing_profile_id"),
         Index("ix_pup_remidio_api_binding_source_rule", "remidio_api_source_rule_id"),
         Index("ix_pup_remidio_api_binding_active", "project_upload_profile_id", "active"),
         Index("ix_pup_remidio_api_binding_source_active", "remidio_api_source_rule_id", "active"),

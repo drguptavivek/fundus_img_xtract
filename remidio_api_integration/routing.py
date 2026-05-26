@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from auth.utils import utcnow
 from encounter_set_types.models import EncounterSetType
-from models import Camera, LabUnit, RemidioConnection, RemidioExam, RemidioSite
+from models import Camera, LabUnit, Project, RemidioConnection, RemidioExam, RemidioSite
 from upload_profiles.models import (
     ProjectUploadProfile,
     UploadProfile,
@@ -19,7 +19,7 @@ from upload_profiles.models import (
 from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET, manager_lab_unit_ids
 
 from .errors import RemidioConfigError
-from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
+from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiRoutingProfile, RemidioApiSourceRule
 from .validation import normalize_device_type
 
 
@@ -42,6 +42,96 @@ def list_api_source_rules(db: Session, *, connection_id: int | None = None) -> l
         query = query.filter(RemidioApiSourceRule.remidio_connection_id == connection_id)
     rows = query.order_by(RemidioApiSourceRule.active.desc(), RemidioApiSourceRule.remidio_connection_id, RemidioApiSourceRule.site_custom_identifier).all()
     return [_source_rule_summary(row) for row in rows]
+
+
+def list_routing_profiles(db: Session, *, project_id: int | None = None) -> list[dict[str, Any]]:
+    query = db.query(RemidioApiRoutingProfile).options(
+        selectinload(RemidioApiRoutingProfile.project),
+        selectinload(RemidioApiRoutingProfile.routes)
+        .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+        .selectinload(RemidioApiSourceRule.connection),
+        selectinload(RemidioApiRoutingProfile.routes)
+        .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+        .selectinload(RemidioApiSourceRule.site),
+        selectinload(RemidioApiRoutingProfile.routes)
+        .selectinload(ProjectUploadProfileRemidioApiBinding.project_profile)
+        .selectinload(ProjectUploadProfile.profile),
+        selectinload(RemidioApiRoutingProfile.routes)
+        .selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit)
+        .selectinload(LabUnit.hospital),
+        selectinload(RemidioApiRoutingProfile.routes).selectinload(ProjectUploadProfileRemidioApiBinding.camera),
+    )
+    if project_id is not None:
+        query = query.filter(RemidioApiRoutingProfile.project_id == project_id)
+    rows = query.order_by(RemidioApiRoutingProfile.active.desc(), RemidioApiRoutingProfile.name).all()
+    return [_routing_profile_summary(row) for row in rows]
+
+
+def upsert_routing_profile(db: Session, payload: dict[str, Any]) -> RemidioApiRoutingProfile:
+    profile_id = _optional_int(payload.get("id") or payload.get("routing_profile_id"))
+    project_id = _required_int(payload, "project_id")
+    project = db.get(Project, project_id)
+    if project is None:
+        raise RemidioConfigError("project_id does not exist.")
+    name = _required_string(payload, "name")
+    active = _optional_bool(payload.get("active"), default=True)
+
+    profile = db.get(RemidioApiRoutingProfile, profile_id) if profile_id else None
+    if profile_id and profile is None:
+        raise RemidioConfigError("Remidio API routing profile was not found.")
+    if profile is None:
+        profile = RemidioApiRoutingProfile(project_id=project_id, name=name, active=active)
+        db.add(profile)
+
+    profile.project_id = project_id
+    profile.name = name
+    profile.description = (payload.get("description") or "").strip() or None
+    profile.active = active
+    profile.updated_at = utcnow()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        raise RemidioConfigError("A Remidio API routing profile with this name already exists for the project.") from exc
+    return profile
+
+
+def upsert_routing_profile_route(
+    db: Session,
+    payload: dict[str, Any],
+    *,
+    manager_user_id: int | None = None,
+) -> ProjectUploadProfileRemidioApiBinding:
+    routing_profile_id = _required_int(payload, "routing_profile_id")
+    routing_profile = db.get(RemidioApiRoutingProfile, routing_profile_id)
+    if routing_profile is None or not routing_profile.active:
+        raise RemidioConfigError("Remidio API routing profile was not found or inactive.")
+
+    project_upload_profile_id = _required_int(payload, "project_upload_profile_id")
+    project_profile = _load_project_profile(db, project_upload_profile_id)
+    if project_profile.project_id != routing_profile.project_id:
+        raise RemidioConfigError("Route target upload profile must belong to the routing profile project.")
+    _validate_automated_project_profile(project_profile)
+
+    source_rule = upsert_api_source_rule(
+        db,
+        {
+            "id": payload.get("remidio_api_source_rule_id") or payload.get("source_rule_id"),
+            "remidio_connection_id": payload.get("remidio_connection_id"),
+            "remidio_site_id": payload.get("remidio_site_id"),
+            "site_custom_identifier": payload.get("site_custom_identifier"),
+            "remidio_device_type": payload.get("remidio_device_type"),
+            "active": True,
+        },
+    )
+
+    binding_payload = dict(payload)
+    binding_payload["project_upload_profile_id"] = project_profile.id
+    binding_payload["remidio_api_source_rule_id"] = source_rule.id
+    binding = upsert_api_binding(db, binding_payload, manager_user_id=manager_user_id)
+    binding.routing_profile_id = routing_profile.id
+    binding.updated_at = utcnow()
+    db.flush()
+    return binding
 
 
 def upsert_api_source_rule(db: Session, payload: dict[str, Any]) -> RemidioApiSourceRule:
@@ -122,6 +212,7 @@ def list_api_bindings(
     source_rule_id: int | None = None,
 ) -> list[dict[str, Any]]:
     query = db.query(ProjectUploadProfileRemidioApiBinding).options(
+        selectinload(ProjectUploadProfileRemidioApiBinding.routing_profile).selectinload(RemidioApiRoutingProfile.project),
         selectinload(ProjectUploadProfileRemidioApiBinding.source_rule).selectinload(RemidioApiSourceRule.connection),
         selectinload(ProjectUploadProfileRemidioApiBinding.source_rule).selectinload(RemidioApiSourceRule.site),
         selectinload(ProjectUploadProfileRemidioApiBinding.project_profile).selectinload(ProjectUploadProfile.project),
@@ -193,6 +284,15 @@ def upsert_api_binding(
 
     binding.project_upload_profile_id = project_upload_profile_id
     binding.remidio_api_source_rule_id = source_rule_id
+    if "routing_profile_id" in payload:
+        routing_profile_id = _optional_int(payload.get("routing_profile_id"))
+        if routing_profile_id is not None:
+            routing_profile = db.get(RemidioApiRoutingProfile, routing_profile_id)
+            if routing_profile is None:
+                raise RemidioConfigError("Remidio API routing profile was not found.")
+            if routing_profile.project_id != project_profile.project_id:
+                raise RemidioConfigError("Route target upload profile must belong to the routing profile project.")
+        binding.routing_profile_id = routing_profile_id
     binding.lab_unit_id = lab_unit_id
     binding.camera_id = camera_id
     binding.active_from_date = active_from_date
@@ -358,18 +458,53 @@ def _source_rule_summary(rule: RemidioApiSourceRule) -> dict[str, Any]:
     }
 
 
+def _routing_profile_summary(profile: RemidioApiRoutingProfile) -> dict[str, Any]:
+    project = profile.project
+    routes = sorted(
+        [_binding_summary(binding) for binding in profile.routes],
+        key=lambda item: (
+            not item["active"],
+            item.get("site_custom_identifier") or "",
+            item.get("remidio_device_type") or "",
+            item.get("active_from_date") or "",
+            item["id"] or 0,
+        ),
+    )
+    return {
+        "id": profile.id,
+        "project_id": profile.project_id,
+        "project_title": project.title if project else None,
+        "project_code": project.code if project else None,
+        "name": profile.name,
+        "description": profile.description,
+        "active": profile.active,
+        "routes": routes,
+        "created_at": _iso(profile.created_at),
+        "updated_at": _iso(profile.updated_at),
+    }
+
+
 def _binding_summary(binding: ProjectUploadProfileRemidioApiBinding) -> dict[str, Any]:
     project_profile = binding.project_profile
     profile = project_profile.profile if project_profile else None
     project = project_profile.project if project_profile else None
+    source_rule = binding.source_rule
     return {
         "id": binding.id,
+        "routing_profile_id": binding.routing_profile_id,
+        "routing_profile_name": binding.routing_profile.name if binding.routing_profile else None,
         "project_upload_profile_id": binding.project_upload_profile_id,
         "project_id": project_profile.project_id if project_profile else None,
         "project_title": project.title if project else None,
         "upload_profile_id": project_profile.upload_profile_id if project_profile else None,
         "upload_profile_name": profile.name if profile else None,
         "remidio_api_source_rule_id": binding.remidio_api_source_rule_id,
+        "remidio_connection_id": source_rule.remidio_connection_id if source_rule else None,
+        "connection_name": source_rule.connection.name if source_rule and source_rule.connection else None,
+        "remidio_site_id": source_rule.remidio_site_id if source_rule else None,
+        "site_name": source_rule.site.site_name if source_rule and source_rule.site else None,
+        "site_custom_identifier": source_rule.site_custom_identifier if source_rule else None,
+        "remidio_device_type": source_rule.remidio_device_type if source_rule else None,
         "lab_unit_id": binding.lab_unit_id,
         "lab_unit_name": binding.lab_unit.name if binding.lab_unit else None,
         "hospital_id": binding.lab_unit.hospital_id if binding.lab_unit else None,

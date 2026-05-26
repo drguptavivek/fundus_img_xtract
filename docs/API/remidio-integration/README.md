@@ -15,6 +15,7 @@ Local Remidio tables use integer primary keys.
 - `remidio_connections`: encrypted Remidio account credentials and client headers.
 - `remidio_sites`: sites returned by `getSites`; `site_custom_identifier` is manually configured because Remidio does not return it.
 - `remidio_api_source_rules`: Remidio API source selectors keyed by `connection + site_custom_identifier + remidio_device_type`.
+- `remidio_api_routing_profiles`: project-owned Remidio API routing profiles. One profile belongs to exactly one project.
 - `project_upload_profile_remidio_api_bindings`: date-windowed bindings from one API source rule to one enabled project upload profile, lab unit, and camera.
 - `remidio_routing_rules`: legacy direct Remidio API routing table retained for compatibility. It is not used by the new EncounterSet upload-profile workflow.
 - `remidio_exams`: source exam metadata keyed by `connection + remidio_exam_id`.
@@ -195,6 +196,75 @@ Binding validation requires:
 - the Remidio EncounterSet mapping has image grading schemes and one default image grading scheme
 - the lab unit is within the caller's management scope
 - active date windows do not overlap for the same API source rule
+
+### List API Routing Profiles
+
+`GET /api/remidio/api-routing-profiles?project_id=1`
+
+Returns project-owned routing profiles and their route rows. A routing profile is the user-facing rule set; existing source rules and bindings remain the underlying storage model.
+
+### Create Or Update API Routing Profile
+
+`POST /api/remidio/api-routing-profiles`
+
+```json
+{
+  "project_id": 1,
+  "name": "SEVA Pristine API",
+  "description": "PRISTINE device feed for SEVA Pristine",
+  "active": true
+}
+```
+
+One routing profile belongs to one project. Multiple routing profiles may target the same project.
+
+### List API Routing Rules
+
+`GET /api/remidio/api-routing-rules?project_id=1`
+
+Returns flattened route rows from active/inactive routing profiles.
+
+### Create Or Update API Routing Rule
+
+`POST /api/remidio/api-routing-rules`
+
+```json
+{
+  "routing_profile_id": 2,
+  "remidio_connection_id": 1,
+  "remidio_site_id": 3,
+  "site_custom_identifier": "rpc_comoph_2",
+  "remidio_device_type": "PRISTINE",
+  "project_upload_profile_id": 7,
+  "lab_unit_id": 2,
+  "camera_id": 8,
+  "active_from_date": "2026-04-01",
+  "active_to_date": null,
+  "active": true
+}
+```
+
+Validation:
+
+- the routing profile must be active
+- the target project upload profile must belong to the routing profile project
+- the target upload profile must be automated Remidio API-populated, EncounterSet-only, and mapped to `remidio_api_standard`
+- active date windows cannot overlap for the same `connection + site_custom_identifier + remidio_device_type`
+
+### Queue API Routing Profile Sync
+
+`POST /api/remidio/api-routing-profiles/{routing_profile_id}/sync`
+
+```json
+{
+  "start_date": "2026-04-01",
+  "end_date": "2026-04-30",
+  "limit": 20,
+  "dry_run": false
+}
+```
+
+Creates a `jobs` / `job_items` row and enqueues `celery_tasks.tasks.remidio_tasks.run_remidio_api_routing_profile_sync_task` on the maintenance queue. The worker fetches exams with `includeFilePaths=true`, then downloads and saves files through the selected routing profile before signed URLs expire.
 
 ### Pull Exams By Date
 

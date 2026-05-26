@@ -2784,6 +2784,7 @@ from upload_metadata.models import UploadMetadataFieldDefinition  # noqa: E402,F
 from encounter_sets.models import EncounterSetAttachment  # noqa: E402,F401
 from remidio_api_integration.models import (  # noqa: E402,F401
     RemidioApiExamEncounter,
+    RemidioApiRoutingProfile,
     ProjectUploadProfileRemidioApiBinding,
     RemidioApiSourceRule,
 )

@@ -69,6 +69,7 @@ def ingest_staged_files(
     include_reports = _bool(payload.get("include_reports"), default=True)
     dry_run = _bool(payload.get("dry_run"), default=False)
     limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
+    allowed_binding_ids = _optional_int_set(payload.get("remidio_api_binding_ids"))
 
     exams = _select_exams(db, connection_id=connection_id, payload=payload, limit=limit)
     summary = IngestSummary(exams_seen=len(exams))
@@ -82,6 +83,7 @@ def ingest_staged_files(
             include_images=include_images,
             include_reports=include_reports,
             dry_run=dry_run,
+            allowed_binding_ids=allowed_binding_ids,
             summary=summary,
         )
         details.append(exam_detail)
@@ -154,6 +156,7 @@ def _ingest_exam(
     include_images: bool,
     include_reports: bool,
     dry_run: bool,
+    allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
 ) -> dict[str, Any]:
     detail = {
@@ -178,6 +181,7 @@ def _ingest_exam(
                 mapped_metadata=mapped_metadata,
                 encounters_by_binding=encounters_by_binding,
                 dry_run=dry_run,
+                allowed_binding_ids=allowed_binding_ids,
                 summary=summary,
             )
             if image_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
@@ -195,6 +199,7 @@ def _ingest_exam(
                 mapped_metadata=mapped_metadata,
                 encounters_by_binding=encounters_by_binding,
                 dry_run=dry_run,
+                allowed_binding_ids=allowed_binding_ids,
                 summary=summary,
             )
             if report_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
@@ -213,6 +218,7 @@ def _ingest_image(
     mapped_metadata,
     encounters_by_binding: dict[int, PatientEncounters],
     dry_run: bool,
+    allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
 ) -> dict[str, Any]:
     if image.encounter_set_image_id:
@@ -228,6 +234,9 @@ def _ingest_image(
         summary.images_skipped += 1
         image.download_error = "No active unique Remidio API project binding for site/device/date."
         return {"remidio_image_id": image.remidio_image_id, "status": "no_route"}
+    if allowed_binding_ids is not None and binding.id not in allowed_binding_ids:
+        summary.images_skipped += 1
+        return {"remidio_image_id": image.remidio_image_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
 
     if dry_run:
         project_profile = binding.project_profile
@@ -299,6 +308,7 @@ def _ingest_report(
     mapped_metadata,
     encounters_by_binding: dict[int, PatientEncounters],
     dry_run: bool,
+    allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
 ) -> dict[str, Any]:
     if report.encounter_set_attachment_id:
@@ -314,6 +324,9 @@ def _ingest_report(
         summary.reports_skipped += 1
         report.download_error = "No active unique Remidio API project binding for report."
         return {"remidio_report_id": report.remidio_report_id, "status": "no_route"}
+    if allowed_binding_ids is not None and binding.id not in allowed_binding_ids:
+        summary.reports_skipped += 1
+        return {"remidio_report_id": report.remidio_report_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
 
     if dry_run:
         project_profile = binding.project_profile
@@ -683,6 +696,17 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         raise RemidioConfigError("Expected an integer value.")
+
+
+def _optional_int_set(value: Any) -> set[int] | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, list):
+        raise RemidioConfigError("Expected a list of integer values.")
+    try:
+        return {int(item) for item in value}
+    except (TypeError, ValueError) as exc:
+        raise RemidioConfigError("Expected a list of integer values.") from exc
 
 
 def _bool(value: Any, *, default: bool) -> bool:

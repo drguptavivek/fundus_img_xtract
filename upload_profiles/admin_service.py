@@ -467,6 +467,10 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not profile_input.automated_remidio_populated
         else False
     )
+    if profile.automated_remidio_populated:
+        for mapping in profile.project_mappings:
+            for assignment in mapping.assignments:
+                assignment.active = False
     profile.task_prioritization_json = prioritization_result.payload["task_prioritization_json"]
     profile.allow_mydriatic = profile_input.allow_mydriatic if clinical_upload_enabled else False
     profile.allow_non_mydriatic = profile_input.allow_non_mydriatic if clinical_upload_enabled else True

@@ -25,6 +25,7 @@ from models import (
     RemidioSite,
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
+from remidio_api_integration.models import RemidioApiRoutingProfile
 from upload_profiles.models import ProjectUploadProfile
 from utils.log_sanitize import sanitize_log_value
 from zip_processor import cleanup_processed_zip_intake_files
@@ -42,6 +43,20 @@ def remidio_workspace():
     """Render the HTMX workspace fragment after Remidio mutations."""
     with transaction_scope() as db:
         return render_template("admin/partials/remidio_workspace.html", **_context(db))
+
+
+@roles_required("admin", "data_manager", "local_admin")
+def remidio_api_routing_dashboard():
+    """Render the Remidio API routing dashboard."""
+    with transaction_scope() as db:
+        return render_template("admin/remidio_api_routing.html", **_routing_context(db))
+
+
+@roles_required("admin", "data_manager", "local_admin")
+def remidio_api_routing_workspace():
+    """Render the Remidio API routing dashboard workspace fragment."""
+    with transaction_scope() as db:
+        return render_template("admin/partials/remidio_api_routing_workspace.html", **_routing_context(db))
 
 
 @roles_required("admin", "data_manager")
@@ -156,6 +171,75 @@ def _context(db) -> dict[str, Any]:
         "diseases": db.execute(select(Disease).order_by(Disease.name)).scalars().all(),
         "connection_stats": _connection_stats(db),
         "site_stats": _site_stats(db),
+    }
+
+
+def _routing_context(db) -> dict[str, Any]:
+    routing_profiles = (
+        db.execute(
+            select(RemidioApiRoutingProfile)
+            .options(
+                selectinload(RemidioApiRoutingProfile.project),
+                selectinload(RemidioApiRoutingProfile.routes)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+                .selectinload(RemidioApiSourceRule.connection),
+                selectinload(RemidioApiRoutingProfile.routes)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule)
+                .selectinload(RemidioApiSourceRule.site),
+                selectinload(RemidioApiRoutingProfile.routes)
+                .selectinload(ProjectUploadProfileRemidioApiBinding.project_profile)
+                .selectinload(ProjectUploadProfile.profile),
+                selectinload(RemidioApiRoutingProfile.routes).selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
+                selectinload(RemidioApiRoutingProfile.routes).selectinload(ProjectUploadProfileRemidioApiBinding.camera),
+            )
+            .order_by(RemidioApiRoutingProfile.active.desc(), RemidioApiRoutingProfile.name)
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    project_profiles = (
+        db.execute(
+            select(ProjectUploadProfile)
+            .options(
+                selectinload(ProjectUploadProfile.project),
+                selectinload(ProjectUploadProfile.profile),
+            )
+            .join(ProjectUploadProfile.profile)
+            .where(ProjectUploadProfile.active.is_(True))
+            .order_by(ProjectUploadProfile.project_id, ProjectUploadProfile.upload_profile_id)
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+    automated_project_profiles = [
+        mapping
+        for mapping in project_profiles
+        if mapping.profile and mapping.profile.active and mapping.profile.automated_remidio_populated
+    ]
+    return {
+        "routing_profiles": routing_profiles,
+        "projects": db.execute(select(Project).where(Project.active.is_(True)).order_by(Project.title)).scalars().all(),
+        "connections": (
+            db.execute(select(RemidioConnection).where(RemidioConnection.active.is_(True)).order_by(RemidioConnection.name))
+            .scalars()
+            .all()
+        ),
+        "sites": (
+            db.execute(
+                select(RemidioSite)
+                .options(selectinload(RemidioSite.connection))
+                .where(RemidioSite.active.is_(True))
+                .order_by(RemidioSite.remidio_connection_id, RemidioSite.site_name, RemidioSite.id)
+            )
+            .scalars()
+            .unique()
+            .all()
+        ),
+        "automated_project_profiles": automated_project_profiles,
+        "lab_units": db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name)).scalars().all(),
+        "cameras": db.execute(select(Camera).order_by(Camera.name)).scalars().all(),
     }
 
 

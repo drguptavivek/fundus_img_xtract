@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Remidio API Routing{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Remidio API Routing</h1>
+      <p class="text-muted mb-0">Route Remidio API source streams into project-owned automated EncounterSet profiles.</p>
+    </div>
+    <div class="d-inline-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.remidio_admin') }}">Connections</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    Each routing profile belongs to one project. Routes in that profile must target automated Remidio API upload profiles from the same project.
+  </div>
+
+  <div id="remidio-api-routing-workspace">
+    {% include "admin/partials/remidio_api_routing_workspace.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+{% endblock %}

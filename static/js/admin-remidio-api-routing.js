@@ -57,6 +57,31 @@
     }
   });
 
+  document.body.addEventListener('click', function (event) {
+    const toggle = event.target.closest('[data-remidio-routing-profile-edit-toggle]');
+    const cancel = event.target.closest('[data-remidio-routing-profile-edit-cancel]');
+    const profileId = toggle
+      ? toggle.dataset.remidioRoutingProfileEditToggle
+      : cancel && cancel.dataset.remidioRoutingProfileEditCancel;
+    if (!profileId) {
+      return;
+    }
+
+    const row = Array.from(document.querySelectorAll('[data-remidio-routing-profile-edit-row]')).find(
+      (candidate) => candidate.dataset.remidioRoutingProfileEditRow === profileId
+    );
+    if (!row) {
+      return;
+    }
+    row.hidden = Boolean(cancel) || !row.hidden;
+    if (!row.hidden) {
+      const input = row.querySelector('input[name="name"]');
+      if (input) {
+        input.focus();
+      }
+    }
+  });
+
   document.body.addEventListener('htmx:afterSwap', function (event) {
     initRouteForms(event.detail.elt || document);
   });

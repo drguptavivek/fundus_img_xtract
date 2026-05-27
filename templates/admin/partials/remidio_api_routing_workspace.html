@@ -65,7 +65,32 @@
               <td>{{ profile.routes|selectattr('active')|list|length }}</td>
               <td><span class="badge {{ 'text-bg-success' if profile.active else 'text-bg-secondary' }}">{{ 'Active' if profile.active else 'Inactive' }}</span></td>
               <td class="text-end">
-                <form method="post"
+                <div class="d-inline-flex gap-2">
+                  <button class="btn btn-sm btn-outline-secondary"
+                          type="button"
+                          data-remidio-routing-profile-edit-toggle="{{ profile.id }}">Edit</button>
+                  <form method="post"
+                        action="{{ url_for('fundus_api.upsert_remidio_api_routing_profile') }}"
+                        hx-post="{{ url_for('fundus_api.upsert_remidio_api_routing_profile') }}"
+                        hx-swap="none"
+                        data-json-api-htmx
+                        data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+                        data-json-api-reload-target="#remidio-api-routing-workspace">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="id" value="{{ profile.id }}">
+                    <input type="hidden" name="project_id" value="{{ profile.project_id }}">
+                    <input type="hidden" name="name" value="{{ profile.name }}">
+                    <input type="hidden" name="description" value="{{ profile.description or '' }}">
+                    <input type="hidden" name="active" value="{{ 'false' if profile.active else 'true' }}">
+                    <button class="btn btn-sm {{ 'btn-outline-danger' if profile.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if profile.active else 'Activate' }}</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            <tr data-remidio-routing-profile-edit-row="{{ profile.id }}" hidden>
+              <td colspan="5">
+                <form class="border rounded p-3 bg-light"
+                      method="post"
                       action="{{ url_for('fundus_api.upsert_remidio_api_routing_profile') }}"
                       hx-post="{{ url_for('fundus_api.upsert_remidio_api_routing_profile') }}"
                       hx-swap="none"
@@ -75,10 +100,25 @@
                   {{ csrf_field() }}
                   <input type="hidden" name="id" value="{{ profile.id }}">
                   <input type="hidden" name="project_id" value="{{ profile.project_id }}">
-                  <input type="hidden" name="name" value="{{ profile.name }}">
-                  <input type="hidden" name="description" value="{{ profile.description or '' }}">
-                  <input type="hidden" name="active" value="{{ 'false' if profile.active else 'true' }}">
-                  <button class="btn btn-sm {{ 'btn-outline-danger' if profile.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if profile.active else 'Activate' }}</button>
+                  <input type="hidden" name="active" value="{{ 'true' if profile.active else 'false' }}">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                      <label class="form-label" for="routing-profile-name-{{ profile.id }}">Name</label>
+                      <input class="form-control" id="routing-profile-name-{{ profile.id }}" name="name" value="{{ profile.name }}" required maxlength="150">
+                    </div>
+                    <div class="col-md-5">
+                      <label class="form-label" for="routing-profile-description-{{ profile.id }}">Description</label>
+                      <input class="form-control" id="routing-profile-description-{{ profile.id }}" name="description" value="{{ profile.description or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                      <div class="d-flex gap-2">
+                        <button class="btn btn-primary flex-fill" type="submit">Save</button>
+                        <button class="btn btn-outline-secondary"
+                                type="button"
+                                data-remidio-routing-profile-edit-cancel="{{ profile.id }}">Cancel</button>
+                      </div>
+                    </div>
+                  </div>
                 </form>
               </td>
             </tr>

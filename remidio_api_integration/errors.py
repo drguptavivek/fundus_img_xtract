@@ -26,6 +26,13 @@ class RemidioRemoteError(RemidioIntegrationError):
 
     status_code = 502
 
-    def __init__(self, message: str, *, remote_status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        remote_status_code: int | None = None,
+        response_snapshot: dict | None = None,
+    ) -> None:
         super().__init__(message)
         self.remote_status_code = remote_status_code
+        self.response_snapshot = response_snapshot or {}

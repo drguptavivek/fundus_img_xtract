@@ -15,6 +15,7 @@ import logging
 from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
+_logged_env_secret_key_fallback = False
 
 
 class EncryptionError(Exception):
@@ -45,6 +46,8 @@ def _get_encryption_key(salt: str = None) -> bytes:
     Raises:
         EncryptionError: If no Flask app context or secret key available
     """
+    global _logged_env_secret_key_fallback
+
     try:
         # Try to get Flask secret key from app context
         try:
@@ -54,7 +57,9 @@ def _get_encryption_key(salt: str = None) -> bytes:
             import os
             from utils.env_loader import get_env
             secret_key = get_env('FLASK_SECRET_KEY', None)
-            logger.warning("Working outside Flask app context, using environment SECRET_KEY")
+            if not _logged_env_secret_key_fallback:
+                logger.debug("Working outside Flask app context, using environment SECRET_KEY")
+                _logged_env_secret_key_fallback = True
 
         if not secret_key:
             raise EncryptionError("Flask SECRET_KEY not configured")
@@ -453,4 +458,3 @@ def decrypt_export_file(encrypted_path: str, password: str, output_path: str = N
             sanitize_log_value(e)
         )
         raise EncryptionError(f"Failed to decrypt export file (wrong password or corrupted file): {str(e)}")
-

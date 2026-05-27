@@ -71,11 +71,11 @@
               </div>
               <div class="col-4">
                 <div class="h4 mb-0">{{ window.images_downloaded }}/{{ window.images_seen }}</div>
-                <div class="small text-muted">Images</div>
+                <div class="small text-muted">Images saved/seen</div>
               </div>
               <div class="col-4">
                 <div class="h4 mb-0">{{ window.reports_downloaded }}/{{ window.reports_seen }}</div>
-                <div class="small text-muted">Reports</div>
+                <div class="small text-muted">Reports saved/seen</div>
               </div>
               <div class="col-6">
                 <span class="badge text-bg-warning">{{ window.pending }} pending</span>
@@ -210,12 +210,35 @@
               <td class="small">
                 <div>{{ job.completed_window_count }}/{{ job.window_count }} windows</div>
                 <div class="text-muted">Processed through: {{ job.last_processed_date or '-' }}</div>
+                {% if job.active_progress %}
+                <div class="mt-1 p-2 border rounded bg-light">
+                  <div class="fw-semibold">Active window</div>
+                  <div>{{ job.active_progress.assets_finished }} files handled · {{ job.active_progress.elapsed_seconds }}s</div>
+                  {% if job.active_progress.last_asset_type %}
+                  <div class="text-muted">
+                    {{ job.active_progress.last_asset_type|capitalize }}
+                    {{ job.active_progress.last_status or job.active_progress.event }}
+                    {% if job.active_progress.last_source_id %}· {{ job.active_progress.last_source_id }}{% endif %}
+                  </div>
+                  {% endif %}
+                  <div class="text-muted">
+                    Images {{ job.active_progress.images_downloaded }}/{{ job.active_progress.images_seen }}
+                    · Reports {{ job.active_progress.reports_downloaded }}/{{ job.active_progress.reports_seen }}
+                  </div>
+                </div>
+                {% endif %}
               </td>
               <td class="small">
                 {{ job.summary.encounters_created }} new · {{ job.summary.encounters_reused }} reused
               </td>
-              <td class="small">{{ job.summary.images_downloaded }}/{{ job.summary.images_seen }}</td>
-              <td class="small">{{ job.summary.reports_downloaded }}/{{ job.summary.reports_seen }}</td>
+              <td class="small">
+                <div>{{ job.summary.images_downloaded }} saved</div>
+                <div class="text-muted">{{ job.summary.images_skipped }} skipped · {{ job.summary.images_failed }} failed · {{ job.summary.images_pending }} pending</div>
+              </td>
+              <td class="small">
+                <div>{{ job.summary.reports_downloaded }} saved</div>
+                <div class="text-muted">{{ job.summary.reports_skipped }} skipped · {{ job.summary.reports_failed }} failed · {{ job.summary.reports_pending }} pending</div>
+              </td>
               <td>
                 <div class="d-flex flex-wrap gap-1">
                   {% if job.can_pause %}

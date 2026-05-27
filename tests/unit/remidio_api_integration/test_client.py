@@ -1,22 +1,27 @@
 from remidio_api_integration.client import RemidioClient
+from remidio_api_integration.errors import RemidioRemoteError
 from remidio_api_integration.schemas import RemidioSecrets
 
 
 class FakeResponse:
-    status_code = 200
-    headers = {"content-type": "application/json"}
+    def __init__(self, *, status_code=200, body=None, text="", headers=None):
+        self.status_code = status_code
+        self._body = body if body is not None else {"status": {"statusCode": "OK"}, "data": []}
+        self.text = text
+        self.headers = headers or {"content-type": "application/json"}
 
     def json(self):
-        return {"status": {"statusCode": "OK"}, "data": []}
+        return self._body
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, response=None):
         self.calls = []
+        self.response = response or FakeResponse()
 
     def request(self, method, url, **kwargs):
         self.calls.append({"method": method, "url": url, "kwargs": kwargs})
-        return FakeResponse()
+        return self.response
 
 
 def _secrets() -> RemidioSecrets:
@@ -48,3 +53,32 @@ def test_get_exams_by_date_can_request_signed_file_paths():
     assert call["kwargs"]["params"] == {"includeFilePaths": "true"}
     assert call["kwargs"]["headers"]["clientAuthToken"] == "gateway-token"
     assert call["kwargs"]["headers"]["Authorization"] == "Bearer bearer-token"
+
+
+def test_request_error_snapshot_redacts_signed_urls_and_tokens():
+    response = FakeResponse(
+        status_code=429,
+        body={
+            "status": {"statusCode": "RATE_LIMITED", "message": "Too many requests"},
+            "data": [
+                {
+                    "path": "https://storage.googleapis.com/bucket/file.jpg?X-Goog-Signature=secret",
+                    "clientAuthToken": "secret-token",
+                }
+            ],
+        },
+    )
+    session = FakeSession(response=response)
+    client = RemidioClient(_secrets(), session=session)
+
+    try:
+        client._request("GET", "/api/gateway/getExamsByDate/01-04-2026/02-04-2026/site", params={"includeFilePaths": "true"})
+    except RemidioRemoteError as exc:
+        assert exc.remote_status_code == 429
+        body_preview = exc.response_snapshot["body_preview"]
+        assert "Too many requests" in body_preview
+        assert "secret-token" not in body_preview
+        assert "X-Goog-Signature" not in body_preview
+        assert "[redacted-query]" in body_preview
+    else:
+        raise AssertionError("Expected RemidioRemoteError")

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -64,6 +64,7 @@ def ingest_staged_files(
     connection_id: int,
     client: RemidioClient,
     payload: dict[str, Any],
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     include_images = _bool(payload.get("include_images"), default=True)
     include_reports = _bool(payload.get("include_reports"), default=True)
@@ -76,6 +77,16 @@ def ingest_staged_files(
     details: list[dict[str, Any]] = []
 
     for exam in exams:
+        _emit_progress(
+            progress_callback,
+            {
+                "event": "exam_started",
+                "remidio_exam_id": exam.remidio_exam_id,
+                "images_seen": len(exam.images or []),
+                "reports_seen": len(exam.reports or []),
+                "summary": summary.as_dict(),
+            },
+        )
         exam_detail = _ingest_exam(
             db,
             client=client,
@@ -85,6 +96,7 @@ def ingest_staged_files(
             dry_run=dry_run,
             allowed_binding_ids=allowed_binding_ids,
             summary=summary,
+            progress_callback=progress_callback,
         )
         details.append(exam_detail)
 
@@ -145,7 +157,7 @@ def _select_exams(db: Session, *, connection_id: int, payload: dict[str, Any], l
             )
         )
 
-    return query.order_by(RemidioExam.exam_date.asc().nullslast(), RemidioExam.id.asc()).limit(limit).all()
+    return query.order_by(RemidioExam.exam_date.asc().nullslast(), RemidioExam.id.asc()).populate_existing().limit(limit).all()
 
 
 def _ingest_exam(
@@ -158,6 +170,7 @@ def _ingest_exam(
     dry_run: bool,
     allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
+    progress_callback: Callable[[dict[str, Any]], None] | None,
 ) -> dict[str, Any]:
     detail = {
         "remidio_exam_row_id": exam.id,
@@ -183,6 +196,7 @@ def _ingest_exam(
                 dry_run=dry_run,
                 allowed_binding_ids=allowed_binding_ids,
                 summary=summary,
+                progress_callback=progress_callback,
             )
             if image_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
                 detail["patient_encounter_id"] = image_result["patient_encounter_id"]
@@ -201,6 +215,7 @@ def _ingest_exam(
                 dry_run=dry_run,
                 allowed_binding_ids=allowed_binding_ids,
                 summary=summary,
+                progress_callback=progress_callback,
             )
             if report_result.get("patient_encounter_id") and not detail["patient_encounter_id"]:
                 detail["patient_encounter_id"] = report_result["patient_encounter_id"]
@@ -220,23 +235,32 @@ def _ingest_image(
     dry_run: bool,
     allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
+    progress_callback: Callable[[dict[str, Any]], None] | None,
 ) -> dict[str, Any]:
     if image.encounter_set_image_id:
         summary.images_skipped += 1
-        return {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_set_image_id": image.encounter_set_image_id}
+        result = {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_set_image_id": image.encounter_set_image_id}
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
     if image.encounter_file_id:
         summary.images_skipped += 1
-        return {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_file_id": image.encounter_file_id}
+        result = {"remidio_image_id": image.remidio_image_id, "status": "already_ingested", "encounter_file_id": image.encounter_file_id}
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
 
     binding = resolve_binding_for_image(db, exam=exam, device_type=image.device_type)
     if binding is None:
         summary.route_errors += 1
         summary.images_skipped += 1
         image.download_error = "No active unique Remidio API project binding for site/device/date."
-        return {"remidio_image_id": image.remidio_image_id, "status": "no_route"}
+        result = {"remidio_image_id": image.remidio_image_id, "status": "no_route"}
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
     if allowed_binding_ids is not None and binding.id not in allowed_binding_ids:
         summary.images_skipped += 1
-        return {"remidio_image_id": image.remidio_image_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
+        result = {"remidio_image_id": image.remidio_image_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
 
     if dry_run:
         project_profile = binding.project_profile
@@ -250,6 +274,16 @@ def _ingest_image(
 
     encounter = _encounter_for_binding(db, exam, binding, mapped_metadata, encounters_by_binding, summary)
     try:
+        _emit_progress(
+            progress_callback,
+            {
+                "event": "download_started",
+                "asset_type": "image",
+                "remidio_exam_id": exam.remidio_exam_id,
+                "source_id": image.remidio_image_id,
+                "summary": summary.as_dict(),
+            },
+        )
         content, content_type = client.download_file(_source_url(image), max_bytes=MAX_FILE_BYTES)
         extension = _image_extension(content, content_type, image.remidio_path)
         safe_content = _strip_image_exif(content)
@@ -285,18 +319,22 @@ def _ingest_image(
         db.flush()
         summary.images_downloaded += 1
 
-        return {
+        result = {
             "remidio_image_id": image.remidio_image_id,
             "status": "downloaded",
             "patient_encounter_id": encounter.id,
             "encounter_set_image_id": set_image.id,
             "filename": filename,
         }
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
     except (OSError, RemidioIntegrationError, UnidentifiedImageError) as exc:
         summary.download_errors += 1
         summary.images_skipped += 1
         image.download_error = str(sanitize_log_value(exc))[:1000]
-        return {"remidio_image_id": image.remidio_image_id, "status": "download_error", "error": image.download_error}
+        result = {"remidio_image_id": image.remidio_image_id, "status": "download_error", "error": image.download_error}
+        _emit_asset_progress(progress_callback, "image", exam, image.remidio_image_id, result, summary)
+        return result
 
 
 def _ingest_report(
@@ -310,23 +348,32 @@ def _ingest_report(
     dry_run: bool,
     allowed_binding_ids: set[int] | None,
     summary: IngestSummary,
+    progress_callback: Callable[[dict[str, Any]], None] | None,
 ) -> dict[str, Any]:
     if report.encounter_set_attachment_id:
         summary.reports_skipped += 1
-        return {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_set_attachment_id": report.encounter_set_attachment_id}
+        result = {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_set_attachment_id": report.encounter_set_attachment_id}
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
     if report.encounter_file_pdf_id:
         summary.reports_skipped += 1
-        return {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_file_pdf_id": report.encounter_file_pdf_id}
+        result = {"remidio_report_id": report.remidio_report_id, "status": "already_ingested", "encounter_file_pdf_id": report.encounter_file_pdf_id}
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
 
     binding = _resolve_report_binding(db, exam=exam, report=report)
     if binding is None:
         summary.route_errors += 1
         summary.reports_skipped += 1
         report.download_error = "No active unique Remidio API project binding for report."
-        return {"remidio_report_id": report.remidio_report_id, "status": "no_route"}
+        result = {"remidio_report_id": report.remidio_report_id, "status": "no_route"}
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
     if allowed_binding_ids is not None and binding.id not in allowed_binding_ids:
         summary.reports_skipped += 1
-        return {"remidio_report_id": report.remidio_report_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
+        result = {"remidio_report_id": report.remidio_report_id, "status": "route_not_in_scope", "remidio_api_binding_id": binding.id}
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
 
     if dry_run:
         project_profile = binding.project_profile
@@ -339,7 +386,32 @@ def _ingest_report(
         }
 
     encounter = _encounter_for_binding(db, exam, binding, mapped_metadata, encounters_by_binding, summary)
+    existing_attachment = _existing_report_attachment(db, encounter.id, report.remidio_report_id)
+    if existing_attachment is not None:
+        report.encounter_set_attachment_id = existing_attachment.id
+        report.downloaded_at = report.downloaded_at or existing_attachment.created_at
+        report.download_error = None
+        db.flush()
+        summary.reports_skipped += 1
+        result = {
+            "remidio_report_id": report.remidio_report_id,
+            "status": "already_ingested",
+            "patient_encounter_id": encounter.id,
+            "encounter_set_attachment_id": existing_attachment.id,
+        }
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
     try:
+        _emit_progress(
+            progress_callback,
+            {
+                "event": "download_started",
+                "asset_type": "report",
+                "remidio_exam_id": exam.remidio_exam_id,
+                "source_id": report.remidio_report_id,
+                "summary": summary.as_dict(),
+            },
+        )
         content, content_type = client.download_file(_source_url(report), max_bytes=MAX_FILE_BYTES)
         if not _looks_like_pdf(content, content_type, report.remidio_path):
             raise RemidioRemoteError("Downloaded Remidio report is not a PDF.")
@@ -373,18 +445,69 @@ def _ingest_report(
         report.download_error = None
         db.flush()
         summary.reports_downloaded += 1
-        return {
+        result = {
             "remidio_report_id": report.remidio_report_id,
             "status": "downloaded",
             "patient_encounter_id": encounter.id,
             "encounter_set_attachment_id": attachment.id,
             "filename": filename,
         }
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
     except (OSError, RemidioIntegrationError) as exc:
         summary.download_errors += 1
         summary.reports_skipped += 1
         report.download_error = str(sanitize_log_value(exc))[:1000]
-        return {"remidio_report_id": report.remidio_report_id, "status": "download_error", "error": report.download_error}
+        result = {"remidio_report_id": report.remidio_report_id, "status": "download_error", "error": report.download_error}
+        _emit_asset_progress(progress_callback, "report", exam, report.remidio_report_id, result, summary)
+        return result
+
+
+def _emit_progress(callback: Callable[[dict[str, Any]], None] | None, event: dict[str, Any]) -> None:
+    if callback is None:
+        return
+    try:
+        callback(event)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Remidio ingest progress update failed: %s", sanitize_log_value(exc))
+
+
+def _emit_asset_progress(
+    callback: Callable[[dict[str, Any]], None] | None,
+    asset_type: str,
+    exam: RemidioExam,
+    source_id: str,
+    result: dict[str, Any],
+    summary: IngestSummary,
+) -> None:
+    _emit_progress(
+        callback,
+        {
+            "event": "asset_finished",
+            "asset_type": asset_type,
+            "remidio_exam_id": exam.remidio_exam_id,
+            "source_id": source_id,
+            "status": result.get("status"),
+            "summary": summary.as_dict(),
+        },
+    )
+
+
+def _existing_report_attachment(db: Session, patient_encounter_id: int, remidio_report_id: str) -> EncounterSetAttachment | None:
+    rows = (
+        db.query(EncounterSetAttachment)
+        .filter(
+            EncounterSetAttachment.patient_encounter_id == patient_encounter_id,
+            EncounterSetAttachment.asset_kind == "pdf",
+        )
+        .order_by(EncounterSetAttachment.id.asc())
+        .all()
+    )
+    for row in rows:
+        metadata = row.metadata_json or {}
+        if str(metadata.get("remidio_report_id") or "").strip() == str(remidio_report_id).strip():
+            return row
+    return None
 
 
 def _resolve_report_binding(

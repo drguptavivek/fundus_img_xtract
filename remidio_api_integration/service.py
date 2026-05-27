@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select
@@ -36,7 +37,7 @@ from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
 
 from .client import RemidioClient
-from .errors import RemidioConfigError
+from .errors import RemidioConfigError, RemidioRemoteError
 from .ingest import ingest_staged_files
 from .models import (
     ProjectUploadProfileRemidioApiBinding,
@@ -64,6 +65,7 @@ REMIDIO_API_PROJECT_SYNC_TASK_NAME = "celery_tasks.tasks.remidio_tasks.run_remid
 REMIDIO_API_PROJECT_PROSPECTIVE_TASK_NAME = "celery_tasks.tasks.remidio_tasks.queue_remidio_api_prospective_project_syncs_task"
 REMIDIO_API_PROJECT_SYNC_ITEM_SOURCE = "remidio_api_project_sync"
 REMIDIO_API_PROJECT_SYNC_UPLOAD_TYPE = "remidio api project sync"
+LOGGER = logging.getLogger("remidio_api_integration.service")
 
 
 def list_encounter_set_browser(
@@ -579,10 +581,16 @@ def pull_latest_patient_exam(db: Session, connection_id: int, payload: dict[str,
     }
 
 
-def ingest_connection_files(db: Session, connection_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+def ingest_connection_files(
+    db: Session,
+    connection_id: int,
+    payload: dict[str, Any],
+    *,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     connection = _get_connection(db, connection_id)
     client = RemidioClient(_secrets(connection))
-    return ingest_staged_files(db, connection_id=connection.id, client=client, payload=payload)
+    return ingest_staged_files(db, connection_id=connection.id, client=client, payload=payload, progress_callback=progress_callback)
 
 
 def create_routing_profile_sync_job(
@@ -987,6 +995,13 @@ def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
         return result
     except Exception as exc:  # noqa: BLE001
         error = str(sanitize_log_value(exc))[:1000]
+        diagnostics = _remidio_exception_diagnostics(exc)
+        LOGGER.warning(
+            "Remidio API routing profile sync failed job_id=%s error=%s diagnostics=%s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(error, max_len=1000),
+            sanitize_log_value(diagnostics, max_len=1500),
+        )
         with get_db_session() as db:
             job = db.get(Job, job_id)
             item = (
@@ -1002,14 +1017,18 @@ def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
                 db.add(job)
             if item:
                 item.state = "failed"
-                item.detail = error
+                item.detail = json.dumps({"error": error, "diagnostics": diagnostics})
                 item.finished_at = utcnow()
                 db.add(item)
             db.commit()
         raise
 
 
-def _run_routing_profile_sync_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _run_routing_profile_sync_payload(
+    payload: dict[str, Any],
+    *,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     routing_profile_id = _required_int(payload, "routing_profile_id")
     start_date = _required_string(payload, "start_date")
     end_date = _required_string(payload, "end_date")
@@ -1032,6 +1051,15 @@ def _run_routing_profile_sync_payload(payload: dict[str, Any]) -> dict[str, Any]
             grouped.setdefault(key, []).append(route)
 
         for (connection_id, site_custom_identifier), group_routes in grouped.items():
+            LOGGER.info(
+                "Remidio API route pull start routing_profile_id=%s connection_id=%s site=%s start_date=%s end_date=%s route_ids=%s",
+                sanitize_log_value(routing_profile_id),
+                sanitize_log_value(connection_id),
+                sanitize_log_value(site_custom_identifier),
+                sanitize_log_value(start_date),
+                sanitize_log_value(end_date),
+                sanitize_log_value([route.id for route in group_routes], max_len=500),
+            )
             pull_result = pull_exams_by_date(
                 db,
                 connection_id,
@@ -1057,7 +1085,18 @@ def _run_routing_profile_sync_payload(payload: dict[str, Any]) -> dict[str, Any]
                         "include_reports": True,
                         "remidio_api_binding_ids": [route.id for route in group_routes],
                     },
+                    progress_callback=progress_callback,
                 )
+            LOGGER.info(
+                "Remidio API route pull complete routing_profile_id=%s connection_id=%s site=%s start_date=%s end_date=%s pull_summary=%s ingest_summary=%s",
+                sanitize_log_value(routing_profile_id),
+                sanitize_log_value(connection_id),
+                sanitize_log_value(site_custom_identifier),
+                sanitize_log_value(start_date),
+                sanitize_log_value(end_date),
+                sanitize_log_value((pull_result.get("summary") if isinstance(pull_result, dict) else None), max_len=500),
+                sanitize_log_value((ingest_result.get("summary") if isinstance(ingest_result, dict) else None), max_len=500),
+            )
             summaries.append(
                 {
                     "connection_id": connection_id,
@@ -1112,7 +1151,18 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
         db.commit()
 
     try:
-        result = _run_routing_profile_sync_payload(payload)
+        LOGGER.info(
+            "Remidio API project sync item start job_id=%s item_id=%s project_id=%s routing_profile_id=%s start_date=%s end_date=%s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(item_id),
+            sanitize_log_value(payload.get("project_id")),
+            sanitize_log_value(payload.get("routing_profile_id")),
+            sanitize_log_value(payload.get("start_date")),
+            sanitize_log_value(payload.get("end_date")),
+        )
+        progress = _ProjectSyncProgress(job_id=job_id, item_id=item_id, payload=payload)
+        _update_project_sync_item_progress(job_id, item_id, payload, progress.snapshot("started"))
+        result = _run_routing_profile_sync_payload(payload, progress_callback=progress.update)
         with get_db_session() as db:
             item = db.get(JobItem, item_id)
             if item:
@@ -1121,14 +1171,33 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
                 item.finished_at = utcnow()
                 db.add(item)
                 db.commit()
+        LOGGER.info(
+            "Remidio API project sync item complete job_id=%s item_id=%s project_id=%s start_date=%s end_date=%s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(item_id),
+            sanitize_log_value(payload.get("project_id")),
+            sanitize_log_value(payload.get("start_date")),
+            sanitize_log_value(payload.get("end_date")),
+        )
         return {"job_id": job_id, "item_id": item_id, "status": "completed", "result": result}
     except Exception as exc:  # noqa: BLE001
         error = str(sanitize_log_value(exc))[:1000]
+        diagnostics = _remidio_exception_diagnostics(exc)
+        LOGGER.warning(
+            "Remidio API project sync item failed job_id=%s item_id=%s project_id=%s start_date=%s end_date=%s error=%s diagnostics=%s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(item_id),
+            sanitize_log_value(payload.get("project_id")),
+            sanitize_log_value(payload.get("start_date")),
+            sanitize_log_value(payload.get("end_date")),
+            sanitize_log_value(error, max_len=1000),
+            sanitize_log_value(diagnostics, max_len=1500),
+        )
         with get_db_session() as db:
             item = db.get(JobItem, item_id)
             if item:
                 item.state = "failed"
-                item.detail = json.dumps({"request": payload, "error": error})
+                item.detail = json.dumps({"request": payload, "error": error, "diagnostics": diagnostics})
                 item.finished_at = utcnow()
                 db.add(item)
                 db.commit()
@@ -1165,6 +1234,70 @@ def _project_route_groups(db: Session, project_id: int) -> list[dict[str, Any]]:
                 }
             )
     return groups
+
+
+def _remidio_exception_diagnostics(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, RemidioRemoteError):
+        diagnostics: dict[str, Any] = {}
+        if exc.remote_status_code is not None:
+            diagnostics["remote_status_code"] = exc.remote_status_code
+        if exc.response_snapshot:
+            diagnostics["response_snapshot"] = exc.response_snapshot
+        return diagnostics
+    return {}
+
+
+class _ProjectSyncProgress:
+    def __init__(self, *, job_id: int, item_id: int, payload: dict[str, Any]) -> None:
+        self.job_id = job_id
+        self.item_id = item_id
+        self.payload = payload
+        self.started_at = utcnow()
+        self.assets_finished = 0
+        self.assets_started = 0
+        self.last_event: dict[str, Any] = {}
+
+    def update(self, event: dict[str, Any]) -> None:
+        if event.get("event") == "download_started":
+            self.assets_started += 1
+        if event.get("event") == "asset_finished":
+            self.assets_finished += 1
+        self.last_event = event
+        _update_project_sync_item_progress(self.job_id, self.item_id, self.payload, self.snapshot(str(event.get("event") or "processing")))
+
+    def snapshot(self, event_name: str) -> dict[str, Any]:
+        elapsed_seconds = max(int((utcnow() - self.started_at).total_seconds()), 0)
+        summary = self.last_event.get("summary") if isinstance(self.last_event.get("summary"), dict) else {}
+        return {
+            "event": event_name,
+            "started_at": self.started_at.isoformat(),
+            "updated_at": utcnow().isoformat(),
+            "elapsed_seconds": elapsed_seconds,
+            "assets_started": self.assets_started,
+            "assets_finished": self.assets_finished,
+            "last_asset_type": self.last_event.get("asset_type"),
+            "last_source_id": self.last_event.get("source_id"),
+            "last_status": self.last_event.get("status"),
+            "last_remidio_exam_id": self.last_event.get("remidio_exam_id"),
+            "images_seen": int(summary.get("images_seen") or 0),
+            "images_downloaded": int(summary.get("images_downloaded") or 0),
+            "images_skipped": int(summary.get("images_skipped") or 0),
+            "reports_seen": int(summary.get("reports_seen") or 0),
+            "reports_downloaded": int(summary.get("reports_downloaded") or 0),
+            "reports_skipped": int(summary.get("reports_skipped") or 0),
+            "download_errors": int(summary.get("download_errors") or 0),
+            "route_errors": int(summary.get("route_errors") or 0),
+        }
+
+
+def _update_project_sync_item_progress(job_id: int, item_id: int, payload: dict[str, Any], progress: dict[str, Any]) -> None:
+    with get_db_session() as db:
+        item = db.get(JobItem, item_id)
+        if item is None or item.job_id != job_id or item.state != "processing":
+            return
+        item.detail = json.dumps({"request": payload, "progress": progress})
+        db.add(item)
+        db.commit()
 
 
 def _daily_slices_newest_first(start_date: date, end_date: date) -> list[tuple[date, date]]:
@@ -1376,12 +1509,19 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
     end_dates: list[str] = []
     completed_windows: set[str] = set()
     completed_start_dates: list[str] = []
+    active_progress: dict[str, Any] | None = None
     aggregate = {
         "exams_seen": 0,
         "images_seen": 0,
         "images_downloaded": 0,
+        "images_skipped": 0,
+        "images_failed": 0,
+        "images_pending": 0,
         "reports_seen": 0,
         "reports_downloaded": 0,
+        "reports_skipped": 0,
+        "reports_failed": 0,
+        "reports_pending": 0,
         "encounters_created": 0,
         "encounters_reused": 0,
         "pending": 0,
@@ -1403,6 +1543,8 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
         item_summary = _result_summary(_job_item_result(item))
         for key in aggregate:
             aggregate[key] += int(item_summary.get(key) or 0)
+        if item.state == "processing" and active_progress is None:
+            active_progress = _job_item_progress(item)
     return {
         "id": job.id,
         "token": job.token,
@@ -1425,6 +1567,7 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
         "window_count": len(set(windows)),
         "completed_window_count": len(completed_windows),
         "last_processed_date": min(completed_start_dates) if completed_start_dates else None,
+        "active_progress": active_progress,
         "summary": aggregate,
         "can_pause": job.status in {"queued", "processing"},
         "can_resume": job.status in {"paused", "processing", "partial_error", "failed"},
@@ -1447,6 +1590,7 @@ def _project_sync_item_summary(item: JobItem) -> dict[str, Any]:
         "end_date": payload.get("end_date"),
         "route_ids": payload.get("route_ids") or [],
         "summary": summary,
+        "progress": _job_item_progress(item),
         "error": _job_item_error(item),
     }
 
@@ -1521,6 +1665,16 @@ def _job_item_result(item: JobItem) -> dict[str, Any]:
     return {}
 
 
+def _job_item_progress(item: JobItem) -> dict[str, Any] | None:
+    try:
+        data = json.loads(item.detail or "{}")
+    except json.JSONDecodeError:
+        return None
+    if isinstance(data, dict) and isinstance(data.get("progress"), dict):
+        return data["progress"]
+    return None
+
+
 def _job_item_error(item: JobItem) -> str | None:
     try:
         data = json.loads(item.detail or "{}")
@@ -1537,9 +1691,13 @@ def _result_summary(result: dict[str, Any]) -> dict[str, int]:
         "images_seen": 0,
         "images_downloaded": 0,
         "images_skipped": 0,
+        "images_failed": 0,
+        "images_pending": 0,
         "reports_seen": 0,
         "reports_downloaded": 0,
         "reports_skipped": 0,
+        "reports_failed": 0,
+        "reports_pending": 0,
         "encounters_created": 0,
         "encounters_reused": 0,
         "pending": 0,
@@ -1558,10 +1716,24 @@ def _result_summary(result: dict[str, Any]) -> dict[str, int]:
         summary["encounters_created"] += int(ingest_summary.get("encounters_created") or 0)
         summary["encounters_reused"] += int(ingest_summary.get("encounters_reused") or 0)
         summary["failed"] += int(ingest_summary.get("route_errors") or 0) + int(ingest_summary.get("download_errors") or 0)
-    summary["pending"] = max(summary["images_seen"] - summary["images_downloaded"], 0) + max(
-        summary["reports_seen"] - summary["reports_downloaded"],
+        for exam in (((group.get("ingest") or {}).get("exams")) or []):
+            for image in exam.get("images") or []:
+                if image.get("status") in {"download_error", "no_route"}:
+                    summary["images_failed"] += 1
+            for report in exam.get("reports") or []:
+                if report.get("status") in {"download_error", "no_route"}:
+                    summary["reports_failed"] += 1
+    summary["images_skipped"] = max(summary["images_skipped"] - summary["images_failed"], 0)
+    summary["reports_skipped"] = max(summary["reports_skipped"] - summary["reports_failed"], 0)
+    summary["images_pending"] = max(
+        summary["images_seen"] - summary["images_downloaded"] - summary["images_skipped"] - summary["images_failed"],
         0,
     )
+    summary["reports_pending"] = max(
+        summary["reports_seen"] - summary["reports_downloaded"] - summary["reports_skipped"] - summary["reports_failed"],
+        0,
+    )
+    summary["pending"] = summary["images_pending"] + summary["reports_pending"]
     return summary
 
 

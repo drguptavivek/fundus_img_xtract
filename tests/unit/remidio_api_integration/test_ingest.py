@@ -190,3 +190,30 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
         .count()
         == 1
     )
+
+    duplicate_report = RemidioReport(
+        remidio_exam_id=exam.id,
+        remidio_report_id="report-1",
+        report_type="aiReport",
+        remidio_path="https://files.example.test/report-1.pdf",
+    )
+    db_session.add(duplicate_report)
+    db_session.flush()
+
+    second_result = ingest_staged_files(
+        db_session,
+        connection_id=connection.id,
+        client=FakeRemidioClient(),
+        payload={"limit": 10},
+    )
+
+    db_session.refresh(duplicate_report)
+    assert second_result["summary"]["reports_downloaded"] == 0
+    assert second_result["summary"]["reports_skipped"] == 2
+    assert duplicate_report.encounter_set_attachment_id == attachment.id
+    assert (
+        db_session.query(EncounterSetAttachment)
+        .filter_by(patient_encounter_id=exam.patient_encounter_id)
+        .count()
+        == 1
+    )

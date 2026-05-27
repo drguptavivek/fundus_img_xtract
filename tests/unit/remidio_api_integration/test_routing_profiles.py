@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from encounter_set_types.models import EncounterSetType
-from models import Disease, EncounterSetImage, Project, RemidioConnection
+from models import Disease, EncounterSetImage, Project, RemidioConnection, RemidioSite
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError
 from remidio_api_integration.routing import upsert_routing_profile, upsert_routing_profile_route
@@ -111,6 +111,42 @@ def test_routing_profile_route_requires_same_project_automated_profile(db_sessio
                 "active_from_date": "2026-01-01",
             },
         )
+
+
+def test_routing_profile_route_prefers_synced_site_custom_identifier(db_session, core_test_data):
+    project = _project(db_session, "SITE")
+    connection = _connection(db_session)
+    site = RemidioSite(
+        remidio_connection_id=connection.id,
+        remidio_site_id=5504695309172736,
+        site_name="Synced Site",
+        site_custom_identifier="rpc_from_site",
+        active=True,
+    )
+    db_session.add(site)
+    db_session.flush()
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route {uuid4()}", "active": True},
+    )
+
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "remidio_site_id": site.id,
+            "site_custom_identifier": "stale_form_value",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    assert route.source_rule.site_custom_identifier == "rpc_from_site"
 
 
 def test_routing_profile_sync_fetches_and_saves_scoped_encounter_set(db_session, core_test_data, tmp_path, monkeypatch):

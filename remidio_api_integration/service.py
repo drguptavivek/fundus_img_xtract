@@ -182,7 +182,7 @@ def upsert_routing_rule(db: Session, payload: dict[str, Any]) -> RemidioRoutingR
         if site is None or site.remidio_connection_id != connection_id:
             raise RemidioConfigError("remidio_site_id does not belong to the connection.")
 
-    site_custom_identifier = (payload.get("site_custom_identifier") or (site.site_custom_identifier if site else None) or "").strip()
+    site_custom_identifier = ((site.site_custom_identifier if site else None) or payload.get("site_custom_identifier") or "").strip()
     if not site_custom_identifier:
         raise RemidioConfigError("site_custom_identifier is required.")
     device_type = normalize_device_type(_required_string(payload, "remidio_device_type"))

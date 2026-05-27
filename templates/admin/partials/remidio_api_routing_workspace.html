@@ -170,14 +170,15 @@
           hx-swap="none"
           data-json-api-htmx
           data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
-          data-json-api-reload-target="#remidio-api-routing-workspace">
+          data-json-api-reload-target="#remidio-api-routing-workspace"
+          data-remidio-api-route-form>
       {{ csrf_field() }}
       <input type="hidden" name="routing_profile_id" value="{{ profile.id }}">
       <input type="hidden" name="active" value="true">
       <div class="row g-2 align-items-end">
         <div class="col-md-3">
           <label class="form-label" for="route_connection_{{ profile.id }}">Connection</label>
-          <select class="form-select" id="route_connection_{{ profile.id }}" name="remidio_connection_id" required>
+          <select class="form-select" id="route_connection_{{ profile.id }}" name="remidio_connection_id" required data-remidio-route-connection>
             <option value="">Select connection</option>
             {% for connection in connections %}
             <option value="{{ connection.id }}">{{ connection.name }}</option>
@@ -186,16 +187,18 @@
         </div>
         <div class="col-md-3">
           <label class="form-label" for="route_site_{{ profile.id }}">Synced Site</label>
-          <select class="form-select" id="route_site_{{ profile.id }}" name="remidio_site_id">
+          <select class="form-select" id="route_site_{{ profile.id }}" name="remidio_site_id" data-remidio-route-site>
             <option value="">Use custom identifier</option>
             {% for site in sites if site.site_custom_identifier %}
-            <option value="{{ site.id }}">{{ site.connection.name if site.connection else 'Connection' }} · {{ site.site_name or site.remidio_site_id }} · {{ site.site_custom_identifier }}</option>
+            <option value="{{ site.id }}"
+                    data-remidio-connection-id="{{ site.remidio_connection_id }}"
+                    data-remidio-site-custom-identifier="{{ site.site_custom_identifier }}">{{ site.connection.name if site.connection else 'Connection' }} · {{ site.site_name or site.remidio_site_id }} · {{ site.site_custom_identifier }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="col-md-3">
           <label class="form-label" for="route_site_custom_{{ profile.id }}">Site Custom Identifier</label>
-          <input class="form-control" id="route_site_custom_{{ profile.id }}" name="site_custom_identifier" placeholder="rpc_comoph_2">
+          <input class="form-control" id="route_site_custom_{{ profile.id }}" name="site_custom_identifier" placeholder="rpc_comoph_2" data-remidio-route-site-custom>
         </div>
         <div class="col-md-3">
           <label class="form-label" for="route_device_{{ profile.id }}">Remidio Device Type</label>

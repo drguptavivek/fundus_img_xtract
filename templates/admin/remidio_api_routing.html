@@ -27,4 +27,5 @@
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-remidio-api-routing.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 {% endblock %}

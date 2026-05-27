@@ -8,6 +8,7 @@ from models import (
     Session,
     EncounterFile,
     EncounterFilePDF,
+    EncounterSetImage,
     ImageMetadata,
     DirectImageUpload
 )
@@ -44,11 +45,12 @@ def process_file_visual(
 
     result = {"status": "ok", "thumbnail": None}
 
-    # Determine Model based on type
     if file_type == 'encounter_file':
         model_cls = EncounterFile
     elif file_type == 'direct_upload':
         model_cls = DirectImageUpload
+    elif file_type == 'encounter_set_image':
+        model_cls = EncounterSetImage
     else:
         raise ValueError(f"Unknown file_type: {file_type}")
 
@@ -59,7 +61,12 @@ def process_file_visual(
     # Image Processing
     if path.suffix.lower() in {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}:
         thumb_filename = get_thumbnail_filename(path.name)
-        thumb_path = path.parent / thumb_filename
+        if file_type == 'encounter_set_image':
+            thumb_dir = path.parent / "thumbnails"
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_path = thumb_dir / thumb_filename
+        else:
+            thumb_path = path.parent / thumb_filename
         
         success = generate_thumbnail(path, thumb_path)
         if success:
@@ -111,6 +118,10 @@ def process_file_data_pipeline(
         record = db_session.query(DirectImageUpload).get(file_id)
         if not record: raise ValueError(f"DirectImageUpload {file_id} not found")
         image_uuid, encounter_file_id, direct_upload_id = str(record.uuid), None, record.id
+    elif file_type == 'encounter_set_image':
+        record = db_session.query(EncounterSetImage).get(file_id)
+        if not record: raise ValueError(f"EncounterSetImage {file_id} not found")
+        image_uuid, encounter_file_id, direct_upload_id = str(record.uuid), None, None
     else:
         raise ValueError(f"Unknown file_type: {file_type}")
 

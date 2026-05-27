@@ -14,6 +14,7 @@ def _import_all():
     from . import zip_tasks  # noqa: F401
     from . import zip_upload_tasks  # noqa: F401
     from . import direct_upload_tasks  # noqa: F401
+    from . import encounter_set_tasks  # noqa: F401
     from . import cve_tasks  # noqa: F401
     from . import package_update_tasks  # noqa: F401
     from . import mv_tasks  # noqa: F401
@@ -28,6 +29,7 @@ def _import_general():
     from . import thumbnail_tasks  # noqa: F401
     from . import zip_upload_tasks  # noqa: F401
     from . import direct_upload_tasks  # noqa: F401
+    from . import encounter_set_tasks  # noqa: F401
     from . import cve_tasks  # noqa: F401
     from . import package_update_tasks  # noqa: F401
     from . import mv_tasks  # noqa: F401
@@ -48,6 +50,7 @@ def _import_ocr():
     from . import zip_tasks  # noqa: F401
     from . import zip_upload_tasks  # noqa: F401
     from . import direct_upload_tasks  # noqa: F401
+    from . import encounter_set_tasks  # noqa: F401
 
 if _PROFILE in ("client", "none", "minimal"):
     pass

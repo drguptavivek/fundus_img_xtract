@@ -1128,6 +1128,7 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
         job = db.get(Job, job_id)
         if job and job.status in {"paused", "cancelled"}:
             return {"job_id": job_id, "item_id": item_id, "status": job.status}
+        job_user_id = job.uploader_user_id if job else None
         try:
             payload_data = json.loads(item.detail or "{}")
         except json.JSONDecodeError as exc:
@@ -1163,6 +1164,9 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
         progress = _ProjectSyncProgress(job_id=job_id, item_id=item_id, payload=payload)
         _update_project_sync_item_progress(job_id, item_id, payload, progress.snapshot("started"))
         result = _run_routing_profile_sync_payload(payload, progress_callback=progress.update)
+        post_processing = _queue_encounter_set_image_post_processing(result, user_id=job_user_id)
+        if post_processing:
+            result["post_processing"] = post_processing
         with get_db_session() as db:
             item = db.get(JobItem, item_id)
             if item:
@@ -1202,6 +1206,67 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
                 db.add(item)
                 db.commit()
         return {"job_id": job_id, "item_id": item_id, "status": "failed", "error": error}
+
+
+def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
+    image_ids = _downloaded_encounter_set_image_ids(result)
+    if not image_ids:
+        return {"images_queued": 0}
+
+    try:
+        from celery import chain
+        from utils.celery_helpers import celery_enabled
+        from celery_tasks.tasks.encounter_set_tasks import (
+            process_encounter_set_image_data_combined_task,
+            process_encounter_set_image_thumbnail_task,
+        )
+
+        queued = 0
+        if celery_enabled():
+            for image_id in image_ids:
+                chain(
+                    process_encounter_set_image_thumbnail_task.s(image_id, user_id=user_id),
+                    process_encounter_set_image_data_combined_task.s(),
+                ).apply_async()
+                queued += 1
+        else:
+            for image_id in image_ids:
+                visual_result = process_encounter_set_image_thumbnail_task.run(image_id, user_id=user_id)
+                process_encounter_set_image_data_combined_task.run(visual_result)
+                queued += 1
+        LOGGER.info(
+            "Queued EncounterSet post-processing for Remidio API images count=%s",
+            sanitize_log_value(queued),
+        )
+        return {"images_queued": queued}
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning(
+            "Failed to queue EncounterSet post-processing for Remidio API images count=%s error=%s",
+            sanitize_log_value(len(image_ids)),
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        return {"images_queued": 0, "queue_errors": len(image_ids)}
+
+
+def _downloaded_encounter_set_image_ids(result: dict[str, Any]) -> list[int]:
+    ids: list[int] = []
+    seen: set[int] = set()
+    for group in result.get("groups") or []:
+        ingest = group.get("ingest") if isinstance(group, dict) else None
+        if not isinstance(ingest, dict):
+            continue
+        for exam in ingest.get("exams") or []:
+            if not isinstance(exam, dict):
+                continue
+            for image in exam.get("images") or []:
+                if not isinstance(image, dict) or image.get("status") != "downloaded":
+                    continue
+                image_id = _optional_int(image.get("encounter_set_image_id"))
+                if image_id is not None and image_id not in seen:
+                    ids.append(image_id)
+                    seen.add(image_id)
+    return ids
 
 
 def _project_route_groups(db: Session, project_id: int) -> list[dict[str, Any]]:
@@ -1688,11 +1753,13 @@ def _job_item_error(item: JobItem) -> str | None:
 def _result_summary(result: dict[str, Any]) -> dict[str, int]:
     summary = {
         "exams_seen": 0,
+        "images_found": 0,
         "images_seen": 0,
         "images_downloaded": 0,
         "images_skipped": 0,
         "images_failed": 0,
         "images_pending": 0,
+        "reports_found": 0,
         "reports_seen": 0,
         "reports_downloaded": 0,
         "reports_skipped": 0,
@@ -1707,8 +1774,10 @@ def _result_summary(result: dict[str, Any]) -> dict[str, int]:
         pull_summary = ((group.get("pull") or {}).get("summary") or {})
         ingest_summary = (((group.get("ingest") or {}).get("summary")) or {})
         summary["exams_seen"] += int(pull_summary.get("exams_seen") or 0)
-        summary["images_seen"] += int(pull_summary.get("images_seen") or 0)
-        summary["reports_seen"] += int(pull_summary.get("reports_seen") or 0)
+        summary["images_found"] += int(pull_summary.get("images_seen") or 0)
+        summary["reports_found"] += int(pull_summary.get("reports_seen") or 0)
+        summary["images_seen"] += int(ingest_summary.get("images_seen") or 0)
+        summary["reports_seen"] += int(ingest_summary.get("reports_seen") or 0)
         summary["images_downloaded"] += int(ingest_summary.get("images_downloaded") or 0)
         summary["images_skipped"] += int(ingest_summary.get("images_skipped") or 0)
         summary["reports_downloaded"] += int(ingest_summary.get("reports_downloaded") or 0)

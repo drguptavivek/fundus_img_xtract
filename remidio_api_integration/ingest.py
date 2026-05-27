@@ -24,7 +24,6 @@ from models import (
     RemidioReport,
 )
 from upload_profiles.models import PatientEncounterTargetDisease
-from utils.image_processing import generate_thumbnail, get_thumbnail_filename, strip_exif_data
 from utils.log_sanitize import sanitize_log_value
 
 from .client import RemidioClient
@@ -286,13 +285,11 @@ def _ingest_image(
         )
         content, content_type = client.download_file(_source_url(image), max_bytes=MAX_FILE_BYTES)
         extension = _image_extension(content, content_type, image.remidio_path)
-        safe_content = _strip_image_exif(content)
         filename = f"{uuid4()}{extension}"
         folder_rel = _encounter_set_folder_rel(encounter)
         target_path = BASE_DIR / folder_rel / filename
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(safe_content)
-        thumbnail_filename = _generate_encounter_set_thumbnail(target_path, filename)
+        target_path.write_bytes(content)
         image_metadata = _image_metadata(mapped_metadata, image.remidio_image_id)
         set_image = EncounterSetImage(
             uuid=str(uuid4()),
@@ -307,7 +304,7 @@ def _ingest_image(
             project_id=encounter.project_id,
             camera_id=binding.camera_id,
             hospital_id=binding.lab_unit.hospital_id if binding.lab_unit else None,
-            thumbnail_filename=thumbnail_filename,
+            thumbnail_filename=None,
             metadata_json=image_metadata,
         )
         db.add(set_image)
@@ -713,19 +710,6 @@ def _encounter_set_folder_rel(encounter: PatientEncounters) -> str:
     return f"files/encounter_sets/{date_str}/{encounter.id}"
 
 
-def _generate_encounter_set_thumbnail(image_path: Path, filename: str) -> str | None:
-    try:
-        thumbnail_filename = get_thumbnail_filename(filename)
-        thumbnail_dir = image_path.parent / "thumbnails"
-        thumbnail_dir.mkdir(parents=True, exist_ok=True)
-        if generate_thumbnail(image_path, thumbnail_dir / thumbnail_filename):
-            return thumbnail_filename
-    except (OSError, UnidentifiedImageError) as exc:
-        logger.info("Remidio EncounterSet thumbnail generation failed: %s", sanitize_log_value(exc))
-        return None
-    return None
-
-
 def _site_identifier(exam: RemidioExam) -> str | None:
     if exam.site_custom_identifier:
         return exam.site_custom_identifier
@@ -759,14 +743,6 @@ def _image_extension(content: bytes, content_type: str | None, path: str | None)
     except UnidentifiedImageError as exc:
         raise RemidioRemoteError("Downloaded Remidio image is not a valid image.") from exc
     return ".jpg"
-
-
-def _strip_image_exif(content: bytes) -> bytes:
-    try:
-        return strip_exif_data(content)
-    except (OSError, UnidentifiedImageError, ValueError) as exc:
-        logger.info("Remidio image EXIF strip failed; storing original bytes: %s", sanitize_log_value(exc))
-        return content
 
 
 def _looks_like_pdf(content: bytes, content_type: str | None, path: str | None) -> bool:

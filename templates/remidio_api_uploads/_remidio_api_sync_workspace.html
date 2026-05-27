@@ -187,8 +187,24 @@
               <th>Date Range</th>
               <th>Progress</th>
               <th>EncounterSets</th>
-              <th>Images</th>
-              <th>Reports</th>
+              <th>
+                Images
+                <span class="text-muted ms-1"
+                      role="button"
+                      tabindex="0"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      title="Found by API is the raw Remidio response count. Eligible is the route-matched subset for this project/site/device/date that the sync selected for download. Pending means eligible assets not yet saved, skipped, or failed.">?</span>
+              </th>
+              <th>
+                Reports
+                <span class="text-muted ms-1"
+                      role="button"
+                      tabindex="0"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      title="Found by API is the raw Remidio response count. Eligible is the route-matched subset for this project/site/device/date that the sync selected for download. Pending means eligible reports not yet saved, skipped, or failed.">?</span>
+              </th>
               <th>Actions</th>
               <th>Error</th>
             </tr>
@@ -233,10 +249,26 @@
               </td>
               <td class="small">
                 <div>{{ job.summary.images_downloaded }} saved</div>
+                {% if job.summary.images_found and job.summary.images_found != job.summary.images_seen %}
+                <div class="text-muted">{{ job.summary.images_found }} found by API · {{ job.summary.images_seen }} eligible</div>
+                {% endif %}
+                {% if job.active_progress %}
+                <div class="text-primary">
+                  Active: {{ job.active_progress.images_downloaded }}/{{ job.active_progress.images_seen }} downloaded
+                </div>
+                {% endif %}
                 <div class="text-muted">{{ job.summary.images_skipped }} skipped · {{ job.summary.images_failed }} failed · {{ job.summary.images_pending }} pending</div>
               </td>
               <td class="small">
                 <div>{{ job.summary.reports_downloaded }} saved</div>
+                {% if job.summary.reports_found and job.summary.reports_found != job.summary.reports_seen %}
+                <div class="text-muted">{{ job.summary.reports_found }} found by API · {{ job.summary.reports_seen }} eligible</div>
+                {% endif %}
+                {% if job.active_progress %}
+                <div class="text-primary">
+                  Active: {{ job.active_progress.reports_downloaded }}/{{ job.active_progress.reports_seen }} downloaded
+                </div>
+                {% endif %}
                 <div class="text-muted">{{ job.summary.reports_skipped }} skipped · {{ job.summary.reports_failed }} failed · {{ job.summary.reports_pending }} pending</div>
               </td>
               <td>

@@ -29,6 +29,8 @@ CELERY_TASK_ROUTES = {
     "celery_tasks.tasks.direct_upload_tasks.process_direct_data_combined_task": {"queue": "pii_detection"},
     "celery_tasks.tasks.direct_upload_tasks.process_direct_metadata_only_task": {"queue": "metadata"},
     "celery_tasks.tasks.direct_upload_tasks.process_direct_pii_only_task": {"queue": "pii_detection"},
+    "celery_tasks.tasks.encounter_set_tasks.process_encounter_set_image_thumbnail_task": {"queue": "thumbnails"},
+    "celery_tasks.tasks.encounter_set_tasks.process_encounter_set_image_data_combined_task": {"queue": "pii_detection"},
     "celery_tasks.tasks.metadata_tasks.extract_exif_task": {"queue": "metadata"},
 }
 

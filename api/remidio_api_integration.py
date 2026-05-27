@@ -12,7 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from remidio_api_integration import routing as api_routing
 from remidio_api_integration import service
-from remidio_api_integration.errors import RemidioIntegrationError
+from remidio_api_integration.errors import RemidioConfigError, RemidioIntegrationError
 from utils.log_sanitize import sanitize_log_value
 
 from . import api_bp
@@ -220,6 +220,35 @@ def upsert_remidio_api_routing_profile():
         return _error_response(exc)
 
 
+@api_bp.route("/remidio/api-routing-profiles/<int:routing_profile_id>", methods=["DELETE"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def delete_remidio_api_routing_profile(routing_profile_id: int):
+    try:
+        with transaction_scope() as db:
+            api_routing.delete_routing_profile(db, routing_profile_id)
+            return jsonify({"success": True, "message": "Remidio API routing profile deleted."})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-routing-profile-routes", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def create_remidio_api_routing_profile_with_route():
+    payload = _json_payload()
+    try:
+        with transaction_scope() as db:
+            profile, binding = api_routing.create_routing_profile_with_route(db, payload, manager_user_id=current_user.id)
+            data = {
+                "routing_profile": next(item for item in api_routing.list_routing_profiles(db) if item["id"] == profile.id),
+                "route": next(item for item in api_routing.list_api_bindings(db) if item["id"] == binding.id),
+            }
+            return jsonify({"success": True, "data": data, "message": "Remidio API routing profile created."}), 201
+    except IntegrityError:
+        return jsonify({"success": False, "error": "Remidio API routing profile or route conflicts with an existing record."}), 409
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
 @api_bp.route("/remidio/api-routing-rules", methods=["GET"])
 @roles_required(*REMIDIO_BINDING_ROLES)
 def list_remidio_api_routing_rules():
@@ -260,6 +289,75 @@ def sync_remidio_api_routing_profile(routing_profile_id: int):
             )
         service.enqueue_routing_profile_sync_job(data["job_id"], user_id=current_user.id)
         return jsonify({"success": True, "data": data, "message": "Remidio API sync job queued."}), 202
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/projects/<int:project_id>/sync", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+def sync_remidio_api_project(project_id: int):
+    payload = _json_payload()
+    return _sync_remidio_api_project_from_payload(project_id, payload)
+
+
+@api_bp.route("/remidio/projects/sync", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+def sync_selected_remidio_api_project():
+    payload = _json_payload()
+    try:
+        project_id = _required_int_payload(payload, "project_id")
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+    return _sync_remidio_api_project_from_payload(project_id, payload)
+
+
+def _sync_remidio_api_project_from_payload(project_id: int, payload: dict):
+    try:
+        with transaction_scope() as db:
+            data = service.create_project_sync_job(
+                db,
+                project_id=project_id,
+                payload=payload,
+                requested_by_user_id=current_user.id,
+                requested_by_username=current_user.username,
+            )
+        if data["items_created"] > 0:
+            service.enqueue_project_sync_job(data["job_id"], user_id=current_user.id)
+        return jsonify({"success": True, "data": data, "message": "Remidio API project sync queued."}), 202
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/project-sync-jobs/<int:job_id>/pause", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+def pause_remidio_api_project_sync_job(job_id: int):
+    try:
+        with transaction_scope() as db:
+            data = service.pause_project_sync_job(db, job_id)
+        return jsonify({"success": True, "data": data, "message": "Remidio API project sync paused."})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/project-sync-jobs/<int:job_id>/resume", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+def resume_remidio_api_project_sync_job(job_id: int):
+    try:
+        with transaction_scope() as db:
+            data = service.resume_project_sync_job(db, job_id)
+        service.enqueue_project_sync_job(job_id, user_id=current_user.id)
+        return jsonify({"success": True, "data": data, "message": "Remidio API project sync resumed."})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/project-sync-jobs/<int:job_id>/cancel", methods=["POST"])
+@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+def cancel_remidio_api_project_sync_job(job_id: int):
+    try:
+        with transaction_scope() as db:
+            data = service.cancel_project_sync_job(db, job_id)
+        return jsonify({"success": True, "data": data, "message": "Remidio API project sync cancelled."})
     except RemidioIntegrationError as exc:
         return _error_response(exc)
 
@@ -317,6 +415,16 @@ def _optional_int_arg(name: str) -> int | None:
         return int(value)
     except ValueError:
         return None
+
+
+def _required_int_payload(payload: dict, name: str) -> int:
+    value = payload.get(name)
+    if value in {None, ""}:
+        raise RemidioConfigError(f"{name} is required.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise RemidioConfigError(f"{name} must be an integer.") from exc
 
 
 def _connection_response(db, connection_id: int) -> dict:

@@ -34,6 +34,19 @@
             </div>
           {% endif %}
 
+          {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('fileUploader') %}
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">
+                <div class="card card-sea h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Remidio API Sync</div>
+                    <div class="small opacity-75">Fetch routed EncounterSets</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+          {% endif %}
+
           {% if current_user_has('fileUploader') %}
             <div class="col">
               <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">

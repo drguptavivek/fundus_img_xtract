@@ -1,0 +1,219 @@
+<div class="row g-3">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <label class="form-label" for="encounter-browser-project">Project</label>
+        <select class="form-select"
+                id="encounter-browser-project"
+                name="project_id"
+                hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace') }}"
+                hx-target="#encounter-set-browser-workspace"
+                hx-swap="innerHTML"
+                hx-trigger="change">
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+            {{ project.title }}{% if project.code %} · {{ project.code }}{% endif %} · {{ project.encounter_count }} EncounterSets
+          </option>
+          {% endfor %}
+        </select>
+        {% if not projects %}
+        <div class="form-text text-warning">No EncounterSets are available for your project scope.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if selected_project_id %}
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body py-3 d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+        <div class="flex-shrink-0" style="min-width: 12rem;">
+          <label class="visually-hidden" for="encounter-browser-month">Month</label>
+          <select class="form-select form-select-sm"
+                  id="encounter-browser-month"
+                  name="month"
+                  hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace', project_id=selected_project_id) }}"
+                  hx-target="#encounter-set-browser-workspace"
+                  hx-swap="innerHTML"
+                  hx-trigger="change">
+            {% for month in months %}
+            <option value="{{ month.value }}" {% if month.value == selected_month %}selected{% endif %}>{{ month.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="d-flex gap-2 overflow-auto pb-1 flex-fill">
+          {% for date_row in dates %}
+          <button class="btn btn-sm {{ 'btn-primary' if date_row.date == selected_date else 'btn-outline-secondary' }} flex-shrink-0"
+                  type="button"
+                  hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace', project_id=selected_project_id, month=selected_month, date=date_row.date.isoformat()) }}"
+                  hx-target="#encounter-set-browser-workspace"
+                  hx-swap="innerHTML">
+            <span class="d-block fw-semibold">{{ date_row.label }}</span>
+            <span class="small">{{ date_row.count }}</span>
+          </button>
+          {% else %}
+          <div class="text-muted">No dated EncounterSets are available for this project.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Patients</span>
+        <span class="badge text-bg-secondary">{{ patients|length }}</span>
+      </div>
+      <div class="list-group list-group-flush overflow-auto" style="max-height: 70vh;">
+        {% for patient in patients %}
+        <button class="list-group-item list-group-item-action text-start {{ 'active' if patient.id == selected_encounter_id else '' }}"
+                type="button"
+                hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace', project_id=selected_project_id, month=selected_month, date=selected_date.isoformat() if selected_date else '', encounter_id=patient.id) }}"
+                hx-target="#encounter-set-browser-workspace"
+                hx-swap="innerHTML">
+          <div class="d-flex justify-content-between gap-2">
+            <div class="fw-semibold text-truncate">{{ patient.name or '-' }}</div>
+            <span class="badge {{ 'text-bg-success' if patient.verified_status == 'verified' else 'text-bg-warning' }}">
+              {{ patient.verified_status }}
+            </span>
+          </div>
+          <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
+            {{ patient.mrn or '-' }}
+            {% if patient.age %} · {{ patient.age }}y{% endif %}
+            {% if patient.sex %} · {{ patient.sex }}{% endif %}
+          </div>
+          <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
+            {{ patient.image_count }} images · {{ patient.attachment_count }} attachments
+          </div>
+        </button>
+        {% else %}
+        <div class="list-group-item text-muted">No patients on this date.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-8">
+    {% if detail %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold">{{ detail.name or '-' }}</div>
+          <div class="small text-muted">
+            {{ detail.mrn or '-' }}
+            {% if detail.age %} · {{ detail.age }}y{% endif %}
+            {% if detail.sex %} · {{ detail.sex }}{% endif %}
+            {% if detail.capture_datetime %} · {{ detail.capture_datetime | user_datetime }}{% elif detail.capture_date_dt %} · {{ detail.capture_date_dt.strftime('%d-%m-%Y') }}{% endif %}
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          <span class="badge text-bg-light">{{ detail.project_title or '-' }}</span>
+          <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">Verify</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-4">
+            <div class="small text-muted">Lab</div>
+            <div>{{ detail.lab_unit_name or '-' }}</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="small text-muted">Remidio Exam</div>
+            <div>{{ detail.remidio_exam_id or '-' }}</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <div class="small text-muted">Capture Date Time</div>
+            <div>{{ detail.capture_datetime | user_datetime if detail.capture_datetime else '-' }}</div>
+          </div>
+        </div>
+
+        {% for group in detail.image_groups %}
+        <div class="border rounded mb-3">
+          <div class="px-3 py-2 border-bottom fw-semibold">{{ group.label }}</div>
+          <div class="p-3">
+            <div class="row g-3">
+              {% for image in group.images %}
+              <div class="col-6 col-md-4 col-xxl-3">
+                <a class="text-decoration-none" href="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}" target="_blank" rel="noopener">
+                  <div class="border rounded overflow-hidden bg-body-tertiary">
+                    <div class="ratio ratio-1x1">
+                      <img class="w-100 h-100 object-fit-cover"
+                           src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
+                           alt="EncounterSet image {{ image.position }}">
+                    </div>
+                    <div class="p-2 small">
+                      <div class="fw-semibold">Position {{ image.position }}</div>
+                      <div class="text-muted text-truncate">
+                        {{ image.laterality or '-' }}{% if image.field %} · {{ image.field }}{% endif %}
+                      </div>
+                      <div class="text-muted text-truncate">{{ image.camera_name or image.device_type or '-' }}</div>
+                    </div>
+                  </div>
+                </a>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-muted">No images are attached to this EncounterSet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-header">Attachments</div>
+          <div class="list-group list-group-flush">
+            {% for attachment in detail.attachments %}
+            <a class="list-group-item list-group-item-action"
+               href="{{ url_for('remidio_api_uploads.encounter_set_attachment', uuid=attachment.uuid) }}"
+               target="_blank"
+               rel="noopener">
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">{{ attachment.report_type or attachment.asset_kind }}</span>
+                <span class="small text-muted">{{ attachment.mime_type or '-' }}</span>
+              </div>
+              <div class="small text-muted text-truncate">{{ attachment.filename }}</div>
+              {% if attachment.remidio_report_id %}
+              <div class="small text-muted">Remidio report {{ attachment.remidio_report_id }}</div>
+              {% endif %}
+            </a>
+            {% else %}
+            <div class="list-group-item text-muted">No attachments.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-header">Metadata</div>
+          <div class="card-body small">
+            <dl class="row mb-0">
+              {% for key, value in detail.metadata_patient.items() %}
+              <dt class="col-5 text-muted">{{ key }}</dt>
+              <dd class="col-7 text-break">{{ value }}</dd>
+              {% endfor %}
+              {% for key, value in detail.metadata_encounter.items() %}
+              <dt class="col-5 text-muted">{{ key }}</dt>
+              <dd class="col-7 text-break">{{ value }}</dd>
+              {% endfor %}
+              {% if not detail.metadata_patient and not detail.metadata_encounter %}
+              <dt class="col-12 text-muted fw-normal">No metadata captured.</dt>
+              {% endif %}
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm h-100">
+      <div class="card-body text-muted">Select a patient to view EncounterSet data.</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

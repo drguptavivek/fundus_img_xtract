@@ -18,6 +18,7 @@ def _import_all():
     from . import package_update_tasks  # noqa: F401
     from . import mv_tasks  # noqa: F401
     from . import wadhwani_tasks  # noqa: F401
+    from . import remidio_tasks  # noqa: F401
 
 def _import_general():
     from . import export_tasks  # noqa: F401
@@ -31,6 +32,7 @@ def _import_general():
     from . import package_update_tasks  # noqa: F401
     from . import mv_tasks  # noqa: F401
     from . import wadhwani_tasks  # noqa: F401
+    from . import remidio_tasks  # noqa: F401
 
 def _import_maintenance():
     # Minimal imports for beat scheduler - only maintenance tasks
@@ -38,6 +40,7 @@ def _import_maintenance():
     from . import cve_tasks  # noqa: F401
     from . import package_update_tasks  # noqa: F401
     from . import mv_tasks  # noqa: F401
+    from . import remidio_tasks  # noqa: F401
 
 def _import_ocr():
     from . import metadata_tasks  # noqa: F401

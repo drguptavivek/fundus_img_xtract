@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}EncounterSet Browser{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">EncounterSet Browser</h1>
+      <p class="text-muted mb-0">Browse project EncounterSets by date and patient.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">Remidio API Sync</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
+    </div>
+  </div>
+
+  <div id="encounter-set-browser-workspace">
+    {% include "remidio_api_uploads/_encounter_set_browser_workspace.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+{% endblock %}

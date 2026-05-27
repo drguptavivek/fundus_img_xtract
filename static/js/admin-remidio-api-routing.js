@@ -1,5 +1,38 @@
 (function () {
+  function syncProjectProfileOptions(form) {
+    const project = form.querySelector('[data-remidio-route-project]');
+    const profile = form.querySelector('[data-remidio-route-project-profile]');
+    const emptyMessage = form.querySelector('[data-remidio-route-project-profile-empty]');
+    if (!project || !profile) {
+      return;
+    }
+    const projectId = project.value;
+    let selectedVisible = false;
+    let visibleCount = 0;
+    Array.from(profile.options).forEach((option) => {
+      if (!option.value) {
+        option.hidden = false;
+        return;
+      }
+      const visible = !projectId || option.dataset.remidioProjectId === projectId;
+      option.hidden = !visible;
+      if (visible) {
+        visibleCount += 1;
+      }
+      if (visible && option.selected) {
+        selectedVisible = true;
+      }
+    });
+    if (profile.value && !selectedVisible) {
+      profile.value = '';
+    }
+    if (emptyMessage) {
+      emptyMessage.classList.toggle('d-none', !projectId || visibleCount > 0);
+    }
+  }
+
   function syncRouteForm(form) {
+    syncProjectProfileOptions(form);
     const connection = form.querySelector('[data-remidio-route-connection]');
     const site = form.querySelector('[data-remidio-route-site]');
     const customIdentifier = form.querySelector('[data-remidio-route-site-custom]');
@@ -47,8 +80,38 @@
     root.querySelectorAll('[data-remidio-api-route-form]').forEach(syncRouteForm);
   }
 
+  function hidePanels() {
+    document.querySelectorAll('[data-remidio-routing-create-panel], [data-remidio-routing-edit-panel]').forEach((panel) => {
+      panel.hidden = true;
+    });
+  }
+
+  function showCreatePanel() {
+    hidePanels();
+    const panel = document.querySelector('[data-remidio-routing-create-panel]');
+    if (panel) {
+      panel.hidden = false;
+      const input = panel.querySelector('select[name="project_id"], input[name="name"]');
+      if (input) {
+        input.focus();
+      }
+    }
+  }
+
+  function showEditPanel(profileId) {
+    hidePanels();
+    const panel = document.querySelector('[data-remidio-routing-edit-panel="' + profileId + '"]');
+    if (panel) {
+      panel.hidden = false;
+      const input = panel.querySelector('input[name="name"]');
+      if (input) {
+        input.focus();
+      }
+    }
+  }
+
   document.body.addEventListener('change', function (event) {
-    if (!event.target.matches('[data-remidio-route-connection], [data-remidio-route-site]')) {
+    if (!event.target.matches('[data-remidio-route-project], [data-remidio-route-connection], [data-remidio-route-site]')) {
       return;
     }
     const form = event.target.closest('[data-remidio-api-route-form]');
@@ -58,27 +121,25 @@
   });
 
   document.body.addEventListener('click', function (event) {
-    const toggle = event.target.closest('[data-remidio-routing-profile-edit-toggle]');
-    const cancel = event.target.closest('[data-remidio-routing-profile-edit-cancel]');
-    const profileId = toggle
-      ? toggle.dataset.remidioRoutingProfileEditToggle
-      : cancel && cancel.dataset.remidioRoutingProfileEditCancel;
-    if (!profileId) {
+    const create = event.target.closest('[data-remidio-routing-show-create]');
+    const edit = event.target.closest('[data-remidio-routing-show-edit]');
+    const hide = event.target.closest('[data-remidio-routing-hide-panel]');
+    const deleteButton = event.target.closest('[data-remidio-routing-confirm-delete]');
+    if (create) {
+      showCreatePanel();
       return;
     }
-
-    const row = Array.from(document.querySelectorAll('[data-remidio-routing-profile-edit-row]')).find(
-      (candidate) => candidate.dataset.remidioRoutingProfileEditRow === profileId
-    );
-    if (!row) {
+    if (edit) {
+      showEditPanel(edit.dataset.remidioRoutingShowEdit);
       return;
     }
-    row.hidden = Boolean(cancel) || !row.hidden;
-    if (!row.hidden) {
-      const input = row.querySelector('input[name="name"]');
-      if (input) {
-        input.focus();
-      }
+    if (hide) {
+      hidePanels();
+      return;
+    }
+    if (deleteButton && !window.confirm('Delete this routing profile and its routes?')) {
+      event.preventDefault();
+      event.stopPropagation();
     }
   });
 

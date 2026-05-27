@@ -9,6 +9,7 @@ from encounter_set_types.models import EncounterSetType
 from models import Disease, EncounterSetImage, Project, RemidioConnection, RemidioSite
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError
+from remidio_api_integration.models import RemidioApiSourceRule
 from remidio_api_integration.routing import upsert_routing_profile, upsert_routing_profile_route
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -147,6 +148,41 @@ def test_routing_profile_route_prefers_synced_site_custom_identifier(db_session,
     )
 
     assert route.source_rule.site_custom_identifier == "rpc_from_site"
+
+
+def test_routing_profile_route_reuses_existing_active_source_rule(db_session, core_test_data):
+    project = _project(db_session, "EXISTING")
+    connection = _connection(db_session)
+    existing_rule = RemidioApiSourceRule(
+        remidio_connection_id=connection.id,
+        site_custom_identifier="rpc_existing",
+        remidio_device_type="PRISTINE",
+        active=True,
+    )
+    db_session.add(existing_rule)
+    db_session.flush()
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route {uuid4()}", "active": True},
+    )
+
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_existing",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    assert route.remidio_api_source_rule_id == existing_rule.id
+    assert db_session.query(RemidioApiSourceRule).filter_by(site_custom_identifier="rpc_existing").count() == 1
 
 
 def test_routing_profile_sync_fetches_and_saves_scoped_encounter_set(db_session, core_test_data, tmp_path, monkeypatch):

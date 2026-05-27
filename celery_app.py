@@ -140,6 +140,11 @@ def make_celery_app() -> Celery:
             "schedule": crontab(minute="0,30", hour="*"),
         }
 
+        beat_schedule["remidio-api-prospective-sync-hourly"] = {
+            "task": "celery_tasks.tasks.remidio_tasks.queue_remidio_api_prospective_project_syncs_task",
+            "schedule": crontab(minute=5, hour="*"),
+        }
+
         # Cleanup old package scans - daily at 4 AM UTC
         beat_schedule["package-update-cleanup-daily"] = {
             "task": "celery_tasks.tasks.package_update_tasks.cleanup_old_package_scans_task",

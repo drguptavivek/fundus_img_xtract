@@ -95,6 +95,29 @@ def upsert_routing_profile(db: Session, payload: dict[str, Any]) -> RemidioApiRo
     return profile
 
 
+def create_routing_profile_with_route(
+    db: Session,
+    payload: dict[str, Any],
+    *,
+    manager_user_id: int | None = None,
+) -> tuple[RemidioApiRoutingProfile, ProjectUploadProfileRemidioApiBinding]:
+    profile = upsert_routing_profile(db, payload)
+    route_payload = dict(payload)
+    route_payload["routing_profile_id"] = profile.id
+    binding = upsert_routing_profile_route(db, route_payload, manager_user_id=manager_user_id)
+    return profile, binding
+
+
+def delete_routing_profile(db: Session, routing_profile_id: int) -> None:
+    profile = db.get(RemidioApiRoutingProfile, routing_profile_id)
+    if profile is None:
+        raise RemidioConfigError("Remidio API routing profile was not found.")
+    for route in list(profile.routes):
+        db.delete(route)
+    db.delete(profile)
+    db.flush()
+
+
 def upsert_routing_profile_route(
     db: Session,
     payload: dict[str, Any],
@@ -166,7 +189,20 @@ def upsert_api_source_rule(db: Session, payload: dict[str, Any]) -> RemidioApiSo
                 RemidioApiSourceRule.remidio_device_type == device_type,
                 RemidioApiSourceRule.active.is_(active),
             )
-            .one_or_none()
+            .order_by(RemidioApiSourceRule.id.asc())
+            .first()
+        )
+    if rule is None and active:
+        rule = (
+            db.query(RemidioApiSourceRule)
+            .filter(
+                RemidioApiSourceRule.remidio_connection_id == connection_id,
+                RemidioApiSourceRule.site_custom_identifier == site_custom_identifier,
+                RemidioApiSourceRule.remidio_device_type == device_type,
+                RemidioApiSourceRule.active.is_(True),
+            )
+            .order_by(RemidioApiSourceRule.id.asc())
+            .first()
         )
     if rule is None:
         rule = RemidioApiSourceRule(
@@ -178,18 +214,23 @@ def upsert_api_source_rule(db: Session, payload: dict[str, Any]) -> RemidioApiSo
         db.add(rule)
 
     if active:
-        conflict = (
-            db.query(RemidioApiSourceRule.id)
-            .filter(
-                RemidioApiSourceRule.id != (rule.id or 0),
-                RemidioApiSourceRule.remidio_connection_id == connection_id,
-                RemidioApiSourceRule.site_custom_identifier == site_custom_identifier,
-                RemidioApiSourceRule.remidio_device_type == device_type,
-                RemidioApiSourceRule.active.is_(True),
+        with db.no_autoflush:
+            conflict = (
+                db.query(RemidioApiSourceRule.id)
+                .filter(
+                    RemidioApiSourceRule.id != (rule.id or 0),
+                    RemidioApiSourceRule.remidio_connection_id == connection_id,
+                    RemidioApiSourceRule.site_custom_identifier == site_custom_identifier,
+                    RemidioApiSourceRule.remidio_device_type == device_type,
+                    RemidioApiSourceRule.active.is_(True),
+                )
+                .first()
             )
-            .first()
-        )
         if conflict:
+            if rule_id is None:
+                existing = db.get(RemidioApiSourceRule, conflict.id)
+                if existing is not None:
+                    return existing
             raise RemidioConfigError("An active Remidio API source rule already exists for this connection, site, and device.")
 
     rule.remidio_connection_id = connection_id
@@ -274,13 +315,14 @@ def upsert_api_binding(
         db.add(binding)
 
     if active:
-        _ensure_no_binding_overlap(
-            db,
-            source_rule_id=source_rule_id,
-            active_from_date=active_from_date,
-            active_to_date=active_to_date,
-            exclude_binding_id=binding.id,
-        )
+        with db.no_autoflush:
+            _ensure_no_binding_overlap(
+                db,
+                source_rule_id=source_rule_id,
+                active_from_date=active_from_date,
+                active_to_date=active_to_date,
+                exclude_binding_id=binding.id,
+            )
 
     binding.project_upload_profile_id = project_upload_profile_id
     binding.remidio_api_source_rule_id = source_rule_id

@@ -168,7 +168,7 @@
 
           {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint in ['admin.upload_profiles_admin', 'admin.encounter_set_types_admin']) else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs','remidio_api_uploads'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint in ['admin.upload_profiles_admin', 'admin.encounter_set_types_admin']) else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Upload
             </a>
@@ -177,6 +177,16 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload_index' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload_index') }}">Dashboard</a>
               </li>
+              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('fileUploader') or current_user_has('optometrist') %}
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'remidio_api_uploads.remidio_api_sync' %}active{% endif %}"
+                  href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">Remidio API Sync</a>
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'remidio_api_uploads.encounter_set_browser' %}active{% endif %}"
+                  href="{{ url_for('remidio_api_uploads.encounter_set_browser') }}">EncounterSet Browser</a>
+              </li>
+              {% endif %}
               <li>
                 <hr class="dropdown-divider">
               </li>

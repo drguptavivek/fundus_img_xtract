@@ -137,14 +137,16 @@
         appendTo: 'root',
         onInit: (el, pswp) => {
           el.classList.add('pswp__custom-caption');
-          pswp.on('change', () => {
+          const updateCaption = () => {
             const currSlide = pswp.currSlide;
             let caption = '';
             if (currSlide?.data?.element) {
-              caption = currSlide.data.element.getAttribute('title') || '';
+              caption = currSlide.data.element.dataset.pswpCaption || currSlide.data.element.getAttribute('title') || '';
             }
             el.textContent = caption;
-          });
+          };
+          pswp.on('change', updateCaption);
+          pswp.on('afterInit', updateCaption);
         }
       });
 

@@ -225,6 +225,8 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
         .first()
     )
     images = [_encounter_set_image_row(image) for image in sorted(encounter.encounter_set_images, key=lambda img: img.spatial_position)]
+    for index, image in enumerate(images):
+        image["gallery_index"] = index
     return {
         **_encounter_set_patient_row(encounter),
         "uuid": encounter.uuid,
@@ -283,6 +285,16 @@ def _encounter_set_patient_row(encounter: PatientEncounters) -> dict[str, Any]:
 
 def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
     metadata = image.metadata_json or {}
+    metadata_items = _metadata_items(
+        metadata,
+        (
+            ("image_variant", "Variant"),
+            ("image_segment", "Segment"),
+            ("remidio_image_quality", "Quality"),
+            ("is_cropped", "Cropped"),
+            ("is_montage", "Montage"),
+        ),
+    )
     return {
         "id": image.id,
         "uuid": image.uuid,
@@ -294,6 +306,12 @@ def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
         "field": _metadata_lookup(metadata, "fundus_field", "field"),
         "quality": _metadata_lookup(metadata, "remidio_image_quality", "quality"),
         "device_type": _metadata_lookup(metadata, "image_device_type", "device_type"),
+        "image_variant": _metadata_lookup(metadata, "image_variant"),
+        "image_segment": _metadata_lookup(metadata, "image_segment"),
+        "is_cropped": _metadata_lookup(metadata, "is_cropped"),
+        "is_montage": _metadata_lookup(metadata, "is_montage"),
+        "metadata_items": metadata_items,
+        "metadata_caption": _metadata_caption(metadata_items),
         "remidio_image_id": _metadata_lookup(metadata, "remidio_image_id"),
         "creates_task": image.creates_task,
         "visible_to_grader": image.visible_to_grader,
@@ -304,6 +322,17 @@ def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
 
 def _encounter_set_attachment_row(attachment: EncounterSetAttachment) -> dict[str, Any]:
     metadata = attachment.metadata_json or {}
+    metadata_items = _metadata_items(
+        metadata,
+        (
+            ("remidio_report_type", "Report"),
+            ("remidio_report_datetime", "Date"),
+            ("refer_required", "Refer"),
+            ("ai_suggested_refer", "AI Refer"),
+            ("gma_suggested_refer", "GMA Refer"),
+            ("gma_patient_level_result", "GMA Result"),
+        ),
+    )
     return {
         "id": attachment.id,
         "uuid": attachment.uuid,
@@ -313,6 +342,8 @@ def _encounter_set_attachment_row(attachment: EncounterSetAttachment) -> dict[st
         "file_size_bytes": attachment.file_size_bytes,
         "report_type": _metadata_lookup(metadata, "remidio_report_type"),
         "remidio_report_id": _metadata_lookup(metadata, "remidio_report_id"),
+        "metadata_items": metadata_items,
+        "metadata_caption": _metadata_caption(metadata_items),
         "visible_to_grader": attachment.visible_to_grader,
         "is_reviewed": attachment.is_reviewed,
     }
@@ -352,6 +383,37 @@ def _metadata_lookup(metadata: dict[str, Any] | None, *keys: str) -> Any:
         if _has_value(value):
             return value
     return None
+
+
+def _metadata_items(metadata: dict[str, Any] | None, fields: tuple[tuple[str, str], ...]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    if not isinstance(metadata, dict):
+        return items
+    for key, label in fields:
+        value = metadata.get(key)
+        if not _has_value(value):
+            continue
+        items.append({"key": key, "label": label, "value": _display_metadata_value(value)})
+    return items
+
+
+def _metadata_caption(items: list[dict[str, str]]) -> str:
+    return " | ".join(f"{item['label']}: {item['value']}" for item in items)
+
+
+def _display_metadata_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, (dict, list)):
+        try:
+            return json.dumps(value, sort_keys=True)
+        except TypeError:
+            return str(value)
+    return str(value)
 
 
 def list_connections(db: Session, *, project_id: int | None = None) -> list[dict[str, Any]]:

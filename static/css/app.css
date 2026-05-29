@@ -69,6 +69,72 @@ body {
   /* PDFs should never be filtered */
 }
 
+/* ================================
+   EncounterSet browser metadata
+   ================================ */
+.encounter-media-info {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 2;
+  color: #fff;
+}
+
+.encounter-media-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+}
+
+.encounter-media-tooltip {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  width: min(16rem, 70vw);
+  padding: 0.5rem 0.6rem;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.94);
+  border-radius: 4px;
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.2rem);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  pointer-events: none;
+}
+
+.encounter-media-info:hover .encounter-media-tooltip,
+.encounter-media-info:focus-within .encounter-media-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.encounter-media-tooltip-row {
+  display: grid;
+  grid-template-columns: 5.25rem minmax(0, 1fr);
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.encounter-media-tooltip-row + .encounter-media-tooltip-row {
+  margin-top: 0.25rem;
+}
+
+.encounter-media-tooltip-label {
+  color: rgba(255, 255, 255, 0.65);
+}
+
 
 
 /* ================================
@@ -79,7 +145,7 @@ body {
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: 80vw;
+  max-width: min(80vw, 64rem);
   padding: .25rem .5rem;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
@@ -91,9 +157,8 @@ body {
   /* below top bar, above slide */
   pointer-events: none;
   /* never block pan/zoom */
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ================================

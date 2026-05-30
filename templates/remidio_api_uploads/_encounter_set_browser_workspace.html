@@ -161,19 +161,6 @@
                       <img class="w-100 h-100 object-fit-cover"
                            src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
                            alt="EncounterSet image {{ image.position }}">
-                      {% if image.metadata_items %}
-                      <span class="encounter-media-info" aria-label="Image metadata">
-                        <span class="encounter-media-info-icon" aria-hidden="true">i</span>
-                        <span class="encounter-media-tooltip" role="tooltip">
-                          {% for item in image.metadata_items %}
-                          <span class="encounter-media-tooltip-row">
-                            <span class="encounter-media-tooltip-label">{{ item.label }}</span>
-                            <span>{{ item.value }}</span>
-                          </span>
-                          {% endfor %}
-                        </span>
-                      </span>
-                      {% endif %}
                     </div>
                     <div class="p-2 small">
                       <div class="fw-semibold">Position {{ image.position }}</div>

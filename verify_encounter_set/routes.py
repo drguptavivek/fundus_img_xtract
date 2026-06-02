@@ -1,6 +1,8 @@
 from flask import render_template, abort, current_app, flash, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from auth.roles import roles_required
+from sqlalchemy import or_
+
 from models import GradingTask, PatientEncounters, EncounterSetImage, Disease
 from upload_profiles.models import PatientEncounterTargetDisease
 from db_transaction_manager import transaction_scope
@@ -83,7 +85,10 @@ def index():
         # Apply hospital scoping to prevent cross-hospital access
         encounters = db.query(PatientEncounters).filter(
             PatientEncounters.is_set_based == True,
-            PatientEncounters.encounter_verified_status.in_(['pending', None])
+            or_(
+                PatientEncounters.encounter_verified_status == 'pending',
+                PatientEncounters.encounter_verified_status.is_(None),
+            ),
         )
 
         # Apply hospital scoping (operation='upload' for hospital-bound)

@@ -17,7 +17,7 @@ def encounter_set_data(db_session, core_test_data):
         capture_date_dt=date(2023, 10, 27),
         lab_unit_id=lab_unit.id,
         is_set_based=True,
-        encounter_verified_status='pending'
+        encounter_verified_status=None
     )
     db_session.add(encounter)
     db_session.flush()

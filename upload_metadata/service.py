@@ -45,7 +45,7 @@ class FieldDefinitionInput:
     validation_regex: str | None = None
     validation_error_message: str | None = None
     required_at_upload_default: bool = False
-    required_for_verification_default: bool = False
+    editable_during_verification_default: bool = False
     visible_to_grader_default: bool = False
     is_pii_default: bool = False
     active: bool = True
@@ -90,7 +90,7 @@ def create_field_definition(manager_user_id: int, dto: FieldDefinitionInput) -> 
         validation_regex=(dto.validation_regex or "").strip() or None,
         validation_error_message=(dto.validation_error_message or "").strip() or None,
         required_at_upload_default=dto.required_at_upload_default,
-        required_for_verification_default=dto.required_for_verification_default,
+        editable_during_verification_default=dto.editable_during_verification_default,
         visible_to_grader_default=dto.visible_to_grader_default,
         is_pii_default=dto.is_pii_default,
         active=dto.active,
@@ -133,7 +133,7 @@ def update_field_definition(manager_user_id: int, field_id: int, dto: FieldDefin
         row.validation_regex = (dto.validation_regex or "").strip() or None
         row.validation_error_message = (dto.validation_error_message or "").strip() or None
         row.required_at_upload_default = dto.required_at_upload_default
-        row.required_for_verification_default = dto.required_for_verification_default
+        row.editable_during_verification_default = dto.editable_during_verification_default
         row.visible_to_grader_default = dto.visible_to_grader_default
         row.is_pii_default = dto.is_pii_default
         row.active = dto.active
@@ -225,7 +225,7 @@ def serialize_field_definition(row: UploadMetadataFieldDefinition) -> dict[str, 
         "validation_regex": row.validation_regex,
         "validation_error_message": row.validation_error_message,
         "required_at_upload_default": row.required_at_upload_default,
-        "required_for_verification_default": row.required_for_verification_default,
+        "editable_during_verification_default": row.editable_during_verification_default,
         "visible_to_grader_default": row.visible_to_grader_default,
         "is_pii_default": row.is_pii_default,
         "active": row.active,

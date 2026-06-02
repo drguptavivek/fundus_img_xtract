@@ -73,7 +73,10 @@ def _input_from_request() -> upload_metadata_service.FieldDefinitionInput:
         validation_regex=(str(data.get("validation_regex")).strip() if data.get("validation_regex") is not None else None) or None,
         validation_error_message=(str(data.get("validation_error_message")).strip() if data.get("validation_error_message") is not None else None) or None,
         required_at_upload_default=_bool_value(data.get("required_at_upload_default"), default=False),
-        required_for_verification_default=_bool_value(data.get("required_for_verification_default"), default=False),
+        editable_during_verification_default=_bool_value(
+            data.get("editable_during_verification_default", data.get("required_for_verification_default")),
+            default=False,
+        ),
         visible_to_grader_default=_bool_value(data.get("visible_to_grader_default"), default=False),
         is_pii_default=_bool_value(data.get("is_pii_default"), default=False),
         active=_bool_value(data.get("active"), default=True),

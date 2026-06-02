@@ -32,7 +32,7 @@ class UploadMetadataFieldDefinition(Base):
     validation_regex: Mapped[str | None] = mapped_column(Text, nullable=True)
     validation_error_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
     required_at_upload_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
-    required_for_verification_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    editable_during_verification_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     visible_to_grader_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     is_pii_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")

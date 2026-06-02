@@ -68,7 +68,7 @@ def _valid_schema():
                 "scope": "patient",
                 "type": "text",
                 "required_at_upload": True,
-                "required_for_verification": True,
+                "editable_during_verification": True,
                 "visible_to_grader": True,
                 "is_pii": False,
             },
@@ -80,7 +80,7 @@ def _valid_schema():
                 "type": "select",
                 "selection_mode": "single",
                 "options": ["OD", "OS"],
-                "required_for_verification": True,
+                "editable_during_verification": True,
             },
         ]
     }

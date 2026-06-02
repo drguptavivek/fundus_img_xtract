@@ -256,7 +256,7 @@ def normalize_field_contract(row: dict[str, Any]) -> dict[str, Any]:
         "selection_mode": selection_mode,
         "options": options,
         "required_at_upload_default": bool(row.get("required_at_upload_default", False)),
-        "required_for_verification_default": bool(row.get("required_for_verification_default", False)),
+        "editable_during_verification_default": bool(row.get("editable_during_verification_default", False)),
         "visible_to_grader_default": bool(row.get("visible_to_grader_default", False)),
         "is_pii_default": bool(row.get("is_pii_default", False)),
     }
@@ -278,7 +278,7 @@ def validate_exams(
     source_stats: dict[str, FieldStats] = defaultdict(FieldStats)
     type_mismatches: list[dict[str, Any]] = []
     select_mismatches: list[dict[str, Any]] = []
-    missing_required: list[dict[str, Any]] = []
+    missing_editable: list[dict[str, Any]] = []
     mapper_errors: list[dict[str, Any]] = []
     image_bucket_counts: Counter[str] = Counter()
     image_variant_counts: Counter[str] = Counter()
@@ -322,7 +322,7 @@ def validate_exams(
             field_contract,
             type_mismatches,
             select_mismatches,
-            missing_required,
+            missing_editable,
             exam_index=exam_index,
             exam_id=exam_id,
             patient_id=patient_id,
@@ -334,7 +334,7 @@ def validate_exams(
             field_contract,
             type_mismatches,
             select_mismatches,
-            missing_required,
+            missing_editable,
             exam_index=exam_index,
             exam_id=exam_id,
             patient_id=patient_id,
@@ -348,7 +348,7 @@ def validate_exams(
                 field_contract,
                 type_mismatches,
                 select_mismatches,
-                missing_required,
+                missing_editable,
                 exam_index=exam_index,
                 exam_id=exam_id,
                 patient_id=patient_id,
@@ -363,7 +363,7 @@ def validate_exams(
                 field_contract,
                 type_mismatches,
                 select_mismatches,
-                missing_required,
+                missing_editable,
                 exam_index=exam_index,
                 exam_id=exam_id,
                 patient_id=patient_id,
@@ -394,7 +394,7 @@ def validate_exams(
             "mapper_error_count": len(mapper_errors),
             "type_mismatch_count": len(type_mismatches),
             "select_mismatch_count": len(select_mismatches),
-            "missing_required_count": len(missing_required),
+            "missing_editable_count": len(missing_editable),
             "mapped_keys_missing_from_schema_count": len(mapped_key_set - schema_key_set),
             "schema_keys_never_observed_in_mapped_output_count": len(schema_key_set - mapped_key_set),
             "source_paths_preserved_in_raw_catchall_count": len(raw_catchall_source_paths),
@@ -417,7 +417,7 @@ def validate_exams(
             "mapper_errors": mapper_errors,
             "type_mismatches": type_mismatches[:500],
             "select_mismatches": select_mismatches[:500],
-            "missing_required_values": missing_required[:500],
+            "missing_editable_values": missing_editable[:500],
             "source_paths_preserved_in_raw_catchall": raw_catchall_source_paths,
             "unmapped_observed_source_paths": unmapped_source_paths,
         },
@@ -437,7 +437,7 @@ def observe_mapped_scope(
     field_contract: dict[str, dict[str, Any]],
     type_mismatches: list[dict[str, Any]],
     select_mismatches: list[dict[str, Any]],
-    missing_required: list[dict[str, Any]],
+    missing_editable: list[dict[str, Any]],
     *,
     exam_index: int,
     exam_id: str | None,
@@ -458,11 +458,11 @@ def observe_mapped_scope(
             if value is not None and str(value) not in option_values:
                 select_mismatches.append(issue("select_option", key, value, contract, exam_index, exam_id, patient_id, source_id, allowed_values=sorted(option_values)))
     for key, contract in field_contract.items():
-        if contract["scope"] != scope or not contract.get("required_for_verification_default"):
+        if contract["scope"] != scope or not contract.get("editable_during_verification_default"):
             continue
         if key in values:
             continue
-        missing_required.append(
+        missing_editable.append(
             {
                 "scope": scope,
                 "key": key,
@@ -470,7 +470,7 @@ def observe_mapped_scope(
                 "exam_id": exam_id,
                 "patient_id": patient_id,
                 "source_id": source_id,
-                "reason": "required_for_verification_default but mapper emitted no value",
+                "reason": "editable_during_verification_default but mapper emitted no value",
             }
         )
 
@@ -631,7 +631,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"- Mapper errors: `{counts['mapper_error_count']}`",
         f"- Type mismatches: `{counts['type_mismatch_count']}`",
         f"- Select-option mismatches: `{counts['select_mismatch_count']}`",
-        f"- Missing required mapped values: `{counts['missing_required_count']}`",
+        f"- Missing editable mapped values: `{counts['missing_editable_count']}`",
         f"- Mapped keys missing from schema: `{counts['mapped_keys_missing_from_schema_count']}`",
         f"- Schema keys never observed in mapped output: `{counts['schema_keys_never_observed_in_mapped_output_count']}`",
         f"- Source paths preserved in raw catch-all: `{counts['source_paths_preserved_in_raw_catchall_count']}`",

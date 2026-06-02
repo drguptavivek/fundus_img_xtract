@@ -32,7 +32,7 @@ def test_upload_metadata_field_definition_create_and_list(db_session, monkeypatc
             field_type="select",
             selection_mode="single",
             options_json=["OD", "OS"],
-            required_for_verification_default=True,
+            editable_during_verification_default=True,
         ),
     )
 

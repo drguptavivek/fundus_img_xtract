@@ -5,7 +5,9 @@ from pathlib import Path
 from celery.utils.log import get_task_logger
 
 from celery_app import celery_app
+from auth.utils import utcnow
 from models import BASE_DIR, EncounterSetImage, Session
+from encounter_sets.models import EncounterSetAttachment
 from utils.log_sanitize import sanitize_log_value
 from utils.upload_processing import process_file_data_pipeline, process_file_visual
 
@@ -14,6 +16,10 @@ logger = get_task_logger(__name__)
 
 def _encounter_set_image_path(record: EncounterSetImage) -> Path:
     return BASE_DIR / record.folder_rel / record.original_filename
+
+
+def _encounter_set_attachment_path(record: EncounterSetAttachment) -> Path:
+    return BASE_DIR / (record.folder_rel or "") / (record.stored_filename or record.original_filename)
 
 
 @celery_app.task(
@@ -118,5 +124,107 @@ def process_encounter_set_image_data_combined_task(self, prev_result: dict) -> d
             exc_info=True,
         )
         return {"set_image_id": set_image_id, "file_path": file_path, "status": "error", "error": str(sanitize_log_value(exc))}
+    finally:
+        session.close()
+
+
+@celery_app.task(
+    name="celery_tasks.tasks.encounter_set_tasks.process_encounter_set_attachment_pdf_ocr_task",
+    bind=True,
+    acks_late=True,
+)
+def process_encounter_set_attachment_pdf_ocr_task(
+    self,
+    attachment_id: int,
+    user_id: int | None = None,
+    force: bool = False,
+) -> dict:
+    _ = self
+    session = Session()
+    filename = "unknown"
+    try:
+        record = session.get(EncounterSetAttachment, attachment_id)
+        if record is None:
+            raise ValueError(f"EncounterSetAttachment {attachment_id} not found")
+        filename = record.original_filename
+        if record.asset_kind != "pdf" and record.mime_type != "application/pdf":
+            raise ValueError(f"EncounterSetAttachment {attachment_id} is not a PDF")
+
+        metadata = dict(record.metadata_json or {})
+        current_ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        if not force and current_ocr.get("status") == "processing":
+            return {"attachment_id": attachment_id, "status": "already_processing"}
+
+        metadata["ocr"] = {
+            **current_ocr,
+            "status": "processing",
+            "started_at": utcnow().isoformat(),
+            "started_by_user_id": user_id,
+        }
+        record.metadata_json = metadata
+        session.add(record)
+        session.commit()
+
+        pdf_path = _encounter_set_attachment_path(record)
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"PDF not found at {pdf_path}")
+        if record.patient_encounter is None:
+            raise ValueError(f"EncounterSetAttachment {attachment_id} has no patient encounter")
+
+        from process_pdfs import process_pdf_for_ocr
+
+        upload_date_str = (record.created_at or utcnow()).strftime("%Y_%m_%d")
+        ocr_result = process_pdf_for_ocr(
+            session,
+            pdf_path=pdf_path,
+            patient_encounter=record.patient_encounter,
+            upload_date_str=upload_date_str,
+        )
+        source_report_datetime = metadata.get("remidio_report_datetime")
+        if source_report_datetime:
+            ocr_result["source_report_datetime"] = source_report_datetime
+        ocr_result["completed_at"] = utcnow().isoformat()
+        ocr_result["completed_by_task"] = "process_encounter_set_attachment_pdf_ocr_task"
+
+        refreshed_metadata = dict(record.metadata_json or {})
+        refreshed_metadata["ocr"] = ocr_result
+        record.metadata_json = refreshed_metadata
+        session.add(record)
+        session.commit()
+
+        logger.info(
+            "EncounterSet attachment PDF OCR complete id=%s filename=%s user=%s status=%s",
+            sanitize_log_value(attachment_id),
+            sanitize_log_value(filename),
+            sanitize_log_value(user_id),
+            sanitize_log_value(ocr_result.get("status")),
+        )
+        return {"attachment_id": attachment_id, "status": ocr_result.get("status") or "completed", "ocr": ocr_result}
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        logger.error(
+            "EncounterSet attachment PDF OCR failed id=%s filename=%s error=%s",
+            sanitize_log_value(attachment_id),
+            sanitize_log_value(filename),
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        try:
+            record = session.get(EncounterSetAttachment, attachment_id)
+            if record is not None:
+                metadata = dict(record.metadata_json or {})
+                current_ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+                metadata["ocr"] = {
+                    **current_ocr,
+                    "status": "failed",
+                    "failed_at": utcnow().isoformat(),
+                    "error": str(sanitize_log_value(exc))[:1000],
+                }
+                record.metadata_json = metadata
+                session.add(record)
+                session.commit()
+        except Exception:  # noqa: BLE001
+            session.rollback()
+        return {"attachment_id": attachment_id, "status": "failed", "error": str(sanitize_log_value(exc))}
     finally:
         session.close()

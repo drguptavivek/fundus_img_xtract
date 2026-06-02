@@ -132,7 +132,7 @@
                   </div>
                   <div class="d-flex flex-wrap gap-1">
                     {% if field.required_at_upload %}<span class="badge text-bg-primary">Upload required</span>{% endif %}
-                    {% if field.required_for_verification %}<span class="badge text-bg-info">Editable in verification</span>{% endif %}
+                    {% if field.editable_during_verification %}<span class="badge text-bg-info">Editable in verification</span>{% endif %}
                     {% if field.visible_to_grader %}<span class="badge text-bg-secondary">Grader visible</span>{% endif %}
                     {% if field.is_pii %}<span class="badge text-bg-warning">PII</span>{% endif %}
                   </div>

@@ -21,10 +21,25 @@
 </div>
 {% endblock %}
 
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .encounter-attachments-list {
+    max-height: 34rem;
+    overflow-y: auto;
+  }
+
+  .encounter-attachment-row {
+    scroll-margin-top: 5rem;
+  }
+</style>
+{% endblock %}
+
 {% block page_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/encounter-set-browser.js') }}?v={{ v }}"></script>
 {% endblock %}

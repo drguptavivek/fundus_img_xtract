@@ -15,9 +15,12 @@ from auth.utils import utcnow
 from db_transaction_manager import get_db_session
 from models import (
     Camera,
+    DiabeticRetinopathyReport,
     Disease,
     EncounterSetImage,
     EncounterSetAttachment,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
     Job,
     JobItem,
     LabUnit,
@@ -89,6 +92,7 @@ def list_encounter_set_browser(
 
     if selected_project_id:
         all_dates = _encounter_set_browser_dates(db, user, selected_project_id)
+        project_ocr_pending_count = count_project_pending_attachment_ocr(db, user, selected_project_id)
         months = _encounter_set_browser_months(all_dates)
         if selected_date:
             selected_month = selected_date.strftime("%Y-%m")
@@ -110,6 +114,7 @@ def list_encounter_set_browser(
     return {
         "projects": projects,
         "selected_project_id": selected_project_id,
+        "project_ocr_pending_count": project_ocr_pending_count if selected_project_id else 0,
         "months": months if selected_project_id else [],
         "selected_month": selected_month,
         "dates": dates,
@@ -138,6 +143,20 @@ def _encounter_set_browser_projects(db: Session, user) -> list[dict[str, Any]]:
         }
         for project, encounter_count in query.all()
     ]
+
+
+def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> int:
+    query = (
+        db.query(EncounterSetAttachment)
+        .join(PatientEncounters, EncounterSetAttachment.patient_encounter_id == PatientEncounters.id)
+        .filter(
+            PatientEncounters.project_id == project_id,
+            PatientEncounters.is_set_based.is_(True),
+            or_(EncounterSetAttachment.asset_kind == "pdf", EncounterSetAttachment.mime_type == "application/pdf"),
+        )
+    )
+    query = apply_scoping(query, PatientEncounters, user, "upload")
+    return sum(1 for attachment in query.all() if _attachment_is_remidio_ai_report(attachment) and _attachment_ocr_is_remaining(attachment))
 
 
 def _encounter_set_browser_dates(db: Session, user, project_id: int) -> list[dict[str, Any]]:
@@ -227,6 +246,17 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
     images = [_encounter_set_image_row(image) for image in sorted(encounter.encounter_set_images, key=lambda img: img.spatial_position)]
     for index, image in enumerate(images):
         image["gallery_index"] = index
+    attachments = sorted(
+        encounter.encounter_set_attachments,
+        key=lambda item: item.created_at.isoformat() if item.created_at else "",
+    )
+    final_reports = _encounter_set_final_reports(db, encounter, attachments, image_count=len(images))
+    source_attachment_ids = {
+        report["source"]["attachment_id"]
+        for report in final_reports.values()
+        if report and report.get("source")
+    }
+    attachment_rows = [_encounter_set_attachment_row(attachment) for attachment in attachments]
     return {
         **_encounter_set_patient_row(encounter),
         "uuid": encounter.uuid,
@@ -252,13 +282,10 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
         "remidio_site": remidio_exam.site_custom_identifier if remidio_exam else _metadata_lookup(metadata, "remidio_site_custom_identifier"),
         "images": images,
         "image_groups": _group_encounter_set_images(images),
-        "attachments": [
-            _encounter_set_attachment_row(attachment)
-            for attachment in sorted(
-                encounter.encounter_set_attachments,
-                key=lambda item: item.created_at.isoformat() if item.created_at else "",
-            )
-        ],
+        "final_reports": final_reports,
+        "source_attachment_ids": source_attachment_ids,
+        "ocr_pending_count": sum(1 for attachment in attachment_rows if attachment.get("ocr_is_pending")),
+        "attachments": attachment_rows,
     }
 
 
@@ -322,6 +349,8 @@ def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
 
 def _encounter_set_attachment_row(attachment: EncounterSetAttachment) -> dict[str, Any]:
     metadata = attachment.metadata_json or {}
+    ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+    ocr_status = ocr.get("status")
     metadata_items = _metadata_items(
         metadata,
         (
@@ -344,9 +373,165 @@ def _encounter_set_attachment_row(attachment: EncounterSetAttachment) -> dict[st
         "remidio_report_id": _metadata_lookup(metadata, "remidio_report_id"),
         "metadata_items": metadata_items,
         "metadata_caption": _metadata_caption(metadata_items),
+        "ocr_status": ocr_status,
+        "ocr_is_pending": _attachment_ocr_is_pending(attachment),
+        "ocr_error": ocr.get("error"),
+        "ocr_dr_report": ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else None,
+        "ocr_glaucoma_report": ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else None,
         "visible_to_grader": attachment.visible_to_grader,
         "is_reviewed": attachment.is_reviewed,
     }
+
+
+def _attachment_ocr_is_pending(attachment: EncounterSetAttachment) -> bool:
+    if attachment.asset_kind != "pdf" and attachment.mime_type != "application/pdf":
+        return False
+    metadata = attachment.metadata_json or {}
+    ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+    return ocr.get("status") not in {"queued", "processing", "completed", "completed_no_reports_detected"}
+
+
+def _attachment_ocr_is_remaining(attachment: EncounterSetAttachment) -> bool:
+    if attachment.asset_kind != "pdf" and attachment.mime_type != "application/pdf":
+        return False
+    metadata = attachment.metadata_json or {}
+    ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+    return ocr.get("status") not in {"completed", "completed_no_reports_detected"}
+
+
+def _attachment_is_remidio_ai_report(attachment: EncounterSetAttachment) -> bool:
+    metadata = attachment.metadata_json or {}
+    return bool(
+        _metadata_lookup(metadata, "remidio_report_id")
+        and _metadata_lookup(metadata, "remidio_report_type") == "aiReport"
+    )
+
+
+def _encounter_set_final_reports(
+    db: Session,
+    encounter: PatientEncounters,
+    attachments: list[EncounterSetAttachment],
+    *,
+    image_count: int,
+) -> dict[str, Any]:
+    dr_report = (
+        db.query(DiabeticRetinopathyReport)
+        .filter_by(patient_encounter_id=encounter.id)
+        .order_by(DiabeticRetinopathyReport.id.asc())
+        .first()
+    )
+    glaucoma_report = (
+        db.query(GlaucomaReport)
+        .filter_by(patient_encounter_id=encounter.id)
+        .order_by(GlaucomaReport.id.asc())
+        .first()
+    )
+    glaucoma_cleaned = None
+    if glaucoma_report is not None:
+        glaucoma_cleaned = (
+            db.query(GlaucomaResultsCleaned)
+            .filter_by(glaucoma_report_id=glaucoma_report.id)
+            .first()
+        )
+    return {
+        "dr": _final_dr_report_row(dr_report, attachments, image_count=image_count) if dr_report else None,
+        "glaucoma": _final_glaucoma_report_row(
+            glaucoma_report,
+            glaucoma_cleaned,
+            attachments,
+            image_count=image_count,
+        )
+        if glaucoma_report
+        else None,
+    }
+
+
+def _final_dr_report_row(
+    report: DiabeticRetinopathyReport,
+    attachments: list[EncounterSetAttachment],
+    *,
+    image_count: int,
+) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "result": report.result,
+        "qualitative_result": report.qualitative_result,
+        "report_file_name": report.report_file_name,
+        "source": _report_source_from_attachment_ocr(
+            attachments,
+            report_key="dr_report",
+            report_id_key="diabetic_retinopathy_report_id",
+            report_id=report.id,
+            image_count=image_count,
+        ),
+    }
+
+
+def _final_glaucoma_report_row(
+    report: GlaucomaReport,
+    cleaned: GlaucomaResultsCleaned | None,
+    attachments: list[EncounterSetAttachment],
+    *,
+    image_count: int,
+) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "vcdr_right": report.vcdr_right,
+        "vcdr_left": report.vcdr_left,
+        "vcdr_right_num": cleaned.vcdr_right_num if cleaned else None,
+        "vcdr_left_num": cleaned.vcdr_left_num if cleaned else None,
+        "result": report.result,
+        "qualitative_result": report.qualitative_result,
+        "report_file_name": report.report_file_name,
+        "cleaned_id": cleaned.id if cleaned else None,
+        "source": _report_source_from_attachment_ocr(
+            attachments,
+            report_key="glaucoma_report",
+            report_id_key="glaucoma_report_id",
+            report_id=report.id,
+            image_count=image_count,
+        ),
+    }
+
+
+def _report_source_from_attachment_ocr(
+    attachments: list[EncounterSetAttachment],
+    *,
+    report_key: str,
+    report_id_key: str,
+    report_id: int,
+    image_count: int,
+) -> dict[str, Any] | None:
+    matches: list[dict[str, Any]] = []
+    pdf_index = image_count
+    for attachment in attachments:
+        is_pdf = attachment.asset_kind == "pdf" or attachment.mime_type == "application/pdf"
+        metadata = attachment.metadata_json or {}
+        ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        report = ocr.get(report_key) if isinstance(ocr.get(report_key), dict) else {}
+        if report.get(report_id_key) != report_id:
+            if is_pdf:
+                pdf_index += 1
+            continue
+        matches.append(
+            {
+                "attachment_id": attachment.id,
+                "filename": attachment.original_filename,
+                "gallery_index": pdf_index if is_pdf else None,
+                "remidio_report_id": _metadata_lookup(metadata, "remidio_report_id"),
+                "promotion_status": report.get("promotion_status"),
+                "page": report.get("page"),
+                "ocr_status": ocr.get("status"),
+            }
+        )
+        if is_pdf:
+            pdf_index += 1
+    created = [match for match in matches if match.get("promotion_status") == "created_clinical_report"]
+    if created:
+        return {**created[0], "source_status": "created_from_pdf", "matched_count": len(matches)}
+    if matches:
+        return {**matches[0], "source_status": "matched_existing_report", "matched_count": len(matches)}
+    return None
 
 
 def _group_encounter_set_images(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1226,7 +1411,7 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
         progress = _ProjectSyncProgress(job_id=job_id, item_id=item_id, payload=payload)
         _update_project_sync_item_progress(job_id, item_id, payload, progress.snapshot("started"))
         result = _run_routing_profile_sync_payload(payload, progress_callback=progress.update)
-        post_processing = _queue_encounter_set_image_post_processing(result, user_id=job_user_id)
+        post_processing = _queue_remidio_api_post_processing(result, user_id=job_user_id)
         if post_processing:
             result["post_processing"] = post_processing
         with get_db_session() as db:
@@ -1311,6 +1496,45 @@ def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_i
         return {"images_queued": 0, "queue_errors": len(image_ids)}
 
 
+def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
+    image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
+    pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
+    return {**image_result, **pdf_result}
+
+
+def _queue_encounter_set_attachment_pdf_ocr(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
+    attachment_ids = _downloaded_encounter_set_attachment_ids(result)
+    if not attachment_ids:
+        return {"pdf_ocr_queued": 0}
+
+    try:
+        from utils.celery_helpers import celery_enabled
+        from celery_tasks.tasks.encounter_set_tasks import process_encounter_set_attachment_pdf_ocr_task
+
+        queued = 0
+        if celery_enabled():
+            for attachment_id in attachment_ids:
+                process_encounter_set_attachment_pdf_ocr_task.apply_async(args=[attachment_id], kwargs={"user_id": user_id})
+                queued += 1
+        else:
+            for attachment_id in attachment_ids:
+                process_encounter_set_attachment_pdf_ocr_task.run(attachment_id, user_id=user_id)
+                queued += 1
+        LOGGER.info(
+            "Queued EncounterSet PDF OCR for Remidio API attachments count=%s",
+            sanitize_log_value(queued),
+        )
+        return {"pdf_ocr_queued": queued}
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning(
+            "Failed to queue EncounterSet PDF OCR for Remidio API attachments count=%s error=%s",
+            sanitize_log_value(len(attachment_ids)),
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        return {"pdf_ocr_queued": 0, "pdf_ocr_queue_errors": len(attachment_ids)}
+
+
 def _downloaded_encounter_set_image_ids(result: dict[str, Any]) -> list[int]:
     ids: list[int] = []
     seen: set[int] = set()
@@ -1328,6 +1552,26 @@ def _downloaded_encounter_set_image_ids(result: dict[str, Any]) -> list[int]:
                 if image_id is not None and image_id not in seen:
                     ids.append(image_id)
                     seen.add(image_id)
+    return ids
+
+
+def _downloaded_encounter_set_attachment_ids(result: dict[str, Any]) -> list[int]:
+    ids: list[int] = []
+    seen: set[int] = set()
+    for group in result.get("groups") or []:
+        ingest = group.get("ingest") if isinstance(group, dict) else None
+        if not isinstance(ingest, dict):
+            continue
+        for exam in ingest.get("exams") or []:
+            if not isinstance(exam, dict):
+                continue
+            for report in exam.get("reports") or []:
+                if not isinstance(report, dict) or report.get("status") != "downloaded":
+                    continue
+                attachment_id = _optional_int(report.get("encounter_set_attachment_id"))
+                if attachment_id is not None and attachment_id not in seen:
+                    ids.append(attachment_id)
+                    seen.add(attachment_id)
     return ids
 
 

@@ -1,6 +1,7 @@
 
 import pytest
 from tests.helpers.test_factories import TestDataFactory
+from models import EncounterSetImage
 
 class TestScreeningsIsolation:
     """Test /screenings route isolation."""
@@ -40,6 +41,49 @@ class TestScreeningsIsolation:
         
         # Should NOT see Hospital B patient
         assert "PATIENT_B" not in content
+
+    def test_screenings_render_encounter_set_images(
+        self, auth_client, hospital_data, hosp_a_data_manager, db_session
+    ):
+        """Set-based screenings should render EncounterSet image media URLs."""
+        encounter = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+            patient_id="PATIENT_SET",
+            name="Set Based Patient"
+        )
+        encounter.is_set_based = True
+        encounter.zip_file_id = None
+        encounter.metadata_json = {
+            "encounter": {"remidio_exam_id": "REMIDIO-EXAM-1"},
+            "remidio_exam_row_id": 123,
+        }
+        image = EncounterSetImage(
+            patient_encounter_id=encounter.id,
+            spatial_position=1,
+            original_filename="set_image.jpg",
+            folder_rel="files/encounter_sets/test",
+            visible_to_grader=True,
+        )
+        db_session.add(image)
+        db_session.flush()
+
+        user = db_session.merge(hosp_a_data_manager)
+        client = auth_client(user)
+
+        list_response = client.get("/screenings/", follow_redirects=True)
+        assert list_response.status_code == 200
+        list_content = list_response.data.decode()
+        assert f"/media/encounter_set/img/{image.uuid}/thumbnail" in list_content
+        assert "Remidio API" in list_content
+        assert "EncounterSet" in list_content
+
+        detail_response = client.get(f"/screenings/{encounter.id}")
+        assert detail_response.status_code == 200
+        detail_content = detail_response.data.decode()
+        assert f"/media/encounter_set/img/{image.uuid}" in detail_content
+        assert "Remidio API" in detail_content
+        assert "EncounterSet" in detail_content
 
     def test_screening_detail_access_control(
         self, auth_client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session

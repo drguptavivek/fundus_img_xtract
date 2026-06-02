@@ -1,21 +1,40 @@
-<div class="row g-3">
+<div class="row g-3" data-encounter-browser-url="{{ browser_url }}">
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-body">
-        <label class="form-label" for="encounter-browser-project">Project</label>
-        <select class="form-select"
-                id="encounter-browser-project"
-                name="project_id"
-                hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace') }}"
-                hx-target="#encounter-set-browser-workspace"
-                hx-swap="innerHTML"
-                hx-trigger="change">
-          {% for project in projects %}
-          <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
-            {{ project.title }}{% if project.code %} · {{ project.code }}{% endif %} · {{ project.encounter_count }} EncounterSets
-          </option>
-          {% endfor %}
-        </select>
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-2">
+          <div class="flex-fill">
+            <label class="form-label" for="encounter-browser-project">Project</label>
+            <select class="form-select"
+                    id="encounter-browser-project"
+                    name="project_id"
+                    hx-get="{{ url_for('remidio_api_uploads.encounter_set_browser_workspace') }}"
+                    hx-target="#encounter-set-browser-workspace"
+                    hx-swap="innerHTML"
+                    hx-trigger="change">
+              {% for project in projects %}
+              <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+                {{ project.title }}{% if project.code %} · {{ project.code }}{% endif %} · {{ project.encounter_count }} EncounterSets
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if selected_project_id %}
+          <div class="text-lg-end">
+            <button class="btn btn-outline-primary flex-shrink-0"
+                    type="button"
+                    data-project-run-pending-ocr
+                    data-project-pending-ocr-url="{{ url_for('fundus_api.queue_project_pending_encounter_set_attachment_ocr', project_id=selected_project_id) }}"
+                    {% if not project_ocr_pending_count %}disabled{% endif %}>
+              <span data-project-pending-ocr-label>Run project pending OCR</span>
+              <span class="badge text-bg-light border ms-1" data-project-pending-ocr-count>{{ project_ocr_pending_count }}</span>
+            </button>
+            <div class="small text-muted mt-1" data-project-pending-ocr-status>
+              {% if project_ocr_pending_count %}OCR pending: {{ project_ocr_pending_count }}{% else %}OCR pending: 0{% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
         {% if not projects %}
         <div class="form-text text-warning">No EncounterSets are available for your project scope.</div>
         {% endif %}
@@ -125,6 +144,7 @@
           {% for attachment in detail.attachments %}
             {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
           {% set attachment_url = url_for('remidio_api_uploads.encounter_set_attachment', uuid=attachment.uuid) %}
+          <link rel="prefetch" href="{{ attachment_url }}" type="application/pdf">
           <a href="{{ attachment_url }}"
              data-pswp-type="html"
              data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ attachment_url }}' title='{{ attachment.report_type or attachment.filename }}'></iframe></div>"
@@ -201,14 +221,148 @@
 
     <div class="row g-3">
       <div class="col-12 col-lg-6">
-        <div class="card shadow-sm h-100">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header">Final Reports</div>
+          <div class="card-body small">
+            {% if detail.final_reports.dr or detail.final_reports.glaucoma %}
+            {% if detail.final_reports.dr %}
+            {% set dr_report = detail.final_reports.dr %}
+            <div class="border rounded p-2">
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">DR</span>
+                <span class="text-muted">Report ID {{ dr_report.id }}</span>
+              </div>
+              <div>{{ dr_report.result or '-' }}</div>
+              {% if dr_report.qualitative_result %}
+              <div class="text-muted">{{ dr_report.qualitative_result }}</div>
+              {% endif %}
+              {% if dr_report.source %}
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                {% if dr_report.source.gallery_index is not none %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPswpGallery('{{ media_gallery_id }}', {{ dr_report.source.gallery_index }}); return false;">View PDF</button>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-primary" href="#encounter-attachment-{{ dr_report.source.attachment_id }}">Source</a>
+              </div>
+              {% else %}
+              <div class="text-muted">Source PDF not recorded in attachment OCR metadata.</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if detail.final_reports.glaucoma %}
+            {% set glaucoma_report = detail.final_reports.glaucoma %}
+            <div class="border rounded p-2 mt-2">
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">Glaucoma</span>
+                <span class="text-muted">Report ID {{ glaucoma_report.id }}</span>
+              </div>
+              <div>{{ glaucoma_report.result or '-' }}</div>
+              {% if glaucoma_report.vcdr_right or glaucoma_report.vcdr_left %}
+              <div class="text-muted">
+                VCDR OD {{ glaucoma_report.vcdr_right or '-' }}{% if glaucoma_report.vcdr_right_num is not none %} ({{ glaucoma_report.vcdr_right_num }}){% endif %}
+                · OS {{ glaucoma_report.vcdr_left or '-' }}{% if glaucoma_report.vcdr_left_num is not none %} ({{ glaucoma_report.vcdr_left_num }}){% endif %}
+              </div>
+              {% endif %}
+              {% if glaucoma_report.qualitative_result %}
+              <div class="text-muted">{{ glaucoma_report.qualitative_result }}</div>
+              {% endif %}
+              {% if glaucoma_report.source %}
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                {% if glaucoma_report.source.gallery_index is not none %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPswpGallery('{{ media_gallery_id }}', {{ glaucoma_report.source.gallery_index }}); return false;">View PDF</button>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-primary" href="#encounter-attachment-{{ glaucoma_report.source.attachment_id }}">Source</a>
+              </div>
+              {% else %}
+              <div class="text-muted">Source PDF not recorded in attachment OCR metadata.</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-muted">No encounter-level DR or glaucoma report has been saved yet.</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card shadow-sm">
           <div class="card-header">Attachments</div>
-          <div class="list-group list-group-flush">
+          <div class="list-group list-group-flush encounter-attachments-list">
             {% set pdf_gallery = namespace(index=detail.images|length) %}
             {% for attachment in detail.attachments %}
+            {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
+            <div class="list-group-item encounter-attachment-row {{ 'border border-3 border-primary' if attachment.id in detail.source_attachment_ids else '' }}" id="encounter-attachment-{{ attachment.id }}">
+              {% set ocr_collapse_id = 'encounter-pdf-ocr-' ~ attachment.id %}
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">{{ attachment.report_type or attachment.asset_kind }}</span>
+                <span class="small text-muted">{{ attachment.mime_type or '-' }}</span>
+              </div>
+              <div class="small text-muted text-truncate">{{ attachment.filename }}</div>
+              {% if attachment.metadata_items %}
+              <div class="small text-muted text-truncate">{{ attachment.metadata_caption }}</div>
+              {% endif %}
+              {% if attachment.remidio_report_id %}
+              <div class="small text-muted">Remidio report {{ attachment.remidio_report_id }}</div>
+              {% endif %}
+              <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPswpGallery('{{ media_gallery_id }}', {{ pdf_gallery.index }}); return false;">View PDF</button>
+                <form class="d-inline" data-encounter-pdf-ocr-form data-ocr-status="{{ attachment.ocr_status or '' }}" action="{{ url_for('fundus_api.queue_encounter_set_attachment_ocr', attachment_id=attachment.id) }}" method="post">
+                  <button class="btn btn-sm btn-outline-primary" type="submit">
+                    {{ 'Re-run OCR' if attachment.ocr_status in ['completed', 'completed_no_reports_detected', 'failed'] else 'Run OCR' }}
+                  </button>
+                </form>
+                <span class="badge text-bg-light border" data-encounter-pdf-ocr-status>
+                  OCR {{ attachment.ocr_status or 'not queued' }}
+                </span>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#{{ ocr_collapse_id }}" aria-expanded="false" aria-controls="{{ ocr_collapse_id }}">
+                  OCR details
+                </button>
+              </div>
+              <div class="collapse" id="{{ ocr_collapse_id }}">
+                <div class="small mt-2" data-encounter-pdf-ocr-results>
+                  {% if attachment.ocr_error %}
+                  <div class="text-danger">{{ attachment.ocr_error }}</div>
+                  {% endif %}
+                  {% if attachment.ocr_dr_report %}
+                  {% set dr_data = attachment.ocr_dr_report.dr_data or {} %}
+                  <div class="border rounded p-2 mt-2">
+                    <div class="fw-semibold">DR OCR</div>
+                    <div>{{ dr_data.result or 'No result text extracted' }}</div>
+                    {% if dr_data.qualitative_result %}
+                    <div class="text-muted">{{ dr_data.qualitative_result }}</div>
+                    {% endif %}
+                    <div class="text-muted">
+                      Page {{ attachment.ocr_dr_report.page or '-' }} ·
+                      Report ID {{ attachment.ocr_dr_report.diabetic_retinopathy_report_id or '-' }} ·
+                      {{ attachment.ocr_dr_report.promotion_status or '-' }}
+                    </div>
+                  </div>
+                  {% endif %}
+                  {% if attachment.ocr_glaucoma_report %}
+                  {% set glaucoma_data = attachment.ocr_glaucoma_report.glaucoma_data or {} %}
+                  <div class="border rounded p-2 mt-2">
+                    <div class="fw-semibold">Glaucoma OCR</div>
+                    <div>{{ glaucoma_data.result or 'No result text extracted' }}</div>
+                    {% if glaucoma_data.vcdr_right or glaucoma_data.vcdr_left %}
+                    <div class="text-muted">VCDR OD {{ glaucoma_data.vcdr_right or '-' }} · OS {{ glaucoma_data.vcdr_left or '-' }}</div>
+                    {% endif %}
+                    {% if glaucoma_data.qualitative_result %}
+                    <div class="text-muted">{{ glaucoma_data.qualitative_result }}</div>
+                    {% endif %}
+                    <div class="text-muted">
+                      Page {{ attachment.ocr_glaucoma_report.page or '-' }} ·
+                      Report ID {{ attachment.ocr_glaucoma_report.glaucoma_report_id or '-' }} ·
+                      Cleaned ID {{ attachment.ocr_glaucoma_report.glaucoma_results_cleaned_id or '-' }} ·
+                      {{ attachment.ocr_glaucoma_report.promotion_status or '-' }}
+                    </div>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% set pdf_gallery.index = pdf_gallery.index + 1 %}
+            {% else %}
             <a class="list-group-item list-group-item-action"
                href="{{ url_for('remidio_api_uploads.encounter_set_attachment', uuid=attachment.uuid) }}"
-               {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}onclick="openPswpGallery('{{ media_gallery_id }}', {{ pdf_gallery.index }}); return false;"{% else %}target="_blank" rel="noopener"{% endif %}>
+               target="_blank"
+               rel="noopener">
               <div class="d-flex justify-content-between gap-2">
                 <span class="fw-semibold">{{ attachment.report_type or attachment.asset_kind }}</span>
                 <span class="small text-muted">{{ attachment.mime_type or '-' }}</span>
@@ -221,8 +375,6 @@
               <div class="small text-muted">Remidio report {{ attachment.remidio_report_id }}</div>
               {% endif %}
             </a>
-            {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
-              {% set pdf_gallery.index = pdf_gallery.index + 1 %}
             {% endif %}
             {% else %}
             <div class="list-group-item text-muted">No attachments.</div>

@@ -7,7 +7,8 @@ import os
 from sqlalchemy.orm import Session as DBSession # Renamed to avoid conflict with `session` variable
 from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 import time
 
 from utils.env_loader import load_environment
@@ -16,7 +17,7 @@ from utils.pii_masking import mask_patient_name, mask_patient_id
 load_environment()
 
 # Import database models and configurations
-from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile
+from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile, GlaucomaResultsCleaned
 
 
 
@@ -84,6 +85,289 @@ def get_daily_dirs(upload_date_str):
         'dr_pdf': dr_pdf_daily,
         'glaucoma_pdf': glaucoma_pdf_daily
     }
+
+
+def process_pdf_for_ocr(
+    db_session: DBSession,
+    *,
+    pdf_path: Path,
+    patient_encounter: PatientEncounters,
+    upload_date_str: str | None = None,
+) -> dict:
+    """Run OCR for one PDF and persist disease-specific canonical reports when absent."""
+    upload_date_str = upload_date_str or datetime.now(timezone.utc).strftime("%Y_%m_%d")
+    daily_dirs = get_daily_dirs(upload_date_str)
+    daily_dirs["dr_pdf"].mkdir(parents=True, exist_ok=True)
+    daily_dirs["glaucoma_pdf"].mkdir(parents=True, exist_ok=True)
+
+    result = {
+        "status": "completed",
+        "source_pdf_filename": pdf_path.name,
+        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "dr_report": _empty_dr_ocr_result(),
+        "glaucoma_report": _empty_glaucoma_ocr_result(),
+    }
+
+    from ocr_extraction import find_report_pages_by_coords_with_grid
+
+    ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path))
+    if len(ocr_result) == 8:
+        (
+            pageNumberDiabeticReport,
+            pageNumberGlaucomaReport,
+            text_diabetic_result,
+            text_diabetic_qual_result,
+            text_glaucoma_result,
+            vcdr_rt,
+            vcdr_lt,
+            text_gl_qual_result,
+        ) = ocr_result
+    elif len(ocr_result) == 2:
+        pageNumberDiabeticReport, pageNumberGlaucomaReport = ocr_result
+        text_diabetic_result = text_diabetic_qual_result = None
+        text_glaucoma_result = vcdr_rt = vcdr_lt = text_gl_qual_result = None
+    else:
+        raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2 or 8")
+
+    pdf_document = None
+    if pageNumberDiabeticReport is not None or pageNumberGlaucomaReport is not None:
+        pdf_document = fitz.open(str(pdf_path))
+
+    try:
+        if pageNumberDiabeticReport is not None:
+            result["dr_report"] = _process_detected_dr_report(
+                db_session,
+                pdf_document=pdf_document,
+                pdf_path=pdf_path,
+                patient_encounter=patient_encounter,
+                daily_dir=daily_dirs["dr_pdf"],
+                page_number=pageNumberDiabeticReport,
+                text_result=text_diabetic_result,
+                qualitative_result=text_diabetic_qual_result,
+            )
+
+        if pageNumberGlaucomaReport is not None:
+            result["glaucoma_report"] = _process_detected_glaucoma_report(
+                db_session,
+                pdf_document=pdf_document,
+                pdf_path=pdf_path,
+                patient_encounter=patient_encounter,
+                daily_dir=daily_dirs["glaucoma_pdf"],
+                page_number=pageNumberGlaucomaReport,
+                text_result=text_glaucoma_result,
+                vcdr_right=vcdr_rt,
+                vcdr_left=vcdr_lt,
+                qualitative_result=text_gl_qual_result,
+            )
+    finally:
+        if pdf_document is not None:
+            pdf_document.close()
+
+    if not result["dr_report"]["detected"] and not result["glaucoma_report"]["detected"]:
+        result["status"] = "completed_no_reports_detected"
+    return result
+
+
+def _empty_dr_ocr_result() -> dict:
+    return {
+        "detected": False,
+        "page": None,
+        "dr_data": {},
+        "diabetic_retinopathy_report_id": None,
+        "promotion_status": "not_detected",
+    }
+
+
+def _empty_glaucoma_ocr_result() -> dict:
+    return {
+        "detected": False,
+        "page": None,
+        "glaucoma_data": {},
+        "glaucoma_report_id": None,
+        "glaucoma_results_cleaned_id": None,
+        "promotion_status": "not_detected",
+    }
+
+
+def _process_detected_dr_report(
+    db_session: DBSession,
+    *,
+    pdf_document,
+    pdf_path: Path,
+    patient_encounter: PatientEncounters,
+    daily_dir: Path,
+    page_number: int,
+    text_result: str | None,
+    qualitative_result: str | None,
+) -> dict:
+    dr_data = {
+        "result": clean_ocr_text(text_result),
+        "qualitative_result": clean_ocr_text(qualitative_result),
+    }
+    existing = (
+        db_session.query(DiabeticRetinopathyReport)
+        .filter_by(patient_encounter_id=patient_encounter.id)
+        .order_by(DiabeticRetinopathyReport.id.asc())
+        .first()
+    )
+    if existing is not None:
+        return {
+            "detected": True,
+            "page": page_number,
+            "dr_data": dr_data,
+            "diabetic_retinopathy_report_id": existing.id,
+            "promotion_status": "not_promoted_duplicate",
+        }
+
+    report_file_name = _save_split_report_pdf(
+        pdf_document,
+        page_number=page_number,
+        target_dir=daily_dir,
+        filename=_split_report_filename(patient_encounter, "DR", page_number),
+        source_name=pdf_path.name,
+    )
+    row = DiabeticRetinopathyReport(
+        patient_encounter_id=patient_encounter.id,
+        result=dr_data["result"],
+        qualitative_result=dr_data["qualitative_result"],
+        report_file_name=report_file_name,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return {
+        "detected": True,
+        "page": page_number,
+        "dr_data": dr_data,
+        "diabetic_retinopathy_report_id": row.id,
+        "promotion_status": "created_clinical_report",
+    }
+
+
+def _process_detected_glaucoma_report(
+    db_session: DBSession,
+    *,
+    pdf_document,
+    pdf_path: Path,
+    patient_encounter: PatientEncounters,
+    daily_dir: Path,
+    page_number: int,
+    text_result: str | None,
+    vcdr_right: str | None,
+    vcdr_left: str | None,
+    qualitative_result: str | None,
+) -> dict:
+    glaucoma_data = {
+        "vcdr_right": clean_ocr_text(vcdr_right),
+        "vcdr_left": clean_ocr_text(vcdr_left),
+        "result": clean_ocr_text(text_result),
+        "qualitative_result": clean_ocr_text(qualitative_result),
+    }
+    existing = (
+        db_session.query(GlaucomaReport)
+        .filter_by(patient_encounter_id=patient_encounter.id)
+        .order_by(GlaucomaReport.id.asc())
+        .first()
+    )
+    if existing is not None:
+        cleaned = (
+            db_session.query(GlaucomaResultsCleaned)
+            .filter_by(glaucoma_report_id=existing.id)
+            .first()
+        )
+        return {
+            "detected": True,
+            "page": page_number,
+            "glaucoma_data": glaucoma_data,
+            "glaucoma_report_id": existing.id,
+            "glaucoma_results_cleaned_id": cleaned.id if cleaned else None,
+            "promotion_status": "not_promoted_duplicate",
+        }
+
+    report_file_name = _save_split_report_pdf(
+        pdf_document,
+        page_number=page_number,
+        target_dir=daily_dir,
+        filename=_split_report_filename(patient_encounter, "GL", page_number),
+        source_name=pdf_path.name,
+    )
+    row = GlaucomaReport(
+        patient_encounter_id=patient_encounter.id,
+        vcdr_right=glaucoma_data["vcdr_right"],
+        vcdr_left=glaucoma_data["vcdr_left"],
+        result=glaucoma_data["result"],
+        qualitative_result=glaucoma_data["qualitative_result"],
+        report_file_name=report_file_name,
+    )
+    db_session.add(row)
+    db_session.flush()
+    cleaned = _upsert_glaucoma_results_cleaned(db_session, row)
+    return {
+        "detected": True,
+        "page": page_number,
+        "glaucoma_data": glaucoma_data,
+        "glaucoma_report_id": row.id,
+        "glaucoma_results_cleaned_id": cleaned.id,
+        "promotion_status": "created_clinical_report",
+    }
+
+
+def _save_split_report_pdf(pdf_document, *, page_number: int, target_dir: Path, filename: str, source_name: str) -> str | None:
+    if pdf_document is None:
+        return None
+    try:
+        output_pdf = fitz.open()
+        output_pdf.insert_pdf(pdf_document, from_page=page_number - 1, to_page=page_number - 1)
+        target_path = target_dir / filename
+        output_pdf.save(target_path)
+        output_pdf.close()
+        return filename
+    except Exception as exc:  # noqa: BLE001
+        log_error(source_name, f"Error saving split report page {page_number}: {exc}")
+        return None
+
+
+def _split_report_filename(patient_encounter: PatientEncounters, report_code: str, page_number: int) -> str:
+    patient_id = patient_encounter.patient_id
+    patient_name = (patient_encounter.name or "").replace(" ", "_")
+    capture_date = patient_encounter.capture_date
+    return f"{patient_id}_{patient_name}_{capture_date}_{report_code}_Page{page_number}.pdf"
+
+
+def _upsert_glaucoma_results_cleaned(db_session: DBSession, report: GlaucomaReport) -> GlaucomaResultsCleaned:
+    row = (
+        db_session.query(GlaucomaResultsCleaned)
+        .filter_by(glaucoma_report_id=report.id)
+        .first()
+    )
+    if row is None:
+        row = GlaucomaResultsCleaned(glaucoma_report_id=report.id, patient_encounter_id=report.patient_encounter_id)
+        db_session.add(row)
+    row.vcdr_right_num = _parse_first_float(report.vcdr_right)
+    row.vcdr_left_num = _parse_first_float(report.vcdr_left)
+    row.original_vcdr_right = report.vcdr_right
+    row.original_vcdr_left = report.vcdr_left
+    row.result = report.result
+    row.qualitative_result = report.qualitative_result
+    row.report_uuid = report.uuid
+    row.report_file_name = report.report_file_name
+    row.patient_encounter_id = report.patient_encounter_id
+    db_session.flush()
+    return row
+
+
+def _parse_first_float(value: str | None) -> float | None:
+    if not value:
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)", str(value))
+    if not match:
+        return None
+    try:
+        number = float(match.group(1))
+    except Exception:
+        return None
+    if 0.0 <= number <= 1.0:
+        return number
+    return None
 
 
 # --- Main PDF Processing Logic ---

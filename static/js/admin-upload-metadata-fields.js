@@ -268,7 +268,8 @@
       addOption(current, '');
     }
     current.querySelector('[data-umf-required-upload]').checked = button.dataset.requiredUpload === '1';
-    current.querySelector('[data-umf-required-verification]').checked = button.dataset.requiredVerification === '1';
+    current.querySelector('[data-umf-editable-verification]').checked =
+      (button.dataset.editableVerification || button.dataset.requiredVerification) === '1';
     current.querySelector('[data-umf-visible-grader]').checked = button.dataset.visibleGrader === '1';
     current.querySelector('[data-umf-pii]').checked = button.dataset.pii === '1';
     document.querySelector('[data-umf-form-title]').textContent = 'Edit Metadata Field';

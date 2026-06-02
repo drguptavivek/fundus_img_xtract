@@ -23,7 +23,7 @@ Upload metadata field definitions are standalone master records. They are not ma
 - `validation_regex`: optional regular expression for validating field values
 - `validation_error_message`: optional user-facing message when regex validation fails
 - `required_at_upload_default`
-- `required_for_verification_default`: editable during verification before finalization
+- `editable_during_verification_default`: editable during verification before finalization
 - `visible_to_grader_default`
 - `is_pii_default`
 - `active`

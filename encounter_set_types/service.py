@@ -362,7 +362,7 @@ def _resolve_master_field(db, manager_user_id: int, field: dict[str, Any], idx: 
         validation_regex=field.get("validation_regex"),
         validation_error_message=field.get("validation_error_message"),
         required_at_upload_default=field["required_at_upload"],
-        required_for_verification_default=field["required_for_verification"],
+        editable_during_verification_default=field["editable_during_verification"],
         visible_to_grader_default=field["visible_to_grader"],
         is_pii_default=field["is_pii"],
         active=True,
@@ -463,7 +463,12 @@ def _normalize_field(field: dict[str, Any], idx: int) -> dict[str, Any]:
         "validation_regex": validation_regex,
         "validation_error_message": validation_error_message,
         "required_at_upload": _bool_field(field, "required_at_upload", idx),
-        "required_for_verification": _bool_field(field, "required_for_verification", idx),
+        "editable_during_verification": _bool_field(
+            field,
+            "editable_during_verification",
+            idx,
+            legacy_key="required_for_verification",
+        ),
         "visible_to_grader": _bool_field(field, "visible_to_grader", idx),
         "is_pii": _bool_field(field, "is_pii", idx),
     }
@@ -492,8 +497,8 @@ def _normalize_options(options: Any, idx: int) -> list[dict[str, str]]:
     return normalized
 
 
-def _bool_field(field: dict[str, Any], key: str, idx: int) -> bool:
-    value = field.get(key, False)
+def _bool_field(field: dict[str, Any], key: str, idx: int, *, legacy_key: str | None = None) -> bool:
+    value = field.get(key, field.get(legacy_key, False) if legacy_key else False)
     if not isinstance(value, bool):
         raise ValueError(f"metadata_schema_json.fields[{idx}] {key} must be boolean.")
     return value

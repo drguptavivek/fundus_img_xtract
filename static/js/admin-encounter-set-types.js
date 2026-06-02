@@ -196,7 +196,7 @@
     const sctid = card.querySelector('[data-est-sctid]')?.value.trim();
     const description = card.querySelector('[data-est-description]')?.value.trim();
     const requiredUpload = boolValue(card.querySelector('[data-est-required-upload]'));
-    const requiredVerification = boolValue(card.querySelector('[data-est-required-verification]'));
+    const editableVerification = boolValue(card.querySelector('[data-est-editable-verification]'));
     const visibleGrader = boolValue(card.querySelector('[data-est-visible-grader]'));
     const isPii = boolValue(card.querySelector('[data-est-pii]'));
     const options = Array.from(card.querySelectorAll('[data-est-option-value]')).map(function (input) {
@@ -212,7 +212,7 @@
       description: description,
       options: options,
       requiredUpload: requiredUpload,
-      requiredVerification: requiredVerification,
+      editableVerification: editableVerification,
       visibleGrader: visibleGrader,
       isPii: isPii
     };
@@ -249,7 +249,7 @@
       if (summary.requiredUpload) {
         flags.appendChild(summaryBadge('Upload required', 'text-bg-primary'));
       }
-      if (summary.requiredVerification) {
+      if (summary.editableVerification) {
         flags.appendChild(summaryBadge('Editable during verification', 'text-bg-info'));
       }
       if (summary.visibleGrader) {
@@ -432,7 +432,7 @@
       validation_regex: field.validation_regex || '',
       validation_error_message: field.validation_error_message || '',
       required_at_upload: Boolean(field.required_at_upload_default),
-      required_for_verification: Boolean(field.required_for_verification_default),
+      editable_during_verification: Boolean(field.editable_during_verification_default || field.required_for_verification_default),
       visible_to_grader: Boolean(field.visible_to_grader_default),
       is_pii: Boolean(field.is_pii_default)
     };
@@ -451,7 +451,9 @@
     card.querySelector('[data-est-validation-regex]').value = data.validation_regex || '';
     card.querySelector('[data-est-validation-error-message]').value = data.validation_error_message || '';
     card.querySelector('[data-est-required-upload]').checked = Boolean(data.required_at_upload);
-    card.querySelector('[data-est-required-verification]').checked = Boolean(data.required_for_verification);
+    card.querySelector('[data-est-editable-verification]').checked = Boolean(
+      data.editable_during_verification || data.required_for_verification
+    );
     card.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
     card.querySelector('[data-est-pii]').checked = Boolean(data.is_pii);
     clearOptions(card);
@@ -635,12 +637,14 @@
     flags.innerHTML = [
       '<div class="w-100 text-muted">These settings are saved for this EncounterSetType and may differ from the metadata master defaults.</div>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-upload> Required at upload</label>',
-      '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-required-verification> Editable during verification</label>',
+      '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-editable-verification> Editable during verification</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-visible-grader> Visible to grader</label>',
       '<label class="form-check mb-0"><input class="form-check-input" type="checkbox" data-est-pii> PII</label>'
     ].join('');
     flags.querySelector('[data-est-required-upload]').checked = Boolean(data.required_at_upload);
-    flags.querySelector('[data-est-required-verification]').checked = Boolean(data.required_for_verification);
+    flags.querySelector('[data-est-editable-verification]').checked = Boolean(
+      data.editable_during_verification || data.required_for_verification
+    );
     flags.querySelector('[data-est-visible-grader]').checked = Boolean(data.visible_to_grader);
     flags.querySelector('[data-est-pii]').checked = Boolean(data.is_pii);
 
@@ -864,7 +868,7 @@
       validation_regex: card.querySelector('[data-est-validation-regex]').value.trim() || null,
       validation_error_message: card.querySelector('[data-est-validation-error-message]').value.trim() || null,
       required_at_upload: boolValue(card.querySelector('[data-est-required-upload]')),
-      required_for_verification: boolValue(card.querySelector('[data-est-required-verification]')),
+      editable_during_verification: boolValue(card.querySelector('[data-est-editable-verification]')),
       visible_to_grader: boolValue(card.querySelector('[data-est-visible-grader]')),
       is_pii: boolValue(card.querySelector('[data-est-pii]'))
     };

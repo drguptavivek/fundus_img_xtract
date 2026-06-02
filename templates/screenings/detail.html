@@ -71,6 +71,13 @@
                         <dt class="col-5">Lab Unit</dt>
                         <dd class="col-7">{{ encounter.lab_unit.name or "-" }}</dd>
                         {% endif %}
+                        <dt class="col-5">Source</dt>
+                        <dd class="col-7">
+                            <span class="badge {{ source_context.intake_class or 'text-bg-light' }}">{{ source_context.intake_label or 'Unknown' }}</span>
+                            {% if source_context.workflow_label %}
+                            <span class="badge {{ source_context.workflow_class }}">{{ source_context.workflow_label }}</span>
+                            {% endif %}
+                        </dd>
                         <dt class="col-5">Zip File</dt>
                         <dd class="col-7">{% if encounter.zip_file %}{{ encounter.zip_file.zip_filename }}{% else %}-{%
                             endif %}</dd>
@@ -83,7 +90,13 @@
                 <div class="card-header"><strong>Main Report PDF</strong></div>
                 <div class="card-body">
                     {% set pdf_files = encounter.encounter_file_pdfs or [] %}
-                    {% if pdf_files %}
+                    {% set set_pdf_files = [] %}
+                    {% for attachment in encounter.encounter_set_attachments or [] %}
+                    {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
+                    {% set _ = set_pdf_files.append(attachment) %}
+                    {% endif %}
+                    {% endfor %}
+                    {% if pdf_files or set_pdf_files %}
                     {% for pdf in pdf_files %}
                     <div class="mb-2">
                         <a class="btn btn-sm btn-outline-primary"
@@ -94,8 +107,18 @@
                         <small class="text-muted d-block mt-1">{{ pdf.filename }}</small>
                     </div>
                     {% endfor %}
+                    {% for pdf in set_pdf_files %}
+                    <div class="mb-2">
+                        <a class="btn btn-sm btn-outline-primary"
+                            href="{{ url_for('remidio_api_uploads.encounter_set_attachment', uuid=pdf.uuid) }}" target="_blank"
+                            rel="noopener">
+                            <i class="bi bi-file-pdf"></i> Open EncounterSet PDF
+                        </a>
+                        <small class="text-muted d-block mt-1">{{ pdf.original_filename }}</small>
+                    </div>
+                    {% endfor %}
                     {% else %}
-                    <em class="text-muted">No PDF files available for this encounter.</em>
+                    <em class="text-muted">No PDF/report files were imported for this encounter.</em>
                     {% endif %}
                 </div>
             </div>
@@ -235,8 +258,9 @@
                     <div class="sv-viewer-root" data-enc-id="{{ encounter.id }}">
                         <!-- Large viewer -->
                         <div class="sv-main bg-black rounded position-relative mb-2">
+                            {% set first_img = images[0].record %}
                             <img class="sv-main-img"
-                                src="{{ url_for('media._encounterImageByUUID', uuid_str=images[0].uuid) }}" alt="Image"
+                                src="{% if images[0].source == 'encounter_set' %}{{ url_for('media._encounterSetImageByUUID', uuid_str=first_img.uuid) }}{% else %}{{ url_for('media._encounterImageByUUID', uuid_str=first_img.uuid) }}{% endif %}" alt="Image"
                                 data-index="0" />
                             <div class="sv-counter">1 / {{ images|length }}</div>
                             <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
@@ -250,11 +274,12 @@
                         <!-- Thumbnails -->
                         <div class="sv-thumbs">
                             {% for img in images %}
+                            {% set image = img.record %}
                             <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
                                 data-index="{{ loop.index0 }}" title="Thumbnail">
                                 <img class="sv-thumb-img"
-                                    src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=img.uuid) }}"
-                                    data-full-url="{{ url_for('media._encounterImageByUUID', uuid_str=img.uuid) }}"
+                                    src="{% if img.source == 'encounter_set' %}{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}{% else %}{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=image.uuid) }}{% endif %}"
+                                    data-full-url="{% if img.source == 'encounter_set' %}{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}{% else %}{{ url_for('media._encounterImageByUUID', uuid_str=image.uuid) }}{% endif %}"
                                     alt="Thumbnail" loading="lazy" />
                             </a>
                             {% endfor %}

@@ -46,7 +46,7 @@ Admin configuration UI is available at `GET /admin/encounter-set-types`. The pag
       "scope": "patient",
       "type": "text",
       "required_at_upload": true,
-      "required_for_verification": true,
+      "editable_during_verification": true,
       "visible_to_grader": true,
       "is_pii": false
     }
@@ -68,7 +68,7 @@ Supported field properties:
 - `validation_regex`: optional regular expression snapshot used to validate field values
 - `validation_error_message`: optional user-facing message when regex validation fails
 - `required_at_upload`: upload-time requiredness
-- `required_for_verification`: editable during verification before grading task creation
+- `editable_during_verification`: editable during verification before grading task creation
 - `visible_to_grader`: whether grader UIs may display the field
 - `is_pii`: whether PII handling/redaction rules apply
 
@@ -76,7 +76,7 @@ Fields not required at upload may be completed during verification.
 
 The admin UI presents this schema as five metadata cards: Patient, Encounter, Image, Document, and Upload. It serializes those field rows into `metadata_schema_json` before posting to the API. Every field must resolve to a master metadata field, whether it was added from `/admin/upload-metadata-fields` or from the EncounterSetType editor.
 
-Metadata masters provide defaults only. After a field is added to an EncounterSetType, `required_at_upload`, `required_for_verification`, `visible_to_grader`, and `is_pii` are stored in the EncounterSetType schema snapshot and may differ from the master defaults.
+Metadata masters provide defaults only. After a field is added to an EncounterSetType, `required_at_upload`, `editable_during_verification`, `visible_to_grader`, and `is_pii` are stored in the EncounterSetType schema snapshot and may differ from the master defaults.
 
 ## Schema Export
 
@@ -185,7 +185,7 @@ curl -X POST /api/encounter-set-types \
           "scope": "patient",
           "type": "text",
           "required_at_upload": false,
-          "required_for_verification": false,
+          "editable_during_verification": false,
           "visible_to_grader": false,
           "is_pii": true
         },
@@ -197,7 +197,7 @@ curl -X POST /api/encounter-set-types \
           "selection_mode": "single",
           "options": ["OD", "OS", "OU", "unknown"],
           "required_at_upload": false,
-          "required_for_verification": true,
+          "editable_during_verification": true,
           "visible_to_grader": true,
           "is_pii": false
         }

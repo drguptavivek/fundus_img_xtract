@@ -9,10 +9,14 @@ from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from auth.roles import roles_required
+from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
+from encounter_sets.models import EncounterSetAttachment
+from models import PatientEncounters
 from remidio_api_integration import routing as api_routing
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError, RemidioIntegrationError
+from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
 
 from . import api_bp
@@ -21,6 +25,7 @@ from . import api_bp
 logger = logging.getLogger("api.remidio_api_integration")
 REMIDIO_ROLES = ("admin", "data_manager")
 REMIDIO_BINDING_ROLES = ("admin", "local_admin", "data_manager")
+REMIDIO_ATTACHMENT_OCR_ROLES = ("admin", "local_admin", "data_manager", "fileUploader", "optometrist")
 
 
 @api_bp.route("/remidio/connections", methods=["GET"])
@@ -218,6 +223,195 @@ def upsert_remidio_api_routing_profile():
         return jsonify({"success": False, "error": "Remidio API routing profile conflicts with an existing profile."}), 409
     except RemidioIntegrationError as exc:
         return _error_response(exc)
+
+
+@api_bp.route("/remidio/encounter-set-attachments/<int:attachment_id>/ocr", methods=["GET", "POST"])
+@roles_required(*REMIDIO_ATTACHMENT_OCR_ROLES)
+def queue_encounter_set_attachment_ocr(attachment_id: int):
+    payload = _json_payload()
+    force = bool(payload.get("force")) if isinstance(payload, dict) else False
+    try:
+        with transaction_scope() as db:
+            query = (
+                db.query(EncounterSetAttachment)
+                .join(PatientEncounters, EncounterSetAttachment.patient_encounter_id == PatientEncounters.id)
+                .filter(EncounterSetAttachment.id == attachment_id)
+            )
+            query = apply_scoping(query, PatientEncounters, current_user, "upload")
+            attachment = query.first()
+            if attachment is None:
+                return jsonify({"success": False, "error": "Attachment not found."}), 404
+            if attachment.asset_kind != "pdf" and attachment.mime_type != "application/pdf":
+                return jsonify({"success": False, "error": "Attachment is not a PDF."}), 400
+            if request.method == "GET":
+                return jsonify({"success": True, "data": _attachment_ocr_payload(attachment, queued=False)})
+
+            metadata = dict(attachment.metadata_json or {})
+            current_ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+            if not force and current_ocr.get("status") in {"queued", "processing"}:
+                return jsonify({"success": True, "data": _attachment_ocr_payload(attachment, queued=False)})
+
+            metadata["ocr"] = {
+                **current_ocr,
+                "status": "queued",
+                "queued_at": utcnow().isoformat(),
+                "queued_by_user_id": current_user.id,
+            }
+            attachment.metadata_json = metadata
+            db.add(attachment)
+
+            from celery_tasks.tasks.encounter_set_tasks import process_encounter_set_attachment_pdf_ocr_task
+
+            process_encounter_set_attachment_pdf_ocr_task.apply_async(
+                args=[attachment.id],
+                kwargs={"user_id": current_user.id, "force": force},
+            )
+            return jsonify(
+                {
+                    "success": True,
+                    "data": _attachment_ocr_payload(attachment, queued=True),
+                    "message": "PDF OCR queued.",
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to queue EncounterSet attachment OCR attachment_id=%s error=%s",
+            sanitize_log_value(attachment_id),
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        return jsonify({"success": False, "error": "Unable to queue PDF OCR."}), 500
+
+
+@api_bp.route("/remidio/projects/<int:project_id>/encounter-set-attachment-ocr/pending", methods=["GET", "POST"])
+@roles_required(*REMIDIO_ATTACHMENT_OCR_ROLES)
+def queue_project_pending_encounter_set_attachment_ocr(project_id: int):
+    queued_attachment_ids: list[int] = []
+    user_id = current_user.id
+    try:
+        with transaction_scope() as db:
+            query = _project_pdf_attachment_query(db, project_id)
+            if request.method == "GET":
+                return jsonify({"success": True, "data": _project_ocr_counts(query.all())})
+
+            for attachment in query.all():
+                metadata = dict(attachment.metadata_json or {})
+                if not _is_remidio_ai_report_attachment(attachment):
+                    continue
+                current_ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+                status = current_ocr.get("status")
+                if status in {"completed", "completed_no_reports_detected"}:
+                    continue
+                if status in {"queued", "processing"}:
+                    continue
+                metadata["ocr"] = {
+                    **current_ocr,
+                    "status": "queued",
+                    "queued_at": utcnow().isoformat(),
+                    "queued_by_user_id": user_id,
+                    "queued_by_project_action": True,
+                }
+                attachment.metadata_json = metadata
+                db.add(attachment)
+                queued_attachment_ids.append(attachment.id)
+            counts = _project_ocr_counts(query.all())
+
+        if queued_attachment_ids:
+            from celery_tasks.tasks.encounter_set_tasks import process_encounter_set_attachment_pdf_ocr_task
+
+            for attachment_id in queued_attachment_ids:
+                process_encounter_set_attachment_pdf_ocr_task.apply_async(
+                    args=[attachment_id],
+                    kwargs={"user_id": user_id, "force": False},
+                )
+
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "project_id": project_id,
+                    **counts,
+                    "newly_queued_count": len(queued_attachment_ids),
+                    "queued_attachment_ids": queued_attachment_ids,
+                },
+                "message": f"Queued {len(queued_attachment_ids)} pending PDF OCR task(s).",
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to queue project EncounterSet attachment OCR project_id=%s error=%s",
+            sanitize_log_value(project_id),
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        return jsonify({"success": False, "error": "Unable to queue project PDF OCR."}), 500
+
+
+def _project_pdf_attachment_query(db, project_id: int):
+    query = (
+        db.query(EncounterSetAttachment)
+        .join(PatientEncounters, EncounterSetAttachment.patient_encounter_id == PatientEncounters.id)
+        .filter(
+            PatientEncounters.project_id == project_id,
+            PatientEncounters.is_set_based.is_(True),
+            (EncounterSetAttachment.asset_kind == "pdf") | (EncounterSetAttachment.mime_type == "application/pdf"),
+        )
+    )
+    return apply_scoping(query, PatientEncounters, current_user, "upload")
+
+
+def _project_ocr_counts(attachments: list[EncounterSetAttachment]) -> dict:
+    eligible_attachments = [attachment for attachment in attachments if _is_remidio_ai_report_attachment(attachment)]
+    counts = {
+        "total_count": len(eligible_attachments),
+        "pending_count": 0,
+        "queued_count": 0,
+        "processing_count": 0,
+        "done_count": 0,
+        "failed_count": 0,
+    }
+    for attachment in eligible_attachments:
+        metadata = attachment.metadata_json or {}
+        ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        status = ocr.get("status")
+        if status == "queued":
+            counts["queued_count"] += 1
+        elif status == "processing":
+            counts["processing_count"] += 1
+        elif status in {"completed", "completed_no_reports_detected"}:
+            counts["done_count"] += 1
+        elif status == "failed":
+            counts["failed_count"] += 1
+            counts["pending_count"] += 1
+        else:
+            counts["pending_count"] += 1
+    counts["active_count"] = counts["queued_count"] + counts["processing_count"]
+    counts["work_remaining_count"] = counts["active_count"] + counts["pending_count"]
+    return counts
+
+
+def _is_remidio_ai_report_attachment(attachment: EncounterSetAttachment) -> bool:
+    metadata = attachment.metadata_json or {}
+    return bool(
+        metadata.get("remidio_report_id")
+        and metadata.get("remidio_report_type") == "aiReport"
+    )
+
+
+def _attachment_ocr_payload(attachment: EncounterSetAttachment, *, queued: bool) -> dict:
+    metadata = attachment.metadata_json or {}
+    ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+    return {
+        "attachment_id": attachment.id,
+        "status": ocr.get("status"),
+        "queued": queued,
+        "started_at": ocr.get("started_at"),
+        "completed_at": ocr.get("completed_at"),
+        "failed_at": ocr.get("failed_at"),
+        "error": ocr.get("error"),
+        "dr_report": ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else None,
+        "glaucoma_report": ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else None,
+    }
 
 
 @api_bp.route("/remidio/api-routing-profiles/<int:routing_profile_id>", methods=["DELETE"])

@@ -76,6 +76,7 @@
 {% if items %}
 <div class="row g-3">
   {% for enc in items %}
+  {% set source_context = source_contexts.get(enc.id, {}) %}
   {# collect images #}
   {% set images = [] %}
   {% for ef in enc.encounter_files %}
@@ -129,6 +130,17 @@
                 </div>
               </div>
               {% endif %}
+
+              <!-- Intake Source -->
+              <div class="col-12 col-sm-6 col-md-4 col-xl-3">
+                <div class="d-flex align-items-center flex-wrap gap-1">
+                  <span class="badge bg-dark-subtle text-dark-emphasis scr-badge-enhanced me-1">Source</span>
+                  <span class="badge {{ source_context.intake_class or 'text-bg-light' }}">{{ source_context.intake_label or 'Unknown' }}</span>
+                  {% if source_context.workflow_label %}
+                    <span class="badge {{ source_context.workflow_class }}">{{ source_context.workflow_label }}</span>
+                  {% endif %}
+                </div>
+              </div>
               
               <!-- Lab Unit (if available) -->
               {% if enc.lab_unit %}
@@ -192,20 +204,32 @@
             <div class="h-100">
               <div class="scr-sec-title small text-uppercase text-muted mb-2">Main Report PDF</div>
               {% set pdf_files = enc.encounter_file_pdfs or [] %}
-              {% if pdf_files %}
+              {% set set_pdf_files = [] %}
+              {% for attachment in enc.encounter_set_attachments or [] %}
+                {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
+                  {% set _ = set_pdf_files.append(attachment) %}
+                {% endif %}
+              {% endfor %}
+              {% if pdf_files or set_pdf_files %}
                 <div class="p-3 rounded bg-light-subtle">
                   <div class="mb-2">
-                    <span class="fw-semibold">{{ pdf_files|length }} PDF file{{ 's' if pdf_files|length != 1 else '' }}</span>
+                    {% set pdf_count = (pdf_files|length) + (set_pdf_files|length) %}
+                    <span class="fw-semibold">{{ pdf_count }} PDF file{{ 's' if pdf_count != 1 else '' }}</span>
                   </div>
                   {% for pdf in pdf_files %}
                     <a class="btn btn-sm btn-outline-primary me-2 mb-2" href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}" target="_blank" rel="noopener">
                       <i class="bi bi-file-pdf"></i> Open PDF
                     </a>
                   {% endfor %}
+                  {% for pdf in set_pdf_files %}
+                    <a class="btn btn-sm btn-outline-primary me-2 mb-2" href="{{ url_for('remidio_api_uploads.encounter_set_attachment', uuid=pdf.uuid) }}" target="_blank" rel="noopener">
+                      <i class="bi bi-file-pdf"></i> Open PDF
+                    </a>
+                  {% endfor %}
                 </div>
               {% else %}
                 <div class="p-3 rounded bg-light-subtle text-center">
-                  <span class="text-muted">No PDF files</span>
+                  <span class="text-muted">No PDF/report files</span>
                 </div>
               {% endif %}
             </div>
@@ -276,7 +300,12 @@
               <div class="scr-sec-title small text-uppercase text-muted mb-2">Images</div>
               {% set image_files = [] %}
               {% for ef in enc.encounter_files if ef.file_type == 'image' %}
-                {% set _ = image_files.append(ef) %}
+                {% set _ = image_files.append({'source': 'legacy', 'record': ef}) %}
+              {% endfor %}
+              {% for set_image in enc.encounter_set_images or [] %}
+                {% if set_image.visible_to_grader %}
+                  {% set _ = image_files.append({'source': 'encounter_set', 'record': set_image}) %}
+                {% endif %}
               {% endfor %}
               {% if image_files %}
                 {% set gallery_id = 'pswp-gallery-enc-' ~ enc.id %}
@@ -288,9 +317,10 @@
                   <!-- Thumbnails -->
                   {% if image_files %}
                   <div class="d-flex flex-wrap gap-2 mb-3">
-                    {% for ef in image_files[:4] %}
+                    {% for image_item in image_files[:4] %}
+                    {% set image = image_item.record %}
                     <div class="scr-thumb-container">
-                      <img src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=ef.uuid) }}"
+                      <img src="{% if image_item.source == 'encounter_set' %}{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}{% else %}{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=image.uuid) }}{% endif %}"
                            alt="Thumbnail"
                            class="scr-thumb-img"
                            loading="lazy">
@@ -309,8 +339,9 @@
                   </button>
                   <!-- Hidden PSWP gallery -->
                   <div id="{{ gallery_id }}" class="pswp-gallery d-none">
-                    {% for ef in image_files %}
-                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" data-pswp-type="image" title="Image"></a>
+                    {% for image_item in image_files %}
+                    {% set image = image_item.record %}
+                    <a href="{% if image_item.source == 'encounter_set' %}{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}{% else %}{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}{% endif %}" data-pswp-type="image" title="Image"></a>
                     {% endfor %}
                     {% for dr in enc.dr_reports if dr.report_file_name %}
                     <a href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" data-pswp-type="html"

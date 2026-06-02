@@ -915,7 +915,7 @@ def encounterSetImageThumbnailByUUID(uuid: str):
                     str(thumb_path),
                     img.thumbnail_filename,
                     uuid,
-                    cache_control='private, max-age=60',
+                    cache_control='private, max-age=300',
                     extra_headers={'X-Thumbnail': 'true'},
                 )
         

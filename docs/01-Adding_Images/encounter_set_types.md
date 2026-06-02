@@ -104,14 +104,14 @@ This keeps grading tasks tightly coupled to quality-reviewed sets and reduces do
 - `options`
 - `selection_mode`
 - `required_at_upload`
-- `required_for_verification`
+- `editable_during_verification`
 - `visible_to_grader`
 - `is_pii`
 
 Interpretation:
 
 - Fields with `required_at_upload = true` must be captured before upload submission can complete.
-- Fields with `required_for_verification = true` but `required_at_upload = false` are captured in the verification flow.
+- Fields with `editable_during_verification = true` but `required_at_upload = false` are captured in the verification flow.
 - `scope` clarifies where the field applies (for example encounter-level or image-level).
 - `visible_to_grader` controls whether the value is shown to grading UIs.
 - `is_pii` controls redaction and handling policy.

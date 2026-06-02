@@ -13,6 +13,8 @@ Stack: Flask, SQLAlchemy, PostgreSQL 18, Redis, Bootstrap 5.3, Celery Beat/Worke
 - Prefer `make` targets for routine work: `make up`, `make test`, `make logs-web`, `make logs-celery`, `make alembic-current`, `make alembic-upgrade`.
 - For Docker commands that create files, especially Alembic revisions and pytest-generated files, run with host UID/GID:
   `docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run ...`
+- Tests that use the PostgreSQL `test-db` service must run from inside the Compose network. Do not run host-side `uv run pytest` for DB tests that point at `test-db`, because the service hostname may not resolve from the host/sandbox even when the container is healthy. Use:
+  `docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run pytest <path-or-selection>`
 - Do not commit after every small change. Commit only after implementation and verification are complete.
 - Do not commit documentation-only changes unless explicitly requested or bundled with completed verified implementation work.
 

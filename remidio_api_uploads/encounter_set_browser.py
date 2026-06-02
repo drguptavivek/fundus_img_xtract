@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from flask import abort, render_template, request, send_file
+from flask import abort, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
@@ -63,7 +63,7 @@ def _browser_context() -> dict:
     selected_month = _optional_month(request.args.get("month"))
     encounter_id = _optional_int(request.args.get("encounter_id"))
     with get_db_session() as db:
-        return remidio_service.list_encounter_set_browser(
+        context = remidio_service.list_encounter_set_browser(
             db,
             user=current_user,
             project_id=project_id,
@@ -71,6 +71,21 @@ def _browser_context() -> dict:
             selected_month=selected_month,
             encounter_id=encounter_id,
         )
+    context["browser_url"] = _browser_url(context)
+    return context
+
+
+def _browser_url(context: dict) -> str:
+    params = {}
+    if context.get("selected_project_id"):
+        params["project_id"] = context["selected_project_id"]
+    if context.get("selected_month"):
+        params["month"] = context["selected_month"]
+    if context.get("selected_date"):
+        params["date"] = context["selected_date"].isoformat()
+    if context.get("selected_encounter_id"):
+        params["encounter_id"] = context["selected_encounter_id"]
+    return url_for("remidio_api_uploads.encounter_set_browser", **params)
 
 
 def _optional_int(value: str | None) -> int | None:

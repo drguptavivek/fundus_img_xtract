@@ -92,6 +92,7 @@ class TestTemplatePIIMasking:
                     encounter=mock_encounter_no_pii,
                     current_user=user,
                     back_url="#",
+                    source_context={"intake_label": "Manual", "intake_class": "text-bg-light", "workflow_label": None, "workflow_class": None},
                     images=[],
                     dr_reports=[],
                     gl_reports=[]

@@ -43,6 +43,8 @@ def list_screenings():
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.encounter_file_pdfs),
+                selectinload(PatientEncounters.encounter_set_images),
+                selectinload(PatientEncounters.encounter_set_attachments),
                 joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
             )
             .order_by(
@@ -121,6 +123,7 @@ def list_screenings():
         return render_template(
             "screenings/list.html",
             items=items,
+            source_contexts={enc.id: _screening_source_context(enc) for enc in items},
             page=page,
             per_page=per_page,
             total=total,
@@ -149,6 +152,8 @@ def screening_detail(encounter_id: int):
             .options(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.encounter_set_images),
+                selectinload(PatientEncounters.encounter_set_attachments),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.encounter_file_pdfs),
@@ -195,13 +200,16 @@ def screening_detail(encounter_id: int):
         prev_url = url_for("screenings.screening_detail", encounter_id=prev_enc.id) if prev_enc else None
         next_url = url_for("screenings.screening_detail", encounter_id=next_enc.id) if next_enc else None
 
-        # Images only from encounter_files
+        # Images can come from legacy ZIP rows or newer EncounterSet rows.
         images = []
         for ef in (encounter.encounter_files or []):
             ft = (ef.file_type or "").lower().strip()
             ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
             if ft.startswith("image/") or ext in IMAGE_EXTS:
-                images.append(ef)
+                images.append({"source": "legacy", "record": ef})
+        for set_image in sorted(encounter.encounter_set_images or [], key=lambda img: img.spatial_position):
+            if set_image.visible_to_grader:
+                images.append({"source": "encounter_set", "record": set_image})
 
         # Reports (for left-side buttons)
         dr_reports = encounter.dr_reports or []
@@ -212,6 +220,7 @@ def screening_detail(encounter_id: int):
         return render_template(
             "screenings/detail.html",
             encounter=encounter,
+            source_context=_screening_source_context(encounter),
             images=images,
             dr_reports=dr_reports,
             gl_reports=gl_reports,
@@ -220,6 +229,33 @@ def screening_detail(encounter_id: int):
             next_url=next_url,
             gallery_id=gallery_id,
         )
+
+
+def _screening_source_context(encounter: PatientEncounters) -> dict[str, str | None]:
+    metadata = encounter.metadata_json or {}
+    encounter_metadata = metadata.get("encounter") if isinstance(metadata.get("encounter"), dict) else {}
+    remidio_exam_id = metadata.get("remidio_exam_id") or metadata.get("remidio_exam_row_id") or encounter_metadata.get("remidio_exam_id")
+    has_zip = bool(encounter.zip_file_id or encounter.zip_file)
+
+    if remidio_exam_id:
+        intake_label = "Remidio API"
+        intake_class = "text-bg-info"
+    elif encounter.is_set_based and has_zip:
+        intake_label = "Remidio ZIP"
+        intake_class = "text-bg-primary"
+    elif has_zip:
+        intake_label = "ZIP"
+        intake_class = "text-bg-secondary"
+    else:
+        intake_label = "Manual"
+        intake_class = "text-bg-light"
+
+    return {
+        "intake_label": intake_label,
+        "intake_class": intake_class,
+        "workflow_label": "EncounterSet" if encounter.is_set_based else None,
+        "workflow_class": "text-bg-dark" if encounter.is_set_based else None,
+    }
 
 
 @bp.route("/reprocess_pdf/<int:encounter_id>", methods=["POST"])

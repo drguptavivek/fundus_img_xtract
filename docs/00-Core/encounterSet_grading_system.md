@@ -1,5 +1,7 @@
 # EncounterSet Grading System
 
+> **Deprecated legacy model:** This document reflects the original Strabismus/cardinal-gaze EncounterSet design. The active direction is the EncounterSetType / Upload Profile model: image-scoped grading schemes apply to verified, task-eligible clinical images, while encounter-scoped grading schemes apply to the entire EncounterSet. See `docs/API/encounter-set-types/README.md` and `docs/API/upload-profiles/README.md`.
+
 ## Overview
 
 The EncounterSet grading system extends the fundus imaging platform to support diseases requiring **multiple spatially-related images** for a single diagnosis. The primary use case is **Strabismus** (9-cardinal gaze positions), but the architecture supports any multi-image set-based workflow.

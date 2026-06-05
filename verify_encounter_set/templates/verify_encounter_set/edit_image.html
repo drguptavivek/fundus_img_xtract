@@ -66,7 +66,7 @@
                 <strong>Patient:</strong> {{ encounter.name }}
                 <strong>Patient ID:</strong> {{ encounter.patient_id }}
                 <br />
-                <strong>Position:</strong> {{ image.spatial_position }} of 9
+                <strong>Display Order:</strong> {{ image.spatial_position }}
                 <strong>Filename:</strong> {{ image.original_filename }}
                 <br />
                 <strong>Lab Unit:</strong> {{ encounter.lab_unit.name if encounter.lab_unit else 'N/A' }}
@@ -143,7 +143,7 @@
                         <button id="save-image" class="btn btn-success btn-sm"
                             data-image-uuid="{{ image.uuid }}"
                             data-save-url="{{ url_for('verify_encounter_set.save_edit', uuid=image.uuid) }}">
-                            <i class="bi bi-save"></i> Save & Mark Reviewed
+                            <i class="bi bi-save"></i> Save & Mark Verified
                         </button>
                         {% if has_edited_version %}
                         <button id="restore-original" class="btn btn-danger btn-sm"
@@ -199,39 +199,6 @@
 <script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Save button handler for encounter set images
-    const saveBtn = document.getElementById('save-image');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', async function() {
-            const saveUrl = this.dataset.saveUrl;
-            const csrfToken = document.getElementById('csrf_token').value;
-
-            try {
-                const response = await fetch(saveUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify({
-                        // In production, this would include crop coordinates, etc.
-                        saved: true
-                    })
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    alert('Image saved and marked as reviewed!');
-                    window.location.href = "{{ url_for('verify_encounter_set.verify_encounter', uuid=encounter.uuid) }}";
-                } else {
-                    alert('Error saving: ' + data.message);
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        });
-    }
-
     // Restore original button handler
     const restoreBtn = document.getElementById('restore-original');
     if (restoreBtn) {

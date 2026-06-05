@@ -144,11 +144,11 @@ The application maintains extensive audit trails across all critical operations:
 
 #### **EncounterSet Uploads**
 - **Bundle Management**: Upload and manage encounter sets as a cohesive unit
-- **Task Creation**: Generates per-image grading tasks with encounter context
+- **Task Creation**: Uses EncounterSetType/profile mappings for image-scoped clinical-image grading schemes and encounter-scoped whole-set grading schemes
 - **Workflow Integration**: Supports downstream verification and grading flows
 - **3x3 Grid View**: Review encounter images in a 3x3 grid for rapid visual screening
 - **Spatial Positioning**: Images are ordered by defined grid positions (1-9) for consistent review
-- **Single Set Grade**: One consolidated grade is submitted for the entire encounter set
+- **Mixed Scope Grades**: Supports image-level grades and encounter-level grades according to configured grading scope
 - **Not-Gradable Tracking**: Counts ungradable images to flag incomplete sets during review
 
 #### **Pre-Graded Excel Import System**

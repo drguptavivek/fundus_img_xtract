@@ -2,9 +2,20 @@ from flask import render_template, abort, current_app, flash, redirect, url_for,
 from flask_login import login_required, current_user
 from auth.roles import roles_required
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 
-from models import GradingTask, PatientEncounters, EncounterSetImage, Disease
+from models import (
+    DiabeticRetinopathyReport,
+    Disease,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
+    GradingTask,
+    PatientEncounters,
+    EncounterSetImage,
+)
+from encounter_sets.models import EncounterSetAttachment
 from upload_profiles.models import PatientEncounterTargetDisease
+from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
@@ -27,6 +38,7 @@ class CropCoordinatesSchema(Schema):
 class SaveEditRequestSchema(Schema):
     """Validate save_edit request data"""
     crop = fields.Nested(CropCoordinatesSchema, required=False)
+    image_data = fields.String(required=False)
 
 
 # =========================================================================
@@ -104,30 +116,358 @@ def index():
 def verify_encounter(uuid):
     """View and manage a specific encounter set for verification."""
     with transaction_scope() as db:
-        # Query encounter by UUID
-        query = db.query(PatientEncounters).filter_by(uuid=uuid)
-
-        # Apply hospital scoping (operation='upload' for hospital-bound)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
-
-        encounter = query.first()
-        if not encounter:
-            abort(404)
-
-        if not encounter.is_set_based:
+        context = _verification_context(db, uuid)
+        if not context["encounter"].is_set_based:
             flash("This encounter is not set-based.", "warning")
             return redirect(url_for("verify_encounter_set.index"))
 
-        # Get images in the set, ordered by spatial position
-        images = db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).order_by(EncounterSetImage.spatial_position).all()
+        return render_template(
+            "verify_encounter_set/verify.html",
+            **context,
+        )
 
-        # Create a 1-9 mapping
-        grid = {i: None for i in range(1, 10)}
-        for img in images:
-            if 1 <= img.spatial_position <= 9:
-                grid[img.spatial_position] = img
 
-        return render_template("verify_encounter_set/verify.html", encounter=encounter, grid=grid)
+@bp.route("/verify/<uuid>/panel/<panel>")
+@login_required
+@roles_required("admin", "optometrist", "data_manager")
+def verify_panel(uuid, panel):
+    """Render one EncounterSet verification panel for HTMX loading."""
+    if panel not in {"patient", "image", "document", "summary"}:
+        abort(404)
+    with transaction_scope() as db:
+        context = _verification_context(db, uuid)
+        selected_image = None
+        selected_attachment = None
+        selected_image_index = None
+        if panel == "image":
+            image_uuid = request.args.get("image_uuid")
+            selected_image = next((image for image in context["images"] if image.uuid == image_uuid), None)
+            if selected_image is None:
+                abort(404)
+            selected_image_index = context["images"].index(selected_image) + 1
+        if panel == "document":
+            attachment_uuid = request.args.get("attachment_uuid")
+            selected_attachment = next(
+                (attachment for attachment in context["attachments"] if attachment.uuid == attachment_uuid),
+                None,
+            )
+            if selected_attachment is None:
+                abort(404)
+
+        return render_template(
+            "verify_encounter_set/_verify_panel.html",
+            panel=panel,
+            selected_image=selected_image,
+            selected_image_index=selected_image_index,
+            selected_attachment=selected_attachment,
+            **context,
+        )
+
+
+@bp.route("/metadata/<uuid>", methods=["POST"])
+@login_required
+@roles_required("admin", "optometrist", "data_manager")
+def update_metadata(uuid):
+    """Persist EncounterSet verification metadata fields allowed by the EncounterSetType."""
+    with transaction_scope() as db:
+        query = (
+            db.query(PatientEncounters)
+            .options(
+                selectinload(PatientEncounters.upload_profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_set_type)
+            )
+            .filter_by(uuid=uuid)
+        )
+        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        encounter = query.first()
+        if not encounter or not encounter.is_set_based:
+            abort(404)
+
+        profile = _encounter_set_verification_profile(encounter)
+        editable_fields = {
+            (field["scope"], field["key"]): field
+            for field in profile["metadata_fields"]
+            if field.get("editable_during_verification")
+        }
+
+        encounter_metadata = dict(encounter.metadata_json or {})
+        for scope in ("patient", "encounter"):
+            section = dict(encounter_metadata.get(scope) or {})
+            for (field_scope, key), field in editable_fields.items():
+                if field_scope != scope:
+                    continue
+                form_name = f"metadata__{scope}__{key}"
+                if not _metadata_form_field_present(request.form, form_name):
+                    continue
+                section[key] = _metadata_form_value(request.form, form_name, field)
+            if section:
+                encounter_metadata[scope] = section
+        encounter.metadata_json = encounter_metadata
+
+        images = {
+            str(image.id): image
+            for image in db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all()
+        }
+        image_fields = [field for (scope, _key), field in editable_fields.items() if scope == "image"]
+        for image_id, image in images.items():
+            metadata = dict(image.metadata_json or {})
+            for field in image_fields:
+                form_name = f"metadata__image__{image_id}__{field['key']}"
+                if not _metadata_form_field_present(request.form, form_name):
+                    continue
+                metadata[field["key"]] = _metadata_form_value(
+                    request.form,
+                    form_name,
+                    field,
+                )
+            image.metadata_json = metadata
+
+        from copy import deepcopy
+
+        attachments = {
+            str(attachment.id): attachment
+            for attachment in db.query(EncounterSetAttachment).filter_by(patient_encounter_id=encounter.id).all()
+        }
+        ocr_fields = {
+            "dr_result": ("ocr", "dr_report", "dr_data", "result"),
+            "dr_qualitative_result": ("ocr", "dr_report", "dr_data", "qualitative_result"),
+            "glaucoma_result": ("ocr", "glaucoma_report", "glaucoma_data", "result"),
+            "glaucoma_qualitative_result": ("ocr", "glaucoma_report", "glaucoma_data", "qualitative_result"),
+            "vcdr_right": ("ocr", "glaucoma_report", "glaucoma_data", "vcdr_right"),
+            "vcdr_left": ("ocr", "glaucoma_report", "glaucoma_data", "vcdr_left"),
+        }
+        for attachment_id, attachment in attachments.items():
+            metadata = deepcopy(attachment.metadata_json or {})
+            for field_key, path in ocr_fields.items():
+                form_name = f"metadata__attachment__{attachment_id}__ocr__{field_key}"
+                if not _metadata_form_field_present(request.form, form_name):
+                    continue
+                _set_nested_metadata_value(metadata, path, request.form.get(form_name, "").strip())
+            attachment.metadata_json = metadata
+            _sync_attachment_ocr_clinical_reports(db, attachment)
+
+        flash("Verification metadata updated.", "success")
+        if request.headers.get("X-EncounterSet-Async") == "1":
+            return jsonify({"success": True})
+        return redirect(url_for("verify_encounter_set.verify_encounter", uuid=encounter.uuid))
+
+
+@bp.route("/mark_reviewed/<uuid>", methods=["POST"])
+@login_required
+@roles_required("admin", "optometrist", "data_manager")
+def mark_reviewed(uuid):
+    """Mark an EncounterSet image as reviewed without implying anonymization."""
+    with transaction_scope() as db:
+        img = db.query(EncounterSetImage).filter_by(uuid=uuid).first()
+        if not img:
+            return jsonify({"success": False, "message": "Image not found"}), 404
+
+        query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
+        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        encounter = query.first()
+        if not encounter:
+            return jsonify({"success": False, "message": "Image not found"}), 404
+
+        img.is_reviewed = True
+        return jsonify({"success": True})
+
+
+def _verification_context(db, uuid: str) -> dict:
+    query = (
+        db.query(PatientEncounters)
+        .options(
+            selectinload(PatientEncounters.upload_profile)
+            .selectinload(UploadProfile.encounter_set_types)
+            .selectinload(UploadProfileEncounterSetType.encounter_set_type),
+            selectinload(PatientEncounters.upload_profile)
+            .selectinload(UploadProfile.encounter_set_types)
+            .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
+            selectinload(PatientEncounters.upload_profile)
+            .selectinload(UploadProfile.encounter_set_types)
+            .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
+            selectinload(PatientEncounters.upload_profile)
+            .selectinload(UploadProfile.encounter_set_types)
+            .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+            .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+            selectinload(PatientEncounters.encounter_set_attachments),
+        )
+        .filter_by(uuid=uuid)
+    )
+    query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+    encounter = query.first()
+    if not encounter:
+        abort(404)
+
+    images = (
+        db.query(EncounterSetImage)
+        .filter_by(patient_encounter_id=encounter.id)
+        .order_by(EncounterSetImage.spatial_position)
+        .all()
+    )
+    attachments = sorted(
+        encounter.encounter_set_attachments or [],
+        key=lambda item: (item.asset_kind or "", item.original_filename or "", item.id),
+    )
+    return {
+        "encounter": encounter,
+        "images": images,
+        "attachments": attachments,
+        "verification_profile": _encounter_set_verification_profile(encounter),
+    }
+
+
+def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:
+    """Return the EncounterSetType/profile contract used by verification UI."""
+    profile_config = _active_encounter_set_type_config(encounter)
+    encounter_set_type = profile_config.encounter_set_type if profile_config else None
+    fields = _metadata_fields_by_display_order(
+        (encounter_set_type.metadata_schema_json or {}).get("fields", []) if encounter_set_type else []
+    )
+    image_schemes = []
+    if profile_config:
+        image_schemes = [
+            {
+                "name": scheme.disease.name if scheme.disease else f"Disease #{scheme.disease_id}",
+                "is_default": scheme.is_default or scheme.disease_id == profile_config.default_image_grading_scheme_id,
+            }
+            for scheme in sorted(
+                [scheme for scheme in profile_config.image_grading_schemes if scheme.active],
+                key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
+            )
+        ]
+    return {
+        "encounter_set_type": encounter_set_type,
+        "profile_config": profile_config,
+        "metadata_fields": fields,
+        "fields_by_scope": {
+            scope: [field for field in fields if field["scope"] == scope]
+            for scope in ("patient", "encounter", "image", "document", "upload")
+        },
+        "editable_fields_by_scope": {
+            scope: [
+                field for field in fields
+                if field["scope"] == scope and field.get("editable_during_verification")
+            ]
+            for scope in ("patient", "encounter", "image", "document", "upload")
+        },
+        "asset_rules": encounter_set_type.asset_rules_json if encounter_set_type else {},
+        "image_grading_schemes": image_schemes,
+        "encounter_grading_scheme": profile_config.encounter_grading_scheme if profile_config else None,
+        "default_image_grading_scheme": profile_config.default_image_grading_scheme if profile_config else None,
+    }
+
+
+def _active_encounter_set_type_config(encounter: PatientEncounters) -> UploadProfileEncounterSetType | None:
+    if not encounter.upload_profile:
+        return None
+    active_configs = [
+        config
+        for config in encounter.upload_profile.encounter_set_types
+        if config.active and config.encounter_set_type and config.encounter_set_type.active
+    ]
+    if not active_configs:
+        return None
+    if len(active_configs) == 1:
+        return active_configs[0]
+    metadata = encounter.metadata_json or {}
+    type_id = metadata.get("encounter_set_type_id")
+    if type_id:
+        for config in active_configs:
+            if config.encounter_set_type_id == type_id:
+                return config
+    return active_configs[0]
+
+
+def _metadata_fields_by_display_order(fields: list[dict]) -> list[dict]:
+    normalized = [field for field in fields if isinstance(field, dict) and field.get("key") and field.get("scope")]
+    return sorted(
+        normalized,
+        key=lambda field: (
+            field.get("scope") or "",
+            int(field.get("display_order") or 0),
+            field.get("label") or field.get("key") or "",
+        ),
+    )
+
+
+def _metadata_form_value(form, name: str, field: dict):
+    field_type = field.get("type")
+    if field_type == "boolean":
+        if f"__present__{name}" in form and form.get(name) in {None, "", "0", "false", "False"}:
+            return False
+        return name in form
+    if field_type == "select" and field.get("selection_mode") == "multiple":
+        return [value for value in form.getlist(name) if value != ""]
+    value = form.get(name)
+    if value == "":
+        return None
+    return value
+
+
+def _metadata_form_field_present(form, name: str) -> bool:
+    return name in form or f"__present__{name}" in form
+
+
+def _set_nested_metadata_value(metadata: dict, path: tuple[str, ...], value):
+    target = metadata
+    for key in path[:-1]:
+        child = target.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            target[key] = child
+        target = child
+    target[path[-1]] = value
+
+
+def _sync_attachment_ocr_clinical_reports(db, attachment: EncounterSetAttachment) -> None:
+    metadata = attachment.metadata_json or {}
+    ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+    dr_report = ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else {}
+    dr_data = dr_report.get("dr_data") if isinstance(dr_report.get("dr_data"), dict) else {}
+    dr_report_id = dr_report.get("diabetic_retinopathy_report_id")
+    if dr_report_id:
+        row = db.get(DiabeticRetinopathyReport, dr_report_id)
+        if row is not None:
+            row.result = dr_data.get("result") or ""
+            row.qualitative_result = dr_data.get("qualitative_result") or None
+
+    glaucoma_report = ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else {}
+    glaucoma_data = glaucoma_report.get("glaucoma_data") if isinstance(glaucoma_report.get("glaucoma_data"), dict) else {}
+    glaucoma_report_id = glaucoma_report.get("glaucoma_report_id")
+    if glaucoma_report_id:
+        row = db.get(GlaucomaReport, glaucoma_report_id)
+        if row is not None:
+            row.result = glaucoma_data.get("result") or ""
+            row.qualitative_result = glaucoma_data.get("qualitative_result") or None
+            row.vcdr_right = glaucoma_data.get("vcdr_right") or None
+            row.vcdr_left = glaucoma_data.get("vcdr_left") or None
+
+    cleaned_id = glaucoma_report.get("glaucoma_results_cleaned_id")
+    if cleaned_id:
+        cleaned = db.get(GlaucomaResultsCleaned, cleaned_id)
+        if cleaned is not None:
+            cleaned.result = glaucoma_data.get("result") or None
+            cleaned.qualitative_result = glaucoma_data.get("qualitative_result") or None
+            cleaned.original_vcdr_right = glaucoma_data.get("vcdr_right") or None
+            cleaned.original_vcdr_left = glaucoma_data.get("vcdr_left") or None
+            cleaned.vcdr_right_num = _parse_first_float(glaucoma_data.get("vcdr_right"))
+            cleaned.vcdr_left_num = _parse_first_float(glaucoma_data.get("vcdr_left"))
+
+
+def _parse_first_float(value) -> float | None:
+    if value is None:
+        return None
+    import re
+
+    match = re.search(r"\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
 
 @bp.route("/update_position", methods=["POST"])
 @login_required
@@ -143,10 +483,10 @@ def update_position():
         
     try:
         new_position = int(new_position)
-        if not (1 <= new_position <= 9):
+        if new_position < 1:
             raise ValueError()
     except ValueError:
-        return jsonify({"success": False, "message": "Invalid position"}), 400
+        return jsonify({"success": False, "message": "Position must be a positive integer"}), 400
 
     with transaction_scope() as db:
         img = db.query(EncounterSetImage).filter_by(uuid=image_uuid).first()
@@ -176,6 +516,63 @@ def update_position():
 
         return jsonify({"success": True})
 
+@bp.route("/exclude/<uuid>", methods=["POST"])
+@login_required
+@roles_required("admin", "optometrist", "data_manager")
+def exclude_encounter_set(uuid):
+    """Exclude an EncounterSet from verification and downstream task creation."""
+    from auth.utils import utcnow
+    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+
+    with transaction_scope() as db:
+        encounter = (
+            db.query(PatientEncounters)
+            .filter_by(uuid=uuid)
+            .with_for_update()
+            .first()
+        )
+        if not encounter or not encounter.is_set_based:
+            abort(404)
+
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if encounter.lab_unit_id not in allowed_lab_unit_ids:
+            message = "You don't have permission to exclude this encounter set."
+            if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+                return jsonify({
+                    "success": False,
+                    "message": message,
+                    "redirect_url": url_for("verify_encounter_set.index"),
+                }), 403
+            flash(message, "danger")
+            return redirect(url_for("verify_encounter_set.index"))
+
+        payload = request.get_json(silent=True) or {}
+        reason = (payload.get("reason") or request.form.get("reason") or "").strip()
+        excluded_at = utcnow()
+        metadata = dict(encounter.metadata_json or {})
+        verification_metadata = dict(metadata.get("verification") or {})
+        verification_metadata.update({
+            "status": "excluded",
+            "excluded": True,
+            "excluded_by": current_user.username,
+            "excluded_at": excluded_at.isoformat(),
+        })
+        if reason:
+            verification_metadata["excluded_reason"] = reason
+        metadata["verification"] = verification_metadata
+
+        encounter.metadata_json = metadata
+        encounter.encounter_verified_status = "excluded"
+        encounter.encounter_verified_by = current_user.username
+        encounter.encounter_verified_at = excluded_at
+
+        redirect_url = _encounter_set_browser_url(encounter)
+        flash(f"Encounter set {encounter.name} excluded from verification.", "warning")
+        if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+            return jsonify({"success": True, "redirect_url": redirect_url})
+        return redirect(redirect_url)
+
+
 @bp.route("/finalize/<uuid>", methods=["POST"])
 @login_required
 @roles_required("admin", "optometrist", "data_manager")
@@ -200,6 +597,12 @@ def finalize_verification(uuid):
         # Check user has access to this encounter's lab unit
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if encounter.lab_unit_id not in allowed_lab_unit_ids:
+            if request.headers.get("X-EncounterSet-Async") == "1":
+                return jsonify({
+                    "success": False,
+                    "message": "You don't have permission to verify this encounter set.",
+                    "redirect_url": url_for("verify_encounter_set.index"),
+                }), 403
             flash("You don't have permission to verify this encounter set.", "danger")
             return redirect(url_for("verify_encounter_set.index"))
 
@@ -213,7 +616,14 @@ def finalize_verification(uuid):
         unreviewed_count = sum(1 for img in images if not img.is_reviewed)
 
         if unreviewed_count > 0:
-            flash(f"Cannot finalize: {unreviewed_count} image(s) not yet reviewed. Please review all images before verifying.", "warning")
+            message = f"Cannot finalize: {unreviewed_count} image(s) not yet reviewed. Please review all images before verifying."
+            if request.headers.get("X-EncounterSet-Async") == "1":
+                return jsonify({
+                    "success": False,
+                    "message": message,
+                    "redirect_url": url_for("verify_encounter_set.verify_encounter", uuid=uuid),
+                }), 409
+            flash(message, "warning")
             return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
 
         # Finalize (atomic - encounter and images locked until commit)
@@ -222,10 +632,74 @@ def finalize_verification(uuid):
         encounter.encounter_verified_at = utcnow()
 
         created_tasks = _create_verified_encounter_set_tasks(db, encounter)
+        close_url = _encounter_set_browser_url(encounter)
+        next_uuid = _next_pending_encounter_uuid(db, encounter=encounter)
 
         task_message = f" Created {created_tasks} grading task(s)." if created_tasks else ""
         flash(f"Encounter set {encounter.name} verified successfully.{task_message}", "success")
-        return redirect(url_for("verify_encounter_set.index"))
+        if request.form.get("after") == "next" and next_uuid:
+            redirect_url = url_for("verify_encounter_set.verify_encounter", uuid=next_uuid)
+        else:
+            redirect_url = close_url
+        if request.headers.get("X-EncounterSet-Async") == "1":
+            return jsonify({"success": True, "redirect_url": redirect_url})
+        response = redirect(redirect_url)
+        response.headers["X-EncounterSet-Verified"] = "1"
+        return response
+
+
+def _encounter_set_browser_url(encounter: PatientEncounters) -> str:
+    params = {}
+    if encounter.project_id:
+        params["project_id"] = encounter.project_id
+    capture_date = encounter.capture_date_dt
+    if capture_date is None and encounter.capture_date:
+        from datetime import datetime
+        try:
+            capture_date = datetime.strptime(str(encounter.capture_date), "%Y-%m-%d").date()
+        except ValueError:
+            capture_date = None
+    if capture_date:
+        params["month"] = capture_date.strftime("%Y-%m")
+        params["date"] = capture_date.isoformat()
+    params["encounter_id"] = encounter.id
+    return url_for("remidio_api_uploads.encounter_set_browser", **params)
+
+
+def _next_pending_encounter_uuid(db, *, encounter: PatientEncounters) -> str | None:
+    query = db.query(PatientEncounters).filter(
+        PatientEncounters.is_set_based == True,
+        PatientEncounters.id != encounter.id,
+        or_(
+            PatientEncounters.encounter_verified_status == 'pending',
+            PatientEncounters.encounter_verified_status.is_(None),
+        ),
+    )
+    if encounter.project_id:
+        query = query.filter(PatientEncounters.project_id == encounter.project_id)
+    if encounter.capture_date_dt:
+        query = query.filter(PatientEncounters.capture_date_dt == encounter.capture_date_dt)
+    query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+    ordered = query.order_by(
+        PatientEncounters.name.asc(),
+        PatientEncounters.patient_id.asc(),
+        PatientEncounters.id.asc(),
+    ).all()
+    current_key = (
+        encounter.name or "",
+        encounter.patient_id or "",
+        encounter.id,
+    )
+    next_encounter = next(
+        (
+            candidate for candidate in ordered
+            if (candidate.name or "", candidate.patient_id or "", candidate.id) > current_key
+        ),
+        None,
+    )
+    if next_encounter is None and ordered:
+        next_encounter = ordered[0]
+    return next_encounter.uuid if next_encounter else None
 
 
 def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> int:
@@ -322,9 +796,11 @@ def edit_image(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def save_edit(uuid):
     """Save edited image data (crop/mask coordinates applied)."""
-    from utils.fileUtils import abs_from_parts
-    from PIL import Image
-    import io
+    import base64
+    from pathlib import Path
+    from models import BASE_DIR
+    from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+    from utils.media_cache import bump_media_cache_version
 
     # P1.4: Validate request data
     data = request.json or {}
@@ -353,14 +829,51 @@ def save_edit(uuid):
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        # P1.1: Image editing feature not yet implemented
-        # Return 501 Not Implemented with clear message to user
-        return jsonify({
-            "success": False,
-            "message": "Image editing feature is not yet implemented",
-            "details": "Image cropping and masking will be available in a future release. "
-                       "Please mark the image as anonymized if PII needs to be masked."
-        }), 501
+        if img.s3_config_id or img.s3_object_key:
+            return jsonify({
+                "success": False,
+                "message": "Image editing is currently available only for locally stored EncounterSet images.",
+            }), 409
+
+        image_data = data.get("image_data")
+        if not image_data:
+            return jsonify({"success": False, "message": "No image data provided."}), 400
+        if image_data.startswith("data:image"):
+            image_data = image_data.split(",", 1)[1]
+
+        try:
+            image_bytes = base64.b64decode(image_data)
+        except Exception:
+            return jsonify({"success": False, "message": "Invalid image data provided."}), 400
+
+        folder = (BASE_DIR / img.folder_rel).resolve()
+        base_root = BASE_DIR.resolve()
+        try:
+            folder.relative_to(base_root)
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid image storage path."}), 400
+
+        edited_basename = f"edited_{Path(img.original_filename).name}"
+        edited_path = folder / edited_basename
+        edited_path.write_bytes(image_bytes)
+
+        thumbnail_filename = None
+        thumbnails_dir = folder / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            thumbnail_filename = get_thumbnail_filename(edited_basename)
+            if not generate_thumbnail(edited_path, thumbnails_dir / thumbnail_filename):
+                thumbnail_filename = None
+        except Exception as exc:
+            current_app.logger.warning("Failed to generate EncounterSet edited thumbnail for %s: %s", img.uuid, exc)
+
+        img.edited_filename = edited_basename
+        if thumbnail_filename:
+            img.thumbnail_filename = thumbnail_filename
+        img.is_reviewed = True
+        bump_media_cache_version(str(img.uuid))
+
+        return jsonify({"success": True, "message": "Image saved and marked reviewed."})
 
 
 @bp.route("/mark_anonymized/<uuid>", methods=["POST"])

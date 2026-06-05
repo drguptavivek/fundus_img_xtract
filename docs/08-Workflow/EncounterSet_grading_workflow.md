@@ -1,5 +1,7 @@
 # EncounterSet Complete Workflow
 
+> **Deprecated legacy model:** This workflow is retained for historical Strabismus/cardinal-gaze context. Current EncounterSet work should follow the EncounterSetType / Upload Profile model, where image-scoped schemes and encounter-scoped schemes can both be configured for one EncounterSet. See `docs/API/encounter-set-types/README.md` and `docs/API/upload-profiles/README.md`.
+
 ## End-to-End Pipeline
 
 This document describes the complete workflow from mobile upload to final diagnosis for encounter-set based diseases like Strabismus.

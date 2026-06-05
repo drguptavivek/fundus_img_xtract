@@ -1,0 +1,529 @@
+{% from "_forms.html" import csrf_field %}
+
+{% macro field_control(field, value, name) %}
+  {% if field.type == 'boolean' %}
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}" value="1" {% if value %}checked{% endif %}>
+      <label class="form-check-label" for="{{ name }}">Yes</label>
+    </div>
+  {% elif field.type == 'select' %}
+    {% if field.selection_mode == 'multiple' %}
+      <select class="form-select" name="{{ name }}" id="{{ name }}" multiple>
+        {% set current_values = value if value is sequence and value is not string else [] %}
+        {% for option in field.options or [] %}
+        <option value="{{ option.value }}" {% if option.value in current_values %}selected{% endif %}>{{ option.label or option.value }}</option>
+        {% endfor %}
+      </select>
+    {% else %}
+      <select class="form-select" name="{{ name }}" id="{{ name }}">
+        <option value="">-</option>
+        {% for option in field.options or [] %}
+        <option value="{{ option.value }}" {% if value == option.value %}selected{% endif %}>{{ option.label or option.value }}</option>
+        {% endfor %}
+      </select>
+    {% endif %}
+  {% elif field.type == 'text' %}
+    <textarea class="form-control" name="{{ name }}" id="{{ name }}" rows="3">{{ value or '' }}</textarea>
+  {% else %}
+    {% set input_type = 'number' if field.type == 'number' else 'datetime-local' if field.type == 'datetime' else field.type %}
+    <input class="form-control" type="{{ input_type }}" name="{{ name }}" id="{{ name }}" value="{{ value or '' }}">
+  {% endif %}
+{% endmacro %}
+
+{% macro editable_fields(fields, metadata, prefix) %}
+  {% if fields %}
+  <div class="panel-field-grid">
+    {% for field in fields %}
+    {% set value = metadata.get(field.key) if metadata else none %}
+    <div>
+      <label class="form-label" for="{{ prefix }}__{{ field.key }}">
+        {{ field.label }}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
+      </label>
+      {{ field_control(field, value, prefix ~ '__' ~ field.key) }}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-muted">No editable fields configured.</div>
+  {% endif %}
+{% endmacro %}
+
+{% set encounter_metadata = encounter.metadata_json or {} %}
+{% set patient_metadata = encounter_metadata.get('patient', {}) if encounter_metadata.get('patient') is mapping else {} %}
+{% set editable_fields_by_scope = verification_profile.editable_fields_by_scope %}
+{% set patient_fields = editable_fields_by_scope.patient %}
+{% set image_fields = editable_fields_by_scope.image %}
+{% set reviewed_count = images|selectattr('is_reviewed')|list|length %}
+
+<style>
+  .panel-content {
+    padding: 1.25rem;
+  }
+  .panel-header {
+    border-bottom: 1px solid var(--bs-border-color);
+    padding: 1rem 1.25rem;
+  }
+  .panel-field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+  }
+  .panel-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: .75rem;
+  }
+  .panel-fact {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .75rem;
+  }
+  .panel-fact-label {
+    color: var(--bs-secondary-color);
+    font-size: .78rem;
+  }
+  .panel-fact-value {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .image-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    min-width: 0;
+  }
+  .image-title-filename {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .image-fact-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .35rem;
+  }
+  .image-fact-chip {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 999px;
+    padding: .2rem .55rem;
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+    font-size: .82rem;
+  }
+  .image-fact-chip span {
+    color: var(--bs-secondary-color);
+  }
+  .image-panel-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .ungradable-reason-panel {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .75rem;
+    background: var(--bs-tertiary-bg);
+  }
+  .ocr-box {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .75rem;
+    background: var(--bs-tertiary-bg);
+  }
+  .document-frame-wrap {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    background: var(--bs-tertiary-bg);
+    overflow: hidden;
+  }
+  .document-frame {
+    display: block;
+    width: 100%;
+    height: min(72vh, 52rem);
+    min-height: 36rem;
+    border: 0;
+    background: var(--bs-body-bg);
+  }
+  .summary-thumb-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .summary-thumb {
+    width: 5.5rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .25rem;
+    background: var(--bs-body-bg);
+  }
+  .summary-thumb img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #111827;
+  }
+  .summary-thumb-label {
+    font-size: .72rem;
+    color: var(--bs-secondary-color);
+    text-align: center;
+    margin-top: .2rem;
+  }
+</style>
+
+{% if panel == 'patient' %}
+<div class="panel-header d-flex justify-content-between gap-3">
+  <div>
+    <h2 class="h5 mb-1">Patient</h2>
+    <div class="text-muted small">{{ patient_fields|length }} editable field{{ 's' if patient_fields|length != 1 else '' }}</div>
+  </div>
+  <span class="badge text-bg-light border align-self-start">{{ encounter.lab_unit.name if encounter.lab_unit else 'No lab unit' }}</span>
+</div>
+<div class="panel-content">
+  <div class="panel-facts mb-4">
+    <div class="panel-fact">
+      <div class="panel-fact-label">Patient ID</div>
+      <div class="panel-fact-value">{{ encounter.patient_id }}</div>
+    </div>
+    <div class="panel-fact">
+      <div class="panel-fact-label">Name</div>
+      <div class="panel-fact-value">{{ encounter.name }}</div>
+    </div>
+    <div class="panel-fact">
+      <div class="panel-fact-label">Capture Date</div>
+      <div class="panel-fact-value">{{ encounter.capture_date }}</div>
+    </div>
+  </div>
+  {{ editable_fields(patient_fields, patient_metadata, 'metadata__patient') }}
+</div>
+{% elif panel == 'image' and selected_image %}
+{% set image_metadata = selected_image.metadata_json or {} %}
+{% set image_index = selected_image_index %}
+{% set image_laterality = image_metadata.get('laterality') %}
+{% set image_type = image_metadata.get('fundus_field') or image_metadata.get('image_segment') or image_metadata.get('image_type') or image_metadata.get('image_device_type') or selected_image.asset_kind %}
+<div class="panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+  <div class="min-width-0">
+    <div class="image-title-row">
+      <h2 class="h5 mb-0 flex-shrink-0">EncounterSet Image {{ image_index }}</h2>
+      <div class="text-muted small image-title-filename">{{ selected_image.original_filename }}</div>
+    </div>
+    <div class="image-fact-strip">
+      <div class="image-fact-chip"><span>Laterality</span> {{ image_laterality or '-' }}</div>
+      <div class="image-fact-chip"><span>Type</span> {{ image_type or '-' }}</div>
+    </div>
+  </div>
+  <div class="d-flex flex-wrap gap-2 align-items-start">
+    {% if selected_image.is_not_gradable %}
+    <span class="badge text-bg-danger">Not gradable</span>
+    {% elif selected_image.is_reviewed %}
+    <span class="badge text-bg-success">Verified</span>
+    {% else %}
+    <span class="badge text-bg-warning">Needs verification</span>
+    {% endif %}
+  </div>
+</div>
+<div class="panel-content">
+  <div class="image-panel-grid">
+    <div class="image-viewer-row">
+      {% set viewer_image_url = url_for('media._encounterSetImageByUUID', uuid_str=selected_image.uuid) %}
+      {% set image = selected_image %}
+      {% set image_uuid = selected_image.uuid %}
+      {% set viewer_footer = '' %}
+      {% include "partials/_viewer_card.html" with context %}
+    </div>
+    <div class="image-fields-row">
+      <h3 class="h6 mb-3">Editable Image Fields</h3>
+      {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
+    </div>
+    <div class="panel-actions">
+      <a class="btn btn-sm btn-primary" href="{{ url_for('verify_encounter_set.edit_image', uuid=selected_image.uuid) }}">
+        <i class="bi bi-pencil-square"></i> Edit Image
+      </a>
+      <button class="btn btn-sm btn-outline-success js-mark-reviewed" type="button" data-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid=selected_image.uuid) }}">
+        <i class="bi bi-check2"></i> Verified
+      </button>
+      {% if selected_image.is_not_gradable %}
+      <button class="btn btn-sm btn-outline-secondary js-undo-not-gradable" type="button" data-url="{{ url_for('verify_encounter_set.undo_not_gradable', uuid=selected_image.uuid) }}">Set Gradable</button>
+      {% else %}
+      <button class="btn btn-sm btn-outline-danger js-open-not-gradable" type="button">Set Ungradable</button>
+      {% endif %}
+    </div>
+    {% if not selected_image.is_not_gradable %}
+    <div class="ungradable-reason-panel d-none" data-ungradable-reason-panel>
+      <label class="form-label" for="not-gradable-reason-{{ selected_image.uuid }}">Ungradable reason</label>
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        {% for reason in ['Poor focus / blurry', 'Media opacity', 'Poor illumination', 'Field missing or incorrect', 'Artifact / obstruction', 'Not a fundus image'] %}
+        <button class="btn btn-sm btn-outline-secondary js-reason-choice" type="button" data-reason="{{ reason }}">{{ reason }}</button>
+        {% endfor %}
+      </div>
+      <textarea class="form-control js-not-gradable-reason" id="not-gradable-reason-{{ selected_image.uuid }}" rows="3" placeholder="Select a reason or enter details manually."></textarea>
+      <div class="d-flex flex-wrap justify-content-end gap-2 mt-2">
+        <button class="btn btn-sm btn-outline-secondary js-cancel-not-gradable" type="button">Cancel</button>
+        <button class="btn btn-sm btn-danger js-not-gradable" type="button" data-url="{{ url_for('verify_encounter_set.mark_not_gradable', uuid=selected_image.uuid) }}">Confirm Ungradable</button>
+      </div>
+    </div>
+    {% endif %}
+    {% if selected_image.not_gradable_reason %}
+    <div class="small text-danger">{{ selected_image.not_gradable_reason }}</div>
+    {% endif %}
+  </div>
+</div>
+{% elif panel == 'document' and selected_attachment %}
+{% set metadata = selected_attachment.metadata_json or {} %}
+{% set ocr = metadata.get('ocr') if metadata.get('ocr') is mapping else {} %}
+{% set is_pdf = selected_attachment.asset_kind == 'pdf' or selected_attachment.mime_type == 'application/pdf' %}
+{% set attachment_url = url_for('remidio_api_uploads.encounter_set_attachment', uuid=selected_attachment.uuid) %}
+<div class="panel-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+  <div>
+    <h2 class="h5 mb-1">{{ metadata.get('remidio_report_type') or selected_attachment.asset_kind|capitalize }}</h2>
+    <div class="text-muted small">{{ selected_attachment.original_filename }}</div>
+  </div>
+  <span class="badge text-bg-light border align-self-start">OCR {{ ocr.get('status') or 'not queued' }}</span>
+</div>
+<div class="panel-content">
+  <div class="panel-actions mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ attachment_url }}" target="_blank" rel="noopener">
+      {% if is_pdf %}
+      <i class="bi bi-file-pdf"></i> View PDF
+      {% else %}
+      <i class="bi bi-file-earmark"></i> View Document
+      {% endif %}
+    </a>
+    {% if is_pdf %}
+    <form action="{{ url_for('fundus_api.queue_encounter_set_attachment_ocr', attachment_id=selected_attachment.id) }}" method="post">
+      {{ csrf_field() }}
+      <button class="btn btn-sm btn-outline-primary" type="submit">
+        {{ 'Re-run OCR' if ocr.get('status') in ['completed', 'completed_no_reports_detected', 'failed'] else 'Run OCR' }}
+      </button>
+    </form>
+    {% endif %}
+    <button class="btn btn-sm btn-primary ms-auto" type="button" data-panel-next>
+      <i class="bi bi-arrow-right-circle"></i> Next
+    </button>
+  </div>
+  {% if is_pdf %}
+  <div class="document-frame-wrap mb-3">
+    <iframe class="document-frame"
+            src="{{ attachment_url }}"
+            title="{{ selected_attachment.original_filename }}"
+            loading="lazy"
+            referrerpolicy="same-origin"></iframe>
+  </div>
+  {% endif %}
+  {% if ocr.get('error') %}
+  <div class="text-danger small mb-3">{{ ocr.get('error') }}</div>
+  {% endif %}
+  {% set dr_report = ocr.get('dr_report') if ocr.get('dr_report') is mapping else none %}
+  {% set glaucoma_report = ocr.get('glaucoma_report') if ocr.get('glaucoma_report') is mapping else none %}
+  {% if dr_report or glaucoma_report %}
+  <div class="row g-3">
+    {% if dr_report %}
+    {% set dr_data = dr_report.get('dr_data') if dr_report.get('dr_data') is mapping else {} %}
+    <div class="col-12 col-lg-6">
+      <div class="ocr-box">
+        <div class="fw-semibold mb-2">DR OCR</div>
+        <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_result">Result</label>
+        <textarea class="form-control"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_result"
+                  rows="3">{{ dr_data.get('result') or '' }}</textarea>
+        <label class="form-label mt-3" for="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result">Qualitative Result</label>
+        <textarea class="form-control"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
+                  rows="2">{{ dr_data.get('qualitative_result') or '' }}</textarea>
+      </div>
+    </div>
+    {% endif %}
+    {% if glaucoma_report %}
+    {% set glaucoma_data = glaucoma_report.get('glaucoma_data') if glaucoma_report.get('glaucoma_data') is mapping else {} %}
+    <div class="col-12 col-lg-6">
+      <div class="ocr-box">
+        <div class="fw-semibold mb-2">Glaucoma OCR</div>
+        <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_result">Result</label>
+        <textarea class="form-control mb-3"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_result"
+                  rows="3">{{ glaucoma_data.get('result') or '' }}</textarea>
+        <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result">Qualitative Result</label>
+        <textarea class="form-control mb-3"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result"
+                  rows="2">{{ glaucoma_data.get('qualitative_result') or '' }}</textarea>
+        <div class="row g-2">
+          <div class="col-12 col-sm-6">
+            <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right">Quantitative VCDR OD</label>
+            <input class="form-control"
+                   type="text"
+                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right"
+                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right"
+                   value="{{ glaucoma_data.get('vcdr_right') or '' }}">
+          </div>
+          <div class="col-12 col-sm-6">
+            <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left">Quantitative VCDR OS</label>
+            <input class="form-control"
+                   type="text"
+                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left"
+                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left"
+                   value="{{ glaucoma_data.get('vcdr_left') or '' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="text-muted">No OCR result available.</div>
+  {% endif %}
+</div>
+{% elif panel == 'summary' %}
+<div class="panel-header">
+  <h2 class="h5 mb-1">Summary</h2>
+  <div class="text-muted small">{{ reviewed_count }} / {{ images|length }} images verified</div>
+</div>
+<div class="panel-content">
+  <div class="row g-4 mb-4">
+    <div class="col-12 col-xl-6">
+      <h3 class="h6">Gradable Images</h3>
+      <div class="summary-thumb-strip">
+        {% set gradable = namespace(found=false) %}
+        {% for image in images %}
+        {% if not image.is_not_gradable %}
+        {% set gradable.found = true %}
+        <div class="summary-thumb">
+          <img src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}" alt="Image {{ loop.index }}">
+          <div class="summary-thumb-label">Image {{ loop.index }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% if not gradable.found %}
+        <div class="text-muted small">None</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-12 col-xl-6">
+      <h3 class="h6">Ungradable Images</h3>
+      <div class="summary-thumb-strip">
+        {% set ungradable = namespace(found=false) %}
+        {% for image in images %}
+        {% if image.is_not_gradable %}
+        {% set ungradable.found = true %}
+        <div class="summary-thumb">
+          <img src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}" alt="Image {{ loop.index }}">
+          <div class="summary-thumb-label">Image {{ loop.index }}</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% if not ungradable.found %}
+        <div class="text-muted small">None</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <h3 class="h6">Changed Fields</h3>
+  <div class="table-responsive mb-4">
+    <table class="table table-sm align-middle mb-0" id="verification-changes-table">
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th>Changed Fields</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-empty-row>
+          <td colspan="2" class="text-muted">No unsaved field changes.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="verification-change-manifest" class="d-none">
+    {% for field in patient_fields %}
+    {% set value = patient_metadata.get(field.key) if patient_metadata else none %}
+    <span data-change-field
+          data-level="Patient"
+          data-name="metadata__patient__{{ field.key }}"
+          data-label="{{ field.label }}"
+          data-current="{{ value if value not in (none, '') else '' }}"></span>
+    {% endfor %}
+    {% for image in images %}
+    {% set image_metadata = image.metadata_json or {} %}
+    {% set image_index = loop.index %}
+    {% for field in image_fields %}
+    {% set value = image_metadata.get(field.key) if image_metadata else none %}
+    <span data-change-field
+          data-level="Image {{ image_index }}"
+          data-name="metadata__image__{{ image.id }}__{{ field.key }}"
+          data-label="{{ field.label }}"
+          data-current="{{ value if value not in (none, '') else '' }}"></span>
+    {% endfor %}
+    {% endfor %}
+    {% for attachment in attachments %}
+    {% set attachment_metadata = attachment.metadata_json or {} %}
+    {% set attachment_ocr = attachment_metadata.get('ocr') if attachment_metadata.get('ocr') is mapping else {} %}
+    {% set attachment_dr_report = attachment_ocr.get('dr_report') if attachment_ocr.get('dr_report') is mapping else none %}
+    {% set attachment_dr_data = attachment_dr_report.get('dr_data') if attachment_dr_report and attachment_dr_report.get('dr_data') is mapping else {} %}
+    {% set attachment_glaucoma_report = attachment_ocr.get('glaucoma_report') if attachment_ocr.get('glaucoma_report') is mapping else none %}
+    {% set attachment_glaucoma_data = attachment_glaucoma_report.get('glaucoma_data') if attachment_glaucoma_report and attachment_glaucoma_report.get('glaucoma_data') is mapping else {} %}
+    {% set attachment_label = attachment_metadata.get('remidio_report_type') or attachment.asset_kind|capitalize %}
+    {% if attachment_dr_report %}
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__dr_result"
+          data-label="DR result"
+          data-current="{{ attachment_dr_data.get('result') or '' }}"></span>
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__dr_qualitative_result"
+          data-label="DR qualitative result"
+          data-current="{{ attachment_dr_data.get('qualitative_result') or '' }}"></span>
+    {% endif %}
+    {% if attachment_glaucoma_report %}
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__glaucoma_result"
+          data-label="Glaucoma result"
+          data-current="{{ attachment_glaucoma_data.get('result') or '' }}"></span>
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__glaucoma_qualitative_result"
+          data-label="Glaucoma qualitative result"
+          data-current="{{ attachment_glaucoma_data.get('qualitative_result') or '' }}"></span>
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__vcdr_right"
+          data-label="VCDR OD"
+          data-current="{{ attachment_glaucoma_data.get('vcdr_right') or '' }}"></span>
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__vcdr_left"
+          data-label="VCDR OS"
+          data-current="{{ attachment_glaucoma_data.get('vcdr_left') or '' }}"></span>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-end gap-2">
+    <button class="btn btn-outline-danger me-auto" type="button"
+            data-exclude-encounter-set
+            data-exclude-url="{{ url_for('verify_encounter_set.exclude_encounter_set', uuid=encounter.uuid) }}"
+            data-confirm-message="Exclude this EncounterSet from verification and grading?">
+      <i class="bi bi-x-octagon me-1"></i> Exclude EncounterSet
+    </button>
+    <button class="btn btn-primary" type="button" data-finalize-action="next">
+      <i class="bi bi-arrow-right-circle me-1"></i> Verify and Next
+    </button>
+    <button class="btn btn-outline-success" type="button" data-finalize-action="close">
+      <i class="bi bi-check-circle me-1"></i> Verify and Close
+    </button>
+  </div>
+</div>
+{% endif %}

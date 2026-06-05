@@ -1,5 +1,7 @@
 # EncounterSet Grading
 
+> **Deprecated legacy model:** This document describes the older Strabismus/cardinal-gaze EncounterSet workflow where a single encounter-level task grades the whole set. The current model is defined by EncounterSetType and Upload Profile mappings: image-scoped grading schemes apply to task-eligible clinical images, and encounter-scoped grading schemes apply to the overall EncounterSet. See `docs/API/encounter-set-types/README.md` and `docs/API/upload-profiles/README.md`.
+
 ## Overview
 
 Grading for encounter sets occurs at the **encounter level**, not per-image. A single `GradingTask` is created for the entire `PatientEncounters`, and graders view all images in a synchronized grid to make a consolidated diagnosis.

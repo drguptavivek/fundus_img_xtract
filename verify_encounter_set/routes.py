@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from models import (
     DiabeticRetinopathyReport,
     Disease,
+    EncounterSetGradingPackage,
     GlaucomaReport,
     GlaucomaResultsCleaned,
     GradingTask,
@@ -703,7 +704,135 @@ def _next_pending_encounter_uuid(db, *, encounter: PatientEncounters) -> str | N
 
 
 def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> int:
-    """Create pending grading tasks for verified EncounterSet target diseases."""
+    """Create package-scoped grading tasks for a verified EncounterSet."""
+    if encounter.encounter_verified_status == "excluded":
+        return 0
+
+    config = _active_encounter_set_type_config(encounter)
+    images = (
+        db.query(EncounterSetImage)
+        .filter(EncounterSetImage.patient_encounter_id == encounter.id)
+        .order_by(EncounterSetImage.spatial_position)
+        .all()
+    )
+    eligible_images = [
+        image for image in images
+        if image.asset_kind == "clinical_image"
+        and image.creates_task
+        and image.visible_to_grader
+        and image.is_reviewed
+        and not image.is_not_gradable
+    ]
+    report_evidence = _encounter_set_report_evidence(encounter)
+    package_configs = _encounter_set_package_configs(db, config, encounter)
+
+    created = 0
+    for package_config in package_configs:
+        image_scheme_ids = sorted(
+            {
+                disease_id
+                for disease_id, policy in package_config["image_scheme_policies"].items()
+                if _image_scheme_policy_applies(policy, report_evidence)
+            }
+        )
+        encounter_scheme_ids = sorted(set(package_config["encounter_scheme_ids"]))
+        if not encounter_scheme_ids and (not image_scheme_ids or not eligible_images):
+            continue
+
+        package = _get_or_create_runtime_package(db, encounter, package_config)
+        if package_config.get("_created"):
+            created += 1
+
+        for disease_id in encounter_scheme_ids:
+            if _get_or_create_package_task(
+                db,
+                package=package,
+                encounter=encounter,
+                disease_id=disease_id,
+                target_level="encounter",
+                source=package_config["source"],
+            ):
+                created += 1
+
+        for image in eligible_images:
+            for disease_id in image_scheme_ids:
+                if _get_or_create_package_task(
+                    db,
+                    package=package,
+                    encounter=encounter,
+                    disease_id=disease_id,
+                    target_level="image",
+                    source=package_config["source"],
+                    image=image,
+                ):
+                    created += 1
+    if created:
+        db.flush()
+    return created
+
+
+def _encounter_set_report_evidence(encounter: PatientEncounters) -> set[str]:
+    evidence: set[str] = set()
+    for attachment in encounter.encounter_set_attachments or []:
+        metadata = attachment.metadata_json or {}
+        report_type = str(metadata.get("remidio_report_type") or attachment.asset_kind or "").lower()
+        ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        if "dr" in report_type or isinstance(ocr.get("dr_report"), dict):
+            evidence.add("dr")
+        if "glaucoma" in report_type or isinstance(ocr.get("glaucoma_report"), dict):
+            evidence.add("glaucoma")
+    return evidence
+
+
+def _image_scheme_policy_applies(policy: str, evidence: set[str]) -> bool:
+    if policy == "always":
+        return True
+    if policy == "never":
+        return False
+    if policy == "remidio_dr_report_present":
+        return "dr" in evidence
+    if policy == "remidio_glaucoma_report_present":
+        return "glaucoma" in evidence
+    return False
+
+
+def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | None, encounter: PatientEncounters) -> list[dict]:
+    if config and config.grading_packages:
+        packages = []
+        for package in sorted(
+            [package for package in config.grading_packages if package.active],
+            key=lambda item: (item.display_order, item.name, item.id),
+        ):
+            packages.append({
+                "config_id": package.id,
+                "name": package.name,
+                "code": package.code,
+                "applicability": "always",
+                "image_scheme_policies": {
+                    scheme.disease_id: scheme.auto_create_policy
+                    for scheme in package.image_grading_schemes if scheme.active
+                },
+                "encounter_scheme_ids": [
+                    scheme.disease_id for scheme in package.encounter_grading_schemes if scheme.active
+                ],
+                "source": "profile_package",
+            })
+        if packages:
+            return packages
+
+    if config:
+        image_scheme_ids = [scheme.disease_id for scheme in config.image_grading_schemes if scheme.active]
+        encounter_scheme_ids = [config.encounter_grading_scheme_id] if config.encounter_grading_scheme_id else []
+        return [{
+            "config_id": None,
+            "name": "Default",
+            "code": "default",
+            "applicability": "always",
+            "image_scheme_policies": {disease_id: "always" for disease_id in image_scheme_ids},
+            "encounter_scheme_ids": encounter_scheme_ids,
+            "source": "profile_default",
+        }]
+
     target_disease_ids = {
         row[0]
         for row in db.query(PatientEncounterTargetDisease.disease_id)
@@ -712,31 +841,83 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
     }
     if not target_disease_ids and encounter.disease_id:
         target_disease_ids = {encounter.disease_id}
+    return [{
+        "config_id": None,
+        "name": "Default",
+        "code": "default",
+        "applicability": "always",
+        "image_scheme_policies": {},
+        "encounter_scheme_ids": sorted(target_disease_ids),
+        "source": "legacy_target_disease",
+    }]
 
-    created = 0
-    for disease_id in sorted(target_disease_ids):
-        existing = (
-            db.query(GradingTask.id)
-            .filter(
-                GradingTask.patient_encounter_id == encounter.id,
-                GradingTask.disease_id == disease_id,
-            )
-            .first()
+
+def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_config: dict) -> EncounterSetGradingPackage:
+    package = (
+        db.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == encounter.id,
+            EncounterSetGradingPackage.code == package_config["code"],
         )
-        if existing:
-            continue
-        db.add(
-            GradingTask(
-                patient_encounter_id=encounter.id,
-                disease_id=disease_id,
-                lab_unit_id=encounter.lab_unit_id,
-                state="pending",
-            )
-        )
-        created += 1
-    if created:
-        db.flush()
-    return created
+        .first()
+    )
+    if package:
+        return package
+    package = EncounterSetGradingPackage(
+        patient_encounter_id=encounter.id,
+        upload_profile_est_grading_package_id=package_config["config_id"],
+        name=package_config["name"],
+        code=package_config["code"],
+        applicability=package_config["applicability"],
+        state="pending",
+        metadata_json={"source": package_config["source"]},
+    )
+    db.add(package)
+    db.flush()
+    package_config["_created"] = True
+    return package
+
+
+def _get_or_create_package_task(
+    db,
+    *,
+    package: EncounterSetGradingPackage,
+    encounter: PatientEncounters,
+    disease_id: int,
+    target_level: str,
+    source: str,
+    image: EncounterSetImage | None = None,
+) -> bool:
+    filters = [
+        GradingTask.disease_id == disease_id,
+        GradingTask.grading_target_level == target_level,
+    ]
+    if target_level == "image":
+        filters.append(GradingTask.encounter_set_image_id == image.id)
+    else:
+        filters.append(GradingTask.patient_encounter_id == encounter.id)
+    existing = db.query(GradingTask).filter(*filters).first()
+    if existing:
+        if existing.encounter_set_package_id is None:
+            existing.encounter_set_package_id = package.id
+            existing.grading_target_level = target_level
+            existing.task_source = source
+        return False
+
+    task = GradingTask(
+        encounter_set_package_id=package.id,
+        disease_id=disease_id,
+        lab_unit_id=encounter.lab_unit_id,
+        state="pending",
+        grading_target_level=target_level,
+        task_source=source,
+    )
+    if target_level == "image":
+        task.encounter_set_image_id = image.id
+    else:
+        task.patient_encounter_id = encounter.id
+    db.add(task)
+    return True
 
 
 @bp.route("/edit/<uuid>", methods=["GET"])

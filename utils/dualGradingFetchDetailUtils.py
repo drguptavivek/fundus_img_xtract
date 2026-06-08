@@ -22,6 +22,8 @@ from models import (
     UserDiseaseUnitRole,
     EncounterFile,
     DirectImageUpload,
+    EncounterSetGradingPackage,
+    EncounterSetImage,
 )
 from utils.hospital_scoping import apply_scoping
 
@@ -41,6 +43,8 @@ def fetch_task_with_related_data(db, task_id: int, user: Optional[User] = None):
         selectinload(GradingTask.disease),
         selectinload(GradingTask.encounter_file),
         selectinload(GradingTask.direct_image),
+        selectinload(GradingTask.encounter_set_image),
+        selectinload(GradingTask.encounter_set_package),
         selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
         selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
         selectinload(GradingTask.grades).selectinload(Grade.grader),
@@ -63,6 +67,8 @@ def fetch_task_with_related_data_by_uuid(db, task_uuid: str, user: Optional[User
         selectinload(GradingTask.disease),
         selectinload(GradingTask.encounter_file),
         selectinload(GradingTask.direct_image),
+        selectinload(GradingTask.encounter_set_image),
+        selectinload(GradingTask.encounter_set_package),
         selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
         selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
         selectinload(GradingTask.grades).selectinload(Grade.grader),
@@ -91,6 +97,8 @@ def fetch_grade_with_related_data(db, grade_id: int, user: Optional[User] = None
         selectinload(Grade.task).selectinload(GradingTask.disease),
         selectinload(Grade.task).selectinload(GradingTask.encounter_file),
         selectinload(Grade.task).selectinload(GradingTask.direct_image),
+        selectinload(Grade.task).selectinload(GradingTask.encounter_set_image),
+        selectinload(Grade.task).selectinload(GradingTask.encounter_set_package),
         selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
         selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
         selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.grader),

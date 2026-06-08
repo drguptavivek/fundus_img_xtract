@@ -208,11 +208,25 @@
                   {% set _ = row_image_scheme_names.append(image_scheme.disease.name) %}
                 {% endif %}
               {% endfor %}
+              {% set row_package_configs = [] %}
+              {% for package in encounter_config.grading_packages if package.active %}
+                {% set package_image_ids = package.image_grading_schemes|selectattr('active')|map(attribute='disease_id')|list %}
+                {% set package_encounter_ids = package.encounter_grading_schemes|selectattr('active')|map(attribute='disease_id')|list %}
+                {% set _ = row_package_configs.append({
+                  'name': package.name,
+                  'code': package.code,
+                  'applicability': package.applicability,
+                  'image_grading_scheme_ids': package_image_ids,
+                  'encounter_grading_scheme_ids': package_encounter_ids,
+                  'default_image_grading_scheme_id': package.default_image_grading_scheme_id
+                }) %}
+              {% endfor %}
               {% set _ = row_encounter_set_target_summaries.append({
                 'encounter_set_type_name': encounter_config.encounter_set_type.name if encounter_config.encounter_set_type else '',
                 'image_grading_scheme_names': row_image_scheme_names,
                 'default_image_grading_scheme_name': encounter_config.default_image_grading_scheme.name if encounter_config.default_image_grading_scheme else '',
-                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else ''
+                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else '',
+                'grading_packages': row_package_configs
               }) %}
               {% set _ = row_encounter_set_configs.append({
                 'encounter_set_type_id': encounter_config.encounter_set_type_id,
@@ -222,7 +236,8 @@
                 'default_image_grading_scheme_id': encounter_config.default_image_grading_scheme_id,
                 'default_image_grading_scheme_name': encounter_config.default_image_grading_scheme.name if encounter_config.default_image_grading_scheme else '',
                 'encounter_grading_scheme_id': encounter_config.encounter_grading_scheme_id,
-                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else ''
+                'encounter_grading_scheme_name': encounter_config.encounter_grading_scheme.name if encounter_config.encounter_grading_scheme else '',
+                'grading_packages': row_package_configs
               }) %}
             {% endfor %}
             {% set row_ai_workflows = [] %}

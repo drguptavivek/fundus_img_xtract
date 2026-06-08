@@ -59,21 +59,34 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
     encounter_set_type_ids = upload_profile_service.to_int_list(
         form.getlist("encounter_set_type_ids") or form.getlist("encounter_set_type_id")
     )
-    encounter_set_configs = [
-        upload_profile_service.EncounterSetProfileInput(
-            encounter_set_type_id=encounter_set_type_id,
-            image_grading_scheme_ids=upload_profile_service.to_int_list(
-                form.getlist(f"encounter_set_type_{encounter_set_type_id}_image_grading_scheme_ids")
-            ),
-            default_image_grading_scheme_id=upload_profile_service.to_int(
-                form.get(f"encounter_set_type_{encounter_set_type_id}_default_image_grading_scheme_id")
-            ),
-            encounter_grading_scheme_id=upload_profile_service.to_int(
-                form.get(f"encounter_set_type_{encounter_set_type_id}_encounter_grading_scheme_id")
-            ),
+    encounter_set_configs = []
+    for encounter_set_type_id in encounter_set_type_ids:
+        packages = _encounter_set_packages_from_request(form, encounter_set_type_id)
+        image_scheme_ids = upload_profile_service.to_int_list(
+            form.getlist(f"encounter_set_type_{encounter_set_type_id}_image_grading_scheme_ids")
         )
-        for encounter_set_type_id in encounter_set_type_ids
-    ]
+        default_image_scheme_id = upload_profile_service.to_int(
+            form.get(f"encounter_set_type_{encounter_set_type_id}_default_image_grading_scheme_id")
+        )
+        encounter_scheme_id = upload_profile_service.to_int(
+            form.get(f"encounter_set_type_{encounter_set_type_id}_encounter_grading_scheme_id")
+        )
+        if packages:
+            image_scheme_ids = sorted({disease_id for package in packages for disease_id in package.image_grading_scheme_ids})
+            default_image_scheme_id = next((package.default_image_grading_scheme_id for package in packages if package.default_image_grading_scheme_id), None)
+            encounter_scheme_id = next(
+                (package.encounter_grading_scheme_ids[0] for package in packages if package.encounter_grading_scheme_ids),
+                None,
+            )
+        encounter_set_configs.append(
+            upload_profile_service.EncounterSetProfileInput(
+                encounter_set_type_id=encounter_set_type_id,
+                image_grading_scheme_ids=image_scheme_ids,
+                default_image_grading_scheme_id=default_image_scheme_id,
+                encounter_grading_scheme_id=encounter_scheme_id,
+                grading_packages=packages,
+            )
+        )
     ai_workflows = []
     for value in form.getlist("ai_workflows"):
         parts = value.split(":")
@@ -107,6 +120,49 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         task_prioritization_json=form.get("task_prioritization_json") or None,
         description=(form.get("description") or "").strip() or None,
     )
+
+
+def _encounter_set_packages_from_request(form, encounter_set_type_id: int):
+    raw_json = (form.get(f"encounter_set_type_{encounter_set_type_id}_grading_packages_json") or "").strip()
+    packages = []
+    if raw_json:
+        import json
+        try:
+            rows = json.loads(raw_json)
+        except json.JSONDecodeError:
+            rows = []
+        if isinstance(rows, list):
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                packages.append(
+                    upload_profile_service.EncounterSetGradingPackageInput(
+                        name=str(row.get("name") or ""),
+                        code=str(row.get("code") or ""),
+                        applicability=str(row.get("applicability") or "always"),
+                        image_grading_scheme_ids=[
+                            value for value in (
+                                upload_profile_service.to_int(str(item)) for item in row.get("image_grading_scheme_ids", [])
+                            )
+                            if value is not None
+                        ],
+                        encounter_grading_scheme_ids=[
+                            value for value in (
+                                upload_profile_service.to_int(str(item)) for item in row.get("encounter_grading_scheme_ids", [])
+                            )
+                            if value is not None
+                        ],
+                        default_image_grading_scheme_id=upload_profile_service.to_int(
+                            str(row.get("default_image_grading_scheme_id") or "")
+                        ),
+                        image_scheme_auto_create_policies={
+                            int(key): str(value or "always")
+                            for key, value in (row.get("image_scheme_auto_create_policies") or {}).items()
+                            if str(key).isdigit()
+                        },
+                    )
+                )
+    return packages
 
 
 def _json_result(result: upload_profile_service.MutationResult, *, redirect_endpoint: str = "admin.upload_profiles_admin"):

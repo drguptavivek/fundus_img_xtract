@@ -275,6 +275,13 @@ class UploadProfileEncounterSetType(Base):
         lazy="selectin",
         order_by="UploadProfileEncounterSetTypeImageGradingScheme.display_order",
     )
+    grading_packages: Mapped[List["UploadProfileEncounterSetTypeGradingPackage"]] = relationship(
+        "UploadProfileEncounterSetTypeGradingPackage",
+        back_populates="profile_encounter_set_type",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="UploadProfileEncounterSetTypeGradingPackage.display_order",
+    )
 
     __table_args__ = (
         UniqueConstraint("upload_profile_id", "encounter_set_type_id", name="uq_upload_profile_encounter_set_type"),
@@ -310,6 +317,112 @@ class UploadProfileEncounterSetTypeImageGradingScheme(Base):
         UniqueConstraint("upload_profile_encounter_set_type_id", "disease_id", name="uq_up_est_image_grading_scheme"),
         Index("ix_up_est_img_scheme_mapping_active", "upload_profile_encounter_set_type_id", "active"),
         Index("ix_up_est_img_scheme_default", "upload_profile_encounter_set_type_id", "is_default"),
+    )
+
+
+class UploadProfileEncounterSetTypeGradingPackage(Base):
+    """Configured grading package for one profile EncounterSetType mapping."""
+
+    __tablename__ = "upload_profile_est_grading_packages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_profile_encounter_set_type_id: Mapped[int] = mapped_column(
+        ForeignKey("upload_profile_encounter_set_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    applicability: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
+    default_image_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    profile_encounter_set_type: Mapped["UploadProfileEncounterSetType"] = relationship(
+        "UploadProfileEncounterSetType",
+        back_populates="grading_packages",
+    )
+    default_image_grading_scheme: Mapped["Disease | None"] = relationship("Disease", foreign_keys=[default_image_grading_scheme_id])
+    image_grading_schemes: Mapped[List["UploadProfileEncounterSetTypePackageImageScheme"]] = relationship(
+        "UploadProfileEncounterSetTypePackageImageScheme",
+        back_populates="package",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="UploadProfileEncounterSetTypePackageImageScheme.display_order",
+    )
+    encounter_grading_schemes: Mapped[List["UploadProfileEncounterSetTypePackageEncounterScheme"]] = relationship(
+        "UploadProfileEncounterSetTypePackageEncounterScheme",
+        back_populates="package",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="UploadProfileEncounterSetTypePackageEncounterScheme.display_order",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("upload_profile_encounter_set_type_id", "code", name="uq_up_est_grading_package_code"),
+        CheckConstraint(
+            "applicability IN ('always','remidio_dr_report_present','remidio_glaucoma_report_present','manual_only','disabled')",
+            name="ck_up_est_grading_package_applicability",
+        ),
+        Index("ix_up_est_grading_package_mapping_active", "upload_profile_encounter_set_type_id", "active"),
+    )
+
+
+class UploadProfileEncounterSetTypePackageImageScheme(Base):
+    """Image-level scheme included in one configured EncounterSet grading package."""
+
+    __tablename__ = "upload_profile_est_package_image_schemes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    package_id: Mapped[int] = mapped_column(ForeignKey("upload_profile_est_grading_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
+    auto_create_policy: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    package: Mapped["UploadProfileEncounterSetTypeGradingPackage"] = relationship(
+        "UploadProfileEncounterSetTypeGradingPackage",
+        back_populates="image_grading_schemes",
+    )
+    disease: Mapped["Disease"] = relationship("Disease")
+
+    __table_args__ = (
+        UniqueConstraint("package_id", "disease_id", name="uq_up_est_pkg_image_scheme"),
+        CheckConstraint(
+            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_glaucoma_report_present')",
+            name="ck_up_est_pkg_image_auto_create_policy",
+        ),
+        Index("ix_up_est_pkg_image_scheme_package_active", "package_id", "active"),
+    )
+
+
+class UploadProfileEncounterSetTypePackageEncounterScheme(Base):
+    """Encounter-level scheme included in one configured EncounterSet grading package."""
+
+    __tablename__ = "upload_profile_est_package_encounter_schemes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    package_id: Mapped[int] = mapped_column(ForeignKey("upload_profile_est_grading_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    package: Mapped["UploadProfileEncounterSetTypeGradingPackage"] = relationship(
+        "UploadProfileEncounterSetTypeGradingPackage",
+        back_populates="encounter_grading_schemes",
+    )
+    disease: Mapped["Disease"] = relationship("Disease")
+
+    __table_args__ = (
+        UniqueConstraint("package_id", "disease_id", name="uq_up_est_pkg_encounter_scheme"),
+        Index("ix_up_est_pkg_encounter_scheme_package_active", "package_id", "active"),
     )
 
 

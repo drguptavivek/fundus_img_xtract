@@ -42,6 +42,7 @@ from .intra_rater import register_routes as register_intra_rater_routes
 from .inter_rater_compare import register_routes as register_inter_rater_routes
 from .grader_statistics import register_routes as register_grader_statistics_routes
 from .encounter_set_grading import register_routes as register_encounter_set_routes
+from .encounter_set_package_grading import register_routes as register_encounter_set_package_routes
 from .regrade_tasks import register_routes as register_regrade_task_routes
 from .wadhwani_glaucoma_inference import register_routes as register_wadhwani_glaucoma_inference_routes
 
@@ -63,5 +64,6 @@ register_grader_statistics_routes(bp)
 
 # Register encounter-set grading routes
 register_encounter_set_routes(bp)
+register_encounter_set_package_routes(bp)
 register_regrade_task_routes(bp)
 register_wadhwani_glaucoma_inference_routes(bp)

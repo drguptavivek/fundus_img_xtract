@@ -89,12 +89,15 @@ Add `?download=1` to receive the same schema as a JSON attachment from the admin
 EncounterSet grading schemes are configured on the Upload & Grading Profile mapping for each selected EncounterSetType:
 
 - one or more image-level grading schemes for task-eligible clinical images
-- one default image-level grading scheme
-- one encounter-level grading scheme for the overall EncounterSet/encounter
+- one default image-level grading scheme where image schemes are configured
+- one or more encounter-level grading schemes for whole-EncounterSet targets
+- optional EncounterSet grading package definitions that group image-level and encounter-level targets into one queue-visible grading unit
 
-Resident and resident2 submissions are compared across configured grading levels. If the configured grading rules detect a mismatch at either the image level or the encounter level, the EncounterSet grading task must escalate to an arbitrator. The arbitrator resolves the final grade.
+For package-based EncounterSet grading, resident and resident2 submissions are compared across all configured targets in the package. If the configured grading rules detect a mismatch at either the image level or the encounter level, that package must escalate to an arbitrator. The arbitrator resolves the mismatched targets while retaining full EncounterSet context.
 
 Supporting PDFs and document-images remain verification/reference assets only and must not receive image-level grading tasks.
+
+Detailed package policy and implementation direction are documented in [EncounterSet Grading Package Policy](../../04-Grade/encounter_set_grading_package_policy.md).
 
 ## Verification Discard Policy
 

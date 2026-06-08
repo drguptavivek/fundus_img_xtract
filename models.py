@@ -1451,6 +1451,10 @@ class GradingTask(Base):
     encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id', ondelete='CASCADE'), nullable=True, index=True)
     direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id', ondelete='CASCADE'), nullable=True, index=True)
     patient_encounter_id: Mapped[int | None] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), nullable=True, index=True)
+    encounter_set_image_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_images.id', ondelete='CASCADE'), nullable=True, index=True)
+    encounter_set_package_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='CASCADE'), nullable=True, index=True)
+    grading_target_level: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    task_source: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False, index=True)
     # lab_unit_id is used strictly for grading assignment and queue scoping.
@@ -1470,6 +1474,11 @@ class GradingTask(Base):
     encounter_file: Mapped['EncounterFile'] = relationship('EncounterFile')
     direct_image: Mapped['DirectImageUpload'] = relationship('DirectImageUpload')
     patient_encounter: Mapped['PatientEncounters'] = relationship('PatientEncounters')
+    encounter_set_image: Mapped['EncounterSetImage | None'] = relationship('EncounterSetImage')
+    encounter_set_package: Mapped['EncounterSetGradingPackage | None'] = relationship(
+        'EncounterSetGradingPackage',
+        back_populates='tasks',
+    )
     grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
@@ -1488,20 +1497,65 @@ class GradingTask(Base):
     __table_args__ = (
         # Ensure one and only one image reference is set
         CheckConstraint(
-            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NULL) OR "
-            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL AND patient_encounter_id IS NULL) OR "
-            "(encounter_file_id IS NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NOT NULL)",
+            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NULL AND encounter_set_image_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL AND patient_encounter_id IS NULL AND encounter_set_image_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NOT NULL AND encounter_set_image_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NULL AND encounter_set_image_id IS NOT NULL)",
             name='ck_grading_task_source_polymorphic'
         ),
         # Unique per image/encounter×disease across all lab units
         UniqueConstraint('encounter_file_id', 'disease_id', name='uq_task_encounter_disease'),
         UniqueConstraint('direct_image_upload_id', 'disease_id', name='uq_task_direct_disease'),
         UniqueConstraint('patient_encounter_id', 'disease_id', name='uq_task_patient_encounter_disease'),
+        UniqueConstraint('encounter_set_image_id', 'disease_id', name='uq_task_encounter_set_image_disease'),
+        UniqueConstraint('encounter_set_package_id', 'patient_encounter_id', 'encounter_set_image_id', 'disease_id', 'grading_target_level', name='uq_task_encounter_set_package_target'),
         CheckConstraint(
             "state IN ('pending','resident_done','resident2_done','arbitration','final')",
             name='ck_task_state_valid'
         ),
+        CheckConstraint(
+            "grading_target_level IS NULL OR grading_target_level IN ('image','encounter')",
+            name='ck_task_grading_target_level_valid',
+        ),
         Index('ix_task_disease_lab_state', 'disease_id', 'lab_unit_id', 'state'),
+    )
+
+
+class EncounterSetGradingPackage(Base):
+    __tablename__ = 'encounter_set_grading_packages'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid4()))
+    patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), nullable=False, index=True)
+    upload_profile_est_grading_package_id: Mapped[int | None] = mapped_column(
+        ForeignKey('upload_profile_est_grading_packages.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    applicability: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(24), default='pending', nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    patient_encounter: Mapped['PatientEncounters'] = relationship('PatientEncounters')
+    tasks: Mapped[list['GradingTask']] = relationship(
+        'GradingTask',
+        back_populates='encounter_set_package',
+        cascade='all, delete-orphan',
+        lazy='selectin',
+    )
+
+    __table_args__ = (
+        UniqueConstraint('patient_encounter_id', 'code', name='uq_encounter_set_grading_package_code'),
+        CheckConstraint(
+            "state IN ('pending','resident_done','resident2_done','arbitration','final')",
+            name='ck_encounter_set_grading_package_state',
+        ),
+        Index('ix_esgp_encounter_state', 'patient_encounter_id', 'state'),
     )
 
 
@@ -2775,7 +2829,10 @@ from upload_profiles.models import (  # noqa: E402,F401
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
     UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
     UploadProfileKind,
     PatientEncounterTargetDisease,
 )

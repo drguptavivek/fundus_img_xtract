@@ -1,6 +1,6 @@
 # Upload Profiles API
 
-Reusable Upload & Grading Profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for asset rules and metadata, and uses profile-level image/encounter grading scheme configuration for task creation. Admin pages render under `/admin/upload-profiles` and `/admin/upload-projects`; mutations use JSON/HTMX-capable APIs under `/api/upload-profiles`.
+Reusable Upload & Grading Profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for asset rules and metadata, and uses profile-level EncounterSet grading packages for task creation. Admin pages render under `/admin/upload-profiles` and `/admin/upload-projects`; mutations use JSON/HTMX-capable APIs under `/api/upload-profiles`.
 
 Project governance owns investigator metadata, project-to-profile enablement, and uploader plus lab-unit assignment. Upload & Grading Profiles own reusable upload workflow and task-target rules.
 
@@ -100,9 +100,19 @@ Profile create/update fields:
 - `default_disease_ids` repeated integers, optional and subset of `disease_ids`; used only as `Default for Remidio ZIP`
 - `upload_kinds` repeated values from `direct_image`, `pregraded`, `remidio`, `encounter_set`
 - `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active
-- `encounter_set_type_<id>_image_grading_scheme_ids` repeated integers for each selected EncounterSetType; one or more image-scoped grading schemes are allowed
-- `encounter_set_type_<id>_default_image_grading_scheme_id` integer; required and must be one of that EncounterSetType mapping's selected image grading schemes
-- `encounter_set_type_<id>_encounter_grading_scheme_id` integer; required and must point to an encounter-scoped grading scheme
+- `encounter_set_type_<id>_image_grading_scheme_ids` repeated integers for each selected EncounterSetType; one or more image-scoped grading schemes are allowed. The admin UI derives this from the package policy.
+- `encounter_set_type_<id>_default_image_grading_scheme_id` integer; compatibility fallback derived from the first selected image scheme in the package policy.
+- `encounter_set_type_<id>_encounter_grading_scheme_id` integer; required and must point to the one encounter-scoped grading scheme for the package.
+- `encounter_set_type_<id>_grading_packages_json` JSON array containing the single EncounterSet grading package policy. Package fields:
+  - `name` string, required
+  - `code` string, optional stable code derived from `name` when omitted
+  - `applicability` should be `always` for the single package policy
+  - `image_grading_scheme_ids` array of image-scoped grading scheme IDs
+  - `default_image_grading_scheme_id` optional image scheme ID that must be in `image_grading_scheme_ids`
+  - `encounter_grading_scheme_ids` array containing the selected encounter-scoped grading scheme ID
+  - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, or `remidio_glaucoma_report_present`
+  - `display_order` integer, optional
+  - `active` boolean, optional
 - `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile. Encounter-set grading targets come from the profile's EncounterSetType mappings, but V1 rejects encounter-set AI workflow bindings here.
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans, used only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `camera_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
@@ -146,6 +156,7 @@ curl -X POST /api/upload-profiles \
   -F "encounter_set_type_9_image_grading_scheme_ids=11" \
   -F "encounter_set_type_9_default_image_grading_scheme_id=8" \
   -F "encounter_set_type_9_encounter_grading_scheme_id=18" \
+  -F 'encounter_set_type_9_grading_packages_json=[{"name":"EncounterSet Package","code":"encounter_set","applicability":"always","image_grading_scheme_ids":[8,11],"default_image_grading_scheme_id":8,"encounter_grading_scheme_ids":[18],"image_scheme_auto_create_policies":{"8":"remidio_dr_report_present","11":"remidio_glaucoma_report_present"},"active":true}]' \
   -F "camera_ids=7" \
   -F "area_ids=1" \
   -F "allow_mydriatic=on" \
@@ -177,9 +188,9 @@ Allowed diseases define valid disease targets for direct image, pregraded, and R
 
 `default_disease_ids` is only for Remidio ZIP ingestion because the Remidio ZIP form does not collect disease. A Remidio-capable profile must provide a default disease, and a non-Remidio profile must not set one.
 
-Encounter-set upload does not use the Remidio default and should not ask for a free-floating disease target. The selected EncounterSetType provides metadata and asset policy. The Upload & Grading Profile mapping for that EncounterSetType provides image-level and encounter-level grading schemes. An upload profile that enables only encounter-set uploads can therefore have no `disease_ids`.
+Encounter-set upload does not use the Remidio default and should not ask for a free-floating disease target. The selected EncounterSetType provides metadata and asset policy. The Upload & Grading Profile mapping for that EncounterSetType provides image-level grading schemes, encounter-level grading schemes, and optional EncounterSet grading package definitions. An upload profile that enables only encounter-set uploads can therefore have no `disease_ids`.
 
-When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. For each selected type, the profile must configure one encounter-scoped grading scheme and one or more image-scoped grading schemes. Multiple image-level schemes are allowed because the same metadata/asset contract may support different project workflows; one image scheme is marked default for operational fallback. Upload UI must require the uploader to select one of those types for the encounter. Project mapping is via `project_upload_profiles`, not directly on the reusable profile template.
+When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. For each selected type, the profile must configure image-scoped grading schemes and encounter-scoped grading schemes either directly or through EncounterSet grading package definitions. Multiple image-level and encounter-level schemes are allowed because the same metadata/asset contract may support different project workflows; one image scheme may be marked default for operational fallback. Upload UI must require the uploader to select one of those types for the encounter. Project mapping is via `project_upload_profiles`, not directly on the reusable profile template.
 
 Camera/site/mydriatic profile fields are not required for EncounterSet-only profiles and are ignored if no clinical image/ZIP mode is enabled. If EncounterSet workflows need camera, site, acquisition method, mydriatic state, or similar capture details, configure those as upload metadata fields on the EncounterSetType.
 
@@ -189,8 +200,11 @@ Automated Remidio API-populated profiles are a stricter EncounterSet-only subset
 - `upload_kinds` must be exactly `encounter_set`
 - the selected EncounterSetTypes must include the active `remidio_api_standard` type
 - every selected Remidio EncounterSet mapping must have image grading schemes and one default image scheme
+- package-based grading, if enabled, is configured on the profile mapping and not inferred from Remidio API ingestion alone
 - direct image, pregraded, and Remidio ZIP upload kinds are rejected
 - user assignment is rejected; routing uses API source bindings on the project-profile mapping
+
+See [EncounterSet Grading Package Policy](../../04-Grade/encounter_set_grading_package_policy.md) for the single package model, per-image-scheme auto-creation rules, ungradable-image omission, and package-scoped escalation policy.
 
 `task_prioritization_json` is capture-only in this phase. It may record abnormal encounter prioritization, AI-abnormal prioritization, normal sampling percent, sampling strategy, source order, applicable upload kinds, and active state. It does not change task selection behavior yet.
 

@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+
+{% block title %}EncounterSet Package Grading{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .esg-shell {
+    min-height: calc(100vh - 9rem);
+  }
+
+  .esg-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bs-body-bg);
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+
+  .esg-target-rail {
+    position: sticky;
+    top: 5.25rem;
+    max-height: calc(100vh - 6.5rem);
+    overflow: auto;
+  }
+
+  .esg-target-button {
+    width: 100%;
+    text-align: left;
+  }
+
+  .esg-target-dot {
+    width: .7rem;
+    height: .7rem;
+    border-radius: 999px;
+    border: 1px solid var(--bs-border-color);
+    background: transparent;
+    flex: 0 0 auto;
+  }
+
+  .esg-target-button[data-status="complete"] .esg-target-dot {
+    background: var(--bs-success);
+    border-color: var(--bs-success);
+  }
+
+  .esg-target-button[data-status="missing"] .esg-target-dot {
+    background: var(--bs-danger);
+    border-color: var(--bs-danger);
+  }
+
+  .esg-target-button[data-status="locked"] .esg-target-dot {
+    background: var(--bs-secondary-bg);
+  }
+
+  .esg-panel {
+    display: none;
+  }
+
+  .esg-panel.is-active {
+    display: block;
+  }
+
+  .esg-image-frame {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #05070a;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .esg-image-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .esg-grade-option {
+    text-align: left;
+    min-height: 3.25rem;
+  }
+
+  .esg-grade-option.is-selected {
+    border-color: var(--bs-primary);
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-body-color);
+  }
+
+  @media (max-width: 991.98px) {
+    .esg-target-rail {
+      position: static;
+      max-height: none;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 esg-shell" data-esg-workbench>
+  <div class="esg-header py-3 mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+      <div>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+          <h1 class="h4 mb-0">{{ package.name }}</h1>
+          <span class="badge text-bg-light border">{{ slot_type|capitalize }}</span>
+          <span class="badge text-bg-secondary">{{ package.state }}</span>
+        </div>
+        <div class="text-muted small">
+          {{ encounter.name }} &middot; Patient {{ encounter.patient_id }} &middot; {{ encounter.capture_date }}
+        </div>
+      </div>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="badge text-bg-light border" data-esg-progress>0 of 0 graded</span>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Dashboard</a>
+        <button class="btn btn-sm btn-success" type="submit" form="encounter-set-package-grade-form" data-esg-submit disabled>
+          Submit package grades
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <form id="encounter-set-package-grade-form" method="post" action="{{ url_for('grading.encounter_set_package_submit') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="package_uuid" value="{{ package.uuid }}">
+    <input type="hidden" name="slot" value="{{ slot_type }}">
+
+    <div class="row g-3">
+      <aside class="col-lg-3 col-xl-2">
+        <div class="esg-target-rail">
+          <div class="list-group" data-esg-nav>
+            {% for panel in task_panels %}
+            {% set task = panel.task %}
+            {% set image = task.encounter_set_image %}
+            <button class="list-group-item list-group-item-action esg-target-button {% if loop.first %}active{% endif %}"
+                    type="button"
+                    data-esg-target-nav
+                    data-target-index="{{ loop.index0 }}"
+                    data-task-uuid="{{ task.uuid }}"
+                    data-available="{{ '1' if panel.available else '0' }}"
+                    data-status="{{ 'locked' if not panel.available else ('complete' if panel.existing_grade else 'pending') }}">
+              <span class="d-flex align-items-center gap-2">
+                <span class="esg-target-dot" aria-hidden="true"></span>
+                <span class="min-w-0">
+                  <span class="d-block fw-semibold text-truncate">
+                    {% if task.grading_target_level == "image" and image %}
+                      Image {{ image.spatial_position or loop.index }}
+                    {% else %}
+                      Encounter
+                    {% endif %}
+                  </span>
+                  <span class="d-block small text-muted text-truncate">{{ task.disease.name if task.disease else "Scheme" }}</span>
+                </span>
+              </span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </aside>
+
+      <section class="col-lg-9 col-xl-10">
+        {% for panel in task_panels %}
+        {% set task = panel.task %}
+        {% set image = task.encounter_set_image %}
+        <article class="esg-panel {% if loop.first %}is-active{% endif %}"
+                 data-esg-panel
+                 data-target-index="{{ loop.index0 }}"
+                 data-task-uuid="{{ task.uuid }}"
+                 data-available="{{ '1' if panel.available else '0' }}">
+          <div class="border rounded bg-body p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+              <div>
+                <div class="text-uppercase small text-muted">
+                  {% if task.grading_target_level == "image" and image %}Image target{% else %}Encounter target{% endif %}
+                </div>
+                <h2 class="h5 mb-1">
+                  {% if task.grading_target_level == "image" and image %}
+                    Image {{ image.spatial_position or loop.index }} &middot; {{ task.disease.name if task.disease else "Scheme" }}
+                  {% else %}
+                    Encounter &middot; {{ task.disease.name if task.disease else "Scheme" }}
+                  {% endif %}
+                </h2>
+                <div class="small text-muted">{{ task.task_source or "profile" }} &middot; {{ task.state }}</div>
+              </div>
+              <span class="badge text-bg-{{ 'success' if panel.available else 'secondary' }}">{{ 'Available' if panel.available else 'Locked' }}</span>
+            </div>
+
+            <div class="row g-3">
+              {% if image %}
+              <div class="col-xl-7">
+                <a class="esg-image-frame" href="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}" target="_blank" rel="noopener">
+                  <img src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}" alt="Image {{ image.spatial_position }}">
+                </a>
+                {% set image_meta = image.metadata_json or {} %}
+                <div class="d-flex flex-wrap justify-content-between gap-2 small text-muted mt-2">
+                  <span class="text-truncate">{{ image.original_filename }}</span>
+                  <span>
+                    {{ image_meta.get('laterality') or image_meta.get('eye') or "-" }}
+                    {% if image_meta.get('image_type') or image_meta.get('type') %}
+                      &middot; {{ image_meta.get('image_type') or image_meta.get('type') }}
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+              <div class="col-xl-5">
+              {% else %}
+              <div class="col-xl-8">
+                <dl class="row small mb-0 border rounded p-3 bg-body-tertiary">
+                  <dt class="col-sm-4">Patient</dt>
+                  <dd class="col-sm-8">{{ encounter.patient_id }}</dd>
+                  <dt class="col-sm-4">Capture date</dt>
+                  <dd class="col-sm-8">{{ encounter.capture_date }}</dd>
+                  <dt class="col-sm-4">Encounter</dt>
+                  <dd class="col-sm-8">{{ encounter.name }}</dd>
+                </dl>
+              </div>
+              <div class="col-xl-4">
+              {% endif %}
+                <label class="form-label small fw-semibold" for="label_{{ task.uuid }}">Grade</label>
+                <select class="form-select visually-hidden" id="label_{{ task.uuid }}" name="label_id_{{ task.uuid }}" {% if not panel.available %}disabled{% endif %} required data-esg-grade-select>
+                  <option value="">Select grade</option>
+                  {% for label in panel.labels %}
+                  <option value="{{ label.id }}" {% if panel.existing_grade and panel.existing_grade.disease_grading_id == label.id %}selected{% endif %}>
+                    {{ label.impression }}
+                  </option>
+                  {% endfor %}
+                </select>
+                <div class="vstack gap-2" data-esg-grade-options>
+                  {% for label in panel.labels %}
+                  <button class="btn btn-outline-secondary esg-grade-option {% if panel.existing_grade and panel.existing_grade.disease_grading_id == label.id %}is-selected{% endif %}"
+                          type="button"
+                          data-esg-grade-option
+                          data-grade-id="{{ label.id }}"
+                          {% if not panel.available %}disabled{% endif %}>
+                    <span class="fw-semibold">{{ label.impression }}</span>
+                    {% if label.guidelines %}
+                    <span class="d-block small text-muted">{{ label.guidelines }}</span>
+                    {% endif %}
+                  </button>
+                  {% endfor %}
+                </div>
+
+                <label class="form-label small fw-semibold mt-3" for="comment_{{ task.uuid }}">Comment</label>
+                <textarea class="form-control" id="comment_{{ task.uuid }}" name="comment_{{ task.uuid }}" rows="3" {% if not panel.available %}disabled{% endif %} data-esg-comment>{{ panel.existing_grade.comment if panel.existing_grade else "" }}</textarea>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3 mt-3">
+              <button class="btn btn-outline-secondary" type="button" data-esg-prev>
+                <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>Previous
+              </button>
+              <div class="small text-muted" data-esg-panel-counter></div>
+              <button class="btn btn-primary" type="button" data-esg-next>
+                Next<i class="fa-solid fa-arrow-right ms-1" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+
+        <section class="border rounded bg-body p-3 mt-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h2 class="h6 mb-0">Package summary</h2>
+            <span class="small text-muted">Submit is enabled after every available target has a grade.</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Target</th>
+                  <th>Scheme</th>
+                  <th>Grade</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for panel in task_panels %}
+                {% set task = panel.task %}
+                {% set image = task.encounter_set_image %}
+                <tr data-esg-summary-row data-task-uuid="{{ task.uuid }}" data-available="{{ '1' if panel.available else '0' }}">
+                  <td>{% if image %}Image {{ image.spatial_position or loop.index }}{% else %}Encounter{% endif %}</td>
+                  <td>{{ task.disease.name if task.disease else "Scheme" }}</td>
+                  <td data-esg-summary-grade>{{ panel.existing_grade.label.impression if panel.existing_grade and panel.existing_grade.label else "-" }}</td>
+                  <td><span class="badge text-bg-secondary" data-esg-summary-status>{{ 'Locked' if not panel.available else ('Ready' if panel.existing_grade else 'Pending') }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  (function () {
+    const root = document.querySelector('[data-esg-workbench]');
+    if (!root) {
+      return;
+    }
+    const panels = Array.from(root.querySelectorAll('[data-esg-panel]'));
+    const navItems = Array.from(root.querySelectorAll('[data-esg-target-nav]'));
+    const submit = root.querySelector('[data-esg-submit]');
+    const progress = root.querySelector('[data-esg-progress]');
+    let activeIndex = 0;
+
+    function panelLabel(panel, index) {
+      const heading = panel.querySelector('h2');
+      return heading ? heading.textContent.trim() : 'Target ' + (index + 1);
+    }
+
+    function gradeText(panel) {
+      const select = panel.querySelector('[data-esg-grade-select]');
+      if (!select || !select.value) {
+        return '-';
+      }
+      return select.selectedOptions[0] ? select.selectedOptions[0].textContent.trim() : '-';
+    }
+
+    function isAvailable(panel) {
+      return panel.dataset.available === '1';
+    }
+
+    function isComplete(panel) {
+      const select = panel.querySelector('[data-esg-grade-select]');
+      return !isAvailable(panel) || Boolean(select && select.value);
+    }
+
+    function setActive(index) {
+      activeIndex = Math.max(0, Math.min(index, panels.length - 1));
+      panels.forEach(function (panel, idx) {
+        panel.classList.toggle('is-active', idx === activeIndex);
+      });
+      navItems.forEach(function (item, idx) {
+        item.classList.toggle('active', idx === activeIndex);
+      });
+      updateProgress();
+    }
+
+    function updateProgress() {
+      let available = 0;
+      let complete = 0;
+      panels.forEach(function (panel, idx) {
+        const panelAvailable = isAvailable(panel);
+        const panelComplete = isComplete(panel);
+        if (panelAvailable) {
+          available += 1;
+          if (panelComplete) {
+            complete += 1;
+          }
+        }
+        const status = !panelAvailable ? 'locked' : (panelComplete ? 'complete' : 'missing');
+        const nav = navItems[idx];
+        if (nav) {
+          nav.dataset.status = status;
+        }
+        const row = root.querySelector('[data-esg-summary-row][data-task-uuid="' + panel.dataset.taskUuid + '"]');
+        if (row) {
+          row.querySelector('[data-esg-summary-grade]').textContent = gradeText(panel);
+          const badge = row.querySelector('[data-esg-summary-status]');
+          if (badge) {
+            badge.textContent = !panelAvailable ? 'Locked' : (panelComplete ? 'Ready' : 'Missing');
+            badge.className = 'badge ' + (!panelAvailable ? 'text-bg-secondary' : (panelComplete ? 'text-bg-success' : 'text-bg-danger'));
+          }
+        }
+      });
+      if (progress) {
+        progress.textContent = complete + ' of ' + available + ' graded';
+      }
+      if (submit) {
+        submit.disabled = !(available > 0 && complete === available);
+      }
+      root.querySelectorAll('[data-esg-panel-counter]').forEach(function (counter) {
+        counter.textContent = 'Target ' + (activeIndex + 1) + ' of ' + panels.length;
+      });
+      root.querySelectorAll('[data-esg-prev]').forEach(function (button) {
+        button.disabled = activeIndex === 0;
+      });
+      root.querySelectorAll('[data-esg-next]').forEach(function (button) {
+        button.disabled = activeIndex >= panels.length - 1;
+      });
+    }
+
+    root.addEventListener('click', function (event) {
+      const nav = event.target.closest('[data-esg-target-nav]');
+      if (nav) {
+        setActive(Number(nav.dataset.targetIndex || 0));
+        return;
+      }
+      const grade = event.target.closest('[data-esg-grade-option]');
+      if (grade) {
+        const panel = grade.closest('[data-esg-panel]');
+        const select = panel.querySelector('[data-esg-grade-select]');
+        if (select) {
+          select.value = grade.dataset.gradeId || '';
+        }
+        panel.querySelectorAll('[data-esg-grade-option]').forEach(function (button) {
+          button.classList.toggle('is-selected', button === grade);
+        });
+        updateProgress();
+        return;
+      }
+      if (event.target.closest('[data-esg-prev]')) {
+        setActive(activeIndex - 1);
+        return;
+      }
+      if (event.target.closest('[data-esg-next]')) {
+        setActive(activeIndex + 1);
+      }
+    });
+
+    root.addEventListener('change', function (event) {
+      if (event.target.matches('[data-esg-grade-select]')) {
+        const panel = event.target.closest('[data-esg-panel]');
+        panel.querySelectorAll('[data-esg-grade-option]').forEach(function (button) {
+          button.classList.toggle('is-selected', button.dataset.gradeId === event.target.value);
+        });
+        updateProgress();
+      }
+    });
+
+    setActive(0);
+  })();
+</script>
+{% endblock %}

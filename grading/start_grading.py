@@ -125,6 +125,15 @@ def start_grading(disease_id: int, role_slot: str):
                 flash("Task UUID is missing. Please try again.", "danger")
                 return redirect(url_for("grading.index"))
 
+            if task.encounter_set_package_id and task.encounter_set_package:
+                return redirect(
+                    url_for(
+                        "grading.encounter_set_package_grading",
+                        package_uuid=task.encounter_set_package.uuid,
+                        slot_type=effective_slot,
+                    )
+                )
+
             # Call dual_grading_task directly with slot_type as a parameter
             return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=effective_slot))
 

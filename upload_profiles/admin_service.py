@@ -21,7 +21,10 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
     UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
     UploadProfileKind,
 )
 from upload_profiles.service import (
@@ -68,6 +71,26 @@ class EncounterSetProfileInput:
     image_grading_scheme_ids: list[int]
     default_image_grading_scheme_id: int | None
     encounter_grading_scheme_id: int | None
+    grading_packages: list["EncounterSetGradingPackageInput"] | None = None
+
+
+@dataclass(frozen=True)
+class EncounterSetGradingPackageInput:
+    name: str
+    code: str
+    applicability: str
+    image_grading_scheme_ids: list[int]
+    encounter_grading_scheme_ids: list[int]
+    default_image_grading_scheme_id: int | None = None
+    image_scheme_auto_create_policies: dict[int, str] | None = None
+
+
+IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
+    "never",
+    "always",
+    "remidio_dr_report_present",
+    "remidio_glaucoma_report_present",
+}
 
 
 @dataclass(frozen=True)
@@ -368,6 +391,38 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
                     for scheme in row.image_grading_schemes
                     if scheme.active
                 ],
+                grading_packages=[
+                    UploadProfileEncounterSetTypeGradingPackage(
+                        name=package.name,
+                        code=package.code,
+                        applicability=package.applicability,
+                        default_image_grading_scheme_id=package.default_image_grading_scheme_id,
+                        display_order=package.display_order,
+                        active=package.active,
+                        image_grading_schemes=[
+                            UploadProfileEncounterSetTypePackageImageScheme(
+                                disease_id=scheme.disease_id,
+                                is_default=scheme.is_default,
+                                auto_create_policy=scheme.auto_create_policy,
+                                display_order=scheme.display_order,
+                                active=scheme.active,
+                            )
+                            for scheme in package.image_grading_schemes
+                            if scheme.active
+                        ],
+                        encounter_grading_schemes=[
+                            UploadProfileEncounterSetTypePackageEncounterScheme(
+                                disease_id=scheme.disease_id,
+                                display_order=scheme.display_order,
+                                active=scheme.active,
+                            )
+                            for scheme in package.encounter_grading_schemes
+                            if scheme.active
+                        ],
+                    )
+                    for package in row.grading_packages
+                    if package.active
+                ],
             )
             for row in source.encounter_set_types
             if row.active
@@ -507,6 +562,35 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
                 )
                 for index, disease_id in enumerate(config.image_grading_scheme_ids, start=1)
             ],
+            grading_packages=[
+                UploadProfileEncounterSetTypeGradingPackage(
+                    name=package.name,
+                    code=package.code,
+                    applicability=package.applicability,
+                    default_image_grading_scheme_id=package.default_image_grading_scheme_id,
+                    display_order=index,
+                    active=True,
+                    image_grading_schemes=[
+                        UploadProfileEncounterSetTypePackageImageScheme(
+                            disease_id=disease_id,
+                            is_default=disease_id == package.default_image_grading_scheme_id,
+                            auto_create_policy=(package.image_scheme_auto_create_policies or {}).get(disease_id, "always"),
+                            display_order=scheme_index,
+                            active=True,
+                        )
+                        for scheme_index, disease_id in enumerate(package.image_grading_scheme_ids, start=1)
+                    ],
+                    encounter_grading_schemes=[
+                        UploadProfileEncounterSetTypePackageEncounterScheme(
+                            disease_id=disease_id,
+                            display_order=scheme_index,
+                            active=True,
+                        )
+                        for scheme_index, disease_id in enumerate(package.encounter_grading_scheme_ids, start=1)
+                    ],
+                )
+                for index, package in enumerate(_packages_for_config(config), start=1)
+            ],
         )
         for config in sorted(encounter_set_configs.values(), key=lambda item: item.encounter_set_type_id)
     ]
@@ -536,8 +620,59 @@ def _normalize_encounter_set_configs(configs: list[EncounterSetProfileInput]) ->
             image_grading_scheme_ids=image_scheme_ids,
             default_image_grading_scheme_id=default_image_scheme_id,
             encounter_grading_scheme_id=config.encounter_grading_scheme_id,
+            grading_packages=_normalize_package_inputs(config.grading_packages or []),
         )
     return normalized
+
+
+def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -> list[EncounterSetGradingPackageInput]:
+    normalized: dict[str, EncounterSetGradingPackageInput] = {}
+    for index, package in enumerate(packages, start=1):
+        code = (package.code or package.name or f"package_{index}").strip().lower().replace(" ", "_")
+        name = (package.name or code).strip()
+        applicability = package.applicability or "always"
+        image_scheme_ids = sorted(set(package.image_grading_scheme_ids or []))
+        encounter_scheme_ids = sorted(set(package.encounter_grading_scheme_ids or []))
+        default_image_scheme_id = package.default_image_grading_scheme_id
+        if image_scheme_ids and default_image_scheme_id not in image_scheme_ids:
+            default_image_scheme_id = image_scheme_ids[0] if len(image_scheme_ids) == 1 else None
+        if not image_scheme_ids and not encounter_scheme_ids:
+            continue
+        normalized[code] = EncounterSetGradingPackageInput(
+            name=name,
+            code=code,
+            applicability=applicability,
+            image_grading_scheme_ids=image_scheme_ids,
+            encounter_grading_scheme_ids=encounter_scheme_ids,
+            default_image_grading_scheme_id=default_image_scheme_id,
+            image_scheme_auto_create_policies={
+                disease_id: (
+                    package.image_scheme_auto_create_policies or {}
+                ).get(disease_id, "always")
+                for disease_id in image_scheme_ids
+            },
+        )
+    return list(normalized.values())
+
+
+def _packages_for_config(config: EncounterSetProfileInput) -> list[EncounterSetGradingPackageInput]:
+    packages = list(config.grading_packages or [])
+    if packages:
+        return packages
+    encounter_ids = [config.encounter_grading_scheme_id] if config.encounter_grading_scheme_id else []
+    if not config.image_grading_scheme_ids and not encounter_ids:
+        return []
+    return [
+        EncounterSetGradingPackageInput(
+            name="Default",
+            code="default",
+            applicability="always",
+            image_grading_scheme_ids=list(config.image_grading_scheme_ids),
+            encounter_grading_scheme_ids=encounter_ids,
+            default_image_grading_scheme_id=config.default_image_grading_scheme_id,
+            image_scheme_auto_create_policies={disease_id: "always" for disease_id in config.image_grading_scheme_ids},
+        )
+    ]
 
 
 def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileInput]) -> str | None:
@@ -567,6 +702,20 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             return "Default image grading scheme must be one of the selected image grading schemes."
         disease_ids.update(config.image_grading_scheme_ids)
         disease_ids.add(config.encounter_grading_scheme_id)
+        for package in _packages_for_config(config):
+            if package.applicability not in {"always", "remidio_dr_report_present", "remidio_glaucoma_report_present", "manual_only", "disabled"}:
+                return "Unsupported EncounterSet grading package applicability."
+            if package.image_grading_scheme_ids and not package.default_image_grading_scheme_id:
+                return f"Select a default image grading scheme for package {package.name}."
+            if package.default_image_grading_scheme_id and package.default_image_grading_scheme_id not in package.image_grading_scheme_ids:
+                return f"Default image grading scheme must be selected in package {package.name}."
+            invalid_policies = sorted(
+                set((package.image_scheme_auto_create_policies or {}).values()) - IMAGE_SCHEME_AUTO_CREATE_POLICIES
+            )
+            if invalid_policies:
+                return f"Unsupported image auto-creation policy in package {package.name}."
+            disease_ids.update(package.image_grading_scheme_ids)
+            disease_ids.update(package.encounter_grading_scheme_ids)
 
     diseases = {row.id: row for row in db.execute(select(Disease).where(Disease.id.in_(disease_ids))).scalars().all()}
     if set(diseases) != disease_ids:
@@ -574,7 +723,11 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
     image_scope_errors = sorted(
         diseases[disease_id].name
         for config in configs.values()
-        for disease_id in config.image_grading_scheme_ids
+        for disease_id in set(config.image_grading_scheme_ids).union(
+            disease_id
+            for package in _packages_for_config(config)
+            for disease_id in package.image_grading_scheme_ids
+        )
         if diseases[disease_id].grading_scope != "image"
     )
     if image_scope_errors:
@@ -584,6 +737,14 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
         for config in configs.values()
         if diseases[config.encounter_grading_scheme_id].grading_scope != "encounter"
     )
+    package_encounter_scope_errors = sorted(
+        diseases[disease_id].name
+        for config in configs.values()
+        for package in _packages_for_config(config)
+        for disease_id in package.encounter_grading_scheme_ids
+        if diseases[disease_id].grading_scope != "encounter"
+    )
+    encounter_scope_errors.extend(package_encounter_scope_errors)
     if encounter_scope_errors:
         return "Encounter grading schemes must have encounter scope: " + ", ".join(encounter_scope_errors)
     return None

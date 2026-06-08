@@ -99,6 +99,10 @@ def _exclude_linked_state_mismatches(db, query, disease_id: int):
             GradingTask.patient_encounter_id.isnot(None),
             GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id,
         ),
+        and_(
+            GradingTask.encounter_set_image_id.isnot(None),
+            GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id,
+        ),
     )
 
     mismatch_filter = or_(
@@ -172,7 +176,8 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
                  and_(
                      or_(
                          and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
-                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id)
+                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id),
+                         and_(GradingTask.encounter_set_image_id != None, GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id),
                      ),
                      LinkedTask.disease_id.in_(linked_ids)
                  )
@@ -500,7 +505,8 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
                  and_(
                      or_(
                          and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
-                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id)
+                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id),
+                         and_(GradingTask.encounter_set_image_id != None, GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id),
                      ),
                      LinkedTask.disease_id.in_(linked_ids)
                  )
@@ -637,6 +643,10 @@ def _atomically_get_and_lock_linked_followup_task(
         and_(
             PrimaryTask.patient_encounter_id.isnot(None),
             PrimaryTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+        ),
+        and_(
+            PrimaryTask.encounter_set_image_id.isnot(None),
+            PrimaryTask.encounter_set_image_id == LinkedTask.encounter_set_image_id,
         ),
     )
 

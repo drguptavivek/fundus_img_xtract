@@ -186,6 +186,13 @@ def _user_has_grading_access_to_image(db, user, uuid: str) -> bool:
             .filter(DirectImageUpload.uuid == uuid)
             .all()
         )
+    if not tasks:
+        tasks = (
+            db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+            .join(EncounterSetImage, GradingTask.encounter_set_image_id == EncounterSetImage.id)
+            .filter(EncounterSetImage.uuid == uuid)
+            .all()
+        )
 
     return any(
         _user_has_grading_slot(db, user, lab_unit_id, disease_id)
@@ -532,7 +539,12 @@ def imgForGradingByUUID(uuid: str):
             direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
-        if encounter_result and direct_image:
+        encounter_set_query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
+        if not allow_grading_access:
+            encounter_set_query = _apply_lab_unit_scoping(encounter_set_query, PatientEncounters, current_user)
+        encounter_set_image = encounter_set_query.first()
+
+        if sum(1 for item in (encounter_result, direct_image, encounter_set_image) if item) > 1:
             flash(f"INTEGRITY ERROR: Two Images found with UUID: {uuid}", "danger")
             abort(404)
 
@@ -548,6 +560,9 @@ def imgForGradingByUUID(uuid: str):
                 return response
             flash(f"Error: Image not found with UUID: {uuid}", "danger")
             abort(404)
+
+        if encounter_set_image:
+            return _serve_encounter_set_final_image(encounter_set_image, uuid)
 
         flash(f"Error: Image not found with UUID: {uuid}", "danger")
         abort(404)
@@ -883,6 +898,20 @@ def _serve_encounter_set_image(img: EncounterSetImage, uuid: str):
         cache_control='no-cache, no-store, must-revalidate',
         add_no_cache_headers=True,
     )
+
+
+def _serve_encounter_set_final_image(img: EncounterSetImage, uuid: str):
+    if img.edited_filename:
+        image_path_str = str(BASE_DIR / img.folder_rel / img.edited_filename)
+        if os.path.exists(image_path_str):
+            return _build_image_response(
+                image_path_str,
+                img.edited_filename,
+                uuid,
+                cache_control='no-cache, no-store, must-revalidate',
+                add_no_cache_headers=True,
+            )
+    return _serve_encounter_set_image(img, uuid)
 
 def encounterSetImageByUUID(uuid: str):
     if not current_user or not current_user.is_authenticated:

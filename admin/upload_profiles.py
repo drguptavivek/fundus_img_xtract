@@ -31,7 +31,10 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
     UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
 )
 
 
@@ -88,6 +91,14 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease),
             )
             .order_by(UploadProfile.active.desc(), UploadProfile.name)
         )
@@ -117,6 +128,16 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.user),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.lab_unit),
                 selectinload(ProjectUploadProfile.remidio_api_bindings)

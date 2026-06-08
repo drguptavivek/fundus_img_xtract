@@ -18,7 +18,10 @@ from upload_profiles.models import (
     UploadProfileCamera,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
     UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
     UploadProfileKind,
 )
 
@@ -222,6 +225,18 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease),
+                selectinload(ProjectUploadProfileAssignment.project_profile)
+                .selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease),
             )
             .order_by(ProjectUploadProfile.project_id, ProjectUploadProfileAssignment.lab_unit_id, UploadProfile.name)
         )
@@ -619,6 +634,47 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
         (scheme for scheme in image_schemes if scheme["id"] == row.default_image_grading_scheme_id),
         next((scheme for scheme in image_schemes if scheme["is_default"]), image_schemes[0] if len(image_schemes) == 1 else None),
     )
+    grading_packages = [
+        {
+            "id": package.id,
+            "name": package.name,
+            "code": package.code,
+            "applicability": package.applicability,
+            "display_order": package.display_order,
+            "image_grading_schemes": [
+                {
+                    "id": scheme.disease_id,
+                    "name": scheme.disease.name if scheme.disease else None,
+                    "is_default": scheme.is_default,
+                    "auto_create_policy": scheme.auto_create_policy,
+                    "display_order": scheme.display_order,
+                }
+                for scheme in sorted(
+                    [scheme for scheme in package.image_grading_schemes if scheme.active],
+                    key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
+                )
+            ],
+            "encounter_grading_schemes": [
+                {
+                    "id": scheme.disease_id,
+                    "name": scheme.disease.name if scheme.disease else None,
+                    "display_order": scheme.display_order,
+                }
+                for scheme in sorted(
+                    [scheme for scheme in package.encounter_grading_schemes if scheme.active],
+                    key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
+                )
+            ],
+            "default_image_grading_scheme": {
+                "id": package.default_image_grading_scheme_id,
+                "name": package.default_image_grading_scheme.name if package.default_image_grading_scheme else None,
+            } if package.default_image_grading_scheme_id else None,
+        }
+        for package in sorted(
+            [package for package in row.grading_packages if package.active],
+            key=lambda item: (item.display_order, item.name, item.id),
+        )
+    ]
     return {
         "id": encounter_set_type.id,
         "mapping_id": row.id,
@@ -630,5 +686,6 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
             "id": row.encounter_grading_scheme_id,
             "name": row.encounter_grading_scheme.name if row.encounter_grading_scheme else None,
         },
+        "grading_packages": grading_packages,
         "asset_rules_json": encounter_set_type.asset_rules_json or {},
     }

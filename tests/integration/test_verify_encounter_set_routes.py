@@ -1,6 +1,6 @@
 import pytest
 import uuid
-from models import PatientEncounters, EncounterSetImage, GradingTask, Project
+from models import EncounterSetGradingPackage, PatientEncounters, EncounterSetImage, GradingTask, Project
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
@@ -389,6 +389,55 @@ def test_verify_encounter_set_finalize_async_close_redirects_to_browser(
         f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
         f"&month=2023-10&date=2023-10-27&encounter_id={encounter_set_data['encounter'].id}"
     )
+    package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(EncounterSetGradingPackage.patient_encounter_id == encounter_set_data['encounter'].id)
+        .one()
+    )
+    assert package.code == "default"
+    tasks = (
+        db_session.query(GradingTask)
+        .filter(GradingTask.encounter_set_package_id == package.id)
+        .all()
+    )
+    assert {task.grading_target_level for task in tasks} == {"encounter", "image"}
+    assert sum(1 for task in tasks if task.encounter_set_image_id == encounter_set_data['image'].id) == 1
+
+
+def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targets(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Verification-created package targets skip images marked ungradable."""
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="admin_verify_finalize_ungradable",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    auth_client = auth_client_factory(user)
+    encounter_set_data['image'].is_reviewed = True
+    encounter_set_data['image'].is_not_gradable = True
+    encounter_set_data['image'].not_gradable_reason = "Poor focus"
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 200
+    package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(EncounterSetGradingPackage.patient_encounter_id == encounter_set_data['encounter'].id)
+        .one()
+    )
+    tasks = (
+        db_session.query(GradingTask)
+        .filter(GradingTask.encounter_set_package_id == package.id)
+        .all()
+    )
+    assert {task.grading_target_level for task in tasks} == {"encounter"}
+    assert all(task.encounter_set_image_id is None for task in tasks)
 
 
 def test_verify_encounter_set_exclude_async_redirects_to_browser_without_tasks(

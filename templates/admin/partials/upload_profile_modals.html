@@ -337,7 +337,7 @@
             </div>
             <span class="badge text-bg-warning" data-upload-profile-est-status>Needs EncounterSetType</span>
           </div>
-          <label class="form-label">Allowed EncounterSetTypes And Grading <span class="text-danger" data-upload-profile-est-required>*</span></label>
+          <label class="form-label">EncounterSetType Package Policy <span class="text-danger" data-upload-profile-est-required>*</span></label>
           <div class="row g-2">
             {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
             <div class="col-12"
@@ -359,37 +359,9 @@
                   <span class="badge text-bg-light border">{{ (encounter_set_type.metadata_schema_json.get('fields', []) if encounter_set_type.metadata_schema_json else [])|length }} metadata fields</span>
                 </div>
 
-                <div class="row g-2" data-upload-profile-est-config>
-                  <div class="col-lg-5">
-                    <label class="form-label small mb-1">Image grading schemes <span class="text-danger">*</span></label>
-                    <div class="border rounded p-2" style="max-height: 12rem; overflow: auto;">
-                      {% for disease in diseases if disease.grading_scope == "image" %}
-                      <div class="form-check mb-1">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
-                               value="{{ disease.id }}"
-                               id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
-                               data-upload-profile-est-image-scheme>
-                        <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
-                      </div>
-                      {% else %}
-                      <div class="text-muted small">No image-scoped grading schemes configured.</div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                  <div class="col-lg-3">
-                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_default_image_scheme">Default image scheme <span class="text-danger">*</span></label>
-                    <select class="form-select form-select-sm"
-                            id="encounter_set_type_{{ encounter_set_type.id }}_default_image_scheme"
-                            name="encounter_set_type_{{ encounter_set_type.id }}_default_image_grading_scheme_id"
-                            data-upload-profile-est-default-image-scheme>
-                      <option value="">Select image schemes first</option>
-                    </select>
-                    <div class="form-text">Used as the default when upload or verification does not choose a more specific image scheme.</div>
-                  </div>
+                <div class="row g-3" data-upload-profile-est-config>
                   <div class="col-lg-4">
-                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme">Encounter grading scheme <span class="text-danger">*</span></label>
+                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme">EncounterSet grading scheme <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm"
                             id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
                             name="encounter_set_type_{{ encounter_set_type.id }}_encounter_grading_scheme_id"
@@ -399,6 +371,51 @@
                       <option value="{{ disease.id }}">{{ disease.name }}</option>
                       {% endfor %}
                     </select>
+                  </div>
+                  <div class="col-lg-8">
+                    <label class="form-label small mb-1">Image-level grading schemes and auto-creation <span class="text-danger">*</span></label>
+                    <div class="border rounded p-2" style="max-height: 16rem; overflow: auto;">
+                      {% for disease in diseases if disease.grading_scope == "image" %}
+                      {% set disease_name_lower = disease.name|lower %}
+                      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom py-2" data-upload-profile-est-image-row>
+                        <div class="form-check mb-0">
+                          <input class="form-check-input"
+                                 type="checkbox"
+                                 name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
+                                 value="{{ disease.id }}"
+                                 id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
+                                 data-upload-profile-est-image-scheme>
+                          <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
+                        </div>
+                        {% if "glaucoma" in disease_name_lower or disease.name == "DR" or disease_name_lower == "dr" %}
+                        <select class="form-select form-select-sm w-auto"
+                                data-upload-profile-image-auto-policy
+                                data-scheme-id="{{ disease.id }}"
+                                data-scheme-name="{{ disease.name }}">
+                          <option value="never">Never</option>
+                          {% if "glaucoma" in disease_name_lower %}
+                          <option value="remidio_glaucoma_report_present">If Remidio glaucoma report detected</option>
+                          {% elif disease.name == "DR" or disease_name_lower == "dr" %}
+                          <option value="remidio_dr_report_present">If Remidio DR report detected</option>
+                          {% endif %}
+                          <option value="always" selected>Always</option>
+                        </select>
+                        {% else %}
+                        <span class="small text-muted" data-upload-profile-image-auto-static>Checked schemes are always created</span>
+                        {% endif %}
+                      </div>
+                      {% else %}
+                      <div class="text-muted small">No image-scoped grading schemes configured.</div>
+                      {% endfor %}
+                    </div>
+                    <input type="hidden"
+                           name="encounter_set_type_{{ encounter_set_type.id }}_default_image_grading_scheme_id"
+                           data-upload-profile-est-default-image-scheme>
+                    <textarea class="d-none"
+                              id="encounter_set_type_{{ encounter_set_type.id }}_grading_packages_json"
+                              name="encounter_set_type_{{ encounter_set_type.id }}_grading_packages_json"
+                              data-upload-profile-est-grading-packages-json></textarea>
+                    <div class="alert alert-warning py-2 px-3 mt-2 mb-0 d-none" role="alert" data-upload-profile-est-package-error></div>
                   </div>
                 </div>
               </div>

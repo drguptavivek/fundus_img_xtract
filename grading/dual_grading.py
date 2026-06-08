@@ -324,6 +324,15 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             if slot_type not in ['resident', 'resident2', 'arbitrator']:
                 flash("Invalid slot type.", "danger")
                 return redirect(url_for("grading.index"))
+
+            if task.encounter_set_package_id and task.encounter_set_package:
+                return redirect(
+                    url_for(
+                        "grading.encounter_set_package_grading",
+                        package_uuid=task.encounter_set_package.uuid,
+                        slot_type=slot_type,
+                    )
+                )
             
             linked_followup = request.args.get("linked_followup", "").lower() == "true"
             linked_followup_disease_id = request.args.get("linked_disease_id", type=int)

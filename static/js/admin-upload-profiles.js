@@ -193,7 +193,7 @@
       const rowEnabled = enabled && input.checked;
       row.classList.toggle('border-primary', rowEnabled);
       row.classList.toggle('bg-primary-subtle', rowEnabled);
-      row.querySelectorAll('[data-upload-profile-est-config] input, [data-upload-profile-est-config] select').forEach(function (field) {
+      row.querySelectorAll('[data-upload-profile-est-config] input, [data-upload-profile-est-config] select, [data-upload-profile-est-config] textarea').forEach(function (field) {
         field.disabled = !rowEnabled;
         if (!rowEnabled) {
           if (field.type === 'checkbox' || field.type === 'radio') {
@@ -204,6 +204,8 @@
         }
       });
       syncEncounterSetDefaultImageScheme(row);
+      syncImagePolicyControls(row);
+      renderEncounterSetPackageBuilder(row);
     });
   }
 
@@ -232,8 +234,8 @@
       return false;
     }
     return selectedRows.every(function (row) {
+      syncSinglePackageField(row);
       return row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)').length > 0
-        && Boolean(row.querySelector('[data-upload-profile-est-default-image-scheme]')?.value)
         && Boolean(row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value);
     });
   }
@@ -241,6 +243,11 @@
   function syncEncounterSetDefaultImageScheme(row) {
     const select = row.querySelector('[data-upload-profile-est-default-image-scheme]');
     if (!select) {
+      return;
+    }
+    if (select.tagName === 'INPUT') {
+      const firstChoice = row.querySelector('[data-upload-profile-est-image-scheme]:checked:not(:disabled)');
+      select.value = firstChoice ? firstChoice.value : '';
       return;
     }
     const previous = select.value || select.dataset.pendingValue || '';
@@ -267,6 +274,243 @@
       select.value = '';
     }
     select.dataset.pendingValue = '';
+  }
+
+  function slugifyPackageCode(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80);
+  }
+
+  function schemeChoices(row, selector) {
+    return Array.from(row.querySelectorAll(selector)).map(function (input) {
+      const label = row.querySelector('label[for="' + input.id + '"]');
+      return {
+        id: String(input.value),
+        name: label ? label.textContent.trim() : String(input.value),
+        enabled: Boolean(input.checked && !input.disabled)
+      };
+    });
+  }
+
+  function selectedImageChoices(row) {
+    return schemeChoices(row, '[data-upload-profile-est-image-scheme]').filter(function (choice) {
+      return choice.enabled;
+    });
+  }
+
+  function encounterChoices(row) {
+    const select = row.querySelector('[data-upload-profile-est-encounter-scheme]');
+    if (!select) {
+      return [];
+    }
+    return Array.from(select.options).filter(function (option) {
+      return option.value;
+    }).map(function (option) {
+      return { id: String(option.value), name: option.textContent.trim(), enabled: true };
+    });
+  }
+
+  function normalizedPackage(pkg, index) {
+    const imageIds = Array.isArray(pkg.image_grading_scheme_ids) ? pkg.image_grading_scheme_ids.map(String) : [];
+    const encounterIds = Array.isArray(pkg.encounter_grading_scheme_ids) ? pkg.encounter_grading_scheme_ids.map(String) : [];
+    const policies = pkg.image_scheme_auto_create_policies || {};
+    const name = String(pkg.name || pkg.code || 'Package ' + (index + 1)).trim();
+    return {
+      name: name,
+      code: String(pkg.code || slugifyPackageCode(name) || 'package_' + (index + 1)).trim(),
+      applicability: pkg.applicability || 'always',
+      image_grading_scheme_ids: imageIds,
+      default_image_grading_scheme_id: pkg.default_image_grading_scheme_id ? String(pkg.default_image_grading_scheme_id) : (imageIds[0] || ''),
+      encounter_grading_scheme_ids: encounterIds,
+      image_scheme_auto_create_policies: imageIds.reduce(function (acc, diseaseId) {
+        acc[diseaseId] = policies[diseaseId] || policies[Number(diseaseId)] || 'always';
+        return acc;
+      }, {}),
+      display_order: Number.isFinite(Number(pkg.display_order)) ? Number(pkg.display_order) : index,
+      active: pkg.active !== false
+    };
+  }
+
+  function packagesFromField(row) {
+    const field = row.querySelector('[data-upload-profile-est-grading-packages-json]');
+    const error = row.querySelector('[data-upload-profile-est-package-error]');
+    if (!field || !field.value.trim()) {
+      if (error) {
+        error.classList.add('d-none');
+        error.textContent = '';
+      }
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(field.value);
+      if (!Array.isArray(parsed)) {
+        throw new Error('Package JSON must be an array.');
+      }
+      if (error) {
+        error.classList.add('d-none');
+        error.textContent = '';
+      }
+      return parsed.map(normalizedPackage);
+    } catch (err) {
+      if (error) {
+        error.classList.remove('d-none');
+        error.textContent = 'Package JSON could not be parsed. Fix the raw JSON or rebuild the package cards.';
+      }
+      return [];
+    }
+  }
+
+  function writePackagesToField(row, packages) {
+    const field = row.querySelector('[data-upload-profile-est-grading-packages-json]');
+    if (!field) {
+      return;
+    }
+    const cleaned = packages.map(function (pkg, index) {
+      const normalized = normalizedPackage(pkg, index);
+      return {
+        name: normalized.name,
+        code: normalized.code,
+        applicability: normalized.applicability,
+        image_grading_scheme_ids: normalized.image_grading_scheme_ids.map(Number).filter(Number.isFinite),
+        default_image_grading_scheme_id: normalized.default_image_grading_scheme_id ? Number(normalized.default_image_grading_scheme_id) : null,
+        encounter_grading_scheme_ids: normalized.encounter_grading_scheme_ids.map(Number).filter(Number.isFinite),
+        image_scheme_auto_create_policies: normalized.image_scheme_auto_create_policies,
+        display_order: index,
+        active: normalized.active
+      };
+    });
+    field.value = cleaned.length ? JSON.stringify(cleaned, null, 2) : '';
+  }
+
+  function packagesFromCards(row) {
+    return Array.from(row.querySelectorAll('[data-upload-profile-est-package-card]')).map(function (card, index) {
+      const imageIds = Array.from(card.querySelectorAll('[data-package-image-scheme]:checked')).map(function (input) {
+        return input.value;
+      });
+      const encounterIds = Array.from(card.querySelectorAll('[data-package-encounter-scheme]:checked')).map(function (input) {
+        return input.value;
+      });
+      return {
+        name: card.querySelector('[data-package-name]')?.value || 'Package ' + (index + 1),
+        code: card.querySelector('[data-package-code]')?.value || '',
+        applicability: card.querySelector('[data-package-applicability]')?.value || 'always',
+        image_grading_scheme_ids: imageIds,
+        default_image_grading_scheme_id: card.querySelector('[data-package-default-image]')?.value || '',
+        encounter_grading_scheme_ids: encounterIds,
+        display_order: index,
+        active: Boolean(card.querySelector('[data-package-active]')?.checked)
+      };
+    });
+  }
+
+  function makeCheckbox(name, choice, checked, attrName) {
+    const wrap = document.createElement('div');
+    wrap.className = 'form-check form-check-inline mb-1';
+    const input = document.createElement('input');
+    input.className = 'form-check-input';
+    input.type = 'checkbox';
+    input.value = choice.id;
+    input.checked = checked;
+    input.setAttribute(attrName, '');
+    const id = name + '_' + choice.id + '_' + Math.random().toString(36).slice(2);
+    input.id = id;
+    const label = document.createElement('label');
+    label.className = 'form-check-label small';
+    label.setAttribute('for', id);
+    label.textContent = choice.name;
+    wrap.appendChild(input);
+    wrap.appendChild(label);
+    return wrap;
+  }
+
+  function renderEncounterSetPackageBuilder(row) {
+    applySinglePackageField(row);
+    syncSinglePackageField(row);
+  }
+
+  function applySinglePackageField(row) {
+    const field = row.querySelector('[data-upload-profile-est-grading-packages-json]');
+    const signature = field ? field.value : '';
+    if (!field || !signature || row.dataset.uploadProfilePackageApplied === signature) {
+      return;
+    }
+    const packages = packagesFromField(row);
+    const pkg = packages[0];
+    if (!pkg) {
+      return;
+    }
+    const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
+    if (encounterSelect && pkg.encounter_grading_scheme_ids.length) {
+      encounterSelect.value = pkg.encounter_grading_scheme_ids[0];
+    }
+    const imageSet = new Set(pkg.image_grading_scheme_ids);
+    row.querySelectorAll('[data-upload-profile-est-image-scheme]').forEach(function (input) {
+      input.checked = imageSet.has(String(input.value));
+    });
+    row.querySelectorAll('[data-upload-profile-image-auto-policy]').forEach(function (select) {
+      const policy = pkg.image_scheme_auto_create_policies[String(select.dataset.schemeId)];
+      if (policy) {
+        select.value = policy;
+      }
+    });
+    row.dataset.uploadProfilePackageApplied = signature;
+  }
+
+  function syncSinglePackageField(row) {
+    const images = selectedImageChoices(row);
+    const encounter = row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value || '';
+    const policies = {};
+    images.forEach(function (choice) {
+      const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(choice.id) + '"]');
+      policies[choice.id] = policy ? policy.value : 'always';
+    });
+    const defaultField = row.querySelector('[data-upload-profile-est-default-image-scheme]');
+    if (defaultField) {
+      defaultField.value = images[0]?.id || '';
+    }
+    writePackagesToField(row, [{
+      name: 'EncounterSet Package',
+      code: 'encounter_set',
+      applicability: 'always',
+      image_grading_scheme_ids: images.map(function (choice) { return choice.id; }),
+      default_image_grading_scheme_id: images[0]?.id || '',
+      encounter_grading_scheme_ids: encounter ? [encounter] : [],
+      image_scheme_auto_create_policies: policies,
+      active: true
+    }]);
+    syncImagePolicyControls(row);
+  }
+
+  function syncImagePolicyControls(row) {
+    row.querySelectorAll('[data-upload-profile-est-image-row]').forEach(function (imageRow) {
+      const checkbox = imageRow.querySelector('[data-upload-profile-est-image-scheme]');
+      const policy = imageRow.querySelector('[data-upload-profile-image-auto-policy]');
+      const staticText = imageRow.querySelector('[data-upload-profile-image-auto-static]');
+      const enabled = Boolean(checkbox && checkbox.checked && !checkbox.disabled);
+      if (policy) {
+        policy.disabled = !enabled;
+        policy.classList.toggle('opacity-50', !enabled);
+      }
+      if (staticText) {
+        staticText.classList.toggle('opacity-50', !enabled);
+      }
+    });
+  }
+
+  function syncPackageCardsToFields(form) {
+    form.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
+      syncSinglePackageField(row);
+    });
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value || '');
+    return div.innerHTML;
   }
 
   function syncModeCards(form) {
@@ -356,6 +600,20 @@
       syncForm(form);
       if (!form.dataset.uploadProfileBound) {
         form.addEventListener('change', function (event) {
+          const packageRow = event.target.closest('[data-upload-profile-est-option]');
+          if (packageRow && event.target.closest('[data-upload-profile-est-package-card]')) {
+            const card = event.target.closest('[data-upload-profile-est-package-card]');
+            if (event.target.matches('[data-package-name]') && !card.querySelector('[data-package-code]')?.value) {
+              card.querySelector('[data-package-code]').value = slugifyPackageCode(event.target.value);
+            }
+            if (event.target.matches('[data-package-image-scheme]')) {
+              refreshPackageDefaultSelect(card);
+            }
+            writePackagesToField(packageRow, packagesFromCards(packageRow));
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-est-grading-packages-json]')) {
+            renderEncounterSetPackageBuilder(packageRow);
+          }
           if (
             event.target.matches('[name="allow_mydriatic"]') ||
             event.target.matches('[name="allow_non_mydriatic"]') ||
@@ -365,9 +623,76 @@
           }
           syncForm(form);
         });
+        form.addEventListener('submit', function () {
+          syncPackageCardsToFields(form);
+        });
         form.dataset.uploadProfileBound = 'true';
       }
     });
+  }
+
+  function handlePackageBuilderClick(event) {
+    const addButton = event.target.closest('[data-upload-profile-est-package-add]');
+    const presetButton = event.target.closest('[data-upload-profile-est-package-preset]');
+    const removeButton = event.target.closest('[data-upload-profile-est-package-remove]');
+    if (!addButton && !presetButton && !removeButton) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const button = addButton || presetButton || removeButton;
+    const row = button.closest('[data-upload-profile-est-option]');
+    const form = button.closest('[data-upload-profile-editor]');
+    if (!row || !form) {
+      return;
+    }
+    if (addButton) {
+      addPackage(row);
+    } else if (presetButton) {
+      applyDrGlaucomaPreset(row);
+    } else if (removeButton) {
+      const card = removeButton.closest('[data-upload-profile-est-package-card]');
+      if (card) {
+        card.remove();
+        writePackagesToField(row, packagesFromCards(row));
+        renderEncounterSetPackageBuilder(row);
+      }
+    }
+    syncForm(form);
+  }
+
+  function handlePackageBuilderInput(event) {
+    const card = event.target.closest('[data-upload-profile-est-package-card]');
+    if (!card) {
+      return;
+    }
+    const row = card.closest('[data-upload-profile-est-option]');
+    if (!row) {
+      return;
+    }
+    if (event.target.matches('[data-package-name]') && !card.querySelector('[data-package-code]')?.value) {
+      card.querySelector('[data-package-code]').value = slugifyPackageCode(event.target.value);
+    }
+    if (event.target.matches('[data-package-image-scheme]')) {
+      refreshPackageDefaultSelect(card);
+    }
+    writePackagesToField(row, packagesFromCards(row));
+    const form = row.closest('[data-upload-profile-editor]');
+    if (form) {
+      syncModeCards(form);
+    }
+  }
+
+  function bindPackageBuilderEvents(root) {
+    const doc = root.ownerDocument || document;
+    const marker = doc.documentElement;
+    if (marker.dataset.uploadProfilePackageBuilderBound) {
+      return;
+    }
+    doc.addEventListener('click', handlePackageBuilderClick);
+    doc.addEventListener('input', handlePackageBuilderInput);
+    doc.addEventListener('change', handlePackageBuilderInput);
+    marker.dataset.uploadProfilePackageBuilderBound = 'true';
   }
 
   function splitIds(value) {
@@ -401,12 +726,16 @@
     if (!list.length) {
       return '-';
     }
-    return list.map(function (target) {
+      return list.map(function (target) {
       const name = target.encounter_set_type_name || 'EncounterSetType';
+      const packages = Array.isArray(target.grading_packages) && target.grading_packages.length
+        ? '; packages ' + target.grading_packages.map(function (pkg) { return pkg.name || pkg.code; }).filter(Boolean).join(', ')
+        : '';
       return name
         + ': image ' + displayValue(target.image_grading_scheme_names)
         + '; default ' + (target.default_image_grading_scheme_name || '-')
-        + '; encounter ' + (target.encounter_grading_scheme_name || '-');
+        + '; encounter ' + (target.encounter_grading_scheme_name || '-')
+        + packages;
     }).join(' | ');
   }
 
@@ -474,6 +803,14 @@
         + ' · Encounter: ' + (config.encounter_grading_scheme_name || '-');
       card.appendChild(title);
       card.appendChild(details);
+      if (Array.isArray(config.grading_packages) && config.grading_packages.length) {
+        const packages = document.createElement('div');
+        packages.className = 'small mt-1';
+        packages.textContent = 'Packages: ' + config.grading_packages.map(function (pkg) {
+          return (pkg.name || pkg.code || 'Package') + ' (' + (pkg.applicability || 'always') + ')';
+        }).join(', ');
+        card.appendChild(packages);
+      }
       container.appendChild(card);
     });
   }
@@ -496,6 +833,12 @@
       const defaultSelect = row.querySelector('[data-upload-profile-est-default-image-scheme]');
       if (defaultSelect) {
         defaultSelect.dataset.pendingValue = config.default_image_grading_scheme_id ? String(config.default_image_grading_scheme_id) : '';
+      }
+      const packagesField = row.querySelector('[data-upload-profile-est-grading-packages-json]');
+      if (packagesField) {
+        packagesField.value = Array.isArray(config.grading_packages) && config.grading_packages.length
+          ? JSON.stringify(config.grading_packages, null, 2)
+          : '';
       }
     });
   }
@@ -762,6 +1105,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    bindPackageBuilderEvents(document);
     initEditors(document);
     initProjectProfileLabFilters(document);
     bindProfileNavigation(document);
@@ -780,6 +1124,7 @@
   });
 
   document.body.addEventListener('htmx:afterSwap', function (event) {
+    bindPackageBuilderEvents(document);
     initProjectProfileLabFilters(event.detail.target || document);
     bindProfileNavigation(event.detail.target || document);
     applyUrlState(false);
@@ -795,6 +1140,7 @@
   document.body.addEventListener('htmx:beforeRequest', function (event) {
     const form = event.detail.elt.closest && event.detail.elt.closest('[data-upload-profile-editor]');
     if (form) {
+      syncPackageCardsToFields(form);
       syncForm(form);
     }
   });

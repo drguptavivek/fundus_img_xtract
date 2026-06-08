@@ -144,7 +144,7 @@ The application maintains extensive audit trails across all critical operations:
 
 #### **EncounterSet Uploads**
 - **Bundle Management**: Upload and manage encounter sets as a cohesive unit
-- **Task Creation**: Uses EncounterSetType/profile mappings for image-scoped clinical-image grading schemes and encounter-scoped whole-set grading schemes
+- **Task Creation**: Uses EncounterSetType/profile mappings and optional grading package definitions for image-scoped and encounter-scoped targets
 - **Workflow Integration**: Supports downstream verification and grading flows
 - **3x3 Grid View**: Review encounter images in a 3x3 grid for rapid visual screening
 - **Spatial Positioning**: Images are ordered by defined grid positions (1-9) for consistent review
@@ -216,6 +216,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSetTypes API](docs/API/encounter-set-types/README.md) - Reusable encounter-set type CRUD and metadata-schema contract
 - [Upload Metadata Field Definitions API](docs/API/upload-metadata/README.md) - Standalone metadata field masters reusable across upload workflows
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
+- [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Policy and implementation plan for package-based EncounterSet grading after verification
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

@@ -27,7 +27,7 @@
           data-json-api-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=scheme.id) if is_edit else url_for('admin.grading_schemes_admin') }}">
       {{ csrf_field() }}
       <div class="row g-3 align-items-end">
-        <div class="{{ 'col-lg-3' if is_edit else 'col-lg-6' }}">
+        <div class="{{ 'col-lg-3' if is_edit else 'col-lg-4' }}">
           <label class="form-label" for="grading-scheme-name">Scheme Name *</label>
           <input class="form-control"
                  id="grading-scheme-name"
@@ -46,8 +46,25 @@
             <option value="encounter" {% if scheme.grading_scope == "encounter" %}selected{% endif %}>Encounter</option>
           </select>
         </div>
+        <div class="{{ 'col-lg-2' if is_edit else 'col-lg-3' }}">
+          <label class="form-label" for="grading-scheme-remidio-ocr">
+            Remidio OCR Link
+            <i class="fa-solid fa-circle-info text-muted ms-1"
+               data-bs-toggle="tooltip"
+               title="Only image schemes linked here can use Remidio report-detected auto-creation in EncounterSet package configuration."></i>
+          </label>
+          <select class="form-select"
+                  id="grading-scheme-remidio-ocr"
+                  name="remidio_ocr_linkage"
+                  data-remidio-ocr-linkage-select>
+            <option value="none" {% if (scheme.remidio_ocr_linkage or 'none') == "none" %}selected{% endif %}>None</option>
+            <option value="dr" {% if scheme.remidio_ocr_linkage == "dr" %}selected{% endif %}>Remidio DR report</option>
+            <option value="glaucoma" {% if scheme.remidio_ocr_linkage == "glaucoma" %}selected{% endif %}>Remidio glaucoma report</option>
+          </select>
+          <div class="form-text">Encounter-scoped schemes save this as None.</div>
+        </div>
         {% if is_edit %}
-        <div class="col-lg-5">
+        <div class="col-lg-3">
           <label class="form-label" for="grading-scheme-parent">
             Parent Scheme for Linked Grading
             <i class="fa-solid fa-circle-info text-muted ms-1"
@@ -62,7 +79,7 @@
           </select>
         </div>
         {% endif %}
-        <div class="{{ 'col-lg-2' if is_edit else 'col-lg-3' }}">
+        <div class="{{ 'col-lg-2' if is_edit else 'col-lg-2' }}">
           <button class="btn btn-primary w-100" type="submit">{{ "Save Changes" if is_edit else "Create Scheme" }}</button>
         </div>
       </div>

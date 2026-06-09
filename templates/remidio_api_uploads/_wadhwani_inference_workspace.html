@@ -1,0 +1,153 @@
+{% from "_forms.html" import csrf_field %}
+
+<form method="post" action="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_run') }}">
+  {{ csrf_field() }}
+  <input type="hidden" name="project_id" value="{{ filters.project_id or '' }}">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+    <div class="small text-muted">
+      {{ filter_stats.encounter_count }} EncounterSets · {{ filter_stats.image_count }} images match filters.
+      <span class="ms-2">
+        Selected for queue:
+        <span class="fw-semibold" data-selected-encounter-count>0</span> EncounterSets ·
+        <span class="fw-semibold" data-selected-image-count>0</span> images
+      </span>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-primary" type="button" data-select-all-visible-images>
+        Select all visible
+      </button>
+      <button class="btn btn-primary" type="submit" {% if not linked_integration %}disabled{% endif %}>
+        Queue selected images
+      </button>
+      <span class="badge text-bg-light border align-self-center">Max {{ max_encounter_sets_per_batch }} EncounterSets</span>
+    </div>
+  </div>
+
+  {% if not encounters %}
+  <div class="card shadow-sm">
+    <div class="card-body text-muted">No EncounterSet images match these filters.</div>
+  </div>
+  {% endif %}
+
+  <div class="vstack gap-3">
+    {% for encounter in encounters %}
+    <section class="card shadow-sm">
+      <div class="card-header d-flex flex-column flex-xl-row justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold">EncounterSet {{ encounter.uuid }}</div>
+          <div class="small text-muted">
+            Patient {{ encounter.patient_id or '-' }} · {{ encounter.capture_date or '-' }} · {{ encounter.lab_unit_name or '-' }}
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-primary" type="button" data-select-encounter-images> Select all visible images</button>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id, encounter_id=encounter.id) }}">Open in Browser</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          {% if encounter.ocr %}
+          <div class="border rounded p-2 bg-body-tertiary small">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+              <span class="fw-semibold">Remidio Glaucoma OCR</span>
+              <span class="badge text-bg-light border">{{ encounter.ocr.status or 'status unknown' }}</span>
+              {% if encounter.ocr.attachment_filename %}
+              <span class="text-muted">{{ encounter.ocr.attachment_filename }}</span>
+              {% endif %}
+            </div>
+            <div>{{ encounter.ocr.result or '-' }}</div>
+            {% if encounter.ocr.qualitative_result %}
+            <div class="text-muted">{{ encounter.ocr.qualitative_result }}</div>
+            {% endif %}
+            {% if encounter.ocr.vcdr_right or encounter.ocr.vcdr_left %}
+            <div class="text-muted">VCDR OD {{ encounter.ocr.vcdr_right or '-' }} · OS {{ encounter.ocr.vcdr_left or '-' }}</div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="small text-muted">No glaucoma OCR report detected for this EncounterSet.</div>
+          {% endif %}
+        </div>
+
+        <div class="encounter-wadhwani-grid">
+          {% for image in encounter.images %}
+          {% set status = image.status %}
+          {% set state = status.state or 'not_requested' %}
+          <div class="encounter-wadhwani-tile border rounded overflow-hidden">
+            <div class="ratio ratio-1x1 bg-body-tertiary">
+              <img class="w-100 h-100 object-fit-cover"
+                   loading="lazy"
+                   decoding="async"
+                   src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
+                   alt="Image {{ image.position }}">
+            </div>
+            <div class="p-2 small">
+              <div class="form-check border-bottom pb-2 mb-2">
+                <input class="form-check-input"
+                       type="checkbox"
+                       id="queue_image_{{ image.id }}"
+                       name="selected_image_ids"
+                       value="{{ image.id }}"
+                       data-encounter-id="{{ encounter.id }}"
+                       {% if state in ['pending', 'running'] %}disabled{% endif %}>
+                <label class="form-check-label fw-semibold" for="queue_image_{{ image.id }}">
+                  Queue this image
+                </label>
+              </div>
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">Image {{ image.position }}</span>
+                <span class="badge text-bg-{{ 'success' if state == 'success' else 'danger' if state == 'failed' else 'warning' if state in ['pending', 'running'] else 'secondary' }}">
+                  {{ state|replace('_', ' ') }}
+                </span>
+              </div>
+              <div class="text-muted text-truncate">{{ image.laterality or '-' }}{% if image.focus %} · {{ image.focus }}{% endif %}</div>
+              <div class="text-muted text-truncate">{{ image.camera_name or '-' }}</div>
+              <div class="d-flex flex-wrap gap-1 mt-1">
+                {% if image.variant %}<span class="badge text-bg-light border">{{ image.variant }}</span>{% endif %}
+                {% if image.quality %}<span class="badge text-bg-light border">{{ image.quality }}</span>{% endif %}
+                {% if state == 'failed' %}<span class="badge text-bg-danger">Retry selectable</span>{% endif %}
+              </div>
+              <div class="border-top mt-2 pt-2">
+                {% if status.grade_name or status.prediction or status.predicted_class_name or status.probability %}
+                <div class="fw-semibold">{{ status.grade_name or status.prediction or '-' }}</div>
+                <div class="text-muted">{{ status.predicted_class_name or '-' }}</div>
+                <div>P={{ status.probability or status.model_score or status.confidence or '-' }}</div>
+                {% if status.run_id %}<div class="text-muted">Run {{ status.run_id }}</div>{% endif %}
+                {% else %}
+                <div class="text-muted">No Wadhwani result yet.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <button class="btn btn-outline-secondary"
+            type="button"
+            data-wadhwani-page="{{ pagination.prev_page }}"
+            {% if not pagination.has_prev %}disabled{% endif %}
+            hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+            hx-include="#wadhwaniEncounterSetFilters"
+            hx-vals='{"page":"{{ pagination.prev_page }}"}'
+            hx-target="#wadhwaniEncounterSetWorkspace"
+            hx-swap="innerHTML">
+      Previous
+    </button>
+    <span class="small text-muted">Page {{ pagination.page }} · {{ pagination.page_size }} EncounterSets per page</span>
+    <button class="btn btn-outline-secondary"
+            type="button"
+            data-wadhwani-page="{{ pagination.next_page }}"
+            {% if not pagination.has_next %}disabled{% endif %}
+            hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+            hx-include="#wadhwaniEncounterSetFilters"
+            hx-vals='{"page":"{{ pagination.next_page }}"}'
+            hx-target="#wadhwaniEncounterSetWorkspace"
+            hx-swap="innerHTML">
+      Next
+    </button>
+  </div>
+</form>

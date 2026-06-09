@@ -207,6 +207,38 @@
       syncImagePolicyControls(row);
       renderEncounterSetPackageBuilder(row);
     });
+    syncEncounterSetAiPolicies(form);
+  }
+
+  function selectedEncounterSetImageSchemeIds(form) {
+    const ids = new Set();
+    form.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
+      const toggle = row.querySelector('[data-upload-profile-est-toggle]');
+      if (!toggle || !toggle.checked || toggle.disabled) {
+        return;
+      }
+      row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)').forEach(function (input) {
+        ids.add(String(input.value));
+      });
+    });
+    return ids;
+  }
+
+  function syncEncounterSetAiPolicies(form) {
+    const enabled = isKindEnabled(form, 'encounter_set');
+    const selectedImageSchemeIds = selectedEncounterSetImageSchemeIds(form);
+    form.querySelectorAll('[data-upload-profile-encounter-ai-row]').forEach(function (row) {
+      const select = row.querySelector('[data-upload-profile-encounter-ai-policy]');
+      const diseaseId = String(row.dataset.diseaseId || '');
+      const rowEnabled = enabled && selectedImageSchemeIds.has(diseaseId);
+      row.classList.toggle('opacity-50', !rowEnabled);
+      if (select) {
+        select.disabled = !rowEnabled;
+        if (!rowEnabled) {
+          select.value = '';
+        }
+      }
+    });
   }
 
   function clinicalComplete(form) {
@@ -704,7 +736,30 @@
   function setCheckedValues(form, name, values) {
     const selected = new Set(values.map(String));
     form.querySelectorAll('[name="' + name + '"]').forEach(function (input) {
-      input.checked = selected.has(String(input.value));
+      if (input.tagName === 'SELECT') {
+        input.value = selected.has(String(input.value)) ? input.value : '';
+      } else {
+        input.checked = selected.has(String(input.value));
+      }
+    });
+  }
+
+  function setAiWorkflowValues(form, values) {
+    const selected = new Set(values.map(String));
+    function selectedHasWorkflowPrefix(value) {
+      return Array.from(selected).some(function (item) {
+        return item === value || item.startsWith(value + ':');
+      });
+    }
+    form.querySelectorAll('[name="ai_workflows"]').forEach(function (input) {
+      if (input.tagName === 'SELECT') {
+        const selectedOption = Array.from(input.options).find(function (option) {
+          return selected.has(String(option.value));
+        });
+        input.value = selectedOption ? selectedOption.value : '';
+      } else {
+        input.checked = selectedHasWorkflowPrefix(String(input.value));
+      }
     });
   }
 
@@ -805,14 +860,49 @@
       card.appendChild(details);
       if (Array.isArray(config.grading_packages) && config.grading_packages.length) {
         const packages = document.createElement('div');
-        packages.className = 'small mt-1';
-        packages.textContent = 'Packages: ' + config.grading_packages.map(function (pkg) {
-          return (pkg.name || pkg.code || 'Package') + ' (' + (pkg.applicability || 'always') + ')';
-        }).join(', ');
+        packages.className = 'small mt-2 vstack gap-1';
+        const packagesTitle = document.createElement('div');
+        packagesTitle.className = 'fw-semibold text-body';
+        packagesTitle.textContent = 'Packages';
+        packages.appendChild(packagesTitle);
+        config.grading_packages.forEach(function (pkg) {
+          const packageLine = document.createElement('div');
+          packageLine.textContent = (pkg.name || pkg.code || 'Package') + ' (' + (pkg.applicability || 'always') + ')';
+          packages.appendChild(packageLine);
+          if (Array.isArray(pkg.image_grading_schemes) && pkg.image_grading_schemes.length) {
+            const imageLine = document.createElement('div');
+            imageLine.className = 'text-muted';
+            imageLine.textContent = 'Image schemes: ' + pkg.image_grading_schemes.map(function (scheme) {
+              return (scheme.name || ('Scheme #' + scheme.id)) + ': ' + imageAutoPolicyLabel(scheme.auto_create_policy);
+            }).join(' · ');
+            packages.appendChild(imageLine);
+          }
+          if (Array.isArray(pkg.encounter_grading_schemes) && pkg.encounter_grading_schemes.length) {
+            const encounterLine = document.createElement('div');
+            encounterLine.className = 'text-muted';
+            encounterLine.textContent = 'Encounter schemes: ' + pkg.encounter_grading_schemes.map(function (scheme) {
+              return scheme.name || ('Scheme #' + scheme.id);
+            }).join(', ');
+            packages.appendChild(encounterLine);
+          }
+        });
         card.appendChild(packages);
       }
       container.appendChild(card);
     });
+  }
+
+  function imageAutoPolicyLabel(policy) {
+    if (policy === 'never') {
+      return 'never';
+    }
+    if (policy === 'remidio_dr_report_present') {
+      return 'if DR report';
+    }
+    if (policy === 'remidio_glaucoma_report_present') {
+      return 'if glaucoma report';
+    }
+    return 'always';
   }
 
   function applyEncounterSetConfigs(form, configs) {
@@ -950,7 +1040,7 @@
       setCheckedValues(form, 'area_ids', splitIds(button.dataset.areaIds));
       setCheckedValues(form, 'upload_kinds', splitIds(button.dataset.uploadKinds));
       setCheckedValues(form, 'encounter_set_type_ids', splitIds(button.dataset.encounterSetTypeIds));
-      setCheckedValues(form, 'ai_workflows', splitIds(button.dataset.aiWorkflows));
+      setAiWorkflowValues(form, splitIds(button.dataset.aiWorkflows));
       applyEncounterSetConfigs(form, parseJson(button.dataset.encounterSetConfigs, []));
       form.querySelector('[name="allow_mydriatic"]').checked = button.dataset.allowMydriatic === '1';
       form.querySelector('[name="allow_non_mydriatic"]').checked = button.dataset.allowNonMydriatic === '1';

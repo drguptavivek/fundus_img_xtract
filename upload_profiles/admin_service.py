@@ -63,6 +63,7 @@ class AIWorkflowInput:
     disease_id: int
     ai_model_id: int
     upload_kind: str
+    auto_inference_policy: str = "always"
 
 
 @dataclass(frozen=True)
@@ -510,7 +511,7 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
     if not prioritization_result.success:
         return prioritization_result.message
-    ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds))
+    ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds), encounter_set_configs)
     if ai_workflows is None:
         return "AI workflow disease and upload type must be included in the profile, and AI models must exist."
 
@@ -599,6 +600,7 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
             disease_id=workflow.disease_id,
             ai_model_id=workflow.ai_model_id,
             upload_kind=workflow.upload_kind,
+            auto_inference_policy=workflow.auto_inference_policy,
             active=True,
         )
         for workflow in ai_workflows
@@ -747,6 +749,21 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
     encounter_scope_errors.extend(package_encounter_scope_errors)
     if encounter_scope_errors:
         return "Encounter grading schemes must have encounter scope: " + ", ".join(encounter_scope_errors)
+    policy_linkage_errors = []
+    for config in configs.values():
+        for package in _packages_for_config(config):
+            for disease_id, policy in (package.image_scheme_auto_create_policies or {}).items():
+                disease = diseases.get(disease_id)
+                if disease is None:
+                    continue
+                if policy == "remidio_dr_report_present" and disease.remidio_ocr_linkage != "dr":
+                    policy_linkage_errors.append(f"{disease.name} must be linked to Remidio DR OCR before using DR report auto-creation.")
+                if policy == "remidio_glaucoma_report_present" and disease.remidio_ocr_linkage != "glaucoma":
+                    policy_linkage_errors.append(
+                        f"{disease.name} must be linked to Remidio glaucoma OCR before using glaucoma report auto-creation."
+                    )
+    if policy_linkage_errors:
+        return " ".join(sorted(policy_linkage_errors))
     return None
 
 
@@ -847,12 +864,25 @@ def _valid_ai_workflows(
     workflow_inputs: list[AIWorkflowInput],
     disease_ids: set[int],
     upload_kinds: set[str],
+    encounter_set_configs: dict[int, EncounterSetProfileInput] | None = None,
 ) -> list[AIWorkflowInput] | None:
     deduped: dict[tuple[int, int, str], AIWorkflowInput] = {}
-    disease_target_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO}
+    disease_target_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
+    encounter_set_disease_ids = {
+        disease_id
+        for config in (encounter_set_configs or {}).values()
+        for package in _packages_for_config(config)
+        for disease_id in package.image_grading_scheme_ids
+    }
+    allowed_policies = {"never", "always", "remidio_glaucoma_report_present"}
     for workflow in workflow_inputs:
+        if workflow.auto_inference_policy not in allowed_policies:
+            return None
+        disease_allowed = workflow.disease_id in disease_ids
+        if workflow.upload_kind == UPLOAD_KIND_ENCOUNTER_SET:
+            disease_allowed = workflow.disease_id in encounter_set_disease_ids
         if (
-            workflow.disease_id not in disease_ids
+            not disease_allowed
             or workflow.upload_kind not in upload_kinds
             or workflow.upload_kind not in disease_target_kinds
         ):
@@ -864,13 +894,14 @@ def _valid_ai_workflows(
     valid_model_ids = {row[0] for row in db.execute(select(AIModel.id).where(AIModel.id.in_(model_ids))).all()}
     if valid_model_ids != model_ids:
         return None
+    ai_disease_ids = set(disease_ids).union(encounter_set_disease_ids)
     valid_pairs = {
         (row[0], row[1])
         for row in db.execute(
             select(AIModelDisease.ai_model_id, AIModelDisease.disease_id).where(
                 AIModelDisease.active.is_(True),
                 AIModelDisease.ai_model_id.in_(model_ids),
-                AIModelDisease.disease_id.in_(disease_ids),
+                AIModelDisease.disease_id.in_(ai_disease_ids),
             )
         ).all()
     }

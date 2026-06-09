@@ -1499,7 +1499,34 @@ def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_i
 def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
     image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
     pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
-    return {**image_result, **pdf_result}
+    ai_result = _queue_encounter_set_ai_inference(result, user_id=user_id)
+    return {**image_result, **pdf_result, **ai_result}
+
+
+def _queue_encounter_set_ai_inference(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
+    try:
+        from services.encounter_set_ai_inference import (
+            encounter_ids_from_ingest_result,
+            enqueue_wadhwani_for_encounter_ids,
+        )
+
+        encounter_ids = encounter_ids_from_ingest_result(result)
+        if not encounter_ids:
+            return {"wadhwani_tasks_queued": 0}
+        ai_result = enqueue_wadhwani_for_encounter_ids(encounter_ids, user_id=user_id)
+        LOGGER.info(
+            "Queued EncounterSet Wadhwani inference from Remidio API encounter_count=%s task_count=%s",
+            sanitize_log_value(len(encounter_ids)),
+            sanitize_log_value(ai_result.get("wadhwani_tasks_queued", 0)),
+        )
+        return {"wadhwani_tasks_queued": int(ai_result.get("wadhwani_tasks_queued", 0) or 0)}
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.warning(
+            "Failed to queue EncounterSet Wadhwani inference from Remidio API error=%s",
+            sanitize_log_value(exc),
+            exc_info=True,
+        )
+        return {"wadhwani_tasks_queued": 0, "wadhwani_queue_errors": 1}
 
 
 def _queue_encounter_set_attachment_pdf_ocr(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:

@@ -90,17 +90,19 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
     ai_workflows = []
     for value in form.getlist("ai_workflows"):
         parts = value.split(":")
-        if len(parts) != 3:
+        if len(parts) not in {3, 4}:
             continue
         disease_id = upload_profile_service.to_int(parts[0])
         ai_model_id = upload_profile_service.to_int(parts[1])
         upload_kind = parts[2]
+        auto_inference_policy = parts[3] if len(parts) == 4 else "always"
         if disease_id and ai_model_id and upload_kind:
             ai_workflows.append(
                 upload_profile_service.AIWorkflowInput(
                     disease_id=disease_id,
                     ai_model_id=ai_model_id,
                     upload_kind=upload_kind,
+                    auto_inference_policy=auto_inference_policy,
                 )
             )
     return upload_profile_service.UploadProfileInput(

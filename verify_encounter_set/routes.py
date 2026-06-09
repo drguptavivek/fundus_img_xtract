@@ -1,4 +1,4 @@
-from flask import render_template, abort, current_app, flash, redirect, url_for, request, jsonify
+from flask import after_this_request, render_template, abort, current_app, flash, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from auth.roles import roles_required
 from sqlalchemy import or_
@@ -15,6 +15,7 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
+from services.encounter_set_ai_inference import create_wadhwani_task_ids_for_encounter, enqueue_wadhwani_for_task_ids
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
 from db_transaction_manager import transaction_scope
@@ -633,6 +634,17 @@ def finalize_verification(uuid):
         encounter.encounter_verified_at = utcnow()
 
         created_tasks = _create_verified_encounter_set_tasks(db, encounter)
+        wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(db, encounter)
+        if wadhwani_task_ids:
+            _enqueue_wadhwani_after_commit(
+                tuple(wadhwani_task_ids),
+                user_id=current_user.id,
+                username=current_user.username,
+                remote_addr=request.remote_addr,
+                lab_unit_id=encounter.lab_unit_id,
+                project_id=encounter.project_id,
+                upload_profile_id=encounter.upload_profile_id,
+            )
         close_url = _encounter_set_browser_url(encounter)
         next_uuid = _next_pending_encounter_uuid(db, encounter=encounter)
 
@@ -794,6 +806,33 @@ def _image_scheme_policy_applies(policy: str, evidence: set[str]) -> bool:
     if policy == "remidio_glaucoma_report_present":
         return "glaucoma" in evidence
     return False
+
+
+def _enqueue_wadhwani_after_commit(
+    task_ids: tuple[int, ...],
+    *,
+    user_id: int,
+    username: str,
+    remote_addr: str | None,
+    lab_unit_id: int | None,
+    project_id: int | None,
+    upload_profile_id: int | None,
+) -> None:
+    @after_this_request
+    def _enqueue(response):
+        try:
+            enqueue_wadhwani_for_task_ids(
+                task_ids,
+                user_id=user_id,
+                username=username,
+                remote_addr=remote_addr,
+                lab_unit_id=lab_unit_id,
+                project_id=project_id,
+                upload_profile_id=upload_profile_id,
+            )
+        except Exception as exc:
+            current_app.logger.exception("Failed to enqueue EncounterSet Wadhwani inference: %s", exc)
+        return response
 
 
 def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | None, encounter: PatientEncounters) -> list[dict]:

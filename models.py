@@ -409,6 +409,7 @@ class Disease(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     grading_scope: Mapped[str] = mapped_column(String(20), default="image", server_default="image", nullable=False)
+    remidio_ocr_linkage: Mapped[str] = mapped_column(String(32), default="none", server_default="none", nullable=False)
     disease_gradings: Mapped[List["DiseaseGrading"]] = relationship("DiseaseGrading", back_populates="disease")
     ai_model_links: Mapped[List["AIModelDisease"]] = relationship(
         "AIModelDisease",
@@ -419,6 +420,10 @@ class Disease(Base):
 
     __table_args__ = (
         CheckConstraint("grading_scope IN ('image', 'encounter')", name="ck_disease_grading_scope"),
+        CheckConstraint(
+            "remidio_ocr_linkage IN ('none', 'dr', 'glaucoma')",
+            name="ck_disease_remidio_ocr_linkage",
+        ),
     )
 
 class Area(Base):

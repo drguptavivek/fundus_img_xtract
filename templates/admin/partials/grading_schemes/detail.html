@@ -47,6 +47,16 @@
         {% endif %}
       </div>
       <div class="col">
+        <div class="text-muted small">Remidio OCR</div>
+        {% if grading_scheme.remidio_ocr_linkage == "dr" %}
+        <span class="badge text-bg-info">DR report</span>
+        {% elif grading_scheme.remidio_ocr_linkage == "glaucoma" %}
+        <span class="badge text-bg-info">Glaucoma report</span>
+        {% else %}
+        <span class="text-muted small">None</span>
+        {% endif %}
+      </div>
+      <div class="col">
         <div class="text-muted small">Grades</div>
         <div class="fw-semibold">{{ grading_scheme.grade_count }} total, {{ grading_scheme.active_grade_count }} active</div>
       </div>

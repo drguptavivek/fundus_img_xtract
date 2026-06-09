@@ -235,6 +235,7 @@ class UploadProfileAIWorkflow(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="CASCADE"), nullable=False, index=True)
     ai_model_id: Mapped[int] = mapped_column(ForeignKey("ai_models.id", ondelete="CASCADE"), nullable=False, index=True)
     upload_kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    auto_inference_policy: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
 
     profile: Mapped["UploadProfile"] = relationship("UploadProfile", back_populates="ai_workflows")
@@ -246,6 +247,10 @@ class UploadProfileAIWorkflow(Base):
         CheckConstraint(
             "upload_kind IN ('direct_image','pregraded','remidio','encounter_set')",
             name="ck_upload_profile_ai_workflow_kind_valid",
+        ),
+        CheckConstraint(
+            "auto_inference_policy IN ('never','always','remidio_glaucoma_report_present')",
+            name="ck_upload_profile_ai_workflow_auto_policy",
         ),
     )
 

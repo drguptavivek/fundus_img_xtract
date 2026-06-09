@@ -20,8 +20,10 @@ from models import (
     DiseaseGrading,
     DirectImageUpload,
     EncounterFile,
+    EncounterSetImage,
     Grade,
     GradingTask,
+    BASE_DIR,
     IMAGE_DIR,
     LabUnit,
     PatientEncounters,
@@ -312,6 +314,8 @@ def _load_task(db, task_id: int) -> GradingTask:
             selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.camera),
             selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.hospital),
             selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
+            selectinload(GradingTask.encounter_set_image).selectinload(EncounterSetImage.camera),
+            selectinload(GradingTask.encounter_set_image).selectinload(EncounterSetImage.patient_encounter),
         )
         .where(GradingTask.id == task_id)
     ).scalar_one_or_none()
@@ -319,12 +323,17 @@ def _load_task(db, task_id: int) -> GradingTask:
         raise WadhwaniInferenceError("task_not_found", f"Task {task_id} was not found.")
     if not task.disease or task.disease.name != "Glaucoma":
         raise WadhwaniInferenceError("not_glaucoma_task", "Wadhwani inference supports only glaucoma tasks.")
-    if task.patient_encounter_id and task.encounter_file_id is None and task.direct_image_upload_id is None:
+    if (
+        task.patient_encounter_id
+        and task.encounter_file_id is None
+        and task.direct_image_upload_id is None
+        and task.encounter_set_image_id is None
+    ):
         raise WadhwaniInferenceError(
             "encounter_set_task_not_supported",
             "Task is an encounter-set task and does not identify a single image to send to Wadhwani.",
         )
-    if task.encounter_file_id is None and task.direct_image_upload_id is None:
+    if task.encounter_file_id is None and task.direct_image_upload_id is None and task.encounter_set_image_id is None:
         raise WadhwaniInferenceError("image_not_found", "Task does not reference a concrete image.")
     return task
 
@@ -392,6 +401,8 @@ def _resolve_task_image_reference(task_id: int) -> dict[str, Any]:
             return _resolve_direct_image(task)
         if task.encounter_file is not None:
             return _resolve_encounter_image(task)
+        if task.encounter_set_image is not None:
+            return _resolve_encounter_set_image(task)
     raise WadhwaniInferenceError("image_not_found", "Task does not reference a concrete image.")
 
 
@@ -459,6 +470,77 @@ def _resolve_encounter_image(task: GradingTask) -> dict[str, Any]:
     }
 
 
+def _resolve_encounter_set_image(task: GradingTask) -> dict[str, Any]:
+    image = task.encounter_set_image
+    if image is None:
+        raise WadhwaniInferenceError("image_not_found", "EncounterSet image is missing.")
+
+    if image.edited_filename:
+        filename = image.edited_filename
+        s3_key = image.s3_object_key_edited
+    else:
+        filename = image.original_filename
+        s3_key = image.s3_object_key
+    if not filename:
+        raise WadhwaniInferenceError("image_not_found", "EncounterSet image filename is missing.")
+
+    encounter = image.patient_encounter
+    encounter_metadata = encounter.metadata_json or {} if encounter else {}
+    patient_metadata = _metadata_section(encounter_metadata, "patient")
+    encounter_detail_metadata = _metadata_section(encounter_metadata, "encounter")
+    image_metadata = image.metadata_json or {}
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    image_bytes = _read_encounter_set_image_bytes(image, filename, s3_key)
+    manifest = {
+        "filename": filename,
+        "encounter_set_id": encounter.uuid if encounter else None,
+        "patient_age_yrs": _metadata_lookup(patient_metadata, "patient_age_yrs", "age", "age_yrs"),
+        "sex": _metadata_lookup(patient_metadata, "sex", "gender"),
+        "capture_datetime": _metadata_lookup(
+            encounter_detail_metadata,
+            "capture_datetime",
+            "image_capture_datetime",
+        ),
+        "capture_date": _capture_date_for_encounter(encounter.capture_date_dt if encounter else None),
+        "encounter_device_type": _metadata_lookup(encounter_detail_metadata, "device_type"),
+        "hospital_name": task.lab_unit.hospital.name if task.lab_unit and task.lab_unit.hospital else None,
+        "lab_unit_name": task.lab_unit.name if task.lab_unit else None,
+        "camera_type": image.camera.name if image.camera else None,
+        "image_camera_type": image.camera.name if image.camera else None,
+        "image_device_type": _metadata_lookup(image_metadata, "image_device_type", "device_type"),
+        "spatial_position": image.spatial_position,
+        "laterality": _normalize_laterality(_metadata_lookup(image_metadata, "laterality", "eye")),
+        "focus": _metadata_lookup(image_metadata, "focus", "centering"),
+        "fundus_field": _metadata_lookup(image_metadata, "fundus_field", "field"),
+        "image_segment": _metadata_lookup(image_metadata, "image_segment", "segment"),
+        "image_type": _metadata_lookup(
+            image_metadata,
+            "image_type",
+            "type",
+            "fundus_field",
+            "image_segment",
+            "image_device_type",
+        ),
+        "image_bucket": _metadata_lookup(image_metadata, "image_bucket"),
+        "image_variant": _metadata_lookup(image_metadata, "image_variant"),
+        "image_capture_datetime": _metadata_lookup(image_metadata, "image_capture_datetime"),
+        "remidio_image_quality": _metadata_lookup(image_metadata, "remidio_image_quality", "quality"),
+        "disc_present": _metadata_lookup(image_metadata, "disc_present"),
+        "disc_quality_acceptable": _metadata_lookup(image_metadata, "disc_quality_acceptable"),
+        "disc_quality_score": _metadata_lookup(image_metadata, "disc_quality_score"),
+        "width_px": _metadata_lookup(image_metadata, "width_px"),
+        "height_px": _metadata_lookup(image_metadata, "height_px"),
+        "is_mydriatic": image.is_mydriatic,
+    }
+    manifest = _clean_manifest(manifest)
+    return {
+        "filename": filename,
+        "content_type": content_type,
+        "image_bytes": image_bytes,
+        "manifest": manifest,
+    }
+
+
 def _read_direct_image_bytes(direct: DirectImageUpload, filename: str, kind: str, s3_key: str | None) -> bytes:
     if direct.s3_config and s3_key:
         from utils.s3_prefix import apply_global_prefix
@@ -493,6 +575,23 @@ def _read_encounter_image_bytes(encounter_file: EncounterFile, upload_date, s3_k
     return path.read_bytes()
 
 
+def _read_encounter_set_image_bytes(image: EncounterSetImage, filename: str, s3_key: str | None) -> bytes:
+    if image.s3_config and s3_key:
+        from utils.s3_prefix import apply_global_prefix
+        from utils.s3_storage_backends import get_s3_client
+
+        client = get_s3_client(image.s3_config)
+        response = client.get_object(
+            Bucket=image.s3_config.bucket_name,
+            Key=apply_global_prefix(s3_key),
+        )
+        return response["Body"].read()
+    path = BASE_DIR / image.folder_rel / filename
+    if not path.exists():
+        raise WadhwaniInferenceError("image_not_found", f"EncounterSet image file is missing: {path}")
+    return path.read_bytes()
+
+
 def _capture_date_for_encounter(capture_date) -> str | None:
     if capture_date is None:
         return None
@@ -507,6 +606,10 @@ def _normalize_laterality(value: str | None) -> str | None:
         return "left"
     if normalized in {"r", "right"}:
         return "right"
+    if normalized in {"os", "left eye"}:
+        return "left"
+    if normalized in {"od", "right eye"}:
+        return "right"
     return None
 
 
@@ -517,6 +620,23 @@ def _normalize_focus(value: str | None) -> str | None:
     if normalized in {"disk", "disc", "onh", "optic_disc", "optic nerve head"}:
         return "disc"
     return None
+
+
+def _metadata_section(metadata: dict[str, Any], key: str) -> dict[str, Any]:
+    value = metadata.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _metadata_lookup(metadata: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = metadata.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _clean_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in manifest.items() if value not in (None, "")}
 
 
 def _build_request_id(task_id: int, ai_model_id: int) -> str:

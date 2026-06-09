@@ -71,6 +71,7 @@ def _input_from_request() -> grading_scheme_service.GradingSchemeInput:
     return grading_scheme_service.GradingSchemeInput(
         name=str(data.get("name") or "").strip(),
         grading_scope=str(data.get("grading_scope") or "").strip(),
+        remidio_ocr_linkage=str(data.get("remidio_ocr_linkage") or "none").strip(),
         parent_scheme_id=_optional_int(data.get("parent_scheme_id")),
     )
 

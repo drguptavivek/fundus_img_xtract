@@ -19,6 +19,7 @@
         <tr>
           <th>Scheme</th>
           <th>Scope</th>
+          <th>Remidio OCR</th>
           <th>Linked Schemes</th>
           <th class="text-end">Grades</th>
           <th class="text-end">Priority Grades</th>
@@ -46,6 +47,15 @@
             <span class="badge text-bg-primary">Encounter</span>
             {% else %}
             <span class="badge text-bg-secondary">Image</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.remidio_ocr_linkage == "dr" %}
+            <span class="badge text-bg-info">DR report</span>
+            {% elif row.remidio_ocr_linkage == "glaucoma" %}
+            <span class="badge text-bg-info">Glaucoma report</span>
+            {% else %}
+            <span class="text-muted small">None</span>
             {% endif %}
           </td>
           <td>
@@ -120,7 +130,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="11" class="text-center text-muted py-4">No grading schemes configured.</td>
+          <td colspan="12" class="text-center text-muted py-4">No grading schemes configured.</td>
         </tr>
         {% endfor %}
       </tbody>

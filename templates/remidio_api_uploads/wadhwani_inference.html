@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ page_title }}</h1>
+      <p class="text-muted mb-0">Queue remote glaucoma inference and visually review EncounterSet-level OCR against image-level Wadhwani results.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id or '') }}">EncounterSet Browser</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">Remidio API Sync</a>
+    </div>
+  </div>
+
+  {% if not linked_integration %}
+  <div class="alert alert-warning">No enabled Wadhwani Glaucoma integration is linked.</div>
+  {% endif %}
+
+  <form id="wadhwaniEncounterSetFilters"
+        class="card shadow-sm mb-3"
+        data-page-url="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}"
+        hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+        hx-target="#wadhwaniEncounterSetWorkspace"
+        hx-trigger="submit"
+        hx-swap="innerHTML">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label" for="project_id">Project</label>
+          <select class="form-select" id="project_id" name="project_id">
+            {% for project in projects %}
+            <option value="{{ project.id }}" {% if project.id == filters.project_id %}selected{% endif %}>{{ project.title }}{% if project.code %} · {{ project.code }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="capture_date_from">From</label>
+          <input class="form-control" id="capture_date_from" name="capture_date_from" type="date" value="{{ filters.capture_date_from }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="capture_date_to">To</label>
+          <input class="form-control" id="capture_date_to" name="capture_date_to" type="date" value="{{ filters.capture_date_to }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="camera_id">Camera</label>
+          <select class="form-select" id="camera_id" name="camera_id">
+            <option value="">All</option>
+            {% for camera in cameras %}
+            <option value="{{ camera.id }}" {% if filters.camera_id == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-1">
+          <label class="form-label" for="laterality">Eye</label>
+          <select class="form-select" id="laterality" name="laterality">
+            <option value="">All</option>
+            <option value="od" {% if filters.laterality == 'od' %}selected{% endif %}>OD</option>
+            <option value="os" {% if filters.laterality == 'os' %}selected{% endif %}>OS</option>
+            <option value="right" {% if filters.laterality == 'right' %}selected{% endif %}>Right</option>
+            <option value="left" {% if filters.laterality == 'left' %}selected{% endif %}>Left</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="focus">Focus</label>
+          <input class="form-control" id="focus" name="focus" value="{{ filters.focus }}" placeholder="disc, macula">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="glaucoma_report">Glaucoma OCR</label>
+          <select class="form-select" id="glaucoma_report" name="glaucoma_report">
+            <option value="">Any</option>
+            <option value="present" {% if filters.glaucoma_report == 'present' %}selected{% endif %}>Present</option>
+            <option value="absent" {% if filters.glaucoma_report == 'absent' %}selected{% endif %}>Absent</option>
+          </select>
+        </div>
+        <input type="hidden" name="page" value="{{ filters.page }}">
+        <div class="col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="include_prior" name="include_prior" value="1" {% if filters.include_prior %}checked{% endif %}>
+            <label class="form-check-label" for="include_prior">Include prior Wadhwani inference present</label>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="submit">Apply</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div id="wadhwaniEncounterSetWorkspace"
+       hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace', project_id=filters.project_id or '') }}"
+       hx-include="#wadhwaniEncounterSetFilters"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="card shadow-sm"><div class="card-body text-muted">Loading EncounterSet inference results…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+<script src="{{ url_for('static', filename='js/encounter-set-wadhwani-inference.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .encounter-wadhwani-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .encounter-wadhwani-tile {
+    display: block;
+    background: var(--bs-body-bg);
+  }
+</style>
+{% endblock %}

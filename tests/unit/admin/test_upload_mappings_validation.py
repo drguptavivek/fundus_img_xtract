@@ -1,9 +1,15 @@
 from contextlib import contextmanager
 
 from encounter_set_types.models import EncounterSetType
-from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
+from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
-from upload_profiles.admin_service import EncounterSetProfileInput, ProjectCreateInput, UploadProfileInput, validate_mydriatic_flags
+from upload_profiles.admin_service import (
+    EncounterSetGradingPackageInput,
+    EncounterSetProfileInput,
+    ProjectCreateInput,
+    UploadProfileInput,
+    validate_mydriatic_flags,
+)
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -350,3 +356,161 @@ def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, mo
         assert exc.code == "profile_not_found"
     else:
         raise AssertionError("Generic EncounterSet profiles must not allow Remidio ZIP upload")
+
+
+def test_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username="ocr_policy_manager", full_name="OCR Policy Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="OCR Policy Hospital")
+    lab = LabUnit(name="OCR Policy Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    image_scheme = Disease(name="Unlinked DR-like Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="OCR Policy Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="OCR Policy EncounterSet",
+        code="ocr_policy_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="OCR policy profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="DR report package",
+                            code="dr_report_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[image_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=image_scheme.id,
+                            image_scheme_auto_create_policies={image_scheme.id: "remidio_dr_report_present"},
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is False
+    assert "must be linked to Remidio DR OCR" in result.message
+
+
+def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_scheme(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username="encounter_ai_manager", full_name="Encounter AI Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="Encounter AI Hospital")
+    lab = LabUnit(name="Encounter AI Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    glaucoma_scheme = Disease(
+        name="Encounter AI Glaucoma Scheme",
+        grading_scope="image",
+        remidio_ocr_linkage="glaucoma",
+    )
+    encounter_scheme = Disease(name="Encounter AI Encounter Scheme", grading_scope="encounter")
+    ai_model = AIModel(name="Encounter AI Wadhwani", version="1.0", description="Wadhwani")
+    encounter_set_type = EncounterSetType(
+        name="Encounter AI EncounterSet",
+        code="encounter_ai_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, glaucoma_scheme, encounter_scheme, ai_model, encounter_set_type])
+    db_session.flush()
+    db_session.add_all(
+        [
+            AIModelDisease(ai_model_id=ai_model.id, disease_id=glaucoma_scheme.id),
+            AIModelIntegration(
+                ai_model_id=ai_model.id,
+                provider="wadhwani_glaucoma",
+                client_id="client",
+                bearer_token="token",
+                is_enabled=True,
+            ),
+        ]
+    )
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Encounter AI profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[
+                admin_service.AIWorkflowInput(
+                    disease_id=glaucoma_scheme.id,
+                    ai_model_id=ai_model.id,
+                    upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
+                    auto_inference_policy="remidio_glaucoma_report_present",
+                )
+            ],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[glaucoma_scheme.id],
+                    default_image_grading_scheme_id=glaucoma_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="EncounterSet Package",
+                            code="encounter_set",
+                            applicability="always",
+                            image_grading_scheme_ids=[glaucoma_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=glaucoma_scheme.id,
+                            image_scheme_auto_create_policies={glaucoma_scheme.id: "always"},
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="Encounter AI profile").one()
+    workflow = profile.ai_workflows[0]
+    assert workflow.upload_kind == UPLOAD_KIND_ENCOUNTER_SET
+    assert workflow.disease_id == glaucoma_scheme.id
+    assert workflow.ai_model_id == ai_model.id
+    assert workflow.auto_inference_policy == "remidio_glaucoma_report_present"

@@ -217,6 +217,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Upload Metadata Field Definitions API](docs/API/upload-metadata/README.md) - Standalone metadata field masters reusable across upload workflows
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Policy and implementation plan for package-based EncounterSet grading after verification
+- [EncounterSet Task Creation](docs/04-Grade/encounter_set_task_creation.md) - Verification-time creation rules for EncounterSet grading packages and image/encounter tasks
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

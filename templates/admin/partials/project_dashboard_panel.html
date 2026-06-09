@@ -212,13 +212,31 @@
               {% for package in encounter_config.grading_packages if package.active %}
                 {% set package_image_ids = package.image_grading_schemes|selectattr('active')|map(attribute='disease_id')|list %}
                 {% set package_encounter_ids = package.encounter_grading_schemes|selectattr('active')|map(attribute='disease_id')|list %}
+                {% set package_image_schemes = [] %}
+                {% for package_image in package.image_grading_schemes if package_image.active %}
+                  {% set _ = package_image_schemes.append({
+                    'id': package_image.disease_id,
+                    'name': package_image.disease.name if package_image.disease else '',
+                    'auto_create_policy': package_image.auto_create_policy,
+                    'remidio_ocr_linkage': package_image.disease.remidio_ocr_linkage if package_image.disease else 'none'
+                  }) %}
+                {% endfor %}
+                {% set package_encounter_schemes = [] %}
+                {% for package_encounter in package.encounter_grading_schemes if package_encounter.active %}
+                  {% set _ = package_encounter_schemes.append({
+                    'id': package_encounter.disease_id,
+                    'name': package_encounter.disease.name if package_encounter.disease else ''
+                  }) %}
+                {% endfor %}
                 {% set _ = row_package_configs.append({
                   'name': package.name,
                   'code': package.code,
                   'applicability': package.applicability,
                   'image_grading_scheme_ids': package_image_ids,
                   'encounter_grading_scheme_ids': package_encounter_ids,
-                  'default_image_grading_scheme_id': package.default_image_grading_scheme_id
+                  'default_image_grading_scheme_id': package.default_image_grading_scheme_id,
+                  'image_grading_schemes': package_image_schemes,
+                  'encounter_grading_schemes': package_encounter_schemes
                 }) %}
               {% endfor %}
               {% set _ = row_encounter_set_target_summaries.append({
@@ -242,7 +260,7 @@
             {% endfor %}
             {% set row_ai_workflows = [] %}
             {% for workflow in profile.ai_workflows if workflow.active %}
-              {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind) %}
+              {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind ~ ':' ~ (workflow.auto_inference_policy or 'always')) %}
             {% endfor %}
             {% set row_profile_summary = {
               'id': profile.id,
@@ -296,9 +314,38 @@
                     {% for target_summary in row_encounter_set_target_summaries %}
                     <div class="ps-2">
                       {{ target_summary.encounter_set_type_name or 'EncounterSetType' }}:
-                      image {{ target_summary.image_grading_scheme_names|join(', ') or '-' }};
-                      default {{ target_summary.default_image_grading_scheme_name or '-' }};
-                      encounter {{ target_summary.encounter_grading_scheme_name or '-' }}
+                      {% if target_summary.grading_packages %}
+                        {% for package in target_summary.grading_packages %}
+                        <div class="ps-2">
+                          <span class="fw-semibold">{{ package.name or package.code or 'Package' }}</span>
+                          <span class="text-muted">({{ package.applicability or 'always' }})</span>
+                          {% if package.encounter_grading_schemes %}
+                          <div class="ps-2 text-muted">Encounter: {{ package.encounter_grading_schemes|map(attribute='name')|join(', ') or '-' }}</div>
+                          {% endif %}
+                          {% if package.image_grading_schemes %}
+                          <div class="ps-2 text-muted">
+                            Images:
+                            {% for scheme in package.image_grading_schemes %}
+                              {{ scheme.name or ('Scheme #' ~ scheme.id) }} -
+                              {% if scheme.auto_create_policy == 'never' %}
+                                Never
+                              {% elif scheme.auto_create_policy == 'remidio_dr_report_present' %}
+                                If Remidio DR report
+                              {% elif scheme.auto_create_policy == 'remidio_glaucoma_report_present' %}
+                                If Remidio glaucoma report
+                              {% else %}
+                                Always
+                              {% endif %}{% if not loop.last %}; {% endif %}
+                            {% endfor %}
+                          </div>
+                          {% endif %}
+                        </div>
+                        {% endfor %}
+                      {% else %}
+                        image {{ target_summary.image_grading_scheme_names|join(', ') or '-' }};
+                        default {{ target_summary.default_image_grading_scheme_name or '-' }};
+                        encounter {{ target_summary.encounter_grading_scheme_name or '-' }}
+                      {% endif %}
                     </div>
                     {% endfor %}
                   </div>

@@ -499,6 +499,7 @@ def _profile_to_dto(
             "ai_model_id": row.ai_model_id,
             "ai_model_name": row.ai_model.name,
             "upload_kind": row.upload_kind,
+            "auto_inference_policy": row.auto_inference_policy,
             "active": row.active,
         }
         for row in profile.ai_workflows
@@ -622,6 +623,7 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
         {
             "id": scheme.disease_id,
             "name": scheme.disease.name if scheme.disease else None,
+            "remidio_ocr_linkage": scheme.disease.remidio_ocr_linkage if scheme.disease else "none",
             "is_default": scheme.is_default,
             "display_order": scheme.display_order,
         }
@@ -645,6 +647,7 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
                 {
                     "id": scheme.disease_id,
                     "name": scheme.disease.name if scheme.disease else None,
+                    "remidio_ocr_linkage": scheme.disease.remidio_ocr_linkage if scheme.disease else "none",
                     "is_default": scheme.is_default,
                     "auto_create_policy": scheme.auto_create_policy,
                     "display_order": scheme.display_order,

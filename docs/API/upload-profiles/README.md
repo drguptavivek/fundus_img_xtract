@@ -113,7 +113,12 @@ Profile create/update fields:
   - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, or `remidio_glaucoma_report_present`
   - `display_order` integer, optional
   - `active` boolean, optional
-- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format; disease and upload kind must also be enabled on the profile. Encounter-set grading targets come from the profile's EncounterSetType mappings, but V1 rejects encounter-set AI workflow bindings here.
+- Remidio report-triggered `image_scheme_auto_create_policies` are accepted only when the image-scoped grading scheme has matching `remidio_ocr_linkage` configured on the grading scheme itself:
+  - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
+  - `remidio_glaucoma_report_present` requires `remidio_ocr_linkage = glaucoma`
+- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format. A fourth part may be supplied as `disease_id:ai_model_id:upload_kind:auto_inference_policy`; omitted policy defaults to `always` for backward compatibility. Supported policies are `always`, `never`, and `remidio_glaucoma_report_present`.
+  - For `direct_image`, `pregraded`, and `remidio`, the disease and upload kind must be enabled on the profile.
+  - For `encounter_set`, the disease must be one of the selected EncounterSet package image-level grading schemes. The Wadhwani Glaucoma policy creates image-scoped AI inference tasks before human verification; human grading tasks are still created after verification.
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans, used only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `camera_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `area_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled

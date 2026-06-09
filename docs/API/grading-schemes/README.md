@@ -25,6 +25,7 @@ Response:
       "id": 1,
       "name": "DR Image",
       "grading_scope": "image",
+      "remidio_ocr_linkage": "dr",
       "grade_count": 5,
       "active_grade_count": 5,
       "prioritized_grade_count": 1,
@@ -63,6 +64,7 @@ Request:
 {
   "name": "DR Encounter",
   "grading_scope": "encounter",
+  "remidio_ocr_linkage": "none",
   "parent_scheme_id": null
 }
 ```
@@ -81,6 +83,7 @@ Validation:
 
 - `name` is required and must be unique case-insensitively.
 - `grading_scope` must be `image` or `encounter`.
+- `remidio_ocr_linkage` must be `none`, `dr`, or `glaucoma`. It is meaningful only for image-scoped schemes; encounter-scoped schemes are saved as `none`.
 - `parent_scheme_id` is optional. When supplied, parent and child schemes must have the same scope, and cycles are rejected.
 
 ### `GET /api/grading-schemes/{scheme_id}`
@@ -98,9 +101,12 @@ The detail payload also includes `non_gradable_reasons`, the standard reason lis
 
 Updates scheme name and scope.
 Also updates the optional linked parent when `parent_scheme_id` is submitted.
+Also updates `remidio_ocr_linkage` for image-scoped schemes.
 
 Core schemes retain the existing production guardrail: they cannot be renamed, but their scope can be changed.
 Linked parent-child relationships must keep matching scopes.
+
+`remidio_ocr_linkage` controls whether an image-scoped grading scheme can use Remidio report-detected auto-creation options inside EncounterSet upload-profile package configuration. It is never inferred from the grading scheme name.
 
 ### `POST /api/grading-schemes/{scheme_id}/delete`
 

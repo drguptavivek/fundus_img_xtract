@@ -38,6 +38,7 @@ from upload_profiles.models import (
 )
 
 VALID_SCOPES = frozenset({"image", "encounter"})
+VALID_REMIDIO_OCR_LINKAGES = frozenset({"none", "dr", "glaucoma"})
 CORE_SCHEME_IDS = frozenset({1, 2, 3})
 GUIDELINE_ALLOWED_TAGS = frozenset({"strong", "b", "em", "i", "ul", "ol", "li", "br", "p"})
 EXTERNAL_USAGE_KEYS = frozenset(
@@ -69,6 +70,7 @@ STANDARD_NON_GRADABLE_REASONS = (
 class GradingSchemeInput:
     name: str
     grading_scope: str
+    remidio_ocr_linkage: str = "none"
     parent_scheme_id: int | None = None
 
 
@@ -154,7 +156,11 @@ def create_grading_scheme(scheme_input: GradingSchemeInput) -> MutationResult:
             parent_error = _validate_parent_link(db, 0, scheme_input.parent_scheme_id, scheme_input.grading_scope)
             if parent_error:
                 return MutationResult(False, parent_error, 400)
-            scheme = Disease(name=scheme_input.name, grading_scope=scheme_input.grading_scope)
+            scheme = Disease(
+                name=scheme_input.name,
+                grading_scope=scheme_input.grading_scope,
+                remidio_ocr_linkage=_normalized_remidio_ocr_linkage(scheme_input),
+            )
             db.add(scheme)
             db.flush()
             _set_parent_link(db, scheme.id, scheme_input.parent_scheme_id)
@@ -206,6 +212,7 @@ def update_grading_scheme(scheme_id: int, scheme_input: GradingSchemeInput) -> M
 
             scheme.name = scheme_input.name
             scheme.grading_scope = scheme_input.grading_scope
+            scheme.remidio_ocr_linkage = _normalized_remidio_ocr_linkage(scheme_input)
             _set_parent_link(db, scheme_id, scheme_input.parent_scheme_id)
             return MutationResult(True, "Grading scheme updated.", payload={"grading_scheme_id": scheme.id})
     except IntegrityError:
@@ -323,7 +330,15 @@ def _validate_scheme_input(scheme_input: GradingSchemeInput) -> str | None:
         return "Grading scheme name is required."
     if scheme_input.grading_scope not in VALID_SCOPES:
         return "Grading scheme scope must be image or encounter."
+    if scheme_input.remidio_ocr_linkage not in VALID_REMIDIO_OCR_LINKAGES:
+        return "Remidio OCR linkage must be none, DR, or glaucoma."
     return None
+
+
+def _normalized_remidio_ocr_linkage(scheme_input: GradingSchemeInput) -> str:
+    if scheme_input.grading_scope != "image":
+        return "none"
+    return scheme_input.remidio_ocr_linkage
 
 
 def _validate_parent_link(db, scheme_id: int, parent_scheme_id: int | None, scope: str) -> str | None:
@@ -494,6 +509,7 @@ def _scheme_summary(
         "id": scheme.id,
         "name": scheme.name,
         "grading_scope": scheme.grading_scope,
+        "remidio_ocr_linkage": scheme.remidio_ocr_linkage or "none",
         "grade_count": len(grades),
         "active_grade_count": len(active_grades),
         "prioritized_grade_count": len(prioritized_grades),

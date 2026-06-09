@@ -8,4 +8,4 @@ bp = Blueprint(
 )
 
 
-from . import encounter_set_browser, remidio_api_sync  # noqa: E402,F401
+from . import encounter_set_browser, remidio_api_sync, wadhwani_inference  # noqa: E402,F401

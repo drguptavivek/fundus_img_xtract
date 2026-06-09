@@ -17,7 +17,7 @@ from models import Disease, DiseaseGrading, GradingsFeatures, LinkedDiseaseGradi
 def test_create_and_list_grading_scheme_uses_disease_as_scheme(app, db_session):
     suffix = uuid4().hex[:8]
     result = create_grading_scheme(
-        GradingSchemeInput(name=f"Test Image Scheme {suffix}", grading_scope="image")
+        GradingSchemeInput(name=f"Test Image Scheme {suffix}", grading_scope="image", remidio_ocr_linkage="dr")
     )
 
     assert result.success is True
@@ -25,12 +25,27 @@ def test_create_and_list_grading_scheme_uses_disease_as_scheme(app, db_session):
     disease = db_session.get(Disease, scheme_id)
     assert disease.name == f"Test Image Scheme {suffix}"
     assert disease.grading_scope == "image"
+    assert disease.remidio_ocr_linkage == "dr"
 
     rows = list_grading_schemes()
     created = next(row for row in rows if row["id"] == scheme_id)
     assert created["name"] == f"Test Image Scheme {suffix}"
+    assert created["remidio_ocr_linkage"] == "dr"
     assert created["grade_count"] == 0
     assert created["feature_count"] == 0
+
+
+def test_encounter_grading_scheme_normalizes_remidio_ocr_linkage(app, db_session):
+    suffix = uuid4().hex[:8]
+    result = create_grading_scheme(
+        GradingSchemeInput(name=f"Encounter OCR Scheme {suffix}", grading_scope="encounter", remidio_ocr_linkage="glaucoma")
+    )
+
+    assert result.success is True
+    scheme_id = result.payload["grading_scheme_id"]
+    disease = db_session.get(Disease, scheme_id)
+    assert disease.grading_scope == "encounter"
+    assert disease.remidio_ocr_linkage == "none"
 
 
 def test_grading_scheme_detail_counts_grades_and_features(app, db_session):

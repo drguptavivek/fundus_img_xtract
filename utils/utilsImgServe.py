@@ -7,7 +7,7 @@ from werkzeug.exceptions import NotFound
 from models import (
     DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR,
     DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR,
-    GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage, UserDiseaseUnitRole, GradingTask
+    GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage, ProjectInvestigator, UserDiseaseUnitRole, GradingTask
 )
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
@@ -218,6 +218,26 @@ def _apply_lab_unit_scoping(query, model_class, user):
         return apply_filter(query, model_class.lab_unit_id.in_(lab_unit_ids))
 
     return query
+
+
+def _apply_encounter_set_media_scoping(query, user, context: str):
+    if user and user.has_role("collaborator") and not user.has_role(
+        "fileUploader",
+        "optometrist",
+        "data_manager",
+        "admin",
+        "ophthalmologist",
+        "resident",
+    ):
+        return query.join(
+            ProjectInvestigator,
+            ProjectInvestigator.project_id == PatientEncounters.project_id,
+        ).filter(
+            ProjectInvestigator.user_id == user.id,
+            ProjectInvestigator.role == "collaborator",
+            ProjectInvestigator.active.is_(True),
+        )
+    return apply_scoping(query, PatientEncounters, user, context)
 
 
 def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
@@ -919,7 +939,7 @@ def encounterSetImageByUUID(uuid: str):
     context = determine_scoping_context()
     with transaction_scope() as db:
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = apply_scoping(query, PatientEncounters, current_user, context)
+        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
         if not img:
             abort(404)
@@ -931,7 +951,7 @@ def encounterSetImageThumbnailByUUID(uuid: str):
     context = determine_scoping_context()
     with transaction_scope() as db:
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = apply_scoping(query, PatientEncounters, current_user, context)
+        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
         if not img:
             abort(404)
@@ -959,7 +979,7 @@ def encounterSetImageEditedByUUID(uuid: str):
     context = determine_scoping_context()
     with transaction_scope() as db:
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = apply_scoping(query, PatientEncounters, current_user, context)
+        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
         if not img:
             abort(404)

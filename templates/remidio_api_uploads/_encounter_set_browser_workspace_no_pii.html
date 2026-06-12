@@ -1,0 +1,184 @@
+{% set workspace_endpoint = browser_workspace_endpoint or "remidio_api_uploads.encounter_set_browser_no_pii_workspace" %}
+<div class="row g-3" data-encounter-browser-url="{{ browser_url }}">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-2">
+          <div class="flex-fill">
+            <label class="form-label" for="encounter-browser-project">Project</label>
+            <select class="form-select"
+                    id="encounter-browser-project"
+                    name="project_id"
+                    hx-get="{{ url_for(workspace_endpoint) }}"
+                    hx-target="#encounter-set-browser-workspace"
+                    hx-swap="innerHTML"
+                    hx-trigger="change">
+              {% for project in projects %}
+              <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+                {{ project.title }}{% if project.code %} · {{ project.code }}{% endif %} · {{ project.encounter_count }} EncounterSets
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        {% if not projects %}
+        <div class="form-text text-warning">No collaborator projects are available to your account.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if selected_project_id %}
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body py-3 d-flex flex-column flex-lg-row gap-3 align-items-lg-center">
+        <div class="flex-shrink-0" style="min-width: 12rem;">
+          <label class="visually-hidden" for="encounter-browser-month">Month</label>
+          <select class="form-select form-select-sm"
+                  id="encounter-browser-month"
+                  name="month"
+                  hx-get="{{ url_for(workspace_endpoint, project_id=selected_project_id) }}"
+                  hx-target="#encounter-set-browser-workspace"
+                  hx-swap="innerHTML"
+                  hx-trigger="change">
+            {% for month in months %}
+            <option value="{{ month.value }}" {% if month.value == selected_month %}selected{% endif %}>{{ month.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="d-flex gap-2 overflow-auto pb-1 flex-fill">
+          {% for date_row in dates %}
+          <button class="btn btn-sm {{ 'btn-primary' if date_row.date == selected_date else 'btn-outline-secondary' }} flex-shrink-0"
+                  type="button"
+                  hx-get="{{ url_for(workspace_endpoint, project_id=selected_project_id, month=selected_month, date=date_row.date.isoformat()) }}"
+                  hx-target="#encounter-set-browser-workspace"
+                  hx-swap="innerHTML">
+            <span class="d-block fw-semibold">{{ date_row.label }}</span>
+            <span class="small">{{ date_row.count }}</span>
+          </button>
+          {% else %}
+          <div class="text-muted">No dated EncounterSets are available for this project.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>EncounterSets</span>
+        <span class="badge text-bg-secondary">{{ patients|length }}</span>
+      </div>
+      <div class="list-group list-group-flush overflow-auto" style="max-height: 70vh;">
+        {% for patient in patients %}
+        <button class="list-group-item list-group-item-action text-start {{ 'active' if patient.id == selected_encounter_id else '' }}"
+                type="button"
+                hx-get="{{ url_for(workspace_endpoint, project_id=selected_project_id, month=selected_month, date=selected_date.isoformat() if selected_date else '', encounter_id=patient.id) }}"
+                hx-target="#encounter-set-browser-workspace"
+                hx-swap="innerHTML">
+          <div class="d-flex justify-content-between gap-2">
+            <div class="fw-semibold text-truncate">{{ patient.name }}</div>
+            <span class="badge {{ 'text-bg-success' if patient.verified_status == 'verified' else 'text-bg-warning' }}">
+              {{ patient.verified_status }}
+            </span>
+          </div>
+          <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
+            {{ patient.image_count }} images
+          </div>
+        </button>
+        {% else %}
+        <div class="list-group-item text-muted">No EncounterSets on this date.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-8">
+    {% if detail %}
+    <div class="card shadow-sm">
+      <div class="card-header d-flex flex-column flex-lg-row justify-content-between gap-2">
+        <div>
+          <div class="fw-semibold">{{ detail.name }}</div>
+          <div class="small text-muted">
+            {% if detail.capture_date_dt %}{{ detail.capture_date_dt.strftime('%d-%m-%Y') }}{% endif %}
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+          <span class="badge text-bg-light">{{ detail.project_title or '-' }}</span>
+          <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
+          <a class="btn btn-sm btn-outline-primary"
+             href="{{ url_for('remidio_api_uploads.encounter_set_browser_no_pii_download', encounter_id=detail.id) }}">
+            Download ZIP
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        {% set media_gallery_id = 'encounter-set-media-gallery-' ~ detail.id %}
+        <div id="{{ media_gallery_id }}" class="d-none pswp-gallery">
+          {% for image in detail.images %}
+          <a href="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}"
+             data-pswp-type="image"
+             data-pswp-caption="Image {{ image.position }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"
+             title="Image {{ image.position }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"></a>
+          {% endfor %}
+        </div>
+
+        {% for group in detail.image_groups %}
+        <div class="border rounded mb-3">
+          <div class="px-3 py-2 border-bottom fw-semibold">{{ group.label }}</div>
+          <div class="p-3">
+            <div class="row g-3">
+              {% for image in group.images %}
+              <div class="col-6 col-md-4 col-xxl-3">
+                <a class="text-decoration-none" href="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}" onclick="openPswpGallery('{{ media_gallery_id }}', {{ image.gallery_index }}); return false;">
+                  <div class="border rounded overflow-hidden bg-body-tertiary">
+                    <div class="ratio ratio-1x1 position-relative">
+                      <img class="w-100 h-100 object-fit-cover"
+                           src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
+                           alt="EncounterSet image {{ image.position }}">
+                    </div>
+                    <div class="p-2 small">
+                      <div class="fw-semibold">Position {{ image.position }}</div>
+                      <div class="text-muted text-truncate">
+                        {{ image.laterality or '-' }}{% if image.field %} · {{ image.field }}{% endif %}
+                      </div>
+                      <div class="text-muted text-truncate">{{ image.camera_name or image.device_type or '-' }}</div>
+                      <div class="d-flex flex-wrap gap-1 mt-1">
+                        {% if image.image_variant %}
+                        <span class="badge text-bg-light border">{{ image.image_variant }}</span>
+                        {% endif %}
+                        {% if image.image_segment %}
+                        <span class="badge text-bg-light border">{{ image.image_segment }}</span>
+                        {% endif %}
+                        {% if image.quality %}
+                        <span class="badge text-bg-light border">{{ image.quality }}</span>
+                        {% endif %}
+                        {% if image.is_montage %}
+                        <span class="badge text-bg-info">Montage</span>
+                        {% endif %}
+                        {% if image.is_cropped %}
+                        <span class="badge text-bg-warning">Cropped</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </a>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-muted">No images are attached to this EncounterSet.</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm h-100">
+      <div class="card-body text-muted">Select an EncounterSet to view no-PII image data.</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

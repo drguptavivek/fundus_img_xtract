@@ -19,6 +19,7 @@ ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"
 ROLE_REGRADE_ADJUDICATOR = "regrade_adjudicator"
+ROLE_COLLABORATOR = "collaborator"
 
 DEFAULT_ROLES = [
     "admin",
@@ -34,6 +35,7 @@ DEFAULT_ROLES = [
     "regrade_adjudicator",
     ROLE_DATASET_CREATOR,
     ROLE_ANALYTICS_VIEWER,
+    ROLE_COLLABORATOR,
 ]
 
 def ensure_roles(db, names: Iterable[str] = DEFAULT_ROLES) -> None:

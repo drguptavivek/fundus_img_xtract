@@ -76,7 +76,7 @@ Investigator assignment fields for `/api/upload-profiles/investigators`:
 
 - `project_id` integer, required
 - `user_id` integer, required
-- `role` string, one of `principal_investigator`, `co_investigator`, or `coordinator`
+- `role` string, one of `principal_investigator`, `co_investigator`, `coordinator`, or `collaborator`
 
 Example project create:
 

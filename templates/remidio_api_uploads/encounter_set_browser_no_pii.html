@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}EncounterSet Browser - No PII{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">EncounterSet Browser</h1>
+      <p class="text-muted mb-0">No-PII project browser for approved collaborators.</p>
+    </div>
+  </div>
+
+  <div id="encounter-set-browser-workspace">
+    {% include "remidio_api_uploads/_encounter_set_browser_workspace_no_pii.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/encounter-set-browser.js') }}?v={{ v }}"></script>
+{% endblock %}

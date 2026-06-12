@@ -10,7 +10,7 @@ from flask_login import current_user
 from app_cache import cache
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from models import DirectImageUpload, EncounterFile, IMAGE_DIR, ImageMetadata, PatientEncounters, ZipFile
+from models import BASE_DIR, DirectImageUpload, EncounterFile, EncounterSetImage, IMAGE_DIR, ImageMetadata, PatientEncounters, ZipFile
 from utils.fileUtils import abs_from_parts
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.image_metadata import extract_image_metadata, upsert_image_metadata
@@ -62,11 +62,57 @@ def _serialize_metadata(meta: ImageMetadata, include_raw: bool) -> dict:
     return payload
 
 
+def _metadata_int(metadata: dict | None, *keys: str) -> int | None:
+    if not metadata:
+        return None
+    for key in keys:
+        value = metadata.get(key)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _serialize_encounter_set_image_fallback(image: EncounterSetImage, variant: str) -> dict:
+    metadata = image.metadata_json or {}
+    width = _metadata_int(metadata, "width", "width_px", "image_width")
+    height = _metadata_int(metadata, "height", "height_px", "image_height")
+    return {
+        "image_uuid": image.uuid,
+        "image_variant": variant,
+        "width": width,
+        "height": height,
+        "format": None,
+        "mode": None,
+        "bit_depth": None,
+        "is_grayscale": None,
+        "has_alpha": None,
+        "file_size_bytes": None,
+        "dpi_x": None,
+        "dpi_y": None,
+        "avg_luminance": None,
+        "max_luminance": None,
+        "luminance_std": None,
+        "mean_r": None,
+        "mean_g": None,
+        "mean_b": None,
+        "median_r": None,
+        "median_g": None,
+        "median_b": None,
+        "exif_present": False,
+        "iptc_present": False,
+        "size_ok": bool(width and height and width >= 1024 and height >= 768) if width and height else None,
+        "created_at": image.created_at.isoformat() + "Z" if image.created_at else None,
+        "updated_at": None,
+    }
+
+
 def _resolve_image_info(
     db,
     image_uuid: str,
     variant: Optional[str] = None,
-) -> tuple[Optional[str], Optional[str], Optional[int], Optional[int]]:
+) -> tuple[Optional[str], Optional[str], Optional[int], Optional[int], Optional[EncounterSetImage]]:
     context = determine_scoping_context()
     encounter_query = (
         db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -81,26 +127,34 @@ def _resolve_image_info(
     direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
     direct_image = direct_query.first()
 
-    if encounter_result and direct_image:
-        return None, None, None, None
+    encounter_set_query = (
+        db.query(EncounterSetImage)
+        .join(PatientEncounters, EncounterSetImage.patient_encounter_id == PatientEncounters.id)
+        .filter(EncounterSetImage.uuid == image_uuid)
+    )
+    encounter_set_query = apply_scoping(encounter_set_query, PatientEncounters, current_user, context)
+    encounter_set_image = encounter_set_query.first()
+
+    if sum(1 for result in (encounter_result, direct_image, encounter_set_image) if result) > 1:
+        return None, None, None, None, None
 
     if encounter_result:
         encounter_file, patient_encounter, zip_file = encounter_result
         if not encounter_file or not encounter_file.filename:
-            return None, None, None, None
+            return None, None, None, None, None
         upload_date = zip_file.upload_date if zip_file else None
         if not upload_date:
-            return None, None, None, None
+            return None, None, None, None, None
         upload_date_str = upload_date.strftime("%Y_%m_%d")
         path = str(IMAGE_DIR / upload_date_str / encounter_file.filename)
-        return path, "orig", encounter_file.id, None
+        return path, "orig", encounter_file.id, None, None
 
     if direct_image:
         if not direct_image.filename:
-            return None, None, None, None
+            return None, None, None, None, None
         requested_variant = variant if variant in {"orig", "edited"} else None
         if requested_variant == "edited" and not direct_image.edited_filename:
-            return None, None, None, None
+            return None, None, None, None, None
         if requested_variant == "orig":
             filename = direct_image.filename
             kind = "orig"
@@ -108,11 +162,25 @@ def _resolve_image_info(
             filename = direct_image.edited_filename or direct_image.filename
             kind = "edited" if direct_image.edited_filename else "orig"
         try:
-            return str(abs_from_parts(direct_image.folder_rel, filename, kind)), kind, None, direct_image.id
+            return str(abs_from_parts(direct_image.folder_rel, filename, kind)), kind, None, direct_image.id, None
         except (OSError, ValueError):
-            return None, None, None, None
+            return None, None, None, None, None
 
-    return None, None, None, None
+    if encounter_set_image:
+        requested_variant = variant if variant in {"orig", "edited"} else None
+        if requested_variant == "edited" and not encounter_set_image.edited_filename:
+            return None, None, None, None, None
+        if requested_variant == "edited":
+            filename = encounter_set_image.edited_filename
+            kind = "edited"
+        else:
+            filename = encounter_set_image.original_filename
+            kind = "orig"
+        if not filename:
+            return None, None, None, None, None
+        return str(BASE_DIR / encounter_set_image.folder_rel / filename), kind, None, None, encounter_set_image
+
+    return None, None, None, None, None
 
 
 def _cache_key(image_uuid: str, variant: str, include_raw: bool) -> str:
@@ -137,7 +205,7 @@ def get_image_metadata(image_uuid: str):
     include_raw = request.args.get("include_raw", "0") in {"1", "true", "yes"}
 
     with get_db_session() as db:
-        image_path, resolved_variant, _, _ = _resolve_image_info(db, image_uuid, variant)
+        image_path, resolved_variant, _, _, encounter_set_image = _resolve_image_info(db, image_uuid, variant)
         if not image_path or not resolved_variant:
             return jsonify({"success": False, "error": "Image not found"}), 404
         cache_key = _cache_key(image_uuid, resolved_variant, include_raw)
@@ -154,6 +222,10 @@ def get_image_metadata(image_uuid: str):
             .first()
         )
         if not meta:
+            if encounter_set_image:
+                payload = _serialize_encounter_set_image_fallback(encounter_set_image, resolved_variant)
+                cache.set(cache_key, payload, timeout=_METADATA_CACHE_TTL_SECONDS)
+                return jsonify({"success": True, "data": payload, "cached": False, "fallback": True})
             return jsonify({"success": False, "error": "Metadata not found"}), 404
         payload = _serialize_metadata(meta, include_raw)
 
@@ -181,7 +253,7 @@ def extract_image_metadata_api(image_uuid: str):
     force = payload.get("force", False) in {True, "true", "1", "yes"}
 
     with get_db_session() as db:
-        image_path, resolved_variant, encounter_id, direct_id = _resolve_image_info(db, image_uuid, variant)
+        image_path, resolved_variant, encounter_id, direct_id, _ = _resolve_image_info(db, image_uuid, variant)
         if not image_path or not resolved_variant:
             return jsonify({"success": False, "error": "Image not found"}), 404
 

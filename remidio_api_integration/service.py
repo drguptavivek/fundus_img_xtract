@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import zipfile
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+import yaml
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +23,7 @@ from models import (
     Disease,
     EncounterSetImage,
     EncounterSetAttachment,
+    BASE_DIR,
     GlaucomaReport,
     GlaucomaResultsCleaned,
     Job,
@@ -26,6 +31,8 @@ from models import (
     LabUnit,
     PatientEncounters,
     Project,
+    ProjectInvestigator,
+    S3Config,
     RemidioExam,
     RemidioImage,
     RemidioReport,
@@ -79,8 +86,9 @@ def list_encounter_set_browser(
     selected_date: date | None = None,
     selected_month: str | None = None,
     encounter_id: int | None = None,
+    no_pii: bool = False,
 ) -> dict[str, Any]:
-    projects = _encounter_set_browser_projects(db, user)
+    projects = _encounter_set_browser_projects(db, user, no_pii=no_pii)
     selected_project_id = project_id if any(project["id"] == project_id for project in projects) else None
     if selected_project_id is None and projects:
         selected_project_id = projects[0]["id"]
@@ -91,8 +99,8 @@ def list_encounter_set_browser(
     detail: dict[str, Any] | None = None
 
     if selected_project_id:
-        all_dates = _encounter_set_browser_dates(db, user, selected_project_id)
-        project_ocr_pending_count = count_project_pending_attachment_ocr(db, user, selected_project_id)
+        all_dates = _encounter_set_browser_dates(db, user, selected_project_id, no_pii=no_pii)
+        project_ocr_pending_count = 0 if no_pii else count_project_pending_attachment_ocr(db, user, selected_project_id)
         months = _encounter_set_browser_months(all_dates)
         if selected_date:
             selected_month = selected_date.strftime("%Y-%m")
@@ -103,13 +111,13 @@ def list_encounter_set_browser(
         if selected_date not in available_dates:
             selected_date = dates[0]["date"] if dates else None
         if selected_date:
-            patients = _encounter_set_browser_patients(db, user, selected_project_id, selected_date)
+            patients = _encounter_set_browser_patients(db, user, selected_project_id, selected_date, no_pii=no_pii)
             if encounter_id and any(row["id"] == encounter_id for row in patients):
                 selected_encounter_id = encounter_id
             elif patients:
                 selected_encounter_id = patients[0]["id"]
             if selected_encounter_id:
-                detail = _encounter_set_browser_detail(db, user, selected_encounter_id)
+                detail = _encounter_set_browser_detail(db, user, selected_encounter_id, no_pii=no_pii)
 
     return {
         "projects": projects,
@@ -122,10 +130,55 @@ def list_encounter_set_browser(
         "patients": patients,
         "selected_encounter_id": selected_encounter_id,
         "detail": detail,
+        "no_pii": no_pii,
     }
 
 
-def _encounter_set_browser_projects(db: Session, user) -> list[dict[str, Any]]:
+def build_no_pii_encounter_set_zip(db: Session, *, user, encounter_id: int) -> tuple[bytes, str] | None:
+    query = (
+        db.query(PatientEncounters)
+        .options(
+            selectinload(PatientEncounters.project),
+            selectinload(PatientEncounters.upload_profile),
+            selectinload(PatientEncounters.lab_unit),
+            selectinload(PatientEncounters.encounter_set_images).selectinload(EncounterSetImage.camera),
+            selectinload(PatientEncounters.encounter_set_images).selectinload(EncounterSetImage.area),
+        )
+        .filter(PatientEncounters.id == encounter_id, PatientEncounters.is_set_based.is_(True))
+    )
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=True)
+    encounter = query.first()
+    if encounter is None:
+        return None
+
+    images = sorted(encounter.encounter_set_images or [], key=lambda image: (image.spatial_position, image.id))
+    zip_buffer = io.BytesIO()
+    image_manifest: list[dict[str, Any]] = []
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for image in images:
+            image_bytes = _encounter_set_export_image_bytes(db, image)
+            image_metadata = _encounter_set_export_image_metadata(image)
+            if image_bytes is None:
+                continue
+            extension, content = image_bytes
+            archive_name = _encounter_set_export_image_archive_name(encounter.id, image, extension)
+            archive.writestr(archive_name, content)
+            image_manifest.append(image_metadata)
+
+        archive.writestr(
+            "metadata.yaml",
+            yaml.safe_dump(
+                _encounter_set_export_metadata(encounter, image_manifest),
+                sort_keys=False,
+                allow_unicode=False,
+            ),
+        )
+
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue(), f"{encounter.uuid}.zip"
+
+
+def _encounter_set_browser_projects(db: Session, user, *, no_pii: bool = False) -> list[dict[str, Any]]:
     query = (
         db.query(Project, func.count(PatientEncounters.id).label("encounter_count"))
         .join(PatientEncounters, PatientEncounters.project_id == Project.id)
@@ -133,7 +186,7 @@ def _encounter_set_browser_projects(db: Session, user) -> list[dict[str, Any]]:
         .group_by(Project.id)
         .order_by(Project.title.asc())
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
     return [
         {
             "id": project.id,
@@ -143,6 +196,16 @@ def _encounter_set_browser_projects(db: Session, user) -> list[dict[str, Any]]:
         }
         for project, encounter_count in query.all()
     ]
+
+
+def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool = False):
+    if not no_pii:
+        return apply_scoping(query, model_class, user, "upload")
+    return query.join(ProjectInvestigator, ProjectInvestigator.project_id == PatientEncounters.project_id).filter(
+        ProjectInvestigator.user_id == user.id,
+        ProjectInvestigator.role == "collaborator",
+        ProjectInvestigator.active.is_(True),
+    )
 
 
 def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> int:
@@ -159,7 +222,7 @@ def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> 
     return sum(1 for attachment in query.all() if _attachment_is_remidio_ai_report(attachment) and _attachment_ocr_is_remaining(attachment))
 
 
-def _encounter_set_browser_dates(db: Session, user, project_id: int) -> list[dict[str, Any]]:
+def _encounter_set_browser_dates(db: Session, user, project_id: int, *, no_pii: bool = False) -> list[dict[str, Any]]:
     query = (
         db.query(PatientEncounters.capture_date_dt, func.count(PatientEncounters.id))
         .filter(
@@ -170,7 +233,7 @@ def _encounter_set_browser_dates(db: Session, user, project_id: int) -> list[dic
         .group_by(PatientEncounters.capture_date_dt)
         .order_by(PatientEncounters.capture_date_dt.desc())
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
     return [
         {
             "date": capture_date,
@@ -198,7 +261,7 @@ def _encounter_set_browser_months(dates: list[dict[str, Any]]) -> list[dict[str,
     return months
 
 
-def _encounter_set_browser_patients(db: Session, user, project_id: int, selected_date: date) -> list[dict[str, Any]]:
+def _encounter_set_browser_patients(db: Session, user, project_id: int, selected_date: date, *, no_pii: bool = False) -> list[dict[str, Any]]:
     query = (
         db.query(PatientEncounters)
         .options(
@@ -212,14 +275,13 @@ def _encounter_set_browser_patients(db: Session, user, project_id: int, selected
             PatientEncounters.project_id == project_id,
             PatientEncounters.capture_date_dt == selected_date,
         )
-        .order_by(PatientEncounters.name.asc(), PatientEncounters.patient_id.asc(), PatientEncounters.id.asc())
-        .limit(300)
+        .order_by(PatientEncounters.id.asc() if no_pii else PatientEncounters.name.asc(), PatientEncounters.patient_id.asc(), PatientEncounters.id.asc())
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
-    return [_encounter_set_patient_row(encounter) for encounter in query.all()]
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
+    return [_encounter_set_patient_row(encounter, no_pii=no_pii) for encounter in query.limit(300).all()]
 
 
-def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[str, Any] | None:
+def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pii: bool = False) -> dict[str, Any] | None:
     query = (
         db.query(PatientEncounters)
         .options(
@@ -231,7 +293,7 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
         )
         .filter(PatientEncounters.id == encounter_id, PatientEncounters.is_set_based.is_(True))
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=no_pii)
     encounter = query.first()
     if encounter is None:
         return None
@@ -258,19 +320,19 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
     }
     attachment_rows = [_encounter_set_attachment_row(attachment) for attachment in attachments]
     return {
-        **_encounter_set_patient_row(encounter),
+        **_encounter_set_patient_row(encounter, no_pii=no_pii),
         "uuid": encounter.uuid,
         "capture_date": encounter.capture_date,
         "capture_date_dt": encounter.capture_date_dt,
-        "capture_datetime": _parse_iso_datetime(_metadata_lookup(encounter_metadata, "capture_datetime"))
+        "capture_datetime": None if no_pii else _parse_iso_datetime(_metadata_lookup(encounter_metadata, "capture_datetime"))
         or (remidio_exam.exam_date if remidio_exam else None),
         "project_title": encounter.project.title if encounter.project else None,
         "project_code": encounter.project.code if encounter.project else None,
         "upload_profile_name": encounter.upload_profile.name if encounter.upload_profile else None,
         "lab_unit_name": encounter.lab_unit.name if encounter.lab_unit else None,
         "verified_status": encounter.encounter_verified_status or "pending",
-        "metadata_patient": metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {},
-        "metadata_encounter": encounter_metadata,
+        "metadata_patient": {} if no_pii else metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {},
+        "metadata_encounter": {} if no_pii else encounter_metadata,
         "metadata_other": {
             key: value
             for key, value in metadata.items()
@@ -278,8 +340,8 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
         }
         if isinstance(metadata, dict)
         else {},
-        "remidio_exam_id": remidio_exam.remidio_exam_id if remidio_exam else _metadata_lookup(metadata, "remidio_exam_id"),
-        "remidio_site": remidio_exam.site_custom_identifier if remidio_exam else _metadata_lookup(metadata, "remidio_site_custom_identifier"),
+        "remidio_exam_id": None if no_pii else remidio_exam.remidio_exam_id if remidio_exam else _metadata_lookup(metadata, "remidio_exam_id"),
+        "remidio_site": None if no_pii else remidio_exam.site_custom_identifier if remidio_exam else _metadata_lookup(metadata, "remidio_site_custom_identifier"),
         "images": images,
         "image_groups": _group_encounter_set_images(images),
         "final_reports": final_reports,
@@ -289,17 +351,95 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int) -> dict[
     }
 
 
-def _encounter_set_patient_row(encounter: PatientEncounters) -> dict[str, Any]:
+def _encounter_set_export_metadata(
+    encounter: PatientEncounters,
+    image_manifest: list[dict[str, Any]],
+) -> dict[str, Any]:
+    metadata = encounter.metadata_json or {}
+    patient_metadata = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
+    encounter_metadata = metadata.get("encounter") if isinstance(metadata.get("encounter"), dict) else {}
+    return {
+        "encounter_set": {
+            "uuid": encounter.uuid,
+            "date": encounter.capture_date_dt.isoformat() if encounter.capture_date_dt else encounter.capture_date,
+            "age": _metadata_lookup(patient_metadata, "patient_age_yrs", "age", "age_yrs"),
+            "sex": _metadata_lookup(patient_metadata, "sex", "gender"),
+            "deviceType": _metadata_lookup(encounter_metadata, "deviceType", "device_type"),
+        },
+        "images": image_manifest,
+    }
+
+
+def _encounter_set_export_image_metadata(image: EncounterSetImage) -> dict[str, Any]:
+    metadata = image.metadata_json or {}
+    return {
+        "image_uuid": image.uuid,
+        "position": image.spatial_position,
+        "laterality": _metadata_lookup(metadata, "laterality"),
+        "field": _metadata_lookup(metadata, "fundus_field", "field"),
+        "type": _metadata_lookup(metadata, "image_type", "asset_type", "image_variant", "image_segment") or image.asset_kind,
+        "camera": image.camera.name if image.camera else None,
+        "image_variant": _metadata_lookup(metadata, "image_variant"),
+        "image_segment": _metadata_lookup(metadata, "image_segment"),
+        "is_montage": _metadata_lookup(metadata, "is_montage"),
+        "width_px": _metadata_lookup(metadata, "width_px", "width"),
+        "height_px": _metadata_lookup(metadata, "height_px", "height"),
+    }
+
+
+def _encounter_set_export_image_bytes(db: Session, image: EncounterSetImage) -> tuple[str, bytes] | None:
+    if image.s3_config_id and image.s3_object_key:
+        s3_config = db.get(S3Config, image.s3_config_id)
+        if s3_config and s3_config.is_active:
+            try:
+                from utils.storage_backends import S3StorageBackend
+
+                stream = S3StorageBackend(s3_config).get(image.s3_object_key)
+                return _safe_image_extension(image.s3_object_key), stream.read()
+            except Exception as exc:
+                LOGGER.warning(
+                    "EncounterSet no-PII ZIP skipped S3 image id=%s key=%s error=%s",
+                    image.id,
+                    sanitize_log_value(image.s3_object_key),
+                    sanitize_log_value(exc),
+                )
+                return None
+
+    if not image.folder_rel or not image.original_filename:
+        return None
+    image_path = (BASE_DIR / Path(image.folder_rel) / image.original_filename).resolve()
+    try:
+        image_path.relative_to(BASE_DIR.resolve())
+    except ValueError:
+        LOGGER.warning("EncounterSet no-PII ZIP rejected out-of-root image id=%s", image.id)
+        return None
+    if not image_path.exists() or not image_path.is_file():
+        return None
+    return _safe_image_extension(image.original_filename), image_path.read_bytes()
+
+
+def _encounter_set_export_image_archive_name(encounter_id: int, image: EncounterSetImage, extension: str) -> str:
+    return f"images/encounterset_{encounter_id}_position_{image.spatial_position}_{image.uuid}{extension}"
+
+
+def _safe_image_extension(filename: str | None) -> str:
+    extension = Path(filename or "").suffix.lower()
+    if extension in {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff"}:
+        return extension
+    return ".jpg"
+
+
+def _encounter_set_patient_row(encounter: PatientEncounters, *, no_pii: bool = False) -> dict[str, Any]:
     metadata = encounter.metadata_json or {}
     patient_metadata = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
     patient_name = _metadata_lookup(patient_metadata, "patient_name")
     return {
         "id": encounter.id,
         "uuid": encounter.uuid,
-        "name": patient_name or encounter.name,
-        "mrn": encounter.patient_id,
-        "age": _metadata_lookup(patient_metadata, "patient_age_yrs", "age", "age_yrs"),
-        "sex": _metadata_lookup(patient_metadata, "sex", "gender"),
+        "name": f"EncounterSet {encounter.uuid}" if no_pii else patient_name or encounter.name,
+        "mrn": None if no_pii else encounter.patient_id,
+        "age": None if no_pii else _metadata_lookup(patient_metadata, "patient_age_yrs", "age", "age_yrs"),
+        "sex": None if no_pii else _metadata_lookup(patient_metadata, "sex", "gender"),
         "capture_date_dt": encounter.capture_date_dt,
         "capture_date": encounter.capture_date,
         "verified_status": encounter.encounter_verified_status or "pending",

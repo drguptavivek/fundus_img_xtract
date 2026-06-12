@@ -50,7 +50,7 @@ def seed_test_database(test_engine):
         roles_data = [
             'admin', 'master_admin', 'local_admin', 'ophthalmologist', 'resident',
             'arbitrator', 'optometrist', 'fileUploader', 'data_manager',
-            'researcher', 'dataset_creator', 'analytics_viewer'
+            'researcher', 'dataset_creator', 'analytics_viewer', 'collaborator'
         ]
         roles = {}
         for role_name in roles_data:

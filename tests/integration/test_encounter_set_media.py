@@ -1,6 +1,6 @@
 import pytest
 import uuid
-from models import PatientEncounters, EncounterSetImage, ZipFile, LabUnit
+from models import PatientEncounters, EncounterSetImage, Project, ProjectInvestigator
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
 
@@ -13,6 +13,9 @@ def encounter_set_data(db_session, core_test_data):
     # So we can skip it if nullable. Let's try skipping it.
     
     lab_unit = db_session.merge(core_test_data['lab_unit'])
+    project = Project(title="Media Collaborator Project", code="MEDIA-COLLAB", active=True)
+    db_session.add(project)
+    db_session.flush()
     
     encounter = PatientEncounters(
         uuid=str(uuid.uuid4()),
@@ -21,6 +24,7 @@ def encounter_set_data(db_session, core_test_data):
         capture_date="2023-10-27",
         capture_date_dt=date(2023, 10, 27),
         lab_unit_id=lab_unit.id,
+        project_id=project.id,
         is_set_based=True,
         encounter_verified_status='pending'
     )
@@ -34,6 +38,7 @@ def encounter_set_data(db_session, core_test_data):
         spatial_position=1,
         original_filename="test_pos_1.jpg",
         folder_rel="files/test_sets",
+        project_id=project.id,
         created_at=datetime.now()
     )
     db_session.add(image)
@@ -42,7 +47,8 @@ def encounter_set_data(db_session, core_test_data):
     return {
         'encounter': encounter,
         'image': image,
-        'lab_unit': lab_unit
+        'lab_unit': lab_unit,
+        'project': project,
     }
 
 def test_access_encounter_set_image_authenticated(client, auth_client_factory, encounter_set_data, db_session):
@@ -82,6 +88,88 @@ def test_access_encounter_set_image_wrong_role(client, auth_client_factory, enco
     response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}")
     # @roles_required usually returns 403 Forbidden
     assert response.status_code == 403
+
+
+def test_access_encounter_set_thumbnail_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):
+    user = UserFactory.create_by_role(db_session, "collaborator", username="media_project_collaborator")
+    db_session.add(
+        ProjectInvestigator(
+            project_id=encounter_set_data["project"].id,
+            user_id=user.id,
+            role="collaborator",
+            active=True,
+        )
+    )
+    db_session.commit()
+    media_dir = tmp_path / "files" / "test_sets"
+    media_dir.mkdir(parents=True)
+    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}/thumbnail")
+
+    assert response.status_code == 200
+
+
+def test_access_encounter_set_thumbnail_collaborator_without_project_membership(
+    auth_client_factory,
+    encounter_set_data,
+    db_session,
+    monkeypatch,
+    tmp_path,
+):
+    user = UserFactory.create_by_role(db_session, "collaborator", username="media_unassigned_collaborator")
+    media_dir = tmp_path / "files" / "test_sets"
+    media_dir.mkdir(parents=True)
+    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}/thumbnail")
+
+    assert response.status_code == 404
+
+
+def test_access_encounter_set_full_image_collaborator_without_project_membership(
+    auth_client_factory,
+    encounter_set_data,
+    db_session,
+    monkeypatch,
+    tmp_path,
+):
+    user = UserFactory.create_by_role(db_session, "collaborator", username="media_unassigned_full_collaborator")
+    media_dir = tmp_path / "files" / "test_sets"
+    media_dir.mkdir(parents=True)
+    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}")
+
+    assert response.status_code == 404
+
+
+def test_access_encounter_set_full_image_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):
+    user = UserFactory.create_by_role(db_session, "collaborator", username="media_full_image_collaborator")
+    db_session.add(
+        ProjectInvestigator(
+            project_id=encounter_set_data["project"].id,
+            user_id=user.id,
+            role="collaborator",
+            active=True,
+        )
+    )
+    db_session.commit()
+    media_dir = tmp_path / "files" / "test_sets"
+    media_dir.mkdir(parents=True)
+    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}")
+
+    assert response.status_code == 200
 
 def test_access_encounter_set_image_not_found(client, auth_client_factory, test_users):
     """Test accessing a non-existent UUID."""

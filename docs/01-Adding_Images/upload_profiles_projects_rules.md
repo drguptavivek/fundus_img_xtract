@@ -19,8 +19,9 @@ Project investigators are users attached to a project with a role such as:
 - `principal_investigator`
 - `co_investigator`
 - `coordinator`
+- `collaborator`
 
-The admin Projects page shows PIs and other investigators so managers can understand project ownership. These records are governance metadata, not upload authorization.
+The admin Projects page shows PIs and other investigators so managers can understand project ownership. These records are governance metadata, not upload authorization. The `collaborator` project role is used with the app-level `collaborator` RBAC role to allow access to the no-PII EncounterSet browser for that specific project only.
 
 ### Upload Profile
 

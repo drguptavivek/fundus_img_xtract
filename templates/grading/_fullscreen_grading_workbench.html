@@ -1,0 +1,691 @@
+{% from "_forms.html" import csrf_field %}
+
+<style>
+  .fgw-shell {
+    width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bs-body-bg);
+    overflow: hidden;
+  }
+
+  .fgw-shell.is-expanded {
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+  }
+
+  .fgw-shell:not(.is-expanded) {
+    position: relative;
+    width: 100%;
+    height: calc(100dvh - 8rem);
+    min-height: 42rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+  }
+
+  .fgw-header,
+  .fgw-footer {
+    flex: 0 0 auto;
+    border-color: var(--bs-border-color);
+  }
+
+  .fgw-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .fgw-panel {
+    display: none;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .fgw-panel.is-active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem);
+    gap: 1rem;
+  }
+
+  .fgw-viewer-card,
+  .fgw-grade-card {
+    min-height: 0;
+    max-height: 100%;
+  }
+
+  .fgw-viewer-card .card-body {
+    min-height: 0;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .fgw-viewer-card .imggr-viewer-root {
+    background: #000;
+    display: flex;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .fgw-viewer-card .imggr-stage,
+  .fgw-viewer-card .imggr-annot-layout,
+  .fgw-viewer-card .imggr-main-wrap {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .fgw-viewer-card .imggr-main {
+    background: #000;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    min-width: 0;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .fgw-viewer-card .fgw-viewer-adjustments {
+    column-gap: 1.5rem !important;
+    row-gap: .5rem;
+  }
+
+  .fgw-viewer-card .fgw-viewer-zoom {
+    min-width: 18rem;
+    max-width: 28rem;
+  }
+
+  .fgw-grade-card {
+    overflow: auto;
+  }
+
+  .fgw-grade-option {
+    text-align: left;
+    min-height: 3.25rem;
+  }
+
+  .fgw-grade-option.is-selected {
+    border-color: var(--bs-primary);
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-body-color);
+  }
+
+  .fgw-encounter-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+  }
+
+  .fgw-encounter-list {
+    max-height: 28rem;
+    overflow: auto;
+  }
+
+  .fgw-encounter-item {
+    border-top: 1px solid var(--bs-border-color);
+    padding: .6rem 0;
+  }
+
+  .fgw-encounter-item:first-child {
+    border-top: 0;
+  }
+
+  .fgw-pager {
+    display: flex;
+    gap: .4rem;
+    overflow-x: auto;
+    padding-bottom: .1rem;
+  }
+
+  .fgw-pager-button {
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+  }
+
+  .fgw-pager-button[data-status="complete"] {
+    border-color: var(--bs-success);
+  }
+
+  .fgw-pager-button[data-status="missing"] {
+    border-color: var(--bs-danger);
+  }
+
+  .fgw-pager-button[data-status="locked"] {
+    opacity: .55;
+  }
+
+  @media (max-width: 991.98px) {
+    .fgw-shell {
+      height: 100dvh;
+      min-height: 0;
+    }
+
+    .fgw-panel.is-active {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(24rem, 1fr) auto;
+      gap: 1rem;
+      overflow: auto;
+    }
+
+    .fgw-viewer-card {
+      min-height: 28rem;
+      margin-bottom: 1rem;
+    }
+
+    .fgw-encounter-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="container-fluid p-2 fgw-shell is-expanded" data-fgw-workbench>
+  <form id="fullscreen-grading-form" class="h-100 d-flex flex-column" method="post" action="{{ url_for('grading.encounter_set_package_submit') }}">
+    {{ csrf_field() }}
+    <span id="imggr-preset-save-button" class="d-none">{{ csrf_field() }}</span>
+    <input type="hidden" name="package_uuid" value="{{ package.uuid }}">
+    <input type="hidden" name="slot" value="{{ slot_type }}">
+
+    <header class="fgw-header border-bottom pb-2 mb-2">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <h1 class="h5 mb-0">{{ package.name }}</h1>
+            <span class="badge text-bg-light border">{{ slot_type|capitalize }}</span>
+            <span class="badge text-bg-secondary">{{ package.state }}</span>
+          </div>
+          <div class="small text-muted">{{ encounter.name }} &middot; Patient {{ encounter.patient_id }} &middot; {{ encounter.capture_date }}</div>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="badge text-bg-light border" data-fgw-progress>0 of 0 graded</span>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-fgw-expand-toggle title="Restore grading view" aria-label="Restore grading view" aria-pressed="true">
+            <i class="fa-solid fa-compress" aria-hidden="true" data-fgw-expand-icon></i>
+          </button>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Dashboard</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="fgw-stage">
+      {% for panel in task_panels %}
+      {% set task = panel.task %}
+      {% set image = task.encounter_set_image %}
+      {% set viewer_uuid = task.uuid %}
+      {% set image_meta = image.metadata_json if image and image.metadata_json else {} %}
+      {% set image_laterality = (image_meta.get('laterality') or image_meta.get('eye') or '')|lower %}
+      <article class="fgw-panel {% if loop.first %}is-active{% endif %}"
+               data-fgw-panel
+               data-target-index="{{ loop.index0 }}"
+               data-task-uuid="{{ task.uuid }}"
+               data-available="{{ '1' if panel.available else '0' }}"
+               data-target-level="{{ task.grading_target_level or '' }}"
+               data-laterality="{% if image_laterality in ['od', 'right', 'right eye', 'r'] %}od{% elif image_laterality in ['os', 'left', 'left eye', 'l'] %}os{% elif image %}unknown{% endif %}">
+        <section class="card fgw-viewer-card h-100">
+          <div class="card-header py-2">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div>
+                <div class="text-uppercase small text-muted">{% if image %}Image target{% else %}Encounter target{% endif %}</div>
+                <h2 class="h6 mb-0">
+                  {% if image %}
+                    Image {{ image.spatial_position or loop.index }} &middot; {{ image_meta.get('laterality') or image_meta.get('eye') or "Unknown" }} &middot; {{ task.disease.name if task.disease else "Scheme" }}
+                  {% else %}
+                    Encounter &middot; {{ task.disease.name if task.disease else "Scheme" }}
+                  {% endif %}
+                </h2>
+              </div>
+              <span class="badge text-bg-{{ 'success' if panel.available else 'secondary' }}">{{ 'Available' if panel.available else 'Locked' }}</span>
+            </div>
+          </div>
+          <div class="card-body p-2 d-flex flex-column">
+            {% if image %}
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 imggr-top-row">
+              <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+                {% for value, label in [('none', 'None'), ('redfree', 'R'), ('greenboost', 'G'), ('bluemono', 'B'), ('gray', 'Y'), ('contrast', 'H'), ('enhance', 'E')] %}
+                <input class="btn-check" type="radio" name="imggrFilter-{{ viewer_uuid }}" id="fgw-imggr-{{ value }}-{{ viewer_uuid }}" value="{{ value }}" {% if value == 'none' %}checked{% endif %}>
+                <label class="btn btn-outline-secondary" for="fgw-imggr-{{ value }}-{{ viewer_uuid }}">{{ label }}</label>
+                {% endfor %}
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-grow-1 fgw-viewer-zoom">
+                <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ viewer_uuid }}">Zoom</label>
+                <input id="imggr-zoom-slider-{{ viewer_uuid }}" class="form-range imggr-zoom-slider flex-grow-1" type="range" min="10" max="400" step="5" value="100" title="Adjust image zoom level">
+                <button type="button" class="btn btn-sm btn-outline-secondary imggr-zoom-fit" title="Fit image to container">Fit</button>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap fgw-viewer-adjustments">
+                <label class="small mb-0" for="fgw-bright-{{ viewer_uuid }}" title="Brightness" aria-label="Brightness">
+                  <i class="fa-solid fa-sun" aria-hidden="true"></i>
+                </label>
+                <div class="imggr-range-wrap position-relative" style="width: 8rem;">
+                  <input id="fgw-bright-{{ viewer_uuid }}" class="form-range imggr-bright form-range-light" type="range" min="0.5" max="5" step="0.05" value="1">
+                  <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-bright-tip d-none">1.00</span>
+                </div>
+                <label class="small mb-0" for="fgw-contrast-{{ viewer_uuid }}" title="Contrast" aria-label="Contrast">
+                  <i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
+                </label>
+                <div class="imggr-range-wrap position-relative" style="width: 8rem;">
+                  <input id="fgw-contrast-{{ viewer_uuid }}" class="form-range imggr-contrast form-range-light" type="range" min="0.5" max="5" step="0.05" value="1">
+                  <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-contrast-tip d-none">1.00</span>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset" title="Reset filters">/</button>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Viewer presets">
+                  {% for preset in [1, 2, 3, 4, 5] %}
+                  <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="{{ preset }}">{{ preset }}</button>
+                  {% endfor %}
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ image.uuid }}" id="imggr-preset-save-button-{{ viewer_uuid }}">
+                  Save
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm imggr-loupe-toggle" aria-pressed="false" aria-label="Toggle loupe magnifier">L</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger" data-bs-toggle="modal" data-bs-target="#imggr-shortcuts-modal-{{ image.uuid }}" aria-label="Keyboard shortcuts">?</button>
+              </div>
+            </div>
+            <div id="fgw-imggr-view-{{ viewer_uuid }}" class="imggr-viewer-root flex-grow-1" data-enc-id="{{ image.uuid }}" data-imggr-lite-mode="false">
+              <div class="imggr-stage position-relative flex-grow-1 w-100">
+                <div class="imggr-annot-layout d-flex h-100">
+                  <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
+                    <div class="imggr-main rounded position-relative" data-fixed-viewport="true">
+                      <img class="imggr-main-img" src="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}" alt="Image {{ image.spatial_position }}" data-index="0">
+                      <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="imggr-loupe" aria-hidden="true"></div>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2">
+              <span class="imggr-zoom-info"><span class="imggr-zoom-level">100%</span> zoom</span>
+              <span class="imggr-dim-info">Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span></span>
+            </div>
+            <div class="modal fade" id="imggr-shortcuts-modal-{{ image.uuid }}" tabindex="-1" aria-labelledby="shortcutsModalLabel-{{ image.uuid }}" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="shortcutsModalLabel-{{ image.uuid }}">Image Viewer Controls</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="row g-3 small">
+                      <div class="col-md-6">
+                        <h6 class="text-uppercase small">Image Controls</h6>
+                        <div><kbd>Z</kbd>/<kbd>X</kbd> Zoom in/out</div>
+                        <div><kbd>Home</kbd> Fit to container</div>
+                        <div><kbd>Left click + drag</kbd> Pan image</div>
+                        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Pan base image</div>
+                      </div>
+                      <div class="col-md-6">
+                        <h6 class="text-uppercase small">Viewer Tools</h6>
+                        <div><kbd>L</kbd> Toggle loupe</div>
+                        <div><kbd>[</kbd>/<kbd>]</kbd> Change loupe size</div>
+                        <div><kbd>-</kbd>/<kbd>=</kbd> Change loupe zoom</div>
+                        <div><kbd>1</kbd>-<kbd>5</kbd> Apply preset</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal fade" id="imggr-preset-modal-{{ image.uuid }}" tabindex="-1" aria-labelledby="presetModalLabel-{{ image.uuid }}" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="presetModalLabel-{{ image.uuid }}">Save Viewer Preset</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="small mb-3 p-2 rounded bg-body-tertiary">
+                      <div><strong>Filter:</strong> <span id="current-filter-display">None</span></div>
+                      <div><strong>Brightness:</strong> <span id="current-brightness-display">1.0</span></div>
+                      <div><strong>Contrast:</strong> <span id="current-contrast-display">1.0</span></div>
+                    </div>
+                    <div class="row g-2" id="preset-slots"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="fgw-encounter-grid">
+              {% for bucket, bucket_label in [('od', 'OD'), ('os', 'OS'), ('unknown', 'Unknown')] %}
+              <section class="border rounded bg-body-tertiary p-3">
+                <h3 class="h6 mb-2">{{ bucket_label }}</h3>
+                <div class="fgw-encounter-list small">
+                  {% set ns = namespace(count=0) %}
+                  {% for image_panel in task_panels %}
+                    {% set image_task = image_panel.task %}
+                    {% set target_image = image_task.encounter_set_image %}
+                    {% if target_image %}
+                      {% set target_meta = target_image.metadata_json or {} %}
+                      {% set target_laterality = (target_meta.get('laterality') or target_meta.get('eye') or '')|lower %}
+                      {% if target_laterality in ['od', 'right', 'right eye', 'r'] %}
+                        {% set target_bucket = 'od' %}
+                      {% elif target_laterality in ['os', 'left', 'left eye', 'l'] %}
+                        {% set target_bucket = 'os' %}
+                      {% else %}
+                        {% set target_bucket = 'unknown' %}
+                      {% endif %}
+                      {% if target_bucket == bucket %}
+                        {% set ns.count = ns.count + 1 %}
+                        <div class="fgw-encounter-item">
+                          <div class="d-flex justify-content-between gap-2">
+                            <span class="fw-semibold">Image {{ target_image.spatial_position }}</span>
+                            <span class="text-muted text-end">{{ image_task.disease.name if image_task.disease else "Scheme" }}</span>
+                          </div>
+                          <div class="mt-1" data-fgw-encounter-image-grade data-source-task-uuid="{{ image_task.uuid }}">
+                            {{ image_panel.existing_grade.label.impression if image_panel.existing_grade and image_panel.existing_grade.label else "-" }}
+                          </div>
+                        </div>
+                      {% endif %}
+                    {% endif %}
+                  {% endfor %}
+                  {% if ns.count == 0 %}
+                  <div class="text-muted">No image targets</div>
+                  {% endif %}
+                </div>
+              </section>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </section>
+
+        <aside class="card fgw-grade-card h-100">
+          <div class="card-header py-2">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div class="small text-muted">Grade</div>
+                <div class="fw-semibold">{{ task.disease.name if task.disease else "Scheme" }}</div>
+              </div>
+              <span class="small text-muted">{{ task.state }}</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <select class="form-select visually-hidden" id="label_{{ task.uuid }}" name="label_id_{{ task.uuid }}" {% if not panel.available %}disabled{% endif %} required data-fgw-grade-select>
+              <option value="">Select grade</option>
+              {% for label in panel.labels %}
+              <option value="{{ label.id }}" {% if panel.existing_grade and panel.existing_grade.disease_grading_id == label.id %}selected{% endif %}>{{ label.impression }}</option>
+              {% endfor %}
+            </select>
+            <div class="vstack gap-2" data-fgw-grade-options>
+              {% for label in panel.labels %}
+              <button class="btn btn-outline-secondary fgw-grade-option {% if panel.existing_grade and panel.existing_grade.disease_grading_id == label.id %}is-selected{% endif %}"
+                      type="button"
+                      data-fgw-grade-option
+                      data-grade-id="{{ label.id }}"
+                      {% if not panel.available %}disabled{% endif %}>
+                <span class="fw-semibold">{{ label.impression }}</span>
+                {% if label.guidelines %}
+                <span class="d-block small text-muted">{{ label.guidelines }}</span>
+                {% endif %}
+              </button>
+              {% endfor %}
+            </div>
+
+            <label class="form-label small fw-semibold mt-3" for="comment_{{ task.uuid }}">Comment</label>
+            <textarea class="form-control" id="comment_{{ task.uuid }}" name="comment_{{ task.uuid }}" rows="4" {% if not panel.available %}disabled{% endif %}>{{ panel.existing_grade.comment if panel.existing_grade else "" }}</textarea>
+          </div>
+          <div class="card-footer d-flex justify-content-between gap-2">
+            <button class="btn btn-outline-secondary" type="button" data-fgw-prev>Previous</button>
+            <button class="btn btn-primary" type="button" data-fgw-next>Save and next</button>
+          </div>
+        </aside>
+      </article>
+      {% endfor %}
+    </main>
+
+    <footer class="fgw-footer border-top pt-2 mt-2">
+      <div class="d-flex align-items-center gap-2">
+        <div class="fgw-pager flex-grow-1" data-fgw-pager>
+          {% for panel in task_panels %}
+          {% set task = panel.task %}
+          {% set image = task.encounter_set_image %}
+          <button class="btn btn-sm btn-outline-secondary fgw-pager-button {% if loop.first %}active{% endif %}"
+                  type="button"
+                  title="{% if image %}Image {{ image.spatial_position }}{% else %}Encounter{% endif %}"
+                  data-fgw-target-nav
+                  data-target-index="{{ loop.index0 }}"
+                  data-task-uuid="{{ task.uuid }}"
+                  data-available="{{ '1' if panel.available else '0' }}"
+                  data-status="{{ 'locked' if not panel.available else ('complete' if panel.existing_grade else 'pending') }}">
+            {% if image %}{{ loop.index }}{% else %}E{% endif %}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+    </footer>
+  </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}" defer></script>
+<script>
+  (function () {
+    const root = document.querySelector('[data-fgw-workbench]');
+    if (!root) return;
+    const panels = Array.from(root.querySelectorAll('[data-fgw-panel]'));
+    const navItems = Array.from(root.querySelectorAll('[data-fgw-target-nav]'));
+    const progress = root.querySelector('[data-fgw-progress]');
+    const expandToggle = root.querySelector('[data-fgw-expand-toggle]');
+    const expandIcon = root.querySelector('[data-fgw-expand-icon]');
+    const viewerAdjustmentStoragePrefix = 'fgwViewerAdjustments';
+    const viewerAdjustmentTtlMs = 15 * 60 * 1000;
+    let activeIndex = 0;
+
+    function viewerAdjustmentKey() {
+      return viewerAdjustmentStoragePrefix + ':package:{{ package.uuid }}';
+    }
+
+    function pruneViewerAdjustments() {
+      const now = Date.now();
+      try {
+        for (let idx = window.localStorage.length - 1; idx >= 0; idx -= 1) {
+          const key = window.localStorage.key(idx);
+          if (!key || !key.startsWith(viewerAdjustmentStoragePrefix + ':')) continue;
+          const raw = window.localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (!parsed || !parsed.savedAt || now - Number(parsed.savedAt) > viewerAdjustmentTtlMs) {
+            window.localStorage.removeItem(key);
+          }
+        }
+      } catch (_) {}
+    }
+
+    function readViewerAdjustments(panel) {
+      pruneViewerAdjustments();
+      try {
+        const raw = window.localStorage.getItem(viewerAdjustmentKey());
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.savedAt || Date.now() - Number(parsed.savedAt) > viewerAdjustmentTtlMs) {
+          window.localStorage.removeItem(viewerAdjustmentKey());
+          return null;
+        }
+        return parsed;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function writeViewerAdjustments(panel) {
+      if (!panel || panel.dataset.targetLevel !== 'image') return;
+      const bright = panel.querySelector('.imggr-bright');
+      const contrast = panel.querySelector('.imggr-contrast');
+      if (!bright && !contrast) return;
+      try {
+        window.localStorage.setItem(viewerAdjustmentKey(), JSON.stringify({
+          savedAt: Date.now(),
+          brightness: bright ? bright.value : '1',
+          contrast: contrast ? contrast.value : '1'
+        }));
+      } catch (_) {}
+    }
+
+    function restoreViewerAdjustments(panel, dispatchEvents) {
+      if (!panel || panel.dataset.targetLevel !== 'image') return;
+      const stored = readViewerAdjustments(panel);
+      if (!stored) return;
+      const bright = panel.querySelector('.imggr-bright');
+      const contrast = panel.querySelector('.imggr-contrast');
+      if (bright && stored.brightness !== undefined) {
+        bright.value = stored.brightness;
+        if (dispatchEvents) bright.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (contrast && stored.contrast !== undefined) {
+        contrast.value = stored.contrast;
+        if (dispatchEvents) contrast.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+
+    function initViewer(panel) {
+      const viewer = panel.querySelector('.imggr-viewer-root');
+      if (!viewer || viewer.dataset.fgwViewerInit === '1') return;
+      restoreViewerAdjustments(panel, false);
+      if (window.initImggrViewers) {
+        window.initImggrViewers(viewer);
+        viewer.dataset.fgwViewerInit = '1';
+      }
+    }
+
+    function gradeText(panel) {
+      const select = panel.querySelector('[data-fgw-grade-select]');
+      if (!select || !select.value) return '-';
+      return select.selectedOptions[0] ? select.selectedOptions[0].textContent.trim() : '-';
+    }
+
+    function isAvailable(panel) {
+      return panel.dataset.available === '1';
+    }
+
+    function isComplete(panel) {
+      const select = panel.querySelector('[data-fgw-grade-select]');
+      return !isAvailable(panel) || Boolean(select && select.value);
+    }
+
+    function setActive(index) {
+      activeIndex = Math.max(0, Math.min(index, panels.length - 1));
+      panels.forEach(function (panel, idx) {
+        panel.classList.toggle('is-active', idx === activeIndex);
+      });
+      navItems.forEach(function (item, idx) {
+        item.classList.toggle('active', idx === activeIndex);
+      });
+      restoreViewerAdjustments(panels[activeIndex], true);
+      initViewer(panels[activeIndex]);
+      updateProgress();
+    }
+
+    function syncExpandedState() {
+      const expanded = root.classList.contains('is-expanded');
+      if (expandToggle) {
+        expandToggle.setAttribute('aria-pressed', expanded ? 'true' : 'false');
+        expandToggle.setAttribute('aria-label', expanded ? 'Restore grading view' : 'Expand grading view');
+        expandToggle.setAttribute('title', expanded ? 'Restore grading view' : 'Expand grading view');
+      }
+      if (expandIcon) {
+        expandIcon.className = 'fa-solid ' + (expanded ? 'fa-compress' : 'fa-expand');
+      }
+      setTimeout(function () {
+        initViewer(panels[activeIndex]);
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+    }
+
+    function updateProgress() {
+      let available = 0;
+      let complete = 0;
+      panels.forEach(function (panel, idx) {
+        const panelAvailable = isAvailable(panel);
+        const panelComplete = isComplete(panel);
+        if (panelAvailable) {
+          available += 1;
+          if (panelComplete) complete += 1;
+        }
+        const status = !panelAvailable ? 'locked' : (panelComplete ? 'complete' : 'missing');
+        const nav = navItems[idx];
+        if (nav) nav.dataset.status = status;
+        root.querySelectorAll('[data-fgw-encounter-image-grade][data-source-task-uuid="' + panel.dataset.taskUuid + '"]').forEach(function (cell) {
+          cell.textContent = gradeText(panel);
+        });
+      });
+      if (progress) progress.textContent = complete + ' of ' + available + ' graded';
+      root.querySelectorAll('[data-fgw-next]').forEach(function (button) {
+        const isLast = activeIndex >= panels.length - 1;
+        button.textContent = isLast ? 'Submit package' : 'Save and next';
+        button.disabled = isLast && !(available > 0 && complete === available);
+      });
+      root.querySelectorAll('[data-fgw-prev]').forEach(function (button) {
+        button.disabled = activeIndex === 0;
+      });
+    }
+
+    root.addEventListener('click', function (event) {
+      const nav = event.target.closest('[data-fgw-target-nav]');
+      if (nav) {
+        setActive(Number(nav.dataset.targetIndex || 0));
+        return;
+      }
+      const grade = event.target.closest('[data-fgw-grade-option]');
+      if (grade) {
+        const panel = grade.closest('[data-fgw-panel]');
+        const select = panel.querySelector('[data-fgw-grade-select]');
+        if (select) select.value = grade.dataset.gradeId || '';
+        panel.querySelectorAll('[data-fgw-grade-option]').forEach(function (button) {
+          button.classList.toggle('is-selected', button === grade);
+        });
+        updateProgress();
+        return;
+      }
+      if (event.target.closest('[data-fgw-prev]')) {
+        setActive(activeIndex - 1);
+        return;
+      }
+      if (event.target.closest('[data-fgw-next]')) {
+        if (activeIndex >= panels.length - 1) {
+          root.querySelector('form')?.requestSubmit();
+        } else {
+          setActive(activeIndex + 1);
+        }
+        return;
+      }
+      if (event.target.closest('[data-fgw-expand-toggle]')) {
+        root.classList.toggle('is-expanded');
+        syncExpandedState();
+        return;
+      }
+      if (event.target.closest('.imggr-reset')) {
+        const panel = event.target.closest('[data-fgw-panel]');
+        setTimeout(function () {
+          writeViewerAdjustments(panel);
+        }, 0);
+      }
+    });
+
+    root.addEventListener('change', function (event) {
+      if (event.target.matches('[data-fgw-grade-select]')) {
+        const panel = event.target.closest('[data-fgw-panel]');
+        panel.querySelectorAll('[data-fgw-grade-option]').forEach(function (button) {
+          button.classList.toggle('is-selected', button.dataset.gradeId === event.target.value);
+        });
+        updateProgress();
+      }
+      if (event.target.matches('.imggr-bright, .imggr-contrast')) {
+        writeViewerAdjustments(event.target.closest('[data-fgw-panel]'));
+      }
+    });
+
+    root.addEventListener('input', function (event) {
+      if (event.target.matches('.imggr-bright, .imggr-contrast')) {
+        writeViewerAdjustments(event.target.closest('[data-fgw-panel]'));
+      }
+    });
+
+    window.addEventListener('load', function () {
+      setActive(activeIndex);
+      syncExpandedState();
+    });
+    setActive(0);
+    syncExpandedState();
+  })();
+</script>

@@ -483,7 +483,7 @@ class ProjectInvestigator(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "user_id", "role", name="uq_project_investigator_role"),
         CheckConstraint(
-            "role IN ('principal_investigator','co_investigator','coordinator')",
+            "role IN ('principal_investigator','co_investigator','coordinator','collaborator')",
             name="ck_project_investigator_role",
         ),
         Index("ix_project_investigators_project_active", "project_id", "active"),

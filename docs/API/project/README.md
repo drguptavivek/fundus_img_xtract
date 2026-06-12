@@ -53,7 +53,38 @@ Fields:
 Fields:
 - `project_id` integer, required
 - `user_id` integer, required
-- `role` one of `principal_investigator`, `co_investigator`, `coordinator`
+- `role` one of `principal_investigator`, `co_investigator`, `coordinator`, `collaborator`
+
+`collaborator` is a project membership role. It is separate from upload-profile
+assignment and does not grant upload permission. Users who also have the app
+RBAC role `collaborator` can use the no-PII EncounterSet browser only for
+projects where they have an active project membership with `role=collaborator`.
+
+### No-PII EncounterSet Browser
+
+`GET /uploads/encountersets/browse-no-pii`
+
+Auth:
+- authenticated browser session
+- app role `collaborator`
+- active `project_investigators` row for the selected project with `role=collaborator`
+
+Behavior:
+- HTMX workspace endpoint: `/uploads/encountersets/browse-no-pii/workspace`
+- EncounterSet ZIP export endpoint:
+  `/uploads/encountersets/browse-no-pii/{encounter_id}/download`
+- supports `project_id`, `month`, `date`, and `encounter_id` query parameters
+- browser page redacts patient name, MRN, age, sex, Remidio exam identifiers, raw
+  patient/encounter metadata, attachment files, OCR details, and final report
+  text
+- displays project/date navigation, EncounterSet placeholder labels, image
+  thumbnails, full EncounterSet images, and non-PII image metadata
+- ZIP export is scoped to one EncounterSet and includes image files plus
+  `metadata.yaml`; the YAML is limited to:
+  `encounter_set.uuid`, `encounter_set.date`, `encounter_set.age`,
+  `encounter_set.sex`, `encounter_set.deviceType`, and per-image
+  `image_uuid`, `position`, `laterality`, `field`, `type`, `camera`,
+  `image_variant`, `image_segment`, `is_montage`, `width_px`, and `height_px`.
 
 ### Create Upload Profile
 

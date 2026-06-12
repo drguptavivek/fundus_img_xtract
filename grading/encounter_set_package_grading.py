@@ -171,12 +171,25 @@ def _ordered_package_tasks(package: EncounterSetGradingPackage) -> list[GradingT
     return sorted(
         [task for task in package.tasks if task.state != "final" or task.grades],
         key=lambda task: (
-            task.grading_target_level or "",
+            1 if task.grading_target_level == "encounter" else 0,
+            _task_laterality_order(task),
             task.encounter_set_image.spatial_position if task.encounter_set_image else 0,
             task.disease.name if task.disease else "",
             task.id,
         ),
     )
+
+
+def _task_laterality_order(task: GradingTask) -> int:
+    image = task.encounter_set_image
+    metadata = image.metadata_json if image and image.metadata_json else {}
+    raw_value = metadata.get("laterality") or metadata.get("eye")
+    value = str(raw_value or "").strip().lower()
+    if value in {"od", "right", "right eye", "r"}:
+        return 0
+    if value in {"os", "left", "left eye", "l"}:
+        return 1
+    return 2
 
 
 def _task_panel(db, task: GradingTask, slot_type: str) -> dict:

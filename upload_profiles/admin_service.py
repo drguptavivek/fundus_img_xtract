@@ -35,6 +35,13 @@ from upload_profiles.service import (
     manager_lab_unit_ids,
 )
 
+PROJECT_INVESTIGATOR_ROLES = {
+    "principal_investigator",
+    "co_investigator",
+    "coordinator",
+    "collaborator",
+}
+
 
 @dataclass(frozen=True)
 class MutationResult:
@@ -192,6 +199,8 @@ def update_project(project_id: int, project_input: ProjectCreateInput) -> Mutati
 def add_investigator(investigator_input: InvestigatorCreateInput) -> MutationResult:
     if not investigator_input.project_id or not investigator_input.user_id:
         return MutationResult(False, "Project and investigator are required.", 400)
+    if investigator_input.role not in PROJECT_INVESTIGATOR_ROLES:
+        return MutationResult(False, "Project collaborator role is invalid.", 400)
     with transaction_scope() as db:
         try:
             investigator = ProjectInvestigator(

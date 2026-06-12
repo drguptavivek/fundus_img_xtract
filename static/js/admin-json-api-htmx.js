@@ -16,11 +16,19 @@
     }
   }
 
-  function refreshTarget(elt) {
+  function templateValue(template, payload) {
+    return (template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, function (_, key) {
+      return payload && payload[key] !== undefined && payload[key] !== null ? String(payload[key]) : '';
+    });
+  }
+
+  function refreshTarget(elt, payload) {
     const managed = managedElement(elt);
-    const url = managed && managed.getAttribute('data-json-api-reload-url');
+    const urlTemplate = managed && managed.getAttribute('data-json-api-reload-url-template');
+    const pushUrlTemplate = managed && managed.getAttribute('data-json-api-push-url-template');
+    const url = urlTemplate ? templateValue(urlTemplate, payload) : (managed && managed.getAttribute('data-json-api-reload-url'));
     const target = managed && managed.getAttribute('data-json-api-reload-target');
-    const pushUrl = managed && managed.getAttribute('data-json-api-push-url');
+    const pushUrl = pushUrlTemplate ? templateValue(pushUrlTemplate, payload) : (managed && managed.getAttribute('data-json-api-push-url'));
     if (pushUrl && window.history && window.history.pushState) {
       window.history.pushState({}, '', pushUrl);
     }
@@ -105,7 +113,7 @@
     if (payload.success) {
       notifySuccess(event.detail.elt, payload);
     }
-    if (payload.success && refreshTarget(event.detail.elt)) {
+    if (payload.success && refreshTarget(event.detail.elt, payload)) {
       return;
     }
     if (payload.success && payload.redirect_url) {

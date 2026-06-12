@@ -6,6 +6,7 @@ from grading_schemes.service import (
     GradingSchemeInput,
     create_grade,
     create_grading_scheme,
+    duplicate_grading_scheme,
     get_grading_scheme,
     list_grading_schemes,
     update_grade,
@@ -161,3 +162,47 @@ def test_create_and_update_grade_replaces_features(app, db_session):
     assert updated["prioritize_for_task_selection"] is False
     assert updated["is_ungradable"] is False
     assert [feature["label"] for feature in updated["features"]] == ["Feature B"]
+
+
+def test_duplicate_grading_scheme_copies_grades_features_and_uses_unique_name(app, db_session):
+    suffix = uuid4().hex[:8]
+    disease = Disease(name=f"Duplicate Source {suffix}", grading_scope="image", remidio_ocr_linkage="glaucoma")
+    db_session.add(disease)
+    db_session.flush()
+    grade = DiseaseGrading(
+        disease_id=disease.id,
+        impression="Referable",
+        display_order=2,
+        is_active=False,
+        prioritize_for_task_selection=True,
+        is_ungradable=True,
+        guidelines="<strong>Review urgently</strong><script>alert(1)</script>",
+    )
+    db_session.add(grade)
+    db_session.flush()
+    db_session.add(GradingsFeatures(disease_grading_id=grade.id, sr_no=3, label="Disc pallor"))
+    db_session.flush()
+
+    first = duplicate_grading_scheme(disease.id)
+    second = duplicate_grading_scheme(disease.id)
+
+    assert first.success is True
+    assert first.status_code == 201
+    assert first.payload["grading_scheme_name"] == f"Copy of Duplicate Source {suffix}"
+    assert second.success is True
+    assert second.payload["grading_scheme_name"] == f"Copy of Duplicate Source {suffix} (2)"
+
+    copied = get_grading_scheme(first.payload["grading_scheme_id"]).payload["grading_scheme"]
+    assert copied["name"] == f"Copy of Duplicate Source {suffix}"
+    assert copied["grading_scope"] == "image"
+    assert copied["remidio_ocr_linkage"] == "glaucoma"
+    assert copied["usage_total"] == 0
+    assert copied["grade_count"] == 1
+    copied_grade = copied["grades"][0]
+    assert copied_grade["impression"] == "Referable"
+    assert copied_grade["display_order"] == 2
+    assert copied_grade["is_active"] is False
+    assert copied_grade["prioritize_for_task_selection"] is True
+    assert copied_grade["is_ungradable"] is True
+    assert copied_grade["guidelines"] == "<strong>Review urgently</strong>alert(1)"
+    assert copied_grade["features"] == [{"id": copied_grade["features"][0]["id"], "sr_no": 3, "label": "Disc pallor"}]

@@ -36,6 +36,12 @@ def update_grading_scheme(scheme_id: int):
     return _json_result(grading_scheme_service.update_grading_scheme(scheme_id, _input_from_request()))
 
 
+@api_bp.route("/grading-schemes/<int:scheme_id>/duplicate", methods=["POST"])
+@roles_required("admin")
+def duplicate_grading_scheme(scheme_id: int):
+    return _json_result(grading_scheme_service.duplicate_grading_scheme(scheme_id))
+
+
 @api_bp.route("/grading-schemes/<int:scheme_id>/delete", methods=["POST"])
 @roles_required("admin")
 def delete_grading_scheme(scheme_id: int):

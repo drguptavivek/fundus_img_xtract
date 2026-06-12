@@ -108,6 +108,36 @@ Linked parent-child relationships must keep matching scopes.
 
 `remidio_ocr_linkage` controls whether an image-scoped grading scheme can use Remidio report-detected auto-creation options inside EncounterSet upload-profile package configuration. It is never inferred from the grading scheme name.
 
+### `POST /api/grading-schemes/{scheme_id}/duplicate`
+
+Creates an unused copy of a grading scheme and returns the new scheme ID.
+
+The duplicate copies editable configuration only:
+
+- scheme scope
+- Remidio OCR linkage
+- same-scope linked parent relationship, when present
+- configured grades
+- grade active/priority/ungradable flags
+- sanitized grade guidelines
+- grade feature rows
+
+It does not copy external usage or operational mappings such as tasks, direct uploads, upload-profile mappings, encounter targets, eligibility roles, AI model mappings, submitted grades, or child linked schemes.
+
+The generated name is `Copy of <source name>`, with a numeric suffix when needed.
+
+Response:
+
+```json
+{
+  "success": true,
+  "message": "Grading scheme duplicated.",
+  "source_grading_scheme_id": 8,
+  "grading_scheme_id": 12,
+  "grading_scheme_name": "Copy of Glaucoma Image"
+}
+```
+
 ### `POST /api/grading-schemes/{scheme_id}/delete`
 
 Deletes an unused non-core grading scheme. The service blocks deletion when the scheme has any external usage:
@@ -184,4 +214,4 @@ The composite admin page is:
 /admin/grading-schemes
 ```
 
-The page uses HTMX partials for list, detail, create, and edit screens. Grade and feature mutation is handled in the unified scheme edit screen backed by the JSON endpoints above. Separate grade edit page partials were removed; the legacy `/admin/disease-gradings` page remains available as a compatibility editor.
+The page uses HTMX partials for list, detail, create, and edit screens. Grade and feature mutation is handled in the unified scheme edit screen backed by the JSON endpoints above. The duplicate action opens the copied scheme on its edit screen so admins can immediately adjust name, scope, Remidio OCR linkage, parent scheme, grades, and features. Separate grade edit page partials were removed; the legacy `/admin/disease-gradings` page remains available as a compatibility editor.

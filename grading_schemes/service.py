@@ -219,6 +219,74 @@ def update_grading_scheme(scheme_id: int, scheme_input: GradingSchemeInput) -> M
         return MutationResult(False, "Duplicate or invalid grading scheme.", 400)
 
 
+def duplicate_grading_scheme(scheme_id: int) -> MutationResult:
+    """Duplicate scheme metadata plus configured grades/features into an unused copy."""
+    try:
+        with transaction_scope() as db:
+            source = (
+                db.execute(
+                    select(Disease)
+                    .options(
+                        selectinload(Disease.disease_gradings).selectinload(DiseaseGrading.features)
+                    )
+                    .where(Disease.id == scheme_id)
+                )
+                .scalar_one_or_none()
+            )
+            if source is None:
+                return MutationResult(False, "Grading scheme not found.", 404)
+
+            parent_id = db.execute(
+                select(LinkedDiseaseGrading.primary_disease_id).where(
+                    LinkedDiseaseGrading.linked_disease_id == scheme_id,
+                    LinkedDiseaseGrading.is_active.is_(True),
+                )
+            ).scalar_one_or_none()
+            name = _unique_copy_name(db, source.name)
+            copy = Disease(
+                name=name,
+                grading_scope=source.grading_scope,
+                remidio_ocr_linkage=source.remidio_ocr_linkage or "none",
+            )
+            db.add(copy)
+            db.flush()
+
+            _set_parent_link(db, copy.id, parent_id)
+            for source_grade in sorted(source.disease_gradings or [], key=lambda item: (item.display_order, item.id)):
+                grade_copy = DiseaseGrading(
+                    disease_id=copy.id,
+                    impression=source_grade.impression,
+                    display_order=source_grade.display_order,
+                    is_active=source_grade.is_active,
+                    prioritize_for_task_selection=bool(source_grade.prioritize_for_task_selection),
+                    is_ungradable=bool(source_grade.is_ungradable),
+                    guidelines=_sanitize_guidelines_html(source_grade.guidelines),
+                )
+                db.add(grade_copy)
+                db.flush()
+                for feature in sorted(source_grade.features or [], key=lambda item: (item.sr_no, item.id)):
+                    db.add(
+                        GradingsFeatures(
+                            disease_grading_id=grade_copy.id,
+                            sr_no=feature.sr_no,
+                            label=feature.label,
+                        )
+                    )
+
+            return MutationResult(
+                True,
+                "Grading scheme duplicated.",
+                201,
+                payload={
+                    "source_grading_scheme_id": scheme_id,
+                    "grading_scheme_id": copy.id,
+                    "grading_scheme_name": name,
+                },
+            )
+    except IntegrityError:
+        return MutationResult(False, "Duplicate or invalid grading scheme copy.", 400)
+
+
 def delete_grading_scheme(scheme_id: int) -> MutationResult:
     """Delete an unused non-core grading scheme and its configured grades."""
     with transaction_scope() as db:
@@ -339,6 +407,17 @@ def _normalized_remidio_ocr_linkage(scheme_input: GradingSchemeInput) -> str:
     if scheme_input.grading_scope != "image":
         return "none"
     return scheme_input.remidio_ocr_linkage
+
+
+def _unique_copy_name(db, source_name: str) -> str:
+    base_name = f"Copy of {source_name}".strip()
+    candidate = base_name[:255]
+    suffix = 2
+    while db.execute(select(Disease.id).where(func.lower(Disease.name) == candidate.lower())).scalar_one_or_none():
+        suffix_text = f" ({suffix})"
+        candidate = f"{base_name[:255 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    return candidate
 
 
 def _validate_parent_link(db, scheme_id: int, parent_scheme_id: int | None, scope: str) -> str | None:

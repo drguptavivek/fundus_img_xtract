@@ -1,3 +1,4 @@
+{% from "_forms.html" import csrf_field %}
 <div class="card mb-3">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div>
@@ -20,6 +21,16 @@
               hx-push-url="{{ url_for('admin.grading_scheme_edit', scheme_id=grading_scheme.id) }}">
         Edit Scheme
       </button>
+      <form method="post"
+            hx-post="{{ url_for('fundus_api.duplicate_grading_scheme', scheme_id=grading_scheme.id) }}"
+            hx-swap="none"
+            data-json-api-htmx
+            data-json-api-reload-url-template="{{ url_for('admin.grading_scheme_edit', scheme_id=0).replace('/0/edit', '/{grading_scheme_id}/edit') }}"
+            data-json-api-reload-target="#grading-schemes-workspace"
+            data-json-api-push-url-template="{{ url_for('admin.grading_scheme_edit', scheme_id=0).replace('/0/edit', '/{grading_scheme_id}/edit') }}">
+        {{ csrf_field() }}
+        <button class="btn btn-outline-success" type="submit">Duplicate Scheme</button>
+      </form>
       {% if grading_scheme.can_delete %}
       <form method="post"
             hx-post="{{ url_for('fundus_api.delete_grading_scheme', scheme_id=grading_scheme.id) }}"
@@ -29,7 +40,6 @@
             data-json-api-reload-target="#grading-schemes-workspace"
             data-json-api-push-url="{{ url_for('admin.grading_schemes_admin') }}"
             onsubmit="return confirm('Delete this unused grading scheme?');">
-        {% from "_forms.html" import csrf_field %}
         {{ csrf_field() }}
         <button class="btn btn-outline-danger" type="submit">Delete Scheme</button>
       </form>

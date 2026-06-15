@@ -1,5 +1,97 @@
 {% from "_forms.html" import csrf_field %}
 
+{% macro route_fields(form_prefix, profile, route=none) %}
+{% set source = route.source_rule if route else none %}
+<input type="hidden" name="routing_profile_id" value="{{ profile.id }}">
+<input type="hidden" value="{{ profile.project_id }}" data-remidio-route-project>
+<div class="row g-3 align-items-end">
+  <div class="col-md-4">
+    <label class="form-label" for="{{ form_prefix }}_upload_profile">Automated Upload Profile</label>
+    <select class="form-select" id="{{ form_prefix }}_upload_profile" name="project_upload_profile_id" required data-remidio-route-project-profile>
+      <option value="">Select project upload profile</option>
+      {% for mapping in automated_project_profiles %}
+      <option value="{{ mapping.id }}"
+              data-remidio-project-id="{{ mapping.project_id }}"
+              {% if route and route.project_upload_profile_id == mapping.id %}selected{% endif %}>{{ mapping.profile.name if mapping.profile else mapping.id }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text text-warning d-none" data-remidio-route-project-profile-empty>
+      No active automated Remidio API upload profile is mapped to this project.
+    </div>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="{{ form_prefix }}_connection">Connection</label>
+    <select class="form-select" id="{{ form_prefix }}_connection" name="remidio_connection_id" required data-remidio-route-connection>
+      <option value="">Select connection</option>
+      {% for connection in connections %}
+      <option value="{{ connection.id }}" {% if source and source.remidio_connection_id == connection.id %}selected{% endif %}>{{ connection.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="{{ form_prefix }}_site">Synced Site</label>
+    <select class="form-select" id="{{ form_prefix }}_site" name="remidio_site_id" data-remidio-route-site>
+      <option value="">Use custom identifier</option>
+      {% for site in sites if site.site_custom_identifier %}
+      <option value="{{ site.id }}"
+              data-remidio-connection-id="{{ site.remidio_connection_id }}"
+              data-remidio-site-custom-identifier="{{ site.site_custom_identifier }}"
+              {% if source and source.remidio_site_id == site.id %}selected{% endif %}>{{ site.connection.name if site.connection else 'Connection' }} · {{ site.site_name or site.remidio_site_id }} · {{ site.site_custom_identifier }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="{{ form_prefix }}_site_custom">Site Custom Identifier</label>
+    <input class="form-control" id="{{ form_prefix }}_site_custom" name="site_custom_identifier" value="{{ source.site_custom_identifier if source else '' }}" placeholder="rpc_comoph_2" data-remidio-route-site-custom>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="{{ form_prefix }}_device">Device</label>
+    <select class="form-select" id="{{ form_prefix }}_device" name="remidio_device_type" required>
+      <option value="">Select type</option>
+      <option value="PRISTINE" {% if source and source.remidio_device_type == 'PRISTINE' %}selected{% endif %}>PRISTINE</option>
+      <option value="FOP" {% if source and source.remidio_device_type == 'FOP' %}selected{% endif %}>FOP</option>
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label" for="{{ form_prefix }}_lab">Lab Unit</label>
+    <select class="form-select" id="{{ form_prefix }}_lab" name="lab_unit_id" required>
+      <option value="">Select lab unit</option>
+      {% for lab_unit in lab_units %}
+      <option value="{{ lab_unit.id }}" {% if route and route.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} · {{ lab_unit.hospital.name }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label" for="{{ form_prefix }}_camera">Local Camera</label>
+    <select class="form-select" id="{{ form_prefix }}_camera" name="camera_id" required>
+      <option value="">Select camera</option>
+      {% for camera in cameras %}
+      <option value="{{ camera.id }}" {% if route and route.camera_id == camera.id %}selected{% endif %}>{{ camera.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="{{ form_prefix }}_from">From</label>
+    <input class="form-control" id="{{ form_prefix }}_from" type="date" name="active_from_date" value="{{ route.active_from_date if route else '' }}" required>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" for="{{ form_prefix }}_to">To</label>
+    <input class="form-control" id="{{ form_prefix }}_to" type="date" name="active_to_date" value="{{ route.active_to_date if route and route.active_to_date else '' }}">
+  </div>
+  {% if route %}
+  <div class="col-md-2">
+    <label class="form-label" for="{{ form_prefix }}_active">Status</label>
+    <select class="form-select" id="{{ form_prefix }}_active" name="active">
+      <option value="true" {% if route.active %}selected{% endif %}>Active</option>
+      <option value="false" {% if not route.active %}selected{% endif %}>Inactive</option>
+    </select>
+  </div>
+  {% else %}
+  <input type="hidden" name="active" value="true">
+  {% endif %}
+</div>
+{% endmacro %}
+
 <div class="card shadow-sm">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span>Routing Profiles</span>
@@ -245,36 +337,55 @@
       </div>
     </form>
 
-    <div class="table-responsive mt-4">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Connection / Site</th>
-            <th>Target</th>
-            <th>Validity</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for route in profile.routes %}
-          {% set source = route.source_rule %}
-          <tr>
-            <td>
-              <div class="fw-semibold">{{ source.connection.name if source and source.connection else '-' }}</div>
-              <div class="small text-muted">{{ source.site_custom_identifier if source else '-' }} · {{ source.remidio_device_type if source else '-' }}</div>
-            </td>
-            <td>
-              <div>{{ route.project_profile.profile.name if route.project_profile and route.project_profile.profile else '-' }}</div>
-              <div class="small text-muted">{{ route.lab_unit.name if route.lab_unit else '-' }} · {{ route.camera.name if route.camera else '-' }}</div>
-            </td>
-            <td class="small">{{ route.active_from_date }} to {{ route.active_to_date or 'open' }}</td>
-            <td><span class="badge {{ 'text-bg-success' if route.active else 'text-bg-secondary' }}">{{ 'Active' if route.active else 'Inactive' }}</span></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4" class="text-center text-muted py-3">No routes in this profile.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="mt-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h3 class="h6 mb-0">Routes</h3>
+        <span class="badge text-bg-secondary">{{ profile.routes|length }}</span>
+      </div>
+      <div class="vstack gap-3">
+        {% for route in profile.routes %}
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
+              hx-post="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+              data-json-api-reload-target="#remidio-api-routing-workspace"
+              data-remidio-api-route-form>
+          {{ csrf_field() }}
+          <input type="hidden" name="id" value="{{ route.id }}">
+          {{ route_fields('route_' ~ route.id, profile, route) }}
+          <div class="d-flex justify-content-between align-items-center gap-2 mt-3">
+            <span class="badge {{ 'text-bg-success' if route.active else 'text-bg-secondary' }}">{{ 'Active' if route.active else 'Inactive' }}</span>
+            <button class="btn btn-primary" type="submit">Save Route</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="text-muted border rounded p-3">No routes in this profile.</div>
+        {% endfor %}
+      </div>
+      {% if profile.active %}
+      <form class="border rounded p-3 mt-3"
+            method="post"
+            action="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
+            hx-post="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
+            hx-swap="none"
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+            data-json-api-reload-target="#remidio-api-routing-workspace"
+            data-remidio-api-route-form>
+        {{ csrf_field() }}
+        <div class="fw-semibold mb-3">Add Route</div>
+        {{ route_fields('route_new_' ~ profile.id, profile) }}
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button class="btn btn-outline-secondary" type="button" data-remidio-routing-hide-panel>Cancel</button>
+          <button class="btn btn-primary" type="submit">Add Route</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="alert alert-secondary mt-3 mb-0">Activate this routing profile before adding routes.</div>
+      {% endif %}
     </div>
   </div>
 </div>

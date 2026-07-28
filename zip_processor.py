@@ -356,7 +356,12 @@ def process_zip_file(zip_path: Path, session, upload_context: dict | None = None
         - "error" for processing errors
     """
     if (upload_context or {}).get("ingest_mode") == "encounter_set":
-        ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
+        if (upload_context or {}).get("encounter_set_zip_format") == "iitk":
+            from encounter_sets.iitk_encounterset_zip_importer import ingest_iitk_encounterset_zip
+
+            ingest_iitk_encounterset_zip(zip_path, session, upload_context=upload_context)
+        else:
+            ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
         return ([], "ok")
 
     def safe_move(src: Path, dst: Path, attempts: int = 5):
@@ -848,7 +853,12 @@ def ingest_zip_atomic(zip_path: Path, session: Session, upload_context: dict | N
         Exception: For other errors.
     """
     if (upload_context or {}).get("ingest_mode") == "encounter_set":
-        summary = ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
+        if (upload_context or {}).get("encounter_set_zip_format") == "iitk":
+            from encounter_sets.iitk_encounterset_zip_importer import ingest_iitk_encounterset_zip
+
+            summary = ingest_iitk_encounterset_zip(zip_path, session, upload_context=upload_context)
+        else:
+            summary = ingest_remidio_zip_as_encounter_set(zip_path, session, upload_context=upload_context)
         return summary["encounter_set_image_ids"], summary["encounter_set_attachment_ids"]
 
     # 1. Validation & Setup

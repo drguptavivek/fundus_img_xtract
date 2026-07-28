@@ -131,16 +131,21 @@
     var diseaseId = numberValue('[name="disease_id"]', form);
     var areaId = numberValue('[name="area_id"]', form);
     var ingestModeInput = form.querySelector('[name="ingest_mode"]:checked');
-    var requiredKind = ingestModeInput && ingestModeInput.value === "legacy_remidio" ? "remidio" : "encounter_set";
+    var ingestMode = ingestModeInput ? ingestModeInput.value : "remidio_encounter_set";
+    var requiredKind = ingestMode === "legacy_remidio" ? "remidio" : "encounter_set";
+    var requiresRemidioEncounterSet = ingestMode === "remidio_encounter_set" || ingestMode === "encounter_set";
+    var requiresIitkEncounterSet = ingestMode === "iitk_encounter_set";
     var modeProfiles = profiles.filter(function (profile) {
       if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
-      if (requiredKind === "encounter_set" && !profile.allow_remidio_zip_encounter_set) return false;
+      if (requiresRemidioEncounterSet && !profile.allow_remidio_zip_encounter_set) return false;
+      if (requiresIitkEncounterSet && !profile.allow_iitk_zip_encounter_set) return false;
       return true;
     });
 
     var matches = modeProfiles.filter(function (profile) {
       if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
-      if (requiredKind === "encounter_set" && !profile.allow_remidio_zip_encounter_set) return false;
+      if (requiresRemidioEncounterSet && !profile.allow_remidio_zip_encounter_set) return false;
+      if (requiresIitkEncounterSet && !profile.allow_iitk_zip_encounter_set) return false;
       if (projectId && Number(profile.project_id) !== projectId) return false;
       if (labUnitId && Number(profile.lab_unit_id) !== labUnitId) return false;
       if (requiredKind === "remidio" && cameraId && Array.isArray(profile.camera_ids) && profile.camera_ids.indexOf(cameraId) === -1) return false;

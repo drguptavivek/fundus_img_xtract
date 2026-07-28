@@ -4,14 +4,15 @@
 
 The ZIP upload functionality allows authorized users to upload ZIP archives containing retinal fundus images and associated PDF reports. These files are then processed in the background to extract images, perform OCR, and populate the database.
 
-## Remidio ZIP Ingest Modes
+## ZIP Ingest Modes
 
-The upload form supports two Remidio ZIP processing modes:
+The upload form supports three ZIP processing modes:
 
-- **EncounterSet**: default mode for current Remidio ZIP downloads. The selected project/lab assignment must allow an EncounterSet UploadProfile with **Allow Remidio ZIPs as EncounterSets** explicitly enabled. JPG/JPEG files become `EncounterSetImage` clinical task evidence and PDFs become `EncounterSetAttachment` supporting report documents with `creates_task=false`.
+- **Remidio ZIP EncounterSet**: default mode for current Remidio ZIP downloads. The selected project/lab assignment must allow an EncounterSet UploadProfile with **Allow Remidio ZIPs as EncounterSets** explicitly enabled. JPG/JPEG files become `EncounterSetImage` clinical task evidence and PDFs become `EncounterSetAttachment` supporting report documents with `creates_task=false`.
+- **IITK ZIP EncounterSet**: IIT Kottayam strabismus batch ZIPs. The selected project/lab assignment must allow an EncounterSet UploadProfile with **Allow IITK ZIPs as EncounterSets** explicitly enabled. Each MRN subfolder becomes one pending-verification EncounterSet.
 - **Legacy Remidio**: the older ZIP flow that requires a ZIP-enabled camera and creates legacy `EncounterFile` / `EncounterFilePDF` rows.
 
-EncounterSet ZIPs use existing EncounterSetType, UploadProfile, and ProjectUploadProfile mappings. The ZIP processor does not create a new profile model, but it does require the profile-level Remidio ZIP EncounterSet flag so generic EncounterSet profiles are not silently reused for Remidio ZIP intake.
+EncounterSet ZIPs use existing EncounterSetType, UploadProfile, and ProjectUploadProfile mappings. The ZIP processor does not create a new profile model, but it does require the matching profile-level vendor ZIP EncounterSet flag so generic EncounterSet profiles are not silently reused for vendor ZIP intake.
 
 ### EncounterSet ZIP Metadata Rules
 
@@ -36,6 +37,25 @@ Camera type is inferred from ZIP structure:
 - no recognized image pattern -> `unknown`
 
 PDFs are optional. When present, they are classified from filename/path hints as FOP DR, FOP glaucoma, PRISTINE, FOP generic, or unknown report attachments. Missing age/gender metadata does not block upload or verification.
+
+### IITK ZIP EncounterSet Rules
+
+IITK ZIP uploads may contain encounter folders directly at the ZIP root or under a wrapper folder such as `New folder/`. Each encounter folder must follow:
+
+```text
+MRN<mrn>_<YYYYMMDD>_<session-short-id>
+```
+
+Each encounter folder must contain exactly one `*_metadata.json` file and one or more JPG/JPEG images named with the same MRN/date prefix plus a gaze position, for example:
+
+```text
+MRN107985017_20260605_primary.jpg
+MRN107985017_20260605_up_left.jpg
+MRN107985017_20260605_composite.jpg
+MRN107985017_20260605_metadata.json
+```
+
+The importer stores the metadata JSON as a non-task `EncounterSetAttachment` with `asset_kind='document'`. JPG/JPEG files become `EncounterSetImage` rows with `metadata_json.source_kind = "iitk_zip"` and `metadata_json.gaze_position` set from the filename.
 
 ### EncounterSet Task Creation
 

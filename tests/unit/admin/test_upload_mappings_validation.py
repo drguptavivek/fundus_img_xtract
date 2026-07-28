@@ -358,6 +358,167 @@ def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, mo
         raise AssertionError("Generic EncounterSet profiles must not allow Remidio ZIP upload")
 
 
+def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr("upload_profiles.service.get_db_session", use_test_session)
+
+    manager = User(username="iitk_zip_manager", full_name="IITK ZIP Manager", password_hash="x", is_active=True)
+    uploader = User(username="iitk_zip_uploader", full_name="IITK ZIP Uploader", password_hash="x", is_active=True)
+    hospital = Hospital(name="IITK ZIP Hospital")
+    lab = LabUnit(name="IITK ZIP Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    uploader.lab_units.append(lab)
+    project = Project(title="IITK ZIP Project", code="IITKZIP", active=True)
+    image_scheme = Disease(name="IITK ZIP Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="IITK ZIP Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="IITK ZIP EncounterSet",
+        code="iitk_zip_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="IITK ZIP EncounterSet profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            allow_iitk_zip_encounter_set=True,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="IITK ZIP EncounterSet profile").one()
+    assert profile.allow_iitk_zip_encounter_set is True
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    resolved = validate_encounter_set_upload_scope(
+        db_session,
+        uploader.id,
+        project_id=project.id,
+        lab_unit_id=lab.id,
+        require_iitk_zip_enabled=True,
+    )
+
+    assert resolved.profile_id == profile.id
+
+
+def test_generic_encounter_set_profile_does_not_allow_iitk_zip(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr("upload_profiles.service.get_db_session", use_test_session)
+
+    manager = User(username="generic_iitk_manager", full_name="Generic IITK Manager", password_hash="x", is_active=True)
+    uploader = User(username="generic_iitk_uploader", full_name="Generic IITK Uploader", password_hash="x", is_active=True)
+    hospital = Hospital(name="Generic IITK Hospital")
+    lab = LabUnit(name="Generic IITK Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    uploader.lab_units.append(lab)
+    project = Project(title="Generic IITK Project", code="GENIITK", active=True)
+    image_scheme = Disease(name="Generic IITK Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="Generic IITK Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Generic IITK EncounterSet",
+        code="generic_iitk_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Generic IITK EncounterSet profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="Generic IITK EncounterSet profile").one()
+    project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    db_session.add(project_profile)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=project_profile.id,
+            user_id=uploader.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    try:
+        validate_encounter_set_upload_scope(
+            db_session,
+            uploader.id,
+            project_id=project.id,
+            lab_unit_id=lab.id,
+            require_iitk_zip_enabled=True,
+        )
+    except UploadProfileError as exc:
+        assert exc.code == "profile_not_found"
+    else:
+        raise AssertionError("Generic EncounterSet profiles must not allow IITK ZIP upload")
+
+
 def test_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_session, monkeypatch):
     @contextmanager
     def use_test_session():

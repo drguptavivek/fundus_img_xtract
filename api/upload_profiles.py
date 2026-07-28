@@ -117,6 +117,7 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         default_is_mydriatic=form.get("default_is_mydriatic") == "on",
         automated_remidio_populated=form.get("automated_remidio_populated") == "on",
         allow_remidio_zip_encounter_set=form.get("allow_remidio_zip_encounter_set") == "on",
+        allow_iitk_zip_encounter_set=form.get("allow_iitk_zip_encounter_set") == "on",
         ai_workflows=ai_workflows,
         encounter_set_configs=encounter_set_configs,
         task_prioritization_json=form.get("task_prioritization_json") or None,

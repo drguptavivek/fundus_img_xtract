@@ -118,6 +118,7 @@ class UploadProfileInput:
     task_prioritization_json: dict[str, Any] | None = None
     description: str | None = None
     allow_remidio_zip_encounter_set: bool = False
+    allow_iitk_zip_encounter_set: bool = False
 
 
 @dataclass(frozen=True)
@@ -379,6 +380,7 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
             default_is_mydriatic=source.default_is_mydriatic,
             automated_remidio_populated=source.automated_remidio_populated,
             allow_remidio_zip_encounter_set=source.allow_remidio_zip_encounter_set,
+            allow_iitk_zip_encounter_set=source.allow_iitk_zip_encounter_set,
             active=True,
         )
         duplicate.diseases = [UploadProfileDisease(disease_id=row.disease_id, is_default=row.is_default) for row in source.diseases]
@@ -470,8 +472,12 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         return "Automated Remidio API profiles must allow only EncounterSet uploads."
     if profile_input.allow_remidio_zip_encounter_set and UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds:
         return "Remidio ZIP EncounterSet uploads require EncounterSet upload mode."
+    if profile_input.allow_iitk_zip_encounter_set and UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds:
+        return "IITK ZIP EncounterSet uploads require EncounterSet upload mode."
     if profile_input.automated_remidio_populated and profile_input.allow_remidio_zip_encounter_set:
         return "Automated Remidio API profiles cannot also allow manual Remidio ZIP uploads."
+    if profile_input.automated_remidio_populated and profile_input.allow_iitk_zip_encounter_set:
+        return "Automated Remidio API profiles cannot also allow manual IITK ZIP uploads."
     disease_required_kinds = {UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO}
     clinical_upload_enabled = bool(set(upload_kinds).intersection(disease_required_kinds))
     if clinical_upload_enabled and not profile_input.disease_ids:
@@ -529,6 +535,11 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     profile.automated_remidio_populated = profile_input.automated_remidio_populated
     profile.allow_remidio_zip_encounter_set = (
         profile_input.allow_remidio_zip_encounter_set
+        if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not profile_input.automated_remidio_populated
+        else False
+    )
+    profile.allow_iitk_zip_encounter_set = (
+        profile_input.allow_iitk_zip_encounter_set
         if UPLOAD_KIND_ENCOUNTER_SET in upload_kinds and not profile_input.automated_remidio_populated
         else False
     )

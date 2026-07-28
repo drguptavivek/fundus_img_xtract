@@ -215,10 +215,18 @@ def upload_files():
         per_file_max = _get_int_setting(db, "PER_FILE_MAX_BYTES", "PER_FILE_MAX_BYTES", per_file_default, min_value=1)
         max_files = _get_int_setting(db, "MAX_FILES_PER_UPLOAD", "MAX_FILES_PER_UPLOAD", max_files_default, min_value=1)
 
-    ingest_mode = (request.form.get("ingest_mode") or "encounter_set").strip()
-    if ingest_mode not in {"encounter_set", "legacy_remidio"}:
+    requested_ingest_mode = (request.form.get("ingest_mode") or "remidio_encounter_set").strip()
+    if requested_ingest_mode == "encounter_set":
+        requested_ingest_mode = "remidio_encounter_set"
+    if requested_ingest_mode not in {"remidio_encounter_set", "iitk_encounter_set", "legacy_remidio"}:
         flash("Invalid ZIP ingest mode.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
+    ingest_mode = "legacy_remidio" if requested_ingest_mode == "legacy_remidio" else "encounter_set"
+    encounter_set_zip_format = (
+        "iitk" if requested_ingest_mode == "iitk_encounter_set"
+        else "remidio" if requested_ingest_mode == "remidio_encounter_set"
+        else None
+    )
 
     # Validate hospital and lab unit selection
     try:
@@ -270,7 +278,8 @@ def upload_files():
                     current_user.id,
                     project_id=project_id,
                     lab_unit_id=lab_unit_id,
-                    require_remidio_zip_enabled=True,
+                    require_remidio_zip_enabled=encounter_set_zip_format == "remidio",
+                    require_iitk_zip_enabled=encounter_set_zip_format == "iitk",
                 )
             else:
                 upload_profile = validate_remedio_upload_scope(
@@ -347,6 +356,7 @@ def upload_files():
                     "default_disease_id": upload_profile.default_disease_id,
                     "camera_id": camera_id or None,
                     "ingest_mode": ingest_mode,
+                    "encounter_set_zip_format": encounter_set_zip_format,
                     "target_disease_ids": target_disease_ids,
                 }
                 with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
@@ -390,6 +400,7 @@ def upload_files():
         "default_disease_id": upload_profile.default_disease_id,
         "camera_id": camera_id or None,
         "ingest_mode": ingest_mode,
+        "encounter_set_zip_format": encounter_set_zip_format,
         "target_disease_ids": target_disease_ids,
     }
     queue_job(

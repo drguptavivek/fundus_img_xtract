@@ -218,6 +218,8 @@ Returns project-owned routing profiles and their route rows. A routing profile i
 
 One routing profile belongs to one project. Multiple routing profiles may target the same project.
 
+Setting a routing profile to inactive also deactivates its active route rows. Open-ended route windows are closed at the current date so the inactive state is explicit in the route data. Inactive route rows remain as historical routing records and do not block a new active route for the same Remidio source/date window.
+
 ### List API Routing Rules
 
 `GET /api/remidio/api-routing-rules?project_id=1`
@@ -250,6 +252,24 @@ Validation:
 - the target project upload profile must belong to the routing profile project
 - the target upload profile must be automated Remidio API-populated, EncounterSet-only, and mapped to `remidio_api_standard`
 - active date windows cannot overlap for the same `connection + site_custom_identifier + remidio_device_type`
+
+### Activate Or Deactivate API Routing Rule
+
+`POST /api/remidio/api-routing-rules/{route_id}/status`
+
+```json
+{
+  "active": false
+}
+```
+
+`PATCH` is also accepted. The caller must be in the route lab-unit management scope. Deactivating a route keeps the binding row for audit history, closes an open-ended route window at the current date, and frees the Remidio source/date window for another active route.
+
+### Delete API Routing Rule
+
+`DELETE /api/remidio/api-routing-rules/{route_id}`
+
+Deletes a route only when no imported encounters reference the binding. If linked `remidio_api_exam_encounters` rows exist, the API deactivates the route instead and returns `data.result = "deactivated"` so historical encounter routing remains intact.
 
 ### Queue API Routing Profile Sync
 

@@ -468,6 +468,36 @@ def upsert_remidio_api_routing_rule():
         return _error_response(exc)
 
 
+@api_bp.route("/remidio/api-routing-rules/<int:route_id>/status", methods=["POST", "PATCH"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def set_remidio_api_routing_rule_status(route_id: int):
+    payload = _json_payload()
+    try:
+        active = _required_bool_payload(payload, "active")
+        with transaction_scope() as db:
+            route = api_routing.set_routing_profile_route_active(db, route_id, active=active, manager_user_id=current_user.id)
+            data = next(item for item in api_routing.list_api_bindings(db) if item["id"] == route.id)
+            message = "Remidio API routing rule activated." if active else "Remidio API routing rule deactivated."
+            return jsonify({"success": True, "data": data, "message": message})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
+@api_bp.route("/remidio/api-routing-rules/<int:route_id>", methods=["DELETE"])
+@roles_required(*REMIDIO_BINDING_ROLES)
+def delete_remidio_api_routing_rule(route_id: int):
+    try:
+        with transaction_scope() as db:
+            result = api_routing.delete_routing_profile_route(db, route_id, manager_user_id=current_user.id)
+            if result == "deactivated":
+                message = "Remidio API routing rule has linked encounters, so it was deactivated instead of deleted."
+            else:
+                message = "Remidio API routing rule deleted."
+            return jsonify({"success": True, "data": {"result": result}, "message": message})
+    except RemidioIntegrationError as exc:
+        return _error_response(exc)
+
+
 @api_bp.route("/remidio/api-routing-profiles/<int:routing_profile_id>/sync", methods=["POST"])
 @roles_required(*REMIDIO_BINDING_ROLES)
 def sync_remidio_api_routing_profile(routing_profile_id: int):
@@ -619,6 +649,19 @@ def _required_int_payload(payload: dict, name: str) -> int:
         return int(value)
     except (TypeError, ValueError) as exc:
         raise RemidioConfigError(f"{name} must be an integer.") from exc
+
+
+def _required_bool_payload(payload: dict, name: str) -> bool:
+    value = payload.get(name)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise RemidioConfigError(f"{name} must be true or false.")
 
 
 def _connection_response(db, connection_id: int) -> dict:

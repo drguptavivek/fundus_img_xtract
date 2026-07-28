@@ -19,7 +19,7 @@ from upload_profiles.models import (
 from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET, manager_lab_unit_ids
 
 from .errors import RemidioConfigError
-from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiRoutingProfile, RemidioApiSourceRule
+from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiExamEncounter, RemidioApiRoutingProfile, RemidioApiSourceRule
 from .validation import normalize_device_type
 
 
@@ -83,11 +83,14 @@ def upsert_routing_profile(db: Session, payload: dict[str, Any]) -> RemidioApiRo
         profile = RemidioApiRoutingProfile(project_id=project_id, name=name, active=active)
         db.add(profile)
 
+    was_active = bool(profile.active)
     profile.project_id = project_id
     profile.name = name
     profile.description = (payload.get("description") or "").strip() or None
     profile.active = active
     profile.updated_at = utcnow()
+    if was_active and not active:
+        _deactivate_routing_profile_routes(profile)
     try:
         db.flush()
     except IntegrityError as exc:
@@ -116,6 +119,62 @@ def delete_routing_profile(db: Session, routing_profile_id: int) -> None:
         db.delete(route)
     db.delete(profile)
     db.flush()
+
+
+def set_routing_profile_route_active(
+    db: Session,
+    route_id: int,
+    *,
+    active: bool,
+    manager_user_id: int | None = None,
+) -> ProjectUploadProfileRemidioApiBinding:
+    route = db.get(ProjectUploadProfileRemidioApiBinding, route_id)
+    if route is None:
+        raise RemidioConfigError("Remidio API routing rule was not found.")
+    _require_route_lab_scope(route, manager_user_id)
+    if not active:
+        _deactivate_route(route)
+        db.flush()
+        return route
+
+    if route.routing_profile and not route.routing_profile.active:
+        raise RemidioConfigError("Activate the routing profile before activating this route.")
+    _ensure_no_binding_overlap(
+        db,
+        source_rule_id=route.remidio_api_source_rule_id,
+        active_from_date=route.active_from_date,
+        active_to_date=route.active_to_date,
+        exclude_binding_id=route.id,
+    )
+    route.active = True
+    route.updated_at = utcnow()
+    db.flush()
+    return route
+
+
+def delete_routing_profile_route(
+    db: Session,
+    route_id: int,
+    *,
+    manager_user_id: int | None = None,
+) -> str:
+    route = db.get(ProjectUploadProfileRemidioApiBinding, route_id)
+    if route is None:
+        raise RemidioConfigError("Remidio API routing rule was not found.")
+    _require_route_lab_scope(route, manager_user_id)
+    linked_encounters = (
+        db.query(RemidioApiExamEncounter.id)
+        .filter(RemidioApiExamEncounter.remidio_api_binding_id == route.id)
+        .first()
+    )
+    if linked_encounters:
+        _deactivate_route(route)
+        db.flush()
+        return "deactivated"
+
+    db.delete(route)
+    db.flush()
+    return "deleted"
 
 
 def upsert_routing_profile_route(
@@ -403,9 +462,14 @@ def _active_bindings_for_date(
             selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
             selectinload(ProjectUploadProfileRemidioApiBinding.camera),
         )
+        .outerjoin(RemidioApiRoutingProfile, ProjectUploadProfileRemidioApiBinding.routing_profile_id == RemidioApiRoutingProfile.id)
         .filter(
             ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == source_rule_id,
             ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            or_(
+                ProjectUploadProfileRemidioApiBinding.routing_profile_id.is_(None),
+                RemidioApiRoutingProfile.active.is_(True),
+            ),
             ProjectUploadProfileRemidioApiBinding.active_from_date <= route_date,
             or_(
                 ProjectUploadProfileRemidioApiBinding.active_to_date.is_(None),
@@ -424,19 +488,47 @@ def _ensure_no_binding_overlap(
     active_to_date: date | None,
     exclude_binding_id: int | None,
 ) -> None:
-    query = db.query(ProjectUploadProfileRemidioApiBinding.id).filter(
-        ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == source_rule_id,
-        ProjectUploadProfileRemidioApiBinding.active.is_(True),
-        ProjectUploadProfileRemidioApiBinding.active_from_date <= (active_to_date or date.max),
-        or_(
-            ProjectUploadProfileRemidioApiBinding.active_to_date.is_(None),
-            ProjectUploadProfileRemidioApiBinding.active_to_date >= active_from_date,
-        ),
+    query = (
+        db.query(ProjectUploadProfileRemidioApiBinding.id)
+        .outerjoin(RemidioApiRoutingProfile, ProjectUploadProfileRemidioApiBinding.routing_profile_id == RemidioApiRoutingProfile.id)
+        .filter(
+            ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == source_rule_id,
+            ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            or_(
+                ProjectUploadProfileRemidioApiBinding.routing_profile_id.is_(None),
+                RemidioApiRoutingProfile.active.is_(True),
+            ),
+            ProjectUploadProfileRemidioApiBinding.active_from_date <= (active_to_date or date.max),
+            or_(
+                ProjectUploadProfileRemidioApiBinding.active_to_date.is_(None),
+                ProjectUploadProfileRemidioApiBinding.active_to_date >= active_from_date,
+            ),
+        )
     )
     if exclude_binding_id:
         query = query.filter(ProjectUploadProfileRemidioApiBinding.id != exclude_binding_id)
     if query.first():
         raise RemidioConfigError("This Remidio API source already has an active binding for an overlapping date window.")
+
+
+def _deactivate_routing_profile_routes(profile: RemidioApiRoutingProfile) -> None:
+    for route in profile.routes:
+        _deactivate_route(route)
+
+
+def _deactivate_route(route: ProjectUploadProfileRemidioApiBinding) -> None:
+    if not route.active:
+        return
+    today = utcnow().date()
+    route.active = False
+    if route.active_to_date is None or route.active_to_date > today:
+        route.active_to_date = today
+    route.updated_at = utcnow()
+
+
+def _require_route_lab_scope(route: ProjectUploadProfileRemidioApiBinding, manager_user_id: int | None) -> None:
+    if manager_user_id is not None and route.lab_unit_id not in manager_lab_unit_ids(manager_user_id):
+        raise RemidioConfigError("You cannot modify Remidio API routing outside your lab-unit scope.")
 
 
 def _load_project_profile(db: Session, project_upload_profile_id: int) -> ProjectUploadProfile:

@@ -340,9 +340,15 @@
     <div class="mt-4">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <h3 class="h6 mb-0">Routes</h3>
-        <span class="badge text-bg-secondary">{{ profile.routes|length }}</span>
+        <div class="d-inline-flex flex-wrap align-items-center gap-2">
+          <span class="badge text-bg-secondary">{{ profile.routes|length }}</span>
+          {% if profile.active %}
+          <button class="btn btn-sm btn-outline-primary" type="button" data-remidio-routing-add-route="{{ profile.id }}">Add Route</button>
+          <button class="btn btn-sm btn-primary" type="button" data-remidio-routing-save-drafts="{{ profile.id }}" disabled>Save Added Routes</button>
+          {% endif %}
+        </div>
       </div>
-      <div class="vstack gap-3">
+      <div class="vstack gap-3" data-remidio-route-list="{{ profile.id }}">
         {% for route in profile.routes %}
         <form class="border rounded p-3"
               method="post"
@@ -356,8 +362,37 @@
           {{ csrf_field() }}
           <input type="hidden" name="id" value="{{ route.id }}">
           {{ route_fields('route_' ~ route.id, profile, route) }}
-          <div class="d-flex justify-content-between align-items-center gap-2 mt-3">
-            <span class="badge {{ 'text-bg-success' if route.active else 'text-bg-secondary' }}">{{ 'Active' if route.active else 'Inactive' }}</span>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            {% if profile.active %}
+            <button class="btn btn-outline-secondary" type="button" data-remidio-routing-duplicate-route="{{ profile.id }}">Duplicate Route</button>
+            {% endif %}
+            {% if route.active %}
+            <button class="btn btn-outline-warning"
+                    type="button"
+                    hx-post="{{ url_for('fundus_api.set_remidio_api_routing_rule_status', route_id=route.id) }}"
+                    hx-vals='{"active": "false"}'
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+                    data-json-api-reload-target="#remidio-api-routing-workspace">Deactivate Route</button>
+            {% elif profile.active %}
+            <button class="btn btn-outline-success"
+                    type="button"
+                    hx-post="{{ url_for('fundus_api.set_remidio_api_routing_rule_status', route_id=route.id) }}"
+                    hx-vals='{"active": "true"}'
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+                    data-json-api-reload-target="#remidio-api-routing-workspace">Activate Route</button>
+            {% endif %}
+            <button class="btn btn-outline-danger"
+                    type="button"
+                    hx-delete="{{ url_for('fundus_api.delete_remidio_api_routing_rule', route_id=route.id) }}"
+                    hx-swap="none"
+                    data-json-api-htmx
+                    data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+                    data-json-api-reload-target="#remidio-api-routing-workspace"
+                    data-remidio-route-confirm-delete>Delete Route</button>
             <button class="btn btn-primary" type="submit">Save Route</button>
           </div>
         </form>
@@ -366,23 +401,24 @@
         {% endfor %}
       </div>
       {% if profile.active %}
-      <form class="border rounded p-3 mt-3"
-            method="post"
-            action="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
-            hx-post="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
-            hx-swap="none"
-            data-json-api-htmx
-            data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
-            data-json-api-reload-target="#remidio-api-routing-workspace"
-            data-remidio-api-route-form>
-        {{ csrf_field() }}
-        <div class="fw-semibold mb-3">Add Route</div>
-        {{ route_fields('route_new_' ~ profile.id, profile) }}
-        <div class="d-flex justify-content-end gap-2 mt-3">
-          <button class="btn btn-outline-secondary" type="button" data-remidio-routing-hide-panel>Cancel</button>
-          <button class="btn btn-primary" type="submit">Add Route</button>
-        </div>
-      </form>
+      <div class="vstack gap-3 mt-3" data-remidio-route-draft-list="{{ profile.id }}"></div>
+      <template data-remidio-route-template="{{ profile.id }}">
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.upsert_remidio_api_routing_rule') }}"
+              data-remidio-api-route-form
+              data-remidio-route-draft
+              data-json-api-reload-url="{{ url_for('admin.remidio_api_routing_workspace') }}"
+              data-json-api-reload-target="#remidio-api-routing-workspace">
+          {{ csrf_field() }}
+          <div class="fw-semibold mb-3" data-remidio-route-draft-title>New Route</div>
+          {{ route_fields('route_new_' ~ profile.id ~ '_template', profile) }}
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button class="btn btn-outline-secondary" type="button" data-remidio-routing-remove-draft>Remove</button>
+            <button class="btn btn-outline-primary" type="button" data-remidio-routing-save-draft>Save This Route</button>
+          </div>
+        </form>
+      </template>
       {% else %}
       <div class="alert alert-secondary mt-3 mb-0">Activate this routing profile before adding routes.</div>
       {% endif %}

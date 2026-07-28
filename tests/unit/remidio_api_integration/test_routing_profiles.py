@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import date
 from io import BytesIO
 from uuid import uuid4
 
@@ -6,11 +7,16 @@ import pytest
 from PIL import Image
 
 from encounter_set_types.models import EncounterSetType
-from models import Disease, EncounterSetImage, Project, RemidioConnection, RemidioSite
+from models import Disease, EncounterSetImage, PatientEncounters, Project, RemidioConnection, RemidioExam, RemidioSite
 from remidio_api_integration import service
-from remidio_api_integration.errors import RemidioConfigError
-from remidio_api_integration.models import RemidioApiSourceRule
-from remidio_api_integration.routing import upsert_routing_profile, upsert_routing_profile_route
+from remidio_api_integration.errors import RemidioConfigError, RemidioRemoteError
+from remidio_api_integration.models import RemidioApiExamEncounter, RemidioApiSourceRule
+from remidio_api_integration.routing import (
+    delete_routing_profile_route,
+    set_routing_profile_route_active,
+    upsert_routing_profile,
+    upsert_routing_profile_route,
+)
 from upload_profiles.models import (
     ProjectUploadProfile,
     UploadProfile,
@@ -69,6 +75,26 @@ class FakeRemidioClient:
         output = BytesIO()
         image.save(output, format="JPEG")
         return output.getvalue(), "image/jpeg"
+
+
+class PartiallyFailingRemidioClient(FakeRemidioClient):
+    def get_exams_by_date(self, *, start_date, end_date, site_custom_identifier, include_file_paths=False):
+        if site_custom_identifier == "rpc_bad":
+            raise RemidioRemoteError(
+                "The Site Custom ID provided cannot be found for your organisation",
+                remote_status_code=404,
+                response_snapshot={
+                    "method": "GET",
+                    "path": f"/api/gateway/getExamsByDate/{start_date}/{end_date}/{site_custom_identifier}",
+                    "status_code": 404,
+                },
+            )
+        return super().get_exams_by_date(
+            start_date=start_date,
+            end_date=end_date,
+            site_custom_identifier=site_custom_identifier,
+            include_file_paths=include_file_paths,
+        )
 
 
 def test_routing_profile_route_requires_same_project_automated_profile(db_session, core_test_data):
@@ -185,6 +211,197 @@ def test_routing_profile_route_reuses_existing_active_source_rule(db_session, co
     assert db_session.query(RemidioApiSourceRule).filter_by(site_custom_identifier="rpc_existing").count() == 1
 
 
+def test_deactivating_routing_profile_frees_source_route_window(db_session, core_test_data):
+    project = _project(db_session, "MOVE")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    first_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route A {uuid4()}", "active": True},
+    )
+    first_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": first_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_move",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    upsert_routing_profile(
+        db_session,
+        {
+            "id": first_profile.id,
+            "project_id": project.id,
+            "name": first_profile.name,
+            "active": False,
+        },
+    )
+    db_session.refresh(first_route)
+    second_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route B {uuid4()}", "active": True},
+    )
+    second_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": second_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_move",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    assert first_route.active is False
+    assert first_route.active_to_date is not None
+    assert second_route.active is True
+    assert second_route.remidio_api_source_rule_id == first_route.remidio_api_source_rule_id
+
+
+def test_route_status_action_frees_source_route_window(db_session, core_test_data):
+    project = _project(db_session, "ROUTESTATUS")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    first_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route Status A {uuid4()}", "active": True},
+    )
+    first_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": first_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_route_status",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    set_routing_profile_route_active(db_session, first_route.id, active=False)
+    db_session.refresh(first_route)
+    second_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route Status B {uuid4()}", "active": True},
+    )
+    second_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": second_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_route_status",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    assert first_route.active is False
+    assert first_route.active_to_date is not None
+    assert second_route.active is True
+
+
+def test_delete_route_with_linked_encounter_deactivates_instead(db_session, core_test_data):
+    project = _project(db_session, "ROUTEDELETE")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route Delete {uuid4()}", "active": True},
+    )
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_route_delete",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    encounter = PatientEncounters(
+        name="Route Delete Patient",
+        patient_id=f"RD-{uuid4()}",
+        capture_date="2026-04-01",
+        capture_date_dt=date(2026, 4, 1),
+        is_set_based=True,
+        lab_unit_id=core_test_data["lab_unit"].id,
+        project_id=project.id,
+        upload_profile_id=automated_mapping.upload_profile_id,
+    )
+    exam = RemidioExam(
+        remidio_connection_id=connection.id,
+        patient_encounter=encounter,
+        remidio_exam_id=f"exam-{uuid4()}",
+        site_custom_identifier="rpc_route_delete",
+        device_types=["FOP"],
+        pull_source="test",
+    )
+    db_session.add_all([encounter, exam])
+    db_session.flush()
+    db_session.add(
+        RemidioApiExamEncounter(
+            remidio_exam_id=exam.id,
+            patient_encounter_id=encounter.id,
+            project_upload_profile_id=route.project_upload_profile_id,
+            remidio_api_binding_id=route.id,
+        )
+    )
+    db_session.flush()
+
+    result = delete_routing_profile_route(db_session, route.id)
+    db_session.refresh(route)
+
+    assert result == "deactivated"
+    assert route.active is False
+    assert route.active_to_date is not None
+
+
+def test_delete_route_without_linked_encounter_removes_route(db_session, core_test_data):
+    project = _project(db_session, "ROUTEREMOVE")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route Remove {uuid4()}", "active": True},
+    )
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_route_remove",
+            "remidio_device_type": "FOP",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    route_id = route.id
+
+    result = delete_routing_profile_route(db_session, route_id)
+
+    assert result == "deleted"
+    assert db_session.get(type(route), route_id) is None
+
+
 def test_routing_profile_sync_fetches_and_saves_scoped_encounter_set(db_session, core_test_data, tmp_path, monkeypatch):
     from remidio_api_integration import ingest as ingest_module
 
@@ -231,6 +448,67 @@ def test_routing_profile_sync_fetches_and_saves_scoped_encounter_set(db_session,
     assert image.project_id == project.id
     assert image.camera_id == core_test_data["camera"].id
     assert (tmp_path / image.folder_rel / image.original_filename).exists()
+
+
+def test_routing_profile_sync_continues_after_bad_site_identifier(db_session, core_test_data, tmp_path, monkeypatch):
+    from remidio_api_integration import ingest as ingest_module
+
+    monkeypatch.setattr(ingest_module, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(service, "RemidioClient", PartiallyFailingRemidioClient)
+    monkeypatch.setattr(service, "_secrets", lambda connection: None)
+    monkeypatch.setattr(service, "get_db_session", _session_context(db_session))
+
+    project = _project(db_session, "PARTIAL")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(db_session, project, core_test_data)
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {"project_id": project.id, "name": f"Route {uuid4()}", "active": True},
+    )
+    bad_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_bad",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    good_route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_good",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+
+    result = service._run_routing_profile_sync_payload(
+        {
+            "routing_profile_id": routing_profile.id,
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "limit": 10,
+            "route_ids": [bad_route.id, good_route.id],
+        }
+    )
+
+    assert [group["site_custom_identifier"] for group in result["groups"]] == ["rpc_bad", "rpc_good"]
+    assert result["groups"][0]["status"] == "failed"
+    assert result["groups"][0]["ingest"]["summary"]["route_errors"] == 1
+    assert result["groups"][1]["status"] == "completed"
+    assert result["groups"][1]["pull"]["summary"]["exams_created"] == 1
+    assert result["groups"][1]["ingest"]["summary"]["images_downloaded"] == 1
+    assert db_session.query(EncounterSetImage).count() == 1
 
 
 def _project(db_session, suffix: str) -> Project:

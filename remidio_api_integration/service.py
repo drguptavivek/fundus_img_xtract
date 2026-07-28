@@ -841,14 +841,34 @@ def patch_site(db: Session, site_id: int, payload: dict[str, Any]) -> RemidioSit
     site = db.get(RemidioSite, site_id)
     if site is None:
         raise RemidioConfigError("Remidio site was not found.")
+    old_site_custom_identifier = site.site_custom_identifier
     if "site_custom_identifier" in payload:
         value = payload.get("site_custom_identifier")
         site.site_custom_identifier = str(value).strip() if value not in {None, ""} else None
+        if site.site_custom_identifier and site.site_custom_identifier != old_site_custom_identifier:
+            _sync_site_custom_identifier_to_rules(db, site)
     if "active" in payload:
         site.active = _optional_bool(payload.get("active"), default=True)
     site.updated_at = utcnow()
     db.flush()
     return site
+
+
+def _sync_site_custom_identifier_to_rules(db: Session, site: RemidioSite) -> None:
+    db.query(RemidioRoutingRule).filter(RemidioRoutingRule.remidio_site_id == site.id).update(
+        {
+            RemidioRoutingRule.site_custom_identifier: site.site_custom_identifier,
+            RemidioRoutingRule.updated_at: utcnow(),
+        },
+        synchronize_session=False,
+    )
+    db.query(RemidioApiSourceRule).filter(RemidioApiSourceRule.remidio_site_id == site.id).update(
+        {
+            RemidioApiSourceRule.site_custom_identifier: site.site_custom_identifier,
+            RemidioApiSourceRule.updated_at: utcnow(),
+        },
+        synchronize_session=False,
+    )
 
 
 def list_routing_rules(db: Session, *, connection_id: int | None = None, project_id: int | None = None) -> list[dict[str, Any]]:
@@ -1255,6 +1275,7 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     failed = 0
+    partial = 0
     for item_id in item_ids:
         with get_db_session() as db:
             job = db.get(Job, job_id)
@@ -1264,6 +1285,8 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
         results.append(result)
         if result.get("status") == "failed":
             failed += 1
+        elif result.get("status") == "partial_error":
+            partial += 1
 
     with get_db_session() as db:
         job = db.get(Job, job_id)
@@ -1271,7 +1294,7 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
             if job.status in {"paused", "cancelled"}:
                 db.commit()
                 return {"job_id": job_id, "status": job.status, "items": results}
-            if failed == 0:
+            if failed == 0 and partial == 0:
                 job.status = "completed"
                 job.error = None
             elif failed == len(results):
@@ -1279,11 +1302,16 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
                 job.error = f"{failed} Remidio API sync item(s) failed."
             else:
                 job.status = "partial_error"
-                job.error = f"{failed} Remidio API sync item(s) failed."
+                parts = []
+                if failed:
+                    parts.append(f"{failed} Remidio API sync item(s) failed")
+                if partial:
+                    parts.append(f"{partial} Remidio API sync item(s) completed with route errors")
+                job.error = "; ".join(parts) + "."
             job.updated_at = utcnow()
             db.add(job)
             db.commit()
-    return {"job_id": job_id, "status": "completed" if failed == 0 else "partial_error", "items": results}
+    return {"job_id": job_id, "status": "completed" if failed == 0 and partial == 0 else "partial_error", "items": results}
 
 
 def list_project_sync_dashboard(db: Session, *, project_id: int | None = None) -> dict[str, Any]:
@@ -1447,33 +1475,61 @@ def _run_routing_profile_sync_payload(
                 sanitize_log_value(end_date),
                 sanitize_log_value([route.id for route in group_routes], max_len=500),
             )
-            pull_result = pull_exams_by_date(
-                db,
-                connection_id,
-                {
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "site_custom_identifier": site_custom_identifier,
-                    "dry_run": dry_run,
-                },
-            )
-            ingest_result = None
-            if not dry_run:
-                ingest_result = ingest_connection_files(
+            try:
+                pull_result = pull_exams_by_date(
                     db,
                     connection_id,
                     {
-                        "site_custom_identifier": site_custom_identifier,
                         "start_date": start_date,
                         "end_date": end_date,
-                        "limit": limit,
-                        "pending_only": True,
-                        "include_images": True,
-                        "include_reports": True,
-                        "remidio_api_binding_ids": [route.id for route in group_routes],
+                        "site_custom_identifier": site_custom_identifier,
+                        "dry_run": dry_run,
                     },
-                    progress_callback=progress_callback,
                 )
+                ingest_result = None
+                if not dry_run:
+                    ingest_result = ingest_connection_files(
+                        db,
+                        connection_id,
+                        {
+                            "site_custom_identifier": site_custom_identifier,
+                            "start_date": start_date,
+                            "end_date": end_date,
+                            "limit": limit,
+                            "pending_only": True,
+                            "include_images": True,
+                            "include_reports": True,
+                            "remidio_api_binding_ids": [route.id for route in group_routes],
+                        },
+                        progress_callback=progress_callback,
+                    )
+            except (RemidioConfigError, RemidioRemoteError) as exc:
+                error = str(sanitize_log_value(exc))[:1000]
+                diagnostics = _remidio_exception_diagnostics(exc)
+                LOGGER.warning(
+                    "Remidio API route pull failed routing_profile_id=%s connection_id=%s site=%s start_date=%s end_date=%s route_ids=%s error=%s diagnostics=%s",
+                    sanitize_log_value(routing_profile_id),
+                    sanitize_log_value(connection_id),
+                    sanitize_log_value(site_custom_identifier),
+                    sanitize_log_value(start_date),
+                    sanitize_log_value(end_date),
+                    sanitize_log_value([route.id for route in group_routes], max_len=500),
+                    sanitize_log_value(error, max_len=1000),
+                    sanitize_log_value(diagnostics, max_len=1500),
+                )
+                summaries.append(
+                    {
+                        "connection_id": connection_id,
+                        "site_custom_identifier": site_custom_identifier,
+                        "route_ids": [route.id for route in group_routes],
+                        "status": "failed",
+                        "error": error,
+                        "diagnostics": diagnostics,
+                        "pull": {"summary": {}},
+                        "ingest": {"summary": {"route_errors": 1, "download_errors": 0}},
+                    }
+                )
+                continue
             LOGGER.info(
                 "Remidio API route pull complete routing_profile_id=%s connection_id=%s site=%s start_date=%s end_date=%s pull_summary=%s ingest_summary=%s",
                 sanitize_log_value(routing_profile_id),
@@ -1489,6 +1545,7 @@ def _run_routing_profile_sync_payload(
                     "connection_id": connection_id,
                     "site_custom_identifier": site_custom_identifier,
                     "route_ids": [route.id for route in group_routes],
+                    "status": "completed",
                     "pull": pull_result,
                     "ingest": ingest_result,
                 }
@@ -1551,6 +1608,7 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
         progress = _ProjectSyncProgress(job_id=job_id, item_id=item_id, payload=payload)
         _update_project_sync_item_progress(job_id, item_id, payload, progress.snapshot("started"))
         result = _run_routing_profile_sync_payload(payload, progress_callback=progress.update)
+        item_status = "partial_error" if _sync_result_has_errors(result) else "completed"
         post_processing = _queue_remidio_api_post_processing(result, user_id=job_user_id)
         if post_processing:
             result["post_processing"] = post_processing
@@ -1563,14 +1621,15 @@ def _run_project_sync_item(job_id: int, item_id: int) -> dict[str, Any]:
                 db.add(item)
                 db.commit()
         LOGGER.info(
-            "Remidio API project sync item complete job_id=%s item_id=%s project_id=%s start_date=%s end_date=%s",
+            "Remidio API project sync item complete job_id=%s item_id=%s project_id=%s start_date=%s end_date=%s status=%s",
             sanitize_log_value(job_id),
             sanitize_log_value(item_id),
             sanitize_log_value(payload.get("project_id")),
             sanitize_log_value(payload.get("start_date")),
             sanitize_log_value(payload.get("end_date")),
+            sanitize_log_value(item_status),
         )
-        return {"job_id": job_id, "item_id": item_id, "status": "completed", "result": result}
+        return {"job_id": job_id, "item_id": item_id, "status": item_status, "result": result}
     except Exception as exc:  # noqa: BLE001
         error = str(sanitize_log_value(exc))[:1000]
         diagnostics = _remidio_exception_diagnostics(exc)
@@ -1783,6 +1842,10 @@ def _remidio_exception_diagnostics(exc: Exception) -> dict[str, Any]:
             diagnostics["response_snapshot"] = exc.response_snapshot
         return diagnostics
     return {}
+
+
+def _sync_result_has_errors(result: dict[str, Any]) -> bool:
+    return any(group.get("status") == "failed" for group in result.get("groups") or [])
 
 
 class _ProjectSyncProgress:

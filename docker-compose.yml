@@ -238,8 +238,10 @@ services:
     command: >
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
-      --concurrency=${CELERY_GENERAL_CONCURRENCY:-2}
-      -Q thumbnails,exports,maintenance,s3_sync,default
+      --concurrency=${CELERY_GENERAL_CONCURRENCY:-3}
+      --prefetch-multiplier=1
+      -Ofair
+      -Q wadhwani,thumbnails,exports,maintenance,s3_sync,default
     restart: on-failure:5
 
   celery-beat:

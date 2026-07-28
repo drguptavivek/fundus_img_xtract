@@ -16,7 +16,7 @@ CELERY_TASK_ROUTES = {
     "celery_tasks.tasks.package_update_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.task_backfill_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.export_tasks.*": {"queue": "exports"},
-    "celery_tasks.tasks.wadhwani_tasks.*": {"queue": "maintenance"},
+    "celery_tasks.tasks.wadhwani_tasks.*": {"queue": "wadhwani"},
     "celery_tasks.tasks.maintenance_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.mv_tasks.*": {"queue": "maintenance"},
     "celery_tasks.tasks.remidio_tasks.*": {"queue": "maintenance"},

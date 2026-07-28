@@ -138,7 +138,7 @@ def encounter_set_package_submit():
                     )
                 )
             db.flush()
-            update_task_state_based_on_grades(db, task)
+            update_task_state_based_on_grades(task.id, db)
             cleanup_task_tracker(task.id, current_user.id, slot_type, db)
             changed += 1
 

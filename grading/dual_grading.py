@@ -88,6 +88,20 @@ def _resolve_task_image_uuid(task: GradingTask) -> str | None:
         return task.encounter_file.uuid
     if task.direct_image:
         return task.direct_image.uuid
+    if task.encounter_set_image:
+        return task.encounter_set_image.uuid
+    return None
+
+
+def _missing_task_image_reference(task: GradingTask) -> str | None:
+    if task.encounter_file_id:
+        return f"Encounter file ID {task.encounter_file_id}"
+    if task.direct_image_upload_id:
+        return f"Direct upload ID {task.direct_image_upload_id}"
+    if task.encounter_set_image_id:
+        return f"EncounterSet image ID {task.encounter_set_image_id}"
+    if task.patient_encounter_id:
+        return f"Patient encounter ID {task.patient_encounter_id}"
     return None
 
 
@@ -216,19 +230,10 @@ def revise_grading(grade_id: int):
                 )
             
             # Determine image URL
-            image_uuid = None
-            if task.encounter_file:
-                image_uuid = task.encounter_file.uuid
-            elif task.direct_image:
-                image_uuid = task.direct_image.uuid
+            image_uuid = _resolve_task_image_uuid(task)
 
             if image_uuid is None:
-                missing_ref = None
-                if task.encounter_file_id:
-                    missing_ref = f"Encounter file ID {task.encounter_file_id}"
-                elif task.direct_image_upload_id:
-                    missing_ref = f"Direct upload ID {task.direct_image_upload_id}"
-
+                missing_ref = _missing_task_image_reference(task)
                 details = f" ({missing_ref})" if missing_ref else ""
                 flash(
                     f"No image is available for this task{details}. The task has been released."
@@ -489,19 +494,10 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             grading_features = grading_data["grading_features"]
             
             # Determine image URL
-            image_uuid = None
-            if task.encounter_file:
-                image_uuid = task.encounter_file.uuid
-            elif task.direct_image:
-                image_uuid = task.direct_image.uuid
+            image_uuid = _resolve_task_image_uuid(task)
 
             if image_uuid is None:
-                missing_ref = None
-                if task.encounter_file_id:
-                    missing_ref = f"Encounter file ID {task.encounter_file_id}"
-                elif task.direct_image_upload_id:
-                    missing_ref = f"Direct upload ID {task.direct_image_upload_id}"
-
+                missing_ref = _missing_task_image_reference(task)
                 details = f" ({missing_ref})" if missing_ref else ""
                 flash(
                     f"No image is available for this task{details}. The task has been released."

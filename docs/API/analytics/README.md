@@ -6,6 +6,7 @@ This folder documents the analytics pages and JSON endpoints.
 
 - [Hospital Dashboard](hospital-dashboard.md)
 - [Model Performance](model-performance.md)
+- [Encounter Task Results Export](encounter-task-results-export.md)
 
 ## Media and KPI pages
 
@@ -15,6 +16,10 @@ This folder documents the analytics pages and JSON endpoints.
 - `GET /analytics/encounters`
 - `GET /analytics/encounter/view/<int:encounter_id>`
 - `GET /analytics/direct/view/<string:uuid_str>`
+
+## File download APIs
+
+- `GET /api/analytics/encounters/export/task-results.xlsx`
 
 ## Dataset curation
 

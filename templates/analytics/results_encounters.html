@@ -32,15 +32,48 @@
         </select>
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
-        <label class="form-label mb-1" for="filter-date">Capture Date</label>
-        <input class="form-control" type="date" id="filter-date" name="capture_date"
-          value="{{ filters.capture_date or '' }}">
+        <label class="form-label mb-1" for="filter-start-date">Start Date</label>
+        <input class="form-control" type="date" id="filter-start-date" name="start_date"
+          value="{{ filters.start_date or '' }}">
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-end-date">End Date</label>
+        <input class="form-control" type="date" id="filter-end-date" name="end_date"
+          value="{{ filters.end_date or '' }}">
+      </div>
+      <div class="col-12 col-lg-auto">
+        <label class="form-label mb-1">Source</label>
+        <div class="border rounded p-2 bg-body" style="max-height: 10rem; overflow-y: auto; min-width: 16rem;">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="filter-classical" name="include_classical" value="1"
+              {% if filters.include_classical %}checked{% endif %}>
+            <label class="form-check-label" for="filter-classical">Classical encounters</label>
+          </div>
+          {% for project in projects %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="filter-project-{{ project.id }}" name="project_id"
+              value="{{ project.id }}" {% if project.id in filters.project_id %}checked{% endif %}>
+            <label class="form-check-label" for="filter-project-{{ project.id }}">
+              {{ project.code }}{% if project.title %} - {{ project.title }}{% endif %}
+            </label>
+          </div>
+          {% endfor %}
+        </div>
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
       </div>
     </form>
   </div>
+
+  {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
+  <div class="d-flex flex-wrap justify-content-end gap-2 mb-3">
+    <a class="btn btn-outline-secondary btn-sm"
+       href="{{ export_url }}">
+      <i class="bi bi-download me-1"></i> Export Task Results
+    </a>
+  </div>
+  {% endif %}
 
   {% if not encounters %}
   <div class="alert alert-info">No encounters matched the selected filters.</div>

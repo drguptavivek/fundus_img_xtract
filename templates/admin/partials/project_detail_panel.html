@@ -178,7 +178,9 @@
               </div>
               {% if profile.automated_remidio_populated %}
               <div class="alert alert-info py-2 mt-2 mb-2 small">
-                Automated Remidio API profile. It receives data through API source bindings and does not require uploader assignments.
+                Automated Remidio API profile. Manage source routing from
+                <a href="{{ url_for('admin.remidio_api_routing_dashboard') }}">Remidio API Routing</a>;
+                this project view summarizes active bindings and does not require uploader assignments.
               </div>
               <div class="table-responsive mt-2">
                 <table class="table table-sm align-middle mb-0">
@@ -220,59 +222,6 @@
                   </tbody>
                 </table>
               </div>
-              <form class="row g-2 align-items-end mt-2"
-                    method="post"
-                    action="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
-                    hx-post="{{ url_for('fundus_api.upsert_remidio_api_binding') }}"
-                    hx-swap="none"
-                    data-json-api-htmx
-                    data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
-                    data-json-api-reload-target="#project-detail-workspace">
-                {{ csrf_field() }}
-                <input type="hidden" name="project_upload_profile_id" value="{{ mapping.id }}">
-                <input type="hidden" name="active" value="true">
-                <div class="col-md-4">
-                  <label class="form-label" for="remidio_api_source_rule_{{ mapping.id }}">API Source</label>
-                  <select class="form-select" id="remidio_api_source_rule_{{ mapping.id }}" name="remidio_api_source_rule_id" required>
-                    <option value="">Select source</option>
-                    {% for source_rule in remidio_api_source_rules if source_rule.active %}
-                    <option value="{{ source_rule.id }}">
-                      {{ source_rule.connection.name if source_rule.connection else 'Connection' }} ·
-                      {{ source_rule.site_custom_identifier }} · {{ source_rule.remidio_device_type }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <label class="form-label" for="remidio_api_lab_{{ mapping.id }}">Lab Unit</label>
-                  <select class="form-select" id="remidio_api_lab_{{ mapping.id }}" name="lab_unit_id" required>
-                    <option value="">Select lab unit</option>
-                    {% for lab_unit in lab_units %}
-                    <option value="{{ lab_unit.id }}">{{ lab_unit.name }}{% if lab_unit.hospital %} · {{ lab_unit.hospital.name }}{% endif %}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <label class="form-label" for="remidio_api_camera_{{ mapping.id }}">Camera</label>
-                  <select class="form-select" id="remidio_api_camera_{{ mapping.id }}" name="camera_id" required>
-                    <option value="">Select camera</option>
-                    {% for camera in cameras %}
-                    <option value="{{ camera.id }}">{{ camera.name }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-md-2">
-                  <label class="form-label" for="remidio_api_from_{{ mapping.id }}">From</label>
-                  <input class="form-control" id="remidio_api_from_{{ mapping.id }}" type="date" name="active_from_date" required>
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label" for="remidio_api_to_{{ mapping.id }}">To</label>
-                  <input class="form-control" id="remidio_api_to_{{ mapping.id }}" type="date" name="active_to_date">
-                </div>
-                <div class="col-md-8 text-end">
-                  <button class="btn btn-outline-primary w-100" type="submit">Bind Remidio API Source</button>
-                </div>
-              </form>
               {% else %}
               {% if profile.allow_remidio_zip_encounter_set %}
               <div class="alert alert-primary py-2 mt-2 mb-2 small">

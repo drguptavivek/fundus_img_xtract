@@ -104,6 +104,9 @@
           </div>
           <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
             {{ patient.image_count }} images · {{ patient.attachment_count }} attachments
+            {% if patient.referral_suggestion == 'yes' %}
+            <span class="badge rounded-pill text-bg-danger ms-1">Refer+</span>
+            {% endif %}
           </div>
         </button>
         {% else %}

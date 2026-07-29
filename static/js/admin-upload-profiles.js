@@ -559,7 +559,7 @@
       if (controls) {
         const showControls = enabled && policy && policy.value === 'positive_plus_negative_controls';
         controls.disabled = !showControls;
-        controlsWrap?.classList.toggle('d-none', !showControls);
+        controlsWrap?.classList.toggle('opacity-50', !showControls);
       }
       if (staticText) {
         staticText.classList.toggle('opacity-50', !enabled);

@@ -34,6 +34,7 @@ from models import (
 )
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from services.glaucoma_ai_upload import GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
+from services.encounter_referral_suggestion import normalize_referral_suggestion
 from .direct import (
     DirectUploadActor,
     DirectUploadJobError,
@@ -606,6 +607,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     _require_payload_text(payload, "patient_id")
     _require_payload_text(payload, "patient_name")
     _require_payload_text(payload, "capture_date")
+    referral_suggestion_raw = payload.get("referral_suggestion")
+    referral_suggestion = normalize_referral_suggestion(referral_suggestion_raw)
 
     encounter = PatientEncounters(
         name=payload["patient_name"],
@@ -618,6 +621,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         disease_id=disease_ids[0] if len(disease_ids) == 1 else None,
         is_set_based=True,
         remarks=_remarks(payload.get("remarks")),
+        referral_suggestion=referral_suggestion,
+        referral_suggestion_updated_at=utcnow() if referral_suggestion_raw is not None else None,
         uuid=str(uuid.uuid4()),
     )
     db.add(encounter)
@@ -670,6 +675,8 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
             spatial_position=spatial_position,
             is_mydriatic=is_mydriatic,
             remarks=_remarks(item.get("remarks")),
+            referral_suggestion=_image_referral_suggestion(item),
+            referral_suggestion_supplied=_image_referral_suggestion_supplied(item),
         )
         db.add(image)
         db.flush()
@@ -692,10 +699,23 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     db.flush()
     payload = _upload_response(job, upload_kind=UPLOAD_KIND_ENCOUNTER_SET, accepted=accepted, rejected=0)
     payload["encounter_uuid"] = encounter.uuid
+    payload["referral_suggestion"] = encounter.referral_suggestion
     return payload
 
 
-def _save_encounter_set_image(*, file: FileStorage, encounter: PatientEncounters, project_id: int, camera_id: int, area_id: int, spatial_position: int, is_mydriatic: bool, remarks: str | None) -> EncounterSetImage:
+def _save_encounter_set_image(
+    *,
+    file: FileStorage,
+    encounter: PatientEncounters,
+    project_id: int,
+    camera_id: int,
+    area_id: int,
+    spatial_position: int,
+    is_mydriatic: bool,
+    remarks: str | None,
+    referral_suggestion: str = "missing",
+    referral_suggestion_supplied: bool = False,
+) -> EncounterSetImage:
     original = secure_filename(file.filename or "")
     if not original:
         raise MobileUploadError("Encounter-set files must have filenames.", code="invalid_filename")
@@ -721,8 +741,24 @@ def _save_encounter_set_image(*, file: FileStorage, encounter: PatientEncounters
         area_id=area_id,
         is_mydriatic=is_mydriatic,
         remarks=remarks,
+        referral_needed_or_positive_image=referral_suggestion,
+        referral_needed_or_positive_image_updated_at=utcnow() if referral_suggestion_supplied else None,
         created_at=utcnow(),
     )
+
+
+def _image_referral_suggestion(item: dict[str, Any]) -> str:
+    return normalize_referral_suggestion(_image_referral_raw(item))
+
+
+def _image_referral_suggestion_supplied(item: dict[str, Any]) -> bool:
+    return _image_referral_raw(item) is not None
+
+
+def _image_referral_raw(item: dict[str, Any]) -> Any:
+    if "referral_needed_or_positive_image" in item:
+        return item.get("referral_needed_or_positive_image")
+    return item.get("refrralneed_or_positive_image")
 
 
 def _create_job(

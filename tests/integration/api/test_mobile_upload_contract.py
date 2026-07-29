@@ -8,6 +8,7 @@ from itertools import count
 import pytest
 from PIL import Image
 
+from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Hospital, LabUnit, Project
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
@@ -17,6 +18,8 @@ from upload_profiles.models import (
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_ENCOUNTER_SET, UPLOAD_KIND_REMIDIO
@@ -38,7 +41,14 @@ def mobile_upload_contract_data(db_session, core_test_data):
     disease = db_session.merge(core_test_data["glaucoma"])
     camera = Camera(name=f"Mobile Contract Camera {suffix}", is_zip_upload_enabled=True)
     area = Area(name=f"Mobile Contract Area {suffix}")
-    db_session.add_all([lab, project, camera, area])
+    encounter_set_type = EncounterSetType(
+        name=f"Mobile Contract EncounterSet {suffix}",
+        code=f"mobile_contract_est_{suffix}",
+        metadata_schema_json={"fields": []},
+        asset_rules_json={"allow_clinical_images": True},
+        active=True,
+    )
+    db_session.add_all([lab, project, camera, area, encounter_set_type])
     db_session.flush()
 
     uploader = UserFactory.create_by_role(
@@ -57,6 +67,16 @@ def mobile_upload_contract_data(db_session, core_test_data):
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
+    profile.encounter_set_types.append(
+        UploadProfileEncounterSetType(
+            encounter_set_type=encounter_set_type,
+            encounter_grading_scheme=disease,
+            default_image_grading_scheme=disease,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypeImageGradingScheme(disease=disease, is_default=True, display_order=1)
+            ],
+        )
+    )
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_REMIDIO))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
@@ -128,6 +148,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
             "capture_date": "2026-05-03",
             "disease_ids": [mobile_upload_contract_data["disease"].id],
             "remarks": "curl-style encounter remarks",
+            "referral_suggestion": "missing",
             "items": [
                 {
                     "file_key": "right_eye",
@@ -135,6 +156,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
                     "camera_id": mobile_upload_contract_data["camera"].id,
                     "area_id": mobile_upload_contract_data["area"].id,
                     "remarks": "right eye curl remarks",
+                    "referral_needed_or_positive_image": "yes",
                 },
                 {
                     "file_key": "left_eye",
@@ -142,6 +164,7 @@ def documented_multipart_shapes(mobile_upload_contract_data):
                     "camera_id": mobile_upload_contract_data["camera"].id,
                     "area_id": mobile_upload_contract_data["area"].id,
                     "remarks": "left eye curl remarks",
+                    "referral_needed_or_positive_image": "no",
                 },
             ],
         }
@@ -167,7 +190,14 @@ def test_mobile_upload_contract_accepts_documented_multipart_shapes_and_polling(
     client,
     mobile_contract_headers,
     documented_multipart_shapes,
+    monkeypatch,
+    tmp_path,
 ):
+    monkeypatch.setattr(client.application, "root_path", str(tmp_path))
+    monkeypatch.setattr(
+        "services.uploads.mobile._save_mobile_zip",
+        lambda file: tmp_path / (file.filename or "remidio.zip"),
+    )
     upload_tokens = {}
 
     for upload_kind, form_factory in documented_multipart_shapes.items():

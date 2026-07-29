@@ -1,6 +1,7 @@
 from flask import after_this_request, render_template, abort, current_app, flash, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from auth.roles import roles_required
+from auth.utils import utcnow
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +16,7 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
+from services.encounter_referral_suggestion import normalize_referral_suggestion, update_encounter_referral_suggestion_from_attachments
 from services.encounter_set_ai_inference import create_wadhwani_task_ids_for_encounter, enqueue_wadhwani_for_task_ids
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
@@ -194,6 +196,10 @@ def update_metadata(uuid):
         }
 
         encounter_metadata = dict(encounter.metadata_json or {})
+        referral_form_name = "metadata__encounter__referral_suggestion"
+        manual_referral_suggestion = None
+        if _metadata_form_field_present(request.form, referral_form_name):
+            manual_referral_suggestion = normalize_referral_suggestion(request.form.get(referral_form_name))
         for scope in ("patient", "encounter"):
             section = dict(encounter_metadata.get(scope) or {})
             for (field_scope, key), field in editable_fields.items():
@@ -213,6 +219,14 @@ def update_metadata(uuid):
         }
         image_fields = [field for (scope, _key), field in editable_fields.items() if scope == "image"]
         for image_id, image in images.items():
+            image_referral_form_name = f"metadata__image__{image_id}__referral_needed_or_positive_image"
+            image_referral_alias_name = f"metadata__image__{image_id}__refrralneed_or_positive_image"
+            if _metadata_form_field_present(request.form, image_referral_form_name):
+                image.referral_needed_or_positive_image = normalize_referral_suggestion(request.form.get(image_referral_form_name))
+                image.referral_needed_or_positive_image_updated_at = utcnow()
+            elif _metadata_form_field_present(request.form, image_referral_alias_name):
+                image.referral_needed_or_positive_image = normalize_referral_suggestion(request.form.get(image_referral_alias_name))
+                image.referral_needed_or_positive_image_updated_at = utcnow()
             metadata = dict(image.metadata_json or {})
             for field in image_fields:
                 form_name = f"metadata__image__{image_id}__{field['key']}"
@@ -248,6 +262,14 @@ def update_metadata(uuid):
                 _set_nested_metadata_value(metadata, path, request.form.get(form_name, "").strip())
             attachment.metadata_json = metadata
             _sync_attachment_ocr_clinical_reports(db, attachment)
+
+        if attachments:
+            from services.encounter_referral_suggestion import update_encounter_referral_suggestion_from_attachments
+
+            update_encounter_referral_suggestion_from_attachments(db, encounter.id)
+        if manual_referral_suggestion is not None:
+            encounter.referral_suggestion = manual_referral_suggestion
+            encounter.referral_suggestion_updated_at = utcnow()
 
         flash("Verification metadata updated.", "success")
         if request.headers.get("X-EncounterSet-Async") == "1":
@@ -629,6 +651,11 @@ def finalize_verification(uuid):
             return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
 
         # Finalize (atomic - encounter and images locked until commit)
+        update_encounter_referral_suggestion_from_attachments(
+            db,
+            encounter.id,
+            preserve_existing_when_missing=True,
+        )
         encounter.encounter_verified_status = 'verified'
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = utcnow()

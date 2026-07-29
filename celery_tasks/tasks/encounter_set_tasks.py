@@ -190,6 +190,9 @@ def process_encounter_set_attachment_pdf_ocr_task(
         refreshed_metadata["ocr"] = ocr_result
         record.metadata_json = refreshed_metadata
         session.add(record)
+        from services.encounter_referral_suggestion import update_encounter_referral_suggestion_from_attachments
+
+        update_encounter_referral_suggestion_from_attachments(session, record.patient_encounter_id)
         session.commit()
 
         logger.info(

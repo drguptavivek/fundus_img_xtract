@@ -389,6 +389,7 @@ def _ingest_report(
         report.downloaded_at = report.downloaded_at or existing_attachment.created_at
         report.download_error = None
         db.flush()
+        _update_referral_suggestion(db, encounter.id)
         summary.reports_skipped += 1
         result = {
             "remidio_report_id": report.remidio_report_id,
@@ -441,6 +442,7 @@ def _ingest_report(
         report.downloaded_at = utcnow()
         report.download_error = None
         db.flush()
+        _update_referral_suggestion(db, encounter.id)
         summary.reports_downloaded += 1
         result = {
             "remidio_report_id": report.remidio_report_id,
@@ -505,6 +507,12 @@ def _existing_report_attachment(db: Session, patient_encounter_id: int, remidio_
         if str(metadata.get("remidio_report_id") or "").strip() == str(remidio_report_id).strip():
             return row
     return None
+
+
+def _update_referral_suggestion(db: Session, encounter_id: int) -> None:
+    from services.encounter_referral_suggestion import update_encounter_referral_suggestion_from_attachments
+
+    update_encounter_referral_suggestion_from_attachments(db, encounter_id)
 
 
 def _resolve_report_binding(

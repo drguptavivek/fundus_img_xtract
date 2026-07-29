@@ -240,6 +240,18 @@
     </div>
     <div class="image-fields-row">
       <h3 class="h6 mb-3">Editable Image Fields</h3>
+      <div class="mb-3">
+        <label class="form-label" for="image_referral_{{ selected_image.id }}">Referral Needed / Image Positive</label>
+        <input type="hidden" name="__present__metadata__image__{{ selected_image.id }}__referral_needed_or_positive_image" value="1">
+        <select class="form-select"
+                id="image_referral_{{ selected_image.id }}"
+                name="metadata__image__{{ selected_image.id }}__referral_needed_or_positive_image"
+                data-original-value="{{ selected_image.referral_needed_or_positive_image or 'missing' }}">
+          <option value="missing" {% if (selected_image.referral_needed_or_positive_image or 'missing') == 'missing' %}selected{% endif %}>Missing</option>
+          <option value="yes" {% if selected_image.referral_needed_or_positive_image == 'yes' %}selected{% endif %}>Yes</option>
+          <option value="no" {% if selected_image.referral_needed_or_positive_image == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
       {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
     </div>
     <div class="panel-actions">
@@ -390,6 +402,19 @@
 </div>
 <div class="panel-content">
   <div class="row g-4 mb-4">
+    <div class="col-12 col-lg-4">
+      <label class="form-label" for="metadata__encounter__referral_suggestion">Referral Suggestion</label>
+      <select class="form-select"
+              name="metadata__encounter__referral_suggestion"
+              id="metadata__encounter__referral_suggestion">
+        {% for value, label in [('missing', 'Missing'), ('yes', 'Yes'), ('no', 'No')] %}
+        <option value="{{ value }}" {% if encounter.referral_suggestion == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
     <div class="col-12 col-xl-6">
       <h3 class="h6">Gradable Images</h3>
       <div class="summary-thumb-strip">
@@ -446,6 +471,11 @@
   </div>
 
   <div id="verification-change-manifest" class="d-none">
+    <span data-change-field
+          data-level="Encounter"
+          data-name="metadata__encounter__referral_suggestion"
+          data-label="Referral Suggestion"
+          data-current="{{ encounter.referral_suggestion or 'missing' }}"></span>
     {% for field in patient_fields %}
     {% set value = patient_metadata.get(field.key) if patient_metadata else none %}
     <span data-change-field

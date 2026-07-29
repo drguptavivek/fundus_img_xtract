@@ -28,6 +28,7 @@ from models import (
     Project,
     User,
 )
+from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -35,6 +36,8 @@ from upload_profiles.models import (
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileKind,
 )
 from upload_profiles.service import (
@@ -63,7 +66,14 @@ def mobile_upload_data(db_session, core_test_data):
     disease = db_session.merge(core_test_data["glaucoma"])
     camera = Camera(name=f"Mobile Upload Camera {suffix}", is_zip_upload_enabled=True)
     area = Area(name=f"Mobile Upload Area {suffix}")
-    db_session.add_all([lab, project, camera, area])
+    encounter_set_type = EncounterSetType(
+        name=f"Mobile Upload EncounterSet {suffix}",
+        code=f"mobile_upload_est_{suffix}",
+        metadata_schema_json={"fields": []},
+        asset_rules_json={"allow_clinical_images": True},
+        active=True,
+    )
+    db_session.add_all([lab, project, camera, area, encounter_set_type])
     db_session.flush()
 
     uploader = UserFactory.create_by_role(
@@ -82,6 +92,16 @@ def mobile_upload_data(db_session, core_test_data):
     profile.diseases.append(UploadProfileDisease(disease_id=disease.id, is_default=True))
     profile.cameras.append(UploadProfileCamera(camera_id=camera.id))
     profile.areas.append(UploadProfileArea(area_id=area.id))
+    profile.encounter_set_types.append(
+        UploadProfileEncounterSetType(
+            encounter_set_type=encounter_set_type,
+            encounter_grading_scheme=disease,
+            default_image_grading_scheme=disease,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypeImageGradingScheme(disease=disease, is_default=True, display_order=1)
+            ],
+        )
+    )
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_DIRECT_IMAGE))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_REMIDIO))
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
@@ -315,8 +335,9 @@ def test_mobile_remidio_upload_accepts_zip_and_creates_queued_job(client, monkey
     assert queued["kwargs"]["upload_context"]["upload_profile_id"] == mobile_upload_data["profile"].id
 
 
-def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(client, db_session, monkeypatch, mobile_upload_data):
+def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(client, db_session, monkeypatch, tmp_path, mobile_upload_data):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
+    monkeypatch.setattr(client.application, "root_path", str(tmp_path))
     token = _mobile_access_token(client, mobile_upload_data["uploader"].username)
     encounter_json = {
         "patient_id": "MRN-123",
@@ -324,6 +345,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
         "capture_date": "2026-05-03",
         "disease_ids": [mobile_upload_data["disease"].id],
         "remarks": "encounter level text",
+        "referral_suggestion": "yes",
         "items": [
             {
                 "file_key": "right_eye",
@@ -331,6 +353,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
                 "camera_id": mobile_upload_data["camera"].id,
                 "area_id": mobile_upload_data["area"].id,
                 "remarks": "right eye text",
+                "referral_needed_or_positive_image": "yes",
             },
             {
                 "file_key": "left_eye",
@@ -338,6 +361,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
                 "camera_id": mobile_upload_data["camera"].id,
                 "area_id": mobile_upload_data["area"].id,
                 "remarks": "left eye text",
+                "referral_needed_or_positive_image": "no",
             },
         ],
     }
@@ -362,12 +386,16 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
     payload = response.get_json()
     assert payload["upload_kind"] == UPLOAD_KIND_ENCOUNTER_SET
     assert payload["accepted_count"] == 2
+    assert payload["referral_suggestion"] == "yes"
 
     encounter = db_session.query(PatientEncounters).one()
     assert encounter.patient_id == "MRN-123"
     assert encounter.remarks == "encounter level text"
+    assert encounter.referral_suggestion == "yes"
+    assert encounter.referral_suggestion_updated_at is not None
     assert db_session.query(EncounterSetImage).count() == 2
     assert {image.remarks for image in db_session.query(EncounterSetImage).all()} == {"right eye text", "left eye text"}
+    assert {image.referral_needed_or_positive_image for image in db_session.query(EncounterSetImage).all()} == {"yes", "no"}
 
 
 def test_mobile_upload_inference_returns_not_configured(client, monkeypatch, mobile_upload_data):

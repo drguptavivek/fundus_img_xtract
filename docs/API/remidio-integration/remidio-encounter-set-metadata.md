@@ -62,6 +62,7 @@ Remidio data is split into three classes.
    - report document count.
    - report presence flags.
    - AI/GMA report presence.
+   - encounter-level referral suggestion.
 
 Graders should not see PII, signed URLs, raw source payloads, source
 user/provider identity fields, or diagnosis fields that would unblind the
@@ -72,6 +73,28 @@ Structured report diagnoses such as `left_eye_diagnosis` and
 `right_eye_diagnosis` are clinical metadata, not PII. They may still be hidden
 from graders for blinding, but that is controlled by `visible_to_grader`, not
 by the PII flag.
+
+## Encounter Referral Suggestion
+
+`patient_encounters.referral_suggestion` stores the encounter-level tri-state
+suggestion as `yes`, `no`, or `missing`.
+
+Remidio API/ZIP report post-processing derives this column from report
+attachment metadata and parsed OCR text. Any positive source signal sets
+`yes`; otherwise any explicit negative signal sets `no`; otherwise the value
+remains `missing`.
+
+Positive signals include `refer_required=true`, `ai_suggested_refer=true`,
+`gma_suggested_refer=true`, DR OCR beginning with `Signs of DR detected`,
+and glaucoma OCR text containing `Referral suggested`, `Refer immediately`,
+`Referable Glaucoma`, or the observed OCR typo `Referable Glacuoma`.
+
+Negative signals include `refer_required=false`, `ai_suggested_refer=false`,
+`gma_suggested_refer=false`, DR OCR beginning with `No signs of DR detected`,
+and glaucoma OCR text containing `No Referable Glaucoma`.
+
+Manual verification writes the same dedicated column; it is not stored under
+`metadata_json`.
 
 ## Seeded Field Masters
 

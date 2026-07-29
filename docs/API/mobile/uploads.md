@@ -153,6 +153,7 @@ Required fields:
 - `capture_date`: required `YYYY-MM-DD` string
 - `disease_id` or `disease_ids`: required
 - `remarks`: optional encounter-level plain text
+- `referral_suggestion`: optional encounter-level tri-state value, one of `yes`, `no`, `missing`
 - `items`: required non-empty array
 
 Each `items[]` entry:
@@ -162,6 +163,8 @@ Each `items[]` entry:
 - `area_id`: positive integer allowed by the profile
 - `is_mydriatic`: optional boolean-like value
 - `remarks`: optional image-level plain text
+- `referral_needed_or_positive_image`: optional image-level tri-state value, one of `yes`, `no`, `missing`
+- `refrralneed_or_positive_image`: accepted alias for `referral_needed_or_positive_image`
 
 The `file_key` value is a mapping key, not a filename. For example, `file_key: "right_eye"` requires a multipart part named `right_eye`.
 
@@ -180,9 +183,10 @@ curl -X POST http://localhost:5001/api/mobile/v1/uploads \
     "patient_name":"Mobile Patient",
     "capture_date":"2026-05-03",
     "disease_ids":[2],
+    "referral_suggestion":"missing",
     "items":[
-      {"file_key":"right_eye","spatial_position":1,"camera_id":3,"area_id":4},
-      {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4}
+      {"file_key":"right_eye","spatial_position":1,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"yes"},
+      {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"no"}
     ]
   }' \
   -F "right_eye=@right-eye.png" \

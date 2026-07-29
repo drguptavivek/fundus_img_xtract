@@ -9,6 +9,7 @@ from models import (
     EncounterSetAttachment,
     EncounterSetImage,
     EncounterSetType,
+    PatientEncounters,
     Project,
     RemidioConnection,
     RemidioExam,
@@ -129,6 +130,15 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
         exam_state="ACTIVE",
         exam_date=datetime(2026, 4, 1, 8, 30, tzinfo=timezone.utc),
         pull_source="test",
+        raw_json={
+            "report": {
+                "id": "report-1",
+                "examId": "exam-1",
+                "localId": "report-local-1",
+                "referRequired": True,
+                "path": "https://files.example.test/report-1.pdf",
+            }
+        },
     )
     db_session.add(exam)
     db_session.flush()
@@ -169,6 +179,8 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
     assert exam.patient_encounter_id is not None
     assert image.encounter_set_image_id is not None
     assert report.encounter_set_attachment_id is not None
+    encounter = db_session.get(PatientEncounters, exam.patient_encounter_id)
+    assert encounter.referral_suggestion == "yes"
 
     encounter_image = db_session.get(EncounterSetImage, image.encounter_set_image_id)
     attachment = db_session.get(EncounterSetAttachment, report.encounter_set_attachment_id)

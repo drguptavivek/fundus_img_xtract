@@ -16,6 +16,7 @@ from models import PatientEncounters, EncounterSetImage, User
 from upload_profiles.models import PatientEncounterTargetDisease
 from auth.utils import utcnow
 from auth.decorators import token_auth_required
+from services.encounter_referral_suggestion import normalize_referral_suggestion
 from utils.rate_limiter import api_rate_limit
 from utils.log_sanitize import sanitize_log_value
 
@@ -291,6 +292,7 @@ def get_encounter_set_details(uuid):
         images = [{
             "uuid": img.uuid,
             "spatial_position": img.spatial_position,
+            "referral_needed_or_positive_image": img.referral_needed_or_positive_image,
             "url": url_for('media.get_encounter_set_image', uuid=img.uuid),
             "thumbnail_url": url_for('media.get_encounter_set_thumbnail', uuid=img.uuid) if img.thumbnail_filename else None
         } for img in encounter.encounter_set_images]
@@ -300,6 +302,7 @@ def get_encounter_set_details(uuid):
             "patient_id": encounter.patient_id,
             "patient_name": encounter.name,
             "capture_date": encounter.capture_date,
+            "referral_suggestion": encounter.referral_suggestion,
             "images": images
         })
 
@@ -422,6 +425,12 @@ def upload_encounter_set_image():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid upload_profile_id, project_id, disease_id, camera_id, or area_id"}), 400
     is_mydriatic = (request.form.get("is_mydriatic") or "").strip().lower() in {"1", "true", "yes", "on"}
+    referral_suggestion_raw = request.form.get("referral_suggestion")
+    referral_suggestion = normalize_referral_suggestion(referral_suggestion_raw)
+    image_referral_raw = request.form.get("referral_needed_or_positive_image")
+    if image_referral_raw is None:
+        image_referral_raw = request.form.get("refrralneed_or_positive_image")
+    image_referral_suggestion = normalize_referral_suggestion(image_referral_raw)
 
     if not uploader_user_id:
         return jsonify({"error": "Upload token is not associated with a user"}), 403
@@ -523,6 +532,8 @@ def upload_encounter_set_image():
                 upload_profile_id=upload_profile.profile_id,
                 disease_id=target_disease_ids[0] if len(target_disease_ids) == 1 else None,
                 is_set_based=True,
+                referral_suggestion=referral_suggestion,
+                referral_suggestion_updated_at=utcnow() if referral_suggestion_raw is not None else None,
                 uuid=str(uuid4())
             )
             db.add(encounter)
@@ -601,6 +612,8 @@ def upload_encounter_set_image():
             camera_id=camera_id,
             area_id=area_id,
             is_mydriatic=is_mydriatic,
+            referral_needed_or_positive_image=image_referral_suggestion,
+            referral_needed_or_positive_image_updated_at=utcnow() if image_referral_raw is not None else None,
             created_at=utcnow()
         )
         db.add(set_image)
@@ -631,5 +644,7 @@ def upload_encounter_set_image():
             "encounter_id": encounter.id,
             "encounter_uuid": encounter_uuid,
             "image_uuid": img_uuid,
-            "spatial_position": spatial_pos
+            "spatial_position": spatial_pos,
+            "referral_suggestion": encounter.referral_suggestion,
+            "referral_needed_or_positive_image": set_image.referral_needed_or_positive_image,
         }), 201

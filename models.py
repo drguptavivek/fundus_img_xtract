@@ -800,6 +800,8 @@ class PatientEncounters(Base):
     disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id'), nullable=True, index=True)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
+    referral_suggestion: Mapped[str] = mapped_column(String(16), nullable=False, default="missing", server_default="missing", index=True)
+    referral_suggestion_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -814,6 +816,13 @@ class PatientEncounters(Base):
     lab_unit: Mapped["LabUnit"] = relationship()
     project: Mapped["Project | None"] = relationship("Project")
     upload_profile: Mapped["UploadProfile | None"] = relationship("UploadProfile")
+
+    __table_args__ = (
+        CheckConstraint(
+            "referral_suggestion IN ('yes','no','missing')",
+            name="ck_patient_encounters_referral_suggestion",
+        ),
+    )
 
 class EncounterSetImage(Base):
     __tablename__ = 'encounter_set_images'
@@ -844,6 +853,8 @@ class EncounterSetImage(Base):
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True, index=True)
     is_mydriatic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    referral_needed_or_positive_image: Mapped[str] = mapped_column(String(16), nullable=False, default="missing", server_default="missing", index=True)
+    referral_needed_or_positive_image_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
     s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
@@ -860,6 +871,10 @@ class EncounterSetImage(Base):
         UniqueConstraint('patient_encounter_id', 'spatial_position', name='uq_encounter_set_image_position'),
         CheckConstraint('spatial_position >= 1', name='ck_encounter_set_image_position_positive'),
         CheckConstraint("asset_kind = 'clinical_image'", name="ck_encounter_set_image_asset_kind"),
+        CheckConstraint(
+            "referral_needed_or_positive_image IN ('yes','no','missing')",
+            name="ck_encounter_set_images_referral_needed_or_positive_image",
+        ),
         # S3 composite indexes for efficient queries
         Index("ix_esi_s3_config_uuid", "s3_config_id", "uuid"),
         Index("ix_esi_hospital_id", "hospital_id"),

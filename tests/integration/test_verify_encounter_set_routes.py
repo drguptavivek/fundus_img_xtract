@@ -204,6 +204,7 @@ def test_verify_encounter_set_image_panel(client, auth_client_factory, encounter
     assert b"Type" in response.data
     assert b"macula" in response.data
     assert b"Laterality" in response.data
+    assert b"Referral Needed / Image Positive" in response.data
     assert b"Patient Age" not in response.data
     assert b"Clinical Note" not in response.data
     assert b"Verified" in response.data
@@ -253,6 +254,7 @@ def test_verify_encounter_set_summary_panel(client, auth_client_factory, encount
     assert b"Gradable Images" in response.data
     assert b"Ungradable Images" in response.data
     assert b"Changed Fields" in response.data
+    assert b"Referral Suggestion" in response.data
     assert b"Level" in response.data
     assert b"Exclude EncounterSet" in response.data
     assert b"Exclude this EncounterSet from verification and grading?" in response.data
@@ -271,6 +273,8 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
         data={
             "metadata__patient__patient_age_yrs": "56",
             "metadata__encounter__clinical_note": "verified note",
+            f"__present__metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "1",
+            f"metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "no",
             f"metadata__image__{encounter_set_data['image'].id}__laterality": "left",
         },
         headers={'X-CSRFToken': csrf_token},
@@ -283,6 +287,8 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
     assert encounter_set_data['encounter'].metadata_json["patient"]["patient_age_yrs"] == "56"
     assert encounter_set_data['encounter'].metadata_json["encounter"]["clinical_note"] == "verified note"
     assert encounter_set_data['image'].metadata_json["laterality"] == "left"
+    assert encounter_set_data['image'].referral_needed_or_positive_image == "no"
+    assert "referral_needed_or_positive_image" not in encounter_set_data['image'].metadata_json
 
 
 def test_verify_encounter_set_metadata_partial_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
@@ -342,6 +348,58 @@ def test_verify_encounter_set_ocr_metadata_update(client, auth_client_factory, e
     assert ocr["glaucoma_report"]["glaucoma_data"]["qualitative_result"] == "Corrected glaucoma qualitative"
     assert ocr["glaucoma_report"]["glaucoma_data"]["vcdr_right"] == "0.44"
     assert ocr["glaucoma_report"]["glaucoma_data"]["vcdr_left"] == "0.52"
+
+
+def test_verify_encounter_set_finalize_refreshes_referral_from_edited_ocr(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Final verification recomputes encounter-level referral suggestion from current OCR metadata."""
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="admin_verify_finalize_referral",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    auth_client = auth_client_factory(user)
+    encounter_set_data['attachment'].metadata_json = {
+        "ocr": {
+            "status": "completed",
+            "dr_report": {"dr_data": {"result": "No signs of DR detected."}},
+            "glaucoma_report": {"glaucoma_data": {"result": "No referable glaucoma."}},
+        }
+    }
+    encounter_set_data['image'].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token},
+    )
+
+    assert response.status_code == 302
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].referral_suggestion == "no"
+
+
+def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
+    """Encounter-level referral suggestion is stored on the dedicated column."""
+    user = UserFactory.create_admin(db_session, username="admin_verify_referral_suggestion")
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={
+            "__present__metadata__encounter__referral_suggestion": "1",
+            "metadata__encounter__referral_suggestion": "yes",
+        },
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 200
+    assert response.json["success"] is True
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].referral_suggestion == "yes"
+    assert "referral_suggestion" not in (encounter_set_data['encounter'].metadata_json.get("encounter") or {})
 
 
 def test_verify_encounter_set_finalize_async_blocked(client, auth_client_factory, encounter_set_data, db_session, csrf_token):

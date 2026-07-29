@@ -331,6 +331,7 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         "upload_profile_name": encounter.upload_profile.name if encounter.upload_profile else None,
         "lab_unit_name": encounter.lab_unit.name if encounter.lab_unit else None,
         "verified_status": encounter.encounter_verified_status or "pending",
+        "referral_suggestion": encounter.referral_suggestion,
         "metadata_patient": {} if no_pii else metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {},
         "metadata_encounter": {} if no_pii else encounter_metadata,
         "metadata_other": {
@@ -443,6 +444,7 @@ def _encounter_set_patient_row(encounter: PatientEncounters, *, no_pii: bool = F
         "capture_date_dt": encounter.capture_date_dt,
         "capture_date": encounter.capture_date,
         "verified_status": encounter.encounter_verified_status or "pending",
+        "referral_suggestion": encounter.referral_suggestion,
         "image_count": len(encounter.encounter_set_images or []),
         "attachment_count": len(encounter.encounter_set_attachments or []),
         "lab_unit_name": encounter.lab_unit.name if encounter.lab_unit else None,

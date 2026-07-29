@@ -337,8 +337,49 @@ def _verification_context(db, uuid: str) -> dict:
         "encounter": encounter,
         "images": images,
         "attachments": attachments,
+        "ocr_summaries": _encounter_set_ocr_summaries(attachments),
         "verification_profile": _encounter_set_verification_profile(encounter),
     }
+
+
+def _encounter_set_ocr_summaries(attachments: list[EncounterSetAttachment]) -> list[dict]:
+    summaries: list[dict] = []
+    for attachment in attachments:
+        metadata = attachment.metadata_json or {}
+        if not isinstance(metadata, dict):
+            continue
+        ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        attachment_label = metadata.get("remidio_report_type") or attachment.original_filename or attachment.asset_kind
+        dr_report = ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else None
+        if dr_report:
+            dr_data = dr_report.get("dr_data") if isinstance(dr_report.get("dr_data"), dict) else {}
+            summaries.append(
+                {
+                    "kind": "DR",
+                    "attachment_label": attachment_label,
+                    "result": dr_data.get("result") or "",
+                    "qualitative_result": dr_data.get("qualitative_result") or "",
+                    "metrics": [],
+                }
+            )
+        glaucoma_report = ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else None
+        if glaucoma_report:
+            glaucoma_data = glaucoma_report.get("glaucoma_data") if isinstance(glaucoma_report.get("glaucoma_data"), dict) else {}
+            metrics = []
+            if glaucoma_data.get("vcdr_right"):
+                metrics.append({"label": "VCDR OD", "value": glaucoma_data.get("vcdr_right")})
+            if glaucoma_data.get("vcdr_left"):
+                metrics.append({"label": "VCDR OS", "value": glaucoma_data.get("vcdr_left")})
+            summaries.append(
+                {
+                    "kind": "Glaucoma",
+                    "attachment_label": attachment_label,
+                    "result": glaucoma_data.get("result") or "",
+                    "qualitative_result": glaucoma_data.get("qualitative_result") or "",
+                    "metrics": metrics,
+                }
+            )
+    return summaries
 
 
 def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:

@@ -401,8 +401,8 @@
   <div class="text-muted small">{{ reviewed_count }} / {{ images|length }} images verified</div>
 </div>
 <div class="panel-content">
-  <div class="row g-4 mb-4">
-    <div class="col-12 col-lg-4">
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-3">
       <label class="form-label" for="metadata__encounter__referral_suggestion">Referral Suggestion</label>
       <select class="form-select"
               name="metadata__encounter__referral_suggestion"
@@ -411,6 +411,51 @@
         <option value="{{ value }}" {% if encounter.referral_suggestion == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+    </div>
+    <div class="col-12 col-lg-9">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <div class="fw-semibold small text-uppercase text-muted">OCR Extracted Results</div>
+        {% if encounter.referral_suggestion == 'yes' %}
+        <span class="badge rounded-pill text-bg-danger">Refer+</span>
+        {% elif encounter.referral_suggestion == 'no' %}
+        <span class="badge rounded-pill text-bg-success">No Refer</span>
+        {% else %}
+        <span class="badge rounded-pill text-bg-secondary">Missing</span>
+        {% endif %}
+      </div>
+      {% if ocr_summaries %}
+      <div class="row g-2">
+        {% for summary in ocr_summaries %}
+        <div class="col-12 col-xl-6">
+          <div class="border rounded-2 p-2 h-100 bg-light">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+              <span class="badge {{ 'text-bg-primary' if summary.kind == 'DR' else 'text-bg-info' }}">{{ summary.kind }}</span>
+              <span class="small text-muted text-truncate">{{ summary.attachment_label }}</span>
+            </div>
+            <div class="small">
+              <span class="fw-semibold">Result:</span>
+              {{ summary.result or 'Missing' }}
+            </div>
+            {% if summary.qualitative_result %}
+            <div class="small mt-1">
+              <span class="fw-semibold">Qualitative:</span>
+              {{ summary.qualitative_result }}
+            </div>
+            {% endif %}
+            {% if summary.metrics %}
+            <div class="d-flex flex-wrap gap-1 mt-2">
+              {% for metric in summary.metrics %}
+              <span class="badge text-bg-light border">{{ metric.label }} {{ metric.value }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="small text-muted border rounded-2 p-2 bg-light">No OCR extracted DR or glaucoma result available.</div>
+      {% endif %}
     </div>
   </div>
 

@@ -346,6 +346,7 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
         "disease_ids": [mobile_upload_data["disease"].id],
         "remarks": "encounter level text",
         "referral_suggestion": "yes",
+        "referral_positive_diseases": ["DR", "dry AMD", "corneal opacity"],
         "items": [
             {
                 "file_key": "right_eye",
@@ -387,11 +388,13 @@ def test_mobile_encounter_set_bundle_creates_one_encounter_with_multiple_images(
     assert payload["upload_kind"] == UPLOAD_KIND_ENCOUNTER_SET
     assert payload["accepted_count"] == 2
     assert payload["referral_suggestion"] == "yes"
+    assert payload["referral_positive_diseases"] == ["DR", "dry AMD", "corneal opacity"]
 
     encounter = db_session.query(PatientEncounters).one()
     assert encounter.patient_id == "MRN-123"
     assert encounter.remarks == "encounter level text"
     assert encounter.referral_suggestion == "yes"
+    assert encounter.referral_positive_diseases_json == ["DR", "dry AMD", "corneal opacity"]
     assert encounter.referral_suggestion_updated_at is not None
     assert db_session.query(EncounterSetImage).count() == 2
     assert {image.remarks for image in db_session.query(EncounterSetImage).all()} == {"right eye text", "left eye text"}

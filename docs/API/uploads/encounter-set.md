@@ -52,11 +52,15 @@ Optional tri-state fields:
 - `referral_needed_or_positive_image`: image-level referral-needed or disease-positive flag, one of `yes`, `no`, `missing`
 - `refrralneed_or_positive_image`: accepted input alias for `referral_needed_or_positive_image`
 
+Optional disease list fields:
+- `referral_positive_diseases`: encounter-level positive/referred diseases or referral reasons. Values may be configured disease names or free text; repeated, comma-separated, or semicolon-separated values are accepted
+- `referral_positive_disease`: accepted input alias for `referral_positive_diseases`
+
 Important validation:
 - upload scope is validated against the current user's assigned profile, permitted lab unit, project, disease, camera/site, and mydriatic rules
 - the encounter must belong to the selected project/profile
 - target diseases are stored on the encounter; they cannot change after upload starts
-- tri-state values are stored on dedicated `patient_encounters` and `encounter_set_images` columns, not inside `metadata_json`
+- tri-state values and encounter-level positive disease/referral reason labels are stored on dedicated `patient_encounters` and `encounter_set_images` columns, not inside `metadata_json`
 
 Common errors:
 - missing or invalid project/lab/disease context

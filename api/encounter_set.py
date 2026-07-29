@@ -16,7 +16,7 @@ from models import PatientEncounters, EncounterSetImage, User
 from upload_profiles.models import PatientEncounterTargetDisease
 from auth.utils import utcnow
 from auth.decorators import token_auth_required
-from services.encounter_referral_suggestion import normalize_referral_suggestion
+from services.encounter_referral_suggestion import normalize_referral_positive_diseases, normalize_referral_suggestion
 from utils.rate_limiter import api_rate_limit
 from utils.log_sanitize import sanitize_log_value
 
@@ -303,6 +303,7 @@ def get_encounter_set_details(uuid):
             "patient_name": encounter.name,
             "capture_date": encounter.capture_date,
             "referral_suggestion": encounter.referral_suggestion,
+            "referral_positive_diseases": encounter.referral_positive_diseases_json or [],
             "images": images
         })
 
@@ -427,6 +428,12 @@ def upload_encounter_set_image():
     is_mydriatic = (request.form.get("is_mydriatic") or "").strip().lower() in {"1", "true", "yes", "on"}
     referral_suggestion_raw = request.form.get("referral_suggestion")
     referral_suggestion = normalize_referral_suggestion(referral_suggestion_raw)
+    referral_positive_diseases_raw = request.form.getlist("referral_positive_diseases")
+    if not referral_positive_diseases_raw:
+        referral_positive_diseases_raw = request.form.getlist("referral_positive_disease")
+    if not referral_positive_diseases_raw and request.form.get("referral_positive_diseases"):
+        referral_positive_diseases_raw = [request.form.get("referral_positive_diseases")]
+    referral_positive_diseases = normalize_referral_positive_diseases(referral_positive_diseases_raw)
     image_referral_raw = request.form.get("referral_needed_or_positive_image")
     if image_referral_raw is None:
         image_referral_raw = request.form.get("refrralneed_or_positive_image")
@@ -514,6 +521,8 @@ def upload_encounter_set_image():
                 encounter.upload_profile_id = upload_profile.profile_id
             if encounter.disease_id is None:
                 encounter.disease_id = target_disease_ids[0] if len(target_disease_ids) == 1 else None
+            if referral_positive_diseases_raw:
+                encounter.referral_positive_diseases_json = referral_positive_diseases
         else:
             # Create new encounter
             patient_id = request.form.get("patient_id")
@@ -534,6 +543,7 @@ def upload_encounter_set_image():
                 is_set_based=True,
                 referral_suggestion=referral_suggestion,
                 referral_suggestion_updated_at=utcnow() if referral_suggestion_raw is not None else None,
+                referral_positive_diseases_json=referral_positive_diseases,
                 uuid=str(uuid4())
             )
             db.add(encounter)
@@ -646,5 +656,6 @@ def upload_encounter_set_image():
             "image_uuid": img_uuid,
             "spatial_position": spatial_pos,
             "referral_suggestion": encounter.referral_suggestion,
+            "referral_positive_diseases": encounter.referral_positive_diseases_json or [],
             "referral_needed_or_positive_image": set_image.referral_needed_or_positive_image,
         }), 201

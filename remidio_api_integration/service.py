@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from auth.utils import utcnow
 from db_transaction_manager import get_db_session
 from models import (
+    AMDReport,
     Camera,
     DiabeticRetinopathyReport,
     Disease,
@@ -519,6 +520,7 @@ def _encounter_set_attachment_row(attachment: EncounterSetAttachment) -> dict[st
         "ocr_is_pending": _attachment_ocr_is_pending(attachment),
         "ocr_error": ocr.get("error"),
         "ocr_dr_report": ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else None,
+        "ocr_amd_report": ocr.get("amd_report") if isinstance(ocr.get("amd_report"), dict) else None,
         "ocr_glaucoma_report": ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else None,
         "visible_to_grader": attachment.visible_to_grader,
         "is_reviewed": attachment.is_reviewed,
@@ -562,6 +564,12 @@ def _encounter_set_final_reports(
         .order_by(DiabeticRetinopathyReport.id.asc())
         .first()
     )
+    amd_report = (
+        db.query(AMDReport)
+        .filter_by(patient_encounter_id=encounter.id)
+        .order_by(AMDReport.id.asc())
+        .first()
+    )
     glaucoma_report = (
         db.query(GlaucomaReport)
         .filter_by(patient_encounter_id=encounter.id)
@@ -577,6 +585,7 @@ def _encounter_set_final_reports(
         )
     return {
         "dr": _final_dr_report_row(dr_report, attachments, image_count=image_count) if dr_report else None,
+        "amd": _final_amd_report_row(amd_report, attachments, image_count=image_count) if amd_report else None,
         "glaucoma": _final_glaucoma_report_row(
             glaucoma_report,
             glaucoma_cleaned,
@@ -585,6 +594,27 @@ def _encounter_set_final_reports(
         )
         if glaucoma_report
         else None,
+    }
+
+
+def _final_amd_report_row(
+    report: AMDReport,
+    attachments: list[EncounterSetAttachment],
+    *,
+    image_count: int,
+) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "result": report.result,
+        "qualitative_result": report.qualitative_result,
+        "report_file_name": report.report_file_name,
+        "source": _report_source_from_attachment_ocr(
+            attachments,
+            report_key="amd_report",
+            report_id_key="amd_report_id",
+            report_id=report.id,
+            image_count=image_count,
+        ),
     }
 
 

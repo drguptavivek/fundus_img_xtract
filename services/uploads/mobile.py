@@ -34,7 +34,7 @@ from models import (
 )
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from services.glaucoma_ai_upload import GLAUCOMA_AI_UPLOAD_VERIFICATION_REMARK
-from services.encounter_referral_suggestion import normalize_referral_suggestion
+from services.encounter_referral_suggestion import normalize_referral_positive_diseases, normalize_referral_suggestion
 from .direct import (
     DirectUploadActor,
     DirectUploadJobError,
@@ -609,6 +609,9 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     _require_payload_text(payload, "capture_date")
     referral_suggestion_raw = payload.get("referral_suggestion")
     referral_suggestion = normalize_referral_suggestion(referral_suggestion_raw)
+    referral_positive_diseases = normalize_referral_positive_diseases(
+        payload.get("referral_positive_diseases", payload.get("referral_positive_disease"))
+    )
 
     encounter = PatientEncounters(
         name=payload["patient_name"],
@@ -623,6 +626,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
         remarks=_remarks(payload.get("remarks")),
         referral_suggestion=referral_suggestion,
         referral_suggestion_updated_at=utcnow() if referral_suggestion_raw is not None else None,
+        referral_positive_diseases_json=referral_positive_diseases,
         uuid=str(uuid.uuid4()),
     )
     db.add(encounter)
@@ -700,6 +704,7 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     payload = _upload_response(job, upload_kind=UPLOAD_KIND_ENCOUNTER_SET, accepted=accepted, rejected=0)
     payload["encounter_uuid"] = encounter.uuid
     payload["referral_suggestion"] = encounter.referral_suggestion
+    payload["referral_positive_diseases"] = encounter.referral_positive_diseases_json or []
     return payload
 
 

@@ -333,8 +333,9 @@
   <div class="text-danger small mb-3">{{ ocr.get('error') }}</div>
   {% endif %}
   {% set dr_report = ocr.get('dr_report') if ocr.get('dr_report') is mapping else none %}
+  {% set amd_report = ocr.get('amd_report') if ocr.get('amd_report') is mapping else none %}
   {% set glaucoma_report = ocr.get('glaucoma_report') if ocr.get('glaucoma_report') is mapping else none %}
-  {% if dr_report or glaucoma_report %}
+  {% if dr_report or amd_report or glaucoma_report %}
   <div class="row g-3">
     {% if dr_report %}
     {% set dr_data = dr_report.get('dr_data') if dr_report.get('dr_data') is mapping else {} %}
@@ -351,6 +352,24 @@
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
                   rows="2">{{ dr_data.get('qualitative_result') or '' }}</textarea>
+      </div>
+    </div>
+    {% endif %}
+    {% if amd_report %}
+    {% set amd_data = amd_report.get('amd_data') if amd_report.get('amd_data') is mapping else {} %}
+    <div class="col-12 col-lg-6">
+      <div class="ocr-box">
+        <div class="fw-semibold mb-2">AMD OCR</div>
+        <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_result">Result</label>
+        <textarea class="form-control"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_result"
+                  rows="3">{{ amd_data.get('result') or '' }}</textarea>
+        <label class="form-label mt-3" for="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result">Qualitative Result</label>
+        <textarea class="form-control"
+                  name="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result"
+                  id="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result"
+                  rows="2">{{ amd_data.get('qualitative_result') or '' }}</textarea>
       </div>
     </div>
     {% endif %}
@@ -411,6 +430,14 @@
         <option value="{{ value }}" {% if encounter.referral_suggestion == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+      {% set positive_diseases = encounter.referral_positive_diseases_json or [] %}
+      <label class="form-label mt-3 mb-1" for="metadata__encounter__referral_positive_diseases">Positive Diseases</label>
+      <input class="form-control form-control-sm"
+             type="text"
+             name="metadata__encounter__referral_positive_diseases"
+             id="metadata__encounter__referral_positive_diseases"
+             value="{{ positive_diseases | join(', ') }}"
+             placeholder="Disease names or free text, comma separated">
     </div>
     <div class="col-12 col-lg-9">
       <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
@@ -521,6 +548,11 @@
           data-name="metadata__encounter__referral_suggestion"
           data-label="Referral Suggestion"
           data-current="{{ encounter.referral_suggestion or 'missing' }}"></span>
+    <span data-change-field
+          data-level="Encounter"
+          data-name="metadata__encounter__referral_positive_diseases"
+          data-label="Positive Diseases"
+          data-current="{{ (encounter.referral_positive_diseases_json or []) | join(', ') }}"></span>
     {% for field in patient_fields %}
     {% set value = patient_metadata.get(field.key) if patient_metadata else none %}
     <span data-change-field
@@ -546,6 +578,8 @@
     {% set attachment_ocr = attachment_metadata.get('ocr') if attachment_metadata.get('ocr') is mapping else {} %}
     {% set attachment_dr_report = attachment_ocr.get('dr_report') if attachment_ocr.get('dr_report') is mapping else none %}
     {% set attachment_dr_data = attachment_dr_report.get('dr_data') if attachment_dr_report and attachment_dr_report.get('dr_data') is mapping else {} %}
+    {% set attachment_amd_report = attachment_ocr.get('amd_report') if attachment_ocr.get('amd_report') is mapping else none %}
+    {% set attachment_amd_data = attachment_amd_report.get('amd_data') if attachment_amd_report and attachment_amd_report.get('amd_data') is mapping else {} %}
     {% set attachment_glaucoma_report = attachment_ocr.get('glaucoma_report') if attachment_ocr.get('glaucoma_report') is mapping else none %}
     {% set attachment_glaucoma_data = attachment_glaucoma_report.get('glaucoma_data') if attachment_glaucoma_report and attachment_glaucoma_report.get('glaucoma_data') is mapping else {} %}
     {% set attachment_label = attachment_metadata.get('remidio_report_type') or attachment.asset_kind|capitalize %}
@@ -560,6 +594,18 @@
           data-name="metadata__attachment__{{ attachment.id }}__ocr__dr_qualitative_result"
           data-label="DR qualitative result"
           data-current="{{ attachment_dr_data.get('qualitative_result') or '' }}"></span>
+    {% endif %}
+    {% if attachment_amd_report %}
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__amd_result"
+          data-label="AMD result"
+          data-current="{{ attachment_amd_data.get('result') or '' }}"></span>
+    <span data-change-field
+          data-level="{{ attachment_label }}"
+          data-name="metadata__attachment__{{ attachment.id }}__ocr__amd_qualitative_result"
+          data-label="AMD qualitative result"
+          data-current="{{ attachment_amd_data.get('qualitative_result') or '' }}"></span>
     {% endif %}
     {% if attachment_glaucoma_report %}
     <span data-change-field

@@ -154,6 +154,8 @@ Required fields:
 - `disease_id` or `disease_ids`: required
 - `remarks`: optional encounter-level plain text
 - `referral_suggestion`: optional encounter-level tri-state value, one of `yes`, `no`, `missing`
+- `referral_positive_diseases`: optional encounter-level list of diseases or referral reasons that are positive or need referral. Values may be configured disease names or free text
+- `referral_positive_disease`: accepted alias for `referral_positive_diseases`
 - `items`: required non-empty array
 
 Each `items[]` entry:
@@ -184,6 +186,7 @@ curl -X POST http://localhost:5001/api/mobile/v1/uploads \
     "capture_date":"2026-05-03",
     "disease_ids":[2],
     "referral_suggestion":"missing",
+    "referral_positive_diseases":["DR","dry AMD","corneal opacity"],
     "items":[
       {"file_key":"right_eye","spatial_position":1,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"yes"},
       {"file_key":"left_eye","spatial_position":2,"camera_id":3,"area_id":4,"referral_needed_or_positive_image":"no"}

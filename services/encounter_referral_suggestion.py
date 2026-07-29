@@ -19,8 +19,6 @@ REFERRAL_SUGGESTION_VALUES = {
     REFERRAL_SUGGESTION_NO,
     REFERRAL_SUGGESTION_MISSING,
 }
-
-
 def normalize_referral_suggestion(value: Any) -> str:
     normalized = str(value or "").strip().lower()
     if normalized in REFERRAL_SUGGESTION_VALUES:
@@ -39,6 +37,34 @@ def derive_referral_suggestion_from_attachment_metadata(metadata_items: Iterable
     return REFERRAL_SUGGESTION_NO if has_no else REFERRAL_SUGGESTION_MISSING
 
 
+def normalize_referral_positive_diseases(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw_values = [item.strip() for item in value.replace(";", ",").split(",")]
+    elif isinstance(value, Iterable):
+        raw_values = []
+        for item in value:
+            raw_values.extend(part.strip() for part in str(item).replace(";", ",").split(","))
+    else:
+        raw_values = [str(value).strip()]
+    normalized: list[str] = []
+    for item in raw_values:
+        label = " ".join(item.split())
+        if label and label.casefold() not in {existing.casefold() for existing in normalized}:
+            normalized.append(label)
+    return normalized
+
+
+def derive_referral_positive_diseases_from_attachment_metadata(metadata_items: Iterable[dict[str, Any]]) -> list[str]:
+    positive: list[str] = []
+    for metadata in metadata_items:
+        for code in _metadata_positive_diseases(metadata or {}):
+            if code not in positive:
+                positive.append(code)
+    return positive
+
+
 def update_encounter_referral_suggestion_from_attachments(
     db: Session,
     encounter_id: int,
@@ -55,6 +81,7 @@ def update_encounter_referral_suggestion_from_attachments(
         .all()
     )
     suggestion = derive_referral_suggestion_from_attachment_metadata(metadata for (metadata,) in attachments)
+    positive_diseases = derive_referral_positive_diseases_from_attachment_metadata(metadata for (metadata,) in attachments)
     if (
         preserve_existing_when_missing
         and suggestion == REFERRAL_SUGGESTION_MISSING
@@ -63,9 +90,19 @@ def update_encounter_referral_suggestion_from_attachments(
         return encounter.referral_suggestion
     encounter.referral_suggestion = suggestion
     encounter.referral_suggestion_updated_at = utcnow()
+    encounter.referral_positive_diseases_json = positive_diseases
     db.add(encounter)
     db.flush()
     return suggestion
+
+
+def _metadata_positive_diseases(metadata: dict[str, Any]) -> list[str]:
+    values = {
+        "DR": _ocr_text_suggestion(_nested(metadata, "ocr", "dr_report", "dr_data", "result"), disease="dr"),
+        "AMD": _ocr_text_suggestion(_nested(metadata, "ocr", "amd_report", "amd_data", "result"), disease="amd"),
+        "Glaucoma": _ocr_text_suggestion(_nested(metadata, "ocr", "glaucoma_report", "glaucoma_data", "result"), disease="glaucoma"),
+    }
+    return [code for code, suggestion in values.items() if suggestion == REFERRAL_SUGGESTION_YES]
 
 
 def _metadata_referral_suggestion(metadata: dict[str, Any]) -> str:
@@ -75,6 +112,7 @@ def _metadata_referral_suggestion(metadata: dict[str, Any]) -> str:
         _bool_suggestion(metadata.get("gma_suggested_refer")),
         _gma_patient_level_suggestion(metadata.get("gma_patient_level_result")),
         _ocr_text_suggestion(_nested(metadata, "ocr", "dr_report", "dr_data", "result"), disease="dr"),
+        _ocr_text_suggestion(_nested(metadata, "ocr", "amd_report", "amd_data", "result"), disease="amd"),
         _ocr_text_suggestion(_nested(metadata, "ocr", "glaucoma_report", "glaucoma_data", "result"), disease="glaucoma"),
     ]
     if REFERRAL_SUGGESTION_YES in values:
@@ -113,6 +151,13 @@ def _ocr_text_suggestion(value: Any, *, disease: str) -> str:
         if text.startswith("no signs of dr detected"):
             return REFERRAL_SUGGESTION_NO
         if text.startswith("signs of dr detected"):
+            return REFERRAL_SUGGESTION_YES
+        return REFERRAL_SUGGESTION_MISSING
+
+    if disease == "amd":
+        if text.startswith("no signs of amd detected"):
+            return REFERRAL_SUGGESTION_NO
+        if text.startswith("signs of amd detected"):
             return REFERRAL_SUGGESTION_YES
         return REFERRAL_SUGGESTION_MISSING
 

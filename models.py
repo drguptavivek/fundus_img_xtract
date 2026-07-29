@@ -802,6 +802,7 @@ class PatientEncounters(Base):
     upload_profile_id: Mapped[int | None] = mapped_column(ForeignKey("upload_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     referral_suggestion: Mapped[str] = mapped_column(String(16), nullable=False, default="missing", server_default="missing", index=True)
     referral_suggestion_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    referral_positive_diseases_json: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -811,6 +812,7 @@ class PatientEncounters(Base):
     encounter_set_attachments: Mapped[List["EncounterSetAttachment"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     encounter_file_pdfs: Mapped[List["EncounterFilePDF"]] = relationship(cascade="all, delete-orphan")
     dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    amd_reports: Mapped[List["AMDReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_results_cleaned: Mapped[List["GlaucomaResultsCleaned"]] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
@@ -957,6 +959,16 @@ class DiabeticRetinopathyReport(Base):
     qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
     report_file_name: Mapped[str | None] = mapped_column(nullable=True)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="dr_reports")
+
+class AMDReport(Base):
+    __tablename__ = 'amd_reports'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'), index=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
+    result: Mapped[str | None] = mapped_column(nullable=True)
+    qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
+    report_file_name: Mapped[str | None] = mapped_column(nullable=True)
+    patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="amd_reports")
 
 class GlaucomaReport(Base):
     __tablename__ = 'glaucoma_reports'

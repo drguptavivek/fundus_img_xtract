@@ -5,6 +5,7 @@ from PIL import Image
 import pytesseract
 import io
 import matplotlib.pyplot as plt  # Import matplotlib
+import re
 
 def find_report_pages_by_coords_with_grid(pdf_path):
     """
@@ -20,6 +21,8 @@ def find_report_pages_by_coords_with_grid(pdf_path):
     pageNumberDiabeticReport = None
     text_diabetic_result  = None
     text_diabetic_qual_result  = None
+    text_amd_result = None
+    text_amd_qual_result = None
     
     pageNumberGlaucomaReport = None
     text_glaucoma_result = None
@@ -29,7 +32,7 @@ def find_report_pages_by_coords_with_grid(pdf_path):
 
 
     diabetic_report_coords = (0, 200, 1200, 400)
-    diabetic_result_coords = (350, 650, 2000, 800)
+    diabetic_result_coords = (0, 560, 2000, 820)
     diabetic_qual_coords = (50, 3100, 1600, 3200)
 
     glaucoma_report_coords = (0, 400, 1200, 600)
@@ -75,13 +78,27 @@ def find_report_pages_by_coords_with_grid(pdf_path):
             region_diabetic = image.crop(diabetic_report_coords)
             #region_diabetic.show()
             text_diabetic = pytesseract.image_to_string(region_diabetic).lower()
-            if "diabetic" in text_diabetic:
+            if _is_dr_or_amd_report_header(text_diabetic):
                 pageNumberDiabeticReport = page_num + 1
                 diabeticresult_area = image.crop(diabetic_result_coords)
                 #diabeticresult_area.show()  
-                text_diabetic_result = pytesseract.image_to_string(diabeticresult_area)
+                text_diabetic_result_block = pytesseract.image_to_string(diabeticresult_area)
+                text_diabetic_result = _extract_labeled_result(
+                    text_diabetic_result_block,
+                    label_pattern=r"result\s+dr",
+                    stop_pattern=r"result\s+amd|dr\s+screening|screening\s+interval",
+                )
+                text_amd_result = _extract_labeled_result(
+                    text_diabetic_result_block,
+                    label_pattern=r"result\s+amd",
+                    stop_pattern=r"dr\s+screening|screening\s+interval",
+                )
+                if text_diabetic_result is None and "result amd" not in text_diabetic_result_block.lower():
+                    text_diabetic_result = text_diabetic_result_block
                 diabetic_qual_area = image.crop(diabetic_qual_coords)
                 text_diabetic_qual_result = pytesseract.image_to_string(diabetic_qual_area)
+                if text_amd_result:
+                    text_amd_qual_result = text_diabetic_qual_result
 
                 # EXTRACT DIABETIC RESULTS from cooridnates - 
 
@@ -110,13 +127,38 @@ def find_report_pages_by_coords_with_grid(pdf_path):
     print(f"pageNumberDiabeticReport = {pageNumberDiabeticReport}")
     print(f"Diabetic Result ----- {text_diabetic_result} \
           WARNINGS --- {text_diabetic_qual_result}")
+    print(f"AMD Result ----- {text_amd_result} \
+          WARNINGS --- {text_amd_qual_result}")
 
     print(f"pageNumberGlaucomaReport = {pageNumberGlaucomaReport}")
     print(f"Glacuaom Result = {text_glaucoma_result} VCDR RT ---{vcdr_rt} \
           VCDR LT --- {vcdr_lt} -- Qual {text_gl_qual_result} ")
 
     return pageNumberDiabeticReport, pageNumberGlaucomaReport, text_diabetic_result, \
-        text_diabetic_qual_result, text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result
+        text_diabetic_qual_result, text_amd_result, text_amd_qual_result, \
+        text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result
+
+
+def _is_dr_or_amd_report_header(text):
+    normalized = " ".join(str(text or "").lower().split())
+    if "diabetic" in normalized:
+        return True
+    if "dr and amd report" in normalized:
+        return True
+    if "dr & amd report" in normalized:
+        return True
+    return False
+
+
+def _extract_labeled_result(text, *, label_pattern, stop_pattern):
+    if not text:
+        return None
+    normalized = " ".join(str(text).split())
+    pattern = rf"{label_pattern}\s*:\s*(.*?)(?:\s+(?:{stop_pattern})\b|$)"
+    match = re.search(pattern, normalized, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1).strip(" :-")
 
 
 # --- Execution ---
@@ -147,4 +189,3 @@ pageNumberDiabeticReport, pageNumberGlaucomaReport, text_diabetic_result, \
 text_diabetic_qual_result, text_glaucoma_result, vcdr_rt, vcdr_lt , text_gl_qual_result= \
       find_report_pages_by_coords_with_grid(pdf_path)
 """
-

@@ -6,6 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from models import (
+    AMDReport,
     DiabeticRetinopathyReport,
     Disease,
     EncounterSetGradingPackage,
@@ -16,7 +17,11 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
-from services.encounter_referral_suggestion import normalize_referral_suggestion, update_encounter_referral_suggestion_from_attachments
+from services.encounter_referral_suggestion import (
+    normalize_referral_positive_diseases,
+    normalize_referral_suggestion,
+    update_encounter_referral_suggestion_from_attachments,
+)
 from services.encounter_set_ai_inference import create_wadhwani_task_ids_for_encounter, enqueue_wadhwani_for_task_ids
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
@@ -197,9 +202,15 @@ def update_metadata(uuid):
 
         encounter_metadata = dict(encounter.metadata_json or {})
         referral_form_name = "metadata__encounter__referral_suggestion"
+        referral_diseases_form_name = "metadata__encounter__referral_positive_diseases"
         manual_referral_suggestion = None
+        manual_referral_positive_diseases = None
         if _metadata_form_field_present(request.form, referral_form_name):
             manual_referral_suggestion = normalize_referral_suggestion(request.form.get(referral_form_name))
+        if _metadata_form_field_present(request.form, referral_diseases_form_name):
+            manual_referral_positive_diseases = normalize_referral_positive_diseases(
+                request.form.getlist(referral_diseases_form_name)
+            )
         for scope in ("patient", "encounter"):
             section = dict(encounter_metadata.get(scope) or {})
             for (field_scope, key), field in editable_fields.items():
@@ -248,6 +259,8 @@ def update_metadata(uuid):
         ocr_fields = {
             "dr_result": ("ocr", "dr_report", "dr_data", "result"),
             "dr_qualitative_result": ("ocr", "dr_report", "dr_data", "qualitative_result"),
+            "amd_result": ("ocr", "amd_report", "amd_data", "result"),
+            "amd_qualitative_result": ("ocr", "amd_report", "amd_data", "qualitative_result"),
             "glaucoma_result": ("ocr", "glaucoma_report", "glaucoma_data", "result"),
             "glaucoma_qualitative_result": ("ocr", "glaucoma_report", "glaucoma_data", "qualitative_result"),
             "vcdr_right": ("ocr", "glaucoma_report", "glaucoma_data", "vcdr_right"),
@@ -270,6 +283,8 @@ def update_metadata(uuid):
         if manual_referral_suggestion is not None:
             encounter.referral_suggestion = manual_referral_suggestion
             encounter.referral_suggestion_updated_at = utcnow()
+        if manual_referral_positive_diseases is not None:
+            encounter.referral_positive_diseases_json = manual_referral_positive_diseases
 
         flash("Verification metadata updated.", "success")
         if request.headers.get("X-EncounterSet-Async") == "1":
@@ -356,9 +371,23 @@ def _encounter_set_ocr_summaries(attachments: list[EncounterSetAttachment]) -> l
             summaries.append(
                 {
                     "kind": "DR",
+                    "disease_code": "dr",
                     "attachment_label": attachment_label,
                     "result": dr_data.get("result") or "",
                     "qualitative_result": dr_data.get("qualitative_result") or "",
+                    "metrics": [],
+                }
+            )
+        amd_report = ocr.get("amd_report") if isinstance(ocr.get("amd_report"), dict) else None
+        if amd_report:
+            amd_data = amd_report.get("amd_data") if isinstance(amd_report.get("amd_data"), dict) else {}
+            summaries.append(
+                {
+                    "kind": "AMD",
+                    "disease_code": "amd",
+                    "attachment_label": attachment_label,
+                    "result": amd_data.get("result") or "",
+                    "qualitative_result": amd_data.get("qualitative_result") or "",
                     "metrics": [],
                 }
             )
@@ -373,6 +402,7 @@ def _encounter_set_ocr_summaries(attachments: list[EncounterSetAttachment]) -> l
             summaries.append(
                 {
                     "kind": "Glaucoma",
+                    "disease_code": "glaucoma",
                     "attachment_label": attachment_label,
                     "result": glaucoma_data.get("result") or "",
                     "qualitative_result": glaucoma_data.get("qualitative_result") or "",
@@ -496,6 +526,15 @@ def _sync_attachment_ocr_clinical_reports(db, attachment: EncounterSetAttachment
         if row is not None:
             row.result = dr_data.get("result") or ""
             row.qualitative_result = dr_data.get("qualitative_result") or None
+
+    amd_report = ocr.get("amd_report") if isinstance(ocr.get("amd_report"), dict) else {}
+    amd_data = amd_report.get("amd_data") if isinstance(amd_report.get("amd_data"), dict) else {}
+    amd_report_id = amd_report.get("amd_report_id")
+    if amd_report_id:
+        row = db.get(AMDReport, amd_report_id)
+        if row is not None:
+            row.result = amd_data.get("result") or None
+            row.qualitative_result = amd_data.get("qualitative_result") or None
 
     glaucoma_report = ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else {}
     glaucoma_data = glaucoma_report.get("glaucoma_data") if isinstance(glaucoma_report.get("glaucoma_data"), dict) else {}

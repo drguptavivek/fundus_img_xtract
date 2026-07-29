@@ -17,7 +17,22 @@ from utils.pii_masking import mask_patient_name, mask_patient_id
 load_environment()
 
 # Import database models and configurations
-from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile, GlaucomaResultsCleaned
+from models import (
+    DR_PDF_DIR,
+    ERROR_LOG,
+    GLAUCOMA_PDF_DIR,
+    PDF_DIR,
+    SUCCESS_LOG,
+    AMDReport,
+    DiabeticRetinopathyReport,
+    EncounterFile,
+    EncounterFilePDF,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
+    PatientEncounters,
+    Session,
+    ZipFile,
+)
 
 
 
@@ -105,13 +120,27 @@ def process_pdf_for_ocr(
         "source_pdf_filename": pdf_path.name,
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "dr_report": _empty_dr_ocr_result(),
+        "amd_report": _empty_amd_ocr_result(),
         "glaucoma_report": _empty_glaucoma_ocr_result(),
     }
 
     from ocr_extraction import find_report_pages_by_coords_with_grid
 
     ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path))
-    if len(ocr_result) == 8:
+    if len(ocr_result) == 10:
+        (
+            pageNumberDiabeticReport,
+            pageNumberGlaucomaReport,
+            text_diabetic_result,
+            text_diabetic_qual_result,
+            text_amd_result,
+            text_amd_qual_result,
+            text_glaucoma_result,
+            vcdr_rt,
+            vcdr_lt,
+            text_gl_qual_result,
+        ) = ocr_result
+    elif len(ocr_result) == 8:
         (
             pageNumberDiabeticReport,
             pageNumberGlaucomaReport,
@@ -122,12 +151,14 @@ def process_pdf_for_ocr(
             vcdr_lt,
             text_gl_qual_result,
         ) = ocr_result
+        text_amd_result = text_amd_qual_result = None
     elif len(ocr_result) == 2:
         pageNumberDiabeticReport, pageNumberGlaucomaReport = ocr_result
         text_diabetic_result = text_diabetic_qual_result = None
+        text_amd_result = text_amd_qual_result = None
         text_glaucoma_result = vcdr_rt = vcdr_lt = text_gl_qual_result = None
     else:
-        raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2 or 8")
+        raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2, 8, or 10")
 
     pdf_document = None
     if pageNumberDiabeticReport is not None or pageNumberGlaucomaReport is not None:
@@ -145,6 +176,15 @@ def process_pdf_for_ocr(
                 text_result=text_diabetic_result,
                 qualitative_result=text_diabetic_qual_result,
             )
+            if text_amd_result or text_amd_qual_result:
+                result["amd_report"] = _process_detected_amd_report(
+                    db_session,
+                    patient_encounter=patient_encounter,
+                    page_number=pageNumberDiabeticReport,
+                    text_result=text_amd_result,
+                    qualitative_result=text_amd_qual_result,
+                    report_file_name=result["dr_report"].get("report_file_name"),
+                )
 
         if pageNumberGlaucomaReport is not None:
             result["glaucoma_report"] = _process_detected_glaucoma_report(
@@ -163,7 +203,7 @@ def process_pdf_for_ocr(
         if pdf_document is not None:
             pdf_document.close()
 
-    if not result["dr_report"]["detected"] and not result["glaucoma_report"]["detected"]:
+    if not result["dr_report"]["detected"] and not result["amd_report"]["detected"] and not result["glaucoma_report"]["detected"]:
         result["status"] = "completed_no_reports_detected"
     return result
 
@@ -174,6 +214,16 @@ def _empty_dr_ocr_result() -> dict:
         "page": None,
         "dr_data": {},
         "diabetic_retinopathy_report_id": None,
+        "promotion_status": "not_detected",
+    }
+
+def _empty_amd_ocr_result() -> dict:
+    return {
+        "detected": False,
+        "page": None,
+        "amd_data": {},
+        "amd_report_id": None,
+        "report_file_name": None,
         "promotion_status": "not_detected",
     }
 
@@ -216,6 +266,7 @@ def _process_detected_dr_report(
             "page": page_number,
             "dr_data": dr_data,
             "diabetic_retinopathy_report_id": existing.id,
+            "report_file_name": existing.report_file_name,
             "promotion_status": "not_promoted_duplicate",
         }
 
@@ -239,6 +290,54 @@ def _process_detected_dr_report(
         "page": page_number,
         "dr_data": dr_data,
         "diabetic_retinopathy_report_id": row.id,
+        "report_file_name": report_file_name,
+        "promotion_status": "created_clinical_report",
+    }
+
+
+def _process_detected_amd_report(
+    db_session: DBSession,
+    *,
+    patient_encounter: PatientEncounters,
+    page_number: int,
+    text_result: str | None,
+    qualitative_result: str | None,
+    report_file_name: str | None,
+) -> dict:
+    amd_data = {
+        "result": clean_ocr_text(text_result),
+        "qualitative_result": clean_ocr_text(qualitative_result),
+    }
+    existing = (
+        db_session.query(AMDReport)
+        .filter_by(patient_encounter_id=patient_encounter.id)
+        .order_by(AMDReport.id.asc())
+        .first()
+    )
+    if existing is not None:
+        return {
+            "detected": True,
+            "page": page_number,
+            "amd_data": amd_data,
+            "amd_report_id": existing.id,
+            "report_file_name": existing.report_file_name,
+            "promotion_status": "not_promoted_duplicate",
+        }
+
+    row = AMDReport(
+        patient_encounter_id=patient_encounter.id,
+        result=amd_data["result"],
+        qualitative_result=amd_data["qualitative_result"],
+        report_file_name=report_file_name,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return {
+        "detected": True,
+        "page": page_number,
+        "amd_data": amd_data,
+        "amd_report_id": row.id,
+        "report_file_name": report_file_name,
         "promotion_status": "created_clinical_report",
     }
 

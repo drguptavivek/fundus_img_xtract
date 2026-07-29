@@ -227,7 +227,7 @@
         <div class="card shadow-sm mb-3">
           <div class="card-header">Final Reports</div>
           <div class="card-body small">
-            {% if detail.final_reports.dr or detail.final_reports.glaucoma %}
+            {% if detail.final_reports.dr or detail.final_reports.amd or detail.final_reports.glaucoma %}
             {% if detail.final_reports.dr %}
             {% set dr_report = detail.final_reports.dr %}
             <div class="border rounded p-2">
@@ -245,6 +245,29 @@
                 <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPswpGallery('{{ media_gallery_id }}', {{ dr_report.source.gallery_index }}); return false;">View PDF</button>
                 {% endif %}
                 <a class="btn btn-sm btn-outline-primary" href="#encounter-attachment-{{ dr_report.source.attachment_id }}">Source</a>
+              </div>
+              {% else %}
+              <div class="text-muted">Source PDF not recorded in attachment OCR metadata.</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if detail.final_reports.amd %}
+            {% set amd_report = detail.final_reports.amd %}
+            <div class="border rounded p-2 mt-2">
+              <div class="d-flex justify-content-between gap-2">
+                <span class="fw-semibold">AMD</span>
+                <span class="text-muted">Report ID {{ amd_report.id }}</span>
+              </div>
+              <div>{{ amd_report.result or '-' }}</div>
+              {% if amd_report.qualitative_result %}
+              <div class="text-muted">{{ amd_report.qualitative_result }}</div>
+              {% endif %}
+              {% if amd_report.source %}
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                {% if amd_report.source.gallery_index is not none %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" onclick="openPswpGallery('{{ media_gallery_id }}', {{ amd_report.source.gallery_index }}); return false;">View PDF</button>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-primary" href="#encounter-attachment-{{ amd_report.source.attachment_id }}">Source</a>
               </div>
               {% else %}
               <div class="text-muted">Source PDF not recorded in attachment OCR metadata.</div>
@@ -281,7 +304,7 @@
             </div>
             {% endif %}
             {% else %}
-            <div class="text-muted">No encounter-level DR or glaucoma report has been saved yet.</div>
+            <div class="text-muted">No encounter-level DR, AMD, or glaucoma report has been saved yet.</div>
             {% endif %}
           </div>
         </div>
@@ -335,6 +358,21 @@
                       Page {{ attachment.ocr_dr_report.page or '-' }} ·
                       Report ID {{ attachment.ocr_dr_report.diabetic_retinopathy_report_id or '-' }} ·
                       {{ attachment.ocr_dr_report.promotion_status or '-' }}
+                    </div>
+                  </div>
+                  {% endif %}
+                  {% if attachment.ocr_amd_report %}
+                  {% set amd_data = attachment.ocr_amd_report.amd_data or {} %}
+                  <div class="border rounded p-2 mt-2">
+                    <div class="fw-semibold">AMD OCR</div>
+                    <div>{{ amd_data.result or 'No result text extracted' }}</div>
+                    {% if amd_data.qualitative_result %}
+                    <div class="text-muted">{{ amd_data.qualitative_result }}</div>
+                    {% endif %}
+                    <div class="text-muted">
+                      Page {{ attachment.ocr_amd_report.page or '-' }} ·
+                      Report ID {{ attachment.ocr_amd_report.amd_report_id or '-' }} ·
+                      {{ attachment.ocr_amd_report.promotion_status or '-' }}
                     </div>
                   </div>
                   {% endif %}

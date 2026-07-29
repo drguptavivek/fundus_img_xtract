@@ -13,9 +13,9 @@ Auth and CSRF:
 | Route | Method | Auth | Request | Response | Status codes |
 | --- | --- | --- | --- | --- | --- |
 | `/api/v1/encounter-set/unverified` | `GET` | Session + login + `admin`, `local_admin`, `optometrist` | None | Array of `{ "uuid": str, "patient_id": str, "patient_name": str, "capture_date": date \| datetime, "image_count": int }` | `403` on role failure. `500` on unexpected server error. |
-| `/api/v1/encounter-set/<uuid>/details` | `GET` | Session + login + `admin`, `local_admin`, `optometrist` | Path `uuid` | `{ "uuid": str, "patient_id": str, "patient_name": str, "capture_date": date \| datetime, "referral_suggestion": "yes" \| "no" \| "missing", "images": [{"uuid": str, "spatial_position": int, "referral_needed_or_positive_image": "yes" \| "no" \| "missing", "url": str, "thumbnail_url": str \| null}] }` | `404` if the encounter is not found or not in scope. `403` on role failure. `500` on unexpected server error. |
+| `/api/v1/encounter-set/<uuid>/details` | `GET` | Session + login + `admin`, `local_admin`, `optometrist` | Path `uuid` | `{ "uuid": str, "patient_id": str, "patient_name": str, "capture_date": date \| datetime, "referral_suggestion": "yes" \| "no" \| "missing", "referral_positive_diseases": [str], "images": [{"uuid": str, "spatial_position": int, "referral_needed_or_positive_image": "yes" \| "no" \| "missing", "url": str, "thumbnail_url": str \| null}] }` | `404` if the encounter is not found or not in scope. `403` on role failure. `500` on unexpected server error. |
 | `/api/v1/encounter-set/image/<uuid>/position` | `POST` | Session + login + `admin`, `local_admin`, `optometrist` + CSRF | JSON body `{ "spatial_position": int }` | `{ "message": "Position updated" }` | `400` for missing or invalid position, `404` if the image is missing, `403` if access is denied, `409` on a unique-position conflict, `500` on unexpected DB error. |
-| `/api/v1/encounter-set/upload` | `POST` | Bearer JWT via `@token_auth_required` + rate limit (`60 per minute`) | Multipart form-data | `{ "message": str, "encounter_id": int, "encounter_uuid": str, "image_uuid": str, "spatial_position": int, "referral_suggestion": "yes" \| "no" \| "missing", "referral_needed_or_positive_image": "yes" \| "no" \| "missing" }` | `400`, `401`, `403`, `404`, `413`, or `500` depending on validation and storage failure. |
+| `/api/v1/encounter-set/upload` | `POST` | Bearer JWT via `@token_auth_required` + rate limit (`60 per minute`) | Multipart form-data | `{ "message": str, "encounter_id": int, "encounter_uuid": str, "image_uuid": str, "spatial_position": int, "referral_suggestion": "yes" \| "no" \| "missing", "referral_positive_diseases": [str], "referral_needed_or_positive_image": "yes" \| "no" \| "missing" }` | `400`, `401`, `403`, `404`, `413`, or `500` depending on validation and storage failure. |
 
 ## `GET /api/v1/encounter-set/unverified`
 
@@ -44,6 +44,7 @@ Returns set-based encounters that are not yet verified and are visible to the ca
   "patient_name": "Jane Doe",
   "capture_date": "2026-04-30",
   "referral_suggestion": "missing",
+  "referral_positive_diseases": [],
   "images": [
     {
       "uuid": "img-uuid",
@@ -90,6 +91,8 @@ Multipart form-data fields used by the code:
 - `patient_name` required when `encounter_uuid` is omitted
 - `capture_date` optional, defaults to the current UTC date as `YYYY-MM-DD`
 - `referral_suggestion` optional for new encounters: `yes`, `no`, or `missing`
+- `referral_positive_diseases` optional encounter-level list of referred/positive diseases or referral reasons. Values may be configured disease names or free text; repeated fields and comma/semicolon-separated values are accepted
+- `referral_positive_disease` is accepted as an alias for `referral_positive_diseases`
 - `referral_needed_or_positive_image` optional for this image: `yes`, `no`, or `missing`
 - `refrralneed_or_positive_image` is accepted as a backward-compatible alias for `referral_needed_or_positive_image`
 
@@ -113,6 +116,7 @@ Successful response:
   "image_uuid": "img-uuid",
   "spatial_position": 1,
   "referral_suggestion": "missing",
+  "referral_positive_diseases": [],
   "referral_needed_or_positive_image": "missing"
 }
 ```

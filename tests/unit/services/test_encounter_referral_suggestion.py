@@ -5,6 +5,8 @@ from services.encounter_referral_suggestion import (
     REFERRAL_SUGGESTION_NO,
     REFERRAL_SUGGESTION_YES,
     derive_referral_suggestion_from_attachment_metadata,
+    derive_referral_positive_diseases_from_attachment_metadata,
+    normalize_referral_positive_diseases,
     update_encounter_referral_suggestion_from_attachments,
 )
 
@@ -62,6 +64,37 @@ def test_derive_referral_suggestion_uses_parsed_remidio_ocr_text():
     assert derive_referral_suggestion_from_attachment_metadata([{"ocr": {"status": "completed"}}]) == REFERRAL_SUGGESTION_MISSING
 
 
+def test_derive_referral_positive_diseases_uses_parsed_remidio_ocr_text():
+    assert derive_referral_positive_diseases_from_attachment_metadata(
+        [
+            {
+                "ocr": {
+                    "dr_report": {"dr_data": {"result": "No signs of DR detected."}},
+                    "amd_report": {"amd_data": {"result": "Signs of AMD detected. Examples of lesions are highlighted."}},
+                    "glaucoma_report": {
+                        "glaucoma_data": {
+                            "result": "Disc Suspect (High vCDR) - Referral suggested for further evaluation"
+                        }
+                    },
+                }
+            }
+        ]
+    ) == ["AMD", "Glaucoma"]
+
+
+def test_normalize_referral_positive_diseases_accepts_free_text_lists_and_comma_values():
+    assert normalize_referral_positive_diseases(["DR, dry AMD", "corneal opacity", "dr"]) == [
+        "DR",
+        "dry AMD",
+        "corneal opacity",
+    ]
+    assert normalize_referral_positive_diseases("strabismus; wet AMD, neoplasm") == [
+        "strabismus",
+        "wet AMD",
+        "neoplasm",
+    ]
+
+
 def test_update_encounter_referral_suggestion_from_attachments(db_session):
     encounter = PatientEncounters(
         name="Referral Test",
@@ -92,4 +125,5 @@ def test_update_encounter_referral_suggestion_from_attachments(db_session):
 
     assert suggestion == REFERRAL_SUGGESTION_YES
     assert encounter.referral_suggestion == REFERRAL_SUGGESTION_YES
+    assert encounter.referral_positive_diseases_json == ["DR"]
     assert encounter.referral_suggestion_updated_at is not None

@@ -191,9 +191,40 @@ def process_encounter_set_attachment_pdf_ocr_task(
         record.metadata_json = refreshed_metadata
         session.add(record)
         from services.encounter_referral_suggestion import update_encounter_referral_suggestion_from_attachments
+        from services.encounter_set_ai_inference import (
+            create_wadhwani_task_ids_for_encounter,
+            enqueue_wadhwani_for_task_ids,
+        )
 
         update_encounter_referral_suggestion_from_attachments(session, record.patient_encounter_id)
+        wadhwani_task_ids = []
+        wadhwani_context = None
+        if record.patient_encounter is not None:
+            wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(session, record.patient_encounter)
+            if wadhwani_task_ids:
+                wadhwani_context = {
+                    "lab_unit_id": record.patient_encounter.lab_unit_id,
+                    "project_id": record.patient_encounter.project_id,
+                    "upload_profile_id": record.patient_encounter.upload_profile_id,
+                }
         session.commit()
+        wadhwani_job_token = None
+        if wadhwani_task_ids and wadhwani_context:
+            try:
+                wadhwani_job_token = enqueue_wadhwani_for_task_ids(
+                    tuple(wadhwani_task_ids),
+                    user_id=user_id,
+                    username=None,
+                    remote_addr=None,
+                    **wadhwani_context,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "EncounterSet attachment PDF OCR could not queue Wadhwani inference id=%s error=%s",
+                    sanitize_log_value(attachment_id),
+                    sanitize_log_value(exc),
+                    exc_info=True,
+                )
 
         logger.info(
             "EncounterSet attachment PDF OCR complete id=%s filename=%s user=%s status=%s",
@@ -202,7 +233,13 @@ def process_encounter_set_attachment_pdf_ocr_task(
             sanitize_log_value(user_id),
             sanitize_log_value(ocr_result.get("status")),
         )
-        return {"attachment_id": attachment_id, "status": ocr_result.get("status") or "completed", "ocr": ocr_result}
+        return {
+            "attachment_id": attachment_id,
+            "status": ocr_result.get("status") or "completed",
+            "ocr": ocr_result,
+            "wadhwani_tasks_queued": len(wadhwani_task_ids) if wadhwani_job_token else 0,
+            "wadhwani_job_token": wadhwani_job_token,
+        }
     except Exception as exc:  # noqa: BLE001
         session.rollback()
         logger.error(

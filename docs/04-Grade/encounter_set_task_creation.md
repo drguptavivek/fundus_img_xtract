@@ -10,7 +10,7 @@ EncounterSet uploads are intentionally quick at ingest time. Automated Wadhwani 
 
 There are two task creation moments:
 
-- Automated Wadhwani Glaucoma inference tasks are created after Remidio API ingest by `services.encounter_set_ai_inference.create_wadhwani_task_ids_for_encounter`. Verification finalization also calls this as a fallback for older or missed EncounterSets.
+- Automated Wadhwani Glaucoma inference tasks are created after Remidio API ingest by `services.encounter_set_ai_inference.create_wadhwani_task_ids_for_encounter`. Remidio PDF OCR completion calls the same queue path after OCR metadata is saved, and verification finalization also calls it as a fallback for older or missed EncounterSets.
 - Human grading package tasks run from `verify_encounter_set.finalize_verification` after verification finalization succeeds.
 
 The human grading package creation function is `_create_verified_encounter_set_tasks(db, encounter)` in `verify_encounter_set/routes.py`.
@@ -46,7 +46,7 @@ Upload profiles may also configure Wadhwani Glaucoma AI inference for EncounterS
 
 - `never`: do not create automated inference work
 - `always`: create automated Wadhwani work for every eligible clinical image
-- `remidio_glaucoma_report_present`: create automated Wadhwani work only when glaucoma Remidio report/OCR evidence exists
+- `remidio_glaucoma_report_present`: create automated Wadhwani work when glaucoma Remidio report/OCR evidence exists, or when Remidio image metadata identifies a disc-focused clinical fundus image. If the only glaucoma signal is disc-focused image metadata, only those disc-focused images are queued.
 
 These AI workflow rows are separate from the EncounterSet package image-scheme auto-creation rules. They create AI-only image-scoped `grading_tasks` before verification with `task_source = encounter_set_ai_inference`.
 
@@ -108,8 +108,9 @@ The current detector marks:
 
 - DR evidence when an attachment report type contains `dr` or OCR metadata contains `dr_report`
 - glaucoma evidence when an attachment report type contains `glaucoma` or OCR metadata contains `glaucoma_report`
+- glaucoma evidence for Wadhwani AI workflow policies when a clinical EncounterSet image has disc-focused Remidio metadata such as `fundus_field`, `image_segment`, `focus`, `centering`, `image_type`, or `image_variant` containing `disc`, `disk`, `optic disc`, `optic disk`, `optic nerve head`, or `onh`
 
-This evidence only controls image-scheme auto-creation policies. It does not automatically choose grading schemes by name.
+This evidence controls configured image-scheme and AI workflow auto-creation policies. It does not automatically choose grading schemes by name.
 
 ## Fallbacks
 

@@ -1385,11 +1385,15 @@ def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
         item.state = "processing"
         item.started_at = utcnow()
         job.updated_at = utcnow()
+        job_user_id = job.uploader_user_id
         db.add_all([job, item])
         db.commit()
 
     try:
         result = _run_routing_profile_sync_payload(payload)
+        post_processing = _queue_remidio_api_post_processing(result, user_id=job_user_id)
+        if post_processing:
+            result["post_processing"] = post_processing
         with get_db_session() as db:
             job = db.get(Job, job_id)
             item = (

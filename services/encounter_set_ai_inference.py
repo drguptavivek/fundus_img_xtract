@@ -11,6 +11,15 @@ from models import AIInferenceRun, AIModelIntegration, EncounterSetGradingPackag
 from upload_profiles.models import UploadProfileAIWorkflow
 from utils.celery_helpers import enqueue_task
 
+DISC_FOCUSED_IMAGE_TERMS = (
+    "disc",
+    "disk",
+    "optic disc",
+    "optic disk",
+    "optic nerve head",
+    "onh",
+)
+
 
 def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> list[int]:
     """Create/reuse Glaucoma image tasks for configured EncounterSet Wadhwani inference."""
@@ -29,12 +38,16 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
         )
         .all()
     )
-    workflow_disease_ids = {
-        row.disease_id
-        for row in workflows
-        if ai_workflow_policy_applies(row.auto_inference_policy, evidence)
-    }
-    if not workflow_disease_ids:
+    applicable_workflows: list[UploadProfileAIWorkflow] = []
+    workflow_disease_scopes: dict[int, str] = {}
+    for row in workflows:
+        scope = _ai_workflow_task_scope(row.auto_inference_policy, evidence)
+        if scope is None:
+            continue
+        applicable_workflows.append(row)
+        if workflow_disease_scopes.get(row.disease_id) != "all":
+            workflow_disease_scopes[row.disease_id] = scope
+    if not workflow_disease_scopes:
         return []
 
     task_ids: list[int] = []
@@ -46,7 +59,9 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
             or image.is_not_gradable
         ):
             continue
-        for disease_id in sorted(workflow_disease_ids):
+        for disease_id, scope in sorted(workflow_disease_scopes.items()):
+            if scope == "disc" and not _is_disc_focused_encounter_set_image(image):
+                continue
             task = (
                 db.query(GradingTask)
                 .filter(
@@ -67,7 +82,7 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
                 db.add(task)
                 db.flush()
             task_ids.append(task.id)
-    return queueable_wadhwani_task_ids(db, task_ids, workflows)
+    return queueable_wadhwani_task_ids(db, task_ids, applicable_workflows)
 
 
 def queueable_wadhwani_task_ids(db, task_ids: list[int], workflows: list[UploadProfileAIWorkflow]) -> list[int]:
@@ -196,8 +211,50 @@ def encounter_set_report_evidence(encounter: PatientEncounters) -> set[str]:
         if "dr" in report_type or isinstance(ocr.get("dr_report"), dict):
             evidence.add("dr")
         if "glaucoma" in report_type or isinstance(ocr.get("glaucoma_report"), dict):
+            evidence.add("glaucoma_report")
             evidence.add("glaucoma")
+    if any(_is_disc_focused_encounter_set_image(image) for image in encounter.encounter_set_images or []):
+        evidence.add("glaucoma_disc_image")
+        evidence.add("glaucoma")
     return evidence
+
+
+def _is_disc_focused_encounter_set_image(image) -> bool:
+    if getattr(image, "asset_kind", None) != "clinical_image":
+        return False
+    metadata = image.metadata_json or {}
+    if not isinstance(metadata, dict):
+        return False
+    text_values = [
+        metadata.get("fundus_field"),
+        metadata.get("field"),
+        metadata.get("focus"),
+        metadata.get("centering"),
+        metadata.get("image_segment"),
+        metadata.get("segment"),
+        metadata.get("image_type"),
+        metadata.get("type"),
+        metadata.get("image_variant"),
+    ]
+    for value in text_values:
+        normalized = _normalize_disc_focus_text(value)
+        if not normalized:
+            continue
+        tokens = set(normalized.split())
+        if normalized in DISC_FOCUSED_IMAGE_TERMS:
+            return True
+        if tokens.intersection({"disc", "disk", "onh"}):
+            return True
+        if any(term in normalized for term in ("optic disc", "optic disk", "optic nerve head")):
+            return True
+    return False
+
+
+def _normalize_disc_focus_text(value: Any) -> str:
+    if value is None:
+        return ""
+    normalized = str(value).strip().lower()
+    return normalized.replace("_", " ").replace("-", " ")
 
 
 def ai_workflow_policy_applies(policy: str | None, evidence: set[str]) -> bool:
@@ -206,3 +263,15 @@ def ai_workflow_policy_applies(policy: str | None, evidence: set[str]) -> bool:
     if policy == "never":
         return False
     return True
+
+
+def _ai_workflow_task_scope(policy: str | None, evidence: set[str]) -> str | None:
+    if policy == "never":
+        return None
+    if policy != "remidio_glaucoma_report_present":
+        return "all"
+    if "glaucoma_report" in evidence:
+        return "all"
+    if "glaucoma_disc_image" in evidence:
+        return "disc"
+    return None

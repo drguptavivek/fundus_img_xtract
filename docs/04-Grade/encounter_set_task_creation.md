@@ -32,12 +32,14 @@ Current auto-creation policies are:
 - `always`: create image targets for all eligible clinical images
 - `never`: keep the scheme configured, but do not create image targets automatically
 - `remidio_dr_report_present`: create image targets only when DR Remidio report/OCR evidence exists
+- `remidio_amd_report_present`: create image targets only when AMD Remidio report/OCR evidence exists
 - `remidio_glaucoma_report_present`: create image targets only when glaucoma Remidio report/OCR evidence exists
 
 Report-triggered policy options are allowed only for image-scoped grading schemes whose `remidio_ocr_linkage` is explicitly configured:
 
 - `none`: no Remidio report-triggered policy options
 - `dr`: can use `remidio_dr_report_present`
+- `amd`: can use `remidio_amd_report_present`
 - `glaucoma`: can use `remidio_glaucoma_report_present`
 
 This linkage is configured on the grading scheme itself, not inferred from the scheme name.

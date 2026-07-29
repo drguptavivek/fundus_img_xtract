@@ -421,7 +421,7 @@ class Disease(Base):
     __table_args__ = (
         CheckConstraint("grading_scope IN ('image', 'encounter')", name="ck_disease_grading_scope"),
         CheckConstraint(
-            "remidio_ocr_linkage IN ('none', 'dr', 'glaucoma')",
+            "remidio_ocr_linkage IN ('none', 'dr', 'amd', 'glaucoma')",
             name="ck_disease_remidio_ocr_linkage",
         ),
     )

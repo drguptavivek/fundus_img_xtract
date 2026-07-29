@@ -898,6 +898,8 @@ def _encounter_set_report_evidence(encounter: PatientEncounters) -> set[str]:
         ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
         if "dr" in report_type or isinstance(ocr.get("dr_report"), dict):
             evidence.add("dr")
+        if "amd" in report_type or isinstance(ocr.get("amd_report"), dict):
+            evidence.add("amd")
         if "glaucoma" in report_type or isinstance(ocr.get("glaucoma_report"), dict):
             evidence.add("glaucoma")
     return evidence
@@ -910,6 +912,8 @@ def _image_scheme_policy_applies(policy: str, evidence: set[str]) -> bool:
         return False
     if policy == "remidio_dr_report_present":
         return "dr" in evidence
+    if policy == "remidio_amd_report_present":
+        return "amd" in evidence
     if policy == "remidio_glaucoma_report_present":
         return "glaucoma" in evidence
     return False

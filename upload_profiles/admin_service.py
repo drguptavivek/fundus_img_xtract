@@ -97,6 +97,7 @@ IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
     "never",
     "always",
     "remidio_dr_report_present",
+    "remidio_amd_report_present",
     "remidio_glaucoma_report_present",
 }
 
@@ -725,7 +726,14 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
         disease_ids.update(config.image_grading_scheme_ids)
         disease_ids.add(config.encounter_grading_scheme_id)
         for package in _packages_for_config(config):
-            if package.applicability not in {"always", "remidio_dr_report_present", "remidio_glaucoma_report_present", "manual_only", "disabled"}:
+            if package.applicability not in {
+                "always",
+                "remidio_dr_report_present",
+                "remidio_amd_report_present",
+                "remidio_glaucoma_report_present",
+                "manual_only",
+                "disabled",
+            }:
                 return "Unsupported EncounterSet grading package applicability."
             if package.image_grading_scheme_ids and not package.default_image_grading_scheme_id:
                 return f"Select a default image grading scheme for package {package.name}."
@@ -778,6 +786,10 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
                     continue
                 if policy == "remidio_dr_report_present" and disease.remidio_ocr_linkage != "dr":
                     policy_linkage_errors.append(f"{disease.name} must be linked to Remidio DR OCR before using DR report auto-creation.")
+                if policy == "remidio_amd_report_present" and disease.remidio_ocr_linkage != "amd":
+                    policy_linkage_errors.append(
+                        f"{disease.name} must be linked to Remidio AMD OCR before using AMD report auto-creation."
+                    )
                 if policy == "remidio_glaucoma_report_present" and disease.remidio_ocr_linkage != "glaucoma":
                     policy_linkage_errors.append(
                         f"{disease.name} must be linked to Remidio glaucoma OCR before using glaucoma report auto-creation."

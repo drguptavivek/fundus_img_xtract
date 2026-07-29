@@ -400,7 +400,7 @@
                                  data-upload-profile-est-image-scheme>
                           <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
                         </div>
-                        {% if remidio_ocr_linkage in ["dr", "glaucoma"] %}
+                        {% if remidio_ocr_linkage in ["dr", "amd", "glaucoma"] %}
                         <select class="form-select form-select-sm w-auto"
                                 data-upload-profile-image-auto-policy
                                 data-scheme-id="{{ disease.id }}"
@@ -409,6 +409,8 @@
                           <option value="never">Never</option>
                           {% if remidio_ocr_linkage == "dr" %}
                           <option value="remidio_dr_report_present">If Remidio DR report detected</option>
+                          {% elif remidio_ocr_linkage == "amd" %}
+                          <option value="remidio_amd_report_present">If Remidio AMD report detected</option>
                           {% elif remidio_ocr_linkage == "glaucoma" %}
                           <option value="remidio_glaucoma_report_present">If Remidio glaucoma report detected</option>
                           {% endif %}

@@ -36,6 +36,17 @@ def test_create_and_list_grading_scheme_uses_disease_as_scheme(app, db_session):
     assert created["feature_count"] == 0
 
 
+def test_image_grading_scheme_accepts_amd_remidio_ocr_linkage(app, db_session):
+    suffix = uuid4().hex[:8]
+    result = create_grading_scheme(
+        GradingSchemeInput(name=f"AMD OCR Scheme {suffix}", grading_scope="image", remidio_ocr_linkage="amd")
+    )
+
+    assert result.success is True
+    disease = db_session.get(Disease, result.payload["grading_scheme_id"])
+    assert disease.remidio_ocr_linkage == "amd"
+
+
 def test_encounter_grading_scheme_normalizes_remidio_ocr_linkage(app, db_session):
     suffix = uuid4().hex[:8]
     result = create_grading_scheme(

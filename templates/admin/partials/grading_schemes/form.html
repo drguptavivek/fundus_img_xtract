@@ -59,6 +59,7 @@
                   data-remidio-ocr-linkage-select>
             <option value="none" {% if (scheme.remidio_ocr_linkage or 'none') == "none" %}selected{% endif %}>None</option>
             <option value="dr" {% if scheme.remidio_ocr_linkage == "dr" %}selected{% endif %}>Remidio DR report</option>
+            <option value="amd" {% if scheme.remidio_ocr_linkage == "amd" %}selected{% endif %}>Remidio AMD report</option>
             <option value="glaucoma" {% if scheme.remidio_ocr_linkage == "glaucoma" %}selected{% endif %}>Remidio glaucoma report</option>
           </select>
           <div class="form-text">Encounter-scoped schemes save this as None.</div>

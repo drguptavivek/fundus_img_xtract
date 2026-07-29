@@ -38,7 +38,7 @@ from upload_profiles.models import (
 )
 
 VALID_SCOPES = frozenset({"image", "encounter"})
-VALID_REMIDIO_OCR_LINKAGES = frozenset({"none", "dr", "glaucoma"})
+VALID_REMIDIO_OCR_LINKAGES = frozenset({"none", "dr", "amd", "glaucoma"})
 CORE_SCHEME_IDS = frozenset({1, 2, 3})
 GUIDELINE_ALLOWED_TAGS = frozenset({"strong", "b", "em", "i", "ul", "ol", "li", "br", "p"})
 EXTERNAL_USAGE_KEYS = frozenset(
@@ -399,7 +399,7 @@ def _validate_scheme_input(scheme_input: GradingSchemeInput) -> str | None:
     if scheme_input.grading_scope not in VALID_SCOPES:
         return "Grading scheme scope must be image or encounter."
     if scheme_input.remidio_ocr_linkage not in VALID_REMIDIO_OCR_LINKAGES:
-        return "Remidio OCR linkage must be none, DR, or glaucoma."
+        return "Remidio OCR linkage must be none, DR, AMD, or glaucoma."
     return None
 
 

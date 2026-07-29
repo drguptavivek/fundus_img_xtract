@@ -369,7 +369,7 @@ class UploadProfileEncounterSetTypeGradingPackage(Base):
     __table_args__ = (
         UniqueConstraint("upload_profile_encounter_set_type_id", "code", name="uq_up_est_grading_package_code"),
         CheckConstraint(
-            "applicability IN ('always','remidio_dr_report_present','remidio_glaucoma_report_present','manual_only','disabled')",
+            "applicability IN ('always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present','manual_only','disabled')",
             name="ck_up_est_grading_package_applicability",
         ),
         Index("ix_up_est_grading_package_mapping_active", "upload_profile_encounter_set_type_id", "active"),
@@ -400,7 +400,7 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
     __table_args__ = (
         UniqueConstraint("package_id", "disease_id", name="uq_up_est_pkg_image_scheme"),
         CheckConstraint(
-            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_glaucoma_report_present')",
+            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present')",
             name="ck_up_est_pkg_image_auto_create_policy",
         ),
         Index("ix_up_est_pkg_image_scheme_package_active", "package_id", "active"),

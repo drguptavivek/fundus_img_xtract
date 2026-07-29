@@ -111,11 +111,12 @@ Profile create/update fields:
   - `image_grading_scheme_ids` array of image-scoped grading scheme IDs
   - `default_image_grading_scheme_id` optional image scheme ID that must be in `image_grading_scheme_ids`
   - `encounter_grading_scheme_ids` array containing the selected encounter-scoped grading scheme ID
-  - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, or `remidio_glaucoma_report_present`
+  - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, `remidio_amd_report_present`, or `remidio_glaucoma_report_present`
   - `display_order` integer, optional
   - `active` boolean, optional
 - Remidio report-triggered `image_scheme_auto_create_policies` are accepted only when the image-scoped grading scheme has matching `remidio_ocr_linkage` configured on the grading scheme itself:
   - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
+  - `remidio_amd_report_present` requires `remidio_ocr_linkage = amd`
   - `remidio_glaucoma_report_present` requires `remidio_ocr_linkage = glaucoma`
 - `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format. A fourth part may be supplied as `disease_id:ai_model_id:upload_kind:auto_inference_policy`; omitted policy defaults to `always` for backward compatibility. Supported policies are `always`, `never`, and `remidio_glaucoma_report_present`.
   - For `direct_image`, `pregraded`, and `remidio`, the disease and upload kind must be enabled on the profile.

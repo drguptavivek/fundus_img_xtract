@@ -60,6 +60,8 @@
         <div class="text-muted small">Remidio OCR</div>
         {% if grading_scheme.remidio_ocr_linkage == "dr" %}
         <span class="badge text-bg-info">DR report</span>
+        {% elif grading_scheme.remidio_ocr_linkage == "amd" %}
+        <span class="badge text-bg-info">AMD report</span>
         {% elif grading_scheme.remidio_ocr_linkage == "glaucoma" %}
         <span class="badge text-bg-info">Glaucoma report</span>
         {% else %}

@@ -53,6 +53,8 @@
           <td>
             {% if row.remidio_ocr_linkage == "dr" %}
             <span class="badge text-bg-info">DR report</span>
+            {% elif row.remidio_ocr_linkage == "amd" %}
+            <span class="badge text-bg-info">AMD report</span>
             {% elif row.remidio_ocr_linkage == "glaucoma" %}
             <span class="badge text-bg-info">Glaucoma report</span>
             {% else %}

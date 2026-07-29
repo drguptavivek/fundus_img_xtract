@@ -910,6 +910,9 @@
     if (policy === 'remidio_dr_report_present') {
       return 'if DR report';
     }
+    if (policy === 'remidio_amd_report_present') {
+      return 'if AMD report';
+    }
     if (policy === 'remidio_glaucoma_report_present') {
       return 'if glaucoma report';
     }

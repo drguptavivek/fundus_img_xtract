@@ -583,6 +583,144 @@ def test_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_
     assert "must be linked to Remidio DR OCR" in result.message
 
 
+def test_amd_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username="amd_policy_manager", full_name="AMD Policy Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="AMD Policy Hospital")
+    lab = LabUnit(name="AMD Policy Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    image_scheme = Disease(
+        name="AMD Policy Image Scheme",
+        grading_scope="image",
+        remidio_ocr_linkage="dr",
+    )
+    encounter_scheme = Disease(name="AMD Policy Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="AMD Policy EncounterSet",
+        code="amd_policy_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="AMD OCR policy profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="AMD report package",
+                            code="amd_report_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[image_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=image_scheme.id,
+                            image_scheme_auto_create_policies={image_scheme.id: "remidio_amd_report_present"},
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is False
+    assert "must be linked to Remidio AMD OCR" in result.message
+
+
+def test_encounter_set_profile_accepts_amd_report_auto_create_policy(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username="amd_auto_manager", full_name="AMD Auto Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="AMD Auto Hospital")
+    lab = LabUnit(name="AMD Auto Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    amd_scheme = Disease(
+        name="AMD Auto Image Scheme",
+        grading_scope="image",
+        remidio_ocr_linkage="amd",
+    )
+    encounter_scheme = Disease(name="AMD Auto Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="AMD Auto EncounterSet",
+        code="amd_auto_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, amd_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="AMD auto policy profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[amd_scheme.id],
+                    default_image_grading_scheme_id=amd_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="AMD report package",
+                            code="amd_report_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[amd_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=amd_scheme.id,
+                            image_scheme_auto_create_policies={amd_scheme.id: "remidio_amd_report_present"},
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="AMD auto policy profile").one()
+    package = profile.encounter_set_types[0].grading_packages[0]
+    assert package.image_grading_schemes[0].auto_create_policy == "remidio_amd_report_present"
+
+
 def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_scheme(db_session, monkeypatch):
     @contextmanager
     def use_test_session():

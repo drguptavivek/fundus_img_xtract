@@ -29,15 +29,17 @@ Image scheme auto-creation policies:
 - `never`: keep the scheme in the package policy, but do not auto-create image tasks during verification finalization.
 - `always`: create image tasks for this scheme on all eligible images.
 - `remidio_dr_report_present`: create image tasks for this scheme only when the verified EncounterSet has DR Remidio report/OCR evidence.
+- `remidio_amd_report_present`: create image tasks for this scheme only when the verified EncounterSet has AMD Remidio report/OCR evidence.
 - `remidio_glaucoma_report_present`: create image tasks for this scheme only when the verified EncounterSet has glaucoma Remidio report/OCR evidence.
 
 The Remidio report-triggered policies are exposed only for image-scoped grading schemes whose `remidio_ocr_linkage` is explicitly configured on the grading scheme:
 
 - `dr`: exposes the DR report-detected option.
+- `amd`: exposes the AMD report-detected option.
 - `glaucoma`: exposes the glaucoma report-detected option.
 - `none`: exposes only the normal selected/unselected behavior.
 
-Do not infer Remidio OCR linkage from grading scheme names. A project may have multiple DR-like or glaucoma-like schemes, and only the schemes explicitly linked to Remidio OCR should receive report-triggered auto-creation options.
+Do not infer Remidio OCR linkage from grading scheme names. A project may have multiple DR-like, AMD-like, or glaucoma-like schemes, and only the schemes explicitly linked to Remidio OCR should receive report-triggered auto-creation options.
 
 Remidio API ingestion is not itself a grading workflow policy. PRISTINE Remidio API profiles and integrated-screening Remidio API profiles may ingest the same kind of source data while using different package definitions.
 

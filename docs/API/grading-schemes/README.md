@@ -83,7 +83,7 @@ Validation:
 
 - `name` is required and must be unique case-insensitively.
 - `grading_scope` must be `image` or `encounter`.
-- `remidio_ocr_linkage` must be `none`, `dr`, or `glaucoma`. It is meaningful only for image-scoped schemes; encounter-scoped schemes are saved as `none`.
+- `remidio_ocr_linkage` must be `none`, `dr`, `amd`, or `glaucoma`. It is meaningful only for image-scoped schemes; encounter-scoped schemes are saved as `none`.
 - `parent_scheme_id` is optional. When supplied, parent and child schemes must have the same scope, and cycles are rejected.
 
 ### `GET /api/grading-schemes/{scheme_id}`

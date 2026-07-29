@@ -1,9 +1,16 @@
 import pytest
 import uuid
-from models import EncounterSetGradingPackage, PatientEncounters, EncounterSetImage, GradingTask, Project
+from models import Disease, EncounterSetGradingPackage, PatientEncounters, EncounterSetImage, GradingTask, Project
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
-from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
+from upload_profiles.models import (
+    UploadProfile,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
+    UploadProfileEncounterSetTypeImageGradingScheme,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
+)
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
 
@@ -460,6 +467,91 @@ def test_verify_encounter_set_finalize_async_close_redirects_to_browser(
     )
     assert {task.grading_target_level for task in tasks} == {"encounter", "image"}
     assert sum(1 for task in tasks if task.encounter_set_image_id == encounter_set_data['image'].id) == 1
+
+
+def test_verify_encounter_set_finalize_creates_amd_report_triggered_image_task(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="admin_verify_finalize_amd_policy",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    auth_client = auth_client_factory(user)
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    amd = Disease(
+        name=f"AMD Report Policy {uuid.uuid4().hex[:8]}",
+        grading_scope="image",
+        remidio_ocr_linkage="amd",
+    )
+    db_session.add(amd)
+    db_session.flush()
+
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.image_grading_schemes.append(
+        UploadProfileEncounterSetTypeImageGradingScheme(disease=amd, is_default=False, display_order=2)
+    )
+    profile_config.grading_packages.append(
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="AMD report package",
+            code="amd_report_package",
+            applicability="always",
+            default_image_grading_scheme=amd,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=amd,
+                    is_default=True,
+                    auto_create_policy="remidio_amd_report_present",
+                    display_order=1,
+                ),
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=glaucoma,
+                    is_default=False,
+                    auto_create_policy="remidio_glaucoma_report_present",
+                    display_order=2,
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=glaucoma, display_order=1),
+            ],
+        )
+    )
+    encounter_set_data["image"].is_reviewed = True
+    metadata = dict(encounter_set_data["attachment"].metadata_json or {})
+    ocr = dict(metadata.get("ocr") or {})
+    ocr.pop("glaucoma_report", None)
+    ocr["amd_report"] = {
+        "amd_data": {
+            "result": "Signs of AMD detected.",
+            "qualitative_result": "Warning: Images insufficient for accurate DR and AMD screening",
+        }
+    }
+    metadata["ocr"] = ocr
+    encounter_set_data["attachment"].metadata_json = metadata
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 200
+    package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == encounter_set_data['encounter'].id,
+            EncounterSetGradingPackage.code == "amd_report_package",
+        )
+        .one()
+    )
+    tasks = (
+        db_session.query(GradingTask)
+        .filter(GradingTask.encounter_set_package_id == package.id)
+        .all()
+    )
+    image_tasks = [task for task in tasks if task.grading_target_level == "image"]
+    assert [task.disease_id for task in image_tasks] == [amd.id]
 
 
 def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targets(

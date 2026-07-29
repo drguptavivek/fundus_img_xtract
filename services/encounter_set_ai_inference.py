@@ -19,6 +19,13 @@ DISC_FOCUSED_IMAGE_TERMS = (
     "optic nerve head",
     "onh",
 )
+MACULA_FOCUSED_IMAGE_TERMS = (
+    "macula",
+    "macular",
+    "fovea",
+    "foveal",
+    "posterior pole",
+)
 
 
 def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> list[int]:
@@ -61,6 +68,8 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
             continue
         for disease_id, scope in sorted(workflow_disease_scopes.items()):
             if scope == "disc" and not _is_disc_focused_encounter_set_image(image):
+                continue
+            if scope == "disc_or_macula" and not _is_disc_or_macula_focused_encounter_set_image(image):
                 continue
             task = (
                 db.query(GradingTask)
@@ -225,18 +234,7 @@ def _is_disc_focused_encounter_set_image(image) -> bool:
     metadata = image.metadata_json or {}
     if not isinstance(metadata, dict):
         return False
-    text_values = [
-        metadata.get("fundus_field"),
-        metadata.get("field"),
-        metadata.get("focus"),
-        metadata.get("centering"),
-        metadata.get("image_segment"),
-        metadata.get("segment"),
-        metadata.get("image_type"),
-        metadata.get("type"),
-        metadata.get("image_variant"),
-    ]
-    for value in text_values:
+    for value in _image_focus_text_values(metadata):
         normalized = _normalize_disc_focus_text(value)
         if not normalized:
             continue
@@ -257,6 +255,20 @@ def _normalize_disc_focus_text(value: Any) -> str:
     return normalized.replace("_", " ").replace("-", " ")
 
 
+def _image_focus_text_values(metadata: dict[str, Any]) -> list[Any]:
+    return [
+        metadata.get("fundus_field"),
+        metadata.get("field"),
+        metadata.get("focus"),
+        metadata.get("centering"),
+        metadata.get("image_segment"),
+        metadata.get("segment"),
+        metadata.get("image_type"),
+        metadata.get("type"),
+        metadata.get("image_variant"),
+    ]
+
+
 def ai_workflow_policy_applies(policy: str | None, evidence: set[str]) -> bool:
     if policy == "remidio_glaucoma_report_present":
         return "glaucoma" in evidence
@@ -271,7 +283,32 @@ def _ai_workflow_task_scope(policy: str | None, evidence: set[str]) -> str | Non
     if policy != "remidio_glaucoma_report_present":
         return "all"
     if "glaucoma_report" in evidence:
-        return "all"
+        return "disc_or_macula"
     if "glaucoma_disc_image" in evidence:
         return "disc"
     return None
+
+
+def _is_disc_or_macula_focused_encounter_set_image(image) -> bool:
+    return _is_disc_focused_encounter_set_image(image) or _is_macula_focused_encounter_set_image(image)
+
+
+def _is_macula_focused_encounter_set_image(image) -> bool:
+    if getattr(image, "asset_kind", None) != "clinical_image":
+        return False
+    metadata = image.metadata_json or {}
+    if not isinstance(metadata, dict):
+        return False
+    text_values = _image_focus_text_values(metadata)
+    for value in text_values:
+        normalized = _normalize_disc_focus_text(value)
+        if not normalized:
+            continue
+        tokens = set(normalized.split())
+        if normalized in MACULA_FOCUSED_IMAGE_TERMS:
+            return True
+        if tokens.intersection({"macula", "macular", "fovea", "foveal"}):
+            return True
+        if "posterior pole" in normalized:
+            return True
+    return False

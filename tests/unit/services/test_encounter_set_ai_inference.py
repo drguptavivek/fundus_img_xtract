@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import uuid4
 
+from encounter_sets.models import EncounterSetAttachment
 from models import (
     AIInferenceRun,
     AIModel,
@@ -143,6 +144,62 @@ def test_disc_image_evidence_queues_only_disc_focused_images(db_session, core_te
     assert len(task_ids) == 1
     task = db_session.get(GradingTask, task_ids[0])
     assert task.encounter_set_image_id == disc_image.id
+
+
+def test_glaucoma_report_evidence_queues_disc_and_macula_images_only(db_session, core_test_data):
+    profile, _ai_model = _encounter_set_wadhwani_profile(db_session, core_test_data["glaucoma"])
+    encounter, disc_image = _encounter_with_image(
+        db_session,
+        core_test_data,
+        profile,
+        metadata={"image_segment": "disc centered"},
+    )
+    macula_image = EncounterSetImage(
+        patient_encounter_id=encounter.id,
+        spatial_position=2,
+        original_filename=f"{uuid4()}.jpg",
+        folder_rel="encounter-set-tests",
+        hospital_id=core_test_data["lab_unit"].hospital_id,
+        camera_id=core_test_data["camera"].id,
+        asset_kind="clinical_image",
+        creates_task=True,
+        visible_to_grader=True,
+        is_not_gradable=False,
+        metadata_json={"fundus_field": "macula"},
+    )
+    peripheral_image = EncounterSetImage(
+        patient_encounter_id=encounter.id,
+        spatial_position=3,
+        original_filename=f"{uuid4()}.jpg",
+        folder_rel="encounter-set-tests",
+        hospital_id=core_test_data["lab_unit"].hospital_id,
+        camera_id=core_test_data["camera"].id,
+        asset_kind="clinical_image",
+        creates_task=True,
+        visible_to_grader=True,
+        is_not_gradable=False,
+        metadata_json={"fundus_field": "peripheral retina", "image_segment": "nasal"},
+    )
+    attachment = EncounterSetAttachment(
+        patient_encounter_id=encounter.id,
+        asset_kind="pdf",
+        original_filename="glaucoma-report.pdf",
+        stored_filename="glaucoma-report.pdf",
+        folder_rel="encounter-set-tests",
+        mime_type="application/pdf",
+        metadata_json={"remidio_report_type": "glaucoma"},
+    )
+    db_session.add_all([macula_image, peripheral_image, attachment])
+    db_session.flush()
+
+    task_ids = create_wadhwani_task_ids_for_encounter(db_session, encounter)
+    task_image_ids = {
+        db_session.get(GradingTask, task_id).encounter_set_image_id
+        for task_id in task_ids
+    }
+
+    assert task_image_ids == {disc_image.id, macula_image.id}
+    assert peripheral_image.id not in task_image_ids
 
 
 def test_existing_queued_wadhwani_run_is_not_requeued(db_session, core_test_data):

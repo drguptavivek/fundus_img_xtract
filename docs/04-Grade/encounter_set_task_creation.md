@@ -46,7 +46,7 @@ Upload profiles may also configure Wadhwani Glaucoma AI inference for EncounterS
 
 - `never`: do not create automated inference work
 - `always`: create automated Wadhwani work for every eligible clinical image
-- `remidio_glaucoma_report_present`: create automated Wadhwani work when glaucoma Remidio report/OCR evidence exists, or when Remidio image metadata identifies a disc-focused clinical fundus image. If the only glaucoma signal is disc-focused image metadata, only those disc-focused images are queued.
+- `remidio_glaucoma_report_present`: create automated Wadhwani work for disc-focused and macula-focused images when glaucoma Remidio report/OCR evidence exists. If the only glaucoma signal is disc-focused image metadata, only those disc-focused images are queued.
 
 These AI workflow rows are separate from the EncounterSet package image-scheme auto-creation rules. They create AI-only image-scoped `grading_tasks` before verification with `task_source = encounter_set_ai_inference`.
 
@@ -93,7 +93,6 @@ An EncounterSet image is eligible when all of these are true:
 - `asset_kind = clinical_image`
 - `creates_task = true`
 - `visible_to_grader = true`
-- `is_reviewed = true`
 - `is_not_gradable = false`
 
 Images marked ungradable during verification remain visible as context, but they are not turned into grading targets.
@@ -109,6 +108,8 @@ The current detector marks:
 - DR evidence when an attachment report type contains `dr` or OCR metadata contains `dr_report`
 - glaucoma evidence when an attachment report type contains `glaucoma` or OCR metadata contains `glaucoma_report`
 - glaucoma evidence for Wadhwani AI workflow policies when a clinical EncounterSet image has disc-focused Remidio metadata such as `fundus_field`, `image_segment`, `focus`, `centering`, `image_type`, or `image_variant` containing `disc`, `disk`, `optic disc`, `optic disk`, `optic nerve head`, or `onh`
+
+For Wadhwani Glaucoma, glaucoma report/OCR evidence queues only clinical images whose Remidio metadata is disc-focused or macula-focused. Disc-only image metadata without a glaucoma report queues only the disc-focused image. Future Wadhwani DR-DME integration should use the analogous DR report plus macula-focused image rule when that API is available.
 
 This evidence controls configured image-scheme and AI workflow auto-creation policies. It does not automatically choose grading schemes by name.
 

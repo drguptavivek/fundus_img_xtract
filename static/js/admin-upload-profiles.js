@@ -511,6 +511,10 @@
     row.querySelectorAll('[data-upload-profile-negative-controls]').forEach(function (input) {
       const value = pkg.image_scheme_negative_controls_per_positive[String(input.dataset.schemeId)];
       input.value = value ?? 3;
+      const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(input.dataset.schemeId) + '"]');
+      if (policy?.value === 'positive_plus_negative_controls' && (parseInt(input.value || '0', 10) || 0) <= 0) {
+        input.value = '3';
+      }
     });
     row.dataset.uploadProfilePackageApplied = signature;
   }
@@ -565,6 +569,21 @@
         staticText.classList.toggle('opacity-50', !enabled);
       }
     });
+  }
+
+  function seedNegativeControlRatio(policySelect) {
+    if (!policySelect || policySelect.value !== 'positive_plus_negative_controls') {
+      return;
+    }
+    const imageRow = policySelect.closest('[data-upload-profile-est-image-row]');
+    const controls = imageRow?.querySelector('[data-upload-profile-negative-controls]');
+    if (!controls) {
+      return;
+    }
+    const current = parseInt(controls.value || '0', 10) || 0;
+    if (current <= 0) {
+      controls.value = '3';
+    }
   }
 
   function syncPackageCardsToFields(form) {
@@ -665,8 +684,24 @@
     root.querySelectorAll('[data-upload-profile-editor]').forEach(function (form) {
       syncForm(form);
       if (!form.dataset.uploadProfileBound) {
+        form.addEventListener('input', function (event) {
+          const packageRow = event.target.closest('[data-upload-profile-est-option]');
+          if (!packageRow || !event.target.matches('[data-upload-profile-negative-controls]')) {
+            return;
+          }
+          syncSinglePackageField(packageRow);
+          syncModeCards(form);
+        });
         form.addEventListener('change', function (event) {
           const packageRow = event.target.closest('[data-upload-profile-est-option]');
+          if (packageRow && event.target.matches('[data-upload-profile-image-auto-policy]')) {
+            seedNegativeControlRatio(event.target);
+            syncSinglePackageField(packageRow);
+            syncImagePolicyControls(packageRow);
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-negative-controls]')) {
+            syncSinglePackageField(packageRow);
+          }
           if (packageRow && event.target.closest('[data-upload-profile-est-package-card]')) {
             const card = event.target.closest('[data-upload-profile-est-package-card]');
             if (event.target.matches('[data-package-name]') && !card.querySelector('[data-package-code]')?.value) {

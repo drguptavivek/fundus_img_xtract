@@ -19,6 +19,7 @@ def find_report_pages_by_coords_with_grid(pdf_path):
         tuple: A tuple containing the page numbers for the Diabetic and Glaucoma reports.
     """
     pageNumberDiabeticReport = None
+    pageNumberAMDReport = None
     text_diabetic_result  = None
     text_diabetic_qual_result  = None
     text_amd_result = None
@@ -49,9 +50,6 @@ def find_report_pages_by_coords_with_grid(pdf_path):
         return None, None
 
     for page_num in range(len(doc)):
-        if pageNumberDiabeticReport is not None and pageNumberGlaucomaReport is not None:
-            break
-
         page = doc.load_page(page_num)
         pix = page.get_pixmap(dpi=300)
         image = Image.open(io.BytesIO(pix.tobytes("png")))
@@ -74,57 +72,48 @@ def find_report_pages_by_coords_with_grid(pdf_path):
         print(f"Generated grid image: {grid_image_filename}")
         # --- End of new code block ---
         """
-        if pageNumberDiabeticReport is None:
-            region_diabetic = image.crop(diabetic_report_coords)
-            #region_diabetic.show()
-            text_diabetic = pytesseract.image_to_string(region_diabetic).lower()
-            if _is_dr_or_amd_report_header(text_diabetic):
+        page_type = _classify_report_page(
+            image,
+            diabetic_report_coords=diabetic_report_coords,
+            glaucoma_report_coords=glaucoma_report_coords,
+        )
+        if page_type in {"dr", "dr_amd"} and (pageNumberDiabeticReport is None or (page_type == "dr_amd" and pageNumberAMDReport is None)):
+            dr_result, dr_qual_result, amd_result, amd_qual_result = _extract_dr_amd_page_results(
+                image,
+                result_coords=diabetic_result_coords,
+                qualitative_coords=diabetic_qual_coords,
+                page_type=page_type,
+            )
+            if pageNumberDiabeticReport is None:
                 pageNumberDiabeticReport = page_num + 1
-                diabeticresult_area = image.crop(diabetic_result_coords)
-                #diabeticresult_area.show()  
-                text_diabetic_result_block = pytesseract.image_to_string(diabeticresult_area)
-                text_diabetic_result = _extract_labeled_result(
-                    text_diabetic_result_block,
-                    label_pattern=r"result\s+dr",
-                    stop_pattern=r"result\s+amd|dr\s+screening|screening\s+interval",
-                )
-                text_amd_result = _extract_labeled_result(
-                    text_diabetic_result_block,
-                    label_pattern=r"result\s+amd",
-                    stop_pattern=r"dr\s+screening|screening\s+interval",
-                )
-                if text_diabetic_result is None and "result amd" not in text_diabetic_result_block.lower():
-                    text_diabetic_result = text_diabetic_result_block
-                diabetic_qual_area = image.crop(diabetic_qual_coords)
-                text_diabetic_qual_result = pytesseract.image_to_string(diabetic_qual_area)
-                if text_amd_result:
-                    text_amd_qual_result = text_diabetic_qual_result
+                text_diabetic_result = dr_result
+                text_diabetic_qual_result = dr_qual_result
+            if page_type == "dr_amd" and pageNumberAMDReport is None:
+                pageNumberAMDReport = page_num + 1
+                text_amd_result = amd_result
+                text_amd_qual_result = amd_qual_result
 
-                # EXTRACT DIABETIC RESULTS from cooridnates - 
+        if page_type == "glaucoma" and pageNumberGlaucomaReport is None:
+            pageNumberGlaucomaReport = page_num + 1
+            glaucoma_result_area = image.crop(glaucoma_result_coords)
+            text_glaucoma_result = pytesseract.image_to_string(glaucoma_result_area)
 
-        if pageNumberGlaucomaReport is None:
-            region_glaucoma = image.crop(glaucoma_report_coords)
-            text_glaucoma = pytesseract.image_to_string(region_glaucoma).lower()
-            if "glaucoma" in text_glaucoma:
-                pageNumberGlaucomaReport = page_num + 1
-                glaucoma_result_area = image.crop(glaucoma_result_coords)
-                text_glaucoma_result = pytesseract.image_to_string(glaucoma_result_area)
+            glaucoma_vcdrRt_area = image.crop(glaucoma_vcdr_rt_coords)
+            vcdr_rt = pytesseract.image_to_string(glaucoma_vcdrRt_area)
 
-                glaucoma_vcdrRt_area = image.crop(glaucoma_vcdr_rt_coords)
-                vcdr_rt = pytesseract.image_to_string(glaucoma_vcdrRt_area)
+            glaucoma_vcdrLt_area = image.crop(glaucoma_vcdr_lt_coords)
+            vcdr_lt = pytesseract.image_to_string(glaucoma_vcdrLt_area)
 
-                glaucoma_vcdrLt_area = image.crop(glaucoma_vcdr_lt_coords)
-                vcdr_lt = pytesseract.image_to_string(glaucoma_vcdrLt_area)
-    
-                gl_qual_area = image.crop(glaucoma_qual_coords)
-                #gl_qual_area.show()
-                text_gl_qual_result = pytesseract.image_to_string(gl_qual_area)
+            gl_qual_area = image.crop(glaucoma_qual_coords)
+            #gl_qual_area.show()
+            text_gl_qual_result = pytesseract.image_to_string(gl_qual_area)
                 
 
 
     doc.close()
     print(f" Report for {pdf_path}")
     print(f"pageNumberDiabeticReport = {pageNumberDiabeticReport}")
+    print(f"pageNumberAMDReport = {pageNumberAMDReport}")
     print(f"Diabetic Result ----- {text_diabetic_result} \
           WARNINGS --- {text_diabetic_qual_result}")
     print(f"AMD Result ----- {text_amd_result} \
@@ -134,20 +123,62 @@ def find_report_pages_by_coords_with_grid(pdf_path):
     print(f"Glacuaom Result = {text_glaucoma_result} VCDR RT ---{vcdr_rt} \
           VCDR LT --- {vcdr_lt} -- Qual {text_gl_qual_result} ")
 
-    return pageNumberDiabeticReport, pageNumberGlaucomaReport, text_diabetic_result, \
-        text_diabetic_qual_result, text_amd_result, text_amd_qual_result, \
+    return pageNumberDiabeticReport, pageNumberAMDReport, pageNumberGlaucomaReport, \
+        text_diabetic_result, text_diabetic_qual_result, text_amd_result, text_amd_qual_result, \
         text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result
 
 
-def _is_dr_or_amd_report_header(text):
+def _classify_report_page(image, *, diabetic_report_coords, glaucoma_report_coords):
+    diabetic_header = pytesseract.image_to_string(image.crop(diabetic_report_coords))
+    glaucoma_header = pytesseract.image_to_string(image.crop(glaucoma_report_coords))
+    if _is_glaucoma_report_header(glaucoma_header):
+        return "glaucoma"
+    if _is_dr_amd_report_header(diabetic_header):
+        return "dr_amd"
+    if _is_dr_report_header(diabetic_header):
+        return "dr"
+    return None
+
+
+def _extract_dr_amd_page_results(image, *, result_coords, qualitative_coords, page_type):
+    result_area = image.crop(result_coords)
+    result_block = pytesseract.image_to_string(result_area)
+    dr_result = _extract_labeled_result(
+        result_block,
+        label_pattern=r"result\s+dr",
+        stop_pattern=r"result\s+amd|dr\s+screening|screening\s+interval",
+    )
+    amd_result = None
+    if page_type == "dr_amd":
+        amd_result = _extract_labeled_result(
+            result_block,
+            label_pattern=r"result\s+amd",
+            stop_pattern=r"dr\s+screening|screening\s+interval",
+        )
+    if dr_result is None and (page_type == "dr" or "result amd" not in result_block.lower()):
+        dr_result = result_block
+    qualitative_result = pytesseract.image_to_string(image.crop(qualitative_coords))
+    return dr_result, qualitative_result, amd_result, qualitative_result if amd_result else None
+
+
+def _is_dr_report_header(text):
     normalized = " ".join(str(text or "").lower().split())
     if "diabetic" in normalized:
         return True
-    if "dr and amd report" in normalized:
-        return True
-    if "dr & amd report" in normalized:
+    if "diabetic retinopathy" in normalized:
         return True
     return False
+
+
+def _is_dr_amd_report_header(text):
+    normalized = " ".join(str(text or "").lower().split())
+    if "dr and amd report" in normalized or "dr & amd report" in normalized:
+        return True
+    return "amd" in normalized and ("diabetic" in normalized or "dr" in normalized)
+
+
+def _is_glaucoma_report_header(text):
+    return "glaucoma" in " ".join(str(text or "").lower().split())
 
 
 def _extract_labeled_result(text, *, label_pattern, stop_pattern):

@@ -98,6 +98,7 @@ def test_process_pdf_for_ocr_promotes_dr_amd_and_glaucoma_reports(db_session, tm
     def fake_ocr(_path):
         return (
             1,
+            1,
             2,
             "No signs of DR detected.",
             "Warning: Images insufficient for accurate DR and AMD screening",

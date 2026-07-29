@@ -127,7 +127,21 @@ def process_pdf_for_ocr(
     from ocr_extraction import find_report_pages_by_coords_with_grid
 
     ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path))
-    if len(ocr_result) == 10:
+    if len(ocr_result) == 11:
+        (
+            pageNumberDiabeticReport,
+            pageNumberAMDReport,
+            pageNumberGlaucomaReport,
+            text_diabetic_result,
+            text_diabetic_qual_result,
+            text_amd_result,
+            text_amd_qual_result,
+            text_glaucoma_result,
+            vcdr_rt,
+            vcdr_lt,
+            text_gl_qual_result,
+        ) = ocr_result
+    elif len(ocr_result) == 10:
         (
             pageNumberDiabeticReport,
             pageNumberGlaucomaReport,
@@ -140,6 +154,7 @@ def process_pdf_for_ocr(
             vcdr_lt,
             text_gl_qual_result,
         ) = ocr_result
+        pageNumberAMDReport = pageNumberDiabeticReport if text_amd_result or text_amd_qual_result else None
     elif len(ocr_result) == 8:
         (
             pageNumberDiabeticReport,
@@ -151,17 +166,19 @@ def process_pdf_for_ocr(
             vcdr_lt,
             text_gl_qual_result,
         ) = ocr_result
+        pageNumberAMDReport = None
         text_amd_result = text_amd_qual_result = None
     elif len(ocr_result) == 2:
         pageNumberDiabeticReport, pageNumberGlaucomaReport = ocr_result
+        pageNumberAMDReport = None
         text_diabetic_result = text_diabetic_qual_result = None
         text_amd_result = text_amd_qual_result = None
         text_glaucoma_result = vcdr_rt = vcdr_lt = text_gl_qual_result = None
     else:
-        raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2, 8, or 10")
+        raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2, 8, 10, or 11")
 
     pdf_document = None
-    if pageNumberDiabeticReport is not None or pageNumberGlaucomaReport is not None:
+    if pageNumberDiabeticReport is not None or pageNumberAMDReport is not None or pageNumberGlaucomaReport is not None:
         pdf_document = fitz.open(str(pdf_path))
 
     try:
@@ -176,15 +193,24 @@ def process_pdf_for_ocr(
                 text_result=text_diabetic_result,
                 qualitative_result=text_diabetic_qual_result,
             )
-            if text_amd_result or text_amd_qual_result:
-                result["amd_report"] = _process_detected_amd_report(
-                    db_session,
-                    patient_encounter=patient_encounter,
-                    page_number=pageNumberDiabeticReport,
-                    text_result=text_amd_result,
-                    qualitative_result=text_amd_qual_result,
-                    report_file_name=result["dr_report"].get("report_file_name"),
+        if pageNumberAMDReport is not None and (text_amd_result or text_amd_qual_result):
+            amd_report_file_name = result["dr_report"].get("report_file_name")
+            if pageNumberAMDReport != pageNumberDiabeticReport:
+                amd_report_file_name = _save_split_report_pdf(
+                    pdf_document,
+                    page_number=pageNumberAMDReport,
+                    target_dir=daily_dirs["dr_pdf"],
+                    filename=_split_report_filename(patient_encounter, "DRAMD", pageNumberAMDReport),
+                    source_name=pdf_path.name,
                 )
+            result["amd_report"] = _process_detected_amd_report(
+                db_session,
+                patient_encounter=patient_encounter,
+                page_number=pageNumberAMDReport,
+                text_result=text_amd_result,
+                qualitative_result=text_amd_qual_result,
+                report_file_name=amd_report_file_name,
+            )
 
         if pageNumberGlaucomaReport is not None:
             result["glaucoma_report"] = _process_detected_glaucoma_report(
@@ -573,7 +599,19 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
             ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path)) # find_report_pages_by_coords_with_grid expects string path
             
             # Handle different return formats from OCR function
-            if len(ocr_result) == 8:
+            if len(ocr_result) == 11:
+                # Current result with DR page, AMD page, glaucoma page, and extracted text.
+                (pageNumberDiabeticReport, _pageNumberAMDReport, pageNumberGlaucomaReport,
+                 text_diabetic_result, text_diabetic_qual_result,
+                 _text_amd_result, _text_amd_qual_result,
+                 text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result) = ocr_result
+            elif len(ocr_result) == 10:
+                # Previous DR+AMD result shape used the DR page as the AMD source page.
+                (pageNumberDiabeticReport, pageNumberGlaucomaReport,
+                 text_diabetic_result, text_diabetic_qual_result,
+                 _text_amd_result, _text_amd_qual_result,
+                 text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result) = ocr_result
+            elif len(ocr_result) == 8:
                 # Full result with all 8 values
                 (pageNumberDiabeticReport, pageNumberGlaucomaReport,
                  text_diabetic_result, text_diabetic_qual_result,
@@ -585,7 +623,7 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
                 text_glaucoma_result = vcdr_rt = vcdr_lt = text_gl_qual_result = None
             else:
                 # Unexpected result format
-                raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2 or 8")
+                raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2, 8, 10, or 11")
 
             # Open the PDF for splitting if any report page is found
             pdf_document = None

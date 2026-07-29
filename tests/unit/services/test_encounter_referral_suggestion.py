@@ -64,6 +64,30 @@ def test_derive_referral_suggestion_uses_parsed_remidio_ocr_text():
     assert derive_referral_suggestion_from_attachment_metadata([{"ocr": {"status": "completed"}}]) == REFERRAL_SUGGESTION_MISSING
 
 
+def test_derive_referral_suggestion_handles_combined_dr_amd_negative_text():
+    assert (
+        derive_referral_suggestion_from_attachment_metadata(
+            [
+                {
+                    "ocr": {
+                        "dr_report": {
+                            "dr_data": {
+                                "result": "No signs of DR or AMD detected. Re-examine after 12 months for AI"
+                            }
+                        },
+                        "amd_report": {
+                            "amd_data": {
+                                "result": "No signs of DR or AMD detected. Re-examine after 12 months for AI"
+                            }
+                        },
+                    }
+                }
+            ]
+        )
+        == REFERRAL_SUGGESTION_NO
+    )
+
+
 def test_derive_referral_positive_diseases_uses_parsed_remidio_ocr_text():
     assert derive_referral_positive_diseases_from_attachment_metadata(
         [

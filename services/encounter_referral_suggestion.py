@@ -148,15 +148,23 @@ def _ocr_text_suggestion(value: Any, *, disease: str) -> str:
         return REFERRAL_SUGGESTION_MISSING
 
     if disease == "dr":
+        if text.startswith("no signs of dr or amd detected"):
+            return REFERRAL_SUGGESTION_NO
         if text.startswith("no signs of dr detected"):
             return REFERRAL_SUGGESTION_NO
+        if text.startswith("signs of dr or amd detected"):
+            return REFERRAL_SUGGESTION_YES
         if text.startswith("signs of dr detected"):
             return REFERRAL_SUGGESTION_YES
         return REFERRAL_SUGGESTION_MISSING
 
     if disease == "amd":
+        if text.startswith("no signs of dr or amd detected"):
+            return REFERRAL_SUGGESTION_NO
         if text.startswith("no signs of amd detected"):
             return REFERRAL_SUGGESTION_NO
+        if text.startswith("signs of dr or amd detected"):
+            return REFERRAL_SUGGESTION_YES
         if text.startswith("signs of amd detected"):
             return REFERRAL_SUGGESTION_YES
         return REFERRAL_SUGGESTION_MISSING

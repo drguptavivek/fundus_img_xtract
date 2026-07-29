@@ -155,8 +155,22 @@ def _extract_dr_amd_page_results(image, *, result_coords, qualitative_coords, pa
             label_pattern=r"result\s+amd",
             stop_pattern=r"dr\s+screening|screening\s+interval",
         )
+    combined_result = None
+    if page_type == "dr_amd" and dr_result is None:
+        combined_result = _extract_labeled_result(
+            result_block,
+            label_pattern=r"result",
+            stop_pattern=r"dr\s+screening|screening\s+interval",
+        )
+        dr_result = combined_result
+        if amd_result is None:
+            amd_result = combined_result
     if dr_result is None and (page_type == "dr" or "result amd" not in result_block.lower()):
-        dr_result = result_block
+        dr_result = _extract_labeled_result(
+            result_block,
+            label_pattern=r"result",
+            stop_pattern=r"dr\s+screening|screening\s+interval",
+        ) or result_block
     qualitative_result = pytesseract.image_to_string(image.crop(qualitative_coords))
     return dr_result, qualitative_result, amd_result, qualitative_result if amd_result else None
 

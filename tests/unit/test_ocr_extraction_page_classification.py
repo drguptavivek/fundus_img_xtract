@@ -79,3 +79,25 @@ def test_extract_dr_amd_page_results_only_extracts_amd_for_combined_page(monkeyp
     )
     assert amd_result is None
     assert amd_qual is None
+
+
+def test_extract_dr_amd_page_results_handles_single_combined_result_label(monkeypatch):
+    result_coords = (0, 560, 2000, 820)
+    qualitative_coords = (50, 3100, 1600, 3200)
+    image = _FakeImage(
+        {
+            result_coords: "Result: No signs of DR or AMD detected. Re-examine after 12 months for AI DR Screening",
+            qualitative_coords: "",
+        }
+    )
+    monkeypatch.setattr(ocr_extraction.pytesseract, "image_to_string", lambda region: region)
+
+    dr_result, _dr_qual, amd_result, _amd_qual = ocr_extraction._extract_dr_amd_page_results(
+        image,
+        result_coords=result_coords,
+        qualitative_coords=qualitative_coords,
+        page_type="dr_amd",
+    )
+
+    assert dr_result == "No signs of DR or AMD detected. Re-examine after 12 months for AI"
+    assert amd_result == "No signs of DR or AMD detected. Re-examine after 12 months for AI"

@@ -111,7 +111,8 @@ Profile create/update fields:
   - `image_grading_scheme_ids` array of image-scoped grading scheme IDs
   - `default_image_grading_scheme_id` optional image scheme ID that must be in `image_grading_scheme_ids`
   - `encounter_grading_scheme_ids` array containing the selected encounter-scoped grading scheme ID
-  - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, `remidio_amd_report_present`, or `remidio_glaucoma_report_present`
+  - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, `remidio_amd_report_present`, `remidio_glaucoma_report_present`, or `positive_plus_negative_controls`
+  - `image_scheme_negative_controls_per_positive` object keyed by image scheme ID; values are integers from `0` to `20` and are used only when the corresponding policy is `positive_plus_negative_controls`
   - `display_order` integer, optional
   - `active` boolean, optional
 - Remidio report-triggered `image_scheme_auto_create_policies` are accepted only when the image-scoped grading scheme has matching `remidio_ocr_linkage` configured on the grading scheme itself:

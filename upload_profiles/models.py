@@ -386,6 +386,7 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=False, index=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
     auto_create_policy: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
+    negative_controls_per_positive: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -400,8 +401,12 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
     __table_args__ = (
         UniqueConstraint("package_id", "disease_id", name="uq_up_est_pkg_image_scheme"),
         CheckConstraint(
-            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present')",
+            "auto_create_policy IN ('never','always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present','positive_plus_negative_controls')",
             name="ck_up_est_pkg_image_auto_create_policy",
+        ),
+        CheckConstraint(
+            "negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 20",
+            name="ck_up_est_pkg_image_negative_controls_per_positive",
         ),
         Index("ix_up_est_pkg_image_scheme_package_active", "package_id", "active"),
     )

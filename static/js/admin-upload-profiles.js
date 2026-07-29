@@ -361,6 +361,7 @@
     const imageIds = Array.isArray(pkg.image_grading_scheme_ids) ? pkg.image_grading_scheme_ids.map(String) : [];
     const encounterIds = Array.isArray(pkg.encounter_grading_scheme_ids) ? pkg.encounter_grading_scheme_ids.map(String) : [];
     const policies = pkg.image_scheme_auto_create_policies || {};
+    const controls = pkg.image_scheme_negative_controls_per_positive || {};
     const name = String(pkg.name || pkg.code || 'Package ' + (index + 1)).trim();
     return {
       name: name,
@@ -371,6 +372,12 @@
       encounter_grading_scheme_ids: encounterIds,
       image_scheme_auto_create_policies: imageIds.reduce(function (acc, diseaseId) {
         acc[diseaseId] = policies[diseaseId] || policies[Number(diseaseId)] || 'always';
+        return acc;
+      }, {}),
+      image_scheme_negative_controls_per_positive: imageIds.reduce(function (acc, diseaseId) {
+        const raw = controls[diseaseId] ?? controls[Number(diseaseId)] ?? 0;
+        const value = Math.max(0, Math.min(20, parseInt(raw, 10) || 0));
+        acc[diseaseId] = value;
         return acc;
       }, {}),
       display_order: Number.isFinite(Number(pkg.display_order)) ? Number(pkg.display_order) : index,
@@ -422,6 +429,7 @@
         default_image_grading_scheme_id: normalized.default_image_grading_scheme_id ? Number(normalized.default_image_grading_scheme_id) : null,
         encounter_grading_scheme_ids: normalized.encounter_grading_scheme_ids.map(Number).filter(Number.isFinite),
         image_scheme_auto_create_policies: normalized.image_scheme_auto_create_policies,
+        image_scheme_negative_controls_per_positive: normalized.image_scheme_negative_controls_per_positive,
         display_order: index,
         active: normalized.active
       };
@@ -500,6 +508,10 @@
         select.value = policy;
       }
     });
+    row.querySelectorAll('[data-upload-profile-negative-controls]').forEach(function (input) {
+      const value = pkg.image_scheme_negative_controls_per_positive[String(input.dataset.schemeId)];
+      input.value = value ?? 3;
+    });
     row.dataset.uploadProfilePackageApplied = signature;
   }
 
@@ -507,9 +519,12 @@
     const images = selectedImageChoices(row);
     const encounter = row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value || '';
     const policies = {};
+    const controls = {};
     images.forEach(function (choice) {
       const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(choice.id) + '"]');
+      const control = row.querySelector('[data-upload-profile-negative-controls][data-scheme-id="' + CSS.escape(choice.id) + '"]');
       policies[choice.id] = policy ? policy.value : 'always';
+      controls[choice.id] = Math.max(0, Math.min(20, parseInt(control?.value || '0', 10) || 0));
     });
     const defaultField = row.querySelector('[data-upload-profile-est-default-image-scheme]');
     if (defaultField) {
@@ -523,6 +538,7 @@
       default_image_grading_scheme_id: images[0]?.id || '',
       encounter_grading_scheme_ids: encounter ? [encounter] : [],
       image_scheme_auto_create_policies: policies,
+      image_scheme_negative_controls_per_positive: controls,
       active: true
     }]);
     syncImagePolicyControls(row);
@@ -532,11 +548,18 @@
     row.querySelectorAll('[data-upload-profile-est-image-row]').forEach(function (imageRow) {
       const checkbox = imageRow.querySelector('[data-upload-profile-est-image-scheme]');
       const policy = imageRow.querySelector('[data-upload-profile-image-auto-policy]');
+      const controls = imageRow.querySelector('[data-upload-profile-negative-controls]');
+      const controlsWrap = imageRow.querySelector('[data-upload-profile-negative-controls-wrap]');
       const staticText = imageRow.querySelector('[data-upload-profile-image-auto-static]');
       const enabled = Boolean(checkbox && checkbox.checked && !checkbox.disabled);
       if (policy) {
         policy.disabled = !enabled;
         policy.classList.toggle('opacity-50', !enabled);
+      }
+      if (controls) {
+        const showControls = enabled && policy && policy.value === 'positive_plus_negative_controls';
+        controls.disabled = !showControls;
+        controlsWrap?.classList.toggle('d-none', !showControls);
       }
       if (staticText) {
         staticText.classList.toggle('opacity-50', !enabled);
@@ -915,6 +938,9 @@
     }
     if (policy === 'remidio_glaucoma_report_present') {
       return 'if glaucoma report';
+    }
+    if (policy === 'positive_plus_negative_controls') {
+      return 'positive + controls';
     }
     return 'always';
   }

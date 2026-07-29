@@ -34,6 +34,7 @@ Current auto-creation policies are:
 - `remidio_dr_report_present`: create image targets only when DR Remidio report/OCR evidence exists
 - `remidio_amd_report_present`: create image targets only when AMD Remidio report/OCR evidence exists
 - `remidio_glaucoma_report_present`: create image targets only when glaucoma Remidio report/OCR evidence exists
+- `positive_plus_negative_controls`: create image targets only when the EncounterSet is positive for the scheme disease, then randomly sample `negative_controls_per_positive` negative control EncounterSets for the same disease
 
 Report-triggered policy options are allowed only for image-scoped grading schemes whose `remidio_ocr_linkage` is explicitly configured:
 

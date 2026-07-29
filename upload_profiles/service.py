@@ -663,6 +663,7 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
                     "remidio_ocr_linkage": scheme.disease.remidio_ocr_linkage if scheme.disease else "none",
                     "is_default": scheme.is_default,
                     "auto_create_policy": scheme.auto_create_policy,
+                    "negative_controls_per_positive": scheme.negative_controls_per_positive,
                     "display_order": scheme.display_order,
                 }
                 for scheme in sorted(

@@ -91,6 +91,7 @@ class EncounterSetGradingPackageInput:
     encounter_grading_scheme_ids: list[int]
     default_image_grading_scheme_id: int | None = None
     image_scheme_auto_create_policies: dict[int, str] | None = None
+    image_scheme_negative_controls_per_positive: dict[int, int] | None = None
 
 
 IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
@@ -99,6 +100,7 @@ IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
     "remidio_dr_report_present",
     "remidio_amd_report_present",
     "remidio_glaucoma_report_present",
+    "positive_plus_negative_controls",
 }
 
 
@@ -417,6 +419,7 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
                                 disease_id=scheme.disease_id,
                                 is_default=scheme.is_default,
                                 auto_create_policy=scheme.auto_create_policy,
+                                negative_controls_per_positive=scheme.negative_controls_per_positive,
                                 display_order=scheme.display_order,
                                 active=scheme.active,
                             )
@@ -597,6 +600,7 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
                             disease_id=disease_id,
                             is_default=disease_id == package.default_image_grading_scheme_id,
                             auto_create_policy=(package.image_scheme_auto_create_policies or {}).get(disease_id, "always"),
+                            negative_controls_per_positive=(package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0),
                             display_order=scheme_index,
                             active=True,
                         )
@@ -674,6 +678,10 @@ def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -
                 ).get(disease_id, "always")
                 for disease_id in image_scheme_ids
             },
+            image_scheme_negative_controls_per_positive={
+                disease_id: max(0, min(20, int((package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) or 0)))
+                for disease_id in image_scheme_ids
+            },
         )
     return list(normalized.values())
 
@@ -694,6 +702,7 @@ def _packages_for_config(config: EncounterSetProfileInput) -> list[EncounterSetG
             encounter_grading_scheme_ids=encounter_ids,
             default_image_grading_scheme_id=config.default_image_grading_scheme_id,
             image_scheme_auto_create_policies={disease_id: "always" for disease_id in config.image_grading_scheme_ids},
+            image_scheme_negative_controls_per_positive={disease_id: 0 for disease_id in config.image_grading_scheme_ids},
         )
     ]
 
@@ -744,6 +753,13 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             )
             if invalid_policies:
                 return f"Unsupported image auto-creation policy in package {package.name}."
+            invalid_ratios = [
+                disease_id
+                for disease_id, value in (package.image_scheme_negative_controls_per_positive or {}).items()
+                if value < 0 or value > 20
+            ]
+            if invalid_ratios:
+                return f"Negative controls per positive must be between 0 and 20 in package {package.name}."
             disease_ids.update(package.image_grading_scheme_ids)
             disease_ids.update(package.encounter_grading_scheme_ids)
 

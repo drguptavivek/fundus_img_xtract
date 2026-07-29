@@ -2,7 +2,7 @@ from flask import after_this_request, render_template, abort, current_app, flash
 from flask_login import login_required, current_user
 from auth.roles import roles_required
 from auth.utils import utcnow
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from models import (
@@ -847,13 +847,20 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
 
     created = 0
     for package_config in package_configs:
+        positive_control_scheme_ids = sorted(
+            disease_id
+            for disease_id, policy in package_config["image_scheme_policies"].items()
+            if policy == "positive_plus_negative_controls"
+            and _encounter_is_positive_for_disease(db, encounter, disease_id)
+        )
         image_scheme_ids = sorted(
             {
                 disease_id
                 for disease_id, policy in package_config["image_scheme_policies"].items()
                 if _image_scheme_policy_applies(policy, report_evidence)
             }
-        )
+        ) + positive_control_scheme_ids
+        image_scheme_ids = sorted(set(image_scheme_ids))
         encounter_scheme_ids = sorted(set(package_config["encounter_scheme_ids"]))
         if not encounter_scheme_ids and (not image_scheme_ids or not eligible_images):
             continue
@@ -861,6 +868,7 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
         package = _get_or_create_runtime_package(db, encounter, package_config)
         if package_config.get("_created"):
             created += 1
+            package_config.pop("_created", None)
 
         for disease_id in encounter_scheme_ids:
             if _get_or_create_package_task(
@@ -885,6 +893,14 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
                     image=image,
                 ):
                     created += 1
+        for disease_id in positive_control_scheme_ids:
+            created += _create_negative_control_tasks_for_positive(
+                db,
+                positive_encounter=encounter,
+                disease_id=disease_id,
+                package_config=package_config,
+                controls_per_positive=package_config["image_scheme_negative_controls_per_positive"].get(disease_id, 0),
+            )
     if created:
         db.flush()
     return created
@@ -916,7 +932,121 @@ def _image_scheme_policy_applies(policy: str, evidence: set[str]) -> bool:
         return "amd" in evidence
     if policy == "remidio_glaucoma_report_present":
         return "glaucoma" in evidence
+    if policy == "positive_plus_negative_controls":
+        return False
     return False
+
+
+def _create_negative_control_tasks_for_positive(
+    db,
+    *,
+    positive_encounter: PatientEncounters,
+    disease_id: int,
+    package_config: dict,
+    controls_per_positive: int,
+) -> int:
+    controls_per_positive = max(0, min(20, int(controls_per_positive or 0)))
+    if controls_per_positive <= 0:
+        return 0
+    config = _active_encounter_set_type_config(positive_encounter)
+    if not config:
+        return 0
+    candidates = (
+        db.query(PatientEncounters)
+        .filter(
+            PatientEncounters.id != positive_encounter.id,
+            PatientEncounters.is_set_based.is_(True),
+            PatientEncounters.encounter_verified_status == "verified",
+            PatientEncounters.lab_unit_id == positive_encounter.lab_unit_id,
+            PatientEncounters.project_id == positive_encounter.project_id,
+            PatientEncounters.upload_profile_id == positive_encounter.upload_profile_id,
+        )
+        .order_by(func.random())
+        .limit(controls_per_positive * 4)
+        .all()
+    )
+    created = 0
+    selected = 0
+    for candidate in candidates:
+        if selected >= controls_per_positive:
+            break
+        candidate_config = _active_encounter_set_type_config(candidate)
+        if not candidate_config or candidate_config.encounter_set_type_id != config.encounter_set_type_id:
+            continue
+        if not _encounter_is_negative_for_disease(db, candidate, disease_id):
+            continue
+        eligible_images = _eligible_encounter_set_images(db, candidate)
+        if not eligible_images:
+            continue
+        package = _get_or_create_runtime_package(db, candidate, package_config)
+        selected += 1
+        if package_config.get("_created"):
+            created += 1
+            package_config.pop("_created", None)
+        for image in eligible_images:
+            if _get_or_create_package_task(
+                db,
+                package=package,
+                encounter=candidate,
+                disease_id=disease_id,
+                target_level="image",
+                source="profile_package_negative_control",
+                image=image,
+            ):
+                created += 1
+    return created
+
+
+def _eligible_encounter_set_images(db, encounter: PatientEncounters) -> list[EncounterSetImage]:
+    return [
+        image
+        for image in (
+            db.query(EncounterSetImage)
+            .filter(EncounterSetImage.patient_encounter_id == encounter.id)
+            .order_by(EncounterSetImage.spatial_position)
+            .all()
+        )
+        if image.asset_kind == "clinical_image"
+        and image.creates_task
+        and image.visible_to_grader
+        and image.is_reviewed
+        and not image.is_not_gradable
+    ]
+
+
+def _encounter_is_positive_for_disease(db, encounter: PatientEncounters, disease_id: int) -> bool:
+    if encounter.referral_suggestion != "yes":
+        return False
+    positive_diseases = encounter.referral_positive_diseases_json or []
+    if not positive_diseases:
+        return True
+    disease = db.get(Disease, disease_id)
+    return bool(disease and _positive_disease_list_matches(disease, positive_diseases))
+
+
+def _encounter_is_negative_for_disease(db, encounter: PatientEncounters, disease_id: int) -> bool:
+    if encounter.referral_suggestion == "no":
+        return True
+    if encounter.referral_suggestion != "yes":
+        return False
+    positive_diseases = encounter.referral_positive_diseases_json or []
+    if not positive_diseases:
+        return False
+    disease = db.get(Disease, disease_id)
+    return bool(disease and not _positive_disease_list_matches(disease, positive_diseases))
+
+
+def _positive_disease_list_matches(disease: Disease, positive_diseases: list[str]) -> bool:
+    values = [str(value or "").strip().lower() for value in positive_diseases if str(value or "").strip()]
+    linkage = (disease.remidio_ocr_linkage or "none").lower()
+    if linkage == "dr":
+        return any(value == "dr" or "diabetic retinopathy" in value for value in values)
+    if linkage == "amd":
+        return any("amd" in value.split() or "macular degeneration" in value for value in values)
+    if linkage == "glaucoma":
+        return any("glaucoma" in value for value in values)
+    disease_name = disease.name.lower()
+    return any(value == disease_name or value in disease_name or disease_name in value for value in values)
 
 
 def _enqueue_wadhwani_after_commit(
@@ -962,6 +1092,10 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
                     scheme.disease_id: scheme.auto_create_policy
                     for scheme in package.image_grading_schemes if scheme.active
                 },
+                "image_scheme_negative_controls_per_positive": {
+                    scheme.disease_id: scheme.negative_controls_per_positive
+                    for scheme in package.image_grading_schemes if scheme.active
+                },
                 "encounter_scheme_ids": [
                     scheme.disease_id for scheme in package.encounter_grading_schemes if scheme.active
                 ],
@@ -979,6 +1113,7 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
             "code": "default",
             "applicability": "always",
             "image_scheme_policies": {disease_id: "always" for disease_id in image_scheme_ids},
+            "image_scheme_negative_controls_per_positive": {disease_id: 0 for disease_id in image_scheme_ids},
             "encounter_scheme_ids": encounter_scheme_ids,
             "source": "profile_default",
         }]
@@ -997,6 +1132,7 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
         "code": "default",
         "applicability": "always",
         "image_scheme_policies": {},
+        "image_scheme_negative_controls_per_positive": {},
         "encounter_scheme_ids": sorted(target_disease_ids),
         "source": "legacy_target_disease",
     }]

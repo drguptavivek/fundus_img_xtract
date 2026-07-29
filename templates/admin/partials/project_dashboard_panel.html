@@ -218,6 +218,7 @@
                     'id': package_image.disease_id,
                     'name': package_image.disease.name if package_image.disease else '',
                     'auto_create_policy': package_image.auto_create_policy,
+                    'negative_controls_per_positive': package_image.negative_controls_per_positive,
                     'remidio_ocr_linkage': package_image.disease.remidio_ocr_linkage if package_image.disease else 'none'
                   }) %}
                 {% endfor %}
@@ -339,6 +340,8 @@
                                 If Remidio AMD report
                               {% elif scheme.auto_create_policy == 'remidio_glaucoma_report_present' %}
                                 If Remidio glaucoma report
+                              {% elif scheme.auto_create_policy == 'positive_plus_negative_controls' %}
+                                Positive + controls 1:{{ scheme.negative_controls_per_positive or 0 }}
                               {% else %}
                                 Always
                               {% endif %}{% if not loop.last %}; {% endif %}

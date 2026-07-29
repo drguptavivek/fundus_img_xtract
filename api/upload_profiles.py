@@ -163,6 +163,11 @@ def _encounter_set_packages_from_request(form, encounter_set_type_id: int):
                             for key, value in (row.get("image_scheme_auto_create_policies") or {}).items()
                             if str(key).isdigit()
                         },
+                        image_scheme_negative_controls_per_positive={
+                            int(key): max(0, min(20, upload_profile_service.to_int(str(value)) or 0))
+                            for key, value in (row.get("image_scheme_negative_controls_per_positive") or {}).items()
+                            if str(key).isdigit()
+                        },
                     )
                 )
     return packages

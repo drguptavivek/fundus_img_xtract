@@ -554,6 +554,131 @@ def test_verify_encounter_set_finalize_creates_amd_report_triggered_image_task(
     assert [task.disease_id for task in image_tasks] == [amd.id]
 
 
+def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_policy(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="admin_verify_finalize_sampling_policy",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    auth_client = auth_client_factory(user)
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    amd = Disease(
+        name=f"AMD Sampling Policy {uuid.uuid4().hex[:8]}",
+        grading_scope="image",
+        remidio_ocr_linkage="amd",
+    )
+    db_session.add(amd)
+    db_session.flush()
+
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.image_grading_schemes.append(
+        UploadProfileEncounterSetTypeImageGradingScheme(disease=amd, is_default=False, display_order=2)
+    )
+    profile_config.grading_packages.append(
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="Sampling package",
+            code="sampling_package",
+            applicability="always",
+            default_image_grading_scheme=amd,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=amd,
+                    is_default=True,
+                    auto_create_policy="positive_plus_negative_controls",
+                    negative_controls_per_positive=1,
+                    display_order=1,
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=glaucoma, display_order=1),
+            ],
+        )
+    )
+
+    negative_encounter = PatientEncounters(
+        uuid=str(uuid.uuid4()),
+        name="Negative Control Set",
+        patient_id="NEG-SET-001",
+        capture_date="2023-10-27",
+        capture_date_dt=date(2023, 10, 27),
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        is_set_based=True,
+        encounter_verified_status="verified",
+        referral_suggestion="no",
+        referral_positive_diseases_json=[],
+        project_id=encounter_set_data["project"].id,
+        upload_profile_id=encounter_set_data["upload_profile"].id,
+        metadata_json={"encounter_set_type_id": encounter_set_data["encounter_set_type"].id},
+    )
+    db_session.add(negative_encounter)
+    db_session.flush()
+    negative_image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        patient_encounter_id=negative_encounter.id,
+        spatial_position=1,
+        original_filename="negative_control_1.jpg",
+        folder_rel="files/test_sets",
+        is_reviewed=True,
+        created_at=datetime.now(),
+    )
+    db_session.add(negative_image)
+
+    encounter_set_data["image"].is_reviewed = True
+    metadata = dict(encounter_set_data["attachment"].metadata_json or {})
+    ocr = dict(metadata.get("ocr") or {})
+    ocr.pop("glaucoma_report", None)
+    ocr["amd_report"] = {"amd_data": {"result": "Signs of AMD detected."}}
+    metadata["ocr"] = ocr
+    encounter_set_data["attachment"].metadata_json = metadata
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 200
+    positive_package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == encounter_set_data["encounter"].id,
+            EncounterSetGradingPackage.code == "sampling_package",
+        )
+        .one()
+    )
+    control_package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == negative_encounter.id,
+            EncounterSetGradingPackage.code == "sampling_package",
+        )
+        .one()
+    )
+    positive_task = (
+        db_session.query(GradingTask)
+        .filter(
+            GradingTask.encounter_set_package_id == positive_package.id,
+            GradingTask.encounter_set_image_id == encounter_set_data["image"].id,
+            GradingTask.disease_id == amd.id,
+        )
+        .one()
+    )
+    control_task = (
+        db_session.query(GradingTask)
+        .filter(
+            GradingTask.encounter_set_package_id == control_package.id,
+            GradingTask.encounter_set_image_id == negative_image.id,
+            GradingTask.disease_id == amd.id,
+        )
+        .one()
+    )
+    assert positive_task.task_source == "profile_package"
+    assert control_task.task_source == "profile_package_negative_control"
+
+
 def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targets(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):

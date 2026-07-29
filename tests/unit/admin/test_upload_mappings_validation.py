@@ -651,7 +651,7 @@ def test_amd_report_triggered_image_policy_requires_matching_remidio_ocr_linkage
     assert "must be linked to Remidio AMD OCR" in result.message
 
 
-def test_encounter_set_profile_accepts_amd_report_auto_create_policy(db_session, monkeypatch):
+def test_encounter_set_profile_accepts_positive_plus_negative_controls_policy(db_session, monkeypatch):
     @contextmanager
     def use_test_session():
         yield db_session
@@ -707,7 +707,8 @@ def test_encounter_set_profile_accepts_amd_report_auto_create_policy(db_session,
                             image_grading_scheme_ids=[amd_scheme.id],
                             encounter_grading_scheme_ids=[encounter_scheme.id],
                             default_image_grading_scheme_id=amd_scheme.id,
-                            image_scheme_auto_create_policies={amd_scheme.id: "remidio_amd_report_present"},
+                            image_scheme_auto_create_policies={amd_scheme.id: "positive_plus_negative_controls"},
+                            image_scheme_negative_controls_per_positive={amd_scheme.id: 3},
                         )
                     ],
                 )
@@ -718,7 +719,8 @@ def test_encounter_set_profile_accepts_amd_report_auto_create_policy(db_session,
     assert result.success is True
     profile = db_session.query(UploadProfile).filter_by(name="AMD auto policy profile").one()
     package = profile.encounter_set_types[0].grading_packages[0]
-    assert package.image_grading_schemes[0].auto_create_policy == "remidio_amd_report_present"
+    assert package.image_grading_schemes[0].auto_create_policy == "positive_plus_negative_controls"
+    assert package.image_grading_schemes[0].negative_controls_per_positive == 3
 
 
 def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_scheme(db_session, monkeypatch):

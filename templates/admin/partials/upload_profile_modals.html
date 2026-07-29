@@ -400,25 +400,38 @@
                                  data-upload-profile-est-image-scheme>
                           <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
                         </div>
-                        {% if remidio_ocr_linkage in ["dr", "amd", "glaucoma"] %}
-                        <select class="form-select form-select-sm w-auto"
-                                data-upload-profile-image-auto-policy
-                                data-scheme-id="{{ disease.id }}"
-                                data-scheme-name="{{ disease.name }}"
-                                data-remidio-ocr-linkage="{{ remidio_ocr_linkage }}">
-                          <option value="never">Never</option>
-                          {% if remidio_ocr_linkage == "dr" %}
-                          <option value="remidio_dr_report_present">If Remidio DR report detected</option>
-                          {% elif remidio_ocr_linkage == "amd" %}
-                          <option value="remidio_amd_report_present">If Remidio AMD report detected</option>
-                          {% elif remidio_ocr_linkage == "glaucoma" %}
-                          <option value="remidio_glaucoma_report_present">If Remidio glaucoma report detected</option>
-                          {% endif %}
-                          <option value="always" selected>Always</option>
-                        </select>
-                        {% else %}
-                        <span class="small text-muted" data-upload-profile-image-auto-static>Checked schemes are always created</span>
-                        {% endif %}
+                        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+                          <select class="form-select form-select-sm w-auto"
+                                  data-upload-profile-image-auto-policy
+                                  data-scheme-id="{{ disease.id }}"
+                                  data-scheme-name="{{ disease.name }}"
+                                  data-remidio-ocr-linkage="{{ remidio_ocr_linkage }}">
+                            <option value="never">Never</option>
+                            {% if remidio_ocr_linkage == "dr" %}
+                            <option value="remidio_dr_report_present">If Remidio DR report detected</option>
+                            {% elif remidio_ocr_linkage == "amd" %}
+                            <option value="remidio_amd_report_present">If Remidio AMD report detected</option>
+                            {% elif remidio_ocr_linkage == "glaucoma" %}
+                            <option value="remidio_glaucoma_report_present">If Remidio glaucoma report detected</option>
+                            {% endif %}
+                            <option value="positive_plus_negative_controls">Positive + sampled negative controls</option>
+                            <option value="always" selected>Always</option>
+                          </select>
+                          <label class="input-group input-group-sm w-auto d-none mb-0"
+                                 data-upload-profile-negative-controls-wrap>
+                            <span class="input-group-text">1:</span>
+                            <input class="form-control"
+                                   type="number"
+                                   min="0"
+                                   max="20"
+                                   step="1"
+                                   value="3"
+                                   style="width: 4rem;"
+                                   aria-label="Negative controls per positive encounter"
+                                   data-upload-profile-negative-controls
+                                   data-scheme-id="{{ disease.id }}">
+                          </label>
+                        </div>
                       </div>
                       {% else %}
                       <div class="text-muted small">No image-scoped grading schemes configured.</div>

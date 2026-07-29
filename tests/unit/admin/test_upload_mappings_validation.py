@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+import pytest
+
 from encounter_set_types.models import EncounterSetType
 from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
@@ -721,6 +723,72 @@ def test_encounter_set_profile_accepts_positive_plus_negative_controls_policy(db
     package = profile.encounter_set_types[0].grading_packages[0]
     assert package.image_grading_schemes[0].auto_create_policy == "positive_plus_negative_controls"
     assert package.image_grading_schemes[0].negative_controls_per_positive == 3
+
+
+@pytest.mark.parametrize("ratio", [0, 11])
+def test_encounter_set_profile_rejects_invalid_positive_control_ratio(db_session, monkeypatch, ratio):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username=f"sampling_ratio_manager_{ratio}", full_name="Sampling Ratio Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name=f"Sampling Ratio Hospital {ratio}")
+    lab = LabUnit(name=f"Sampling Ratio Lab {ratio}", hospital=hospital)
+    manager.lab_units.append(lab)
+    image_scheme = Disease(name=f"Sampling Ratio Image Scheme {ratio}", grading_scope="image", remidio_ocr_linkage="dr")
+    encounter_scheme = Disease(name=f"Sampling Ratio Encounter Scheme {ratio}", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name=f"Sampling Ratio EncounterSet {ratio}",
+        code=f"sampling_ratio_encounter_set_{ratio}",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name=f"Invalid sampling ratio profile {ratio}",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="Sampling package",
+                            code="sampling_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[image_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=image_scheme.id,
+                            image_scheme_auto_create_policies={image_scheme.id: "positive_plus_negative_controls"},
+                            image_scheme_negative_controls_per_positive={image_scheme.id: ratio},
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is False
+    assert "1 to 10" in result.message
 
 
 def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_scheme(db_session, monkeypatch):

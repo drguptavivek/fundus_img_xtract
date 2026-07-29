@@ -376,7 +376,7 @@
       }, {}),
       image_scheme_negative_controls_per_positive: imageIds.reduce(function (acc, diseaseId) {
         const raw = controls[diseaseId] ?? controls[Number(diseaseId)] ?? 0;
-        const value = Math.max(0, Math.min(20, parseInt(raw, 10) || 0));
+        const value = Math.max(0, Math.min(10, parseInt(raw, 10) || 0));
         acc[diseaseId] = value;
         return acc;
       }, {}),
@@ -527,8 +527,11 @@
     images.forEach(function (choice) {
       const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(choice.id) + '"]');
       const control = row.querySelector('[data-upload-profile-negative-controls][data-scheme-id="' + CSS.escape(choice.id) + '"]');
-      policies[choice.id] = policy ? policy.value : 'always';
-      controls[choice.id] = Math.max(0, Math.min(20, parseInt(control?.value || '0', 10) || 0));
+      const policyValue = policy ? policy.value : 'always';
+      policies[choice.id] = policyValue;
+      controls[choice.id] = policyValue === 'positive_plus_negative_controls'
+        ? Math.max(1, Math.min(10, parseInt(control?.value || '0', 10) || 0))
+        : 0;
     });
     const defaultField = row.querySelector('[data-upload-profile-est-default-image-scheme]');
     if (defaultField) {
@@ -698,9 +701,13 @@
             seedNegativeControlRatio(event.target);
             syncSinglePackageField(packageRow);
             syncImagePolicyControls(packageRow);
+            syncModeCards(form);
+            return;
           }
           if (packageRow && event.target.matches('[data-upload-profile-negative-controls]')) {
             syncSinglePackageField(packageRow);
+            syncModeCards(form);
+            return;
           }
           if (packageRow && event.target.closest('[data-upload-profile-est-package-card]')) {
             const card = event.target.closest('[data-upload-profile-est-package-card]');

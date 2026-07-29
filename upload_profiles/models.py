@@ -405,7 +405,7 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
             name="ck_up_est_pkg_image_auto_create_policy",
         ),
         CheckConstraint(
-            "negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 20",
+            "((auto_create_policy = 'positive_plus_negative_controls' AND negative_controls_per_positive >= 1 AND negative_controls_per_positive <= 10) OR (auto_create_policy <> 'positive_plus_negative_controls' AND negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 10))",
             name="ck_up_est_pkg_image_negative_controls_per_positive",
         ),
         Index("ix_up_est_pkg_image_scheme_package_active", "package_id", "active"),

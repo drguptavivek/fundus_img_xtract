@@ -679,7 +679,7 @@ def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -
                 for disease_id in image_scheme_ids
             },
             image_scheme_negative_controls_per_positive={
-                disease_id: max(0, min(20, int((package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) or 0)))
+                disease_id: int((package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) or 0)
                 for disease_id in image_scheme_ids
             },
         )
@@ -753,13 +753,21 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             )
             if invalid_policies:
                 return f"Unsupported image auto-creation policy in package {package.name}."
+            invalid_sampling_ratios = [
+                disease_id
+                for disease_id, policy in (package.image_scheme_auto_create_policies or {}).items()
+                if policy == "positive_plus_negative_controls"
+                and not (1 <= (package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) <= 10)
+            ]
+            if invalid_sampling_ratios:
+                return f"Positive + sampled negative controls requires a 1 to 10 control ratio in package {package.name}."
             invalid_ratios = [
                 disease_id
                 for disease_id, value in (package.image_scheme_negative_controls_per_positive or {}).items()
-                if value < 0 or value > 20
+                if value < 0 or value > 10
             ]
             if invalid_ratios:
-                return f"Negative controls per positive must be between 0 and 20 in package {package.name}."
+                return f"Negative controls per positive must be between 0 and 10 in package {package.name}."
             disease_ids.update(package.image_grading_scheme_ids)
             disease_ids.update(package.encounter_grading_scheme_ids)
 

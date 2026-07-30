@@ -442,15 +442,18 @@
                     </select>
                   </div>
                   <div class="col-12" data-upload-profile-image-schemes-wrap>
-                    <label class="form-label small mb-1">Image-level grading schemes and auto-creation <span class="text-danger">*</span></label>
-                    <div class="table-responsive border rounded" style="max-height: 18rem; overflow: auto;">
+                    <label class="form-label small mb-1">Image-level grading schemes and task auto-creation <span class="text-danger">*</span></label>
+                    <div class="form-text mb-2">
+                      Select each image-level grading scheme that should create image tasks. In disease-specific mode, choose the matching encounter-level grading scheme in the same row.
+                    </div>
+                    <div class="table-responsive border rounded" style="max-height: 20rem; overflow: auto;">
                       <table class="table table-sm align-middle mb-0">
                         <thead class="table-light position-sticky top-0">
                           <tr>
-                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 13rem; z-index: 2;">Disease</th>
-                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 16rem; z-index: 2;">Encounter-Level Grading</th>
-                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 15rem; z-index: 2;">Creation Mode</th>
-                            <th scope="col" class="position-sticky top-0 bg-light" style="width: 9rem; z-index: 2;">Positive-Negative Ratio</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 18rem; z-index: 2;">Image-Level Grading Scheme</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 18rem; z-index: 2;">Encounter-Level Grading</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 17rem; z-index: 2;">Image Task Creation Mode</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="width: 11rem; z-index: 2;">Positive-Negative Ratio</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -465,7 +468,10 @@
                                    value="{{ disease.id }}"
                                    id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
                                    data-upload-profile-est-image-scheme>
-                            <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
+                            <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">
+                              <span class="fw-semibold">{{ disease.name }}</span>
+                              <span class="d-block text-muted small">Create image-level grading tasks for this scheme</span>
+                            </label>
                           </div>
                         </td>
                         <td>

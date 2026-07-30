@@ -22,5 +22,5 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 <script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
-<script src="{{ url_for('static', filename='js/remidio-api-sync.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/remidio-api-sync.js') }}?v={{ config.get('ASSETS_VERSION','') }}-modal-filter-v2"></script>
 {% endblock %}

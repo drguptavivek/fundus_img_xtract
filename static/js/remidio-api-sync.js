@@ -63,6 +63,13 @@
     applyDetailFilters(modal);
   }
 
+  function closestDetailModal(element) {
+    if (!element || !element.closest) {
+      return null;
+    }
+    return element.closest('[data-remidio-sync-detail-modal]');
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     enableTooltips(document);
   });
@@ -75,14 +82,14 @@
     if (!event.target.matches('[data-remidio-sync-filter]')) {
       return;
     }
-    applyDetailFilters(event.target.closest('.modal'));
+    applyDetailFilters(closestDetailModal(event.target));
   });
 
   document.body.addEventListener('change', function (event) {
     if (!event.target.matches('[data-remidio-sync-filter]')) {
       return;
     }
-    applyDetailFilters(event.target.closest('.modal'));
+    applyDetailFilters(closestDetailModal(event.target));
   });
 
   document.body.addEventListener('click', function (event) {
@@ -90,6 +97,6 @@
     if (!resetButton) {
       return;
     }
-    resetDetailFilters(resetButton.closest('.modal'));
+    resetDetailFilters(closestDetailModal(resetButton));
   });
 })();

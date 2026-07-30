@@ -174,7 +174,12 @@
   </div>
 
   {% for job in jobs %}
-  <div class="modal fade" id="remidio-sync-job-details-{{ job.id }}" tabindex="-1" aria-labelledby="remidio-sync-job-details-label-{{ job.id }}" aria-hidden="true">
+  <div class="modal fade"
+       id="remidio-sync-job-details-{{ job.id }}"
+       tabindex="-1"
+       aria-labelledby="remidio-sync-job-details-label-{{ job.id }}"
+       aria-hidden="true"
+       data-remidio-sync-detail-modal>
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">

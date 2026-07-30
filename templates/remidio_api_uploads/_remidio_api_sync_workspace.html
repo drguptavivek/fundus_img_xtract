@@ -217,6 +217,45 @@
             </div>
           </div>
 
+          <div class="row g-2 align-items-end mb-3" data-remidio-sync-detail-filters>
+            <div class="col-12 col-md-4">
+              <label class="form-label small" for="remidio-sync-site-filter-{{ job.id }}">Site custom identifier</label>
+              <input class="form-control form-control-sm"
+                     id="remidio-sync-site-filter-{{ job.id }}"
+                     type="search"
+                     placeholder="Filter site"
+                     data-remidio-sync-filter="site">
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small" for="remidio-sync-status-filter-{{ job.id }}">Status</label>
+              <select class="form-select form-select-sm"
+                      id="remidio-sync-status-filter-{{ job.id }}"
+                      data-remidio-sync-filter="status">
+                <option value="">All</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label small" for="remidio-sync-files-saved-filter-{{ job.id }}">Files saved</label>
+              <select class="form-select form-select-sm"
+                      id="remidio-sync-files-saved-filter-{{ job.id }}"
+                      data-remidio-sync-filter="files-saved">
+                <option value="">All</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-2">
+              <button class="btn btn-sm btn-outline-secondary w-100"
+                      type="button"
+                      data-remidio-sync-filter-reset>
+                Reset
+              </button>
+            </div>
+          </div>
+
           <div class="table-responsive">
             <table class="table table-sm align-middle">
               <thead>
@@ -232,7 +271,11 @@
               </thead>
               <tbody>
                 {% for group in job.route_groups %}
-                <tr>
+                {% set files_saved = (group.ingest_summary.images_downloaded + group.ingest_summary.reports_downloaded) > 0 %}
+                <tr data-remidio-sync-detail-row
+                    data-site="{{ group.site_custom_identifier or '' }}"
+                    data-status="{{ group.status }}"
+                    data-files-saved="{{ 'yes' if files_saved else 'no' }}">
                   <td class="small">{{ group.window }}</td>
                   <td>
                     <span class="badge text-bg-{{ 'success' if group.status == 'completed' else 'danger' if group.status == 'failed' else 'warning' }}">
@@ -275,6 +318,9 @@
                 {% else %}
                 <tr><td colspan="7" class="text-center text-muted py-4">No route details recorded yet.</td></tr>
                 {% endfor %}
+                <tr class="d-none" data-remidio-sync-filter-empty>
+                  <td colspan="7" class="text-center text-muted py-4">No route details match the filters.</td>
+                </tr>
               </tbody>
             </table>
           </div>

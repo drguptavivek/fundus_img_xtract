@@ -272,7 +272,16 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         "users": users,
         "projects": projects,
         "project_cards": project_cards,
-        "diseases": db.execute(select(Disease).order_by(Disease.name)).scalars().all(),
+        "diseases": (
+            db.execute(
+                select(Disease)
+                .options(selectinload(Disease.disease_gradings).selectinload(DiseaseGrading.features))
+                .order_by(Disease.name)
+            )
+            .scalars()
+            .unique()
+            .all()
+        ),
         "cameras": db.execute(select(Camera).order_by(Camera.name)).scalars().all(),
         "areas": db.execute(select(Area).order_by(Area.name)).scalars().all(),
         "encounter_set_types": (

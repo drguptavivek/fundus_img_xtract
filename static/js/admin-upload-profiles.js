@@ -41,6 +41,62 @@
     badge.className = 'badge ' + className;
   }
 
+  function selectedSchemePopoverContent(button) {
+    if (!button) {
+      return '<div class="text-muted small">No scheme selected.</div>';
+    }
+    const selectedMode = button.hasAttribute('data-upload-profile-selected-scheme-popover');
+    let template = null;
+    if (selectedMode) {
+      const wrap = button.closest('.d-flex') || button.parentElement;
+      const select = wrap ? wrap.querySelector('select') : null;
+      const selectedId = select ? select.value : '';
+      template = selectedId && wrap
+        ? wrap.querySelector('[data-upload-profile-scheme-grade-template][data-scheme-id="' + CSS.escape(selectedId) + '"]')
+        : null;
+    } else {
+      template = button.parentElement
+        ? button.parentElement.querySelector('[data-upload-profile-scheme-grade-template]')
+        : null;
+    }
+    return template ? template.innerHTML : '<div class="text-muted small">No scheme selected.</div>';
+  }
+
+  function syncSchemeGradePopoverButtons(root) {
+    (root || document).querySelectorAll('[data-upload-profile-selected-scheme-popover]').forEach(function (button) {
+      const wrap = button.closest('.d-flex') || button.parentElement;
+      const select = wrap ? wrap.querySelector('select') : null;
+      const hidden = Boolean(select && select.classList.contains('d-none'));
+      const disabled = !select || select.disabled || hidden || !select.value;
+      button.disabled = disabled;
+      button.classList.toggle('d-none', hidden);
+      button.classList.toggle('opacity-50', disabled);
+    });
+  }
+
+  function initSchemeGradePopovers(root) {
+    if (!window.bootstrap || !window.bootstrap.Popover) {
+      return;
+    }
+    (root || document).querySelectorAll('[data-upload-profile-scheme-grade-popover]').forEach(function (button) {
+      if (button.dataset.uploadProfileSchemePopoverReady) {
+        return;
+      }
+      window.bootstrap.Popover.getOrCreateInstance(button, {
+        html: true,
+        sanitize: false,
+        trigger: 'hover focus',
+        placement: 'auto',
+        title: button.getAttribute('title') || 'Grades',
+        content: function () {
+          return selectedSchemePopoverContent(button);
+        }
+      });
+      button.dataset.uploadProfileSchemePopoverReady = '1';
+    });
+    syncSchemeGradePopoverButtons(root);
+  }
+
   function setUrlState(mode, profileId, replace) {
     const url = new URL(window.location.href);
     url.searchParams.delete(PROFILE_MODE_PARAM);
@@ -703,6 +759,7 @@
         staticText.classList.toggle('opacity-50', !enabled);
       }
     });
+    syncSchemeGradePopoverButtons(row);
   }
 
   function seedNegativeControlRatio(policySelect) {
@@ -812,11 +869,13 @@
     syncClinicalSection(form);
     syncEncounterSetTypes(form);
     syncModeCards(form);
+    syncSchemeGradePopoverButtons(form);
   }
 
   function initEditors(root) {
     root.querySelectorAll('[data-upload-profile-editor]').forEach(function (form) {
       syncForm(form);
+      initSchemeGradePopovers(form);
       if (!form.dataset.uploadProfileBound) {
         form.addEventListener('input', function (event) {
           const packageRow = event.target.closest('[data-upload-profile-est-option]');
@@ -843,6 +902,7 @@
           if (packageRow && event.target.matches('[data-upload-profile-disease-encounter-scheme]')) {
             syncSinglePackageField(packageRow);
             syncModeCards(form);
+            syncSchemeGradePopoverButtons(packageRow);
             return;
           }
           if (packageRow && event.target.matches('[data-upload-profile-est-grading-mode]')) {

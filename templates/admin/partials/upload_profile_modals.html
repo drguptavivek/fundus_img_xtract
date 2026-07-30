@@ -1,4 +1,39 @@
 {% from "_forms.html" import csrf_field %}
+{% macro scheme_grade_template(scheme, template_id='') -%}
+<template data-upload-profile-scheme-grade-template data-scheme-id="{{ scheme.id }}" {% if template_id %}id="{{ template_id }}"{% endif %}>
+  <div class="small">
+    <div class="fw-semibold mb-1">{{ scheme.name }}</div>
+    {% set active_grades = scheme.disease_gradings|selectattr('is_active')|sort(attribute='display_order')|list %}
+    {% if active_grades %}
+    <div class="vstack gap-1">
+      {% for grade in active_grades %}
+      <div>
+        <span class="fw-semibold">{{ grade.impression }}</span>
+        {% set features = grade.features|sort(attribute='sr_no')|list %}
+        {% if features %}
+        <span class="text-muted">: {{ features|map(attribute='label')|join(', ') }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-muted">No active grades configured.</div>
+    {% endif %}
+  </div>
+</template>
+{%- endmacro %}
+
+{% macro scheme_grade_button(label='Show grades', selected=false) -%}
+<button class="btn btn-sm btn-outline-secondary rounded-circle flex-shrink-0"
+        type="button"
+        style="width: 1.75rem; height: 1.75rem; padding: 0;"
+        aria-label="{{ label }}"
+        title="{{ label }}"
+        data-upload-profile-scheme-grade-popover
+        {% if selected %}data-upload-profile-selected-scheme-popover{% endif %}>
+  <i class="fas fa-info-circle" aria-hidden="true"></i>
+</button>
+{%- endmacro %}
 
 <section id="upload-profile-view-section" class="mt-4 d-none" data-upload-profile-view-section>
   <div class="card shadow-sm">
@@ -431,15 +466,21 @@
                   </div>
                   <div class="col-12" data-upload-profile-unified-encounter-wrap>
                     <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme" data-upload-profile-est-encounter-label>Unified encounter grading scheme <span class="text-danger">*</span></label>
-                    <select class="form-select form-select-sm"
-                            id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
-                            name="encounter_set_type_{{ encounter_set_type.id }}_encounter_grading_scheme_id"
-                            data-upload-profile-est-encounter-scheme>
-                      <option value="">Select encounter scheme</option>
+                    <div class="d-flex align-items-center gap-2">
+                      <select class="form-select form-select-sm"
+                              id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
+                              name="encounter_set_type_{{ encounter_set_type.id }}_encounter_grading_scheme_id"
+                              data-upload-profile-est-encounter-scheme>
+                        <option value="">Select encounter scheme</option>
+                        {% for disease in diseases if disease.grading_scope == "encounter" %}
+                        <option value="{{ disease.id }}">{{ disease.name }}</option>
+                        {% endfor %}
+                      </select>
+                      {{ scheme_grade_button('Show grades for selected encounter scheme', true) }}
                       {% for disease in diseases if disease.grading_scope == "encounter" %}
-                      <option value="{{ disease.id }}">{{ disease.name }}</option>
+                      {{ scheme_grade_template(disease) }}
                       {% endfor %}
-                    </select>
+                    </div>
                   </div>
                   <div class="col-12" data-upload-profile-image-schemes-wrap>
                     <label class="form-label small mb-1">Image-level grading schemes and task auto-creation <span class="text-danger">*</span></label>
@@ -461,7 +502,8 @@
                       {% set remidio_ocr_linkage = disease.remidio_ocr_linkage or "none" %}
                       <tr data-upload-profile-est-image-row>
                         <td>
-                          <div class="form-check mb-0">
+                          <div class="d-flex align-items-start gap-2">
+                          <div class="form-check mb-0 flex-grow-1">
                             <input class="form-check-input"
                                    type="checkbox"
                                    name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
@@ -473,17 +515,28 @@
                               <span class="d-block text-muted small">Create image-level grading tasks for this scheme</span>
                             </label>
                           </div>
+                          <div>
+                            {{ scheme_grade_button('Show grades for ' ~ disease.name) }}
+                            {{ scheme_grade_template(disease) }}
+                          </div>
+                          </div>
                         </td>
                         <td>
-                          <select class="form-select form-select-sm w-auto d-none"
-                                  aria-label="Disease-specific encounter grading scheme for {{ disease.name }}"
-                                  data-upload-profile-disease-encounter-scheme
-                                  data-scheme-id="{{ disease.id }}">
-                            <option value="">Encounter scheme</option>
+                          <div class="d-flex align-items-center gap-2">
+                            <select class="form-select form-select-sm w-auto d-none"
+                                    aria-label="Disease-specific encounter grading scheme for {{ disease.name }}"
+                                    data-upload-profile-disease-encounter-scheme
+                                    data-scheme-id="{{ disease.id }}">
+                              <option value="">Encounter scheme</option>
+                              {% for encounter_disease in diseases if encounter_disease.grading_scope == "encounter" %}
+                              <option value="{{ encounter_disease.id }}">{{ encounter_disease.name }}</option>
+                              {% endfor %}
+                            </select>
+                            {{ scheme_grade_button('Show grades for selected encounter scheme', true) }}
                             {% for encounter_disease in diseases if encounter_disease.grading_scope == "encounter" %}
-                            <option value="{{ encounter_disease.id }}">{{ encounter_disease.name }}</option>
+                            {{ scheme_grade_template(encounter_disease) }}
                             {% endfor %}
-                          </select>
+                          </div>
                         </td>
                         <td>
                           <select class="form-select form-select-sm w-auto"

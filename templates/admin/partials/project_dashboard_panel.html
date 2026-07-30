@@ -2,136 +2,47 @@
 
 {% if not profiles_only %}
 
-<div class="row g-3 mb-4" id="projects-summary">
-  {% for item in project_cards %}
-  {% set project = item.project %}
-  <div class="col-md-6 col-xl-4">
-    <button
-      class="card shadow-sm h-100 w-100 text-start border bg-body"
-      type="button"
-      hx-get="{{ url_for('admin.upload_project_workspace', project_id=project.id) }}"
-      hx-target="#project-detail-workspace"
-      hx-swap="innerHTML"
-      hx-push-url="false">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start gap-3">
-          <div>
-            <h2 class="h5 mb-1">{{ project.title }}</h2>
-            <div class="text-muted small">{{ project.code }}</div>
-            <div class="small mt-2">
-              <span class="text-muted">PI:</span>
-              {{ item.pi_names|join(', ') if item.pi_names else '-' }}
+<div class="row g-4 align-items-start" id="projects-summary">
+  <div class="col-lg-4 col-xxl-3">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Projects</span>
+        <span class="badge text-bg-secondary">{{ project_cards|length }}</span>
+      </div>
+      <div class="list-group list-group-flush" style="max-height: calc(100vh - 16rem); overflow: auto;">
+        {% for item in project_cards %}
+        {% set project = item.project %}
+        <button
+          class="list-group-item list-group-item-action text-start"
+          type="button"
+          hx-get="{{ url_for('admin.upload_project_workspace', project_id=project.id) }}"
+          hx-target="#project-detail-workspace"
+          hx-swap="innerHTML"
+          hx-push-url="false">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-semibold">{{ project.title }}</div>
+              <div class="text-muted small">{{ project.code }}</div>
             </div>
-          </div>
-          <div class="d-flex align-items-center gap-2">
             <span class="badge {{ 'bg-success' if project.active else 'bg-secondary' }}">{{ 'Active' if project.active else 'Inactive' }}</span>
           </div>
-        </div>
-        {% if project.description %}
-        <p class="small text-muted mt-3 mb-0">{{ project.description }}</p>
-        {% endif %}
-      </div>
-      <div class="card-footer bg-body">
-        <div class="row text-center g-2">
-          <div class="col"><div class="fw-semibold">{{ item.investigator_count }}</div><div class="small text-muted">Investigators</div></div>
-          <div class="col"><div class="fw-semibold">{{ item.uploader_count }}</div><div class="small text-muted">Uploaders</div></div>
-          <div class="col"><div class="fw-semibold">{{ item.mapping_count }}</div><div class="small text-muted">Profiles</div></div>
-        </div>
-      </div>
-    </button>
-  </div>
-  {% else %}
-  <div class="col-12">
-    <div class="card shadow-sm"><div class="card-body text-center text-muted py-5">No projects have been created yet.</div></div>
-  </div>
-  {% endfor %}
-</div>
-
-<div id="project-detail-workspace" class="mb-4">
-  <div class="card shadow-sm">
-    <div class="card-body text-center text-muted py-5">Select a project to manage details, investigators, upload profiles, and uploaders.</div>
-  </div>
-</div>
-
-<div class="row g-4">
-  <div class="col-xl-5" id="project-investigators">
-    <div class="card shadow-sm h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Project Investigators</span>
-        <span class="small text-muted">Select a project above to edit assignments.</span>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>Project</th><th>User</th><th>Role</th><th>Status</th></tr></thead>
-          <tbody>
-            {% for investigator in investigators %}
-            <tr>
-              <td>{{ investigator.project.title }}</td>
-              <td>{{ investigator.user.full_name or investigator.user.username }}</td>
-              <td>{{ investigator.role.replace('_', ' ')|title }}</td>
-              <td>{{ 'Active' if investigator.active else 'Inactive' }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" class="text-center text-muted py-4">No project investigators configured.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+          <div class="d-flex flex-wrap gap-2 mt-2 small text-muted">
+            <span>{{ item.investigator_count }} investigators</span>
+            <span>{{ item.mapping_count }} profiles</span>
+            <span>{{ item.uploader_count }} uploaders</span>
+          </div>
+        </button>
+        {% else %}
+        <div class="list-group-item text-center text-muted py-4">No projects have been created yet.</div>
+        {% endfor %}
       </div>
     </div>
   </div>
 
-  <div class="col-xl-7" id="project-upload-profile-users">
-    <div class="card shadow-sm h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Project Upload Profiles And Users</span>
-        <div class="d-inline-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Profiles</a>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Project</th><th>Profile</th><th>Lab Unit</th><th>Uploaders</th><th>Types</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for mapping in project_profile_mappings %}
-            {% set profile = mapping.profile %}
-            <tr>
-              <td>{{ mapping.project.title }}</td>
-              <td>{{ profile.name }}</td>
-              <td class="small">
-                {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
-                  {{ assignment.lab_unit.name }}{% if not loop.last %}, {% endif %}
-                {% else %}
-                  -
-                {% endfor %}
-              </td>
-              <td class="small">
-                {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
-                <form class="d-inline"
-                      method="post"
-                      action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
-                      hx-post="{{ url_for('fundus_api.remove_upload_profile_user') }}"
-                      hx-swap="none"
-                      data-json-api-htmx>
-                  {{ csrf_field() }}
-                  <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
-                  <button class="btn btn-sm btn-link p-0 align-baseline" type="submit">{{ assignment.user.username }}{% if assignment.lab_unit %} / {{ assignment.lab_unit.name }}{% endif %}</button>{% if not loop.last %}, {% endif %}
-                </form>
-                {% else %}
-                -
-                {% endfor %}
-              </td>
-              <td class="small">{{ profile.upload_kinds|map(attribute='upload_kind')|join(', ') }}</td>
-              <td><span class="badge {{ 'bg-success' if mapping.active and profile.active else 'bg-secondary' }}">{{ 'Active' if mapping.active and profile.active else 'Inactive' }}</span></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" class="text-center text-muted py-4">No upload profiles configured in your lab-unit scope.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  <div class="col-lg-8 col-xxl-9">
+    <div id="project-detail-workspace">
+      <div class="card shadow-sm">
+        <div class="card-body text-center text-muted py-5">Select a project to manage details, investigators, upload profiles, and uploaders.</div>
       </div>
     </div>
   </div>

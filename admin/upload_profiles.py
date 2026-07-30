@@ -23,6 +23,7 @@ from models import (
     user_lab_units,
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
+from remote_inference import admin_service as remote_inference_service
 from upload_profiles.service import manager_lab_unit_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -264,6 +265,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
             }
         )
 
+    remote_inference_options = remote_inference_service.remote_inference_options(db)
     return {
         "lab_units": lab_units,
         "scoped_lab_ids": scoped_lab_ids,
@@ -282,6 +284,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
             .all()
         ),
         "ai_models_by_disease": ai_models_by_disease,
+        **remote_inference_options,
         "upload_profiles": upload_profiles,
         "project_profile_mappings": project_profile_mappings,
         "investigators": investigators,
@@ -348,6 +351,7 @@ def upload_project_workspace(project_id: int):
             mapping.upload_profile_id for mapping in context["project_profile_mappings"] if mapping.active
         }
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
+        context.update(remote_inference_service.project_policy_context(db, project_id))
         return render_template("admin/partials/project_detail_panel.html", **context)
 
 

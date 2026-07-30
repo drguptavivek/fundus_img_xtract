@@ -200,7 +200,11 @@ def process_encounter_set_attachment_pdf_ocr_task(
         wadhwani_task_ids = []
         wadhwani_context = None
         if record.patient_encounter is not None:
-            wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(session, record.patient_encounter)
+            wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(
+                session,
+                record.patient_encounter,
+                trigger_timing="on_report_received",
+            )
             if wadhwani_task_ids:
                 wadhwani_context = {
                     "lab_unit_id": record.patient_encounter.lab_unit_id,

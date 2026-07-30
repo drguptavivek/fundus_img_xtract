@@ -8,9 +8,9 @@ EncounterSet uploads are intentionally quick at ingest time. Automated Wadhwani 
 
 ## Trigger
 
-There are two task creation moments:
+There are two task creation categories:
 
-- Automated Wadhwani Glaucoma inference tasks are created after Remidio API ingest by `services.encounter_set_ai_inference.create_wadhwani_task_ids_for_encounter`. Remidio PDF OCR completion calls the same queue path after OCR metadata is saved, and verification finalization also calls it as a fallback for older or missed EncounterSets.
+- Remote inference policy tasks are evaluated by `services.encounter_set_ai_inference.create_wadhwani_task_ids_for_encounter`. Project-level Remote Inference Policies can run at image receipt, report receipt/OCR completion, after verification, or manual-only. Remidio API ingest sends an `on_image_received` event, Remidio PDF OCR completion sends an `on_report_received` event, and verification finalization sends an `after_verification` event.
 - Human grading package tasks run from `verify_encounter_set.finalize_verification` after verification finalization succeeds.
 
 The human grading package creation function is `_create_verified_encounter_set_tasks(db, encounter)` in `verify_encounter_set/routes.py`.
@@ -45,13 +45,15 @@ Report-triggered policy options are allowed only for image-scoped grading scheme
 
 This linkage is configured on the grading scheme itself, not inferred from the scheme name.
 
-Upload profiles may also configure Wadhwani Glaucoma AI inference for EncounterSet image schemes. The stored value is an `upload_profile_ai_workflows` row with `upload_kind = encounter_set` and an `auto_inference_policy`:
+Projects may configure a Remote Inference Policy. Each active disease rule separates:
 
-- `never`: do not create automated inference work
-- `always`: create automated Wadhwani work for every eligible clinical image
-- `remidio_glaucoma_report_present`: create automated Wadhwani work for disc-focused and macula-focused images when glaucoma Remidio report/OCR evidence exists. If the only glaucoma signal is disc-focused image metadata, only those disc-focused images are queued.
+- `trigger_timing`: `on_image_received`, `on_report_received`, `after_verification`, or `manual_only`
+- `encounter_eligibility`: `always`, `if_matching_report_present`, `if_matching_report_absent`, or `if_any_report_present`
+- `image_selection`: `all_eligible_images`, `disc_focused_images`, `macula_focused_images`, or `disc_or_macula_images`
 
-These AI workflow rows are separate from the EncounterSet package image-scheme auto-creation rules. They create AI-only image-scoped `grading_tasks` before verification with `task_source = encounter_set_ai_inference`.
+Matching-report eligibility requires an explicit `disease_report_linkages` row. Existing `diseases.remidio_ocr_linkage` values are migrated into `disease_report_linkages`, but new report-driven rules should rely on the normalized linkage rows rather than disease names.
+
+Remote inference rules create AI-only image-scoped `grading_tasks` before or after verification according to the trigger timing, with `task_source = encounter_set_ai_inference`. The legacy `upload_profile_ai_workflows` rows remain as a compatibility fallback only when no active project Remote Inference Policy is assigned.
 
 ## Runtime Rows
 

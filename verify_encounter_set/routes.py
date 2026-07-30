@@ -741,7 +741,7 @@ def finalize_verification(uuid):
         encounter.encounter_verified_at = utcnow()
 
         created_tasks = _create_verified_encounter_set_tasks(db, encounter)
-        wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(db, encounter)
+        wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(db, encounter, trigger_timing="after_verification")
         if wadhwani_task_ids:
             _enqueue_wadhwani_after_commit(
                 tuple(wadhwani_task_ids),

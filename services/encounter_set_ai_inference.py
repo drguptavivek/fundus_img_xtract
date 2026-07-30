@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from db_transaction_manager import transaction_scope
 from job_store import db_create_job
 from models import AIInferenceRun, AIModelIntegration, EncounterSetGradingPackage, Grade, GradingTask, PatientEncounters
+from remote_inference.models import DiseaseReportLinkage, ProjectRemoteInferencePolicy, RemoteInferencePolicyRule
 from upload_profiles.models import UploadProfileAIWorkflow
 from utils.celery_helpers import enqueue_task
 
@@ -28,32 +29,49 @@ MACULA_FOCUSED_IMAGE_TERMS = (
 )
 
 
-def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> list[int]:
+def create_wadhwani_task_ids_for_encounter(
+    db,
+    encounter: PatientEncounters,
+    *,
+    trigger_timing: str | None = None,
+) -> list[int]:
     """Create/reuse Glaucoma image tasks for configured EncounterSet Wadhwani inference."""
-    if not encounter.upload_profile_id:
+    if not encounter.upload_profile_id and not encounter.project_id:
         return []
-    evidence = encounter_set_report_evidence(encounter)
-    workflows = (
-        db.query(UploadProfileAIWorkflow)
-        .join(AIModelIntegration, AIModelIntegration.ai_model_id == UploadProfileAIWorkflow.ai_model_id)
-        .filter(
-            UploadProfileAIWorkflow.upload_profile_id == encounter.upload_profile_id,
-            UploadProfileAIWorkflow.upload_kind == "encounter_set",
-            UploadProfileAIWorkflow.active.is_(True),
-            AIModelIntegration.provider == "wadhwani_glaucoma",
-            AIModelIntegration.is_enabled.is_(True),
-        )
-        .all()
-    )
-    applicable_workflows: list[UploadProfileAIWorkflow] = []
+    applicable_workflows: list[UploadProfileAIWorkflow | RemoteInferencePolicyRule] = []
     workflow_disease_scopes: dict[int, str] = {}
-    for row in workflows:
-        scope = _ai_workflow_task_scope(row.auto_inference_policy, evidence)
-        if scope is None:
-            continue
-        applicable_workflows.append(row)
-        if workflow_disease_scopes.get(row.disease_id) != "all":
-            workflow_disease_scopes[row.disease_id] = scope
+    remote_policy_rules = _active_remote_policy_rules(db, encounter, trigger_timing)
+    if remote_policy_rules:
+        for row in remote_policy_rules:
+            scope = _remote_rule_task_scope(db, encounter, row)
+            if scope is None:
+                continue
+            applicable_workflows.append(row)
+            if workflow_disease_scopes.get(row.disease_id) != "all":
+                workflow_disease_scopes[row.disease_id] = scope
+    elif _has_active_remote_policy(db, encounter):
+        return []
+    elif encounter.upload_profile_id:
+        evidence = encounter_set_report_evidence(encounter)
+        workflows = (
+            db.query(UploadProfileAIWorkflow)
+            .join(AIModelIntegration, AIModelIntegration.ai_model_id == UploadProfileAIWorkflow.ai_model_id)
+            .filter(
+                UploadProfileAIWorkflow.upload_profile_id == encounter.upload_profile_id,
+                UploadProfileAIWorkflow.upload_kind == "encounter_set",
+                UploadProfileAIWorkflow.active.is_(True),
+                AIModelIntegration.provider == "wadhwani_glaucoma",
+                AIModelIntegration.is_enabled.is_(True),
+            )
+            .all()
+        )
+        for row in workflows if trigger_timing != "manual_only" else []:
+            scope = _ai_workflow_task_scope(row.auto_inference_policy, evidence)
+            if scope is None:
+                continue
+            applicable_workflows.append(row)
+            if workflow_disease_scopes.get(row.disease_id) != "all":
+                workflow_disease_scopes[row.disease_id] = scope
     if not workflow_disease_scopes:
         return []
 
@@ -68,6 +86,8 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
             continue
         for disease_id, scope in sorted(workflow_disease_scopes.items()):
             if scope == "disc" and not _is_disc_focused_encounter_set_image(image):
+                continue
+            if scope == "macula" and not _is_macula_focused_encounter_set_image(image):
                 continue
             if scope == "disc_or_macula" and not _is_disc_or_macula_focused_encounter_set_image(image):
                 continue
@@ -94,7 +114,7 @@ def create_wadhwani_task_ids_for_encounter(db, encounter: PatientEncounters) -> 
     return queueable_wadhwani_task_ids(db, task_ids, applicable_workflows)
 
 
-def queueable_wadhwani_task_ids(db, task_ids: list[int], workflows: list[UploadProfileAIWorkflow]) -> list[int]:
+def queueable_wadhwani_task_ids(db, task_ids: list[int], workflows: list[UploadProfileAIWorkflow | RemoteInferencePolicyRule]) -> list[int]:
     if not task_ids:
         return []
     model_ids = {workflow.ai_model_id for workflow in workflows}
@@ -156,6 +176,7 @@ def enqueue_wadhwani_for_task_ids(
 def enqueue_wadhwani_for_encounter_ids(
     encounter_ids: list[int] | tuple[int, ...],
     *,
+    trigger_timing: str | None = None,
     user_id: int | None = None,
     username: str | None = None,
     remote_addr: str | None = None,
@@ -174,7 +195,7 @@ def enqueue_wadhwani_for_encounter_ids(
         )
         rows = []
         for encounter in encounters:
-            task_ids = create_wadhwani_task_ids_for_encounter(db, encounter)
+            task_ids = create_wadhwani_task_ids_for_encounter(db, encounter, trigger_timing=trigger_timing)
             if task_ids:
                 rows.append((encounter.id, encounter.lab_unit_id, encounter.project_id, encounter.upload_profile_id, task_ids))
         db.flush()
@@ -226,6 +247,118 @@ def encounter_set_report_evidence(encounter: PatientEncounters) -> set[str]:
         evidence.add("glaucoma_disc_image")
         evidence.add("glaucoma")
     return evidence
+
+
+def _active_remote_policy_rules(
+    db,
+    encounter: PatientEncounters,
+    trigger_timing: str | None,
+) -> list[RemoteInferencePolicyRule]:
+    if not encounter.project_id:
+        return []
+    query = (
+        db.query(RemoteInferencePolicyRule)
+        .join(ProjectRemoteInferencePolicy, ProjectRemoteInferencePolicy.remote_inference_policy_id == RemoteInferencePolicyRule.policy_id)
+        .join(AIModelIntegration, AIModelIntegration.ai_model_id == RemoteInferencePolicyRule.ai_model_id)
+        .filter(
+            ProjectRemoteInferencePolicy.project_id == encounter.project_id,
+            ProjectRemoteInferencePolicy.active.is_(True),
+            RemoteInferencePolicyRule.upload_kind == "encounter_set",
+            RemoteInferencePolicyRule.active.is_(True),
+            AIModelIntegration.provider == "wadhwani_glaucoma",
+            AIModelIntegration.is_enabled.is_(True),
+        )
+        .order_by(RemoteInferencePolicyRule.display_order, RemoteInferencePolicyRule.id)
+    )
+    if trigger_timing:
+        query = query.filter(RemoteInferencePolicyRule.trigger_timing == trigger_timing)
+    else:
+        query = query.filter(RemoteInferencePolicyRule.trigger_timing != "manual_only")
+    return query.all()
+
+
+def _has_active_remote_policy(db, encounter: PatientEncounters) -> bool:
+    if not encounter.project_id:
+        return False
+    return (
+        db.query(ProjectRemoteInferencePolicy.id)
+        .filter(
+            ProjectRemoteInferencePolicy.project_id == encounter.project_id,
+            ProjectRemoteInferencePolicy.active.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
+def _remote_rule_task_scope(db, encounter: PatientEncounters, rule: RemoteInferencePolicyRule) -> str | None:
+    if not _encounter_eligibility_applies(db, encounter, rule):
+        return None
+    if rule.image_selection == "disc_focused_images":
+        return "disc"
+    if rule.image_selection == "macula_focused_images":
+        return "macula"
+    if rule.image_selection == "disc_or_macula_images":
+        return "disc_or_macula"
+    return "all"
+
+
+def _encounter_eligibility_applies(db, encounter: PatientEncounters, rule: RemoteInferencePolicyRule) -> bool:
+    report_types = _encounter_report_types(encounter)
+    if rule.encounter_eligibility == "always":
+        return True
+    if rule.encounter_eligibility == "if_any_report_present":
+        return bool(report_types)
+    matching_report = _matching_report_present(db, rule.disease_id, report_types)
+    if rule.encounter_eligibility == "if_matching_report_present":
+        return matching_report
+    if rule.encounter_eligibility == "if_matching_report_absent":
+        return _has_report_linkage(db, rule.disease_id) and not matching_report
+    return False
+
+
+def _matching_report_present(db, disease_id: int, report_types: set[str]) -> bool:
+    linked_report_types = {
+        row[0]
+        for row in db.query(DiseaseReportLinkage.report_type)
+        .filter(
+            DiseaseReportLinkage.disease_id == disease_id,
+            DiseaseReportLinkage.report_source == "remidio",
+            DiseaseReportLinkage.active.is_(True),
+        )
+        .all()
+    }
+    if not linked_report_types:
+        return False
+    return bool(linked_report_types.intersection(report_types))
+
+
+def _has_report_linkage(db, disease_id: int) -> bool:
+    return (
+        db.query(DiseaseReportLinkage.id)
+        .filter(
+            DiseaseReportLinkage.disease_id == disease_id,
+            DiseaseReportLinkage.report_source == "remidio",
+            DiseaseReportLinkage.active.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
+def _encounter_report_types(encounter: PatientEncounters) -> set[str]:
+    report_types: set[str] = set()
+    for attachment in encounter.encounter_set_attachments or []:
+        metadata = attachment.metadata_json or {}
+        report_type = str(metadata.get("remidio_report_type") or attachment.asset_kind or "").lower()
+        ocr = metadata.get("ocr") if isinstance(metadata.get("ocr"), dict) else {}
+        if "dr" in report_type or isinstance(ocr.get("dr_report"), dict):
+            report_types.add("dr")
+        if "amd" in report_type or isinstance(ocr.get("amd_report"), dict):
+            report_types.add("amd")
+        if "glaucoma" in report_type or isinstance(ocr.get("glaucoma_report"), dict):
+            report_types.add("glaucoma")
+    return report_types
 
 
 def _is_disc_focused_encounter_set_image(image) -> bool:

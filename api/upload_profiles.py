@@ -5,6 +5,7 @@ from flask import flash, jsonify, request, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
+from remote_inference import admin_service as remote_inference_service
 from upload_profiles import admin_service as upload_profile_service
 
 from . import api_bp
@@ -202,6 +203,17 @@ def update_upload_profile_project(project_id: int):
     """Update a project for upload profile governance."""
     dto = _project_input_from_request()
     return _json_result(upload_profile_service.update_project(project_id, dto), redirect_endpoint="admin.upload_projects_admin")
+
+
+@api_bp.route("/upload-profiles/projects/<int:project_id>/remote-inference-policy", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def save_project_remote_inference_policy(project_id: int):
+    """Create or update the remote inference policy assigned to a project."""
+    dto = remote_inference_service.policy_input_from_form(request.form)
+    return _json_result(
+        remote_inference_service.save_project_policy(current_user.id, project_id, dto),
+        redirect_endpoint="admin.upload_projects_admin",
+    )
 
 
 @api_bp.route("/upload-profiles/investigators", methods=["POST"])

@@ -7,11 +7,14 @@ from encounter_sets.models import EncounterSetAttachment
 from models import (
     AIInferenceRun,
     AIModel,
+    AIModelDisease,
     AIModelIntegration,
     EncounterSetImage,
     GradingTask,
     PatientEncounters,
+    Project,
 )
+from remote_inference.models import DiseaseReportLinkage, ProjectRemoteInferencePolicy, RemoteInferencePolicy, RemoteInferencePolicyRule
 from services.encounter_set_ai_inference import (
     create_wadhwani_task_ids_for_encounter,
     encounter_set_report_evidence,
@@ -51,7 +54,7 @@ def _encounter_set_wadhwani_profile(db_session, glaucoma):
     return profile, ai_model
 
 
-def _encounter_with_image(db_session, core_test_data, profile, *, metadata):
+def _encounter_with_image(db_session, core_test_data, profile, *, metadata, project_id=None):
     lab_unit = core_test_data["lab_unit"]
     encounter = PatientEncounters(
         name=f"Disc Evidence Encounter {uuid4()}",
@@ -60,6 +63,7 @@ def _encounter_with_image(db_session, core_test_data, profile, *, metadata):
         capture_date_dt=date(2026, 7, 29),
         is_set_based=True,
         lab_unit_id=lab_unit.id,
+        project_id=project_id,
         upload_profile_id=profile.id,
     )
     db_session.add(encounter)
@@ -80,6 +84,42 @@ def _encounter_with_image(db_session, core_test_data, profile, *, metadata):
     db_session.add(image)
     db_session.flush()
     return encounter, image
+
+
+def _remote_policy_project(db_session, core_test_data, glaucoma, *, trigger_timing, encounter_eligibility, image_selection):
+    project = Project(title=f"Remote Policy Project {uuid4()}", code=f"RIP{str(uuid4())[:8]}", active=True)
+    profile = UploadProfile(
+        name=f"Remote Policy Profile {uuid4()}",
+        active=True,
+        allow_mydriatic=True,
+        allow_non_mydriatic=True,
+    )
+    profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
+    ai_model = AIModel(name=f"Remote Policy Wadhwani {uuid4()}", version="test")
+    ai_model.integration = AIModelIntegration(
+        provider=WADHWANI_PROVIDER,
+        is_enabled=True,
+        client_id="test-client",
+        bearer_token="test-token",
+    )
+    ai_model.disease_links.append(AIModelDisease(disease_id=glaucoma.id, active=True))
+    policy = RemoteInferencePolicy(name=f"Remote Policy {uuid4()}", active=True)
+    policy.rules.append(
+        RemoteInferencePolicyRule(
+            disease_id=glaucoma.id,
+            ai_model=ai_model,
+            upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
+            trigger_timing=trigger_timing,
+            encounter_eligibility=encounter_eligibility,
+            image_selection=image_selection,
+            active=True,
+        )
+    )
+    db_session.add_all([project, profile, ai_model, policy])
+    db_session.flush()
+    db_session.add(ProjectRemoteInferencePolicy(project_id=project.id, remote_inference_policy_id=policy.id, active=True))
+    db_session.flush()
+    return project, profile, ai_model
 
 
 def test_disc_focused_remidio_image_satisfies_glaucoma_wadhwani_policy(db_session, core_test_data):
@@ -221,3 +261,89 @@ def test_existing_queued_wadhwani_run_is_not_requeued(db_session, core_test_data
     db_session.flush()
 
     assert create_wadhwani_task_ids_for_encounter(db_session, encounter) == []
+
+
+def test_remote_policy_trigger_and_image_selection_control_wadhwani_tasks(db_session, core_test_data):
+    project, profile, _ai_model = _remote_policy_project(
+        db_session,
+        core_test_data,
+        core_test_data["glaucoma"],
+        trigger_timing="on_image_received",
+        encounter_eligibility="always",
+        image_selection="macula_focused_images",
+    )
+    encounter, _disc_image = _encounter_with_image(
+        db_session,
+        core_test_data,
+        profile,
+        metadata={"image_segment": "disc centered"},
+        project_id=project.id,
+    )
+    macula_image = EncounterSetImage(
+        patient_encounter_id=encounter.id,
+        spatial_position=2,
+        original_filename=f"{uuid4()}.jpg",
+        folder_rel="encounter-set-tests",
+        hospital_id=core_test_data["lab_unit"].hospital_id,
+        camera_id=core_test_data["camera"].id,
+        asset_kind="clinical_image",
+        creates_task=True,
+        visible_to_grader=True,
+        is_not_gradable=False,
+        metadata_json={"fundus_field": "macula"},
+    )
+    db_session.add(macula_image)
+    db_session.flush()
+
+    assert create_wadhwani_task_ids_for_encounter(db_session, encounter, trigger_timing="after_verification") == []
+    task_ids = create_wadhwani_task_ids_for_encounter(db_session, encounter, trigger_timing="on_image_received")
+
+    assert len(task_ids) == 1
+    task = db_session.get(GradingTask, task_ids[0])
+    assert task.encounter_set_image_id == macula_image.id
+
+
+def test_matching_report_policy_requires_explicit_disease_report_linkage(db_session, core_test_data):
+    project, profile, _ai_model = _remote_policy_project(
+        db_session,
+        core_test_data,
+        core_test_data["glaucoma"],
+        trigger_timing="on_report_received",
+        encounter_eligibility="if_matching_report_present",
+        image_selection="disc_or_macula_images",
+    )
+    encounter, disc_image = _encounter_with_image(
+        db_session,
+        core_test_data,
+        profile,
+        metadata={"image_segment": "disc centered"},
+        project_id=project.id,
+    )
+    attachment = EncounterSetAttachment(
+        patient_encounter_id=encounter.id,
+        asset_kind="pdf",
+        original_filename="glaucoma-report.pdf",
+        stored_filename="glaucoma-report.pdf",
+        folder_rel="encounter-set-tests",
+        mime_type="application/pdf",
+        metadata_json={"remidio_report_type": "glaucoma"},
+    )
+    db_session.add(attachment)
+    db_session.flush()
+
+    assert create_wadhwani_task_ids_for_encounter(db_session, encounter, trigger_timing="on_report_received") == []
+
+    db_session.add(
+        DiseaseReportLinkage(
+            disease_id=core_test_data["glaucoma"].id,
+            report_source="remidio",
+            report_type="glaucoma",
+            active=True,
+        )
+    )
+    db_session.flush()
+    task_ids = create_wadhwani_task_ids_for_encounter(db_session, encounter, trigger_timing="on_report_received")
+
+    assert len(task_ids) == 1
+    task = db_session.get(GradingTask, task_ids[0])
+    assert task.encounter_set_image_id == disc_image.id

@@ -465,6 +465,21 @@ def run_mobile_upload_post_commit(app, post_commit: dict[str, Any] | None) -> No
             app.logger.warning("Could not queue mobile Remidio ZIP processing: %s", sanitize_log_value(exc))
         return
 
+    if post_commit.get("kind") == "encounter_set":
+        try:
+            from services.encounter_set_ai_inference import enqueue_wadhwani_for_encounter_ids
+
+            enqueue_wadhwani_for_encounter_ids(
+                [int(post_commit["encounter_id"])],
+                trigger_timing="on_image_received",
+                user_id=int(post_commit["user_id"]),
+                username=post_commit.get("username"),
+                remote_addr=post_commit.get("remote_addr"),
+            )
+        except Exception as exc:
+            app.logger.warning("Could not queue mobile EncounterSet inference: %s", sanitize_log_value(exc))
+        return
+
     if post_commit.get("kind") != "direct_image":
         return
     try:
@@ -705,6 +720,13 @@ def _create_encounter_set_upload(*, db, actor: _Actor, form: MultiDict, files: M
     payload["encounter_uuid"] = encounter.uuid
     payload["referral_suggestion"] = encounter.referral_suggestion
     payload["referral_positive_diseases"] = encounter.referral_positive_diseases_json or []
+    payload["_post_commit"] = {
+        "kind": "encounter_set",
+        "user_id": actor.user_id,
+        "username": actor.username,
+        "remote_addr": actor.remote_addr,
+        "encounter_id": encounter.id,
+    }
     return payload
 
 

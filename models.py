@@ -2882,3 +2882,9 @@ from remidio_api_integration.models import (  # noqa: E402,F401
     ProjectUploadProfileRemidioApiBinding,
     RemidioApiSourceRule,
 )
+from remote_inference.models import (  # noqa: E402,F401
+    DiseaseReportLinkage,
+    ProjectRemoteInferencePolicy,
+    RemoteInferencePolicy,
+    RemoteInferencePolicyRule,
+)

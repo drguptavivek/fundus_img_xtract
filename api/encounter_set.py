@@ -17,6 +17,7 @@ from upload_profiles.models import PatientEncounterTargetDisease
 from auth.utils import utcnow
 from auth.decorators import token_auth_required
 from services.encounter_referral_suggestion import normalize_referral_positive_diseases, normalize_referral_suggestion
+from services.encounter_set_ai_inference import enqueue_wadhwani_for_encounter_ids
 from utils.rate_limiter import api_rate_limit
 from utils.log_sanitize import sanitize_log_value
 
@@ -628,6 +629,22 @@ def upload_encounter_set_image():
         )
         db.add(set_image)
         db.commit()
+
+        try:
+            enqueue_wadhwani_for_encounter_ids(
+                [encounter.id],
+                trigger_timing="on_image_received",
+                user_id=uploader_user_id,
+                username=getattr(uploader_user, "username", None),
+                remote_addr=request.remote_addr,
+            )
+        except Exception as exc:
+            current_app.logger.warning(
+                "Failed to queue EncounterSet Wadhwani inference after image upload encounter_id=%s error=%s",
+                sanitize_log_value(encounter.id),
+                sanitize_log_value(exc),
+                exc_info=True,
+            )
 
         # Schedule thumbnail generation in background
         try:

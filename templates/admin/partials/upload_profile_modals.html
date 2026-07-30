@@ -542,48 +542,6 @@
             {% endfor %}
           </div>
 
-          <div class="border rounded p-3 mt-3 bg-light-subtle" data-upload-profile-encounter-set-ai-section>
-            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-              <div>
-                <div class="fw-semibold">Automated Wadhwani Glaucoma Inference</div>
-                <div class="small text-muted">Choose which eligible Glaucoma EncounterSet image tasks should be sent to the linked Wadhwani model after verification.</div>
-              </div>
-              <span class="badge text-bg-light border">EncounterSet images</span>
-            </div>
-            <div class="vstack gap-2">
-              {% set wadhwani_rows = namespace(count=0) %}
-              {% for disease in diseases if disease.grading_scope == "image" %}
-                {% for model in ai_models_by_disease.get(disease.id, []) %}
-                  {% if model.integration and model.integration.provider == 'wadhwani_glaucoma' and model.integration.is_enabled %}
-                  {% set wadhwani_rows.count = wadhwani_rows.count + 1 %}
-                  <div class="row g-2 align-items-center"
-                       data-upload-profile-encounter-ai-row
-                       data-disease-id="{{ disease.id }}">
-                    <div class="col-lg-5">
-                      <div class="fw-semibold small">{{ disease.name }}</div>
-                      <div class="text-muted small">{{ model.name }} {{ model.version }}</div>
-                    </div>
-                    <div class="col-lg-7">
-                      <select class="form-select form-select-sm"
-                              name="ai_workflows"
-                              data-upload-profile-encounter-ai-policy
-                              data-upload-profile-ai-kind="encounter_set"
-                              data-disease-id="{{ disease.id }}"
-                              data-model-id="{{ model.id }}">
-                        <option value="">Do not run</option>
-                        <option value="{{ disease.id }}:{{ model.id }}:encounter_set:remidio_glaucoma_report_present">Run if Remidio glaucoma report detected</option>
-                        <option value="{{ disease.id }}:{{ model.id }}:encounter_set:always">Run for all eligible images</option>
-                      </select>
-                    </div>
-                  </div>
-                  {% endif %}
-                {% endfor %}
-              {% endfor %}
-              {% if wadhwani_rows.count == 0 %}
-              <div class="text-muted small">No enabled Wadhwani glaucoma AI model is linked to an image-scoped grading scheme.</div>
-              {% endif %}
-            </div>
-          </div>
         </div>
 
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3">

@@ -1748,7 +1748,7 @@ def _queue_encounter_set_ai_inference(result: dict[str, Any], *, user_id: int | 
         encounter_ids = encounter_ids_from_ingest_result(result)
         if not encounter_ids:
             return {"wadhwani_tasks_queued": 0}
-        ai_result = enqueue_wadhwani_for_encounter_ids(encounter_ids, user_id=user_id)
+        ai_result = enqueue_wadhwani_for_encounter_ids(encounter_ids, trigger_timing="on_image_received", user_id=user_id)
         LOGGER.info(
             "Queued EncounterSet Wadhwani inference from Remidio API encounter_count=%s task_count=%s",
             sanitize_log_value(len(encounter_ids)),

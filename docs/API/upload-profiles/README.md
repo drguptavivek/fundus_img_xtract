@@ -39,6 +39,7 @@ Error:
 
 - `POST /api/upload-profiles/projects`
 - `POST|PATCH /api/upload-profiles/projects/<project_id>`
+- `POST /api/upload-profiles/projects/<project_id>/remote-inference-policy`
 - `POST /api/upload-profiles/investigators`
 - `POST /api/upload-profiles/projects/<project_id>/profiles`
 - `POST /api/upload-profiles/project-profiles/<project_upload_profile_id>/activate`
@@ -77,6 +78,19 @@ Investigator assignment fields for `/api/upload-profiles/investigators`:
 - `project_id` integer, required
 - `user_id` integer, required
 - `role` string, one of `principal_investigator`, `co_investigator`, `coordinator`, or `collaborator`
+
+Remote inference policy fields for `/api/upload-profiles/projects/<project_id>/remote-inference-policy`:
+
+- `remote_inference_policy_name` string, required
+- `remote_inference_policy_description` string, optional
+- `remote_inference_rule` repeated values as `disease_id:ai_model_id`
+- For each enabled rule, fields are keyed as `remote_rule_<disease_id>_<ai_model_id>_*`:
+  - `upload_kind`: `direct_image`, `pregraded`, `remidio`, or `encounter_set`
+  - `trigger_timing`: `on_image_received`, `on_report_received`, `after_verification`, or `manual_only`
+  - `encounter_eligibility`: `always`, `if_matching_report_present`, `if_matching_report_absent`, or `if_any_report_present`
+  - `image_selection`: `all_eligible_images`, `disc_focused_images`, `macula_focused_images`, or `disc_or_macula_images`
+
+`if_matching_report_present` and `if_matching_report_absent` require an explicit active `disease_report_linkages` row for the disease.
 
 Example project create:
 
@@ -119,9 +133,9 @@ Profile create/update fields:
   - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
   - `remidio_amd_report_present` requires `remidio_ocr_linkage = amd`
   - `remidio_glaucoma_report_present` requires `remidio_ocr_linkage = glaucoma`
-- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format. A fourth part may be supplied as `disease_id:ai_model_id:upload_kind:auto_inference_policy`; omitted policy defaults to `always` for backward compatibility. Supported policies are `always`, `never`, and `remidio_glaucoma_report_present`.
+- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format. A fourth part may be supplied as `disease_id:ai_model_id:upload_kind:auto_inference_policy`; omitted policy defaults to `always` for backward compatibility. Supported policies are `always`, `never`, and `remidio_glaucoma_report_present`. EncounterSet remote inference should now be configured at project level with Remote Inference Policies; upload-profile AI workflows remain as a legacy fallback.
   - For `direct_image`, `pregraded`, and `remidio`, the disease and upload kind must be enabled on the profile.
-  - For `encounter_set`, the disease must be one of the selected EncounterSet package image-level grading schemes. The Wadhwani Glaucoma policy creates image-scoped AI inference tasks before human verification; human grading tasks are still created after verification.
+  - For `encounter_set`, the disease must be one of the selected EncounterSet package image-level grading schemes. Project Remote Inference Policies decide whether image-scoped AI inference tasks are created on image receipt, on report receipt, after verification, or manual-only. Human grading tasks are still created after verification.
   - For EncounterSet Wadhwani workflows, `remidio_glaucoma_report_present` is satisfied by glaucoma Remidio report/OCR evidence or by disc-focused Remidio image metadata such as `fundus_field`, `image_segment`, or `focus`. Glaucoma report/OCR evidence queues disc-focused and macula-focused images; when disc-focused image metadata is the only glaucoma signal, only those disc-focused images are queued.
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans, used only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `camera_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled

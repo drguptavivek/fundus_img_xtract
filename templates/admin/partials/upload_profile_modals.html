@@ -421,6 +421,15 @@
                           <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
                         </div>
                         <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+                          <select class="form-select form-select-sm w-auto d-none"
+                                  aria-label="Disease-specific encounter grading scheme for {{ disease.name }}"
+                                  data-upload-profile-disease-encounter-scheme
+                                  data-scheme-id="{{ disease.id }}">
+                            <option value="">Encounter scheme</option>
+                            {% for encounter_disease in diseases if encounter_disease.grading_scope == "encounter" %}
+                            <option value="{{ encounter_disease.id }}">{{ encounter_disease.name }}</option>
+                            {% endfor %}
+                          </select>
                           <select class="form-select form-select-sm w-auto"
                                   data-upload-profile-image-auto-policy
                                   data-scheme-id="{{ disease.id }}"

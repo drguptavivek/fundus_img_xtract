@@ -278,8 +278,16 @@
     }
     return selectedRows.every(function (row) {
       syncSinglePackageField(row);
-      return row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)').length > 0
-        && Boolean(row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value);
+      const selectedImages = row.querySelectorAll('[data-upload-profile-est-image-scheme]:checked:not(:disabled)');
+      if (selectedImages.length === 0) {
+        return false;
+      }
+      if (selectedEncounterSetGradingMode(row) !== 'disease_specific') {
+        return Boolean(row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value);
+      }
+      return Array.from(selectedImages).every(function (input) {
+        return Boolean(diseaseEncounterSchemeValue(row, input.value));
+      });
     });
   }
 
@@ -527,6 +535,15 @@
         input.value = '3';
       }
     });
+    row.querySelectorAll('[data-upload-profile-disease-encounter-scheme]').forEach(function (select) {
+      const encounterPackage = packages.find(function (item) {
+        return (item.image_grading_scheme_ids || []).map(String).includes(String(select.dataset.schemeId));
+      });
+      const encounterId = encounterPackage?.encounter_grading_scheme_ids?.[0];
+      if (encounterId) {
+        select.value = String(encounterId);
+      }
+    });
     row.dataset.uploadProfilePackageApplied = signature;
   }
 
@@ -542,9 +559,15 @@
     const label = row.querySelector('[data-upload-profile-est-encounter-label]');
     if (label) {
       label.innerHTML = normalized === 'disease_specific'
-        ? 'Default encounter grading scheme <span class="text-danger">*</span>'
+        ? 'Default encounter grading scheme'
         : 'Unified encounter grading scheme <span class="text-danger">*</span>';
     }
+    syncImagePolicyControls(row);
+  }
+
+  function diseaseEncounterSchemeValue(row, imageSchemeId) {
+    const select = row.querySelector('[data-upload-profile-disease-encounter-scheme][data-scheme-id="' + CSS.escape(String(imageSchemeId)) + '"]');
+    return select?.value || '';
   }
 
   function syncSinglePackageField(row) {
@@ -578,7 +601,8 @@
         const existing = existingByImage[choice.id] || {};
         const encounterIds = Array.isArray(existing.encounter_grading_scheme_ids) && existing.encounter_grading_scheme_ids.length
           ? existing.encounter_grading_scheme_ids
-          : (encounter ? [encounter] : []);
+          : [];
+        const selectedEncounter = diseaseEncounterSchemeValue(row, choice.id) || encounterIds[0] || encounter;
         return {
           name: existing.name || (choice.name + ' EncounterSet Package'),
           code: existing.code || (slugifyPackageCode(choice.name) + '_encounter_set'),
@@ -586,7 +610,7 @@
           grading_mode: 'disease_specific',
           image_grading_scheme_ids: [choice.id],
           default_image_grading_scheme_id: choice.id,
-          encounter_grading_scheme_ids: encounterIds,
+          encounter_grading_scheme_ids: selectedEncounter ? [selectedEncounter] : [],
           image_scheme_auto_create_policies: { [choice.id]: policies[choice.id] },
           image_scheme_negative_controls_per_positive: { [choice.id]: controls[choice.id] },
           active: true
@@ -616,11 +640,21 @@
       const policy = imageRow.querySelector('[data-upload-profile-image-auto-policy]');
       const controls = imageRow.querySelector('[data-upload-profile-negative-controls]');
       const controlsWrap = imageRow.querySelector('[data-upload-profile-negative-controls-wrap]');
+      const diseaseEncounterSelect = imageRow.querySelector('[data-upload-profile-disease-encounter-scheme]');
       const staticText = imageRow.querySelector('[data-upload-profile-image-auto-static]');
       const enabled = Boolean(checkbox && checkbox.checked && !checkbox.disabled);
+      const diseaseSpecific = selectedEncounterSetGradingMode(imageRow.closest('[data-upload-profile-est-option]')) === 'disease_specific';
       if (policy) {
         policy.disabled = !enabled;
         policy.classList.toggle('opacity-50', !enabled);
+      }
+      if (diseaseEncounterSelect) {
+        diseaseEncounterSelect.disabled = !(enabled && diseaseSpecific);
+        diseaseEncounterSelect.classList.toggle('d-none', !diseaseSpecific);
+        diseaseEncounterSelect.classList.toggle('opacity-50', !(enabled && diseaseSpecific));
+        if (!enabled && diseaseSpecific) {
+          diseaseEncounterSelect.value = '';
+        }
       }
       if (controls) {
         const showControls = enabled && policy && policy.value === 'positive_plus_negative_controls';
@@ -764,6 +798,11 @@
             return;
           }
           if (packageRow && event.target.matches('[data-upload-profile-negative-controls]')) {
+            syncSinglePackageField(packageRow);
+            syncModeCards(form);
+            return;
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-disease-encounter-scheme]')) {
             syncSinglePackageField(packageRow);
             syncModeCards(form);
             return;

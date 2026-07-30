@@ -143,6 +143,7 @@ def _encounter_set_packages_from_request(form, encounter_set_type_id: int):
                         name=str(row.get("name") or ""),
                         code=str(row.get("code") or ""),
                         applicability=str(row.get("applicability") or "always"),
+                        grading_mode=str(row.get("grading_mode") or "unified"),
                         image_grading_scheme_ids=[
                             value for value in (
                                 upload_profile_service.to_int(str(item)) for item in row.get("image_grading_scheme_ids", [])

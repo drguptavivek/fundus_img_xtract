@@ -373,8 +373,28 @@
                 </div>
 
                 <div class="row g-3" data-upload-profile-est-config>
+                  <div class="col-12">
+                    <label class="form-label small mb-1">EncounterSet grading mode</label>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="EncounterSet grading mode">
+                      <input class="btn-check"
+                             type="radio"
+                             name="encounter_set_type_{{ encounter_set_type.id }}_grading_mode"
+                             id="encounter_set_type_{{ encounter_set_type.id }}_grading_mode_unified"
+                             value="unified"
+                             checked
+                             data-upload-profile-est-grading-mode>
+                      <label class="btn btn-outline-secondary" for="encounter_set_type_{{ encounter_set_type.id }}_grading_mode_unified">Unified person-wise</label>
+                      <input class="btn-check"
+                             type="radio"
+                             name="encounter_set_type_{{ encounter_set_type.id }}_grading_mode"
+                             id="encounter_set_type_{{ encounter_set_type.id }}_grading_mode_disease_specific"
+                             value="disease_specific"
+                             data-upload-profile-est-grading-mode>
+                      <label class="btn btn-outline-secondary" for="encounter_set_type_{{ encounter_set_type.id }}_grading_mode_disease_specific">Disease-specific</label>
+                    </div>
+                  </div>
                   <div class="col-lg-4">
-                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme">EncounterSet grading scheme <span class="text-danger">*</span></label>
+                    <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme" data-upload-profile-est-encounter-label>Unified encounter grading scheme <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm"
                             id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
                             name="encounter_set_type_{{ encounter_set_type.id }}_encounter_grading_scheme_id"

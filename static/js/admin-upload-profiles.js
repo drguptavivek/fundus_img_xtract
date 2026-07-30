@@ -367,6 +367,7 @@
       name: name,
       code: String(pkg.code || slugifyPackageCode(name) || 'package_' + (index + 1)).trim(),
       applicability: pkg.applicability || 'always',
+      grading_mode: ['unified', 'disease_specific'].includes(pkg.grading_mode) ? pkg.grading_mode : 'unified',
       image_grading_scheme_ids: imageIds,
       default_image_grading_scheme_id: pkg.default_image_grading_scheme_id ? String(pkg.default_image_grading_scheme_id) : (imageIds[0] || ''),
       encounter_grading_scheme_ids: encounterIds,
@@ -425,6 +426,7 @@
         name: normalized.name,
         code: normalized.code,
         applicability: normalized.applicability,
+        grading_mode: normalized.grading_mode,
         image_grading_scheme_ids: normalized.image_grading_scheme_ids.map(Number).filter(Number.isFinite),
         default_image_grading_scheme_id: normalized.default_image_grading_scheme_id ? Number(normalized.default_image_grading_scheme_id) : null,
         encounter_grading_scheme_ids: normalized.encounter_grading_scheme_ids.map(Number).filter(Number.isFinite),
@@ -490,26 +492,35 @@
       return;
     }
     const packages = packagesFromField(row);
-    const pkg = packages[0];
-    if (!pkg) {
+    if (!packages.length) {
       return;
     }
+    const pkg = packages[0];
+    applyEncounterSetGradingMode(row, pkg.grading_mode || 'unified');
     const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
     if (encounterSelect && pkg.encounter_grading_scheme_ids.length) {
       encounterSelect.value = pkg.encounter_grading_scheme_ids[0];
     }
-    const imageSet = new Set(pkg.image_grading_scheme_ids);
+    const imageSet = new Set(packages.flatMap(function (item) {
+      return item.image_grading_scheme_ids || [];
+    }).map(String));
     row.querySelectorAll('[data-upload-profile-est-image-scheme]').forEach(function (input) {
       input.checked = imageSet.has(String(input.value));
     });
     row.querySelectorAll('[data-upload-profile-image-auto-policy]').forEach(function (select) {
-      const policy = pkg.image_scheme_auto_create_policies[String(select.dataset.schemeId)];
+      const policyPackage = packages.find(function (item) {
+        return (item.image_grading_scheme_ids || []).map(String).includes(String(select.dataset.schemeId));
+      });
+      const policy = policyPackage?.image_scheme_auto_create_policies[String(select.dataset.schemeId)];
       if (policy) {
         select.value = policy;
       }
     });
     row.querySelectorAll('[data-upload-profile-negative-controls]').forEach(function (input) {
-      const value = pkg.image_scheme_negative_controls_per_positive[String(input.dataset.schemeId)];
+      const controlPackage = packages.find(function (item) {
+        return (item.image_grading_scheme_ids || []).map(String).includes(String(input.dataset.schemeId));
+      });
+      const value = controlPackage?.image_scheme_negative_controls_per_positive[String(input.dataset.schemeId)];
       input.value = value ?? 3;
       const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(input.dataset.schemeId) + '"]');
       if (policy?.value === 'positive_plus_negative_controls' && (parseInt(input.value || '0', 10) || 0) <= 0) {
@@ -519,9 +530,28 @@
     row.dataset.uploadProfilePackageApplied = signature;
   }
 
+  function selectedEncounterSetGradingMode(row) {
+    return row.querySelector('[data-upload-profile-est-grading-mode]:checked')?.value || 'unified';
+  }
+
+  function applyEncounterSetGradingMode(row, mode) {
+    const normalized = mode === 'disease_specific' ? 'disease_specific' : 'unified';
+    row.querySelectorAll('[data-upload-profile-est-grading-mode]').forEach(function (input) {
+      input.checked = input.value === normalized;
+    });
+    const label = row.querySelector('[data-upload-profile-est-encounter-label]');
+    if (label) {
+      label.innerHTML = normalized === 'disease_specific'
+        ? 'Default encounter grading scheme <span class="text-danger">*</span>'
+        : 'Unified encounter grading scheme <span class="text-danger">*</span>';
+    }
+  }
+
   function syncSinglePackageField(row) {
     const images = selectedImageChoices(row);
     const encounter = row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value || '';
+    const gradingMode = selectedEncounterSetGradingMode(row);
+    const existingPackages = packagesFromField(row);
     const policies = {};
     const controls = {};
     images.forEach(function (choice) {
@@ -537,10 +567,39 @@
     if (defaultField) {
       defaultField.value = images[0]?.id || '';
     }
+    if (gradingMode === 'disease_specific') {
+      const existingByImage = existingPackages.reduce(function (acc, pkg) {
+        (pkg.image_grading_scheme_ids || []).forEach(function (diseaseId) {
+          acc[String(diseaseId)] = pkg;
+        });
+        return acc;
+      }, {});
+      writePackagesToField(row, images.map(function (choice) {
+        const existing = existingByImage[choice.id] || {};
+        const encounterIds = Array.isArray(existing.encounter_grading_scheme_ids) && existing.encounter_grading_scheme_ids.length
+          ? existing.encounter_grading_scheme_ids
+          : (encounter ? [encounter] : []);
+        return {
+          name: existing.name || (choice.name + ' EncounterSet Package'),
+          code: existing.code || (slugifyPackageCode(choice.name) + '_encounter_set'),
+          applicability: existing.applicability || 'always',
+          grading_mode: 'disease_specific',
+          image_grading_scheme_ids: [choice.id],
+          default_image_grading_scheme_id: choice.id,
+          encounter_grading_scheme_ids: encounterIds,
+          image_scheme_auto_create_policies: { [choice.id]: policies[choice.id] },
+          image_scheme_negative_controls_per_positive: { [choice.id]: controls[choice.id] },
+          active: true
+        };
+      }));
+      syncImagePolicyControls(row);
+      return;
+    }
     writePackagesToField(row, [{
-      name: 'EncounterSet Package',
-      code: 'encounter_set',
+      name: gradingMode === 'disease_specific' ? 'Disease-specific EncounterSet Package' : 'EncounterSet Package',
+      code: gradingMode === 'disease_specific' ? 'disease_specific_encounter_set' : 'encounter_set',
       applicability: 'always',
+      grading_mode: gradingMode,
       image_grading_scheme_ids: images.map(function (choice) { return choice.id; }),
       default_image_grading_scheme_id: images[0]?.id || '',
       encounter_grading_scheme_ids: encounter ? [encounter] : [],
@@ -705,6 +764,12 @@
             return;
           }
           if (packageRow && event.target.matches('[data-upload-profile-negative-controls]')) {
+            syncSinglePackageField(packageRow);
+            syncModeCards(form);
+            return;
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-est-grading-mode]')) {
+            applyEncounterSetGradingMode(packageRow, event.target.value);
             syncSinglePackageField(packageRow);
             syncModeCards(form);
             return;
@@ -1012,6 +1077,10 @@
           ? JSON.stringify(config.grading_packages, null, 2)
           : '';
       }
+      const gradingMode = Array.isArray(config.grading_packages) && config.grading_packages.length
+        ? (config.grading_packages[0].grading_mode || 'unified')
+        : 'unified';
+      applyEncounterSetGradingMode(row, gradingMode);
     });
   }
 

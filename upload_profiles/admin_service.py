@@ -92,6 +92,7 @@ class EncounterSetGradingPackageInput:
     default_image_grading_scheme_id: int | None = None
     image_scheme_auto_create_policies: dict[int, str] | None = None
     image_scheme_negative_controls_per_positive: dict[int, int] | None = None
+    grading_mode: str = "unified"
 
 
 IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
@@ -102,6 +103,8 @@ IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
     "remidio_glaucoma_report_present",
     "positive_plus_negative_controls",
 }
+
+ENCOUNTER_SET_GRADING_MODES = {"unified", "disease_specific"}
 
 
 @dataclass(frozen=True)
@@ -411,6 +414,7 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
                         name=package.name,
                         code=package.code,
                         applicability=package.applicability,
+                        grading_mode=package.grading_mode,
                         default_image_grading_scheme_id=package.default_image_grading_scheme_id,
                         display_order=package.display_order,
                         active=package.active,
@@ -592,6 +596,7 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
                     name=package.name,
                     code=package.code,
                     applicability=package.applicability,
+                    grading_mode=package.grading_mode,
                     default_image_grading_scheme_id=package.default_image_grading_scheme_id,
                     display_order=index,
                     active=True,
@@ -669,6 +674,7 @@ def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -
             name=name,
             code=code,
             applicability=applicability,
+            grading_mode=package.grading_mode if package.grading_mode in ENCOUNTER_SET_GRADING_MODES else "unified",
             image_grading_scheme_ids=image_scheme_ids,
             encounter_grading_scheme_ids=encounter_scheme_ids,
             default_image_grading_scheme_id=default_image_scheme_id,
@@ -698,6 +704,7 @@ def _packages_for_config(config: EncounterSetProfileInput) -> list[EncounterSetG
             name="Default",
             code="default",
             applicability="always",
+            grading_mode="unified",
             image_grading_scheme_ids=list(config.image_grading_scheme_ids),
             encounter_grading_scheme_ids=encounter_ids,
             default_image_grading_scheme_id=config.default_image_grading_scheme_id,
@@ -744,6 +751,8 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
                 "disabled",
             }:
                 return "Unsupported EncounterSet grading package applicability."
+            if package.grading_mode not in ENCOUNTER_SET_GRADING_MODES:
+                return "Unsupported EncounterSet grading package mode."
             if package.image_grading_scheme_ids and not package.default_image_grading_scheme_id:
                 return f"Select a default image grading scheme for package {package.name}."
             if package.default_image_grading_scheme_id and package.default_image_grading_scheme_id not in package.image_grading_scheme_ids:

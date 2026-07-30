@@ -655,6 +655,7 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
             "name": package.name,
             "code": package.code,
             "applicability": package.applicability,
+            "grading_mode": package.grading_mode or "unified",
             "display_order": package.display_order,
             "image_grading_schemes": [
                 {

@@ -1567,6 +1567,7 @@ class EncounterSetGradingPackage(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     applicability: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    grading_mode: Mapped[str] = mapped_column(String(32), default="unified", server_default="unified", nullable=False)
     state: Mapped[str] = mapped_column(String(24), default='pending', nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -1586,6 +1587,10 @@ class EncounterSetGradingPackage(Base):
         CheckConstraint(
             "state IN ('pending','resident_done','resident2_done','arbitration','final')",
             name='ck_encounter_set_grading_package_state',
+        ),
+        CheckConstraint(
+            "grading_mode IN ('unified','disease_specific')",
+            name='ck_encounter_set_grading_package_mode',
         ),
         Index('ix_esgp_encounter_state', 'patient_encounter_id', 'state'),
     )

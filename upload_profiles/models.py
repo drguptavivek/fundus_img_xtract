@@ -340,6 +340,7 @@ class UploadProfileEncounterSetTypeGradingPackage(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     applicability: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
+    grading_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="unified", server_default="unified")
     default_image_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
@@ -371,6 +372,10 @@ class UploadProfileEncounterSetTypeGradingPackage(Base):
         CheckConstraint(
             "applicability IN ('always','remidio_dr_report_present','remidio_amd_report_present','remidio_glaucoma_report_present','manual_only','disabled')",
             name="ck_up_est_grading_package_applicability",
+        ),
+        CheckConstraint(
+            "grading_mode IN ('unified','disease_specific')",
+            name="ck_up_est_grading_package_mode",
         ),
         Index("ix_up_est_grading_package_mapping_active", "upload_profile_encounter_set_type_id", "active"),
     )

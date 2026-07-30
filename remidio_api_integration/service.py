@@ -2149,11 +2149,13 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
     active_progress: dict[str, Any] | None = None
     aggregate = {
         "exams_seen": 0,
+        "images_found": 0,
         "images_seen": 0,
         "images_downloaded": 0,
         "images_skipped": 0,
         "images_failed": 0,
         "images_pending": 0,
+        "reports_found": 0,
         "reports_seen": 0,
         "reports_downloaded": 0,
         "reports_skipped": 0,
@@ -2166,6 +2168,7 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
     }
     for item in items:
         payload = _job_item_payload(item)
+        result = _job_item_result(item)
         if payload:
             window_label = f"{payload.get('start_date')} -> {payload.get('end_date')}"
             windows.append(window_label)
@@ -2177,7 +2180,7 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
                 completed_windows.add(window_label)
                 if payload.get("start_date"):
                     completed_start_dates.append(str(payload["start_date"]))
-        item_summary = _result_summary(_job_item_result(item))
+        item_summary = _result_summary(result)
         for key in aggregate:
             aggregate[key] += int(item_summary.get(key) or 0)
         if item.state == "processing" and active_progress is None:
@@ -2210,6 +2213,16 @@ def _project_sync_job_summary(job: Job) -> dict[str, Any]:
         "can_resume": job.status in {"paused", "processing", "partial_error", "failed"},
         "can_cancel": job.status in {"queued", "processing", "paused", "partial_error", "failed"},
         "items": [_project_sync_item_summary(item) for item in items],
+        "route_groups": [
+            group
+            for item in items
+            for group in _project_sync_route_group_details(
+                _job_item_payload(item),
+                _job_item_result(item),
+                item_id=item.id,
+                item_state=item.state,
+            )
+        ],
     }
 
 
@@ -2227,9 +2240,60 @@ def _project_sync_item_summary(item: JobItem) -> dict[str, Any]:
         "end_date": payload.get("end_date"),
         "route_ids": payload.get("route_ids") or [],
         "summary": summary,
+        "route_groups": _project_sync_route_group_details(payload, result, item_id=item.id, item_state=item.state),
         "progress": _job_item_progress(item),
         "error": _job_item_error(item),
     }
+
+
+def _project_sync_route_group_details(
+    payload: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    item_id: int,
+    item_state: str,
+) -> list[dict[str, Any]]:
+    groups = []
+    for group in result.get("groups") or []:
+        pull_summary = ((group.get("pull") or {}).get("summary") or {})
+        ingest_summary = (((group.get("ingest") or {}).get("summary")) or {})
+        diagnostics = group.get("diagnostics") if isinstance(group.get("diagnostics"), dict) else {}
+        response_snapshot = diagnostics.get("response_snapshot") if isinstance(diagnostics.get("response_snapshot"), dict) else {}
+        groups.append(
+            {
+                "item_id": item_id,
+                "item_state": item_state,
+                "window": f"{payload.get('start_date') or '-'} -> {payload.get('end_date') or '-'}",
+                "routing_profile_id": payload.get("routing_profile_id"),
+                "status": group.get("status") or "unknown",
+                "connection_id": group.get("connection_id"),
+                "site_custom_identifier": group.get("site_custom_identifier"),
+                "route_ids": group.get("route_ids") or [],
+                "error": group.get("error"),
+                "remote_status_code": diagnostics.get("remote_status_code"),
+                "response_path": response_snapshot.get("path"),
+                "response_status_code": response_snapshot.get("status_code"),
+                "response_body_preview": response_snapshot.get("body_preview"),
+                "pull_summary": {
+                    "exams_seen": int(pull_summary.get("exams_seen") or 0),
+                    "images_seen": int(pull_summary.get("images_seen") or 0),
+                    "reports_seen": int(pull_summary.get("reports_seen") or 0),
+                    "exams_created": int(pull_summary.get("exams_created") or 0),
+                    "exams_updated": int(pull_summary.get("exams_updated") or 0),
+                },
+                "ingest_summary": {
+                    "encounters_created": int(ingest_summary.get("encounters_created") or 0),
+                    "encounters_reused": int(ingest_summary.get("encounters_reused") or 0),
+                    "images_downloaded": int(ingest_summary.get("images_downloaded") or 0),
+                    "images_skipped": int(ingest_summary.get("images_skipped") or 0),
+                    "reports_downloaded": int(ingest_summary.get("reports_downloaded") or 0),
+                    "reports_skipped": int(ingest_summary.get("reports_skipped") or 0),
+                    "route_errors": int(ingest_summary.get("route_errors") or 0),
+                    "download_errors": int(ingest_summary.get("download_errors") or 0),
+                },
+            }
+        )
+    return groups
 
 
 def _failed_or_pending_assets(db: Session, project_id: int) -> list[dict[str, Any]]:

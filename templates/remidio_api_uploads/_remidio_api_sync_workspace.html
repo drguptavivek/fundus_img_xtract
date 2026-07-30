@@ -173,6 +173,120 @@
     </div>
   </div>
 
+  {% for job in jobs %}
+  <div class="modal fade" id="remidio-sync-job-details-{{ job.id }}" tabindex="-1" aria-labelledby="remidio-sync-job-details-label-{{ job.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title fs-5" id="remidio-sync-job-details-label-{{ job.id }}">Remidio API Sync Details</h2>
+            <div class="small text-muted">
+              Job {{ job.id }} · {{ job.project_title or '-' }} · {{ job.date_range }} · {{ job.status }}
+            </div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          {% if job.error %}
+          <div class="alert alert-danger py-2">{{ job.error }}</div>
+          {% endif %}
+          <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">Windows</div>
+                <div class="fw-semibold">{{ job.completed_window_count }}/{{ job.window_count }}</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">EncounterSets</div>
+                <div class="fw-semibold">{{ job.summary.encounters_created }} new · {{ job.summary.encounters_reused }} reused</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">Images</div>
+                <div class="fw-semibold">{{ job.summary.images_downloaded }} saved · {{ job.summary.images_failed }} failed</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="border rounded p-2 h-100">
+                <div class="small text-muted">Reports</div>
+                <div class="fw-semibold">{{ job.summary.reports_downloaded }} saved · {{ job.summary.reports_failed }} failed</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Window</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th>Routes</th>
+                  <th>Found By API</th>
+                  <th>Saved / Skipped</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for group in job.route_groups %}
+                <tr>
+                  <td class="small">{{ group.window }}</td>
+                  <td>
+                    <span class="badge text-bg-{{ 'success' if group.status == 'completed' else 'danger' if group.status == 'failed' else 'warning' }}">
+                      {{ group.status }}
+                    </span>
+                  </td>
+                  <td class="small">
+                    <div>{{ group.site_custom_identifier or '-' }}</div>
+                    <div class="text-muted">Connection {{ group.connection_id or '-' }}</div>
+                  </td>
+                  <td class="small">{{ group.route_ids|join(', ') if group.route_ids else '-' }}</td>
+                  <td class="small">
+                    <div>{{ group.pull_summary.exams_seen }} exams</div>
+                    <div class="text-muted">{{ group.pull_summary.images_seen }} images · {{ group.pull_summary.reports_seen }} reports</div>
+                  </td>
+                  <td class="small">
+                    <div>Images {{ group.ingest_summary.images_downloaded }} saved · {{ group.ingest_summary.images_skipped }} skipped</div>
+                    <div>Reports {{ group.ingest_summary.reports_downloaded }} saved · {{ group.ingest_summary.reports_skipped }} skipped</div>
+                    {% if group.ingest_summary.route_errors or group.ingest_summary.download_errors %}
+                    <div class="text-danger">{{ group.ingest_summary.route_errors }} route errors · {{ group.ingest_summary.download_errors }} download errors</div>
+                    {% endif %}
+                  </td>
+                  <td class="small">
+                    {% if group.error %}
+                    <div class="text-danger">{{ group.error }}</div>
+                    {% endif %}
+                    {% if group.remote_status_code or group.response_status_code %}
+                    <div class="text-muted">Remote {{ group.remote_status_code or group.response_status_code }}</div>
+                    {% endif %}
+                    {% if group.response_path %}
+                    <div class="text-break text-muted">{{ group.response_path }}</div>
+                    {% endif %}
+                    {% if group.response_body_preview %}
+                    <pre class="small bg-light border rounded p-2 mt-1 mb-0 text-break">{{ group.response_body_preview }}</pre>
+                    {% elif not group.error %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-4">No route details recorded yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-header">Run History</div>
@@ -273,6 +387,12 @@
               </td>
               <td>
                 <div class="d-flex flex-wrap gap-1">
+                  <button class="btn btn-sm btn-outline-info"
+                          type="button"
+                          data-bs-toggle="modal"
+                          data-bs-target="#remidio-sync-job-details-{{ job.id }}">
+                    Details
+                  </button>
                   {% if job.can_pause %}
                   <form method="post"
                         action="{{ url_for('fundus_api.pause_remidio_api_project_sync_job', job_id=job.id) }}"
@@ -311,10 +431,22 @@
                   {% endif %}
                 </div>
               </td>
-              <td class="small text-danger">{{ job.error or '-' }}</td>
+              <td class="small">
+                {% if job.error %}
+                <div class="text-danger">{{ job.error }}</div>
+                <button class="btn btn-link btn-sm p-0"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#remidio-sync-job-details-{{ job.id }}">
+                  View details
+                </button>
+                {% else %}
+                <span class="text-muted">-</span>
+                {% endif %}
+              </td>
             </tr>
             {% else %}
-            <tr><td colspan="10" class="text-center text-muted py-4">No sync jobs yet.</td></tr>
+            <tr><td colspan="11" class="text-center text-muted py-4">No sync jobs yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>

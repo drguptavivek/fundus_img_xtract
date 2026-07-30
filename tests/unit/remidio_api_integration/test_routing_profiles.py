@@ -510,6 +510,25 @@ def test_routing_profile_sync_continues_after_bad_site_identifier(db_session, co
     assert result["groups"][1]["ingest"]["summary"]["images_downloaded"] == 1
     assert db_session.query(EncounterSetImage).count() == 1
 
+    payload = {
+        "routing_profile_id": routing_profile.id,
+        "start_date": "2026-04-01",
+        "end_date": "2026-04-30",
+    }
+    route_groups = service._project_sync_route_group_details(payload, result, item_id=123, item_state="completed")
+    assert [group["status"] for group in route_groups] == ["failed", "completed"]
+    assert route_groups[0]["site_custom_identifier"] == "rpc_bad"
+    assert route_groups[0]["error"] == "The Site Custom ID provided cannot be found for your organisation"
+    assert route_groups[0]["remote_status_code"] == 404
+    assert route_groups[0]["ingest_summary"]["route_errors"] == 1
+    assert route_groups[1]["site_custom_identifier"] == "rpc_good"
+    assert route_groups[1]["pull_summary"]["images_seen"] == 1
+    assert route_groups[1]["ingest_summary"]["images_downloaded"] == 1
+
+    summary = service._result_summary(result)
+    assert summary["images_found"] == 1
+    assert summary["reports_found"] == 1
+
 
 def _project(db_session, suffix: str) -> Project:
     project = Project(title=f"Remidio Routing {suffix} {uuid4()}", code=f"RR{suffix}{uuid4().hex[:8]}", active=True)

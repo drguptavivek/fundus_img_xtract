@@ -199,6 +199,73 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
     assert result.success is True
 
 
+def test_encounter_set_profile_rejects_multiple_package_policies(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+
+    manager = User(username="multi_est_manager", full_name="Multi EST Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="Multi EST Hospital")
+    lab = LabUnit(name="Multi EST Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    image_scheme = Disease(name="Multi EST Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="Multi EST Encounter Scheme", grading_scope="encounter")
+    encounter_set_type_one = EncounterSetType(
+        name="Multi EST Type One",
+        code="multi_est_type_one",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    encounter_set_type_two = EncounterSetType(
+        name="Multi EST Type Two",
+        code="multi_est_type_two",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all(
+        [manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type_one, encounter_set_type_two]
+    )
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Multiple EncounterSet policy profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            ai_workflows=[],
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type_one.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                ),
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type_two.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                ),
+            ],
+        ),
+    )
+
+    assert result.success is False
+    assert "Select only one EncounterSetType Package Policy" in result.message
+
+
 def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, monkeypatch):
     @contextmanager
     def use_test_session():

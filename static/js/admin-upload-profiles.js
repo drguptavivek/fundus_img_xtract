@@ -188,6 +188,12 @@
     if (section) {
       section.classList.toggle('d-none', !enabled);
     }
+    if (enabled && !automated) {
+      const checkedTypes = Array.from(form.querySelectorAll('[data-upload-profile-est-toggle]:checked'));
+      checkedTypes.slice(1).forEach(function (input) {
+        input.checked = false;
+      });
+    }
     form.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
       const input = row.querySelector('[data-upload-profile-est-toggle]');
       if (!input) {
@@ -1209,7 +1215,7 @@
   }
 
   function applyEncounterSetConfigs(form, configs) {
-    configs.forEach(function (config) {
+    configs.slice(0, 1).forEach(function (config) {
       const estId = String(config.encounter_set_type_id || '');
       if (!estId) {
         return;
@@ -1364,7 +1370,7 @@
       setCheckedValues(form, 'camera_ids', splitIds(button.dataset.cameraIds));
       setCheckedValues(form, 'area_ids', splitIds(button.dataset.areaIds));
       setCheckedValues(form, 'upload_kinds', splitIds(button.dataset.uploadKinds));
-      setCheckedValues(form, 'encounter_set_type_ids', splitIds(button.dataset.encounterSetTypeIds));
+      setCheckedValues(form, 'encounter_set_type_ids', splitIds(button.dataset.encounterSetTypeIds).slice(0, 1));
       setAiWorkflowValues(form, splitIds(button.dataset.aiWorkflows));
       applyEncounterSetConfigs(form, parseJson(button.dataset.encounterSetConfigs, []));
       form.querySelector('[name="allow_mydriatic"]').checked = button.dataset.allowMydriatic === '1';

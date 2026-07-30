@@ -515,6 +515,8 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         return "Select at least one EncounterSetType for encounter-set uploads."
     if UPLOAD_KIND_ENCOUNTER_SET not in upload_kinds and encounter_set_configs:
         return "EncounterSetTypes are only used when encounter-set uploads are allowed."
+    if len(encounter_set_configs) > 1:
+        return "Select only one EncounterSetType Package Policy for an upload profile."
     encounter_set_error = _validate_encounter_set_configs(db, encounter_set_configs)
     if encounter_set_error:
         return encounter_set_error

@@ -208,11 +208,56 @@ def update_upload_profile_project(project_id: int):
 @api_bp.route("/upload-profiles/projects/<int:project_id>/remote-inference-policy", methods=["POST"])
 @roles_required("admin", "local_admin", "data_manager")
 def save_project_remote_inference_policy(project_id: int):
-    """Create or update the remote inference policy assigned to a project."""
+    """Assign or clear the reusable remote inference policy for a project."""
+    return _json_result(
+        remote_inference_service.assign_project_policy(
+            current_user.id,
+            project_id,
+            remote_inference_service.policy_id_from_form(request.form),
+        ),
+        redirect_endpoint="admin.upload_projects_admin",
+    )
+
+
+@api_bp.route("/remote-inference-policies", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def create_remote_inference_policy():
+    """Create a reusable remote inference policy."""
     dto = remote_inference_service.policy_input_from_form(request.form)
     return _json_result(
-        remote_inference_service.save_project_policy(current_user.id, project_id, dto),
-        redirect_endpoint="admin.upload_projects_admin",
+        remote_inference_service.save_policy(current_user.id, None, dto),
+        redirect_endpoint="admin.remote_inference_policies_admin",
+    )
+
+
+@api_bp.route("/remote-inference-policies/<int:policy_id>", methods=["POST", "PATCH"])
+@roles_required("admin", "local_admin", "data_manager")
+def update_remote_inference_policy(policy_id: int):
+    """Update a reusable remote inference policy."""
+    dto = remote_inference_service.policy_input_from_form(request.form)
+    return _json_result(
+        remote_inference_service.save_policy(current_user.id, policy_id, dto),
+        redirect_endpoint="admin.remote_inference_policies_admin",
+    )
+
+
+@api_bp.route("/remote-inference-policies/<int:policy_id>/activate", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def activate_remote_inference_policy(policy_id: int):
+    """Activate a reusable remote inference policy."""
+    return _json_result(
+        remote_inference_service.set_policy_active(current_user.id, policy_id, True),
+        redirect_endpoint="admin.remote_inference_policies_admin",
+    )
+
+
+@api_bp.route("/remote-inference-policies/<int:policy_id>/deactivate", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def deactivate_remote_inference_policy(policy_id: int):
+    """Deactivate a reusable remote inference policy and its project assignments."""
+    return _json_result(
+        remote_inference_service.set_policy_active(current_user.id, policy_id, False),
+        redirect_endpoint="admin.remote_inference_policies_admin",
     )
 
 

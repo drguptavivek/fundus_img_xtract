@@ -329,6 +329,19 @@ def upload_projects_admin():
 
 
 @roles_required("admin", "local_admin", "data_manager")
+def remote_inference_policies_admin():
+    """Render reusable remote inference policy management."""
+    scoped_lab_ids = _manager_lab_unit_ids()
+    if not scoped_lab_ids:
+        flash("You are not assigned to any lab units for remote inference policy management.", "warning")
+        return redirect(url_for("admin.users_list"))
+
+    with transaction_scope() as db:
+        context = remote_inference_service.policy_admin_context(db, request.args.get("policy_id", type=int))
+        return render_template("admin/remote_inference_policies.html", **context)
+
+
+@roles_required("admin", "local_admin", "data_manager")
 def upload_project_workspace(project_id: int):
     """Render one project management workspace fragment."""
     scoped_lab_ids = _manager_lab_unit_ids()

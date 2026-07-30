@@ -319,12 +319,6 @@
           <span class="badge text-bg-secondary">Not configured</span>
           {% endif %}
         </div>
-        {% set current_remote_rules = {} %}
-        {% if remote_inference_policy %}
-          {% for rule in remote_inference_policy.rules if rule.active %}
-            {% set _ = current_remote_rules.update({(rule.disease_id|string ~ ':' ~ rule.ai_model_id|string): rule}) %}
-          {% endfor %}
-        {% endif %}
         <form class="border rounded p-3"
               method="post"
               action="{{ url_for('fundus_api.save_project_remote_inference_policy', project_id=selected_project.id) }}"
@@ -334,113 +328,51 @@
               data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
               data-json-api-reload-target="#project-detail-workspace">
           {{ csrf_field() }}
-          <div class="row g-2 mb-3">
-            <div class="col-md-5">
-              <label class="form-label" for="remote_inference_policy_name">Policy Name</label>
-              <input class="form-control"
-                     id="remote_inference_policy_name"
-                     name="remote_inference_policy_name"
-                     maxlength="150"
-                     value="{{ remote_inference_policy.name if remote_inference_policy else selected_project.title ~ ' Remote Inference' }}"
-                     required>
-            </div>
-            <div class="col-md-7">
-              <label class="form-label" for="remote_inference_policy_description">Description</label>
-              <input class="form-control"
-                     id="remote_inference_policy_description"
-                     name="remote_inference_policy_description"
-                     value="{{ remote_inference_policy.description if remote_inference_policy else '' }}">
-            </div>
-          </div>
-          <div class="table-responsive border rounded">
-            <table class="table table-sm align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th style="min-width: 12rem;">Disease / Model</th>
-                  <th style="width: 7rem;">Run</th>
-                  <th style="min-width: 11rem;">Upload Kind</th>
-                  <th style="min-width: 13rem;">When</th>
-                  <th style="min-width: 15rem;">Encounter Eligibility</th>
-                  <th style="min-width: 14rem;">Image Selection</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% set remote_rows = namespace(count=0) %}
-                {% for disease in remote_inference_diseases %}
-                  {% set report_links = [] %}
-                  {% for linkage in remote_inference_report_linkages if linkage.disease_id == disease.id %}
-                    {% set _ = report_links.append(linkage.report_source ~ ':' ~ linkage.report_type) %}
-                  {% endfor %}
-                  {% for model in remote_inference_ai_models %}
-                    {% set model_scope = namespace(supports=false) %}
-                    {% for link in model.disease_links if link.active and link.disease_id == disease.id %}
-                      {% set model_scope.supports = true %}
-                    {% endfor %}
-                    {% if model_scope.supports %}
-                    {% set remote_rows.count = remote_rows.count + 1 %}
-                    {% set key = disease.id|string ~ ':' ~ model.id|string %}
-                    {% set current_rule = current_remote_rules.get(key) %}
-                    {% set prefix = 'remote_rule_' ~ disease.id ~ '_' ~ model.id %}
-                    <tr>
-                      <td>
-                        <div class="fw-semibold small">{{ disease.name }}</div>
-                        <div class="text-muted small">{{ model.name }} {{ model.version }}</div>
-                        <div class="text-muted small">Reports: {{ report_links|join(', ') or '-' }}</div>
-                      </td>
-                      <td>
-                        <div class="form-check">
-                          <input class="form-check-input"
-                                 type="checkbox"
-                                 name="remote_inference_rule"
-                                 value="{{ disease.id }}:{{ model.id }}"
-                                 id="{{ prefix }}_enabled"
-                                 {% if current_rule %}checked{% endif %}>
-                          <label class="form-check-label small" for="{{ prefix }}_enabled">Enable</label>
-                        </div>
-                      </td>
-                      <td>
-                        <select class="form-select form-select-sm" name="{{ prefix }}_upload_kind">
-                          <option value="encounter_set" {% if not current_rule or current_rule.upload_kind == 'encounter_set' %}selected{% endif %}>EncounterSet</option>
-                          <option value="direct_image" {% if current_rule and current_rule.upload_kind == 'direct_image' %}selected{% endif %}>Direct image</option>
-                          <option value="remidio" {% if current_rule and current_rule.upload_kind == 'remidio' %}selected{% endif %}>Remidio ZIP</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select class="form-select form-select-sm" name="{{ prefix }}_trigger_timing">
-                          <option value="on_image_received" {% if not current_rule or current_rule.trigger_timing == 'on_image_received' %}selected{% endif %}>As image is received</option>
-                          <option value="on_report_received" {% if current_rule and current_rule.trigger_timing == 'on_report_received' %}selected{% endif %}>As report is received</option>
-                          <option value="after_verification" {% if current_rule and current_rule.trigger_timing == 'after_verification' %}selected{% endif %}>After verification</option>
-                          <option value="manual_only" {% if current_rule and current_rule.trigger_timing == 'manual_only' %}selected{% endif %}>Manual only</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select class="form-select form-select-sm" name="{{ prefix }}_encounter_eligibility">
-                          <option value="always" {% if not current_rule or current_rule.encounter_eligibility == 'always' %}selected{% endif %}>Always</option>
-                          <option value="if_matching_report_present" {% if current_rule and current_rule.encounter_eligibility == 'if_matching_report_present' %}selected{% endif %}>If linked report present</option>
-                          <option value="if_matching_report_absent" {% if current_rule and current_rule.encounter_eligibility == 'if_matching_report_absent' %}selected{% endif %}>If linked report absent</option>
-                          <option value="if_any_report_present" {% if current_rule and current_rule.encounter_eligibility == 'if_any_report_present' %}selected{% endif %}>If any report present</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select class="form-select form-select-sm" name="{{ prefix }}_image_selection">
-                          <option value="all_eligible_images" {% if not current_rule or current_rule.image_selection == 'all_eligible_images' %}selected{% endif %}>All eligible images</option>
-                          <option value="disc_focused_images" {% if current_rule and current_rule.image_selection == 'disc_focused_images' %}selected{% endif %}>Disc-focused images</option>
-                          <option value="macula_focused_images" {% if current_rule and current_rule.image_selection == 'macula_focused_images' %}selected{% endif %}>Macula-focused images</option>
-                          <option value="disc_or_macula_images" {% if current_rule and current_rule.image_selection == 'disc_or_macula_images' %}selected{% endif %}>Disc or macula images</option>
-                        </select>
-                      </td>
-                    </tr>
-                    {% endif %}
-                  {% endfor %}
+          <div class="row g-2 align-items-end">
+            <div class="col-lg-8">
+              <label class="form-label" for="project_remote_inference_policy_id">Assigned Policy</label>
+              <select class="form-select" id="project_remote_inference_policy_id" name="remote_inference_policy_id">
+                <option value="">No automated remote inference policy</option>
+                {% for policy in remote_inference_policies %}
+                <option value="{{ policy.id }}" {% if remote_inference_policy and remote_inference_policy.id == policy.id %}selected{% endif %}>
+                  {{ policy.name }}
+                </option>
                 {% endfor %}
-                {% if remote_rows.count == 0 %}
-                <tr><td colspan="6" class="text-muted text-center py-3">No enabled remote AI model is linked to an image-scoped disease.</td></tr>
-                {% endif %}
-              </tbody>
-            </table>
+              </select>
+            </div>
+            <div class="col-lg-2">
+              <button class="btn btn-outline-primary w-100" type="submit">Save Assignment</button>
+            </div>
+            <div class="col-lg-2">
+              <a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.remote_inference_policies_admin') }}">Manage Policies</a>
+            </div>
           </div>
-          <div class="text-end mt-3">
-            <button class="btn btn-outline-primary" type="submit">Save Remote Inference Policy</button>
+          <div class="border rounded p-3 mt-3">
+            {% if remote_inference_policy and remote_inference_policy.active %}
+              <div class="fw-semibold">{{ remote_inference_policy.name }}</div>
+              <div class="small text-muted mb-2">{{ remote_inference_policy.description or 'No description.' }}</div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead><tr><th>Disease</th><th>Model</th><th>Upload</th><th>When</th><th>Eligibility</th><th>Images</th></tr></thead>
+                  <tbody>
+                    {% for rule in remote_inference_policy.rules if rule.active %}
+                    <tr>
+                      <td>{{ rule.disease.name if rule.disease else '-' }}</td>
+                      <td>{{ rule.ai_model.name if rule.ai_model else '-' }}</td>
+                      <td>{{ rule.upload_kind.replace('_', ' ')|title }}</td>
+                      <td>{{ rule.trigger_timing.replace('_', ' ')|title }}</td>
+                      <td>{{ rule.encounter_eligibility.replace('_', ' ')|title }}</td>
+                      <td>{{ rule.image_selection.replace('_', ' ')|title }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-muted text-center py-2">Assigned policy has no active rules.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted">No remote inference policy is assigned to this project.</div>
+            {% endif %}
           </div>
         </form>
       </div>

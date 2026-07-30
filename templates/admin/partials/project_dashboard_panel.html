@@ -216,9 +216,26 @@
                 {% set package_image_auto_policies = {} %}
                 {% set package_image_control_ratios = {} %}
                 {% for package_image in package.image_grading_schemes if package_image.active %}
+                  {% set package_image_grades = [] %}
+                  {% if package_image.disease %}
+                    {% for grade in package_image.disease.disease_gradings|sort(attribute='display_order') if grade.is_active %}
+                      {% set grade_features = [] %}
+                      {% for feature in grade.features|sort(attribute='sr_no') %}
+                        {% set _ = grade_features.append(feature.label) %}
+                      {% endfor %}
+                      {% set _ = package_image_grades.append({
+                        'id': grade.id,
+                        'impression': grade.impression,
+                        'display_order': grade.display_order,
+                        'features': grade_features
+                      }) %}
+                    {% endfor %}
+                  {% endif %}
                   {% set _ = package_image_schemes.append({
                     'id': package_image.disease_id,
                     'name': package_image.disease.name if package_image.disease else '',
+                    'grading_scope': package_image.disease.grading_scope if package_image.disease else 'image',
+                    'grades': package_image_grades,
                     'auto_create_policy': package_image.auto_create_policy,
                     'negative_controls_per_positive': package_image.negative_controls_per_positive,
                     'remidio_ocr_linkage': package_image.disease.remidio_ocr_linkage if package_image.disease else 'none'
@@ -228,9 +245,26 @@
                 {% endfor %}
                 {% set package_encounter_schemes = [] %}
                 {% for package_encounter in package.encounter_grading_schemes if package_encounter.active %}
+                  {% set package_encounter_grades = [] %}
+                  {% if package_encounter.disease %}
+                    {% for grade in package_encounter.disease.disease_gradings|sort(attribute='display_order') if grade.is_active %}
+                      {% set grade_features = [] %}
+                      {% for feature in grade.features|sort(attribute='sr_no') %}
+                        {% set _ = grade_features.append(feature.label) %}
+                      {% endfor %}
+                      {% set _ = package_encounter_grades.append({
+                        'id': grade.id,
+                        'impression': grade.impression,
+                        'display_order': grade.display_order,
+                        'features': grade_features
+                      }) %}
+                    {% endfor %}
+                  {% endif %}
                   {% set _ = package_encounter_schemes.append({
                     'id': package_encounter.disease_id,
-                    'name': package_encounter.disease.name if package_encounter.disease else ''
+                    'name': package_encounter.disease.name if package_encounter.disease else '',
+                    'grading_scope': package_encounter.disease.grading_scope if package_encounter.disease else 'encounter',
+                    'grades': package_encounter_grades
                   }) %}
                 {% endfor %}
                 {% set _ = row_package_configs.append({

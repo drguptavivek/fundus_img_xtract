@@ -562,6 +562,15 @@
         ? 'Default encounter grading scheme'
         : 'Unified encounter grading scheme <span class="text-danger">*</span>';
     }
+    const unifiedEncounterWrap = row.querySelector('[data-upload-profile-unified-encounter-wrap]');
+    if (unifiedEncounterWrap) {
+      unifiedEncounterWrap.classList.toggle('d-none', normalized === 'disease_specific');
+    }
+    const imageSchemesWrap = row.querySelector('[data-upload-profile-image-schemes-wrap]');
+    if (imageSchemesWrap) {
+      imageSchemesWrap.classList.toggle('col-lg-8', normalized !== 'disease_specific');
+      imageSchemesWrap.classList.toggle('col-12', normalized === 'disease_specific');
+    }
     const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
     if (encounterSelect) {
       encounterSelect.disabled = normalized === 'disease_specific';
@@ -969,17 +978,96 @@
     if (!list.length) {
       return '-';
     }
-      return list.map(function (target) {
+    return list.map(function (target) {
       const name = target.encounter_set_type_name || 'EncounterSetType';
-      const packages = Array.isArray(target.grading_packages) && target.grading_packages.length
-        ? '; packages ' + target.grading_packages.map(function (pkg) { return pkg.name || pkg.code; }).filter(Boolean).join(', ')
-        : '';
+      if (Array.isArray(target.grading_packages) && target.grading_packages.length) {
+        return name + ': ' + target.grading_packages.map(function (pkg) {
+          const mode = (pkg.grading_mode || 'unified') === 'disease_specific' ? 'disease-specific' : 'unified person-wise';
+          const encounterNames = (pkg.encounter_grading_schemes || []).map(function (scheme) {
+            return scheme.name;
+          }).filter(Boolean).join(', ') || '-';
+          const imageNames = (pkg.image_grading_schemes || []).map(function (scheme) {
+            return scheme.name;
+          }).filter(Boolean).join(', ') || '-';
+          return (pkg.name || pkg.code || 'Package') + ' [' + mode + '] encounter ' + encounterNames + '; image ' + imageNames;
+        }).join(' | ');
+      }
       return name
         + ': image ' + displayValue(target.image_grading_scheme_names)
-        + '; default ' + (target.default_image_grading_scheme_name || '-')
-        + '; encounter ' + (target.encounter_grading_scheme_name || '-')
-        + packages;
+        + '; encounter ' + (target.encounter_grading_scheme_name || '-');
     }).join(' | ');
+  }
+
+  function renderSchemeDetail(scheme, scopeLabel, metaText) {
+    const block = document.createElement('div');
+    block.className = 'border rounded p-2 bg-body';
+
+    const header = document.createElement('div');
+    header.className = 'd-flex flex-wrap justify-content-between align-items-start gap-2';
+    const title = document.createElement('div');
+    title.className = 'fw-semibold';
+    title.textContent = scheme.name || ('Scheme #' + scheme.id);
+    const badge = document.createElement('span');
+    badge.className = 'badge text-bg-light border';
+    badge.textContent = scopeLabel;
+    header.appendChild(title);
+    header.appendChild(badge);
+    block.appendChild(header);
+
+    if (metaText) {
+      const meta = document.createElement('div');
+      meta.className = 'small text-muted mt-1';
+      meta.textContent = metaText;
+      block.appendChild(meta);
+    }
+
+    const grades = Array.isArray(scheme.grades) ? scheme.grades : [];
+    if (!grades.length) {
+      const empty = document.createElement('div');
+      empty.className = 'small text-muted mt-2';
+      empty.textContent = 'No grade labels configured.';
+      block.appendChild(empty);
+      return block;
+    }
+
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-responsive mt-2';
+    const table = document.createElement('table');
+    table.className = 'table table-sm mb-0 align-middle';
+    table.innerHTML = '<thead><tr><th>Grade</th><th>Features</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    grades.forEach(function (grade) {
+      const tr = document.createElement('tr');
+      const gradeTd = document.createElement('td');
+      gradeTd.textContent = grade.impression || '-';
+      const featuresTd = document.createElement('td');
+      const features = Array.isArray(grade.features) ? grade.features.filter(Boolean) : [];
+      featuresTd.textContent = features.length ? features.join(', ') : '-';
+      tr.appendChild(gradeTd);
+      tr.appendChild(featuresTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    block.appendChild(tableWrap);
+    return block;
+  }
+
+  function renderSchemeGroup(container, titleText, schemes, scopeLabel, metaForScheme) {
+    const activeSchemes = Array.isArray(schemes) ? schemes : [];
+    if (!activeSchemes.length) {
+      return;
+    }
+    const section = document.createElement('div');
+    section.className = 'vstack gap-2';
+    const title = document.createElement('div');
+    title.className = 'small fw-semibold text-body';
+    title.textContent = titleText;
+    section.appendChild(title);
+    activeSchemes.forEach(function (scheme) {
+      section.appendChild(renderSchemeDetail(scheme, scopeLabel, metaForScheme ? metaForScheme(scheme) : ''));
+    });
+    container.appendChild(section);
   }
 
   function kindLabel(kind) {
@@ -1020,7 +1108,8 @@
     });
   }
 
-  function renderEncounterSetView(container, configs) {
+  function renderEncounterSetView(container, configs, options) {
+    const showHeaderSummary = !(options && options.detailOnly);
     if (!container) {
       return;
     }
@@ -1039,40 +1128,61 @@
       const title = document.createElement('div');
       title.className = 'fw-semibold';
       title.textContent = config.encounter_set_type_name || ('EncounterSetType #' + config.encounter_set_type_id);
-      const details = document.createElement('div');
-      details.className = 'small text-muted mt-1';
-      details.textContent = 'Image: ' + displayValue(config.image_grading_scheme_names)
-        + ' · Default: ' + (config.default_image_grading_scheme_name || '-')
-        + ' · Encounter: ' + (config.encounter_grading_scheme_name || '-');
       card.appendChild(title);
-      card.appendChild(details);
+      if (showHeaderSummary) {
+        const details = document.createElement('div');
+        details.className = 'small text-muted mt-1';
+        if (Array.isArray(config.grading_packages) && config.grading_packages.length) {
+          details.textContent = config.grading_packages.length + ' grading package'
+            + (config.grading_packages.length === 1 ? '' : 's')
+            + ' configured. Use package details below for applicable schemes.';
+        } else {
+          details.textContent = 'Image: ' + displayValue(config.image_grading_scheme_names)
+            + ' · Encounter: ' + (config.encounter_grading_scheme_name || '-');
+        }
+        card.appendChild(details);
+      }
       if (Array.isArray(config.grading_packages) && config.grading_packages.length) {
         const packages = document.createElement('div');
         packages.className = 'small mt-2 vstack gap-1';
         const packagesTitle = document.createElement('div');
         packagesTitle.className = 'fw-semibold text-body';
-        packagesTitle.textContent = 'Packages';
+        packagesTitle.textContent = 'Applicable Grading Details';
         packages.appendChild(packagesTitle);
         config.grading_packages.forEach(function (pkg) {
+          const packageBlock = document.createElement('div');
+          packageBlock.className = 'border rounded p-2 bg-light';
           const packageLine = document.createElement('div');
-          packageLine.textContent = (pkg.name || pkg.code || 'Package') + ' (' + (pkg.applicability || 'always') + ')';
-          packages.appendChild(packageLine);
-          if (Array.isArray(pkg.image_grading_schemes) && pkg.image_grading_schemes.length) {
-            const imageLine = document.createElement('div');
-            imageLine.className = 'text-muted';
-            imageLine.textContent = 'Image schemes: ' + pkg.image_grading_schemes.map(function (scheme) {
-              return (scheme.name || ('Scheme #' + scheme.id)) + ': ' + imageAutoPolicyLabel(scheme.auto_create_policy);
-            }).join(' · ');
-            packages.appendChild(imageLine);
-          }
-          if (Array.isArray(pkg.encounter_grading_schemes) && pkg.encounter_grading_schemes.length) {
-            const encounterLine = document.createElement('div');
-            encounterLine.className = 'text-muted';
-            encounterLine.textContent = 'Encounter schemes: ' + pkg.encounter_grading_schemes.map(function (scheme) {
-              return scheme.name || ('Scheme #' + scheme.id);
-            }).join(', ');
-            packages.appendChild(encounterLine);
-          }
+          packageLine.className = 'fw-semibold';
+          packageLine.textContent = (pkg.name || pkg.code || 'Package')
+            + ' · ' + ((pkg.grading_mode || 'unified') === 'disease_specific' ? 'Disease-specific' : 'Unified person-wise')
+            + ' · ' + (pkg.applicability || 'always');
+          packageBlock.appendChild(packageLine);
+
+          const encounterTitle = (pkg.grading_mode || 'unified') === 'disease_specific'
+            ? 'Per-Disease Encounter-Level Grading'
+            : 'Unified Encounter-Level Grading';
+          renderSchemeGroup(
+            packageBlock,
+            encounterTitle,
+            pkg.encounter_grading_schemes,
+            'Encounter',
+            null
+          );
+          renderSchemeGroup(
+            packageBlock,
+            'Per-Disease Image-Level Grading',
+            pkg.image_grading_schemes,
+            'Image',
+            function (scheme) {
+              const policy = imageAutoPolicyLabel(scheme.auto_create_policy);
+              if (scheme.auto_create_policy === 'positive_plus_negative_controls') {
+                return 'Creation mode: ' + policy + ' 1:' + (scheme.negative_controls_per_positive || 0);
+              }
+              return 'Creation mode: ' + policy;
+            }
+          );
+          packages.appendChild(packageBlock);
         });
         card.appendChild(packages);
       }
@@ -1196,6 +1306,15 @@
     );
     renderKindBadges(section.querySelector('[data-upload-profile-view-kinds]'), summary.upload_kinds);
     renderEncounterSetView(section.querySelector('[data-upload-profile-view-encounter-sets]'), summary.encounter_set_configs);
+    const detailTitle = document.querySelector('[data-upload-profile-scheme-detail-title]');
+    if (detailTitle) {
+      detailTitle.textContent = 'Applicable Grading Schemes - ' + (summary.name || 'Upload & Grading Profile');
+    }
+    renderEncounterSetView(
+      document.querySelector('[data-upload-profile-scheme-detail-modal-body]'),
+      summary.encounter_set_configs,
+      { detailOnly: true }
+    );
     const editButton = section.querySelector('[data-upload-profile-view-edit]');
     if (editButton) {
       editButton.dataset.profileId = String(summary.id || button.dataset.profileId || '');

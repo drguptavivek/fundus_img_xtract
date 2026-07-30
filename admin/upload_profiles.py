@@ -14,6 +14,7 @@ from models import (
     AIModelDisease,
     Camera,
     Disease,
+    DiseaseGrading,
     EncounterSetType,
     LabUnit,
     Project,
@@ -87,18 +88,39 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
                 selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
+                selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.grading_packages)
                 .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease),
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
                 .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease),
+                selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
             )
             .order_by(UploadProfile.active.desc(), UploadProfile.name)
         )
@@ -123,11 +145,22 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.default_image_grading_scheme),
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypeImageGradingScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.grading_packages)
@@ -136,8 +169,22 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.image_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageImageScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
                 .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
                 .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease),
+                selectinload(ProjectUploadProfile.profile)
+                .selectinload(UploadProfile.encounter_set_types)
+                .selectinload(UploadProfileEncounterSetType.grading_packages)
+                .selectinload(UploadProfileEncounterSetTypeGradingPackage.encounter_grading_schemes)
+                .selectinload(UploadProfileEncounterSetTypePackageEncounterScheme.disease)
+                .selectinload(Disease.disease_gradings)
+                .selectinload(DiseaseGrading.features),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.user),
                 selectinload(ProjectUploadProfile.assignments).selectinload(ProjectUploadProfileAssignment.lab_unit),
                 selectinload(ProjectUploadProfile.remidio_api_bindings)

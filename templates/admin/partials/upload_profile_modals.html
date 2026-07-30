@@ -5,9 +5,16 @@
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
         <div class="fw-semibold" data-upload-profile-view-title>Upload & Grading Profile</div>
-        <div class="small text-muted">Read-only profile configuration and workflow summary.</div>
+        <div class="small text-muted">Profile workflow and applicable grading scheme summary.</div>
       </div>
       <div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target="#uploadProfileSchemeDetailModal"
+                data-upload-profile-view-details>
+          Detailed schemes
+        </button>
         <button class="btn btn-sm btn-outline-primary" type="button" data-upload-profile-view-edit>Edit</button>
         <button class="btn btn-sm btn-outline-secondary" type="button" data-upload-profile-view-close>Close</button>
       </div>
@@ -54,11 +61,11 @@
       <div class="row g-3">
         <div class="col-xl-6">
           <div class="border rounded p-3 h-100">
-            <div class="fw-semibold mb-2">Clinical Upload Configuration</div>
+            <div class="fw-semibold mb-2">Workflow Configuration</div>
             <dl class="row small mb-0">
               <dt class="col-sm-4">Targets</dt>
               <dd class="col-sm-8" data-upload-profile-view-targets>-</dd>
-              <dt class="col-sm-4">EncounterSet targets</dt>
+              <dt class="col-sm-4">EncounterSet grading</dt>
               <dd class="col-sm-8" data-upload-profile-view-est-targets>-</dd>
               <dt class="col-sm-4">Remedio default</dt>
               <dd class="col-sm-8" data-upload-profile-view-remidio-defaults>-</dd>
@@ -83,6 +90,22 @@
     </div>
   </div>
 </section>
+
+<div class="modal fade" id="uploadProfileSchemeDetailModal" tabindex="-1" aria-labelledby="uploadProfileSchemeDetailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h6" id="uploadProfileSchemeDetailModalLabel" data-upload-profile-scheme-detail-title>Applicable Grading Schemes</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="vstack gap-3" data-upload-profile-scheme-detail-modal-body>
+          <div class="text-muted small">No EncounterSet grading schemes configured.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <section id="upload-profile-editor-section" class="mt-4 d-none">
   <div class="card shadow-sm">
@@ -393,7 +416,7 @@
                       <label class="btn btn-outline-secondary" for="encounter_set_type_{{ encounter_set_type.id }}_grading_mode_disease_specific">Disease-specific</label>
                     </div>
                   </div>
-                  <div class="col-lg-4">
+                  <div class="col-lg-4" data-upload-profile-unified-encounter-wrap>
                     <label class="form-label small mb-1" for="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme" data-upload-profile-est-encounter-label>Unified encounter grading scheme <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm"
                             id="encounter_set_type_{{ encounter_set_type.id }}_encounter_scheme"
@@ -405,22 +428,34 @@
                       {% endfor %}
                     </select>
                   </div>
-                  <div class="col-lg-8">
+                  <div class="col-lg-8" data-upload-profile-image-schemes-wrap>
                     <label class="form-label small mb-1">Image-level grading schemes and auto-creation <span class="text-danger">*</span></label>
-                    <div class="border rounded p-2" style="max-height: 16rem; overflow: auto;">
+                    <div class="table-responsive border rounded" style="max-height: 18rem; overflow: auto;">
+                      <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light position-sticky top-0">
+                          <tr>
+                            <th scope="col" style="min-width: 13rem;">Disease</th>
+                            <th scope="col" style="min-width: 16rem;">Encounter-Level Grading</th>
+                            <th scope="col" style="min-width: 15rem;">Creation Mode</th>
+                            <th scope="col" style="width: 9rem;">Positive-Negative Ratio</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                       {% for disease in diseases if disease.grading_scope == "image" %}
                       {% set remidio_ocr_linkage = disease.remidio_ocr_linkage or "none" %}
-                      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom py-2" data-upload-profile-est-image-row>
-                        <div class="form-check mb-0">
-                          <input class="form-check-input"
-                                 type="checkbox"
-                                 name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
-                                 value="{{ disease.id }}"
-                                 id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
-                                 data-upload-profile-est-image-scheme>
-                          <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
-                        </div>
-                        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+                      <tr data-upload-profile-est-image-row>
+                        <td>
+                          <div class="form-check mb-0">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
+                                   value="{{ disease.id }}"
+                                   id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
+                                   data-upload-profile-est-image-scheme>
+                            <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">{{ disease.name }}</label>
+                          </div>
+                        </td>
+                        <td>
                           <select class="form-select form-select-sm w-auto d-none"
                                   aria-label="Disease-specific encounter grading scheme for {{ disease.name }}"
                                   data-upload-profile-disease-encounter-scheme
@@ -430,6 +465,8 @@
                             <option value="{{ encounter_disease.id }}">{{ encounter_disease.name }}</option>
                             {% endfor %}
                           </select>
+                        </td>
+                        <td>
                           <select class="form-select form-select-sm w-auto"
                                   data-upload-profile-image-auto-policy
                                   data-scheme-id="{{ disease.id }}"
@@ -446,9 +483,11 @@
                             <option value="positive_plus_negative_controls">Positive + sampled negative controls</option>
                             <option value="always" selected>Always</option>
                           </select>
+                        </td>
+                        <td>
                           <label class="input-group input-group-sm w-auto mb-0 opacity-50"
                                  data-upload-profile-negative-controls-wrap>
-                            <span class="input-group-text">Controls 1:</span>
+                            <span class="input-group-text">1:</span>
                             <input class="form-control"
                                    type="number"
                                    min="1"
@@ -461,11 +500,15 @@
                                    data-upload-profile-negative-controls
                                    data-scheme-id="{{ disease.id }}">
                           </label>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                       {% else %}
-                      <div class="text-muted small">No image-scoped grading schemes configured.</div>
+                      <tr>
+                        <td colspan="4" class="text-muted small">No image-scoped grading schemes configured.</td>
+                      </tr>
                       {% endfor %}
+                        </tbody>
+                      </table>
                     </div>
                     <input type="hidden"
                            name="encounter_set_type_{{ encounter_set_type.id }}_default_image_grading_scheme_id"

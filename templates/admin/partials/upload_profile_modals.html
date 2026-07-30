@@ -373,23 +373,36 @@
             </div>
             <span class="badge text-bg-warning" data-upload-profile-est-status>Needs EncounterSetType</span>
           </div>
-          <label class="form-label">EncounterSetType Package Policy <span class="text-danger" data-upload-profile-est-required>*</span></label>
-          <div class="row g-2">
+          <div class="mb-3">
+            <label class="form-label" for="upload_profile_encounter_set_type_policy">EncounterSetType Package Policy <span class="text-danger" data-upload-profile-est-required>*</span></label>
+            <select class="form-select"
+                    id="upload_profile_encounter_set_type_policy"
+                    name="encounter_set_type_ids"
+                    data-upload-profile-est-select>
+              <option value="">Select EncounterSetType package</option>
+              {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
+              <option value="{{ encounter_set_type.id }}"
+                      data-upload-profile-est-code="{{ encounter_set_type.code }}">
+                {{ encounter_set_type.name }} · {{ encounter_set_type.code }} · {{ (encounter_set_type.metadata_schema_json.get('fields', []) if encounter_set_type.metadata_schema_json else [])|length }} metadata fields
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="vstack gap-2">
             {% for encounter_set_type in encounter_set_types if encounter_set_type.active %}
-            <div class="col-12"
+            <div class="d-none"
                  data-upload-profile-est-option
                  data-upload-profile-est-id="{{ encounter_set_type.id }}"
                  data-upload-profile-est-code="{{ encounter_set_type.code }}">
-              <div class="border rounded p-2 h-100">
+              <input class="d-none"
+                     type="radio"
+                     value="{{ encounter_set_type.id }}"
+                     id="encounter_set_type_{{ encounter_set_type.id }}"
+                     data-upload-profile-est-toggle>
+              <div class="border rounded p-3">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-                  <div class="form-check mb-0">
-                    <input class="form-check-input"
-                           type="radio"
-                           name="encounter_set_type_ids"
-                           value="{{ encounter_set_type.id }}"
-                           id="encounter_set_type_{{ encounter_set_type.id }}"
-                           data-upload-profile-est-toggle>
-                    <label class="form-check-label fw-semibold" for="encounter_set_type_{{ encounter_set_type.id }}">{{ encounter_set_type.name }}</label>
+                  <div>
+                    <div class="fw-semibold">{{ encounter_set_type.name }}</div>
                     <div class="small text-muted">{{ encounter_set_type.code }}</div>
                   </div>
                   <span class="badge text-bg-light border">{{ (encounter_set_type.metadata_schema_json.get('fields', []) if encounter_set_type.metadata_schema_json else [])|length }} metadata fields</span>
@@ -434,10 +447,10 @@
                       <table class="table table-sm align-middle mb-0">
                         <thead class="table-light position-sticky top-0">
                           <tr>
-                            <th scope="col" style="min-width: 13rem;">Disease</th>
-                            <th scope="col" style="min-width: 16rem;">Encounter-Level Grading</th>
-                            <th scope="col" style="min-width: 15rem;">Creation Mode</th>
-                            <th scope="col" style="width: 9rem;">Positive-Negative Ratio</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 13rem; z-index: 2;">Disease</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 16rem; z-index: 2;">Encounter-Level Grading</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 15rem; z-index: 2;">Creation Mode</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="width: 9rem; z-index: 2;">Positive-Negative Ratio</th>
                           </tr>
                         </thead>
                         <tbody>

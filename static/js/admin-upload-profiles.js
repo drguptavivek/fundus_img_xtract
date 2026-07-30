@@ -188,26 +188,42 @@
     if (section) {
       section.classList.toggle('d-none', !enabled);
     }
-    if (enabled && !automated) {
+    const typeSelect = form.querySelector('[data-upload-profile-est-select]');
+    if (typeSelect) {
+      typeSelect.disabled = !enabled;
+      typeSelect.querySelectorAll('option[data-upload-profile-est-code]').forEach(function (option) {
+        option.disabled = automated && option.dataset.uploadProfileEstCode !== 'remidio_api_standard';
+      });
+      if (!enabled) {
+        typeSelect.value = '';
+      } else if (automated) {
+        const remidioOption = typeSelect.querySelector('option[data-upload-profile-est-code="remidio_api_standard"]');
+        typeSelect.value = remidioOption ? remidioOption.value : '';
+      }
+    } else if (enabled && !automated) {
       const checkedTypes = Array.from(form.querySelectorAll('[data-upload-profile-est-toggle]:checked'));
       checkedTypes.slice(1).forEach(function (input) {
         input.checked = false;
       });
     }
+    const selectedTypeId = typeSelect ? typeSelect.value : '';
     form.querySelectorAll('[data-upload-profile-est-option]').forEach(function (row) {
       const input = row.querySelector('[data-upload-profile-est-toggle]');
       if (!input) {
         return;
       }
-      input.disabled = !enabled;
-      if (automated) {
+      if (typeSelect) {
+        input.checked = Boolean(selectedTypeId) && row.dataset.uploadProfileEstId === selectedTypeId;
+      } else if (automated) {
         input.checked = row.dataset.uploadProfileEstCode === 'remidio_api_standard';
         input.disabled = row.dataset.uploadProfileEstCode !== 'remidio_api_standard';
       }
+      input.disabled = !(enabled && input.checked);
       if (!enabled) {
         input.checked = false;
       }
       const rowEnabled = enabled && input.checked;
+      row.classList.toggle('d-none', !rowEnabled);
       row.classList.toggle('border-primary', rowEnabled);
       row.classList.toggle('bg-primary-subtle', rowEnabled);
       row.querySelectorAll('[data-upload-profile-est-config] input, [data-upload-profile-est-config] select, [data-upload-profile-est-config] textarea').forEach(function (field) {
@@ -939,7 +955,7 @@
     const selected = new Set(values.map(String));
     form.querySelectorAll('[name="' + name + '"]').forEach(function (input) {
       if (input.tagName === 'SELECT') {
-        input.value = selected.has(String(input.value)) ? input.value : '';
+        input.value = values.length ? String(values[0]) : '';
       } else {
         input.checked = selected.has(String(input.value));
       }

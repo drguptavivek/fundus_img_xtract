@@ -506,7 +506,7 @@
     const pkg = packages[0];
     applyEncounterSetGradingMode(row, pkg.grading_mode || 'unified');
     const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
-    if (encounterSelect && pkg.encounter_grading_scheme_ids.length) {
+    if (encounterSelect && pkg.grading_mode !== 'disease_specific' && pkg.encounter_grading_scheme_ids.length) {
       encounterSelect.value = pkg.encounter_grading_scheme_ids[0];
     }
     const imageSet = new Set(packages.flatMap(function (item) {
@@ -561,6 +561,14 @@
       label.innerHTML = normalized === 'disease_specific'
         ? 'Default encounter grading scheme'
         : 'Unified encounter grading scheme <span class="text-danger">*</span>';
+    }
+    const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
+    if (encounterSelect) {
+      encounterSelect.disabled = normalized === 'disease_specific';
+      encounterSelect.classList.toggle('opacity-50', normalized === 'disease_specific');
+      if (normalized === 'disease_specific') {
+        encounterSelect.value = '';
+      }
     }
     syncImagePolicyControls(row);
   }

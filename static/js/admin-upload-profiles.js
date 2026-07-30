@@ -568,8 +568,7 @@
     }
     const imageSchemesWrap = row.querySelector('[data-upload-profile-image-schemes-wrap]');
     if (imageSchemesWrap) {
-      imageSchemesWrap.classList.toggle('col-lg-8', normalized !== 'disease_specific');
-      imageSchemesWrap.classList.toggle('col-12', normalized === 'disease_specific');
+      imageSchemesWrap.classList.add('col-12');
     }
     const encounterSelect = row.querySelector('[data-upload-profile-est-encounter-scheme]');
     if (encounterSelect) {

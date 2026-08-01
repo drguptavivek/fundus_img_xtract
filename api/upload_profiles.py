@@ -5,7 +5,6 @@ from flask import flash, jsonify, request, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
-from remote_inference import admin_service as remote_inference_service
 from upload_profiles import admin_service as upload_profile_service
 
 from . import api_bp
@@ -88,24 +87,6 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
                 grading_packages=packages,
             )
         )
-    ai_workflows = []
-    for value in form.getlist("ai_workflows"):
-        parts = value.split(":")
-        if len(parts) not in {3, 4}:
-            continue
-        disease_id = upload_profile_service.to_int(parts[0])
-        ai_model_id = upload_profile_service.to_int(parts[1])
-        upload_kind = parts[2]
-        auto_inference_policy = parts[3] if len(parts) == 4 else "always"
-        if disease_id and ai_model_id and upload_kind:
-            ai_workflows.append(
-                upload_profile_service.AIWorkflowInput(
-                    disease_id=disease_id,
-                    ai_model_id=ai_model_id,
-                    upload_kind=upload_kind,
-                    auto_inference_policy=auto_inference_policy,
-                )
-            )
     return upload_profile_service.UploadProfileInput(
         name=(form.get("name") or "").strip(),
         disease_ids=disease_ids,
@@ -119,7 +100,7 @@ def _profile_input_from_request() -> upload_profile_service.UploadProfileInput:
         automated_remidio_populated=form.get("automated_remidio_populated") == "on",
         allow_remidio_zip_encounter_set=form.get("allow_remidio_zip_encounter_set") == "on",
         allow_iitk_zip_encounter_set=form.get("allow_iitk_zip_encounter_set") == "on",
-        ai_workflows=ai_workflows,
+        ai_workflows=[],
         encounter_set_configs=encounter_set_configs,
         task_prioritization_json=form.get("task_prioritization_json") or None,
         description=(form.get("description") or "").strip() or None,
@@ -203,62 +184,6 @@ def update_upload_profile_project(project_id: int):
     """Update a project for upload profile governance."""
     dto = _project_input_from_request()
     return _json_result(upload_profile_service.update_project(project_id, dto), redirect_endpoint="admin.upload_projects_admin")
-
-
-@api_bp.route("/upload-profiles/projects/<int:project_id>/remote-inference-policy", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
-def save_project_remote_inference_policy(project_id: int):
-    """Assign or clear the reusable remote inference policy for a project."""
-    return _json_result(
-        remote_inference_service.assign_project_policy(
-            current_user.id,
-            project_id,
-            remote_inference_service.policy_id_from_form(request.form),
-        ),
-        redirect_endpoint="admin.upload_projects_admin",
-    )
-
-
-@api_bp.route("/remote-inference-policies", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
-def create_remote_inference_policy():
-    """Create a reusable remote inference policy."""
-    dto = remote_inference_service.policy_input_from_form(request.form)
-    return _json_result(
-        remote_inference_service.save_policy(current_user.id, None, dto),
-        redirect_endpoint="admin.remote_inference_policies_admin",
-    )
-
-
-@api_bp.route("/remote-inference-policies/<int:policy_id>", methods=["POST", "PATCH"])
-@roles_required("admin", "local_admin", "data_manager")
-def update_remote_inference_policy(policy_id: int):
-    """Update a reusable remote inference policy."""
-    dto = remote_inference_service.policy_input_from_form(request.form)
-    return _json_result(
-        remote_inference_service.save_policy(current_user.id, policy_id, dto),
-        redirect_endpoint="admin.remote_inference_policies_admin",
-    )
-
-
-@api_bp.route("/remote-inference-policies/<int:policy_id>/activate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
-def activate_remote_inference_policy(policy_id: int):
-    """Activate a reusable remote inference policy."""
-    return _json_result(
-        remote_inference_service.set_policy_active(current_user.id, policy_id, True),
-        redirect_endpoint="admin.remote_inference_policies_admin",
-    )
-
-
-@api_bp.route("/remote-inference-policies/<int:policy_id>/deactivate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
-def deactivate_remote_inference_policy(policy_id: int):
-    """Deactivate a reusable remote inference policy and its project assignments."""
-    return _json_result(
-        remote_inference_service.set_policy_active(current_user.id, policy_id, False),
-        redirect_endpoint="admin.remote_inference_policies_admin",
-    )
 
 
 @api_bp.route("/upload-profiles/investigators", methods=["POST"])

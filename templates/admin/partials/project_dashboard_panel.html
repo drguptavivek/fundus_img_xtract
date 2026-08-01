@@ -211,10 +211,6 @@
                 'grading_packages': row_package_configs
               }) %}
             {% endfor %}
-            {% set row_ai_workflows = [] %}
-            {% for workflow in profile.ai_workflows if workflow.active %}
-              {% set _ = row_ai_workflows.append(workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind ~ ':' ~ (workflow.auto_inference_policy or 'always')) %}
-            {% endfor %}
             {% set row_profile_summary = {
               'id': profile.id,
               'name': profile.name,
@@ -230,7 +226,6 @@
               'upload_kinds': row_upload_kinds,
               'encounter_set_types': row_encounter_set_names,
               'encounter_set_configs': row_encounter_set_configs,
-              'ai_workflow_count': row_ai_workflows|length,
               'automated_remidio_populated': profile.automated_remidio_populated,
               'allow_remidio_zip_encounter_set': profile.allow_remidio_zip_encounter_set,
               'allow_iitk_zip_encounter_set': profile.allow_iitk_zip_encounter_set,
@@ -351,7 +346,6 @@
                     data-upload-kinds="{{ row_upload_kinds|join(',') }}"
                     data-encounter-set-type-ids="{{ row_encounter_set_type_ids|join(',') }}"
                     data-encounter-set-configs="{{ row_encounter_set_configs|tojson|forceescape }}"
-                    data-ai-workflows="{{ row_ai_workflows|join(',') }}"
                     data-automated-remidio-populated="{{ '1' if profile.automated_remidio_populated else '0' }}"
                     data-allow-remidio-zip-encounter-set="{{ '1' if profile.allow_remidio_zip_encounter_set else '0' }}"
                     data-allow-iitk-zip-encounter-set="{{ '1' if profile.allow_iitk_zip_encounter_set else '0' }}"

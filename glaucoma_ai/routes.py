@@ -121,15 +121,9 @@ def _load_upload_options(db):
     glaucoma_disease_id = get_glaucoma_disease_id(db)
     options = get_user_upload_options_for_kind(db, current_user.id, UPLOAD_KIND_DIRECT_IMAGE)
     options = filter_upload_options(db, options, disease_id=glaucoma_disease_id)
-    profiles = [
-        profile for profile in options.profiles
-        if any(
-            workflow.get("disease_id") == glaucoma_disease_id
-            and workflow.get("upload_kind") == UPLOAD_KIND_DIRECT_IMAGE
-            and workflow.get("active", True)
-            for workflow in profile.get("ai_workflows", [])
-        )
-    ]
+    from services.uploads.direct import profile_has_executable_direct_workflow
+
+    profiles = [profile for profile in options.profiles if profile_has_executable_direct_workflow(db, profile, disease_id=glaucoma_disease_id)]
     return restrict_upload_options_to_profiles(options, profiles)
 
 

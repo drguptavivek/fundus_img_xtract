@@ -13,7 +13,6 @@ from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
     UploadProfile,
-    UploadProfileAIWorkflow,
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
@@ -205,10 +204,6 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
                 selectinload(ProjectUploadProfileAssignment.project_profile)
                 .selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.upload_kinds),
-                selectinload(ProjectUploadProfileAssignment.project_profile)
-                .selectinload(ProjectUploadProfile.profile)
-                .selectinload(UploadProfile.ai_workflows)
-                .selectinload(UploadProfileAIWorkflow.ai_model),
                 selectinload(ProjectUploadProfileAssignment.project_profile)
                 .selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
@@ -503,19 +498,9 @@ def _profile_to_dto(
     assignment_id: int | None,
 ) -> UploadProfileDTO:
     disease_names = {row.disease_id: row.disease.name for row in profile.diseases}
-    ai_workflows = tuple(
-        {
-            "id": row.id,
-            "disease_id": row.disease_id,
-            "ai_model_id": row.ai_model_id,
-            "ai_model_name": row.ai_model.name,
-            "upload_kind": row.upload_kind,
-            "auto_inference_policy": row.auto_inference_policy,
-            "active": row.active,
-        }
-        for row in profile.ai_workflows
-        if row.active
-    )
+    # Automated inference is project-owned; retained as an empty DTO field until
+    # older mobile clients no longer deserialize this optional property.
+    ai_workflows: tuple[dict[str, Any], ...] = ()
     return UploadProfileDTO(
         profile_id=profile.id,
         project_upload_profile_id=project_upload_profile_id,
@@ -617,7 +602,6 @@ def _profile_payload(profile: UploadProfileDTO) -> dict[str, Any]:
         "camera_ids": sorted(profile.camera_ids),
         "area_ids": sorted(profile.area_ids),
         "upload_kinds": sorted(profile.upload_kinds),
-        "ai_workflows": list(profile.ai_workflows),
         "encounter_set_type_ids": sorted(profile.encounter_set_type_ids),
         "encounter_set_types": list(profile.encounter_set_types),
         "task_prioritization_json": profile.task_prioritization_json,

@@ -10,8 +10,6 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import (
     Area,
-    AIModel,
-    AIModelDisease,
     Camera,
     Disease,
     DiseaseGrading,
@@ -23,7 +21,8 @@ from models import (
     user_lab_units,
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
-from remote_inference import admin_service as remote_inference_service
+from remote_inference.automated_service import project_automated_workflow_context
+from remote_inference.manual_service import project_manual_workflow_context
 from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
 from upload_profiles.models import (
@@ -85,7 +84,6 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
                 selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),
                 selectinload(UploadProfile.cameras).selectinload(UploadProfileCamera.camera),
                 selectinload(UploadProfile.areas).selectinload(UploadProfileArea.area),
-                selectinload(UploadProfile.ai_workflows),
                 selectinload(UploadProfile.encounter_set_types).selectinload(UploadProfileEncounterSetType.encounter_set_type),
                 selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.encounter_grading_scheme),
@@ -213,26 +211,6 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
         .scalars()
         .all()
     )
-    ai_models = (
-        db.execute(
-            select(AIModel)
-            .join(AIModelDisease, AIModelDisease.ai_model_id == AIModel.id)
-            .where(AIModelDisease.active.is_(True))
-            .options(
-                selectinload(AIModel.integration),
-                selectinload(AIModel.disease_links).selectinload(AIModelDisease.disease),
-            )
-            .order_by(AIModel.name, AIModel.version)
-        )
-        .scalars()
-        .unique()
-        .all()
-    )
-    ai_models_by_disease: dict[int, list[AIModel]] = {}
-    for model in ai_models:
-        for link in model.disease_links:
-            if link.active:
-                ai_models_by_disease.setdefault(link.disease_id, []).append(model)
     project_cards = []
     for project in projects:
         active_investigators = [investigator for investigator in investigators if investigator.project_id == project.id and investigator.active]
@@ -266,7 +244,6 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
             }
         )
 
-    remote_inference_options = remote_inference_service.remote_inference_options(db)
     return {
         "lab_units": lab_units,
         "scoped_lab_ids": scoped_lab_ids,
@@ -293,8 +270,6 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
             .scalars()
             .all()
         ),
-        "ai_models_by_disease": ai_models_by_disease,
-        **remote_inference_options,
         "upload_profiles": upload_profiles,
         "project_profile_mappings": project_profile_mappings,
         "investigators": investigators,
@@ -339,18 +314,6 @@ def upload_projects_admin():
 
 
 @roles_required("admin", "local_admin", "data_manager")
-def remote_inference_policies_admin():
-    """Render reusable remote inference policy management."""
-    scoped_lab_ids = _manager_lab_unit_ids()
-    if not scoped_lab_ids:
-        flash("You are not assigned to any lab units for remote inference policy management.", "warning")
-        return redirect(url_for("admin.users_list"))
-
-    with transaction_scope() as db:
-        context = remote_inference_service.policy_admin_context(db, request.args.get("policy_id", type=int))
-        return render_template("admin/remote_inference_policies.html", **context)
-
-
 @roles_required("admin", "local_admin", "data_manager")
 def upload_project_workspace(project_id: int):
     """Render one project management workspace fragment."""
@@ -374,7 +337,8 @@ def upload_project_workspace(project_id: int):
             mapping.upload_profile_id for mapping in context["project_profile_mappings"] if mapping.active
         }
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
-        context.update(remote_inference_service.project_policy_context(db, project_id))
+        context.update(project_automated_workflow_context(db, project_id))
+        context.update(project_manual_workflow_context(db, project_id))
         context.update(iitk_service.project_connection_context(db, project_id))
         return render_template("admin/partials/project_detail_panel.html", **context)
 

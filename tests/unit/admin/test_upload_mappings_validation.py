@@ -858,7 +858,7 @@ def test_encounter_set_profile_rejects_invalid_positive_control_ratio(db_session
     assert "1 to 10" in result.message
 
 
-def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_scheme(db_session, monkeypatch):
+def test_encounter_set_profile_ignores_retired_profile_ai_workflow_input(db_session, monkeypatch):
     @contextmanager
     def use_test_session():
         yield db_session
@@ -945,8 +945,4 @@ def test_encounter_set_profile_accepts_wadhwani_ai_policy_for_package_image_sche
 
     assert result.success is True
     profile = db_session.query(UploadProfile).filter_by(name="Encounter AI profile").one()
-    workflow = profile.ai_workflows[0]
-    assert workflow.upload_kind == UPLOAD_KIND_ENCOUNTER_SET
-    assert workflow.disease_id == glaucoma_scheme.id
-    assert workflow.ai_model_id == ai_model.id
-    assert workflow.auto_inference_policy == "remidio_glaucoma_report_present"
+    assert profile.ai_workflows == []

@@ -1,7 +1,8 @@
 from werkzeug.datastructures import FileStorage
 from types import SimpleNamespace
 
-from models import AIModel, AIModelIntegration, Disease
+from models import AIModel, AIModelIntegration, Disease, Project
+from remote_inference.models import ProjectAutomatedRemoteInferenceRule
 from services.glaucoma_ai_upload import (
     GlaucomaAIUploadItem,
     GlaucomaAIUploadSelection,
@@ -131,6 +132,7 @@ def test_glaucoma_ai_upload_enqueue_skips_non_queueable_duplicate_tasks(monkeypa
 
 def test_glaucoma_ai_workflow_requires_selected_profile_linked_to_wadhwani(db_session):
     disease = Disease(name="Glaucoma Workflow Test")
+    project = Project(title="Glaucoma Workflow Project", code="GLAU_WORKFLOW_TEST", active=True)
     integration = db_session.query(AIModelIntegration).filter_by(provider=WADHWANI_PROVIDER).one_or_none()
     if integration is None:
         model = AIModel(name="Glaucoma Screening MOHFW Wadhwani AI Model", version="1.0")
@@ -146,21 +148,23 @@ def test_glaucoma_ai_workflow_requires_selected_profile_linked_to_wadhwani(db_se
         db_session.add(integration)
     else:
         integration.is_enabled = True
-    db_session.add(disease)
+    db_session.add_all([disease, project])
+    db_session.flush()
+    db_session.add(ProjectAutomatedRemoteInferenceRule(
+        project_id=project.id,
+        disease_id=disease.id,
+        ai_model_id=integration.ai_model_id,
+        upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+        trigger_timing="on_image_received",
+        encounter_eligibility="always",
+        image_selection="all_eligible_images",
+        active=True,
+    ))
     db_session.flush()
 
-    profile = SimpleNamespace(
-        ai_workflows=(
-            {
-                "disease_id": disease.id,
-                "ai_model_id": integration.ai_model_id,
-                "upload_kind": UPLOAD_KIND_DIRECT_IMAGE,
-                "active": True,
-            },
-        )
-    )
+    profile = SimpleNamespace(project_id=project.id)
 
-    assert _validate_glaucoma_ai_workflow(db_session, profile, disease.id) == model.id
+    assert _validate_glaucoma_ai_workflow(db_session, profile, disease.id) == integration.ai_model_id
 
 
 def test_glaucoma_ai_workflow_rejects_profile_without_ai_workflow(db_session):
@@ -169,7 +173,10 @@ def test_glaucoma_ai_workflow_rejects_profile_without_ai_workflow(db_session):
         disease = Disease(name="Glaucoma")
         db_session.add(disease)
         db_session.flush()
-    profile = SimpleNamespace(ai_workflows=())
+    project = Project(title="Glaucoma Disabled Project", code="GLAU_DISABLED_TEST", active=True)
+    db_session.add(project)
+    db_session.flush()
+    profile = SimpleNamespace(project_id=project.id)
 
     try:
         _validate_glaucoma_ai_workflow(db_session, profile, disease.id)

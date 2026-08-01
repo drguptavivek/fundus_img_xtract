@@ -14,17 +14,18 @@ from models import (
     PatientEncounters,
     Project,
 )
-from remote_inference.models import DiseaseReportLinkage, ProjectRemoteInferencePolicy, RemoteInferencePolicy, RemoteInferencePolicyRule
+from remote_inference.models import DiseaseReportLinkage, ProjectAutomatedRemoteInferenceRule
 from services.encounter_set_ai_inference import (
     create_wadhwani_task_ids_for_encounter,
     encounter_set_report_evidence,
 )
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
-from upload_profiles.models import UploadProfile, UploadProfileAIWorkflow, UploadProfileKind
+from upload_profiles.models import UploadProfile, UploadProfileKind
 from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET
 
 
 def _encounter_set_wadhwani_profile(db_session, glaucoma):
+    project = Project(title=f"Wadhwani Project {uuid4()}", code=f"WAI{str(uuid4())[:8]}", active=True)
     profile = UploadProfile(
         name=f"EncounterSet Wadhwani {uuid4()}",
         active=True,
@@ -39,18 +40,22 @@ def _encounter_set_wadhwani_profile(db_session, glaucoma):
         client_id="test-client",
         bearer_token="test-token",
     )
-    db_session.add_all([profile, ai_model])
+    db_session.add_all([project, profile, ai_model])
     db_session.flush()
-    profile.ai_workflows.append(
-        UploadProfileAIWorkflow(
+    db_session.add(
+        ProjectAutomatedRemoteInferenceRule(
+            project_id=project.id,
             disease_id=glaucoma.id,
             ai_model_id=ai_model.id,
             upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
-            auto_inference_policy="remidio_glaucoma_report_present",
+            trigger_timing="on_image_received",
+            encounter_eligibility="always",
+            image_selection="disc_focused_images",
             active=True,
         )
     )
     db_session.flush()
+    profile._test_project_id = project.id
     return profile, ai_model
 
 
@@ -63,7 +68,7 @@ def _encounter_with_image(db_session, core_test_data, profile, *, metadata, proj
         capture_date_dt=date(2026, 7, 29),
         is_set_based=True,
         lab_unit_id=lab_unit.id,
-        project_id=project_id,
+        project_id=project_id or getattr(profile, "_test_project_id", None),
         upload_profile_id=profile.id,
     )
     db_session.add(encounter)
@@ -103,9 +108,8 @@ def _remote_policy_project(db_session, core_test_data, glaucoma, *, trigger_timi
         bearer_token="test-token",
     )
     ai_model.disease_links.append(AIModelDisease(disease_id=glaucoma.id, active=True))
-    policy = RemoteInferencePolicy(name=f"Remote Policy {uuid4()}", active=True)
-    policy.rules.append(
-        RemoteInferencePolicyRule(
+    rule = ProjectAutomatedRemoteInferenceRule(
+            project=project,
             disease_id=glaucoma.id,
             ai_model=ai_model,
             upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
@@ -114,10 +118,7 @@ def _remote_policy_project(db_session, core_test_data, glaucoma, *, trigger_timi
             image_selection=image_selection,
             active=True,
         )
-    )
-    db_session.add_all([project, profile, ai_model, policy])
-    db_session.flush()
-    db_session.add(ProjectRemoteInferencePolicy(project_id=project.id, remote_inference_policy_id=policy.id, active=True))
+    db_session.add_all([project, profile, ai_model, rule])
     db_session.flush()
     return project, profile, ai_model
 
@@ -186,7 +187,7 @@ def test_disc_image_evidence_queues_only_disc_focused_images(db_session, core_te
     assert task.encounter_set_image_id == disc_image.id
 
 
-def test_glaucoma_report_evidence_queues_disc_and_macula_images_only(db_session, core_test_data):
+def test_project_rule_image_selection_remains_disc_focused_when_report_exists(db_session, core_test_data):
     profile, _ai_model = _encounter_set_wadhwani_profile(db_session, core_test_data["glaucoma"])
     encounter, disc_image = _encounter_with_image(
         db_session,
@@ -238,7 +239,7 @@ def test_glaucoma_report_evidence_queues_disc_and_macula_images_only(db_session,
         for task_id in task_ids
     }
 
-    assert task_image_ids == {disc_image.id, macula_image.id}
+    assert task_image_ids == {disc_image.id}
     assert peripheral_image.id not in task_image_ids
 
 

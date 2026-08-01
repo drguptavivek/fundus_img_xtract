@@ -111,6 +111,7 @@ def create_direct_upload_web():
             token = result.job.token
             upload_ids = result.upload_ids_for_post_commit
             hospital_id = result.hospital_id_for_post_commit
+            inference_task_ids = result.inference_task_ids_for_post_commit
     except UploadProfileError as exc:
         return _upload_error(exc.message, status_code=400)
     except DirectUploadJobError as exc:
@@ -122,6 +123,12 @@ def create_direct_upload_web():
         upload_ids=upload_ids,
         job_token=token,
         hospital_id=hospital_id,
+        inference_task_ids=inference_task_ids,
+        username=current_user.username,
+        remote_addr=request.remote_addr,
+        lab_unit_id=request.form.get("lab_unit_id", type=int),
+        project_id=request.form.get("project_id", type=int),
+        upload_profile_id=request.form.get("profile_id", type=int),
     )
 
     messages = [("success", f"Uploaded {result.uploaded_count}, duplicates {result.duplicate_count}, rejected {result.rejected_count}")]

@@ -4,23 +4,25 @@ from contextlib import contextmanager
 from uuid import uuid4
 
 from models import AIModel, AIModelDisease, AIModelIntegration, Project
-from remote_inference import admin_service
-from remote_inference.models import ProjectRemoteInferencePolicy, RemoteInferencePolicy, RemoteInferencePolicyRule
+from remote_inference import automated_service
+from remote_inference.models import ProjectAutomatedRemoteInferenceRule
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
+from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileDisease, UploadProfileKind
 
 
-def _remote_model(db_session, disease):
-    ai_model = AIModel(name=f"Remote Admin Model {uuid4()}", version="test")
-    ai_model.integration = AIModelIntegration(
-        provider=WADHWANI_PROVIDER,
-        is_enabled=True,
-        client_id="test-client",
-        bearer_token="test-token",
-    )
-    ai_model.disease_links.append(AIModelDisease(disease_id=disease.id, active=True))
-    db_session.add(ai_model)
+def _configured_project(db_session, disease):
+    project = Project(title=f"Automated Project {uuid4()}", code=f"AUTO{str(uuid4())[:8]}", active=True)
+    profile = UploadProfile(name=f"Direct Glaucoma {uuid4()}", active=True, allow_mydriatic=True, allow_non_mydriatic=True)
+    profile.diseases.append(UploadProfileDisease(disease_id=disease.id))
+    profile.upload_kinds.append(UploadProfileKind(upload_kind="direct_image"))
+    model = AIModel(name=f"Wadhwani {uuid4()}", version="test")
+    model.integration = AIModelIntegration(provider=WADHWANI_PROVIDER, is_enabled=True, client_id="client", bearer_token="token")
+    model.disease_links.append(AIModelDisease(disease_id=disease.id, active=True))
+    db_session.add_all([project, profile, model])
     db_session.flush()
-    return ai_model
+    db_session.add(ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True))
+    db_session.flush()
+    return project, profile, model
 
 
 def _use_test_session(db_session, monkeypatch):
@@ -29,181 +31,53 @@ def _use_test_session(db_session, monkeypatch):
         yield db_session
         db_session.flush()
 
-    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr(automated_service, "transaction_scope", use_test_session)
 
 
-def _policy_input(disease_id: int, ai_model_id: int, *, upload_kind: str = "encounter_set"):
-    return admin_service.RemoteInferencePolicyInput(
-        name=f"Reusable Policy {uuid4()}",
-        description="Reusable remote inference policy",
-        rules=[
-            admin_service.RemoteInferenceRuleInput(
-                disease_id=disease_id,
-                ai_model_id=ai_model_id,
-                upload_kind=upload_kind,
-                trigger_timing="on_image_received",
-                encounter_eligibility="always",
-                image_selection="disc_or_macula_images",
-            )
-        ],
-    )
+def test_project_options_are_derived_from_active_profile_capabilities(db_session, core_test_data):
+    project, profile, model = _configured_project(db_session, core_test_data["glaucoma"])
+
+    context = automated_service.project_automated_workflow_context(db_session, project.id)
+
+    option = next(row for row in context["automated_remote_inference_workflows"] if row.ai_model_id == model.id)
+    assert option.upload_kind == "direct_image"
+    assert option.supporting_profiles == (profile.name,)
+    assert option.enabled is False
 
 
-def test_save_policy_creates_reusable_policy_without_project_assignment(db_session, core_test_data, monkeypatch):
+def test_save_project_rules_creates_and_deactivates_project_owned_rows(db_session, core_test_data, monkeypatch):
     _use_test_session(db_session, monkeypatch)
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {core_test_data["lab_unit"].id})
-    ai_model = _remote_model(db_session, core_test_data["glaucoma"])
-
-    result = admin_service.save_policy(
-        manager_user_id=1,
-        policy_id=None,
-        policy_input=_policy_input(core_test_data["glaucoma"].id, ai_model.id),
-    )
-
-    assert result.success is True
-    policy = db_session.get(RemoteInferencePolicy, result.payload["remote_inference_policy_id"])
-    assert policy.name.startswith("Reusable Policy")
-    assert len(policy.rules) == 1
-    assert db_session.query(ProjectRemoteInferencePolicy).filter_by(remote_inference_policy_id=policy.id).count() == 0
-
-
-def test_save_policy_reconciles_existing_rules_without_duplicate_keys(db_session, core_test_data, monkeypatch):
-    _use_test_session(db_session, monkeypatch)
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {core_test_data["lab_unit"].id})
-    ai_model = _remote_model(db_session, core_test_data["glaucoma"])
-    policy = RemoteInferencePolicy(name=f"Editable Policy {uuid4()}", active=True)
-    existing_rule = RemoteInferencePolicyRule(
+    monkeypatch.setattr(automated_service, "manager_lab_unit_ids", lambda _user_id: {core_test_data["lab_unit"].id})
+    project, _profile, model = _configured_project(db_session, core_test_data["glaucoma"])
+    selected = [automated_service.AutomatedRemoteInferenceRuleInput(
         disease_id=core_test_data["glaucoma"].id,
-        ai_model_id=ai_model.id,
-        upload_kind="encounter_set",
-        trigger_timing="after_verification",
-        encounter_eligibility="always",
-        image_selection="disc_focused_images",
-        active=True,
-    )
-    policy.rules.append(existing_rule)
-    db_session.add(policy)
-    db_session.flush()
-    existing_rule_id = existing_rule.id
-
-    policy_input = admin_service.RemoteInferencePolicyInput(
-        name=policy.name,
-        description="Updated policy",
-        rules=[
-            admin_service.RemoteInferenceRuleInput(
-                disease_id=core_test_data["glaucoma"].id,
-                ai_model_id=ai_model.id,
-                upload_kind=upload_kind,
-                trigger_timing="on_image_received",
-                encounter_eligibility="always",
-                image_selection="all_eligible_images",
-            )
-            for upload_kind in ("encounter_set", "direct_image", "remidio")
-        ],
-    )
-
-    result = admin_service.save_policy(1, policy.id, policy_input)
-
-    assert result.success is True
-    db_session.refresh(policy)
-    rules = sorted(policy.rules, key=lambda rule: rule.display_order)
-    assert len(rules) == 3
-    assert rules[0].id == existing_rule_id
-    assert rules[0].trigger_timing == "on_image_received"
-    assert [rule.upload_kind for rule in rules] == ["encounter_set", "direct_image", "remidio"]
-    assert all(rule.active for rule in rules)
-
-
-def test_save_policy_deactivates_removed_rules(db_session, core_test_data, monkeypatch):
-    _use_test_session(db_session, monkeypatch)
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {core_test_data["lab_unit"].id})
-    ai_model = _remote_model(db_session, core_test_data["glaucoma"])
-    policy = RemoteInferencePolicy(name=f"Policy With Removed Rule {uuid4()}", active=True)
-    removed_rule = RemoteInferencePolicyRule(
-        disease_id=core_test_data["glaucoma"].id,
-        ai_model_id=ai_model.id,
+        ai_model_id=model.id,
         upload_kind="direct_image",
-        trigger_timing="on_image_received",
-        encounter_eligibility="always",
-        image_selection="all_eligible_images",
-        active=True,
-    )
-    policy.rules.append(removed_rule)
-    db_session.add(policy)
-    db_session.flush()
+    )]
 
-    result = admin_service.save_policy(
-        1,
-        policy.id,
-        admin_service.RemoteInferencePolicyInput(name=policy.name, description=None, rules=[]),
-    )
-
+    result = automated_service.set_project_automated_rules(1, project.id, selected)
     assert result.success is True
-    db_session.refresh(removed_rule)
-    assert removed_rule.active is False
+    rule = db_session.query(ProjectAutomatedRemoteInferenceRule).filter_by(project_id=project.id).one()
+    assert rule.active is True
 
-
-def test_assign_project_policy_reuses_existing_policy_and_can_clear_assignment(db_session, core_test_data, monkeypatch):
-    _use_test_session(db_session, monkeypatch)
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {core_test_data["lab_unit"].id})
-    ai_model = _remote_model(db_session, core_test_data["glaucoma"])
-    policy = RemoteInferencePolicy(name=f"Reusable Assigned Policy {uuid4()}", active=True)
-    policy.rules.append(
-        RemoteInferencePolicyRule(
-            disease_id=core_test_data["glaucoma"].id,
-            ai_model_id=ai_model.id,
-            upload_kind="encounter_set",
-            trigger_timing="after_verification",
-            encounter_eligibility="always",
-            image_selection="disc_focused_images",
-            active=True,
-        )
-    )
-    project = Project(title=f"Remote Project {uuid4()}", code=f"RP{str(uuid4())[:8]}", active=True)
-    db_session.add_all([policy, project])
-    db_session.flush()
-
-    assigned = admin_service.assign_project_policy(1, project.id, policy.id)
-
-    assert assigned.success is True
-    assignment = db_session.query(ProjectRemoteInferencePolicy).filter_by(project_id=project.id).one()
-    assert assignment.remote_inference_policy_id == policy.id
-    assert assignment.active is True
-
-    cleared = admin_service.assign_project_policy(1, project.id, None)
-
+    cleared = automated_service.set_project_automated_rules(1, project.id, [])
     assert cleared.success is True
-    db_session.refresh(assignment)
-    assert assignment.active is False
+    db_session.refresh(rule)
+    assert rule.active is False
 
 
-def test_deactivating_policy_deactivates_project_assignment(db_session, core_test_data, monkeypatch):
+def test_save_rejects_upload_path_not_supported_by_project_profiles(db_session, core_test_data, monkeypatch):
     _use_test_session(db_session, monkeypatch)
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {core_test_data["lab_unit"].id})
-    ai_model = _remote_model(db_session, core_test_data["glaucoma"])
-    policy = RemoteInferencePolicy(name=f"Policy To Deactivate {uuid4()}", active=True)
-    policy.rules.append(
-        RemoteInferencePolicyRule(
+    monkeypatch.setattr(automated_service, "manager_lab_unit_ids", lambda _user_id: {core_test_data["lab_unit"].id})
+    project, _profile, model = _configured_project(db_session, core_test_data["glaucoma"])
+
+    result = automated_service.set_project_automated_rules(1, project.id, [
+        automated_service.AutomatedRemoteInferenceRuleInput(
             disease_id=core_test_data["glaucoma"].id,
-            ai_model_id=ai_model.id,
-            upload_kind="encounter_set",
-            trigger_timing="on_image_received",
-            encounter_eligibility="always",
-            image_selection="all_eligible_images",
-            active=True,
+            ai_model_id=model.id,
+            upload_kind="remidio",
         )
-    )
-    project = Project(title=f"Remote Project {uuid4()}", code=f"RPD{str(uuid4())[:8]}", active=True)
-    db_session.add_all([policy, project])
-    db_session.flush()
-    assignment = ProjectRemoteInferencePolicy(project_id=project.id, remote_inference_policy_id=policy.id, active=True)
-    db_session.add(assignment)
-    db_session.flush()
+    ])
 
-    result = admin_service.set_policy_active(1, policy.id, False)
-
-    assert result.success is True
-    db_session.refresh(policy)
-    db_session.refresh(assignment)
-    assert policy.active is False
-    assert assignment.active is False
+    assert result.success is False
+    assert "not supported" in result.message

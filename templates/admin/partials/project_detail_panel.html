@@ -394,8 +394,8 @@
 
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-          <h3 class="h6 mb-0">Automated Remote Inference Policy</h3>
-          {% if remote_inference_policy and remote_inference_policy.active %}
+          <h3 class="h6 mb-0">Automated Remote AI Inference</h3>
+          {% if automated_remote_inference_enabled %}
           <span class="badge text-bg-success">Configured</span>
           {% else %}
           <span class="badge text-bg-secondary">Not configured</span>
@@ -403,59 +403,63 @@
         </div>
         <form class="border rounded p-3"
               method="post"
-              action="{{ url_for('fundus_api.save_project_remote_inference_policy', project_id=selected_project.id) }}"
-              hx-post="{{ url_for('fundus_api.save_project_remote_inference_policy', project_id=selected_project.id) }}"
+              action="{{ url_for('fundus_api.save_project_automated_remote_inference_workflows', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_project_automated_remote_inference_workflows', project_id=selected_project.id) }}"
               hx-swap="none"
               data-json-api-htmx
               data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
               data-json-api-reload-target="#project-detail-workspace">
           {{ csrf_field() }}
-          <div class="row g-2 align-items-end">
-            <div class="col-lg-8">
-              <label class="form-label" for="project_remote_inference_policy_id">Assigned Policy</label>
-              <select class="form-select" id="project_remote_inference_policy_id" name="remote_inference_policy_id">
-                <option value="">No automated remote inference policy</option>
-                {% for policy in remote_inference_policies %}
-                <option value="{{ policy.id }}" {% if remote_inference_policy and remote_inference_policy.id == policy.id %}selected{% endif %}>
-                  {{ policy.name }}
-                </option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-lg-2">
-              <button class="btn btn-outline-primary w-100" type="submit">Save Assignment</button>
-            </div>
-            <div class="col-lg-2">
-              <a class="btn btn-outline-secondary w-100" href="{{ url_for('admin.remote_inference_policies_admin') }}">Manage Policies</a>
-            </div>
-          </div>
-          <div class="border rounded p-3 mt-3">
-            {% if remote_inference_policy and remote_inference_policy.active %}
-              <div class="fw-semibold">{{ remote_inference_policy.name }}</div>
-              <div class="small text-muted mb-2">{{ remote_inference_policy.description or 'No description.' }}</div>
-              <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                  <thead><tr><th>Disease</th><th>Model</th><th>Upload</th><th>When</th><th>Eligibility</th><th>Images</th></tr></thead>
-                  <tbody>
-                    {% for rule in remote_inference_policy.rules if rule.active %}
-                    <tr>
-                      <td>{{ rule.disease.name if rule.disease else '-' }}</td>
-                      <td>{{ rule.ai_model.name if rule.ai_model else '-' }}</td>
-                      <td>{{ rule.upload_kind.replace('_', ' ')|title }}</td>
-                      <td>{{ rule.trigger_timing.replace('_', ' ')|title }}</td>
-                      <td>{{ rule.encounter_eligibility.replace('_', ' ')|title }}</td>
-                      <td>{{ rule.image_selection.replace('_', ' ')|title }}</td>
-                    </tr>
+          <p class="small text-muted mb-3">
+            Options come from this project's active Upload Profiles and their disease targets. Enabling a row causes automatic submission on that upload path.
+          </p>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead><tr><th>Enable</th><th>Disease / model</th><th>Upload path</th><th>Supporting profiles</th><th>Eligibility</th><th>Images</th></tr></thead>
+              <tbody>
+                {% for workflow in automated_remote_inference_workflows %}
+                {% set workflow_key = workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind %}
+                {% set field_prefix = 'automated_remote_rule_' ~ workflow.disease_id ~ '_' ~ workflow.ai_model_id ~ '_' ~ workflow.upload_kind %}
+                <tr>
+                  <td>
+                    <input class="form-check-input" type="checkbox"
+                           name="automated_remote_inference_workflow" value="{{ workflow_key }}"
+                           aria-label="Enable {{ workflow.disease_name }} {{ workflow.upload_kind }} inference"
+                           {% if workflow.enabled %}checked{% endif %}>
+                  </td>
+                  <td><span class="fw-semibold">{{ workflow.disease_name }}</span><span class="d-block small text-muted">{{ workflow.ai_model_name }} {{ workflow.ai_model_version }}</span></td>
+                  <td>{{ workflow.upload_kind.replace('_', ' ')|title }}</td>
+                  <td class="small">{{ workflow.supporting_profiles|join(', ') }}</td>
+                  <td>
+                    {% if workflow.upload_kind == 'encounter_set' %}
+                    <select class="form-select form-select-sm" name="{{ field_prefix }}_encounter_eligibility">
+                      {% for value, label in [('always', 'Always'), ('if_matching_report_present', 'Matching report present'), ('if_matching_report_absent', 'Matching report absent'), ('if_any_report_present', 'Any report present')] %}
+                      <option value="{{ value }}" {% if workflow.encounter_eligibility == value %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
                     {% else %}
-                    <tr><td colspan="6" class="text-muted text-center py-2">Assigned policy has no active rules.</td></tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            {% else %}
-              <div class="text-muted">No remote inference policy is assigned to this project.</div>
-            {% endif %}
+                    <span class="small text-muted">Always</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if workflow.upload_kind == 'encounter_set' %}
+                    <select class="form-select form-select-sm" name="{{ field_prefix }}_image_selection">
+                      {% for value, label in [('all_eligible_images', 'All eligible'), ('disc_focused_images', 'Disc focused'), ('macula_focused_images', 'Macula focused'), ('disc_or_macula_images', 'Disc or macula')] %}
+                      <option value="{{ value }}" {% if workflow.image_selection == value %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                    {% else %}
+                    <span class="small text-muted">All eligible</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-muted text-center py-3">No enabled model matches the disease and upload paths configured by this project's active profiles.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
+          <button class="btn btn-outline-primary" type="submit" {% if not automated_remote_inference_workflows %}disabled{% endif %}>Save Automated Workflows</button>
         </form>
       </div>
     </div>

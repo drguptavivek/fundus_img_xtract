@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
+from job_store import db_create_job
 from models import AIInferenceRun, AIModelIntegration, AppSetting, Area, Camera, Disease, Grade, Hospital, Job, JobItem, LabUnit, User
 from services.direct_upload_service import (
     DEFAULT_DIRECT_MAX_FILE_SIZE_BYTES,
@@ -22,6 +23,7 @@ from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, get_user_upload_options_for_kind, validate_profile_upload_scope
 from utils.jobUtils import get_recent_zip_uploads
 from utils.log_sanitize import sanitize_log_value
+from utils.celery_helpers import enqueue_task
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
@@ -336,7 +338,13 @@ def get_direct_upload_settings(db, *, user=None) -> DirectUploadSettings:
     )
 
 
-def enqueue_direct_upload_post_commit(app, *, user_id: int, upload_ids: tuple[int, ...], job_token: str, hospital_id: int | None) -> None:
+def enqueue_direct_upload_post_commit(
+    app, *, user_id: int, upload_ids: tuple[int, ...], job_token: str,
+    hospital_id: int | None, inference_task_ids: tuple[int, ...] = (),
+    username: str | None = None, remote_addr: str | None = None,
+    lab_unit_id: int | None = None, project_id: int | None = None,
+    upload_profile_id: int | None = None,
+) -> None:
     """Schedule background work that must run after the upload transaction commits."""
     try:
         from utils.celery_helpers import celery_enabled
@@ -355,6 +363,23 @@ def enqueue_direct_upload_post_commit(app, *, user_id: int, upload_ids: tuple[in
                 ).apply_async()
     except Exception as exc:
         app.logger.error("Failed to enqueue direct upload tasks: %s", sanitize_log_value(exc))
+
+    if inference_task_ids:
+        try:
+            inference_job_token = db_create_job(
+                [f"task:{task_id}" for task_id in inference_task_ids], [],
+                uploader_user_id=user_id, uploader_username=username,
+                uploader_ip=remote_addr, lab_unit_id=lab_unit_id,
+                project_id=project_id, upload_type="direct_image_wadhwani_inference",
+                upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+                upload_profile_id=upload_profile_id,
+            )
+            enqueue_task(
+                "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task",
+                inference_job_token, list(inference_task_ids), user_id=user_id,
+            )
+        except Exception as exc:
+            app.logger.error("Failed to enqueue direct Wadhwani inference: %s", sanitize_log_value(exc))
 
     try:
         queue_missing_thumbnail_regeneration(app, schedule_time="post_direct_upload", limit=200)
@@ -381,16 +406,23 @@ def profile_has_executable_direct_workflow(db, profile, *, disease_id: int) -> b
 
 
 def linked_wadhwani_model_id_for_direct_workflow(db, profile, *, disease_id: int) -> int | None:
-    executable_model_ids = _executable_ai_model_ids(db)
-    workflow_model_ids = {
-        int(workflow.get("ai_model_id") or 0)
-        for workflow in profile.ai_workflows
-        if workflow.get("active", True)
-        and workflow.get("upload_kind") == UPLOAD_KIND_DIRECT_IMAGE
-        and workflow.get("disease_id") == disease_id
-    }
-    linked = sorted(workflow_model_ids.intersection(executable_model_ids))
-    return linked[0] if linked else None
+    from remote_inference.models import ProjectAutomatedRemoteInferenceRule
+
+    project_id = profile.get("project_id") if isinstance(profile, dict) else profile.project_id
+    return db.execute(
+        select(ProjectAutomatedRemoteInferenceRule.ai_model_id)
+        .join(AIModelIntegration, AIModelIntegration.ai_model_id == ProjectAutomatedRemoteInferenceRule.ai_model_id)
+        .where(
+            ProjectAutomatedRemoteInferenceRule.project_id == project_id,
+            ProjectAutomatedRemoteInferenceRule.disease_id == disease_id,
+            ProjectAutomatedRemoteInferenceRule.upload_kind == UPLOAD_KIND_DIRECT_IMAGE,
+            ProjectAutomatedRemoteInferenceRule.trigger_timing == "on_image_received",
+            ProjectAutomatedRemoteInferenceRule.active.is_(True),
+            AIModelIntegration.provider == WADHWANI_PROVIDER,
+            AIModelIntegration.is_enabled.is_(True),
+        )
+        .order_by(ProjectAutomatedRemoteInferenceRule.display_order, ProjectAutomatedRemoteInferenceRule.id)
+    ).scalars().first()
 
 
 def _queueable_wadhwani_task_ids(db, *, task_ids: tuple[int, ...], ai_model_id: int | None) -> tuple[int, ...]:

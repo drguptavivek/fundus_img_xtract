@@ -11,12 +11,11 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, Disease, LabUnit, Project, ProjectInvestigator, User
+from models import Disease, LabUnit, Project, ProjectInvestigator, User
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
     UploadProfile,
-    UploadProfileAIWorkflow,
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
@@ -169,7 +168,6 @@ def validate_mydriatic_flags(*, allow_mydriatic: bool, allow_non_mydriatic: bool
     if not default_is_mydriatic and not allow_non_mydriatic:
         return "Default cannot be non-mydriatic unless non-mydriatic uploads are allowed."
     return None
-
 
 def create_project(project_input: ProjectCreateInput) -> MutationResult:
     if not project_input.title or not project_input.code:
@@ -536,10 +534,6 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
     if not prioritization_result.success:
         return prioritization_result.message
-    ai_workflows = _valid_ai_workflows(db, profile_input.ai_workflows, disease_ids, set(upload_kinds), encounter_set_configs)
-    if ai_workflows is None:
-        return "AI workflow disease and upload type must be included in the profile, and AI models must exist."
-
     profile.name = profile_input.name
     profile.description = profile_input.description
     profile.automated_remidio_populated = profile_input.automated_remidio_populated
@@ -627,16 +621,9 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         )
         for config in sorted(encounter_set_configs.values(), key=lambda item: item.encounter_set_type_id)
     ]
-    profile.ai_workflows = [
-        UploadProfileAIWorkflow(
-            disease_id=workflow.disease_id,
-            ai_model_id=workflow.ai_model_id,
-            upload_kind=workflow.upload_kind,
-            auto_inference_policy=workflow.auto_inference_policy,
-            active=True,
-        )
-        for workflow in ai_workflows
-    ]
+    # Profile-owned AI rules are retired. Clearing the relationship preserves
+    # old rows only until this profile is next edited.
+    profile.ai_workflows = []
     return None
 
 
@@ -924,55 +911,3 @@ def _validate_user_lab_assignment(db, user_id: int | None, lab_unit_ids: set[int
     if any(lab.hospital_id != user_hospital_id for lab in labs):
         return "Selected lab units must belong to the user's hospital."
     return None
-
-
-def _valid_ai_workflows(
-    db,
-    workflow_inputs: list[AIWorkflowInput],
-    disease_ids: set[int],
-    upload_kinds: set[str],
-    encounter_set_configs: dict[int, EncounterSetProfileInput] | None = None,
-) -> list[AIWorkflowInput] | None:
-    deduped: dict[tuple[int, int, str], AIWorkflowInput] = {}
-    disease_target_kinds = {UPLOAD_KIND_DIRECT_IMAGE, "pregraded", UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET}
-    encounter_set_disease_ids = {
-        disease_id
-        for config in (encounter_set_configs or {}).values()
-        for package in _packages_for_config(config)
-        for disease_id in package.image_grading_scheme_ids
-    }
-    allowed_policies = {"never", "always", "remidio_glaucoma_report_present"}
-    for workflow in workflow_inputs:
-        if workflow.auto_inference_policy not in allowed_policies:
-            return None
-        disease_allowed = workflow.disease_id in disease_ids
-        if workflow.upload_kind == UPLOAD_KIND_ENCOUNTER_SET:
-            disease_allowed = workflow.disease_id in encounter_set_disease_ids
-        if (
-            not disease_allowed
-            or workflow.upload_kind not in upload_kinds
-            or workflow.upload_kind not in disease_target_kinds
-        ):
-            return None
-        deduped[(workflow.disease_id, workflow.ai_model_id, workflow.upload_kind)] = workflow
-    if not deduped:
-        return []
-    model_ids = {workflow.ai_model_id for workflow in deduped.values()}
-    valid_model_ids = {row[0] for row in db.execute(select(AIModel.id).where(AIModel.id.in_(model_ids))).all()}
-    if valid_model_ids != model_ids:
-        return None
-    ai_disease_ids = set(disease_ids).union(encounter_set_disease_ids)
-    valid_pairs = {
-        (row[0], row[1])
-        for row in db.execute(
-            select(AIModelDisease.ai_model_id, AIModelDisease.disease_id).where(
-                AIModelDisease.active.is_(True),
-                AIModelDisease.ai_model_id.in_(model_ids),
-                AIModelDisease.disease_id.in_(ai_disease_ids),
-            )
-        ).all()
-    }
-    for workflow in deduped.values():
-        if (workflow.ai_model_id, workflow.disease_id) not in valid_pairs:
-            return None
-    return sorted(deduped.values(), key=lambda workflow: (workflow.disease_id, workflow.ai_model_id, workflow.upload_kind))

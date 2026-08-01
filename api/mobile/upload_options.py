@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
 from models import User
-from services.uploads import serialize_mobile_upload_options
+from services.uploads.mobile import serialize_mobile_upload_options
 from upload_profiles.service import UploadOptions, filter_upload_options, get_user_upload_options
 
 from . import mobile_api_bp

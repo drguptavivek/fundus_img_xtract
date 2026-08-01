@@ -98,7 +98,6 @@ from .celery_schedule import (
     celery_schedule_delete,
 )
 from .upload_profiles import (
-    remote_inference_policies_admin,
     upload_profiles_admin,
     upload_project_create_workspace,
     upload_project_workspace,
@@ -139,7 +138,6 @@ admin_bp.add_url_rule("/encounter-set-types/<int:type_id>/edit", view_func=encou
 admin_bp.add_url_rule("/upload-metadata-fields", view_func=upload_metadata_fields_admin, methods=["GET"])
 admin_bp.add_url_rule("/upload-metadata-fields/list", view_func=upload_metadata_fields_list, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects", view_func=upload_projects_admin, methods=["GET"])
-admin_bp.add_url_rule("/remote-inference-policies", view_func=remote_inference_policies_admin, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project_create_workspace, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
 admin_bp.add_url_rule("/remidio", view_func=remidio_admin, methods=["GET"], endpoint="remidio_admin")

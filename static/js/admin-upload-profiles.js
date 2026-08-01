@@ -1022,25 +1022,6 @@
     });
   }
 
-  function setAiWorkflowValues(form, values) {
-    const selected = new Set(values.map(String));
-    function selectedHasWorkflowPrefix(value) {
-      return Array.from(selected).some(function (item) {
-        return item === value || item.startsWith(value + ':');
-      });
-    }
-    form.querySelectorAll('[name="ai_workflows"]').forEach(function (input) {
-      if (input.tagName === 'SELECT') {
-        const selectedOption = Array.from(input.options).find(function (option) {
-          return selected.has(String(option.value));
-        });
-        input.value = selectedOption ? selectedOption.value : '';
-      } else {
-        input.checked = selectedHasWorkflowPrefix(String(input.value));
-      }
-    });
-  }
-
   function parseJson(value, fallback) {
     try {
       return value ? JSON.parse(value) : fallback;
@@ -1447,7 +1428,6 @@
       setCheckedValues(form, 'area_ids', splitIds(button.dataset.areaIds));
       setCheckedValues(form, 'upload_kinds', splitIds(button.dataset.uploadKinds));
       setCheckedValues(form, 'encounter_set_type_ids', splitIds(button.dataset.encounterSetTypeIds).slice(0, 1));
-      setAiWorkflowValues(form, splitIds(button.dataset.aiWorkflows));
       applyEncounterSetConfigs(form, parseJson(button.dataset.encounterSetConfigs, []));
       form.querySelector('[name="allow_mydriatic"]').checked = button.dataset.allowMydriatic === '1';
       form.querySelector('[name="allow_non_mydriatic"]').checked = button.dataset.allowNonMydriatic === '1';

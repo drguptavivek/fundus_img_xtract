@@ -1,6 +1,6 @@
 # Upload Profiles API
 
-Reusable Upload & Grading Profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional legacy AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for asset rules and metadata, and uses profile-level EncounterSet grading packages for task creation. Automated Remote Inference Policies and Manual Remote AI Workflows are project-owned controls managed separately from upload profiles. See [Project Remote Inference API](../remote-inference/README.md).
+Reusable Upload & Grading Profiles define enabled upload modes and their grading targets. Project, lab unit, and uploader access are separate governance mappings. Automated and manual remote AI inference are project-owned controls managed in Project Settings, not Upload Profiles. See [Project Remote Inference API](../remote-inference/README.md).
 
 Project governance owns investigator metadata, project-to-profile enablement, and uploader plus lab-unit assignment. Upload & Grading Profiles own reusable upload workflow and task-target rules.
 
@@ -39,12 +39,8 @@ Error:
 
 - `POST /api/upload-profiles/projects`
 - `POST|PATCH /api/upload-profiles/projects/<project_id>`
-- `POST /api/upload-profiles/projects/<project_id>/remote-inference-policy`
+- `GET|POST|PATCH /api/remote-inference/projects/<project_id>/automated-workflows`
 - `GET|POST|PATCH /api/remote-inference/projects/<project_id>/manual-workflows`
-- `POST /api/remote-inference-policies`
-- `POST|PATCH /api/remote-inference-policies/<policy_id>`
-- `POST /api/remote-inference-policies/<policy_id>/activate`
-- `POST /api/remote-inference-policies/<policy_id>/deactivate`
 - `POST /api/upload-profiles/investigators`
 - `POST /api/upload-profiles/projects/<project_id>/profiles`
 - `POST /api/upload-profiles/project-profiles/<project_upload_profile_id>/activate`
@@ -63,7 +59,6 @@ These routes return HTML and are not JSON APIs:
 
 - `GET /admin/upload-profiles`: dedicated Upload Profile CRUD page.
 - `GET /admin/upload-projects`: project governance page for PIs, investigators, profile review, and uploader assignment.
-- `GET /admin/remote-inference-policies`: reusable Remote Inference Policy management page.
 - `GET /admin/upload-projects/new/workspace`: HTMX fragment for project creation.
 - `GET /admin/upload-projects/<project_id>/workspace`: HTMX fragment for one project's details, investigators, profiles, and uploader assignment controls.
 
@@ -85,26 +80,7 @@ Investigator assignment fields for `/api/upload-profiles/investigators`:
 - `user_id` integer, required
 - `role` string, one of `principal_investigator`, `co_investigator`, `coordinator`, or `collaborator`
 
-Project remote inference assignment fields for `/api/upload-profiles/projects/<project_id>/remote-inference-policy`:
-
-- `remote_inference_policy_id` integer, optional. Empty clears the project's policy assignment.
-
 Project manual remote inference is configured independently through `/api/remote-inference/projects/<project_id>/manual-workflows`. It controls manual submission permission and does not depend on project-to-upload-profile mappings or trigger automatic inference.
-
-Remote inference policy create/update fields for `/api/remote-inference-policies` and `/api/remote-inference-policies/<policy_id>`:
-
-- `remote_inference_policy_name` string, required.
-- `remote_inference_policy_description` string, optional.
-- `remote_inference_rule` repeated values as either `disease_id:ai_model_id` or `disease_id:ai_model_id:upload_kind`.
-- For each enabled rule, fields are keyed as `remote_rule_<disease_id>_<ai_model_id>_*` for the two-part value, or `remote_rule_<disease_id>_<ai_model_id>_<upload_kind>_*` for the three-part value:
-  - `upload_kind`: `direct_image`, `pregraded`, `remidio`, or `encounter_set`. This can be omitted when upload kind is included in the `remote_inference_rule` value.
-  - `trigger_timing`: `on_image_received`, `on_report_received`, `after_verification`, or `manual_only`
-  - `encounter_eligibility`: `always`, `if_matching_report_present`, `if_matching_report_absent`, or `if_any_report_present`
-  - `image_selection`: `all_eligible_images`, `disc_focused_images`, `macula_focused_images`, or `disc_or_macula_images`
-
-`if_matching_report_present` and `if_matching_report_absent` require an explicit active `disease_report_linkages` row for the disease.
-
-Deactivating a Remote Inference Policy also deactivates its project assignments.
 
 Example project create:
 

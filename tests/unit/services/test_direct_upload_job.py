@@ -9,12 +9,12 @@ from werkzeug.datastructures import FileStorage
 from models import AIInferenceRun, AIModel, AIModelIntegration, Area, Camera, DirectImageUpload, DirectImageVerify, DiseaseGrading, Grade, GradingTask, Hospital, Job, JobItem, LabUnit, Project, User
 from services.uploads.direct import DirectUploadActor, DirectUploadJobRequest, create_direct_upload_job, direct_upload_response_payload
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
+from remote_inference.models import ProjectAutomatedRemoteInferenceRule
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
     UploadProfile,
-    UploadProfileAIWorkflow,
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,
@@ -159,11 +159,15 @@ def test_direct_upload_duplicate_links_existing_image_and_task(db_session, core_
     )
     db_session.add(ai_model)
     db_session.flush()
-    profile.ai_workflows.append(
-        UploadProfileAIWorkflow(
+    db_session.add(
+        ProjectAutomatedRemoteInferenceRule(
+            project_id=project.id,
             disease_id=disease.id,
             ai_model_id=ai_model.id,
             upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+            trigger_timing="on_image_received",
+            encounter_eligibility="always",
+            image_selection="all_eligible_images",
             active=True,
         )
     )
@@ -254,11 +258,15 @@ def test_direct_upload_duplicate_does_not_create_verification_or_requeue_running
     )
     db_session.add(ai_model)
     db_session.flush()
-    profile.ai_workflows.append(
-        UploadProfileAIWorkflow(
+    db_session.add(
+        ProjectAutomatedRemoteInferenceRule(
+            project_id=project.id,
             disease_id=disease.id,
             ai_model_id=ai_model.id,
             upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+            trigger_timing="on_image_received",
+            encounter_eligibility="always",
+            image_selection="all_eligible_images",
             active=True,
         )
     )
@@ -357,11 +365,15 @@ def test_direct_upload_duplicate_with_existing_current_model_grade_is_not_queued
     )
     db_session.add(ai_model)
     db_session.flush()
-    profile.ai_workflows.append(
-        UploadProfileAIWorkflow(
+    db_session.add(
+        ProjectAutomatedRemoteInferenceRule(
+            project_id=project.id,
             disease_id=disease.id,
             ai_model_id=ai_model.id,
             upload_kind=UPLOAD_KIND_DIRECT_IMAGE,
+            trigger_timing="on_image_received",
+            encounter_eligibility="always",
+            image_selection="all_eligible_images",
             active=True,
         )
     )

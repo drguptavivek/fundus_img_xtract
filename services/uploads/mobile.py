@@ -21,7 +21,6 @@ from auth.utils import utcnow
 from job_store import db_create_job
 from models import (
     AIInferenceRun,
-    AIModelIntegration,
     DIRECT_UPLOAD_DIR,
     UPLOAD_DIR,
     DirectImageUpload,
@@ -81,7 +80,6 @@ class _Actor:
 
 
 def serialize_mobile_upload_options(options: UploadOptions, *, db=None) -> dict[str, Any]:
-    executable_model_ids = _executable_ai_model_ids(db) if db is not None else None
     profiles = []
     for profile in options.profiles:
         upload_kinds = [kind for kind in profile["upload_kinds"] if kind in MOBILE_UPLOAD_KINDS]
@@ -89,12 +87,6 @@ def serialize_mobile_upload_options(options: UploadOptions, *, db=None) -> dict[
             continue
         payload = dict(profile)
         payload["upload_kinds"] = upload_kinds
-        payload["ai_workflows"] = [
-            workflow
-            for workflow in payload.get("ai_workflows", [])
-            if workflow.get("upload_kind") in upload_kinds
-            and (executable_model_ids is None or int(workflow.get("ai_model_id") or 0) in executable_model_ids)
-        ]
         profiles.append(payload)
     return {
         "projects": _filter_options(options.projects, {profile["project_id"] for profile in profiles}),
@@ -1054,28 +1046,6 @@ def _parse_capture_date(value: str):
 
 def _filter_options(items: list[dict[str, Any]], ids: set[int]) -> list[dict[str, Any]]:
     return [item for item in items if item["id"] in ids]
-
-
-def _executable_ai_model_ids(db) -> set[int]:
-    return {
-        int(model_id)
-        for model_id in db.execute(
-            select(AIModelIntegration.ai_model_id)
-            .where(AIModelIntegration.provider == WADHWANI_PROVIDER)
-            .where(AIModelIntegration.is_enabled.is_(True))
-        ).scalars()
-    }
-
-
-def _profile_has_executable_workflow(db, profile, *, disease_id: int, upload_kind: str) -> bool:
-    executable_model_ids = _executable_ai_model_ids(db)
-    return any(
-        workflow.get("active", True)
-        and workflow.get("upload_kind") == upload_kind
-        and workflow.get("disease_id") == disease_id
-        and int(workflow.get("ai_model_id") or 0) in executable_model_ids
-        for workflow in profile.ai_workflows
-    )
 
 
 def _iso(value) -> str | None:

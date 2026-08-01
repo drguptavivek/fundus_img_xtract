@@ -4,7 +4,7 @@ from flask import current_app, jsonify, request
 
 from auth.decorators import token_auth_required
 from db_transaction_manager import transaction_scope
-from services.uploads import (
+from services.uploads.mobile import (
     MobileUploadError,
     create_mobile_upload,
     get_mobile_direct_upload_thumbnail,

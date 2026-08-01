@@ -309,38 +309,6 @@
                     <input class="form-check-input" type="radio" name="default_disease_ids" value="{{ disease.id }}" id="default_disease_{{ disease.id }}" data-upload-profile-dependent data-upload-profile-remedio-default>
                     <label class="form-check-label" for="default_disease_{{ disease.id }}">Base target for Remedio ZIP</label>
                   </div>
-                  {% set disease_ai_models = ai_models_by_disease.get(disease.id, []) %}
-                  {% if disease_ai_models %}
-                  <details class="mt-2 small">
-                    <summary class="text-muted">AI inference workflows</summary>
-                    <div class="mt-2 ps-2 border-start">
-                      {% for model in disease_ai_models %}
-                      <div class="mb-2">
-                        <div class="fw-semibold">
-                          {{ model.name }} {{ model.version }}
-                          {% if model.integration and model.integration.provider == 'wadhwani_glaucoma' %}
-                          <span class="badge text-bg-info ms-1">Wadhwani</span>
-                          {% endif %}
-                        </div>
-                        <div class="d-flex flex-wrap gap-3 mt-1">
-                          {% for kind, kind_label in [('direct_image', 'Direct'), ('pregraded', 'Pregraded'), ('remidio', 'Remedio ZIP')] %}
-                          <div class="form-check form-check-inline mb-0">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="ai_workflows"
-                                   value="{{ disease.id }}:{{ model.id }}:{{ kind }}"
-                                   id="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}"
-                                   data-upload-profile-dependent
-                                   data-upload-profile-ai-kind="{{ kind }}">
-                            <label class="form-check-label" for="ai_workflow_{{ disease.id }}_{{ model.id }}_{{ kind }}">{{ kind_label }}</label>
-                          </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                      {% endfor %}
-                    </div>
-                  </details>
-                  {% endif %}
                 </div>
               </div>
               {% else %}

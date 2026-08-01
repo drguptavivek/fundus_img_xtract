@@ -170,31 +170,16 @@ def process_glaucoma_ai_uploads(
 
 
 def _validate_glaucoma_ai_workflow(db, upload_profile, glaucoma_disease_id: int) -> int:
-    """Return the linked Wadhwani AI model ID allowed by the selected upload profile."""
-    workflow_model_ids = {
-        int(workflow["ai_model_id"])
-        for workflow in upload_profile.ai_workflows
-        if workflow.get("disease_id") == glaucoma_disease_id
-        and workflow.get("upload_kind") == UPLOAD_KIND_DIRECT_IMAGE
-        and workflow.get("active", True)
-    }
-    if not workflow_model_ids:
-        raise UploadProfileError(
-            "Selected upload profile does not enable glaucoma AI inference workflow.",
-            code="ai_workflow_not_allowed",
-        )
+    """Return the Wadhwani model enabled by the selected upload's project."""
+    from services.uploads.direct import linked_wadhwani_model_id_for_direct_workflow
 
-    linked_model_id = db.execute(
-        select(AIModelIntegration.ai_model_id)
-        .where(AIModelIntegration.provider == WADHWANI_PROVIDER)
-        .where(AIModelIntegration.is_enabled.is_(True))
-        .where(AIModelIntegration.ai_model_id.in_(workflow_model_ids))
-        .order_by(AIModelIntegration.updated_at.desc(), AIModelIntegration.id.desc())
-    ).scalars().first()
+    linked_model_id = linked_wadhwani_model_id_for_direct_workflow(
+        db, upload_profile, disease_id=glaucoma_disease_id
+    )
     if linked_model_id is None:
         raise UploadProfileError(
-            "Selected upload profile is not linked to the enabled Wadhwani glaucoma AI model.",
-            code="ai_workflow_not_linked",
+            "Selected project does not enable automated glaucoma AI inference for Direct Image uploads.",
+            code="ai_workflow_not_allowed",
         )
     return linked_model_id
 

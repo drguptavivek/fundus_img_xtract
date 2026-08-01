@@ -10,6 +10,9 @@
       <p class="text-muted mb-0">Queue remote glaucoma inference and visually review EncounterSet-level OCR against image-level Wadhwani results.</p>
     </div>
     <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('analytics.wai_api_statistics', project_id=filters.project_id) if filters.project_id else url_for('analytics.wai_api_statistics') }}">
+        <i class="fa-solid fa-chart-line me-1"></i>Recent WAI Results
+      </a>
       <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id or '') }}">EncounterSet Browser</a>
       <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">Remidio API Sync</a>
     </div>

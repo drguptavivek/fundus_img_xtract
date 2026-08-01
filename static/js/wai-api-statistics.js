@@ -61,6 +61,38 @@
     });
   }
 
+  function applyQueryParams() {
+    const params = new URLSearchParams(window.location.search);
+    const selectParamMap = [
+      [els.disease, 'disease_id'],
+      [els.project, 'project_id'],
+      [els.model, 'ai_model_id'],
+      [els.resultType, 'result_type'],
+      [els.status, 'inference_status'],
+    ];
+    selectParamMap.forEach(([selectEl, paramName]) => {
+      const selected = new Set(params.getAll(paramName).filter(Boolean));
+      if (!selected.size) return;
+      Array.from(selectEl.options).forEach((option) => {
+        option.selected = selected.has(option.value);
+      });
+    });
+
+    const dateParamMap = [
+      [els.captureStart, 'capture_start'],
+      [els.captureEnd, 'capture_end'],
+      [els.inferenceStart, 'inference_start'],
+      [els.inferenceEnd, 'inference_end'],
+    ];
+    dateParamMap.forEach(([input, paramName]) => {
+      const value = params.get(paramName);
+      if (value) input.value = value;
+    });
+
+    const pageSize = params.get('page_size');
+    if (pageSize) els.pageSize.value = pageSize;
+  }
+
   function buildParams(page) {
     const params = new URLSearchParams();
     selectedValues(els.disease).forEach((value) => params.append('disease_id', value));
@@ -285,6 +317,7 @@
       setOptions(els.model, payload.models || []);
       setOptions(els.resultType, payload.result_types || []);
       setOptions(els.status, payload.inference_statuses || []);
+      applyQueryParams();
     });
   }
 

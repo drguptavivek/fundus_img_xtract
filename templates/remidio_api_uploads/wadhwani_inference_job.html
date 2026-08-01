@@ -9,7 +9,12 @@
       <h1 class="h3 mb-1">{{ page_title }}</h1>
       <p class="text-muted mb-0">Batch job <code>{{ job_token }}</code></p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Back to Wadhwani Browser</a>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('analytics.wai_api_statistics') }}">
+        <i class="fa-solid fa-chart-line me-1"></i>Recent WAI Results
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Back to Wadhwani Browser</a>
+    </div>
   </div>
 
   <div id="wadhwaniEncounterSetJobStatus"

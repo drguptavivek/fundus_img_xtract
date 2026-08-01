@@ -144,4 +144,8 @@ def wai_api_statistics_retry(inference_run_id: int):
             )
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 404
+    payload["job_url"] = url_for(
+        "remidio_api_uploads.encounter_set_wadhwani_inference_job",
+        job_token=payload["job_token"],
+    )
     return jsonify({"success": True, **_serialize(payload)})

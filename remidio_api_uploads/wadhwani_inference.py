@@ -24,6 +24,7 @@ from . import bp
 
 
 WADHWANI_ENCOUNTER_SET_JOB_TYPE = "encounter_set_wadhwani_inference"
+WADHWANI_RETRY_JOB_TYPE = "wai_api_statistics_retry"
 AI_PROBABILITY_PATTERN = re.compile(r"AI probability:\s*([0-9.]+)", flags=re.IGNORECASE)
 PAGE_ROLES = ("admin", "local_admin", "data_manager")
 ENCOUNTER_SETS_PER_PAGE = 10
@@ -450,7 +451,12 @@ def _selected_encounter_count(db, *, project_id: int, image_ids: list[int]) -> i
 
 
 def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
-    job = db.execute(select(Job).where(Job.token == job_token, Job.upload_type == WADHWANI_ENCOUNTER_SET_JOB_TYPE)).scalar_one_or_none()
+    job = db.execute(
+        select(Job).where(
+            Job.token == job_token,
+            Job.upload_type.in_((WADHWANI_ENCOUNTER_SET_JOB_TYPE, WADHWANI_RETRY_JOB_TYPE)),
+        )
+    ).scalar_one_or_none()
     if job is None:
         return None
     items = db.execute(select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)).scalars().all()

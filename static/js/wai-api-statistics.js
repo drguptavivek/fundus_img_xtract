@@ -162,6 +162,13 @@
     return `<span class="wai-result-chip ${classes[result] || 'bg-secondary-subtle text-secondary-emphasis'}">${escapeHtml(titleCase(result))}</span>`;
   }
 
+  function errorSummary(row) {
+    if (!row || (!row.error_code && !row.error_message)) return '';
+    const code = row.error_code ? `<span class="fw-semibold">${escapeHtml(row.error_code)}</span>` : '';
+    const message = row.error_message ? `<span>${escapeHtml(row.error_message)}</span>` : '';
+    return `<div class="small text-danger mt-1">${code}${code && message ? ': ' : ''}${message}</div>`;
+  }
+
   function renderCards(cards) {
     const cardDefs = [
       ['Images', cards.images],
@@ -212,7 +219,7 @@
             <div class="mb-1">${resultChip(row.result_type, row.inference_status)}</div>
             <div class="small">${escapeHtml(row.ai_model_name || '-')} ${escapeHtml(row.ai_model_version || '')}</div>
             <div class="small text-muted">${escapeHtml(formatDateTime(row.inference_created_at))}</div>
-            ${row.error_message ? `<div class="small text-danger text-truncate" title="${escapeHtml(row.error_message)}">${escapeHtml(row.error_code || row.error_message)}</div>` : ''}
+            ${errorSummary(row)}
           </td>
           <td>
             <div class="small fw-semibold">${escapeHtml(row.ai_grade_name || '-')}</div>
@@ -239,9 +246,10 @@
     } else {
       els.encounterRows.innerHTML = rows.map((row) => {
         const chips = (row.image_results || []).slice(0, 6).map((item) => `
-          <span class="wai-image-chip">
+          <span class="wai-image-chip" title="${escapeHtml(item.error_message || item.error_code || '')}">
             ${resultChip(item.result_type, item.status)}
             <span class="text-truncate">${escapeHtml(item.image_filename || item.image_uuid || '-')}</span>
+            ${item.error_code ? `<span class="text-danger">${escapeHtml(item.error_code)}</span>` : ''}
             ${item.retry_url ? `<button class="btn btn-link btn-sm p-0 text-warning" type="button" data-wai-retry-url="${escapeHtml(item.retry_url)}" title="Retry inference"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
           </span>
         `).join('');
@@ -355,7 +363,13 @@
     const original = button.innerHTML;
     button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
     postJSON(button.dataset.waiRetryUrl)
-      .then(() => reloadAll())
+      .then((payload) => {
+        if (payload.job_url) {
+          window.location.href = payload.job_url;
+          return null;
+        }
+        return reloadAll();
+      })
       .catch((error) => {
         els.loading.textContent = error.message || 'Retry failed';
       })

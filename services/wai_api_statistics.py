@@ -326,7 +326,9 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
                     'result_type', result_type,
                     'ai_grade_name', ai_grade_name,
                     'ai_probability', ai_probability,
-                    'inference_created_at', inference_created_at
+                    'inference_created_at', inference_created_at,
+                    'error_code', error_code,
+                    'error_message', error_message
                 )
                 ORDER BY inference_created_at DESC, inference_run_id DESC
             ) FILTER (WHERE image_uuid IS NOT NULL) AS image_results

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from celery_app import celery_app
 
 from job_store import db_set_item_state, db_set_job_status
 from services.wadhwani_glaucoma_inference import run_task_inference
+from utils.materialized_view_scheduler import refresh_ai_inference_runs_materialized_view
+
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task", bind=True, acks_late=True)
@@ -63,3 +68,6 @@ def run_wadhwani_glaucoma_batch_task(
         db_set_job_status(job_token, "error", error="All Wadhwani inference tasks failed.")
     else:
         db_set_job_status(job_token, "done")
+
+    if not refresh_ai_inference_runs_materialized_view():
+        logger.warning("Wadhwani batch %s completed, but ai_inference_runs_mv refresh failed", job_token)

@@ -168,6 +168,7 @@ Response:
   "queued_task_id": 123,
   "image_uuid": "uuid",
   "image_filename": "image.jpg",
-  "previous_error_code": "execute_failed"
+  "previous_error_code": "execute_failed",
+  "job_url": "/uploads/encountersets/wadhwani_inference/jobs/job-token"
 }
 ```

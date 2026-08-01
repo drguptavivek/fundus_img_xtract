@@ -94,6 +94,17 @@ def _refresh_single_view(app, view_name):
             db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
 
 
+def refresh_ai_inference_runs_materialized_view() -> bool:
+    """Refresh the WAI/API inference runs view after async inference writes."""
+    try:
+        with transaction_scope() as db:
+            db.execute(text("REFRESH MATERIALIZED VIEW ai_inference_runs_mv"))
+        return True
+    except Exception:
+        logger.exception("Failed to refresh ai_inference_runs_mv")
+        return False
+
+
 def refresh_materialized_view(app, schedule_time="manual"):
     """Execute all materialized view refreshes with proper timezone logging and timestamp tracking.
 

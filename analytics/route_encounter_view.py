@@ -8,7 +8,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
-from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters
+from models import Consensus, EncounterSetImage, Grade, GradingTask, LabUnit, PatientEncounters
 from .encounterUtils import get_encounter_summary
 from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping
@@ -34,6 +34,7 @@ def view_encounter(encounter_id: int):
             .options(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.encounter_set_images).selectinload(EncounterSetImage.camera),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
@@ -78,7 +79,37 @@ def view_encounter(encounter_id: int):
             ft = (ef.file_type or "").lower().strip()
             ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
             if ft.startswith("image/") or ext in image_exts:
-                images.append(ef)
+                images.append(
+                    {
+                        "id": ef.id,
+                        "task_key": f"encounter_file:{ef.id}",
+                        "source": "encounter_file",
+                        "uuid": ef.uuid,
+                        "filename": ef.filename,
+                        "eye_side": ef.eye_side,
+                        "position": None,
+                        "thumb_url": url_for("media._imgForGradingByUUID", uuid_str=ef.uuid),
+                        "full_url": url_for("media._imgForGradingByUUID", uuid_str=ef.uuid),
+                    }
+                )
+        for image in sorted(encounter.encounter_set_images or [], key=lambda item: (item.spatial_position, item.id)):
+            metadata = image.metadata_json or {}
+            laterality = metadata.get("laterality") or metadata.get("eye")
+            focus = metadata.get("focus") or metadata.get("centering")
+            images.append(
+                {
+                    "id": image.id,
+                    "task_key": f"encounter_set_image:{image.id}",
+                    "source": "encounter_set_image",
+                    "uuid": image.uuid,
+                    "filename": image.edited_filename or image.original_filename,
+                    "eye_side": laterality,
+                    "focus": focus,
+                    "position": image.spatial_position,
+                    "thumb_url": url_for("media._encounterSetImageThumbnailByUUID", uuid_str=image.uuid),
+                    "full_url": url_for("media._encounterSetImageByUUID", uuid_str=image.uuid),
+                }
+            )
 
         dr_reports = encounter.dr_reports or []
         gl_reports = encounter.glaucoma_reports or []
@@ -92,26 +123,27 @@ def view_encounter(encounter_id: int):
         # Create tasks map from the summary data and make it compatible with the template
         tasks_map: dict[int, list] = defaultdict(list)
         for img_with_task in summary['images_with_tasks']:
+            task_key = img_with_task.get('task_key') or f"{img_with_task.get('source', 'encounter_file')}:{img_with_task['id']}"
             for task in img_with_task['tasks']:
                 # Get the full task details from the summary tasks
                 full_task = next((t for t in summary['tasks'] if t['id'] == task['id']), None)
                 if full_task:
-                    tasks_map[img_with_task['id']].append(full_task)
+                    tasks_map[task_key].append(full_task)
 
-    gallery_id = f"pswp-gallery-analytics-enc-{encounter.id}"
+        gallery_id = f"pswp-gallery-analytics-enc-{encounter.id}"
 
-    return render_template(
-        "analytics/view_encounter.html",
-        encounter=encounter,
-        images=images,
-        dr_reports=dr_reports,
-        gl_reports=gl_reports,
-        gl_cleaned=gl_cleaned,
-        tasks_map=tasks_map,
-        back_url=url_for("analytics.encounter_results"),
-        prev_url=url_for("analytics.view_encounter", encounter_id=prev_enc.id) if prev_enc else None,
-        next_url=url_for("analytics.view_encounter", encounter_id=next_enc.id) if next_enc else None,
-        gallery_id=gallery_id,
-        summary=summary,
-        back_label="Encounters",
-    )
+        return render_template(
+            "analytics/view_encounter.html",
+            encounter=encounter,
+            images=images,
+            dr_reports=dr_reports,
+            gl_reports=gl_reports,
+            gl_cleaned=gl_cleaned,
+            tasks_map=tasks_map,
+            back_url=url_for("analytics.encounter_results"),
+            prev_url=url_for("analytics.view_encounter", encounter_id=prev_enc.id) if prev_enc else None,
+            next_url=url_for("analytics.view_encounter", encounter_id=next_enc.id) if next_enc else None,
+            gallery_id=gallery_id,
+            summary=summary,
+            back_label="Encounters",
+        )

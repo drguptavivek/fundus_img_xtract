@@ -52,6 +52,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
             query
             .options(
                 selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.encounter_set_images),
                 selectinload(PatientEncounters.encounter_file_pdfs),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
@@ -66,6 +67,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
             
         # Extract image UUIDs
         image_uuids = [ef.uuid for ef in encounter.encounter_files or [] if ef.uuid]
+        image_uuids.extend(esi.uuid for esi in encounter.encounter_set_images or [] if esi.uuid)
         
         # Extract report PDF UUIDs
         report_pdf_uuids = [pdf.uuid for pdf in encounter.encounter_file_pdfs or [] if pdf.uuid]
@@ -77,14 +79,20 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
         dr_reports = encounter.dr_reports or []
         
         # Get all image IDs
-        all_image_ids = [ef.id for ef in encounter.encounter_files or []]
+        encounter_file_ids = [ef.id for ef in encounter.encounter_files or []]
+        encounter_set_image_ids = [esi.id for esi in encounter.encounter_set_images or []]
         
         # Fetch all tasks for encounter images
         tasks = []
         
-        if all_image_ids:
+        if encounter_file_ids or encounter_set_image_ids:
             # Build query for tasks
-            task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(all_image_ids))
+            clauses = []
+            if encounter_file_ids:
+                clauses.append(GradingTask.encounter_file_id.in_(encounter_file_ids))
+            if encounter_set_image_ids:
+                clauses.append(GradingTask.encounter_set_image_id.in_(encounter_set_image_ids))
+            task_query = db.query(GradingTask).filter(or_(*clauses))
             
             # Apply hospital scoping to tasks as well
             task_query = apply_scoping(task_query, GradingTask, user, 'analytics')
@@ -94,6 +102,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
                 .options(
                     joinedload(GradingTask.disease),
                     joinedload(GradingTask.encounter_file),
+                    joinedload(GradingTask.encounter_set_image),
                     selectinload(GradingTask.grades).selectinload(Grade.label),
                     joinedload(GradingTask.consensus).joinedload(Consensus.final_label),
                 )
@@ -103,18 +112,37 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
         # Create a mapping of image IDs to their tasks
         image_tasks_map = {}
         for img in encounter.encounter_files or []:
-            image_tasks_map[img.id] = {
+            image_tasks_map[f"encounter_file:{img.id}"] = {
                 'id': img.id,
+                'source': 'encounter_file',
+                'task_key': f"encounter_file:{img.id}",
                 'uuid': img.uuid,
                 'filename': img.filename,
                 'eye_side': img.eye_side,
                 'tasks': []
             }
+        for img in encounter.encounter_set_images or []:
+            metadata = img.metadata_json or {}
+            image_tasks_map[f"encounter_set_image:{img.id}"] = {
+                'id': img.id,
+                'source': 'encounter_set_image',
+                'task_key': f"encounter_set_image:{img.id}",
+                'uuid': img.uuid,
+                'filename': img.edited_filename or img.original_filename,
+                'eye_side': metadata.get('laterality') or metadata.get('eye'),
+                'position': img.spatial_position,
+                'tasks': []
+            }
         
         # Add tasks to their associated images
         for task in tasks:
-            if task.encounter_file_id in image_tasks_map:
-                image_tasks_map[task.encounter_file_id]['tasks'].append({
+            image_key = None
+            if task.encounter_file_id:
+                image_key = f"encounter_file:{task.encounter_file_id}"
+            elif task.encounter_set_image_id:
+                image_key = f"encounter_set_image:{task.encounter_set_image_id}"
+            if image_key in image_tasks_map:
+                image_tasks_map[image_key]['tasks'].append({
                     'id': task.id,
                     'disease': task.disease.name if task.disease else None,
                     'status': task.state
@@ -179,8 +207,9 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
                 'status': task.state,
                 'disease': task.disease.name if task.disease else None,
                 'image': {
-                    'id': task.encounter_file.id if task.encounter_file else None,
-                    'uuid': task.encounter_file.uuid if task.encounter_file else None,
+                    'id': task.encounter_file.id if task.encounter_file else task.encounter_set_image.id if task.encounter_set_image else None,
+                    'uuid': task.encounter_file.uuid if task.encounter_file else task.encounter_set_image.uuid if task.encounter_set_image else None,
+                    'source': 'encounter_file' if task.encounter_file else 'encounter_set_image' if task.encounter_set_image else None,
                 },
                 'grades': [],
                 'consensus': None

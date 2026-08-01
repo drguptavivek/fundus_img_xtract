@@ -115,23 +115,31 @@
             <div class="col-12 col-md-6 col-xl-4">
               <div class="border rounded p-2 h-100">
                 <div class="mb-2 ratio ratio-4x3 bg-light">
-                  <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}"
+                  <img src="{{ image.thumb_url }}"
                     alt="Encounter Image {{ loop.index }}" class="img-fluid object-fit-contain rounded">
                 </div>
                 <dl class="row small mb-0">
                   <dt class="col-5">UUID</dt>
                   <dd class="col-7"><code>{{ image.uuid }}</code></dd>
+                  {% if image.position %}
+                  <dt class="col-5">Position</dt>
+                  <dd class="col-7">{{ image.position }}</dd>
+                  {% endif %}
                   <dt class="col-5">Eye</dt>
                   <dd class="col-7">{{ image.eye_side or '-' }}</dd>
+                  {% if image.focus %}
+                  <dt class="col-5">Focus</dt>
+                  <dd class="col-7">{{ image.focus }}</dd>
+                  {% endif %}
                 </dl>
 
-                {% set image_tasks = tasks_map.get(image.id) or [] %}
+                {% set image_tasks = tasks_map.get(image.task_key) or [] %}
                 {% set dr_task = None %}
                 {% set glaucoma_task = None %}
                 {% for task in image_tasks %}
-                {% if task.disease and (task.disease.name|lower in ['diabetic retinopathy', 'dr']) %}
+                {% if task.disease and (task.disease|lower in ['diabetic retinopathy', 'dr']) %}
                 {% set dr_task = task %}
-                {% elif task.disease and task.disease.name|lower == 'glaucoma' %}
+                {% elif task.disease and task.disease|lower == 'glaucoma' %}
                 {% set glaucoma_task = task %}
                 {% endif %}
                 {% endfor %}

@@ -18,6 +18,7 @@ from models import (
     DiabeticRetinopathyReport,
     DirectImageUpload,
     EncounterFile,
+    EncounterSetImage,
     GlaucomaResultsCleaned,
     Grade,
     GradingTask,
@@ -118,6 +119,7 @@ def fetch_image_task_details(
     task_ids = [task.id for task in tasks]
 
     encounter_ids = [task.encounter_file_id for task in tasks if task.encounter_file_id]
+    encounter_set_image_ids = [task.encounter_set_image_id for task in tasks if task.encounter_set_image_id]
     direct_ids = [task.direct_image_upload_id for task in tasks if task.direct_image_upload_id]
 
     encounter_map: Dict[int, EncounterFile] = {}
@@ -137,6 +139,25 @@ def fetch_image_task_details(
             encounter_map[encounter.id] = encounter
             if encounter.patient_encounter_id:
                 patient_encounter_ids.append(encounter.patient_encounter_id)
+
+    encounter_set_image_map: Dict[int, EncounterSetImage] = {}
+    if encounter_set_image_ids:
+        encounter_set_image_rows = (
+            db.query(EncounterSetImage)
+            .filter(EncounterSetImage.id.in_(encounter_set_image_ids))
+            .options(
+                joinedload(EncounterSetImage.patient_encounter)
+                .joinedload(PatientEncounters.lab_unit)
+                .joinedload(LabUnit.hospital),
+                selectinload(EncounterSetImage.camera),
+                selectinload(EncounterSetImage.area),
+            )
+            .all()
+        )
+        for image in encounter_set_image_rows:
+            encounter_set_image_map[image.id] = image
+            if image.patient_encounter_id:
+                patient_encounter_ids.append(image.patient_encounter_id)
 
     if patient_encounter_ids:
         patient_encounter_ids = list({pid for pid in patient_encounter_ids if pid is not None})
@@ -217,9 +238,10 @@ def fetch_image_task_details(
     details: List[Dict[str, Any]] = []
     for task in tasks:
         encounter = encounter_map.get(task.encounter_file_id) if task.encounter_file_id else None
+        encounter_set_image = encounter_set_image_map.get(task.encounter_set_image_id) if task.encounter_set_image_id else None
         direct_image = direct_map.get(task.direct_image_upload_id) if task.direct_image_upload_id else None
 
-        patient_encounter = encounter.patient_encounter if encounter else None
+        patient_encounter = encounter.patient_encounter if encounter else encounter_set_image.patient_encounter if encounter_set_image else None
         patient_encounter_id = patient_encounter.id if patient_encounter else None
 
         glaucoma_cleaned = glaucoma_map.get(patient_encounter_id) if patient_encounter_id else None
@@ -245,6 +267,18 @@ def fetch_image_task_details(
             upload_type = "zip"
             if patient_encounter and patient_encounter.zip_file_id:
                 is_zip_image = True
+        elif encounter_set_image:
+            metadata = encounter_set_image.metadata_json or {}
+            image_uuid = encounter_set_image.uuid
+            image_type = metadata.get("focus") or metadata.get("centering") or metadata.get("image_type") or "encounter_set_image"
+            eye_side = metadata.get("laterality") or metadata.get("eye")
+            upload_type = "encounter_set"
+            hospital_name = hospital_name or (
+                patient_encounter.lab_unit.hospital.name
+                if patient_encounter and patient_encounter.lab_unit and patient_encounter.lab_unit.hospital
+                else None
+            )
+            lab_unit_name = lab_unit_name or (patient_encounter.lab_unit.name if patient_encounter and patient_encounter.lab_unit else None)
         elif direct_image:
             image_uuid = direct_image.uuid
             image_type = direct_image.area.name if direct_image.area else None
@@ -284,6 +318,7 @@ def fetch_image_task_details(
             {
                 "task_id": task.id,
                 "encounter_file_id": task.encounter_file_id,
+                "encounter_set_image_id": task.encounter_set_image_id,
                 "direct_image_upload_id": task.direct_image_upload_id,
                 "image_uuid": image_uuid,
                 "disease_name": task.disease.name if task.disease else None,
@@ -338,12 +373,15 @@ def _latest_dr_report(dr_rows: Sequence[DiabeticRetinopathyReport]) -> Optional[
     }
 
 
-def group_task_details_by_image(task_details: Sequence[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]:
-    mapping: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+def group_task_details_by_image(task_details: Sequence[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    mapping: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for detail in task_details:
-        image_id = detail.get("encounter_file_id")
-        if image_id is not None:
-            mapping[int(image_id)].append(detail)
+        encounter_file_id = detail.get("encounter_file_id")
+        encounter_set_image_id = detail.get("encounter_set_image_id")
+        if encounter_file_id is not None:
+            mapping[f"encounter_file:{int(encounter_file_id)}"].append(detail)
+        elif encounter_set_image_id is not None:
+            mapping[f"encounter_set_image:{int(encounter_set_image_id)}"].append(detail)
     for details in mapping.values():
         details.sort(key=lambda item: (item.get("disease_name") or "", item.get("task_id") or 0))
     return mapping
@@ -365,7 +403,7 @@ def build_encounter_result_payload(
 
         images: List[Dict[str, Any]] = []
         for image in sorted(encounter.encounter_files, key=lambda ef: ((ef.eye_side or ""), ef.id)):
-            image_task_details = tasks_by_image.get(image.id, [])
+            image_task_details = tasks_by_image.get(f"encounter_file:{image.id}", [])
             legacy_gradings: List[Dict[str, Any]] = []
             for detail in image_task_details:
                 disease_name = detail.get("disease_name") or "unknown"
@@ -394,11 +432,32 @@ def build_encounter_result_payload(
             images.append(
                 {
                     "id": image.id,
+                    "task_key": f"encounter_file:{image.id}",
+                    "source": "encounter_file",
                     "uuid": image.uuid,
                     "eye_side": image.eye_side,
                     "file_type": image.file_type,
+                    "position": None,
+                    "focus": None,
                     "tasks": image_task_details,
                     "legacy_gradings": legacy_gradings,
+                }
+            )
+        for image in sorted(encounter.encounter_set_images or [], key=lambda esi: (esi.spatial_position, esi.id)):
+            image_task_details = tasks_by_image.get(f"encounter_set_image:{image.id}", [])
+            metadata = image.metadata_json or {}
+            images.append(
+                {
+                    "id": image.id,
+                    "task_key": f"encounter_set_image:{image.id}",
+                    "source": "encounter_set_image",
+                    "uuid": image.uuid,
+                    "eye_side": metadata.get("laterality") or metadata.get("eye"),
+                    "file_type": "encounter_set_image",
+                    "position": image.spatial_position,
+                    "focus": metadata.get("focus") or metadata.get("centering"),
+                    "tasks": image_task_details,
+                    "legacy_gradings": [],
                 }
             )
 

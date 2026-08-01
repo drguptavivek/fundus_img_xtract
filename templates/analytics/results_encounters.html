@@ -98,6 +98,9 @@
               <div>Lab Unit: {{ encounter.lab_unit.name if encounter.lab_unit else '—' }}</div>
               <div>Hospital: {{ encounter.lab_unit.hospital.name if encounter.lab_unit and encounter.lab_unit.hospital
                 else '—' }}</div>
+              <a class="btn btn-sm btn-outline-primary mt-2" href="{{ url_for('analytics.view_encounter', encounter_id=encounter.id) }}">
+                <i class="bi bi-eye me-1"></i>Details
+              </a>
             </div>
           </div>
         </div>
@@ -141,12 +144,15 @@
                       <div>
                         <div class="small text-muted">Image UUID</div>
                         <code class="small">{{ image.uuid or '—' }}</code>
+                        {% if image.position %}
+                        <div class="small text-muted">Position: {{ image.position }}</div>
+                        {% endif %}
                       </div>
                       <div class="small text-muted">Eye: {{ image.eye_side or '—' }}</div>
                       {% if image.uuid %}
                       {% set gallery_id = 'enc-gallery-' ~ encounter.id ~ '-' ~ loop.index0 %}
                       <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}"
+                        <a href="{% if image.source == 'encounter_set_image' %}{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}{% else %}{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}{% endif %}"
                           data-pswp-type="image" title="Encounter Image"></a>
                       </div>
                       <div>

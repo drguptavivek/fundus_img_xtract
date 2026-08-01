@@ -21,6 +21,7 @@ from models import (
     DirectImageUpload,
     DiabeticRetinopathyReport,
     EncounterFile,
+    EncounterSetImage,
     GlaucomaResultsCleaned,
     GradingTask,
     Hospital,
@@ -63,7 +64,7 @@ def _filter_query_params(filter_params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _encounter_results_cache_key() -> str:
-    return f"analytics:encounters:u{current_user.id}:{request.query_string.decode('utf-8')}"
+    return f"analytics:encounters:v2:u{current_user.id}:{request.query_string.decode('utf-8')}"
 
 
 @bp.route("/encounters", methods=["GET"])
@@ -213,6 +214,7 @@ def encounter_results() -> str:
                     .options(
                         selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
                         selectinload(PatientEncounters.encounter_files),
+                        selectinload(PatientEncounters.encounter_set_images).selectinload(EncounterSetImage.camera),
                         selectinload(PatientEncounters.glaucoma_results_cleaned),
                         selectinload(PatientEncounters.dr_reports),
                         selectinload(PatientEncounters.zip_file),
@@ -225,14 +227,22 @@ def encounter_results() -> str:
                 encounters = []
 
         encounter_file_ids: list[int] = []
+        encounter_set_image_ids: list[int] = []
         for encounter in encounters:
             for encounter_file in encounter.encounter_files:
                 encounter_file_ids.append(encounter_file.id)
+            for encounter_set_image in encounter.encounter_set_images:
+                encounter_set_image_ids.append(encounter_set_image.id)
 
         task_details: list[dict[str, Any]] = []
-        if encounter_file_ids:
+        if encounter_file_ids or encounter_set_image_ids:
             # Apply apply_scoping to task query
-            task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(encounter_file_ids))
+            task_clauses = []
+            if encounter_file_ids:
+                task_clauses.append(GradingTask.encounter_file_id.in_(encounter_file_ids))
+            if encounter_set_image_ids:
+                task_clauses.append(GradingTask.encounter_set_image_id.in_(encounter_set_image_ids))
+            task_query = db.query(GradingTask).filter(sa.or_(*task_clauses))
             task_query = apply_scoping(task_query, GradingTask, current_user, 'analytics')
             
             tasks = (
@@ -240,6 +250,7 @@ def encounter_results() -> str:
                     selectinload(GradingTask.disease),
                     selectinload(GradingTask.lab_unit).selectinload(LabUnit.hospital),
                     selectinload(GradingTask.encounter_file),
+                    selectinload(GradingTask.encounter_set_image),
                     selectinload(GradingTask.direct_image),
                 )
                 .all()

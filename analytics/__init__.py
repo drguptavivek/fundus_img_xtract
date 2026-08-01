@@ -14,4 +14,5 @@ from . import (
     route_images_without_tasks, route_directFiles_kpi_display, route_model_performance,
     route_hospital_dashboard,
     route_dataset_curation,
+    route_wai_api_statistics,
 )  # noqa: E402,F401

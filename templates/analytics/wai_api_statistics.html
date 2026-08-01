@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}WAI API Statistics{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .wai-stat-card {
+    border-radius: 8px;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+  }
+
+  .wai-stat-value {
+    font-size: 1.55rem;
+    line-height: 1.1;
+    font-weight: 700;
+  }
+
+  .wai-thumb {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-tertiary-bg);
+  }
+
+  .wai-result-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    max-width: 100%;
+    border-radius: 999px;
+    padding: .15rem .5rem;
+    font-size: .75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .wai-image-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 6px;
+    padding: .25rem .4rem;
+    font-size: .75rem;
+    gap: .35rem;
+  }
+
+  .wai-table td,
+  .wai-table th {
+    vertical-align: middle;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" id="waiStatsApp"
+     data-options-url="{{ url_for('fundus_api.wai_api_statistics_options') }}"
+     data-summary-url="{{ url_for('fundus_api.wai_api_statistics_summary') }}"
+     data-images-url="{{ url_for('fundus_api.wai_api_statistics_images') }}"
+     data-encounters-url="{{ url_for('fundus_api.wai_api_statistics_encounters') }}">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1">WAI API Statistics</h1>
+      <div class="text-muted small">Images, encounters, outcomes, and API run status</div>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" type="button" id="waiResetFilters">
+        <i class="fa-solid fa-rotate-left me-1"></i>Reset
+      </button>
+      <button class="btn btn-primary btn-sm" type="button" id="waiApplyFilters">
+        <i class="fa-solid fa-filter me-1"></i>Apply
+      </button>
+    </div>
+  </div>
+
+  <div class="border rounded p-3 mb-3">
+    <div class="row g-3">
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiDisease">Disease</label>
+        <select class="form-select form-select-sm" id="waiDisease" multiple></select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiProject">Project</label>
+        <select class="form-select form-select-sm" id="waiProject" multiple></select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiModel">API Model</label>
+        <select class="form-select form-select-sm" id="waiModel" multiple></select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiResultType">Result</label>
+        <select class="form-select form-select-sm" id="waiResultType" multiple></select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiStatus">API Status</label>
+        <select class="form-select form-select-sm" id="waiStatus" multiple></select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-2">
+        <label class="form-label small" for="waiPageSize">Rows</label>
+        <select class="form-select form-select-sm" id="waiPageSize">
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <label class="form-label small" for="waiCaptureStart">Capture From</label>
+        <input class="form-control form-control-sm" type="date" id="waiCaptureStart">
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <label class="form-label small" for="waiCaptureEnd">Capture To</label>
+        <input class="form-control form-control-sm" type="date" id="waiCaptureEnd">
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <label class="form-label small" for="waiInferenceStart">Inference From</label>
+        <input class="form-control form-control-sm" type="date" id="waiInferenceStart">
+      </div>
+      <div class="col-12 col-md-6 col-xl-3">
+        <label class="form-label small" for="waiInferenceEnd">Inference To</label>
+        <input class="form-control form-control-sm" type="date" id="waiInferenceEnd">
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3" id="waiCards"></div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-xl-5">
+      <div class="border rounded h-100">
+        <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+          <h2 class="h6 mb-0">Month Wise</h2>
+          <span class="small text-muted" id="waiLoadingState"></span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="text-end">Images</th>
+                <th class="text-end">Encounters</th>
+                <th class="text-end">Positive</th>
+                <th class="text-end">Failed</th>
+              </tr>
+            </thead>
+            <tbody id="waiMonthlyRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-7">
+      <ul class="nav nav-tabs" id="waiResultTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="waiImagesTab" data-bs-toggle="tab" data-bs-target="#waiImagesPane" type="button" role="tab">Image Wise</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="waiEncountersTab" data-bs-toggle="tab" data-bs-target="#waiEncountersPane" type="button" role="tab">Encounter Wise</button>
+        </li>
+      </ul>
+      <div class="tab-content border border-top-0 rounded-bottom">
+        <div class="tab-pane fade show active" id="waiImagesPane" role="tabpanel" tabindex="0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover wai-table mb-0">
+              <thead>
+                <tr>
+                  <th>Image</th>
+                  <th>Context</th>
+                  <th>WAI</th>
+                  <th>Local</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="waiImageRows"></tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-between align-items-center gap-2 p-2 border-top">
+            <span class="small text-muted" id="waiImagePageInfo"></span>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" type="button" id="waiImagePrev"><i class="fa-solid fa-chevron-left"></i></button>
+              <button class="btn btn-outline-secondary" type="button" id="waiImageNext"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="tab-pane fade" id="waiEncountersPane" role="tabpanel" tabindex="0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover wai-table mb-0">
+              <thead>
+                <tr>
+                  <th>Encounter</th>
+                  <th>Counts</th>
+                  <th>Result</th>
+                  <th>Images</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="waiEncounterRows"></tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-between align-items-center gap-2 p-2 border-top">
+            <span class="small text-muted" id="waiEncounterPageInfo"></span>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" type="button" id="waiEncounterPrev"><i class="fa-solid fa-chevron-left"></i></button>
+              <button class="btn btn-outline-secondary" type="button" id="waiEncounterNext"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% set v = (config.get('ASSETS_VERSION') or '') %}
+<script src="{{ url_for('static', filename='js/wai-api-statistics.js') }}?v={{ v }}"></script>
+{% endblock %}

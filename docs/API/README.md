@@ -16,6 +16,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Upload Metadata Field Definitions API](upload-metadata/README.md)
 - [Grading Schemes API](grading-schemes/README.md)
 - [Analytics APIs](analytics/README.md)
+- [WAI API Statistics API](wai-api-statistics/README.md)
 - [Admin APIs](admin/README.md)
 - [Media APIs](media/README.md)
 - [Dataset APIs](datasets/README.md)

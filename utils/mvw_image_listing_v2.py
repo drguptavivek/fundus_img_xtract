@@ -72,10 +72,78 @@ def _ai_probability_expr() -> str:
     return "SUBSTRING(g.comment FROM 'AI probability:\\\\s*([0-9.]+)')"
 
 
-def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
+def _build_mv_sql(
+    mv_name: str,
+    disease_id: int,
+    disease_name: str,
+    *,
+    include_encounter_set_images: bool = False,
+) -> str:
     disease_name_literal = _escape_literal(disease_name)
     final_preference_expr = sql_preference_final_grade("rg")
     final_double_match_expr = sql_double_match_final_grade("rg")
+    encounter_set_image_select = ""
+    if include_encounter_set_images:
+        encounter_set_image_select = """
+
+        UNION ALL
+
+        SELECT
+            esi.uuid AS image_uuid,
+            NULL::text AS direct_image_uuid,
+            NULL::text AS encounter_file_uuid,
+            NULL::integer AS direct_image_upload_id,
+            NULL::integer AS encounter_file_id,
+            esi.id AS encounter_set_image_id,
+            esi.patient_encounter_id AS patient_encounter_id,
+            'EncounterSet' AS upload_type,
+            COALESCE(esi.hospital_id, h.id) AS hospital_id,
+            COALESCE(eh.name, h.name) AS hospital_name,
+            lu.name AS lab_unit_name,
+            esi.camera_id AS camera_id,
+            cam.name AS camera_name,
+            a.name AS area_name,
+            NULL::text AS direct_filename,
+            NULL::text AS direct_edited_filename,
+            NULL::text AS direct_folder_rel,
+            esi.original_filename AS encounter_filename,
+            NULL::date AS encounter_upload_date,
+            COALESCE(esi.edited_filename, esi.original_filename) AS image_filename,
+            esi.folder_rel AS image_folder_rel,
+            TRUE AS is_set_based,
+            pe.capture_date_dt AS capture_date,
+            esi.created_at AS upload_date_utc,
+            NULL::text AS direct_image_verified_status,
+            pe.encounter_verified_status AS encounter_verified_status
+        FROM encounter_set_images esi
+        JOIN patient_encounters pe ON pe.id = esi.patient_encounter_id
+        LEFT JOIN lab_units lu ON pe.lab_unit_id = lu.id
+        LEFT JOIN hospitals h ON lu.hospital_id = h.id
+        LEFT JOIN hospitals eh ON esi.hospital_id = eh.id
+        LEFT JOIN cameras cam ON esi.camera_id = cam.id
+        LEFT JOIN areas a ON esi.area_id = a.id
+        """
+    encounter_set_image_null_column = (
+        "NULL::integer AS encounter_set_image_id," if include_encounter_set_images else ""
+    )
+    encounter_set_image_task_column = (
+        "t.encounter_set_image_id," if include_encounter_set_images else ""
+    )
+    encounter_set_image_result_column = (
+        "b.encounter_set_image_id," if include_encounter_set_images else ""
+    )
+    encounter_set_image_join = ""
+    encounter_join = (
+        "(b.patient_encounter_id IS NOT NULL AND dt.patient_encounter_id = b.patient_encounter_id)"
+    )
+    if include_encounter_set_images:
+        encounter_set_image_join = """
+        (b.encounter_set_image_id IS NOT NULL AND dt.encounter_set_image_id = b.encounter_set_image_id) OR
+        """
+        encounter_join = (
+            "(b.encounter_set_image_id IS NULL AND b.patient_encounter_id IS NOT NULL "
+            "AND dt.patient_encounter_id = b.patient_encounter_id)"
+        )
     return f"""
     CREATE MATERIALIZED VIEW {mv_name} AS
     WITH base_images AS (
@@ -85,6 +153,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             NULL::text AS encounter_file_uuid,
             diu.id AS direct_image_upload_id,
             NULL::integer AS encounter_file_id,
+            {encounter_set_image_null_column}
             NULL::integer AS patient_encounter_id,
             CASE WHEN diu.is_pregraded = TRUE THEN 'Pregraded' ELSE 'Direct' END AS upload_type,
             h.id AS hospital_id,
@@ -120,6 +189,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             ef.uuid AS encounter_file_uuid,
             NULL::integer AS direct_image_upload_id,
             ef.id AS encounter_file_id,
+            {encounter_set_image_null_column}
             ef.patient_encounter_id AS patient_encounter_id,
             'ZIP' AS upload_type,
             h.id AS hospital_id,
@@ -154,6 +224,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             NULL::text AS encounter_file_uuid,
             NULL::integer AS direct_image_upload_id,
             NULL::integer AS encounter_file_id,
+            {encounter_set_image_null_column}
             pe.id AS patient_encounter_id,
             'SET' AS upload_type,
             h.id AS hospital_id,
@@ -179,6 +250,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         LEFT JOIN lab_units lu ON pe.lab_unit_id = lu.id
         LEFT JOIN hospitals h ON lu.hospital_id = h.id
         WHERE pe.is_set_based = TRUE
+        {encounter_set_image_select}
     ),
     disease_tasks AS (
         SELECT
@@ -189,6 +261,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
             t.lab_unit_id,
             t.direct_image_upload_id,
             t.encounter_file_id,
+            {encounter_set_image_task_column}
             t.patient_encounter_id
         FROM grading_tasks t
         WHERE t.disease_id = {int(disease_id)}
@@ -287,6 +360,7 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
         b.encounter_file_uuid,
         b.direct_image_upload_id,
         b.encounter_file_id,
+        {encounter_set_image_result_column}
         b.patient_encounter_id,
         b.upload_type,
         b.hospital_id,
@@ -355,7 +429,8 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
     JOIN disease_tasks dt ON (
         (b.direct_image_upload_id IS NOT NULL AND dt.direct_image_upload_id = b.direct_image_upload_id) OR
         (b.encounter_file_id IS NOT NULL AND dt.encounter_file_id = b.encounter_file_id) OR
-        (b.patient_encounter_id IS NOT NULL AND dt.patient_encounter_id = b.patient_encounter_id)
+        {encounter_set_image_join}
+        {encounter_join}
     )
     LEFT JOIN consensus c ON dt.task_id = c.task_id
     LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
@@ -365,8 +440,10 @@ def _build_mv_sql(mv_name: str, disease_id: int, disease_name: str) -> str:
     """
 
 
-def _create_indexes_sql(mv_name: str) -> Iterable[str]:
-    return [
+def _create_indexes_sql(
+    mv_name: str, *, include_encounter_set_images: bool = False
+) -> Iterable[str]:
+    indexes = [
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_id')} ON {mv_name}(task_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_lab_unit_id')} ON {mv_name}(task_lab_unit_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'hospital_id')} ON {mv_name}(hospital_id);",
@@ -393,6 +470,12 @@ def _create_indexes_sql(mv_name: str) -> Iterable[str]:
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'review_grade_name')} ON {mv_name}(review_grade_name);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'ai_models_json_gin')} ON {mv_name} USING GIN(ai_models_json);",
     ]
+    if include_encounter_set_images:
+        indexes.append(
+            f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'encounter_set_image_id')} "
+            f"ON {mv_name}(encounter_set_image_id);"
+        )
+    return indexes
 
 
 def ensure_per_disease_image_listing_mvs(
@@ -420,9 +503,20 @@ def ensure_per_disease_image_listing_mvs(
                     {"name": mv_name},
                 ).scalar()
                 if not exists and create_missing:
-                    db.execute(text(_build_mv_sql(mv_name, int(disease_id), str(disease_name))))
+                    db.execute(
+                        text(
+                            _build_mv_sql(
+                                mv_name,
+                                int(disease_id),
+                                str(disease_name),
+                                include_encounter_set_images=True,
+                            )
+                        )
+                    )
                     results["created"] += 1
-                    for idx_sql in _create_indexes_sql(mv_name):
+                    for idx_sql in _create_indexes_sql(
+                        mv_name, include_encounter_set_images=True
+                    ):
                         db.execute(text(idx_sql))
                 elif not exists:
                     results["skipped"] += 1

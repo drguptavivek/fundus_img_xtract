@@ -24,8 +24,42 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TIMEOUT = 30 * 60  # 30 minutes
 _PAGE_CACHE_KEY = "public:analytics:page:v1"
-_KPI_CACHE_KEY = "public:analytics:kpi:v1"
-_CHART_CACHE_KEY = "public:analytics:charts:v1"
+_KPI_CACHE_KEY = "public:analytics:kpi:v5"
+_CHART_CACHE_KEY = "public:analytics:charts:v5"
+
+_IMAGE_TASK_PREDICATE = """(
+    gt.encounter_file_id IS NOT NULL
+    OR gt.direct_image_upload_id IS NOT NULL
+    OR gt.encounter_set_image_id IS NOT NULL
+)"""
+
+_ANALYTICS_IMAGE_SOURCE_CTE = """
+analytics_images AS (
+    SELECT
+        upload_type,
+        (verified_status_direct + verified_status_zip)::integer AS verified_count,
+        is_pregraded,
+        upload_date_utc,
+        hospital_name,
+        lab_unit_name
+    FROM mvw_image_listing_all
+
+    UNION ALL
+
+    SELECT
+        'EncounterSet'::text AS upload_type,
+        CASE WHEN pe.encounter_verified_status = 'verified' THEN 1 ELSE 0 END AS verified_count,
+        FALSE AS is_pregraded,
+        esi.created_at AS upload_date_utc,
+        COALESCE(image_hospital.name, lab_hospital.name) AS hospital_name,
+        lu.name AS lab_unit_name
+    FROM encounter_set_images esi
+    JOIN patient_encounters pe ON pe.id = esi.patient_encounter_id
+    LEFT JOIN lab_units lu ON lu.id = pe.lab_unit_id
+    LEFT JOIN hospitals lab_hospital ON lab_hospital.id = lu.hospital_id
+    LEFT JOIN hospitals image_hospital ON image_hospital.id = esi.hospital_id
+)
+"""
 
 
 @cache.cached(timeout=_CACHE_TIMEOUT, key_prefix=_PAGE_CACHE_KEY)
@@ -47,14 +81,15 @@ def api_analytics_kpi():
     try:
         with current_app.app_context():
             with transaction_scope() as db:
-                # Total images by type with verification status (using materialized view)
-                result = db.execute(text("""
+                # Total images by type with verification status across every image source.
+                result = db.execute(text(f"""
+                    WITH {_ANALYTICS_IMAGE_SOURCE_CTE}
                     SELECT
                         upload_type,
                         COUNT(*) as total_count,
-                        SUM(verified_status_direct + verified_status_zip) as verified_count,
+                        COALESCE(SUM(verified_count), 0) as verified_count,
                         SUM(CASE WHEN is_pregraded = TRUE THEN 1 ELSE 0 END) as pregraded_count
-                    FROM mvw_image_listing_all
+                    FROM analytics_images
                     GROUP BY upload_type
                     ORDER BY total_count DESC
                 """)).fetchall()
@@ -73,15 +108,16 @@ def api_analytics_kpi():
                     total_verified += row[2]
 
                 # Total grading tasks by disease
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         d.name as disease_name,
                         COUNT(*) as task_count,
                         COUNT(DISTINCT gt.encounter_file_id) FILTER (WHERE gt.encounter_file_id IS NOT NULL) +
-                        COUNT(DISTINCT gt.direct_image_upload_id) FILTER (WHERE gt.direct_image_upload_id IS NOT NULL) as unique_images
+                        COUNT(DISTINCT gt.direct_image_upload_id) FILTER (WHERE gt.direct_image_upload_id IS NOT NULL) +
+                        COUNT(DISTINCT gt.encounter_set_image_id) FILTER (WHERE gt.encounter_set_image_id IS NOT NULL) as unique_images
                     FROM grading_tasks gt
                     JOIN diseases d ON gt.disease_id = d.id
-                    WHERE gt.encounter_file_id IS NOT NULL OR gt.direct_image_upload_id IS NOT NULL
+                    WHERE {_IMAGE_TASK_PREDICATE}
                     GROUP BY d.name
                     ORDER BY task_count DESC
                 """)).fetchall()
@@ -94,7 +130,7 @@ def api_analytics_kpi():
                 }
 
                 # AI grades count and coverage
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         COUNT(*) as total_ai_gradings,
                         COUNT(DISTINCT gt.id) as tasks_with_ai,
@@ -103,7 +139,7 @@ def api_analytics_kpi():
                     JOIN grading_tasks gt ON g.task_id = gt.id
                     JOIN diseases d ON gt.disease_id = d.id
                     WHERE g.ai_model_id IS NOT NULL
-                    AND (gt.encounter_file_id IS NOT NULL OR gt.direct_image_upload_id IS NOT NULL)
+                    AND {_IMAGE_TASK_PREDICATE}
                     GROUP BY d.name
                 """)).fetchall()
 
@@ -117,7 +153,7 @@ def api_analytics_kpi():
                     total_ai_gradings += row[0]
 
                 # Consensus achievement by disease
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         d.name as disease_name,
                         COUNT(*) FILTER (WHERE g.role_slot != 'ai') as total_human_gradings,
@@ -126,7 +162,7 @@ def api_analytics_kpi():
                     FROM grades g
                     JOIN grading_tasks gt ON g.task_id = gt.id
                     JOIN diseases d ON gt.disease_id = d.id
-                    WHERE (gt.encounter_file_id IS NOT NULL OR gt.direct_image_upload_id IS NOT NULL)
+                    WHERE {_IMAGE_TASK_PREDICATE}
                     AND g.role_slot != 'ai'
                     GROUP BY d.name, gt.id
                     HAVING COUNT(*) FILTER (WHERE g.role_slot != 'ai') >= 2
@@ -145,12 +181,13 @@ def api_analytics_kpi():
                         consensus_stats[disease]['consensus_achieved'] += 1
 
                 # Monthly uploads (last 12 months)
-                result = db.execute(text("""
+                result = db.execute(text(f"""
+                    WITH {_ANALYTICS_IMAGE_SOURCE_CTE}
                     SELECT
                         DATE_TRUNC('month', upload_date_utc) as month,
                         upload_type,
                         COUNT(*) as count
-                    FROM mvw_image_listing_all
+                    FROM analytics_images
                     WHERE upload_date_utc >= NOW() - INTERVAL '12 months'
                     GROUP BY month, upload_type
                     ORDER BY month DESC, upload_type
@@ -164,7 +201,7 @@ def api_analytics_kpi():
                     monthly_uploads[month_str][row[1]] = row[2]
 
                 # Monthly gradings (last 12 months)
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         DATE_TRUNC('month', g.created_at) as month,
                         d.name as disease_name,
@@ -174,7 +211,7 @@ def api_analytics_kpi():
                     JOIN grading_tasks gt ON g.task_id = gt.id
                     JOIN diseases d ON gt.disease_id = d.id
                     WHERE g.created_at >= NOW() - INTERVAL '12 months'
-                    AND (gt.encounter_file_id IS NOT NULL OR gt.direct_image_upload_id IS NOT NULL)
+                    AND {_IMAGE_TASK_PREDICATE}
                     GROUP BY month, d.name
                     ORDER BY month DESC, d.name
                 """)).fetchall()
@@ -222,12 +259,13 @@ def api_analytics_kpi():
                     })
 
                 # Hospital distribution
-                result = db.execute(text("""
+                result = db.execute(text(f"""
+                    WITH {_ANALYTICS_IMAGE_SOURCE_CTE}
                     SELECT
                         hospital_name,
                         COUNT(*) as image_count,
                         COUNT(DISTINCT lab_unit_name) as lab_units
-                    FROM mvw_image_listing_all
+                    FROM analytics_images
                     WHERE hospital_name IS NOT NULL
                     GROUP BY hospital_name
                     ORDER BY image_count DESC
@@ -246,7 +284,18 @@ def api_analytics_kpi():
                         COUNT(*) FILTER (WHERE dr_verified_status IS NOT NULL) as dr_reports,
                         COUNT(*) FILTER (WHERE glaucoma_verified_status IS NOT NULL) as glaucoma_reports,
                         COUNT(*) FILTER (WHERE dr_verified_status = 'verified') as verified_dr_reports,
-                        COUNT(*) FILTER (WHERE glaucoma_verified_status = 'verified') as verified_glaucoma_reports
+                        COUNT(*) FILTER (WHERE glaucoma_verified_status = 'verified') as verified_glaucoma_reports,
+                        (
+                            SELECT COUNT(*)
+                            FROM encounter_set_attachments esa
+                            WHERE esa.asset_kind = 'pdf' OR esa.mime_type = 'application/pdf'
+                        ) AS encounter_set_pdfs,
+                        (
+                            SELECT COUNT(*)
+                            FROM encounter_set_attachments esa
+                            WHERE (esa.asset_kind = 'pdf' OR esa.mime_type = 'application/pdf')
+                              AND esa.is_reviewed = TRUE
+                        ) AS reviewed_encounter_set_pdfs
                     FROM patient_encounters
                 """)).fetchone()
 
@@ -254,8 +303,15 @@ def api_analytics_kpi():
                     'dr_reports': result[0] or 0,
                     'glaucoma_reports': result[1] or 0,
                     'verified_dr_reports': result[2] or 0,
-                    'verified_glaucoma_reports': result[3] or 0
+                    'verified_glaucoma_reports': result[3] or 0,
+                    'encounter_set_pdfs': result[4] or 0,
+                    'reviewed_encounter_set_pdfs': result[5] or 0,
                 }
+                report_stats['total_reports'] = (
+                    report_stats['dr_reports']
+                    + report_stats['glaucoma_reports']
+                    + report_stats['encounter_set_pdfs']
+                )
 
                 # System health metrics
                 result = db.execute(text("""
@@ -301,7 +357,9 @@ def api_analytics_kpi():
                             'total_graders': system_health['total_graders'],
                             'ai_models_count': system_health['ai_models_count'],
                             'dr_reports': report_stats['dr_reports'],
-                            'glaucoma_reports': report_stats['glaucoma_reports']
+                            'glaucoma_reports': report_stats['glaucoma_reports'],
+                            'encounter_set_pdfs': report_stats['encounter_set_pdfs'],
+                            'total_reports': report_stats['total_reports'],
                         },
                         'image_types': image_type_stats,
                         'disease_tasks': disease_task_stats,
@@ -335,14 +393,16 @@ def api_analytics_chart_data():
         with current_app.app_context():
             with transaction_scope() as db:
                 # Upload trends - last 12 months
-                result = db.execute(text("""
+                result = db.execute(text(f"""
+                    WITH {_ANALYTICS_IMAGE_SOURCE_CTE}
                     SELECT
                         TO_CHAR(DATE_TRUNC('month', upload_date_utc), 'YYYY-MM') as month,
                         COUNT(*) as total_uploads,
                         COUNT(*) FILTER (WHERE upload_type = 'Direct') as direct,
                         COUNT(*) FILTER (WHERE upload_type = 'ZIP') as zip,
-                        COUNT(*) FILTER (WHERE upload_type = 'Pregraded') as pregraded
-                    FROM mvw_image_listing_all
+                        COUNT(*) FILTER (WHERE upload_type = 'Pregraded') as pregraded,
+                        COUNT(*) FILTER (WHERE upload_type = 'EncounterSet') as encounter_set
+                    FROM analytics_images
                     WHERE upload_date_utc >= NOW() - INTERVAL '12 months'
                     GROUP BY DATE_TRUNC('month', upload_date_utc)
                     ORDER BY month
@@ -355,11 +415,12 @@ def api_analytics_chart_data():
                         'total': row[1],
                         'direct': row[2] or 0,
                         'zip': row[3] or 0,
-                        'pregraded': row[4] or 0
+                        'pregraded': row[4] or 0,
+                        'encounter_set': row[5] or 0,
                     })
 
                 # Grading trends - last 12 months
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         TO_CHAR(DATE_TRUNC('month', g.created_at), 'YYYY-MM') as month,
                         d.name as disease,
@@ -369,7 +430,7 @@ def api_analytics_chart_data():
                     JOIN grading_tasks gt ON g.task_id = gt.id
                     JOIN diseases d ON gt.disease_id = d.id
                     WHERE g.created_at >= NOW() - INTERVAL '12 months'
-                    AND (gt.encounter_file_id IS NOT NULL OR gt.direct_image_upload_id IS NOT NULL)
+                    AND {_IMAGE_TASK_PREDICATE}
                     GROUP BY DATE_TRUNC('month', g.created_at), d.name
                     ORDER BY month, disease
                 """)).fetchall()

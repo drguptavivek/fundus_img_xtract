@@ -506,7 +506,7 @@ function displayAnalytics(data) {
     displayImageTypes(data.image_types);
 
     // Display verification status
-    displayVerificationStatus(data.image_types);
+    displayVerificationStatus(data.summary);
 
     // Display disease tasks
     displayDiseaseTasks(data.disease_tasks);
@@ -582,18 +582,25 @@ function displayReports(reportStats) {
     const container = document.getElementById('reportsStats');
     container.innerHTML = `
         <div class="row">
-            <div class="col-6">
+            <div class="col-4">
                 <div class="text-center mb-3">
                     <h4 class="text-primary">${formatNumber(reportStats.dr_reports)}</h4>
                     <p class="text-secondary">DR Reports</p>
                     <small class="text-success">${reportStats.verified_dr_reports} verified</small>
                 </div>
             </div>
-            <div class="col-6">
+            <div class="col-4">
                 <div class="text-center mb-3">
                     <h4 class="text-warning">${formatNumber(reportStats.glaucoma_reports)}</h4>
                     <p class="text-secondary">Glaucoma Reports</p>
                     <small class="text-success">${reportStats.verified_glaucoma_reports} verified</small>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="text-center mb-3">
+                    <h4 class="text-info">${formatNumber(reportStats.encounter_set_pdfs)}</h4>
+                    <p class="text-secondary">EncounterSet PDFs</p>
+                    <small class="text-success">${reportStats.reviewed_encounter_set_pdfs} reviewed</small>
                 </div>
             </div>
         </div>
@@ -635,22 +642,17 @@ function displayConsensus(consensusData) {
     container.innerHTML = consensusHtml;
 }
 
-function displayVerificationStatus(imageTypes) {
+function displayVerificationStatus(summary) {
     const container = document.getElementById('verificationStats');
     container.innerHTML = '';
 
-    if (!imageTypes || Object.keys(imageTypes).length === 0) {
+    if (!summary) {
         container.innerHTML = '<p class="text-secondary">No verification data available</p>';
         return;
     }
 
-    let totalVerified = 0;
-    let totalUnverified = 0;
-
-    Object.entries(imageTypes).forEach(([type, stats]) => {
-        totalVerified += stats.verified;
-        totalUnverified += (stats.total - stats.verified);
-    });
+    const totalVerified = summary.total_verified_images || 0;
+    const totalUnverified = Math.max((summary.total_images || 0) - totalVerified, 0);
 
     const overallVerificationRate = (totalVerified + totalUnverified) > 0 ?
         (totalVerified / (totalVerified + totalUnverified) * 100).toFixed(1) : 0;
@@ -696,6 +698,7 @@ function displayUploadTrendsChart(data) {
     const directData = [];
     const zipData = [];
     const pregradedData = [];
+    const encounterSetData = [];
 
     if (data.monthly_uploads) {
         // Sort months chronologically
@@ -707,6 +710,7 @@ function displayUploadTrendsChart(data) {
             directData.push(monthData.Direct || 0);
             zipData.push(monthData.ZIP || 0);
             pregradedData.push(monthData.Pregraded || 0);
+            encounterSetData.push(monthData.EncounterSet || 0);
         });
     }
 
@@ -734,6 +738,13 @@ function displayUploadTrendsChart(data) {
                     data: pregradedData,
                     borderColor: 'rgba(25, 135, 84, 1)',
                     backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    tension: 0.1
+                },
+                {
+                    label: 'EncounterSets',
+                    data: encounterSetData,
+                    borderColor: 'rgba(111, 66, 193, 1)',
+                    backgroundColor: 'rgba(111, 66, 193, 0.1)',
                     tension: 0.1
                 }
             ]

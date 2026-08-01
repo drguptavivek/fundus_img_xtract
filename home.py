@@ -9,11 +9,17 @@ from flask.typing import ResponseReturnValue
 from sqlalchemy import select, func, or_, case, and_, text, bindparam
 from app_cache import cache
 from db_transaction_manager import get_db_session
-from models import EncounterFile, PatientEncounters, GlaucomaResultsCleaned, DirectImageUpload
+from models import (
+    DirectImageUpload,
+    EncounterFile,
+    EncounterSetImage,
+    GlaucomaResultsCleaned,
+    PatientEncounters,
+)
 from models import DirectImageVerify, Disease, Grade, DiseaseGrading
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease_name
 
-_CACHE_KEY = "home:charts:v1"
+_CACHE_KEY = "home:charts:v2"
 _CACHE_TTL_SECONDS = 15 * 60  # 15 minutes
 
 
@@ -108,6 +114,10 @@ def _compute_home_payload() -> Dict[str, Any]:
         images_count = db.execute(
             select(func.count(EncounterFile.id)).where(or_(*img_filters))
         ).scalar_one()
+        encounter_set_images_count = db.execute(
+            select(func.count(EncounterSetImage.id))
+        ).scalar_one()
+        images_count += encounter_set_images_count
         screenings_count = db.execute(select(func.count(PatientEncounters.id))).scalar_one()
 
         direct_images_count = db.execute(select(func.count(DirectImageUpload.id))).scalar_one()
@@ -394,6 +404,7 @@ def _compute_home_payload() -> Dict[str, Any]:
 
     return {
         "images_count": images_count,
+        "encounter_set_images_count": encounter_set_images_count,
         "screenings_count": screenings_count,
         "direct_images_count": direct_images_count,
         "verified_direct_images_count": verified_direct_images_count,

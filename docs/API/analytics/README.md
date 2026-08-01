@@ -21,6 +21,61 @@ This folder documents the analytics pages and JSON endpoints.
 
 - `GET /api/analytics/encounters/export/task-results.xlsx`
 
+## Public dashboard APIs
+
+### `GET /api/analytics/kpi`
+
+Returns the public homepage and `/analytics` summary payload. Authentication and
+CSRF are not required because this is a read-only public endpoint.
+
+The `data.summary` object includes total images, encounters, tasks, gradings,
+AI gradings, graders, models, and medical reports. `data.image_types` separates
+the mutually exclusive physical image sources:
+
+- `Direct`: non-pregraded rows from `direct_image_uploads`
+- `Pregraded`: pregraded rows from `direct_image_uploads`
+- `ZIP`: classical `encounter_files` images
+- `EncounterSet`: physical `encounter_set_images` rows
+
+`summary.total_images` is the sum of those four source counts. EncounterSet
+verification uses the parent encounter verification status. `summary.total_encounters`
+includes both classical and set-based `patient_encounters` rows.
+
+`data.report_stats` includes the existing DR and glaucoma report counts plus
+`encounter_set_pdfs`, `reviewed_encounter_set_pdfs`, and their combined
+`total_reports`. EncounterSet PDFs are attachments whose `asset_kind` is `pdf`
+or whose MIME type is `application/pdf`.
+
+Example response excerpt:
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "total_images": 20672,
+      "total_encounters": 3764,
+      "encounter_set_pdfs": 1121,
+      "total_reports": 4352
+    },
+    "image_types": {
+      "Direct": {"total": 110},
+      "Pregraded": {"total": 5425},
+      "ZIP": {"total": 6365},
+      "EncounterSet": {"total": 8772}
+    }
+  }
+}
+```
+
+### `GET /api/analytics/chart-data`
+
+Returns `data.upload_trends` and `data.grading_trends` for the last 12 months.
+Upload trend rows include `direct`, `pregraded`, `zip`, and `encounter_set`
+counts. Grading trends include tasks backed by EncounterSet images as well as
+direct and classical encounter-file images. Authentication and CSRF are not
+required.
+
 ## Dataset curation
 
 - `GET /analytics/dataset-curation`

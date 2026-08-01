@@ -153,7 +153,8 @@
           <div class="display-6 fw-bold" id="home-total-reports">-</div>
           <div class="small opacity-75">
             DR: <span id="home-dr-reports">-</span> |
-            Glaucoma: <span id="home-glaucoma-reports">-</span>
+            Glaucoma: <span id="home-glaucoma-reports">-</span> |
+            EncounterSet PDFs: <span id="home-encounter-set-pdfs">-</span>
           </div>
         </div>
       </div>
@@ -162,17 +163,17 @@
 
   <!-- Image Type Distribution -->
   <div class="row g-3 mb-4">
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--purple h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">Direct Uploads</div>
           <div class="display-6 fw-bold" id="home-direct-uploads">-</div>
-          <div class="small opacity-75">Clinic image uploads</div>
+          <div class="small opacity-75">Non-pregraded clinic image uploads</div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--danger h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">ZIP Uploads</div>
@@ -182,12 +183,22 @@
       </div>
     </div>
 
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--teal h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">Pregraded Images</div>
           <div class="display-6 fw-bold" id="home-pregraded-uploads">-</div>
           <div class="small opacity-75">Pre-graded datasets</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">EncounterSets</div>
+          <div class="display-6 fw-bold" id="home-encounter-set-images">-</div>
+          <div class="small opacity-75">Images grouped by encounter</div>
         </div>
       </div>
     </div>
@@ -418,10 +429,11 @@
           document.getElementById('home-ai-gradings').textContent = formatNumber(summary.total_ai_gradings);
 
           // Update reports KPIs
-          const totalReports = (reportStats.dr_reports || 0) + (reportStats.glaucoma_reports || 0);
+          const totalReports = reportStats.total_reports || 0;
           document.getElementById('home-total-reports').textContent = formatNumber(totalReports);
           document.getElementById('home-dr-reports').textContent = formatNumber(reportStats.dr_reports || 0);
           document.getElementById('home-glaucoma-reports').textContent = formatNumber(reportStats.glaucoma_reports || 0);
+          document.getElementById('home-encounter-set-pdfs').textContent = formatNumber(reportStats.encounter_set_pdfs || 0);
 
           // Update image type KPIs
           if (imageTypes.Direct) {
@@ -440,6 +452,12 @@
             document.getElementById('home-pregraded-uploads').textContent = formatNumber(imageTypes.Pregraded.total);
           } else {
             document.getElementById('home-pregraded-uploads').textContent = '0';
+          }
+
+          if (imageTypes.EncounterSet) {
+            document.getElementById('home-encounter-set-images').textContent = formatNumber(imageTypes.EncounterSet.total);
+          } else {
+            document.getElementById('home-encounter-set-images').textContent = '0';
           }
 
         } else {

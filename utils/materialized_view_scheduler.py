@@ -104,6 +104,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
     4. mvw_amd_grading_pivot (AMD-specific pivoted data)
     5. mvw_encounter_pivot (comprehensive encounter-centric analytics with individual image grade pivots)
     6. mvw_image_listing_all (comprehensive image catalog with upload types and verification status)
+    7. ai_inference_runs_mv (normalized AI inference run analytics)
 
     Args:
         app: Flask application instance
@@ -141,6 +142,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
             ("mvw_amd_grading_pivot", "AMD Pivot"),
             ("mvw_encounter_pivot", "Encounter Pivot"),
             ("mvw_image_listing_all", "Image Listing All"),
+            ("ai_inference_runs_mv", "AI Inference Runs"),
         ]
         per_disease_views = _load_per_disease_views(app)
 

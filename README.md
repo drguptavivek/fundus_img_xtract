@@ -78,7 +78,7 @@ Core workflows include:
 - **Full Documentation**: [📖 Complete Viewer Help Guide](docs/Help/Advanced_Image_Viewer_Guide.md)
 
 ### 📊 Advanced Analytics & Reporting
-- **Materialized Views**: Four specialized POSTGreSQL Materialzied views for high-performance analytics
+- **Materialized Views**: PostgreSQL materialized views for high-performance grading, encounter, image, and AI inference analytics
 - **Disease-Specific Pivots**: Separate analytics for DR, Glaucoma, and AMD and all disease generated automacticlly 
 - **Automated Refresh**: 4x daily updates with manual refresh capabilities
 - **Real-Time KPIs**: Live performance metrics and quality indicators
@@ -357,6 +357,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 ### Analytics & Reporting System
 - [Comprehensive Analytics & Reporting System](docs/11-KPI and DFs/comprehensive_analytics_reporting_system.md) - Complete materialized views and analytics platform documentation
+- [AI Inference Runs Materialized View](docs/06-Analytics/AI_Inference_Runs_Materialized_View.md) - Normalized AI API inference run analytics for WAI statistics
 - [Encounter Pivot View User Guide](docs/11-KPI and DFs/06-Encounter-Pivot-View-User-Guide.md) - Complete guide for using the encounter pivot materialized view for research analytics and operational reporting
 - [Analytics User Guide](docs/user-guide/viewing-analytics.md) - User interface for viewing analytics and reports
 

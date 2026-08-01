@@ -2,7 +2,7 @@
 
 ## Overview
 
-The fundus image management system uses six PostgreSQL materialized views to optimize analytics and reporting performance. These views pre-compute complex aggregations across images, grading tasks, and patient encounters, enabling fast query responses for dashboards, KPIs, and data exports.
+The fundus image management system uses PostgreSQL materialized views to optimize analytics and reporting performance. These views pre-compute complex aggregations across images, grading tasks, patient encounters, and AI inference runs, enabling fast query responses for dashboards, KPIs, and data exports.
 
 ## Materialized Views Architecture
 
@@ -85,6 +85,28 @@ The fundus image management system uses six PostgreSQL materialized views to opt
 **Migration:** `/migrations/versions/819e7a97ca1f_create_image_listing_materialized_view.py`
 
 **Documentation:** `Image_Listing_Materialized_View.md`
+
+---
+
+### ai_inference_runs_mv
+**Purpose:** Normalized AI API inference run analytics
+
+**Key Features:**
+- One row per `ai_inference_runs` row
+- Adds disease, project, image, and encounter context
+- Derives `result_type` for positive, negative, and inconclusive successful runs
+- Preserves failed/running API status, HTTP status, error fields, and response JSON
+- Marks the latest run per task/model with `is_latest_for_task_model`
+
+**Use Cases:**
+- Wadhwani AI API statistics
+- Image-wise and encounter-wise inference browsing
+- API run failure review
+- Month-wise inference reporting
+
+**Migration:** `/migrations/versions/b6c7d8e9f0a1_create_ai_inference_runs_mv.py`
+
+**Documentation:** `AI_Inference_Runs_Materialized_View.md`
 
 ---
 

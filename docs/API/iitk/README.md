@@ -332,8 +332,11 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
 - Patient, encounter, and upload metadata are stored in the canonical nested
   EncounterSet `metadata_json` scopes. Existing locally managed keys in those
   scopes are preserved when source-owned keys are refreshed.
-- Remote filenames are not persisted. Images use random local filenames and
-  retain only a SHA-256 source-filename fingerprint in image metadata.
+- Images use random local filenames. The exact IITK inventory filename is
+  retained as `source_filename` in image metadata, alongside its SHA-256
+  fingerprint, because annotation submissions must reference the exact
+  filename returned by `GET /listImages`. An inventory-only sync backfills the
+  field on previously imported images without downloading unchanged bytes.
 - JPEGs are size-checked, decoded, stripped of EXIF, stored locally, and
   thumbnailed. Unchanged inventory entries are not downloaded again; a missing
   local file is recovered on the next sync.

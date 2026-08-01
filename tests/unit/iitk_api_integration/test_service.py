@@ -99,6 +99,31 @@ def test_partial_session_is_created_then_updated_in_place(db_session, core_test_
     assert encounter.metadata_json["encounter"]["capture_status"] == "complete"
     assert encounter.metadata_json["upload"]["source_kind"] == "iitk_api"
     assert all((tmp_path / image.folder_rel / image.original_filename).exists() for image in images)
+    assert [image.metadata_json["source_filename"] for image in images] == ["private-primary.jpg", "private-up.jpg"]
+    assert all(image.original_filename != image.metadata_json["source_filename"] for image in images)
+
+
+def test_inventory_sync_backfills_exact_source_filename_without_redownload(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    current_inventory = inventory("primary")
+    _persist_session(runtime, source("partial", 1, ("primary",)), current_inventory, {"primary": jpeg()})
+    image = db_session.query(EncounterSetImage).one()
+    local_filename = image.original_filename
+    metadata = dict(image.metadata_json)
+    metadata.pop("source_filename")
+    image.metadata_json = metadata
+    db_session.flush()
+
+    result = _persist_session(runtime, source("partial", 1, ("primary",)), current_inventory, {})
+    db_session.refresh(image)
+
+    assert result["images_unchanged"] == 1
+    assert image.original_filename == local_filename
+    assert image.metadata_json["source_filename"] == "private-primary.jpg"
 
 
 def test_capture_datetime_is_normalized_and_dated_in_utc(db_session, core_test_data, app, monkeypatch, tmp_path):

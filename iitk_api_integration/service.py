@@ -473,6 +473,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
                 image.thumbnail_filename = thumbnail if generate_thumbnail(target, thumb_path) else None
             image.metadata_json = {
                 **(image.metadata_json or {}), "source_kind": "iitk_api", "source_session_ref": _opaque(source.session_id),
+                "source_filename": item.filename,
                 "source_filename_hash": hashlib.sha256(item.filename.encode()).hexdigest(), "source_size_bytes": item.size_bytes,
                 "source_captured_at": item.captured_at,
                 "source_captured_at_utc": _utc_iso_datetime(item.captured_at),

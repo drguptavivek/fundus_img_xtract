@@ -126,6 +126,48 @@ def test_inventory_sync_backfills_exact_source_filename_without_redownload(
     assert image.metadata_json["source_filename"] == "private-primary.jpg"
 
 
+def test_complete_upstream_session_and_inventory_payloads_are_preserved_for_audit(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    raw_session = {
+        "sessionId": "session-1",
+        "mrn": "MRN-1",
+        "futureSessionField": {"nested": [1, "kept"]},
+    }
+    raw_image = {
+        "filename": "private-primary.jpg",
+        "position": "primary",
+        "contentType": "image/jpeg",
+        "futureImageField": {"kept": True},
+    }
+    raw_inventory = {
+        "sessionId": "session-1",
+        "mode": "closeup",
+        "images": [raw_image],
+        "futureInventoryField": ["also", "kept"],
+    }
+    source_dto = replace(source("partial", 1, ("primary",)), raw_payload=raw_session)
+    parsed_inventory = inventory("primary")
+    image_dto = replace(parsed_inventory.images[0], raw_payload=raw_image)
+    inventory_dto = IITKImageInventory(
+        parsed_inventory.session_id,
+        parsed_inventory.mode,
+        (image_dto,),
+        raw_payload=raw_inventory,
+    )
+
+    _persist_session(runtime, source_dto, inventory_dto, {"primary": jpeg()})
+
+    link = db_session.query(IITKApiSessionLink).one()
+    image = db_session.query(EncounterSetImage).one()
+    assert link.source_metadata_json["upstream_session_payload"] == raw_session
+    assert link.source_metadata_json["upstream_image_inventory_payload"] == raw_inventory
+    assert image.metadata_json["upstream_payload"] == raw_image
+
+
 def test_capture_datetime_is_normalized_and_dated_in_utc(db_session, core_test_data, app, monkeypatch, tmp_path):
     runtime = setup_config(db_session, core_test_data)
     monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)

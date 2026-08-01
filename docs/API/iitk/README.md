@@ -332,6 +332,10 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
 - Patient, encounter, and upload metadata are stored in the canonical nested
   EncounterSet `metadata_json` scopes. Existing locally managed keys in those
   scopes are preserved when source-owned keys are refreshed.
+- Audit metadata retains the complete per-session object returned by
+  `listSessions`, the complete per-session response from `listImages`, and each
+  complete image inventory object. Unknown upstream fields are preserved
+  verbatim alongside the normalized fields used by the application.
 - Images use random local filenames. The exact IITK inventory filename is
   retained as `source_filename` in image metadata, alongside its SHA-256
   fingerprint, because annotation submissions must reference the exact

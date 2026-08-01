@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class IITKSessionDTO:
     diagnosis: str | None
     diagnosis_other: str | None
     clinician_uid: str | None
+    raw_payload: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,7 @@ class IITKImageDTO:
     size_bytes: int | None
     content_type: str
     captured_at: str | None
+    raw_payload: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -43,3 +46,4 @@ class IITKImageInventory:
     session_id: str
     mode: str | None
     images: tuple[IITKImageDTO, ...]
+    raw_payload: dict[str, Any] | None = None

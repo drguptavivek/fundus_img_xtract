@@ -43,9 +43,12 @@ def jpeg() -> bytes:
 
 
 def test_client_parses_partial_session_and_image_inventory():
+    session_payload = {"sessionId": "s-1", "startedAt": "2026-08-01T01:30:00Z", "status": "partial", "imageCount": 1, "mrn": "M-1", "capturedPositions": ["primary", "consent"], "futureSessionField": {"value": 7}}
+    image_payload = {"filename": "private.jpg", "position": "primary", "sizeBytes": 100, "contentType": "image/jpeg", "capturedAt": "2026-08-01T01:31:00Z", "futureImageField": ["kept"]}
+    inventory_payload = {"sessionId": "s-1", "mode": "closeup", "images": [image_payload], "futureInventoryField": True}
     transport = Session(
-        Response(body={"sessions": [{"sessionId": "s-1", "startedAt": "2026-08-01T01:30:00Z", "status": "partial", "imageCount": 1, "mrn": "M-1", "capturedPositions": ["primary", "consent"]}], "nextPageToken": "next"}),
-        Response(body={"sessionId": "s-1", "mode": "closeup", "images": [{"filename": "private.jpg", "position": "primary", "sizeBytes": 100, "contentType": "image/jpeg", "capturedAt": "2026-08-01T01:31:00Z"}]}),
+        Response(body={"sessions": [session_payload], "nextPageToken": "next"}),
+        Response(body=inventory_payload),
         Response(content=jpeg(), headers={"content-type": "image/jpeg"}),
     )
     client = IITKClient("secret", base_url="https://iitk.test", min_request_interval_seconds=0, session=transport)
@@ -58,6 +61,9 @@ def test_client_parses_partial_session_and_image_inventory():
     assert page.sessions[0].captured_positions == ("primary", "consent")
     assert page.next_page_token == "next"
     assert inventory.images[0].position == "primary"
+    assert page.sessions[0].raw_payload == session_payload
+    assert inventory.raw_payload == inventory_payload
+    assert inventory.images[0].raw_payload == image_payload
     assert content.startswith(b"\xff\xd8\xff")
     assert transport.calls[0][1]["headers"] == {"Authorization": "Bearer secret"}
 

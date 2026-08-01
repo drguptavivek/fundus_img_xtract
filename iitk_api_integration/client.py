@@ -1,6 +1,7 @@
 """Read-only IITK API client used by browsing and synchronization."""
 from __future__ import annotations
 
+from copy import deepcopy
 from io import BytesIO
 import time
 from typing import Any
@@ -56,7 +57,12 @@ class IITKClient:
         returned_id = _required(body.get("sessionId"), "sessionId")
         if returned_id != session_id:
             raise IITKContractError("IITK listImages returned a different sessionId.")
-        return IITKImageInventory(returned_id, _optional_string(body.get("mode")), tuple(_image(row) for row in images))
+        return IITKImageInventory(
+            returned_id,
+            _optional_string(body.get("mode")),
+            tuple(_image(row) for row in images),
+            raw_payload=deepcopy(body),
+        )
 
     def get_image(self, session_id: str, filename: str) -> bytes:
         response = self._request("/image", {"sessionId": _required(session_id, "sessionId"), "filename": _required(filename, "filename")}, stream=True)
@@ -153,6 +159,7 @@ def _session(value: Any) -> IITKSessionDTO:
         eye=_optional_string(value.get("eye")), gender=_optional_string(value.get("gender")),
         diagnosis=_optional_string(value.get("diagnosis")), diagnosis_other=_optional_string(value.get("diagnosisOther")),
         clinician_uid=_optional_string(value.get("clinicianUid")),
+        raw_payload=deepcopy(value),
     )
 
 
@@ -162,7 +169,14 @@ def _image(value: Any) -> IITKImageDTO:
     content_type = _required(value.get("contentType"), "contentType").lower()
     if content_type not in {"image/jpeg", "image/jpg"}:
         raise IITKContractError("IITK image inventory contains a non-JPEG asset.")
-    return IITKImageDTO(_required(value.get("filename"), "filename"), _required(value.get("position"), "position"), _optional_int(value.get("sizeBytes")), content_type, _optional_string(value.get("capturedAt")))
+    return IITKImageDTO(
+        _required(value.get("filename"), "filename"),
+        _required(value.get("position"), "position"),
+        _optional_int(value.get("sizeBytes")),
+        content_type,
+        _optional_string(value.get("capturedAt")),
+        raw_payload=deepcopy(value),
+    )
 
 
 def _required(value: Any, label: str) -> str:

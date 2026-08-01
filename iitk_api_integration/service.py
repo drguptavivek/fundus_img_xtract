@@ -420,7 +420,8 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             db.add(encounter)
             db.flush()
             link = IITKApiSessionLink(config_id=runtime.id, source_session_id=source.session_id, patient_encounter_id=encounter.id,
-                source_status=source.status, source_image_count=source.image_count, local_image_count=0, source_metadata_json=asdict(source))
+                source_status=source.status, source_image_count=source.image_count, local_image_count=0,
+                source_metadata_json=_source_audit_metadata(source, inventory))
             db.add(link)
             counts["encounters_created"] = 1
         else:
@@ -477,6 +478,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
                 "source_filename_hash": hashlib.sha256(item.filename.encode()).hexdigest(), "source_size_bytes": item.size_bytes,
                 "source_captured_at": item.captured_at,
                 "source_captured_at_utc": _utc_iso_datetime(item.captured_at),
+                "upstream_payload": item.raw_payload or _normalized_image_payload(item),
                 "source_present": True, "gaze_position": item.position,
                 "laterality": source.eye, "is_montage": item.position == "composite", "encounter_set_type_id": runtime.encounter_set_type_id,
             }
@@ -485,7 +487,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         link.source_image_count = source.image_count
         link.local_image_count = sum(1 for item in inventory.images if POSITION_ORDER[item.position] in images_by_position)
         link.inventory_hash = inventory_hash
-        link.source_metadata_json = asdict(source)
+        link.source_metadata_json = _source_audit_metadata(source, inventory)
         link.last_seen_at = now
         link.last_synced_at = now
         link.last_error = None
@@ -496,6 +498,30 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         db.add_all([encounter, link])
         db.commit()
     return counts
+
+
+def _source_audit_metadata(source: IITKSessionDTO, inventory: IITKImageInventory) -> dict[str, Any]:
+    normalized = asdict(source)
+    normalized.pop("raw_payload", None)
+    return {
+        **normalized,
+        "upstream_session_payload": source.raw_payload or dict(normalized),
+        "upstream_image_inventory_payload": inventory.raw_payload or {
+            "sessionId": inventory.session_id,
+            "mode": inventory.mode,
+            "images": [_normalized_image_payload(item) for item in inventory.images],
+        },
+    }
+
+
+def _normalized_image_payload(item: IITKImageDTO) -> dict[str, Any]:
+    return {
+        "filename": item.filename,
+        "position": item.position,
+        "sizeBytes": item.size_bytes,
+        "contentType": item.content_type,
+        "capturedAt": item.captured_at,
+    }
 
 
 def _current_images(config_id: int, source_session_id: str) -> dict[str, dict[str, Any]]:

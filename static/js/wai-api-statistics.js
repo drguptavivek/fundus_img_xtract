@@ -20,7 +20,6 @@
     inferenceStart: document.getElementById('waiInferenceStart'),
     inferenceEnd: document.getElementById('waiInferenceEnd'),
     cards: document.getElementById('waiCards'),
-    monthlyRows: document.getElementById('waiMonthlyRows'),
     imageRows: document.getElementById('waiImageRows'),
     encounterRows: document.getElementById('waiEncounterRows'),
     imagePageInfo: document.getElementById('waiImagePageInfo'),
@@ -134,22 +133,6 @@
     `).join('');
   }
 
-  function renderMonthly(rows) {
-    if (!rows || !rows.length) {
-      els.monthlyRows.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No rows</td></tr>';
-      return;
-    }
-    els.monthlyRows.innerHTML = rows.map((row) => `
-      <tr>
-        <td>${escapeHtml(formatDate(row.month).slice(0, 7))}</td>
-        <td class="text-end">${formatNumber(row.images)}</td>
-        <td class="text-end">${formatNumber(row.encounters)}</td>
-        <td class="text-end">${formatNumber(row.positive)}</td>
-        <td class="text-end">${formatNumber(row.failed)}</td>
-      </tr>
-    `).join('');
-  }
-
   function pageText(pagination) {
     const start = pagination.total ? ((pagination.page - 1) * pagination.page_size) + 1 : 0;
     const end = Math.min(pagination.total, pagination.page * pagination.page_size);
@@ -247,7 +230,6 @@
   function loadSummary() {
     return fetchJSON(root.dataset.summaryUrl, buildParams()).then((payload) => {
       renderCards(payload.cards || {});
-      renderMonthly(payload.monthly || []);
     });
   }
 

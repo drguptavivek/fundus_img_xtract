@@ -372,4 +372,7 @@ business-hours dispatch.
 
 The retired `GET /admin/iitk` URL redirects to `GET /admin/upload-projects`.
 Imported records appear in the existing EncounterSet browser with an `IITK
-partial` or `IITK complete` badge.
+partial` or `IITK complete` badge. Its metadata card keeps canonical fields
+visible and provides a collapsed **Full metadata** disclosure containing the
+complete encounter, source-audit, and per-image metadata. The no-PII browser
+does not receive or render this disclosure.

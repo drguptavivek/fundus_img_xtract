@@ -46,6 +46,7 @@ from upload_profiles.service import manager_lab_unit_ids
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
 from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
+from iitk_api_integration.models import IITKApiSessionLink
 
 from .client import RemidioClient
 from .errors import RemidioConfigError, RemidioRemoteError
@@ -300,6 +301,11 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         return None
     metadata = encounter.metadata_json or {}
     encounter_metadata = metadata.get("encounter") if isinstance(metadata.get("encounter"), dict) else {}
+    iitk_link = (
+        db.query(IITKApiSessionLink).filter_by(patient_encounter_id=encounter.id).one_or_none()
+        if not no_pii
+        else None
+    )
     remidio_exam = (
         db.query(RemidioExam)
         .filter(RemidioExam.patient_encounter_id == encounter.id)
@@ -320,6 +326,18 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         if report and report.get("source")
     }
     attachment_rows = [_encounter_set_attachment_row(attachment) for attachment in attachments]
+    full_metadata = None if no_pii else {
+        "encounter_metadata": metadata,
+        "source_audit": iitk_link.source_metadata_json if iitk_link else None,
+        "image_metadata": [
+            {
+                "uuid": image.uuid,
+                "position": image.spatial_position,
+                "metadata": image.metadata_json or {},
+            }
+            for image in sorted(encounter.encounter_set_images, key=lambda item: item.spatial_position)
+        ],
+    }
     return {
         **_encounter_set_patient_row(encounter, no_pii=no_pii),
         "uuid": encounter.uuid,
@@ -342,6 +360,7 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         }
         if isinstance(metadata, dict)
         else {},
+        "full_metadata": full_metadata,
         "remidio_exam_id": None if no_pii else remidio_exam.remidio_exam_id if remidio_exam else _metadata_lookup(metadata, "remidio_exam_id"),
         "remidio_site": None if no_pii else remidio_exam.site_custom_identifier if remidio_exam else _metadata_lookup(metadata, "remidio_site_custom_identifier"),
         "images": images,

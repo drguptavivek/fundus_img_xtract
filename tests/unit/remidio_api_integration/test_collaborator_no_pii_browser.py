@@ -105,6 +105,7 @@ def test_no_pii_browser_redacts_patient_identifiers(db_session):
     assert context["detail"]["name"] == f"EncounterSet {encounter.uuid}"
     assert context["detail"]["metadata_patient"] == {}
     assert context["detail"]["metadata_encounter"] == {}
+    assert context["detail"]["full_metadata"] is None
     assert context["detail"]["remidio_exam_id"] is None
 
 

@@ -9,6 +9,7 @@ from flask_login import current_user
 
 from auth.roles import ROLE_COLLABORATOR, roles_required
 from db_transaction_manager import get_db_session
+from encounter_sets.access import ENCOUNTER_SET_PII_ROLES
 from encounter_sets.models import EncounterSetAttachment
 from models import BASE_DIR, PatientEncounters
 from remidio_api_integration import service as remidio_service
@@ -17,7 +18,7 @@ from utils.hospital_scoping import apply_scoping
 from . import bp
 
 
-BROWSER_ROLES = ("admin", "local_admin", "data_manager", "fileUploader", "optometrist")
+BROWSER_ROLES = ENCOUNTER_SET_PII_ROLES
 COLLABORATOR_BROWSER_ROLES = (ROLE_COLLABORATOR, "collaborators")
 
 

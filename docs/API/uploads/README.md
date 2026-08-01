@@ -5,6 +5,7 @@ This folder groups the upload-related contract pages that back direct uploads, e
 ## Contract Pages
 
 - [Direct and Lookup APIs](direct-and-lookup.md)
+- [EncounterSet EMR Export](encounter-set-emr-export.md)
 - [Encounter Set Upload API](encounter-set.md)
 - [Image Settings and Metadata API](image-settings.md)
 - [OCR, PII, and AI Model APIs](ocr-pii-ai.md)

@@ -74,6 +74,14 @@
           <div class="text-muted">No dated EncounterSets are available for this project.</div>
           {% endfor %}
         </div>
+        {% if selected_month %}
+        <a class="btn btn-sm btn-outline-success flex-shrink-0"
+           href="{{ url_for('fundus_api.export_encounter_sets', project_id=selected_project_id, month=selected_month) }}"
+           title="Export selected month as Excel">
+          <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
+          <span>Export month</span>
+        </a>
+        {% endif %}
       </div>
     </div>
   </div>

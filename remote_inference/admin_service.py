@@ -158,19 +158,30 @@ def save_policy(
             policy = RemoteInferencePolicy(name=policy_input.name, description=policy_input.description, active=True)
             db.add(policy)
             db.flush()
-        policy.rules = [
-            RemoteInferencePolicyRule(
-                disease_id=rule.disease_id,
-                ai_model_id=rule.ai_model_id,
-                upload_kind=rule.upload_kind,
-                trigger_timing=rule.trigger_timing,
-                encounter_eligibility=rule.encounter_eligibility,
-                image_selection=rule.image_selection,
-                display_order=index,
-                active=True,
-            )
-            for index, rule in enumerate(policy_input.rules, start=1)
-        ]
+        existing_rules = {
+            (rule.disease_id, rule.ai_model_id, rule.upload_kind): rule
+            for rule in policy.rules
+        }
+        retained_keys: set[tuple[int, int, str]] = set()
+        for index, rule_input in enumerate(policy_input.rules, start=1):
+            key = (rule_input.disease_id, rule_input.ai_model_id, rule_input.upload_kind)
+            retained_keys.add(key)
+            rule = existing_rules.get(key)
+            if rule is None:
+                rule = RemoteInferencePolicyRule(
+                    disease_id=rule_input.disease_id,
+                    ai_model_id=rule_input.ai_model_id,
+                    upload_kind=rule_input.upload_kind,
+                )
+                policy.rules.append(rule)
+            rule.trigger_timing = rule_input.trigger_timing
+            rule.encounter_eligibility = rule_input.encounter_eligibility
+            rule.image_selection = rule_input.image_selection
+            rule.display_order = index
+            rule.active = True
+        for key, rule in existing_rules.items():
+            if key not in retained_keys:
+                rule.active = False
         try:
             db.flush()
             return MutationResult(True, "Remote inference policy saved.", payload={"remote_inference_policy_id": policy.id})

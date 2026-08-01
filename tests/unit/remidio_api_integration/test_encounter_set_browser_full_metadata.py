@@ -1,15 +1,12 @@
 from flask import render_template
 
 
-def test_full_metadata_is_collapsed_and_contains_nested_audit_json(app):
+def test_full_metadata_opens_fullscreen_modal_with_only_upstream_json(app):
     detail = {
+        "id": 3737,
         "full_metadata": {
-            "encounter_metadata": {"patient": {"hospital_UHID": "MRN-1"}},
-            "source_audit": {
-                "upstream_session_payload": {"sessionId": "session-1", "futureField": "kept"},
-                "upstream_image_inventory_payload": {"images": [{"filename": "exact.jpg"}]},
-            },
-            "image_metadata": [{"position": 1, "metadata": {"source_filename": "exact.jpg"}}],
+            "session": {"sessionId": "session-1", "futureField": "kept"},
+            "image_inventory": {"images": [{"filename": "exact.jpg"}]},
         }
     }
 
@@ -19,12 +16,15 @@ def test_full_metadata_is_collapsed_and_contains_nested_audit_json(app):
             detail=detail,
         )
 
-    assert "<details" in rendered
-    assert " open" not in rendered
+    assert 'data-bs-toggle="modal"' in rendered
+    assert 'data-bs-target="#encounter-full-metadata-3737"' in rendered
+    assert "modal-dialog modal-fullscreen" in rendered
     assert "Full metadata" in rendered
-    assert "upstream_session_payload" in rendered
+    assert "IITK upstream payload" in rendered
     assert "futureField" in rendered
     assert "exact.jpg" in rendered
+    assert "encounter_metadata" not in rendered
+    assert "image_metadata" not in rendered
 
 
 def test_full_metadata_disclosure_is_absent_when_redacted(app):

@@ -1,8 +1,22 @@
 {% if detail.full_metadata %}
-<details class="mt-3">
-  <summary class="btn btn-sm btn-outline-secondary">Full metadata</summary>
-  <div class="border rounded bg-body-tertiary mt-2 p-3 overflow-auto" style="max-height: 32rem;">
-    <pre class="small mb-0 text-wrap">{{ detail.full_metadata | tojson(indent=2) }}</pre>
+{% set modal_id = "encounter-full-metadata-" ~ detail.id %}
+<button class="btn btn-sm btn-outline-secondary mt-3"
+        type="button"
+        data-bs-toggle="modal"
+        data-bs-target="#{{ modal_id }}">
+  Full metadata
+</button>
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}-label" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="{{ modal_id }}-label">IITK upstream payload</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-body-tertiary p-0 overflow-auto">
+        <pre class="font-monospace small m-0 p-3">{{ detail.full_metadata | tojson(indent=2) }}</pre>
+      </div>
+    </div>
   </div>
-</details>
+</div>
 {% endif %}

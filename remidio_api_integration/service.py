@@ -326,17 +326,10 @@ def _encounter_set_browser_detail(db: Session, user, encounter_id: int, *, no_pi
         if report and report.get("source")
     }
     attachment_rows = [_encounter_set_attachment_row(attachment) for attachment in attachments]
-    full_metadata = None if no_pii else {
-        "encounter_metadata": metadata,
-        "source_audit": iitk_link.source_metadata_json if iitk_link else None,
-        "image_metadata": [
-            {
-                "uuid": image.uuid,
-                "position": image.spatial_position,
-                "metadata": image.metadata_json or {},
-            }
-            for image in sorted(encounter.encounter_set_images, key=lambda item: item.spatial_position)
-        ],
+    source_audit = iitk_link.source_metadata_json if iitk_link else {}
+    full_metadata = None if no_pii or not iitk_link else {
+        "session": source_audit.get("upstream_session_payload"),
+        "image_inventory": source_audit.get("upstream_image_inventory_payload"),
     }
     return {
         **_encounter_set_patient_row(encounter, no_pii=no_pii),

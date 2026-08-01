@@ -1,0 +1,56 @@
+{% from "_forms.html" import csrf_field %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">Add project configuration</div>
+  <div class="card-body">
+    <form class="row g-3" method="post" action="{{ url_for('fundus_api.save_iitk_configuration') }}"
+          hx-post="{{ url_for('fundus_api.save_iitk_configuration') }}" hx-swap="none" data-json-api-htmx
+          data-json-api-reload-url="{{ url_for('admin.iitk_workspace') }}" data-json-api-reload-target="#iitk-admin-workspace">
+      {{ csrf_field() }}
+      <div class="col-md-3"><label class="form-label">Project</label><select class="form-select" name="project_id" required><option value="">Select</option>{% for row in projects %}<option value="{{ row.id }}">{{ row.title }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Project upload profile</label><select class="form-select" name="project_upload_profile_id" required><option value="">Select</option>{% for row in project_profiles %}<option value="{{ row.id }}">{{ row.project.title }} · {{ row.profile.name }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">EncounterSetType</label><select class="form-select" name="encounter_set_type_id" required><option value="">Select</option>{% for row in encounter_set_types %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Lab unit</label><select class="form-select" name="lab_unit_id" required><option value="">Select</option>{% for row in lab_units %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Camera (optional)</label><select class="form-select" name="camera_id"><option value="">None</option>{% for row in cameras %}<option value="{{ row.id }}">{{ row.name }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Site filter (optional)</label><input class="form-control" name="site_filter"></div>
+      <div class="col-md-3"><label class="form-label">Initial sync from date</label><input class="form-control" name="sync_from_date" type="date"></div>
+      <div class="col-md-3"><label class="form-label">Base URL</label><input class="form-control" name="base_url" value="{{ default_base_url }}" required></div>
+      <div class="col-md-6"><label class="form-label">API token</label><input class="form-control" name="api_token" type="password" autocomplete="new-password" required></div>
+      <input type="hidden" name="active" value="true">
+      <div class="col-12"><button class="btn btn-primary" type="submit">Save IITK configuration</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between"><span class="fw-semibold">Project configurations</span><span class="badge text-bg-secondary">{{ iitk_configs|length }}</span></div>
+  <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Project</th><th>Target</th><th>Source</th><th>Last sync</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for row in iitk_configs %}
+    <tr>
+      <td><div class="fw-semibold">{{ row.project_title }}</div><div class="small text-muted">{{ row.lab_unit_name }}</div></td>
+      <td>{{ row.upload_profile_name }}<div class="small text-muted">{{ row.encounter_set_type_name }}</div></td>
+      <td>{{ row.site_filter or 'All sites' }}<div class="small text-muted">{{ row.sync_from_date or 'All available dates' }}</div></td>
+      <td>{{ row.last_success_at or 'Never' }}{% if row.last_error %}<div class="small text-danger">{{ row.last_error }}</div>{% endif %}</td>
+      <td><span class="badge {{ 'text-bg-success' if row.active else 'text-bg-secondary' }}">{{ 'Active' if row.active else 'Inactive' }}</span>{% if row.sync_running %} <span class="badge text-bg-info">Running</span>{% endif %}</td>
+      <td class="text-end"><div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#iitk-edit-{{ row.id }}">Edit</button>
+        <form method="post" action="{{ url_for('fundus_api.queue_iitk_sync', config_id=row.id) }}" hx-post="{{ url_for('fundus_api.queue_iitk_sync', config_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.iitk_workspace') }}" data-json-api-reload-target="#iitk-admin-workspace">{{ csrf_field() }}<button class="btn btn-sm btn-outline-primary" type="submit">Sync now</button></form>
+        <form method="post" action="{{ url_for('fundus_api.patch_iitk_configuration', config_id=row.id) }}" hx-post="{{ url_for('fundus_api.patch_iitk_configuration', config_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.iitk_workspace') }}" data-json-api-reload-target="#iitk-admin-workspace">{{ csrf_field() }}
+          <input type="hidden" name="project_id" value="{{ row.project_id }}"><input type="hidden" name="project_upload_profile_id" value="{{ row.project_upload_profile_id }}"><input type="hidden" name="encounter_set_type_id" value="{{ row.encounter_set_type_id }}"><input type="hidden" name="lab_unit_id" value="{{ row.lab_unit_id }}"><input type="hidden" name="camera_id" value="{{ row.camera_id or '' }}"><input type="hidden" name="base_url" value="{{ row.base_url }}"><input type="hidden" name="site_filter" value="{{ row.site_filter or '' }}"><input type="hidden" name="sync_from_date" value="{{ row.sync_from_date or '' }}"><input type="hidden" name="active" value="{{ 'false' if row.active else 'true' }}"><button class="btn btn-sm {{ 'btn-outline-danger' if row.active else 'btn-outline-success' }}" type="submit">{{ 'Deactivate' if row.active else 'Activate' }}</button>
+        </form>
+      </div></td>
+    </tr>
+    <tr class="collapse" id="iitk-edit-{{ row.id }}"><td colspan="6" class="bg-body-tertiary">
+      <form class="row g-3" method="post" action="{{ url_for('fundus_api.patch_iitk_configuration', config_id=row.id) }}" hx-post="{{ url_for('fundus_api.patch_iitk_configuration', config_id=row.id) }}" hx-swap="none" data-json-api-htmx data-json-api-reload-url="{{ url_for('admin.iitk_workspace') }}" data-json-api-reload-target="#iitk-admin-workspace">
+        {{ csrf_field() }}
+        <input type="hidden" name="project_id" value="{{ row.project_id }}"><input type="hidden" name="project_upload_profile_id" value="{{ row.project_upload_profile_id }}"><input type="hidden" name="encounter_set_type_id" value="{{ row.encounter_set_type_id }}"><input type="hidden" name="lab_unit_id" value="{{ row.lab_unit_id }}"><input type="hidden" name="active" value="{{ 'true' if row.active else 'false' }}">
+        <div class="col-md-3"><label class="form-label">New token</label><input class="form-control" name="api_token" type="password" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
+        <div class="col-md-3"><label class="form-label">Base URL</label><input class="form-control" name="base_url" value="{{ row.base_url }}" required></div>
+        <div class="col-md-2"><label class="form-label">Site filter</label><input class="form-control" name="site_filter" value="{{ row.site_filter or '' }}"></div>
+        <div class="col-md-2"><label class="form-label">Sync from</label><input class="form-control" name="sync_from_date" type="date" value="{{ row.sync_from_date or '' }}"></div>
+        <div class="col-md-2"><label class="form-label">Camera</label><select class="form-select" name="camera_id"><option value="">None</option>{% for camera in cameras %}<option value="{{ camera.id }}" {% if camera.id == row.camera_id %}selected{% endif %}>{{ camera.name }}</option>{% endfor %}</select></div>
+        <div class="col-12 text-end"><button class="btn btn-sm btn-primary" type="submit">Save changes</button></div>
+      </form>
+    </td></tr>
+  {% else %}<tr><td colspan="6" class="text-center text-muted py-4">No IITK project configuration exists.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>

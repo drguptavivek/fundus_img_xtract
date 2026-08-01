@@ -114,6 +114,7 @@ from .remidio import (
     remidio_workspace,
     stuck_remidio_uploads_status,
 )
+from .iitk import iitk_admin, iitk_workspace
 
 
 # Register routes with the blueprint
@@ -143,6 +144,8 @@ admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project
 admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
 admin_bp.add_url_rule("/remidio", view_func=remidio_admin, methods=["GET"], endpoint="remidio_admin")
 admin_bp.add_url_rule("/remidio/workspace", view_func=remidio_workspace, methods=["GET"], endpoint="remidio_workspace")
+admin_bp.add_url_rule("/iitk", view_func=iitk_admin, methods=["GET"], endpoint="iitk_admin")
+admin_bp.add_url_rule("/iitk/workspace", view_func=iitk_workspace, methods=["GET"], endpoint="iitk_workspace")
 admin_bp.add_url_rule(
     "/remidio/api-routing-rules",
     view_func=remidio_api_routing_dashboard,

@@ -112,6 +112,9 @@
           </div>
           <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
             {{ patient.image_count }} images · {{ patient.attachment_count }} attachments
+            {% if patient.source_kind == 'iitk_api' %}
+            <span class="badge {{ 'text-bg-success' if patient.source_status == 'complete' else 'text-bg-warning' }} ms-1">IITK {{ patient.source_status }}</span>
+            {% endif %}
             {% if patient.referral_suggestion == 'yes' %}
             <span class="badge rounded-pill text-bg-danger ms-1">Refer+</span>
             {% endif %}
@@ -140,6 +143,7 @@
         <div class="d-flex flex-wrap gap-2 align-items-start">
           <span class="badge text-bg-light">{{ detail.project_title or '-' }}</span>
           <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
+          {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">Verify</a>
         </div>
       </div>

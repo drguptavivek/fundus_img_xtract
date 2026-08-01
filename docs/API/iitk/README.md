@@ -17,6 +17,10 @@ committed.
   It never calls `POST /annotations`.
 - The provider requests a rate of approximately 60 requests per minute or less.
 
+The supplied contract does not define a retry policy or `Retry-After`
+behavior, so the local integration uses the conservative single-retry policy
+documented below.
+
 For local probing, add the token to the gitignored `develop.config.env`:
 
 ```env
@@ -213,3 +217,65 @@ identifiers:
 
 No raw response, patient metadata, filename, session identifier, token, image
 hash, or image file is stored in the repository.
+
+## Local integration API
+
+The application now stores one encrypted IITK configuration per project and
+imports upstream sessions as project-scoped EncounterSets. Configuration and
+sync endpoints require an authenticated `admin`, `local_admin`, or
+`data_manager`; unsafe methods require the normal CSRF token.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/iitk/configurations` | List configurations visible through the manager's lab-unit scope |
+| `POST` | `/api/iitk/configurations` | Save a project configuration and encrypted API token |
+| `POST/PATCH` | `/api/iitk/configurations/<id>` | Update settings or rotate the token; a blank token preserves the current secret |
+| `GET` | `/api/iitk/configurations/<id>/sessions` | Browse a live upstream session page using documented filters |
+| `POST` | `/api/iitk/configurations/<id>/sync` | Queue an incremental sync; pass `full=true` for a full configured-date scan |
+
+Configuration requires `project_id`, `lab_unit_id`,
+`project_upload_profile_id`, and `encounter_set_type_id`. The selected
+EncounterSetType must be active on the selected project upload profile.
+Optional fields are `camera_id`, `site_filter`, `sync_from_date`, `base_url`,
+and `active`.
+
+The token is encrypted with a per-record salt and is never returned by the
+API. Configuration responses expose only `token_configured: true|false`.
+
+## Synchronization behavior
+
+- Every upstream session is imported, including `partial` sessions with zero
+  images.
+- `(configuration, sessionId)` is the idempotent source identity. A partial
+  session that gains images or becomes complete updates the existing
+  EncounterSet.
+- Patient, encounter, and upload metadata are stored in the canonical nested
+  EncounterSet `metadata_json` scopes. Existing locally managed keys in those
+  scopes are preserved when source-owned keys are refreshed.
+- Remote filenames are not persisted. Images use random local filenames and
+  retain only a SHA-256 source-filename fingerprint in image metadata.
+- JPEGs are size-checked, decoded, stripped of EXIF, stored locally, and
+  thumbnailed. Unchanged inventory entries are not downloaded again; a missing
+  local file is recovered on the next sync.
+- Images absent from a later inventory remain stored for history and receive
+  `source_present: false`.
+- All imported images have `creates_task=false`. Synchronization does not run
+  verification or create grading tasks.
+- A failed image does not prevent the session metadata or other images from
+  being saved. Each individual network request or HTTP `429`/`5xx` response is
+  retried once after 5 seconds. Configuration, contract, authentication,
+  authorization, invalid-parameter, and not-found failures are not retried;
+  they remain visible for correction and the next scheduled/manual sync.
+- Requests are sequentially paced at no more than approximately 60 per minute,
+  matching the supplied provider guidance. Incremental runs use a one-day
+  overlap and do not repeat a second unbounded scan of every historical partial
+  session. A manual `full=true` sync remains available when older sessions need
+  reconciliation.
+
+The database-backed Celery Beat schedule runs at minute `30`, UTC hours
+`1-12`, which is exactly hourly from 07:00 through 18:00 IST. It dispatches
+one maintenance-queue task for every active project configuration and uses a
+two-hour stale-lock boundary to prevent overlapping project syncs.
+
+The administration page is `GET /admin/iitk`. Imported records appear in the
+existing EncounterSet browser with an `IITK partial` or `IITK complete` badge.

@@ -434,6 +434,7 @@ def _safe_image_extension(filename: str | None) -> str:
 def _encounter_set_patient_row(encounter: PatientEncounters, *, no_pii: bool = False) -> dict[str, Any]:
     metadata = encounter.metadata_json or {}
     patient_metadata = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
+    upload_metadata = metadata.get("upload") if isinstance(metadata.get("upload"), dict) else {}
     patient_name = _metadata_lookup(patient_metadata, "patient_name")
     return {
         "id": encounter.id,
@@ -450,6 +451,10 @@ def _encounter_set_patient_row(encounter: PatientEncounters, *, no_pii: bool = F
         "attachment_count": len(encounter.encounter_set_attachments or []),
         "lab_unit_name": encounter.lab_unit.name if encounter.lab_unit else None,
         "upload_profile_name": encounter.upload_profile.name if encounter.upload_profile else None,
+        "source_kind": _metadata_lookup(upload_metadata, "source_kind"),
+        "source_status": _metadata_lookup(upload_metadata, "source_status"),
+        "source_image_count": _metadata_lookup(upload_metadata, "source_image_count"),
+        "source_last_synced_at": _metadata_lookup(upload_metadata, "last_synced_at"),
     }
 
 

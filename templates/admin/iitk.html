@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}IITK API Integration{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">IITK API Integration</h1>
+      <p class="text-muted mb-0">Import and refresh complete or partial capture sessions as project EncounterSets.</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_browser') }}">EncounterSet Browser</a>
+  </div>
+  <div class="alert alert-info">Scheduled synchronization runs hourly from 07:00 through 18:00 IST. Imported assets are saved with task creation disabled.</div>
+  <div id="iitk-admin-workspace">{% include "admin/partials/iitk_workspace.html" %}</div>
+</div>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-json-api-htmx.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+{% endblock %}

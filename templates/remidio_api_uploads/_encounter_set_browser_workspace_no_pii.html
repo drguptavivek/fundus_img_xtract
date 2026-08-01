@@ -85,6 +85,7 @@
           </div>
           <div class="small {{ 'text-white-50' if patient.id == selected_encounter_id else 'text-muted' }}">
             {{ patient.image_count }} images
+            {% if patient.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if patient.source_status == 'complete' else 'text-bg-warning' }} ms-1">IITK {{ patient.source_status }}</span>{% endif %}
           </div>
         </button>
         {% else %}
@@ -107,6 +108,7 @@
         <div class="d-flex flex-wrap gap-2 align-items-start">
           <span class="badge text-bg-light">{{ detail.project_title or '-' }}</span>
           <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
+          {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
           <a class="btn btn-sm btn-outline-primary"
              href="{{ url_for('remidio_api_uploads.encounter_set_browser_no_pii_download', encounter_id=detail.id) }}">
             Download ZIP

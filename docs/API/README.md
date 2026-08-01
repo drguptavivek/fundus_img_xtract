@@ -23,6 +23,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [Job APIs](jobs/README.md)
 - [KPI APIs](kpis/README.md)
 - [Remidio API Integration](remidio-integration/README.md)
+- [IITK/AIIMS Image Capture API Contract](iitk/README.md)
 
 ## Contract Rules
 

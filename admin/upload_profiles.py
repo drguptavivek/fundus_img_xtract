@@ -24,6 +24,7 @@ from models import (
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remote_inference import admin_service as remote_inference_service
+from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -374,6 +375,7 @@ def upload_project_workspace(project_id: int):
         }
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
         context.update(remote_inference_service.project_policy_context(db, project_id))
+        context.update(iitk_service.project_connection_context(db, project_id))
         return render_template("admin/partials/project_detail_panel.html", **context)
 
 

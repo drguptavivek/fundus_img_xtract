@@ -227,20 +227,93 @@ sync endpoints require an authenticated `admin`, `local_admin`, or
 
 | Method | Endpoint | Purpose |
 |---|---|---|
+| `GET` | `/api/iitk/projects/<project_id>/configuration` | Read the project IITK flag, token status, and derived intake target |
+| `POST/PATCH` | `/api/iitk/projects/<project_id>/configuration` | Enable/disable IITK intake and save or rotate its encrypted token |
 | `GET` | `/api/iitk/configurations` | List configurations visible through the manager's lab-unit scope |
+| `GET` | `/api/iitk/site-mappings` | List IITK site-to-hospital/lab-unit mappings and local resolution status |
 | `POST` | `/api/iitk/configurations` | Save a project configuration and encrypted API token |
 | `POST/PATCH` | `/api/iitk/configurations/<id>` | Update settings or rotate the token; a blank token preserves the current secret |
 | `GET` | `/api/iitk/configurations/<id>/sessions` | Browse a live upstream session page using documented filters |
 | `POST` | `/api/iitk/configurations/<id>/sync` | Queue an incremental sync; pass `full=true` for a full configured-date scan |
 
-Configuration requires `project_id`, `lab_unit_id`,
-`project_upload_profile_id`, and `encounter_set_type_id`. The selected
-EncounterSetType must be active on the selected project upload profile.
-Optional fields are `camera_id`, `site_filter`, `sync_from_date`, `base_url`,
-and `active`.
+The supported administration surface is the selected project workspace under
+`GET /admin/upload-projects`. It exposes only `active` (labelled **IITK API
+populated project**) and `api_token`. A token is required the first time the
+project is enabled; a blank token on later updates preserves the current
+secret. Disabling the flag retains the encrypted token and synchronization
+history so the connection can be re-enabled.
+
+The service derives `project_upload_profile_id`, `encounter_set_type_id`, the
+default intake lab/hospital, and an unambiguous optional camera from the
+project's existing active Upload Profile and EncounterSetType configuration.
+When an active `IITK-zips` EncounterSetType is present it is preferred as the
+existing IITK metadata target; otherwise the project must have exactly one
+active EncounterSetType target. The legacy IITK ZIP-import enable flag is not
+used as the API-populated-project flag.
+
+Example mutation (unsafe methods require the normal CSRF token):
+
+```http
+POST /api/iitk/projects/42/configuration
+Content-Type: application/json
+X-CSRFToken: <csrf-token>
+
+{"active": true, "api_token": "<secret>"}
+```
+
+The older configuration mutation endpoints accept explicit target IDs for
+backward compatibility, but the admin UI no longer exposes that duplicate
+configuration form.
 
 The token is encrypted with a per-record salt and is never returned by the
 API. Configuration responses expose only `token_configured: true|false`.
+
+### Site destination mapping
+
+The IITK module owns a versioned `site_mappings.json` file. It resolves target
+records by the exact hospital and lab-unit names rather than environment-
+specific numeric IDs:
+
+| IITK site | Local hospital | Local lab unit |
+|---|---|---|
+| `delhi` | RPC AIIMS | Deepsekhar Das |
+| `kalyani` | AIIMS Kalyani | Ophthalmology |
+| `bilaspur` | AIIMS Bilaspur | Ophthalmology |
+| `nagpur` | AIIMS Nagpur | Ophthalmology |
+
+Example `GET /api/iitk/site-mappings` response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "site": "delhi",
+      "hospital": "RPC AIIMS",
+      "lab_unit": "Deepsekhar Das",
+      "hospital_id": 1,
+      "lab_unit_id": 6,
+      "resolved": true
+    }
+  ]
+}
+```
+
+This read endpoint requires an authenticated `admin`, `local_admin`, or
+`data_manager`. It has no request body and does not require CSRF because it is
+read-only.
+
+The upstream site is retained as immutable `upload.source_site`. On first
+import it also initializes the editable `patient.site_recruitment` field. A
+known editable value assigns the EncounterSet lab unit and every image's
+hospital during import. Verification edits apply the same remapping
+immediately. Subsequent IITK synchronization does not overwrite the edited
+patient field.
+
+An unknown site or a named target missing from the local database does not
+block ingestion. The EncounterSet remains in the configuration's default
+intake lab and receives `upload.site_mapping_status` of `unmapped` or
+`target_missing` for correction during verification.
 
 ## Synchronization behavior
 
@@ -277,5 +350,6 @@ The database-backed Celery Beat schedule runs at minute `30`, UTC hours
 one maintenance-queue task for every active project configuration and uses a
 two-hour stale-lock boundary to prevent overlapping project syncs.
 
-The administration page is `GET /admin/iitk`. Imported records appear in the
-existing EncounterSet browser with an `IITK partial` or `IITK complete` badge.
+The retired `GET /admin/iitk` URL redirects to `GET /admin/upload-projects`.
+Imported records appear in the existing EncounterSet browser with an `IITK
+partial` or `IITK complete` badge.

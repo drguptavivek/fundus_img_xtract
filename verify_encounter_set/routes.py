@@ -223,6 +223,10 @@ def update_metadata(uuid):
             if section:
                 encounter_metadata[scope] = section
         encounter.metadata_json = encounter_metadata
+        if (encounter_metadata.get("upload") or {}).get("source_kind") == "iitk_api":
+            from iitk_api_integration.service import remap_iitk_encounter_site
+
+            remap_iitk_encounter_site(db, encounter)
 
         images = {
             str(image.id): image

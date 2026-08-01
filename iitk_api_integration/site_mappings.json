@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "default_site": "delhi",
+  "sites": {
+    "bilaspur": {
+      "hospital": "AIIMS Bilaspur",
+      "lab_unit": "Ophthalmology"
+    },
+    "delhi": {
+      "hospital": "RPC AIIMS",
+      "lab_unit": "Deepsekhar Das"
+    },
+    "kalyani": {
+      "hospital": "AIIMS Kalyani",
+      "lab_unit": "Ophthalmology"
+    },
+    "nagpur": {
+      "hospital": "AIIMS Nagpur",
+      "lab_unit": "Ophthalmology"
+    }
+  }
+}

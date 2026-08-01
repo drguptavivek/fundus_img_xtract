@@ -104,6 +104,47 @@
 
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">IITK API Intake</h3>
+          <span class="badge {{ 'text-bg-success' if iitk_project_config.active else 'text-bg-secondary' }}">{{ 'Enabled' if iitk_project_config.active else 'Disabled' }}</span>
+        </div>
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.save_iitk_project_configuration', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_iitk_project_configuration', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="active" value="true" id="iitk_api_active_{{ selected_project.id }}" {% if iitk_project_config.active %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="iitk_api_active_{{ selected_project.id }}">IITK API populated project</label>
+          </div>
+          <div class="row g-3 align-items-end">
+            <div class="col-lg-8">
+              <label class="form-label" for="iitk_api_token_{{ selected_project.id }}">IITK API token</label>
+              <input class="form-control" type="password" name="api_token" id="iitk_api_token_{{ selected_project.id }}" autocomplete="new-password" placeholder="{{ 'Leave blank to keep current token' if iitk_project_config.token_configured else 'Required when enabling' }}">
+            </div>
+            <div class="col-lg-4">
+              <button class="btn btn-outline-primary w-100" type="submit" {% if iitk_project_readiness_error and not iitk_project_config.active %}disabled{% endif %}>Save IITK Connection</button>
+            </div>
+          </div>
+          {% if iitk_project_readiness_error %}
+          <div class="alert alert-warning py-2 mt-3 mb-0 small">{{ iitk_project_readiness_error }}</div>
+          {% elif iitk_project_target %}
+          <div class="small text-muted mt-3">
+            Uses {{ iitk_project_target.upload_profile_name }} · {{ iitk_project_target.encounter_set_type_name }}.
+            Unmapped sites enter through {{ iitk_project_target.hospital_name }} / {{ iitk_project_target.lab_unit_name }}.
+          </div>
+          {% endif %}
+          {% if iitk_project_config.last_success_at or iitk_project_config.last_error %}
+          <div class="small mt-2">Last sync: {{ iitk_project_config.last_success_at or 'Never' }}{% if iitk_project_config.last_error %}<span class="text-danger ms-2">{{ iitk_project_config.last_error }}</span>{% endif %}</div>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="col-12">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <h3 class="h6 mb-0">Profiles And Uploaders</h3>
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Reusable Profiles</a>
         </div>

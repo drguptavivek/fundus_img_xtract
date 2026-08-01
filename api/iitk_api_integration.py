@@ -26,6 +26,32 @@ def list_iitk_configurations():
         return jsonify({"success": True, "data": service.list_configs(db, manager_user_id=current_user.id)})
 
 
+@api_bp.route("/iitk/site-mappings", methods=["GET"])
+@roles_required(*IITK_ROLES)
+def list_iitk_site_mappings():
+    with transaction_scope() as db:
+        return jsonify({"success": True, "data": service.site_mapping_payload(db)})
+
+
+@api_bp.route("/iitk/projects/<int:project_id>/configuration", methods=["GET"])
+@roles_required(*IITK_ROLES)
+def get_iitk_project_configuration(project_id: int):
+    with transaction_scope() as db:
+        return jsonify({"success": True, "data": service.project_connection_context(db, project_id)})
+
+
+@api_bp.route("/iitk/projects/<int:project_id>/configuration", methods=["POST", "PATCH"])
+@roles_required(*IITK_ROLES)
+def save_iitk_project_configuration(project_id: int):
+    try:
+        with transaction_scope() as db:
+            service.save_project_connection(db, project_id, _payload(), manager_user_id=current_user.id)
+            data = service.project_connection_context(db, project_id)
+            return jsonify({"success": True, "message": "IITK project connection updated.", "data": data})
+    except IITKIntegrationError as exc:
+        return _error(exc)
+
+
 @api_bp.route("/iitk/configurations", methods=["POST"])
 @roles_required(*IITK_ROLES)
 def save_iitk_configuration():

@@ -6,6 +6,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -16,8 +17,8 @@ from sqlalchemy.orm import Session, selectinload
 from auth.utils import utcnow
 from db_transaction_manager import get_db_session
 from encounter_set_types.models import EncounterSetType
-from models import BASE_DIR, Camera, EncounterSetImage, LabUnit, PatientEncounters, Project
-from upload_profiles.models import ProjectUploadProfile, UploadProfileEncounterSetType
+from models import BASE_DIR, Camera, EncounterSetImage, Hospital, LabUnit, PatientEncounters, Project
+from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileEncounterSetType
 from upload_profiles.service import manager_lab_unit_ids
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
 from utils.image_processing import generate_thumbnail, get_thumbnail_filename, strip_exif_data
@@ -32,6 +33,7 @@ from .models import IITKApiProjectConfig, IITKApiSessionLink
 LOGGER = logging.getLogger("iitk_api_integration.service")
 POSITION_ORDER = {"primary": 1, "up_left": 2, "up": 3, "up_right": 4, "right": 5, "down_right": 6, "down": 7, "down_left": 8, "left": 9, "composite": 10}
 SYNC_STALE_AFTER = timedelta(hours=2)
+SITE_MAPPING_PATH = Path(__file__).with_name("site_mappings.json")
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,114 @@ class RuntimeConfig:
     site_filter: str | None
     sync_from_date: date | None
     last_success_at: datetime | None
+
+
+@dataclass(frozen=True)
+class SiteDestination:
+    source_site: str | None
+    effective_site: str | None
+    status: str
+    hospital_id: int | None
+    lab_unit_id: int
+    hospital_name: str | None
+    lab_unit_name: str
+
+
+@lru_cache(maxsize=1)
+def _site_mapping_document() -> dict[str, Any]:
+    body = json.loads(SITE_MAPPING_PATH.read_text(encoding="utf-8"))
+    if not isinstance(body, dict):
+        raise IITKConfigError("IITK site mapping JSON must contain an object.")
+    return body
+
+
+@lru_cache(maxsize=1)
+def site_mapping_catalog() -> dict[str, dict[str, str]]:
+    """Return the IITK-owned site map without database-specific identifiers."""
+    sites = _site_mapping_document().get("sites")
+    if not isinstance(sites, dict):
+        raise IITKConfigError("IITK site mapping JSON is missing the sites object.")
+    result: dict[str, dict[str, str]] = {}
+    for raw_site, raw_target in sites.items():
+        site = _normalized_site(raw_site)
+        if not site or not isinstance(raw_target, dict):
+            raise IITKConfigError("IITK site mapping JSON contains an invalid site entry.")
+        hospital = str(raw_target.get("hospital") or "").strip()
+        lab_unit = str(raw_target.get("lab_unit") or "").strip()
+        if not hospital or not lab_unit:
+            raise IITKConfigError("IITK site mapping JSON contains an incomplete destination.")
+        result[site] = {"hospital": hospital, "lab_unit": lab_unit}
+    return result
+
+
+def project_connection_context(db: Session, project_id: int) -> dict[str, Any]:
+    row = db.query(IITKApiProjectConfig).filter_by(project_id=project_id).one_or_none()
+    try:
+        derived = _derive_project_target(db, project_id)
+        readiness_error = None
+    except IITKConfigError as exc:
+        derived = None
+        readiness_error = str(exc)
+    return {
+        "iitk_project_config": _config_payload(row) if row else {
+            "project_id": project_id, "active": False, "token_configured": False,
+            "last_attempt_at": None, "last_success_at": None, "last_error": None,
+        },
+        "iitk_project_target": derived,
+        "iitk_project_readiness_error": readiness_error,
+    }
+
+
+def save_project_connection(db: Session, project_id: int, payload: dict[str, Any], *, manager_user_id: int) -> IITKApiProjectConfig | None:
+    if db.get(Project, project_id) is None:
+        raise IITKConfigError("The selected project was not found.")
+    if not manager_lab_unit_ids(manager_user_id):
+        raise IITKConfigError("You are not assigned to any lab units for project management.")
+    row = db.query(IITKApiProjectConfig).filter_by(project_id=project_id).one_or_none()
+    active = _bool(payload.get("active"), False)
+    token = str(payload.get("api_token") or "").strip()
+    if not active:
+        if row:
+            row.active = False
+            row.updated_at = utcnow()
+            db.flush()
+        return row
+    target = _derive_project_target(db, project_id)
+    if row is None:
+        if not token:
+            raise IITKConfigError("IITK API token is required when enabling a project.")
+        salt = generate_salt()
+        row = IITKApiProjectConfig(
+            project_id=project_id, lab_unit_id=target["lab_unit_id"],
+            project_upload_profile_id=target["project_upload_profile_id"],
+            encounter_set_type_id=target["encounter_set_type_id"], camera_id=target["camera_id"],
+            base_url=DEFAULT_BASE_URL, api_token_encrypted=encrypt_password_with_salt(token, salt), secret_salt=salt,
+        )
+        db.add(row)
+    else:
+        row.lab_unit_id = target["lab_unit_id"]
+        row.project_upload_profile_id = target["project_upload_profile_id"]
+        row.encounter_set_type_id = target["encounter_set_type_id"]
+        row.camera_id = target["camera_id"]
+        if token:
+            row.api_token_encrypted = encrypt_password_with_salt(token, row.secret_salt)
+    row.active = True
+    row.updated_at = utcnow()
+    db.flush()
+    return row
+
+
+def site_mapping_payload(db: Session) -> list[dict[str, Any]]:
+    """Describe static mappings and whether their named targets resolve locally."""
+    rows = []
+    for site, target in site_mapping_catalog().items():
+        hospital, lab_unit = _named_site_target(db, target)
+        rows.append({
+            "site": site, "hospital": target["hospital"], "lab_unit": target["lab_unit"],
+            "hospital_id": hospital.id if hospital else None, "lab_unit_id": lab_unit.id if lab_unit else None,
+            "resolved": bool(hospital and lab_unit),
+        })
+    return rows
 
 
 def list_configs(db: Session, *, manager_user_id: int | None = None) -> list[dict[str, Any]]:
@@ -177,6 +287,7 @@ def admin_context(db: Session, *, manager_user_id: int) -> dict[str, Any]:
         "project_profiles": project_profiles,
         "encounter_set_types": db.query(EncounterSetType).filter(EncounterSetType.active.is_(True)).order_by(EncounterSetType.name).all(),
         "cameras": db.query(Camera).order_by(Camera.name).all(),
+        "iitk_site_mappings": site_mapping_payload(db),
         "default_base_url": DEFAULT_BASE_URL,
     }
 
@@ -239,10 +350,12 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         link = db.query(IITKApiSessionLink).filter_by(config_id=runtime.id, source_session_id=source.session_id).with_for_update().one_or_none()
         encounter = db.get(PatientEncounters, link.patient_encounter_id) if link else None
         capture_dt = _parse_datetime(source.started_at)
-        metadata = _encounter_metadata(encounter.metadata_json if encounter else None, runtime, source, now)
+        effective_site = _effective_encounter_site(encounter, source.site)
+        destination = _resolve_site_destination(db, runtime, source_site=source.site, effective_site=effective_site)
+        metadata = _encounter_metadata(encounter.metadata_json if encounter else None, runtime, source, destination, now)
         if encounter is None:
             encounter = PatientEncounters(uuid=str(uuid4()), name=f"IITK MRN {source.mrn}", patient_id=source.mrn,
-                capture_date=capture_dt.date().isoformat(), capture_date_dt=capture_dt.date(), lab_unit_id=runtime.lab_unit_id,
+                capture_date=capture_dt.date().isoformat(), capture_date_dt=capture_dt.date(), lab_unit_id=destination.lab_unit_id,
                 project_id=runtime.project_id, upload_profile_id=runtime.upload_profile_id, is_set_based=True,
                 encounter_verified_status="pending", metadata_json=metadata)
             db.add(encounter)
@@ -256,6 +369,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             encounter.patient_id = source.mrn
             encounter.capture_date = capture_dt.date().isoformat()
             encounter.capture_date_dt = capture_dt.date()
+            encounter.lab_unit_id = destination.lab_unit_id
             encounter.metadata_json = metadata
             counts["encounters_updated"] = 1
         db.flush()
@@ -265,6 +379,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             image_meta = dict(existing.metadata_json or {})
             image_meta["source_present"] = existing.spatial_position in present_positions
             existing.metadata_json = image_meta
+            existing.hospital_id = destination.hospital_id
         folder_rel = f"files/encounter_sets/{now.strftime('%Y_%m_%d')}/{encounter.id}"
         image_dir = BASE_DIR / folder_rel
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -278,7 +393,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
                 stored_filename = f"{uuid4()}.jpg"
                 image = EncounterSetImage(uuid=str(uuid4()), patient_encounter_id=encounter.id, spatial_position=position,
                     original_filename=stored_filename, folder_rel=folder_rel, asset_kind="clinical_image", creates_task=False,
-                    is_pii=False, visible_to_grader=True, project_id=runtime.project_id, hospital_id=runtime.hospital_id,
+                    is_pii=False, visible_to_grader=True, project_id=runtime.project_id, hospital_id=destination.hospital_id,
                     camera_id=runtime.camera_id, created_at=now)
                 db.add(image)
                 images_by_position[position] = image
@@ -333,19 +448,149 @@ def _current_images(config_id: int, source_session_id: str) -> dict[str, dict[st
         return result
 
 
-def _encounter_metadata(existing: dict | None, runtime: RuntimeConfig, source: IITKSessionDTO, synced_at: datetime) -> dict:
+def _encounter_metadata(existing: dict | None, runtime: RuntimeConfig, source: IITKSessionDTO,
+                        destination: SiteDestination, synced_at: datetime) -> dict:
     result = dict(existing or {})
-    result["patient"] = {**(result.get("patient") if isinstance(result.get("patient"), dict) else {}),
-        "hospital_UHID": source.mrn, "patient_age_yrs": source.age, "sex": source.gender, "site_recruitment": source.site}
+    patient = dict(result.get("patient") if isinstance(result.get("patient"), dict) else {})
+    patient.update({"hospital_UHID": source.mrn, "patient_age_yrs": source.age, "sex": source.gender})
+    patient.setdefault("site_recruitment", destination.effective_site)
+    result["patient"] = patient
     result["encounter"] = {**(result.get("encounter") if isinstance(result.get("encounter"), dict) else {}),
         "source_session_id": source.session_id, "capture_datetime": source.started_at, "mode_capture": source.mode,
         "eye_laterality": source.eye, "patient_diagnosis": source.diagnosis,
         "patient_diagnosis_other": source.diagnosis_other, "captured_positions": list(source.captured_positions),
         "expected_positions": source.expected_positions, "capture_status": source.status, "clinician_uid": source.clinician_uid}
-    result["upload"] = {**(result.get("upload") if isinstance(result.get("upload"), dict) else {}),
+    existing_upload = dict(result.get("upload") if isinstance(result.get("upload"), dict) else {})
+    source_site_first_seen = existing_upload.get("source_site", destination.source_site)
+    result["upload"] = {**existing_upload,
         "source_kind": "iitk_api", "source_status": source.status, "source_image_count": source.image_count,
+        "source_site": source_site_first_seen, "source_site_last_seen": destination.source_site,
+        "site_mapping_status": destination.status,
+        "mapped_hospital_id": destination.hospital_id, "mapped_lab_unit_id": destination.lab_unit_id,
         "encounter_set_type_id": runtime.encounter_set_type_id, "last_synced_at": synced_at.isoformat()}
     return result
+
+
+def remap_iitk_encounter_site(db: Session, encounter: PatientEncounters) -> SiteDestination | None:
+    """Apply an edited IITK site value immediately during verification."""
+    metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
+    upload = metadata.get("upload") if isinstance(metadata.get("upload"), dict) else {}
+    if upload.get("source_kind") != "iitk_api":
+        return None
+    link = db.query(IITKApiSessionLink).filter_by(patient_encounter_id=encounter.id).one_or_none()
+    if link is None:
+        return None
+    runtime = _runtime_from_row(link.config, decrypt_token=False)
+    source_site = _normalized_site(upload.get("source_site"))
+    destination = _resolve_site_destination(
+        db, runtime, source_site=source_site,
+        effective_site=_effective_encounter_site(encounter, source_site),
+    )
+    encounter.lab_unit_id = destination.lab_unit_id
+    upload.update({
+        "source_site": destination.source_site, "site_mapping_status": destination.status,
+        "mapped_hospital_id": destination.hospital_id, "mapped_lab_unit_id": destination.lab_unit_id,
+    })
+    metadata["upload"] = upload
+    encounter.metadata_json = metadata
+    for image in db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all():
+        image.hospital_id = destination.hospital_id
+    return destination
+
+
+def _effective_encounter_site(encounter: PatientEncounters | None, source_site: str | None) -> str | None:
+    if encounter and isinstance(encounter.metadata_json, dict):
+        patient = encounter.metadata_json.get("patient")
+        if isinstance(patient, dict) and "site_recruitment" in patient:
+            return _normalized_site(patient.get("site_recruitment"))
+    return _normalized_site(source_site)
+
+
+def _resolve_site_destination(db: Session, runtime: RuntimeConfig, *, source_site: str | None,
+                              effective_site: str | None) -> SiteDestination:
+    normalized_source = _normalized_site(source_site)
+    normalized_effective = _normalized_site(effective_site)
+    target = site_mapping_catalog().get(normalized_effective or "")
+    if target:
+        hospital, lab_unit = _named_site_target(db, target)
+        if hospital and lab_unit:
+            return SiteDestination(normalized_source, normalized_effective, "mapped", hospital.id, lab_unit.id,
+                                   hospital.name, lab_unit.name)
+        LOGGER.warning("IITK site target is not present locally site=%s", sanitize_log_value(normalized_effective))
+        status = "target_missing"
+    else:
+        status = "unmapped"
+    fallback_lab = db.get(LabUnit, runtime.lab_unit_id)
+    return SiteDestination(normalized_source, normalized_effective, status, runtime.hospital_id,
+                           runtime.lab_unit_id, fallback_lab.hospital.name if fallback_lab and fallback_lab.hospital else None,
+                           fallback_lab.name if fallback_lab else f"Lab unit {runtime.lab_unit_id}")
+
+
+def _named_site_target(db: Session, target: dict[str, str]) -> tuple[Hospital | None, LabUnit | None]:
+    hospital = db.query(Hospital).filter_by(name=target["hospital"]).one_or_none()
+    if hospital is None:
+        return None, None
+    lab_unit = db.query(LabUnit).filter_by(hospital_id=hospital.id, name=target["lab_unit"]).one_or_none()
+    return hospital, lab_unit
+
+
+def _derive_project_target(db: Session, project_id: int) -> dict[str, Any]:
+    mappings = (
+        db.query(ProjectUploadProfile)
+        .join(UploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+        .options(
+            selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.encounter_set_types)
+            .selectinload(UploadProfileEncounterSetType.encounter_set_type),
+            selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.cameras),
+        )
+        .filter(
+            ProjectUploadProfile.project_id == project_id,
+            ProjectUploadProfile.active.is_(True),
+            UploadProfile.active.is_(True),
+        )
+        .all()
+    )
+    targets = [
+        (mapping, encounter_type)
+        for mapping in mappings
+        for encounter_type in mapping.profile.encounter_set_types
+        if encounter_type.active and encounter_type.encounter_set_type and encounter_type.encounter_set_type.active
+    ]
+    iitk_targets = [
+        target for target in targets
+        if target[1].encounter_set_type.code.casefold() == "iitk-zips"
+    ]
+    selected_targets = iitk_targets or targets
+    if not selected_targets:
+        raise IITKConfigError("Configure an active Upload Profile and EncounterSetType for this project first.")
+    if len(selected_targets) != 1:
+        raise IITKConfigError(
+            "The project's IITK EncounterSet target is ambiguous; configure exactly one IITK EncounterSetType target."
+        )
+    mapping, encounter_type = selected_targets[0]
+    default_site = _normalized_site(_site_mapping_document().get("default_site"))
+    default_target = site_mapping_catalog().get(default_site or "")
+    if not default_target:
+        raise IITKConfigError("IITK site mapping JSON does not define a valid default_site.")
+    hospital, lab_unit = _named_site_target(db, default_target)
+    if hospital is None or lab_unit is None:
+        raise IITKConfigError("The IITK default hospital or lab unit is not present locally.")
+    cameras = [row.camera for row in mapping.profile.cameras if row.camera]
+    camera = cameras[0] if len(cameras) == 1 else None
+    return {
+        "project_upload_profile_id": mapping.id,
+        "upload_profile_name": mapping.profile.name,
+        "encounter_set_type_id": encounter_type.encounter_set_type_id,
+        "encounter_set_type_name": encounter_type.encounter_set_type.name,
+        "lab_unit_id": lab_unit.id, "lab_unit_name": lab_unit.name,
+        "hospital_id": hospital.id, "hospital_name": hospital.name,
+        "camera_id": camera.id if camera else None, "camera_name": camera.name if camera else None,
+    }
+
+
+def _normalized_site(value: Any) -> str | None:
+    result = str(value).strip().casefold() if value not in {None, ""} else ""
+    return result or None
 
 
 def _begin_sync(config_id: int) -> RuntimeConfig | None:
@@ -397,10 +642,11 @@ def _runtime_config(db: Session, config_id: int, *, manager_user_id: int) -> Run
     return _runtime_from_row(row)
 
 
-def _runtime_from_row(row: IITKApiProjectConfig) -> RuntimeConfig:
+def _runtime_from_row(row: IITKApiProjectConfig, *, decrypt_token: bool = True) -> RuntimeConfig:
     return RuntimeConfig(row.id, row.project_id, row.lab_unit_id, row.project_profile.upload_profile_id,
         row.encounter_set_type_id, row.camera_id, row.lab_unit.hospital_id if row.lab_unit else None, row.base_url,
-        decrypt_password_with_salt(row.api_token_encrypted, row.secret_salt), row.site_filter, row.sync_from_date, row.last_success_at)
+        decrypt_password_with_salt(row.api_token_encrypted, row.secret_salt) if decrypt_token else "",
+        row.site_filter, row.sync_from_date, row.last_success_at)
 
 
 def _validate_binding(db: Session, project_id: int, lab_unit_id: int, project_profile_id: int, encounter_set_type_id: int) -> None:

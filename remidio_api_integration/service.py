@@ -460,6 +460,7 @@ def _encounter_set_patient_row(encounter: PatientEncounters, *, no_pii: bool = F
 
 def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
     metadata = image.metadata_json or {}
+    gaze_position = _metadata_lookup(metadata, "gaze_position", "strabismus_gaze_position")
     metadata_items = _metadata_items(
         metadata,
         (
@@ -474,6 +475,7 @@ def _encounter_set_image_row(image: EncounterSetImage) -> dict[str, Any]:
         "id": image.id,
         "uuid": image.uuid,
         "position": image.spatial_position,
+        "position_label": str(gaze_position) if _has_value(gaze_position) else f"Position {image.spatial_position}",
         "filename": image.original_filename,
         "thumbnail_filename": image.thumbnail_filename,
         "camera_name": image.camera.name if image.camera else None,

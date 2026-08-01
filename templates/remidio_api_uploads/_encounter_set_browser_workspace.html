@@ -153,8 +153,8 @@
           {% for image in detail.images %}
           <a href="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}"
              data-pswp-type="image"
-             data-pswp-caption="Image {{ image.position }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"
-             title="Image {{ image.position }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"></a>
+             data-pswp-caption="{{ image.position_label }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"
+             title="{{ image.position_label }}{% if image.laterality %} | {{ image.laterality }}{% endif %}{% if image.field %} | {{ image.field }}{% endif %}{% if image.metadata_caption %} | {{ image.metadata_caption }}{% endif %}"></a>
           {% endfor %}
           {% for attachment in detail.attachments %}
             {% if attachment.asset_kind == 'pdf' or attachment.mime_type == 'application/pdf' %}
@@ -195,10 +195,10 @@
                     <div class="ratio ratio-1x1 position-relative">
                       <img class="w-100 h-100 object-fit-cover"
                            src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
-                           alt="EncounterSet image {{ image.position }}">
+                           alt="EncounterSet image {{ image.position_label }}">
                     </div>
                     <div class="p-2 small">
-                      <div class="fw-semibold">Position {{ image.position }}</div>
+                      <div class="fw-semibold">{{ image.position_label }}</div>
                       <div class="text-muted text-truncate">
                         {{ image.laterality or '-' }}{% if image.field %} · {{ image.field }}{% endif %}
                       </div>

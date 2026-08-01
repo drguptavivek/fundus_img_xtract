@@ -34,7 +34,6 @@ class DatabaseSessionInterface(SessionInterface):
 
     def __init__(self, key_length: int = 64):
         self.key_length = key_length
-        self._current_request = None
 
     @staticmethod
     def _now() -> datetime:
@@ -42,6 +41,15 @@ class DatabaseSessionInterface(SessionInterface):
 
     def _generate_sid(self) -> str:
         return secrets.token_hex(self.key_length // 2)
+
+    def regenerate(self, session: DatabaseSession) -> None:
+        """Replace the pre-authentication session ID after a successful login."""
+        previous_session_id = getattr(session, "session_id", None)
+        session.session_id = self._generate_sid()
+        session.new = True
+        session.modified = True
+        if previous_session_id:
+            mark_session_ended(previous_session_id)
 
     def _get_permanent_lifetime(self, app) -> timedelta:
         lifetime = app.permanent_session_lifetime
@@ -73,9 +81,6 @@ class DatabaseSessionInterface(SessionInterface):
                 return request.remote_addr
 
         client_ip = get_client_ip()
-
-        # Store the current request for later use in save_session
-        self._current_request = request
 
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = request.cookies.get(cookie_name)
@@ -126,7 +131,8 @@ class DatabaseSessionInterface(SessionInterface):
 
         # Get client IP address using stored request
         def get_client_ip():
-            request = self._current_request
+            from flask import request
+
             if request.headers.getlist("X-Forwarded-For"):
                 return request.headers.getlist("X-Forwarded-For")[0]
             elif request.headers.getlist("X-Real-IP"):
@@ -174,6 +180,12 @@ class DatabaseSessionInterface(SessionInterface):
         db = DbSession()
         try:
             stored = db.get(FlaskSession, session.session_id)
+            if stored is not None and stored.ended_at is not None:
+                # This request opened the session before another request ended
+                # or rotated it. Do not let its late response resurrect the
+                # database row or overwrite the browser's newer cookie.
+                return
+            previous_user_id = stored.user_id if stored is not None else None
             payload_dict = dict(session)
             payload_dict['_ip_address'] = client_ip  # Add IP to session data
             payload = self.serializer.dumps(payload_dict)
@@ -202,28 +214,11 @@ class DatabaseSessionInterface(SessionInterface):
                     stored.started_at = self._now()
             db.commit()
 
-            # SECURITY: Enforce concurrent session limit on user login
-            # This prevents session abuse by limiting active sessions per user
-            if user_id_value is not None:
+            # Enforce the limit only when this session becomes authenticated.
+            # Running it on every response lets concurrent requests evict one
+            # another, including the browser session currently being saved.
+            if user_id_value is not None and previous_user_id != user_id_value:
                 enforce_concurrent_session_limit(session.session_id, user_id_value)
-
-                # SECURITY: Session rotation on fresh login
-                # Invalidate all other sessions when user logs in from new device
-                # This prevents session fixation attacks (CWE-384)
-                is_fresh_login = payload_dict.get("_fresh_login", False)
-                if is_fresh_login:
-                    invalidated = invalidate_all_other_sessions(session.session_id, user_id_value)
-                    if invalidated > 0:
-                        session_logger.info(
-                            "Session rotation on login - UserID: %s, CurrentSession: %s, Invalidated: %d",
-                            user_id_value,
-                            session.session_id,
-                            invalidated,
-                        )
-                    # Clear the flag so we don't invalidate on every save
-                    payload_dict.pop("_fresh_login", None)
-                    stored.data = self.serializer.dumps(payload_dict)
-                    db.commit()
         finally:
             db.close()
 
@@ -396,11 +391,13 @@ def enforce_concurrent_session_limit(session_id: str, user_id: int) -> int:
         if active_count <= MAX_CONCURRENT_SESSIONS:
             return 0
 
-        # Need to invalidate oldest sessions (first N sessions where N = active_count - MAX)
+        # Never invalidate the session whose response is currently being saved.
+        # If it is the oldest session, evict the next-oldest session instead.
         to_invalidate = active_count - MAX_CONCURRENT_SESSIONS
+        candidates = [sess for sess in active_sessions if sess.session_id != session_id]
         invalidated_count = 0
 
-        for sess in active_sessions[:to_invalidate]:
+        for sess in candidates[:to_invalidate]:
             sess.ended_at = now
             sess.expiry = now
             sess.data = "{}"

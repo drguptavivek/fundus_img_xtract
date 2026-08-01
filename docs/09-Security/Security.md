@@ -43,6 +43,8 @@ The system implements a robust authentication system with the following security
   - Server-side enforcement with sliding window activity tracking
   - Cross-tab synchronization using localStorage
 - **Session Tracking**: Full session lifecycle tracking including start time, end time, user association, and expiry
+- **Concurrent Session Limit**: Up to three authenticated web sessions per user; a newly authenticated session is always retained while the oldest other session is revoked
+- **Login Rotation**: The pre-authentication session ID is replaced after successful login without revoking the user's other valid sessions
 - **Secure Session Cookies**: HttpOnly, Secure, and SameSite settings configurable via Flask configuration
 
 ### Server-Side Session Implementation (server_side_session.py)
@@ -73,8 +75,9 @@ The application implements a custom server-side session storage system using the
 **Session Persistence (save_session method)**
 1. Saves session data to database with current expiry time
 2. Associates session with user ID when authenticated
-3. Updates session modification timestamp
-4. Sets secure cookie with appropriate security flags
+3. Enforces the concurrent-session limit when the session first becomes authenticated
+4. Ignores late responses for sessions that another request has already ended or rotated
+5. Sets secure cookie with appropriate security flags
 
 **Session Termination**
 - Explicit logout: Session is marked as ended in database
@@ -87,6 +90,7 @@ The application implements a custom server-side session storage system using the
 - 64-character hexadecimal tokens generated using cryptographically secure random numbers
 - Session IDs are never stored in client-side cookies (only reference)
 - New session IDs generated for expired or invalid sessions
+- Successful login rotates the anonymous session ID to prevent fixation
 
 **Database Storage**
 - Session data stored as JSON in FlaskSession model

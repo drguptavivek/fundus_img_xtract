@@ -383,15 +383,20 @@ def login():
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
+
+                # Rotate the anonymous/pre-authentication server-side session ID.
+                # This prevents session fixation without signing the user out of
+                # their other browsers; the concurrent-session limit handles
+                # excess authenticated sessions separately.
+                regenerate_session = getattr(current_app.session_interface, "regenerate", None)
+                if callable(regenerate_session):
+                    regenerate_session(session)
                 login_user(user)
 
                 # Start sliding inactivity window
                 session.permanent = True  # enable cookie expiration control
                 session["last_active"] = int(time.time())
 
-                # SECURITY: Flag this as a new login for session rotation
-                # This will trigger invalidation of other sessions in save_session()
-                session["_fresh_login"] = True
                 session.modified = True
 
                 # Log successful login with session ID

@@ -140,3 +140,34 @@ Returns paginated encounter-wise groups. Encounter result is positive if any ima
   }
 }
 ```
+
+## Retry Failed Inference
+
+`POST /api/analytics/wai-api-statistics/inference-runs/<inference_run_id>/retry`
+
+Queues a retry for the selected latest failed inference run. Requires one of:
+
+- `admin`
+- `local_admin`
+- `data_manager`
+
+The request must include the standard `X-CSRFToken` header.
+
+The endpoint only retries rows that are:
+
+- visible within the caller's analytics scope
+- the latest run for that task/model
+- currently `failed`
+
+Response:
+
+```json
+{
+  "success": true,
+  "job_token": "job-token",
+  "queued_task_id": 123,
+  "image_uuid": "uuid",
+  "image_filename": "image.jpg",
+  "previous_error_code": "execute_failed"
+}
+```

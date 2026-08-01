@@ -7,6 +7,7 @@
     encounterPage: 1,
     activeTab: 'images',
   };
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
   const els = {
     disease: document.getElementById('waiDisease'),
@@ -82,6 +83,21 @@
       if (!response.ok) throw new Error(`Request failed: ${response.status}`);
       return response.json();
     });
+  }
+
+  function postJSON(url) {
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: '{}',
+    }).then((response) => response.json().then((payload) => {
+      if (!response.ok) throw new Error(payload.error || `Request failed: ${response.status}`);
+      return payload;
+    }));
   }
 
   function formatDate(value) {
@@ -172,6 +188,7 @@
             <div class="small text-muted">${escapeHtml(row.api_predicted_class_name || row.api_prediction || '-')}</div>
           </td>
           <td class="text-end">
+            ${row.retry_url ? `<button class="btn btn-sm btn-outline-warning me-1" type="button" data-wai-retry-url="${escapeHtml(row.retry_url)}" title="Retry inference"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
             ${row.viewer_url ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></a>` : ''}
           </td>
         </tr>
@@ -193,6 +210,7 @@
           <span class="wai-image-chip">
             ${resultChip(item.result_type, item.status)}
             <span class="text-truncate">${escapeHtml(item.image_filename || item.image_uuid || '-')}</span>
+            ${item.retry_url ? `<button class="btn btn-link btn-sm p-0 text-warning" type="button" data-wai-retry-url="${escapeHtml(item.retry_url)}" title="Retry inference"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
           </span>
         `).join('');
         return `
@@ -296,6 +314,22 @@
     state.imagePage = 1;
     state.encounterPage = 1;
     reloadAll();
+  });
+  root.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-wai-retry-url]');
+    if (!button) return;
+    button.disabled = true;
+    const original = button.innerHTML;
+    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    postJSON(button.dataset.waiRetryUrl)
+      .then(() => reloadAll())
+      .catch((error) => {
+        els.loading.textContent = error.message || 'Retry failed';
+      })
+      .finally(() => {
+        button.disabled = false;
+        button.innerHTML = original;
+      });
   });
 
   initOptions().then(reloadAll).catch((error) => {

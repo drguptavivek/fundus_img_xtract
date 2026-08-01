@@ -10,7 +10,9 @@ from typing import Any, Iterable
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
+from job_store import db_create_job
 from models import LabUnit
+from utils.celery_helpers import enqueue_task
 
 
 RESULT_TYPES = ("positive", "negative", "inconclusive")
@@ -316,6 +318,7 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
             JSONB_AGG(
                 JSONB_BUILD_OBJECT(
                     'image_uuid', image_uuid,
+                    'inference_run_id', inference_run_id,
                     'image_filename', image_filename,
                     'disease_name', disease_name,
                     'model', ai_model_name || ' ' || ai_model_version,
@@ -341,3 +344,62 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
     """
     rows = [dict(row) for row in db.execute(_statement(sql, params), params).mappings().all()]
     return {"rows": rows, "pagination": _pagination(int(total), clean_page, clean_page_size)}
+
+
+def retry_failed_inference_run(
+    db: Session,
+    user: Any,
+    *,
+    inference_run_id: int,
+    remote_addr: str | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"inference_run_id": inference_run_id}
+    where_sql = " AND ".join(
+        [
+            "inference_run_id = :inference_run_id",
+            "is_latest_for_task_model IS TRUE",
+            "inference_status = 'failed'",
+            *_scope_clause(db, user, params),
+        ]
+    )
+    sql = f"""
+        SELECT
+            task_id,
+            project_id,
+            lab_unit_id,
+            image_filename,
+            image_uuid,
+            error_code
+        FROM ai_inference_runs_mv
+        WHERE {where_sql}
+        LIMIT 1
+    """
+    row = db.execute(_statement(sql, params), params).mappings().first()
+    if row is None:
+        raise ValueError("No retryable failed inference run was found.")
+
+    task_id = int(row["task_id"])
+    job_token = db_create_job(
+        [f"task:{task_id}"],
+        [],
+        uploader_user_id=user.id,
+        uploader_username=getattr(user, "username", None),
+        uploader_ip=remote_addr,
+        lab_unit_id=row["lab_unit_id"],
+        project_id=row["project_id"],
+        upload_type="wai_api_statistics_retry",
+        upload_kind="remote_inference",
+    )
+    enqueue_task(
+        "celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task",
+        job_token,
+        [task_id],
+        user_id=user.id,
+    )
+    return {
+        "job_token": job_token,
+        "queued_task_id": task_id,
+        "image_uuid": row["image_uuid"],
+        "image_filename": row["image_filename"],
+        "previous_error_code": row["error_code"],
+    }

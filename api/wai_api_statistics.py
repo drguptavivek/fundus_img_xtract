@@ -17,6 +17,7 @@ from services.wai_api_statistics import (
     get_filter_options,
     get_image_results,
     get_summary,
+    retry_failed_inference_run,
 )
 from utils.date_utils import parse_date_yyyy_mm_dd
 
@@ -70,12 +71,23 @@ def _image_urls(row: dict[str, Any]) -> dict[str, Any]:
     else:
         row["thumbnail_url"] = None
         row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+    row["retry_url"] = (
+        url_for("fundus_api.wai_api_statistics_retry", inference_run_id=row["inference_run_id"])
+        if row.get("inference_status") == "failed"
+        else None
+    )
     return row
 
 
 def _encounter_urls(row: dict[str, Any]) -> dict[str, Any]:
     encounter_id = row.get("normalized_patient_encounter_id")
     row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+    for item in row.get("image_results") or []:
+        item["retry_url"] = (
+            url_for("fundus_api.wai_api_statistics_retry", inference_run_id=item["inference_run_id"])
+            if item.get("status") == "failed" and item.get("inference_run_id")
+            else None
+        )
     return row
 
 
@@ -115,3 +127,21 @@ def wai_api_statistics_encounters():
         payload = get_encounter_results(db, current_user, _filters_from_request(), page=page, page_size=page_size)
     payload["rows"] = [_encounter_urls(row) for row in payload["rows"]]
     return jsonify(_serialize(payload))
+
+
+@api_bp.route("/analytics/wai-api-statistics/inference-runs/<int:inference_run_id>/retry", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def wai_api_statistics_retry(inference_run_id: int):
+    xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    remote_addr = xff or (request.remote_addr or "-")
+    try:
+        with get_db_session() as db:
+            payload = retry_failed_inference_run(
+                db,
+                current_user,
+                inference_run_id=inference_run_id,
+                remote_addr=remote_addr,
+            )
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 404
+    return jsonify({"success": True, **_serialize(payload)})

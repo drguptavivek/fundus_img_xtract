@@ -866,7 +866,7 @@ def directImgFinalThumbnailByUUID(uuid: str):
 
 def universalImageThumbnailByUUID(uuid: str):
     """
-    Universal thumbnail serving function that works for both encounter and direct upload images.
+    Universal thumbnail serving for ZIP, direct-upload, and EncounterSet images.
 
     This follows the same logic as imgForGradingByUUID but for thumbnails.
     """
@@ -874,8 +874,7 @@ def universalImageThumbnailByUUID(uuid: str):
         abort(401)
 
     with transaction_scope() as db:
-        lab_unit_id, disease_id = _get_grading_task_context_for_image(db, uuid)
-        allow_grading_access = _user_has_grading_slot(db, current_user, lab_unit_id, disease_id)
+        allow_grading_access = _user_has_grading_access_to_image(db, current_user, uuid)
 
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -892,7 +891,12 @@ def universalImageThumbnailByUUID(uuid: str):
             direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
-        if encounter_result and direct_image:
+        encounter_set_query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
+        if not allow_grading_access:
+            encounter_set_query = _apply_lab_unit_scoping(encounter_set_query, PatientEncounters, current_user)
+        encounter_set_image = encounter_set_query.first()
+
+        if sum(1 for item in (encounter_result, direct_image, encounter_set_image) if item) > 1:
             abort(404)
 
         if encounter_result:
@@ -903,6 +907,9 @@ def universalImageThumbnailByUUID(uuid: str):
 
         if direct_image:
             return _serve_direct_final_thumbnail(db, direct_image, uuid)
+
+        if encounter_set_image:
+            return _serve_encounter_set_thumbnail(encounter_set_image, uuid)
 
         abort(404)
 
@@ -933,6 +940,20 @@ def _serve_encounter_set_final_image(img: EncounterSetImage, uuid: str):
             )
     return _serve_encounter_set_image(img, uuid)
 
+
+def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
+    if img.thumbnail_filename:
+        thumb_path = BASE_DIR / img.folder_rel / "thumbnails" / img.thumbnail_filename
+        if thumb_path.exists():
+            return _build_image_response(
+                str(thumb_path),
+                img.thumbnail_filename,
+                uuid,
+                cache_control="private, max-age=300",
+                extra_headers={"X-Thumbnail": "true"},
+            )
+    return _serve_encounter_set_image(img, uuid)
+
 def encounterSetImageByUUID(uuid: str):
     if not current_user or not current_user.is_authenticated:
         abort(401)
@@ -956,20 +977,7 @@ def encounterSetImageThumbnailByUUID(uuid: str):
         if not img:
             abort(404)
         
-        # If thumbnail exists, serve it
-        if img.thumbnail_filename:
-            thumb_path = BASE_DIR / img.folder_rel / "thumbnails" / img.thumbnail_filename
-            if thumb_path.exists():
-                return _build_image_response(
-                    str(thumb_path),
-                    img.thumbnail_filename,
-                    uuid,
-                    cache_control='private, max-age=300',
-                    extra_headers={'X-Thumbnail': 'true'},
-                )
-        
-        # Fallback to full image for now
-        return _serve_encounter_set_image(img, uuid)
+        return _serve_encounter_set_thumbnail(img, uuid)
 
 
 def encounterSetImageEditedByUUID(uuid: str):

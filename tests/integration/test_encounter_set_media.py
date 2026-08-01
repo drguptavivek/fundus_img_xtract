@@ -192,3 +192,28 @@ def test_access_encounter_set_thumbnail_authenticated(client, auth_client_factor
     # Expect 404 because file doesn't exist, but route is reachable (not 401/403)
     response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}/thumbnail")
     assert response.status_code == 404
+
+
+def test_universal_thumbnail_serves_encounter_set_image(
+    auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path
+):
+    user = UserFactory.create_ophthalmologist(
+        db_session,
+        username="test_universal_set_thumb_viewer",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    media_dir = tmp_path / "files" / "test_sets"
+    thumbnail_dir = media_dir / "thumbnails"
+    thumbnail_dir.mkdir(parents=True)
+    thumbnail_name = "thm_test_pos_1.jpg"
+    (thumbnail_dir / thumbnail_name).write_bytes(b"thumbnail bytes")
+    encounter_set_data["image"].thumbnail_filename = thumbnail_name
+    db_session.flush()
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/img/{encounter_set_data['image'].uuid}/thumbnail")
+
+    assert response.status_code == 200
+    assert response.headers["X-Thumbnail"] == "true"
+    assert response.data == b"thumbnail bytes"

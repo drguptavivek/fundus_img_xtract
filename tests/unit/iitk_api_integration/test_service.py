@@ -1,3 +1,4 @@
+from dataclasses import replace
 from io import BytesIO
 from uuid import uuid4
 
@@ -94,6 +95,19 @@ def test_partial_session_is_created_then_updated_in_place(db_session, core_test_
     assert encounter.metadata_json["encounter"]["capture_status"] == "complete"
     assert encounter.metadata_json["upload"]["source_kind"] == "iitk_api"
     assert all((tmp_path / image.folder_rel / image.original_filename).exists() for image in images)
+
+
+def test_capture_datetime_is_normalized_and_dated_in_utc(db_session, core_test_data, app, monkeypatch, tmp_path):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    source_with_offset = replace(source("partial", 0, ()), started_at="2026-08-01T00:30:00+05:30")
+
+    _persist_session(runtime, source_with_offset, inventory(), {})
+
+    encounter = db_session.query(PatientEncounters).filter_by(project_id=runtime.project_id).one()
+    assert encounter.capture_date == "2026-07-31"
+    assert encounter.capture_date_dt.isoformat() == "2026-07-31"
+    assert encounter.metadata_json["encounter"]["capture_datetime"] == "2026-07-31T19:00:00Z"
 
 
 def test_site_mapping_routes_import_and_preserves_editable_site(db_session, core_test_data, app, monkeypatch, tmp_path):

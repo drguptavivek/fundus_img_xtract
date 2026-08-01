@@ -158,7 +158,7 @@ does not echo upstream bodies because they may contain sensitive values.
 
 ## Candidate EncounterSet metadata mapping
 
-This is a discovery mapping, not implemented persistence behavior yet.
+The importer persists these values in the canonical EncounterSet metadata model.
 
 | Upstream field | Existing IITK EncounterSet metadata field |
 |---|---|
@@ -173,6 +173,11 @@ This is a discovery mapping, not implemented persistence behavior yet.
 | `eye` | `encounter.eye_laterality` |
 | `capturedPositions` | `encounter.gaze` |
 | image `position` | spatial position and `strabismus_gaze_position` |
+
+`startedAt` is normalized to an explicit UTC ISO timestamp before it is saved
+as `encounter.capture_datetime`, and the core capture date is derived from that
+UTC value. A timezone-less upstream timestamp is treated as UTC. The exact
+upstream string remains available in the IITK source-link audit metadata.
 
 Remote diagnosis is metadata only. It must not choose grading schemes or task
 routing; those remain owned by the configured Upload & Grading Profile.

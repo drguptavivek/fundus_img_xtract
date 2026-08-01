@@ -352,7 +352,14 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         capture_dt = _parse_datetime(source.started_at)
         effective_site = _effective_encounter_site(encounter, source.site)
         destination = _resolve_site_destination(db, runtime, source_site=source.site, effective_site=effective_site)
-        metadata = _encounter_metadata(encounter.metadata_json if encounter else None, runtime, source, destination, now)
+        metadata = _encounter_metadata(
+            encounter.metadata_json if encounter else None,
+            runtime,
+            source,
+            capture_dt,
+            destination,
+            now,
+        )
         if encounter is None:
             encounter = PatientEncounters(uuid=str(uuid4()), name=f"IITK MRN {source.mrn}", patient_id=source.mrn,
                 capture_date=capture_dt.date().isoformat(), capture_date_dt=capture_dt.date(), lab_unit_id=destination.lab_unit_id,
@@ -415,7 +422,9 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             image.metadata_json = {
                 **(image.metadata_json or {}), "source_kind": "iitk_api", "source_session_ref": _opaque(source.session_id),
                 "source_filename_hash": hashlib.sha256(item.filename.encode()).hexdigest(), "source_size_bytes": item.size_bytes,
-                "source_captured_at": item.captured_at, "source_present": True, "gaze_position": item.position,
+                "source_captured_at": item.captured_at,
+                "source_captured_at_utc": _utc_iso_datetime(item.captured_at),
+                "source_present": True, "gaze_position": item.position,
                 "laterality": source.eye, "is_montage": item.position == "composite", "encounter_set_type_id": runtime.encounter_set_type_id,
             }
         inventory_hash = hashlib.sha256(json.dumps([(i.position, i.size_bytes, i.captured_at) for i in inventory.images], sort_keys=True).encode()).hexdigest()
@@ -448,15 +457,23 @@ def _current_images(config_id: int, source_session_id: str) -> dict[str, dict[st
         return result
 
 
-def _encounter_metadata(existing: dict | None, runtime: RuntimeConfig, source: IITKSessionDTO,
-                        destination: SiteDestination, synced_at: datetime) -> dict:
+def _encounter_metadata(
+    existing: dict | None,
+    runtime: RuntimeConfig,
+    source: IITKSessionDTO,
+    capture_dt: datetime,
+    destination: SiteDestination,
+    synced_at: datetime,
+) -> dict:
     result = dict(existing or {})
     patient = dict(result.get("patient") if isinstance(result.get("patient"), dict) else {})
     patient.update({"hospital_UHID": source.mrn, "patient_age_yrs": source.age, "sex": source.gender})
     patient.setdefault("site_recruitment", destination.effective_site)
     result["patient"] = patient
     result["encounter"] = {**(result.get("encounter") if isinstance(result.get("encounter"), dict) else {}),
-        "source_session_id": source.session_id, "capture_datetime": source.started_at, "mode_capture": source.mode,
+        "source_session_id": source.session_id,
+        "capture_datetime": _utc_iso(capture_dt),
+        "mode_capture": source.mode,
         "eye_laterality": source.eye, "patient_diagnosis": source.diagnosis,
         "patient_diagnosis_other": source.diagnosis_other, "captured_positions": list(source.captured_positions),
         "expected_positions": source.expected_positions, "capture_status": source.status, "clinician_uid": source.clinician_uid}
@@ -687,7 +704,16 @@ def _parse_datetime(value: str) -> datetime:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise IITKIntegrationError("IITK startedAt is not a valid ISO datetime.") from exc
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    aware = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc)
+
+
+def _utc_iso_datetime(value: str | None) -> str | None:
+    return _utc_iso(_parse_datetime(value)) if value else None
+
+
+def _utc_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _required_int(payload: dict[str, Any], key: str) -> int:

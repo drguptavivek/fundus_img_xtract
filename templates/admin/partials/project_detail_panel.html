@@ -131,11 +131,6 @@
           </div>
           {% if iitk_project_readiness_error %}
           <div class="alert alert-warning py-2 mt-3 mb-0 small">{{ iitk_project_readiness_error }}</div>
-          {% elif iitk_project_target %}
-          <div class="small text-muted mt-3">
-            Uses {{ iitk_project_target.upload_profile_name }} · {{ iitk_project_target.encounter_set_type_name }}.
-            Unmapped sites enter through {{ iitk_project_target.hospital_name }} / {{ iitk_project_target.lab_unit_name }}.
-          </div>
           {% endif %}
           {% if iitk_project_config.last_success_at or iitk_project_config.last_error %}
           <div class="small mt-2">Last sync: {{ iitk_project_config.last_success_at or 'Never' }}{% if iitk_project_config.last_error %}<span class="text-danger ms-2">{{ iitk_project_config.last_error }}</span>{% endif %}</div>

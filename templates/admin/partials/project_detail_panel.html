@@ -312,7 +312,53 @@
 
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-          <h3 class="h6 mb-0">Remote Inference Policy</h3>
+          <h3 class="h6 mb-0">Manual Remote AI Workflows</h3>
+          {% if manual_remote_inference_enabled %}
+          <span class="badge text-bg-success">Enabled</span>
+          {% else %}
+          <span class="badge text-bg-secondary">Disabled</span>
+          {% endif %}
+        </div>
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.save_project_manual_remote_inference_workflows', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_project_manual_remote_inference_workflows', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <p class="small text-muted mb-3">
+            Allow authorized users to submit this project's images manually. This setting does not trigger automatic inference.
+          </p>
+          {% for workflow in manual_remote_inference_workflows %}
+          <div class="form-check mb-3">
+            <input class="form-check-input"
+                   type="checkbox"
+                   name="manual_remote_inference_workflow"
+                   value="{{ workflow.disease_id }}:{{ workflow.ai_model_id }}:{{ workflow.upload_kind }}"
+                   id="manual_remote_workflow_{{ workflow.disease_id }}_{{ workflow.ai_model_id }}_{{ workflow.upload_kind }}"
+                   {% if workflow.enabled %}checked{% endif %}>
+            <label class="form-check-label" for="manual_remote_workflow_{{ workflow.disease_id }}_{{ workflow.ai_model_id }}_{{ workflow.upload_kind }}">
+              <span class="fw-semibold">Wadhwani Glaucoma</span>
+              <span class="text-muted">— EncounterSet images</span>
+              <span class="d-block small text-muted">{{ workflow.ai_model_name }} {{ workflow.ai_model_version }}</span>
+            </label>
+          </div>
+          {% else %}
+          <div class="alert alert-warning mb-3">
+            No enabled Wadhwani model is linked to the Glaucoma disease.
+          </div>
+          {% endfor %}
+          <button class="btn btn-outline-primary" type="submit" {% if not manual_remote_inference_workflows %}disabled{% endif %}>
+            Save Manual Workflows
+          </button>
+        </form>
+      </div>
+
+      <div class="col-12">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">Automated Remote Inference Policy</h3>
           {% if remote_inference_policy and remote_inference_policy.active %}
           <span class="badge text-bg-success">Configured</span>
           {% else %}

@@ -1,6 +1,6 @@
 # Upload Profiles API
 
-Reusable Upload & Grading Profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional legacy AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for asset rules and metadata, and uses profile-level EncounterSet grading packages for task creation. Remote Inference Policies are reusable project-assigned policies managed separately from upload profiles. Admin pages render under `/admin/upload-profiles`, `/admin/upload-projects`, and `/admin/remote-inference-policies`; mutations use JSON/HTMX-capable APIs under `/api/upload-profiles` and `/api/remote-inference-policies`.
+Reusable Upload & Grading Profiles define workflow templates: enabled upload modes and the mode-specific rules for those uploads. Project, lab unit, and uploader access are separate governance mappings. Direct image, pregraded, and Remedio ZIP modes use profile-level disease/target, camera/site, mydriatic, and optional legacy AI workflow bindings. EncounterSet mode uses selected EncounterSetTypes for asset rules and metadata, and uses profile-level EncounterSet grading packages for task creation. Automated Remote Inference Policies and Manual Remote AI Workflows are project-owned controls managed separately from upload profiles. See [Project Remote Inference API](../remote-inference/README.md).
 
 Project governance owns investigator metadata, project-to-profile enablement, and uploader plus lab-unit assignment. Upload & Grading Profiles own reusable upload workflow and task-target rules.
 
@@ -40,6 +40,7 @@ Error:
 - `POST /api/upload-profiles/projects`
 - `POST|PATCH /api/upload-profiles/projects/<project_id>`
 - `POST /api/upload-profiles/projects/<project_id>/remote-inference-policy`
+- `GET|POST|PATCH /api/remote-inference/projects/<project_id>/manual-workflows`
 - `POST /api/remote-inference-policies`
 - `POST|PATCH /api/remote-inference-policies/<policy_id>`
 - `POST /api/remote-inference-policies/<policy_id>/activate`
@@ -87,6 +88,8 @@ Investigator assignment fields for `/api/upload-profiles/investigators`:
 Project remote inference assignment fields for `/api/upload-profiles/projects/<project_id>/remote-inference-policy`:
 
 - `remote_inference_policy_id` integer, optional. Empty clears the project's policy assignment.
+
+Project manual remote inference is configured independently through `/api/remote-inference/projects/<project_id>/manual-workflows`. It controls manual submission permission and does not depend on project-to-upload-profile mappings or trigger automatic inference.
 
 Remote inference policy create/update fields for `/api/remote-inference-policies` and `/api/remote-inference-policies/<policy_id>`:
 

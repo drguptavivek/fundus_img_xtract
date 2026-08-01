@@ -14,9 +14,10 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session, transaction_scope
 from encounter_sets.models import EncounterSetAttachment
-from models import AIInferenceRun, Camera, EncounterSetImage, Grade, GradingTask, Job, JobItem, PatientEncounters, Project
+from models import AIInferenceRun, Camera, EncounterSetImage, Grade, GradingTask, Job, JobItem, PatientEncounters
+from remote_inference.manual_service import list_manual_wadhwani_projects, project_allows_manual_wadhwani
+from remote_inference.job_service import is_job_resumable
 from services.encounter_set_ai_inference import enqueue_wadhwani_for_task_ids
-from upload_profiles.models import ProjectUploadProfile, UploadProfileAIWorkflow
 from utils.hospital_scoping import apply_scoping
 from utils.wadhwani_glaucoma_selector import get_glaucoma_disease, get_linked_wadhwani_integration
 
@@ -88,8 +89,8 @@ def encounter_set_wadhwani_inference_run():
         if integration is None or glaucoma is None:
             flash("No linked Wadhwani glaucoma model is configured.", "danger")
             return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference", project_id=project_id))
-        if not _project_has_wadhwani_profile(db, project_id):
-            flash("Selected project does not have EncounterSet Wadhwani inference configured.", "warning")
+        if not project_allows_manual_wadhwani(db, project_id):
+            flash("Manual Wadhwani glaucoma inference is not enabled for the selected project.", "warning")
             return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference", project_id=project_id))
         selected_encounter_count = _selected_encounter_count(db, project_id=project_id, image_ids=image_ids)
         if selected_encounter_count > MAX_ENCOUNTER_SETS_PER_BATCH:
@@ -174,23 +175,7 @@ def _page_context(
 
 
 def _configured_projects(db) -> list[dict[str, Any]]:
-    query = (
-        db.query(Project)
-        .join(ProjectUploadProfile, ProjectUploadProfile.project_id == Project.id)
-        .join(UploadProfileAIWorkflow, UploadProfileAIWorkflow.upload_profile_id == ProjectUploadProfile.upload_profile_id)
-        .join(PatientEncounters, PatientEncounters.project_id == Project.id)
-        .filter(
-            Project.active.is_(True),
-            ProjectUploadProfile.active.is_(True),
-            UploadProfileAIWorkflow.active.is_(True),
-            UploadProfileAIWorkflow.upload_kind == "encounter_set",
-            PatientEncounters.is_set_based.is_(True),
-        )
-        .order_by(Project.title.asc())
-        .distinct()
-    )
-    query = apply_scoping(query, PatientEncounters, current_user, "upload")
-    return [{"id": project.id, "title": project.title, "code": project.code} for project in query.all()]
+    return list_manual_wadhwani_projects(db, current_user)
 
 
 def _cameras(db) -> list[dict[str, Any]]:
@@ -540,6 +525,7 @@ def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
         "groups": groups,
         "summary": summary,
         "done": str(job.status or "").lower() in {"done", "error", "partial"},
+        "resumable": is_job_resumable(job, items),
     }
 
 
@@ -564,21 +550,6 @@ def _selected_image_ids_from_request() -> list[int]:
         if value:
             values.append(value)
     return list(dict.fromkeys(values))
-
-
-def _project_has_wadhwani_profile(db, project_id: int) -> bool:
-    return (
-        db.query(ProjectUploadProfile.id)
-        .join(UploadProfileAIWorkflow, UploadProfileAIWorkflow.upload_profile_id == ProjectUploadProfile.upload_profile_id)
-        .filter(
-            ProjectUploadProfile.project_id == project_id,
-            ProjectUploadProfile.active.is_(True),
-            UploadProfileAIWorkflow.active.is_(True),
-            UploadProfileAIWorkflow.upload_kind == "encounter_set",
-        )
-        .first()
-        is not None
-    )
 
 
 def _empty_status() -> dict[str, Any]:

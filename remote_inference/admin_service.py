@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from models import AIModel, AIModelDisease, AIModelIntegration, Disease, Project
+from remote_inference.manual_service import project_manual_workflow_context
 from remote_inference.models import DiseaseReportLinkage, ProjectRemoteInferencePolicy, RemoteInferencePolicy, RemoteInferencePolicyRule
 from upload_profiles.admin_service import MutationResult, to_int
 from upload_profiles.service import manager_lab_unit_ids
@@ -130,6 +131,7 @@ def project_policy_context(db, project_id: int) -> dict[str, Any]:
         "remote_inference_assignment": assignment,
         "remote_inference_policy": assignment.policy if assignment else None,
         "remote_inference_policies": policies,
+        **project_manual_workflow_context(db, project_id),
     }
 
 

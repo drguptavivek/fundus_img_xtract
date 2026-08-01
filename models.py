@@ -2885,6 +2885,7 @@ from remidio_api_integration.models import (  # noqa: E402,F401
 )
 from remote_inference.models import (  # noqa: E402,F401
     DiseaseReportLinkage,
+    ProjectManualRemoteInferenceWorkflow,
     ProjectRemoteInferencePolicy,
     RemoteInferencePolicy,
     RemoteInferencePolicyRule,

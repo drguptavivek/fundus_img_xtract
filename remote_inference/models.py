@@ -127,3 +127,41 @@ class ProjectRemoteInferencePolicy(Base):
         UniqueConstraint("project_id", name="uq_project_remote_inference_policy_project"),
         Index("ix_project_remote_inference_policies_project_active", "project_id", "active"),
     )
+
+
+class ProjectManualRemoteInferenceWorkflow(Base):
+    """Project-owned permission to submit images to a remote model manually."""
+
+    __tablename__ = "project_manual_remote_inference_workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=False, index=True)
+    ai_model_id: Mapped[int] = mapped_column(ForeignKey("ai_models.id", ondelete="RESTRICT"), nullable=False, index=True)
+    upload_kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project")
+    disease: Mapped["Disease"] = relationship("Disease")
+    ai_model: Mapped["AIModel"] = relationship("AIModel")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "disease_id",
+            "ai_model_id",
+            "upload_kind",
+            name="uq_project_manual_remote_inference_workflow",
+        ),
+        CheckConstraint(
+            "upload_kind IN ('direct_image','pregraded','remidio','encounter_set')",
+            name="ck_project_manual_remote_inference_upload_kind",
+        ),
+        Index(
+            "ix_project_manual_remote_inference_project_active",
+            "project_id",
+            "active",
+        ),
+    )

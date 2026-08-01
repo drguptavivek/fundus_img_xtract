@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_forms.html" import csrf_field %}
-{% block title %}Remote Inference Policies{% endblock %}
+{% block title %}Automated Remote Inference Policies{% endblock %}
 
 {% block content %}
 {% set selected_policy = selected_remote_inference_policy %}
@@ -13,7 +13,7 @@
 <div class="container-fluid py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
-      <h1 class="h3 mb-1">Remote Inference Policies</h1>
+      <h1 class="h3 mb-1">Automated Remote Inference Policies</h1>
       <p class="text-muted mb-0">Define reusable automated inference rules; assign one policy from each project configuration.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
@@ -167,7 +167,7 @@
                             <option value="on_image_received" {% if not current_rule or current_rule.trigger_timing == 'on_image_received' %}selected{% endif %}>As image is received</option>
                             <option value="on_report_received" {% if current_rule and current_rule.trigger_timing == 'on_report_received' %}selected{% endif %}>As report is received</option>
                             <option value="after_verification" {% if current_rule and current_rule.trigger_timing == 'after_verification' %}selected{% endif %}>After verification</option>
-                            <option value="manual_only" {% if current_rule and current_rule.trigger_timing == 'manual_only' %}selected{% endif %}>Manual only</option>
+                            <option value="manual_only" {% if current_rule and current_rule.trigger_timing == 'manual_only' %}selected{% endif %}>Legacy manual only (does not enable browser)</option>
                           </select>
                         </td>
                         <td>

@@ -152,6 +152,8 @@ The package reaches `final` when all child tasks are final.
 
 ## Wadhwani Manifest Metadata
 
+Manual EncounterSet Wadhwani inference is enabled per project through a Manual Remote AI Workflow. This permission is independent of Upload & Grading Profiles and Automated Remote Inference Policies. The manual browser and its submission route both enforce the project setting and user upload scope.
+
 EncounterSet Wadhwani inference sends the selected image bytes plus a curated manifest. The manifest does not include raw patient metadata, MRN, patient name, Remidio patient ID, or DOB.
 
 Included only when present:

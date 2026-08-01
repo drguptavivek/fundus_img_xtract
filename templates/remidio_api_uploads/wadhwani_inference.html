@@ -21,6 +21,13 @@
   {% if not linked_integration %}
   <div class="alert alert-warning">No enabled Wadhwani Glaucoma integration is linked.</div>
   {% endif %}
+  {% if not projects %}
+  <div class="alert alert-info">
+    No projects are enabled for manual Wadhwani Glaucoma inference in your scope.
+    Enable <strong>Wadhwani Glaucoma — EncounterSet images</strong> under
+    <a class="alert-link" href="{{ url_for('admin.upload_projects_admin') }}">Admin → Projects → Manual Remote AI Workflows</a>.
+  </div>
+  {% endif %}
 
   <form id="wadhwaniEncounterSetFilters"
         class="card shadow-sm mb-3"

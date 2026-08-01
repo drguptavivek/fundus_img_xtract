@@ -1,10 +1,28 @@
+{% from "_forms.html" import csrf_field %}
+
 <div class="card shadow-sm" data-job-done="{{ 'true' if job['done'] else 'false' }}">
   <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
     <div>
       <h2 class="h5 mb-0">Batch Status</h2>
       <div class="text-muted small">Updated {{ job['updated_at']|user_datetime if job['updated_at'] else '-' }}</div>
     </div>
-    <span class="badge text-bg-{{ 'success' if job['status'] == 'done' else 'danger' if job['status'] == 'error' else 'warning' if job['status'] in ['processing', 'partial'] else 'secondary' }}">{{ job['status'] }}</span>
+    <div class="d-flex align-items-center gap-2">
+      {% if job['resumable'] %}
+      <form method="post"
+            action="{{ url_for('fundus_api.resume_interrupted_wadhwani_encounter_set_job', job_token=job['token']) }}"
+            hx-post="{{ url_for('fundus_api.resume_interrupted_wadhwani_encounter_set_job', job_token=job['token']) }}"
+            hx-swap="none"
+            data-json-api-htmx
+            data-json-api-reload-url="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_job_status', job_token=job['token']) }}"
+            data-json-api-reload-target="#wadhwaniEncounterSetJobStatus">
+        {{ csrf_field() }}
+        <button class="btn btn-sm btn-outline-primary" type="submit">
+          <i class="fa-solid fa-rotate-right me-1"></i>Resume interrupted batch
+        </button>
+      </form>
+      {% endif %}
+      <span class="badge text-bg-{{ 'success' if job['status'] == 'done' else 'danger' if job['status'] == 'error' else 'warning' if job['status'] in ['processing', 'partial'] else 'secondary' }}">{{ job['status'] }}</span>
+    </div>
   </div>
   <div class="card-body">
     <div class="row g-3 mb-3">

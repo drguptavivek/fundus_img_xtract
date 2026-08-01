@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from celery_app import celery_app
-from iitk_api_integration.service import queue_active_config_syncs, sync_config
+from iitk_api_integration.service import queue_active_config_syncs, recover_stale_config_syncs, sync_config
 
 
 @celery_app.task(
@@ -26,3 +26,13 @@ def queue_active_iitk_syncs_task(self) -> dict:
         return queue_active_config_syncs()
     except Exception as exc:
         raise self.retry(exc=exc, countdown=5) from exc
+
+
+@celery_app.task(
+    name="celery_tasks.tasks.iitk_tasks.recover_stale_iitk_syncs_task",
+    bind=True,
+    acks_late=True,
+)
+def recover_stale_iitk_syncs_task(self) -> dict:
+    _ = self
+    return recover_stale_config_syncs()

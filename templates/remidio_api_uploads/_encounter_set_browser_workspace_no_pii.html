@@ -106,7 +106,7 @@
           </div>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-start">
-          <span class="badge text-bg-light">{{ detail.project_title or '-' }}</span>
+          {% include "remidio_api_uploads/_encounter_set_project_badge.html" %}
           <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
           {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
           <a class="btn btn-sm btn-outline-primary"

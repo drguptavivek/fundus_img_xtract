@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from uuid import uuid4
 
@@ -11,7 +12,10 @@ from iitk_api_integration.service import (
     RuntimeConfig,
     _persist_session,
     _sync_session,
+    project_connection_context,
+    recover_stale_config_syncs,
     remap_iitk_encounter_site,
+    reclaim_stale_sync_locks,
     save_project_connection,
     site_mapping_catalog,
 )
@@ -208,12 +212,106 @@ def test_project_connection_saves_only_flag_and_encrypted_token_from_existing_ta
     assert row.active is False
 
 
+def test_disabled_non_iitk_project_does_not_show_iitk_target_warning(db_session):
+    project = Project(
+        title=f"Ordinary project {uuid4()}", code=f"ORD{uuid4().hex[:8]}", active=True,
+    )
+    first_profile = UploadProfile(name=f"First {uuid4()}", active=True)
+    second_profile = UploadProfile(name=f"Second {uuid4()}", active=True)
+    first_type = EncounterSetType(
+        name=f"First type {uuid4()}", code=f"first_{uuid4().hex[:8]}", active=True,
+        metadata_schema_json={"fields": []}, asset_rules_json={},
+    )
+    second_type = EncounterSetType(
+        name=f"Second type {uuid4()}", code=f"second_{uuid4().hex[:8]}", active=True,
+        metadata_schema_json={"fields": []}, asset_rules_json={},
+    )
+    db_session.add_all([project, first_profile, second_profile, first_type, second_type])
+    db_session.flush()
+    db_session.add_all([
+        ProjectUploadProfile(project_id=project.id, upload_profile_id=first_profile.id, active=True),
+        ProjectUploadProfile(project_id=project.id, upload_profile_id=second_profile.id, active=True),
+        UploadProfileEncounterSetType(
+            upload_profile_id=first_profile.id, encounter_set_type_id=first_type.id, active=True,
+        ),
+        UploadProfileEncounterSetType(
+            upload_profile_id=second_profile.id, encounter_set_type_id=second_type.id, active=True,
+        ),
+    ])
+    db_session.flush()
+
+    context = project_connection_context(db_session, project.id)
+
+    assert context["iitk_project_config"]["active"] is False
+    assert context["iitk_project_target"] is None
+    assert context["iitk_project_readiness_error"] is None
+
+
 def test_iitk_business_hours_schedule_is_seeded(db_session):
     row = db_session.query(CeleryBeatSchedule).filter_by(name="IITK API EncounterSet Sync Hourly IST Business Hours").one()
     assert row.queue == "maintenance"
     assert row.crontab_minute == "30"
     assert row.crontab_hour == "1-12"
     assert row.task_name == "celery_tasks.tasks.iitk_tasks.queue_active_iitk_syncs_task"
+
+
+def test_iitk_stale_recovery_schedule_is_seeded(db_session):
+    row = db_session.query(CeleryBeatSchedule).filter_by(name="IITK API Stale Sync Recovery").one()
+    assert row.queue == "maintenance"
+    assert row.schedule_type == "interval"
+    assert row.interval_seconds == 300
+    assert row.task_name == "celery_tasks.tasks.iitk_tasks.recover_stale_iitk_syncs_task"
+
+
+def test_only_stale_iitk_heartbeat_locks_are_reclaimed(db_session, core_test_data, app):
+    stale_runtime = setup_config(db_session, core_test_data)
+    recent_runtime = setup_config(db_session, core_test_data)
+    now = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    stale = db_session.get(IITKApiProjectConfig, stale_runtime.id)
+    recent = db_session.get(IITKApiProjectConfig, recent_runtime.id)
+    stale.sync_started_at = now - timedelta(minutes=16)
+    recent.sync_started_at = now - timedelta(minutes=14)
+    db_session.flush()
+
+    reclaimed = reclaim_stale_sync_locks(now=now)
+
+    assert reclaimed == [stale.id]
+    assert stale.sync_started_at is None
+    assert recent.sync_started_at == now - timedelta(minutes=14)
+
+
+def test_stale_recovery_does_not_queue_api_sync_outside_business_hours(
+    db_session, core_test_data, app, monkeypatch
+):
+    runtime = setup_config(db_session, core_test_data)
+    now = datetime(2026, 8, 1, 13, 0, tzinfo=timezone.utc)  # 18:30 IST
+    config = db_session.get(IITKApiProjectConfig, runtime.id)
+    config.sync_started_at = now - timedelta(minutes=16)
+    db_session.flush()
+    queued_ids = []
+    monkeypatch.setattr(
+        "iitk_api_integration.service._queue_config_ids",
+        lambda config_ids: queued_ids.extend(config_ids) or [],
+    )
+
+    result = recover_stale_config_syncs(now=now)
+
+    assert result["reclaimed_config_ids"] == [runtime.id]
+    assert result["deferred_count"] == 1
+    assert queued_ids == []
+
+
+def test_session_commit_refreshes_active_sync_heartbeat(db_session, core_test_data, app, monkeypatch, tmp_path):
+    runtime = setup_config(db_session, core_test_data)
+    config = db_session.get(IITKApiProjectConfig, runtime.id)
+    old_heartbeat = datetime(2026, 8, 1, 1, 0, tzinfo=timezone.utc)
+    config.sync_started_at = old_heartbeat
+    db_session.flush()
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+
+    _persist_session(runtime, source("partial", 0, ()), inventory(), {})
+
+    assert config.sync_started_at > old_heartbeat
 
 
 def test_image_failure_still_imports_partial_session_metadata(db_session, core_test_data, app, monkeypatch, tmp_path):

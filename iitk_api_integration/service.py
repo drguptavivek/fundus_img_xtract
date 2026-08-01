@@ -32,7 +32,8 @@ from .models import IITKApiProjectConfig, IITKApiSessionLink
 
 LOGGER = logging.getLogger("iitk_api_integration.service")
 POSITION_ORDER = {"primary": 1, "up_left": 2, "up": 3, "up_right": 4, "right": 5, "down_right": 6, "down": 7, "down_left": 8, "left": 9, "composite": 10}
-SYNC_STALE_AFTER = timedelta(hours=2)
+SYNC_STALE_AFTER = timedelta(minutes=15)
+IST = timezone(timedelta(hours=5, minutes=30))
 SITE_MAPPING_PATH = Path(__file__).with_name("site_mappings.json")
 
 
@@ -92,12 +93,13 @@ def site_mapping_catalog() -> dict[str, dict[str, str]]:
 
 def project_connection_context(db: Session, project_id: int) -> dict[str, Any]:
     row = db.query(IITKApiProjectConfig).filter_by(project_id=project_id).one_or_none()
-    try:
-        derived = _derive_project_target(db, project_id)
-        readiness_error = None
-    except IITKConfigError as exc:
-        derived = None
-        readiness_error = str(exc)
+    derived = None
+    readiness_error = None
+    if row and row.active:
+        try:
+            derived = _derive_project_target(db, project_id)
+        except IITKConfigError as exc:
+            readiness_error = str(exc)
     return {
         "iitk_project_config": _config_payload(row) if row else {
             "project_id": project_id, "active": False, "token_configured": False,
@@ -266,15 +268,60 @@ def sync_config(config_id: int, *, full: bool = False) -> dict[str, Any]:
 
 
 def queue_active_config_syncs() -> dict[str, Any]:
-    from celery_tasks.tasks.iitk_tasks import run_iitk_config_sync_task
-
     with get_db_session() as db:
         ids = [row[0] for row in db.execute(select(IITKApiProjectConfig.id).where(IITKApiProjectConfig.active.is_(True))).all()]
+    queued = _queue_config_ids(ids)
+    return {"queued": queued, "count": len(queued)}
+
+
+def recover_stale_config_syncs(*, now: datetime | None = None) -> dict[str, Any]:
+    """Reclaim stopped heartbeats, requeueing only during the IITK sync window."""
+    checked_at = now or utcnow()
+    reclaimed_ids = reclaim_stale_sync_locks(now=checked_at)
+    queued = _queue_config_ids(reclaimed_ids) if _inside_scheduled_sync_window(checked_at) else []
+    return {
+        "reclaimed_config_ids": reclaimed_ids,
+        "queued": queued,
+        "count": len(queued),
+        "deferred_count": len(reclaimed_ids) - len(queued),
+    }
+
+
+def _inside_scheduled_sync_window(now: datetime) -> bool:
+    local = now.astimezone(IST)
+    local_minute = local.hour * 60 + local.minute
+    return 7 * 60 <= local_minute <= 18 * 60
+
+
+def reclaim_stale_sync_locks(*, now: datetime | None = None) -> list[int]:
+    cutoff = (now or utcnow()) - SYNC_STALE_AFTER
+    with get_db_session() as db:
+        rows = (
+            db.query(IITKApiProjectConfig)
+            .filter(
+                IITKApiProjectConfig.active.is_(True),
+                IITKApiProjectConfig.sync_started_at.is_not(None),
+                IITKApiProjectConfig.sync_started_at < cutoff,
+            )
+            .with_for_update(skip_locked=True)
+            .all()
+        )
+        reclaimed_ids = [row.id for row in rows]
+        for row in rows:
+            row.sync_started_at = None
+            row.updated_at = now or utcnow()
+        db.commit()
+    return reclaimed_ids
+
+
+def _queue_config_ids(config_ids: list[int]) -> list[dict[str, Any]]:
+    from celery_tasks.tasks.iitk_tasks import run_iitk_config_sync_task
+
     queued = []
-    for config_id in ids:
+    for config_id in config_ids:
         task = run_iitk_config_sync_task.delay(config_id, False)
         queued.append({"config_id": config_id, "task_id": task.id})
-    return {"queued": queued, "count": len(queued)}
+    return queued
 
 
 def admin_context(db: Session, *, manager_user_id: int) -> dict[str, Any]:
@@ -305,6 +352,7 @@ def _collect_sessions(client: IITKClient, runtime: RuntimeConfig, *, full: bool)
         page_token = None
         for _ in range(1000):
             page = client.list_sessions(site=runtime.site_filter, limit=200, page_token=page_token, **item)
+            _touch_sync_heartbeat(runtime.id)
             result.update({row.session_id: row for row in page.sessions})
             page_token = page.next_page_token
             if not page_token:
@@ -315,7 +363,9 @@ def _collect_sessions(client: IITKClient, runtime: RuntimeConfig, *, full: bool)
 
 
 def _sync_session(client: IITKClient, runtime: RuntimeConfig, session_dto: IITKSessionDTO) -> dict[str, int]:
+    _touch_sync_heartbeat(runtime.id)
     inventory = client.list_images(session_dto.session_id)
+    _touch_sync_heartbeat(runtime.id)
     for image in inventory.images:
         if image.position not in POSITION_ORDER:
             raise IITKIntegrationError("IITK inventory contains an unsupported image position.")
@@ -332,6 +382,8 @@ def _sync_session(client: IITKClient, runtime: RuntimeConfig, session_dto: IITKS
                 downloaded[image.position] = content
             except Exception as exc:  # noqa: BLE001
                 download_errors.append(f"{image.position}: {str(sanitize_log_value(exc))[:300]}")
+            finally:
+                _touch_sync_heartbeat(runtime.id)
     result = _persist_session(runtime, session_dto, inventory, downloaded)
     result["images_failed"] = len(download_errors)
     if download_errors:
@@ -436,6 +488,10 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
         link.last_seen_at = now
         link.last_synced_at = now
         link.last_error = None
+        config = db.get(IITKApiProjectConfig, runtime.id)
+        if config and config.sync_started_at is not None:
+            config.sync_started_at = now
+            config.updated_at = now
         db.add_all([encounter, link])
         db.commit()
     return counts
@@ -639,6 +695,16 @@ def _finish_sync(config_id: int, *, result: dict | None = None, error: Exception
                 row.last_error = str(sanitize_log_value(error))[:1000]
             row.updated_at = utcnow()
             db.add(row)
+            db.commit()
+
+
+def _touch_sync_heartbeat(config_id: int) -> None:
+    with get_db_session() as db:
+        row = db.get(IITKApiProjectConfig, config_id)
+        if row and row.sync_started_at is not None:
+            now = utcnow()
+            row.sync_started_at = now
+            row.updated_at = now
             db.commit()
 
 

@@ -1,0 +1,4 @@
+{% set project_title = detail.project_title or '-' %}
+<span class="badge text-bg-light" title="{{ project_title }}">
+  {{ project_title[:75] }}{% if project_title|length > 75 %}&hellip;{% endif %}
+</span>

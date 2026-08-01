@@ -246,7 +246,9 @@ The supported administration surface is the selected project workspace under
 populated project**) and `api_token`. A token is required the first time the
 project is enabled; a blank token on later updates preserves the current
 secret. Disabling the flag retains the encrypted token and synchronization
-history so the connection can be re-enabled.
+history so the connection can be re-enabled. IITK target-readiness warnings
+are evaluated only for enabled IITK projects; ordinary projects do not show
+IITK configuration warnings.
 
 The service derives `project_upload_profile_id`, `encounter_set_type_id`, the
 default intake lab/hospital, and an unambiguous optional camera from the
@@ -352,8 +354,14 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
 
 The database-backed Celery Beat schedule runs at minute `30`, UTC hours
 `1-12`, which is exactly hourly from 07:00 through 18:00 IST. It dispatches
-one maintenance-queue task for every active project configuration and uses a
-two-hour stale-lock boundary to prevent overlapping project syncs.
+one maintenance-queue task for every active project configuration. A running
+sync refreshes its database heartbeat during pagination, inventory work, and
+each committed session. A separate maintenance-only check runs every five
+minutes and requeues only locks whose heartbeat has stopped for 15 minutes.
+This recovers worker/container interruptions without overlapping an active sync
+or adding requests during healthy operation. Outside 07:00 through 18:00 IST,
+the check clears a stale lock but defers its API work to the next scheduled
+business-hours dispatch.
 
 The retired `GET /admin/iitk` URL redirects to `GET /admin/upload-projects`.
 Imported records appear in the existing EncounterSet browser with an `IITK

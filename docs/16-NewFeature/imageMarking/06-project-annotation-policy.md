@@ -616,6 +616,187 @@ On reload, the user explicitly restores or discards the draft. A draft from a
 stale context is not silently applied. Successful submission clears it.
 Drafts do not synchronize between devices and are not server-side records.
 
+### 13.4 CVAT canvas assessment
+
+The CVAT `develop` branch was reviewed on 2026-08-01 as a possible replacement
+for the custom viewport. The reviewed module is
+[`cvat-canvas`](https://github.com/cvat-ai/cvat/tree/develop/cvat-canvas), not a
+deployment of the complete CVAT application.
+
+#### Capabilities that are relevant to this workbench
+
+`cvat-canvas` is a mature imperative TypeScript annotation engine. Its public
+API and internal handlers provide:
+
+- rectangle, polygon, polyline, point, ellipse, cuboid, skeleton, and mask
+  objects;
+- drawing, selection, activation, highlighting, focus, editing, and deletion
+  event lifecycles;
+- grouping, joining, merging, splitting, polygon slicing, and region
+  selection;
+- pan, zoom, rotation, fit-to-window, grid, snap, z-order, object opacity, and
+  label/group/instance color modes;
+- brush and eraser mask editing, plus polygon-add and polygon-subtract mask
+  operations;
+- positive/negative point and box interaction hooks suitable for assisted
+  annotation tools;
+- issue regions, locked/hidden objects, conflict highlighting, and read-only
+  editing controls; and
+- a CSS image-filter hook that can express browser brightness, contrast,
+  saturation, and similar presentation filters.
+
+Its explicit interaction modes and emitted events are particularly useful
+references for cancel behavior, tool switching, selection, edit completion,
+and prevention of conflicting simultaneous operations. These behaviors should
+inform the workbench state machine and frontend tests even though the renderer
+is not adopted.
+
+#### Rendering and mask architecture
+
+`cvat-canvas` is not a WebGL renderer. It uses SVG.js and SVG DOM elements for
+vector annotations. Its mask layer uses Fabric.js over a Canvas2D element.
+Image adjustment is a CSS filter on the background image rather than a shader
+pipeline.
+
+Mask instances are cropped to their occupied bounding rectangle and serialized
+as run-length encoded pixels followed by `left`, `top`, `right`, and `bottom`.
+This provides a deterministic box for a mask and is efficient for many compact
+objects. It also demonstrates the desired rule that a segmentation can produce
+its bounding box without a second independently editable box.
+
+The workbench must not adopt that representation unchanged. A large edited
+mask is decoded into a contiguous `ImageData`/canvas region during editing.
+There is no sparse full-resolution tile cache, dirty-tile upload contract, GPU
+texture painting, or worker-owned tile pipeline. The proposed 256 by 256 mask
+tiles therefore remain the authoritative workbench design. Run-length encoding
+may be evaluated as a per-tile compression option, but only if benchmarks show
+a benefit over PNG and the API continues to treat the tile as an opaque,
+checksummed payload.
+
+#### Integration and ownership concerns
+
+The module is not a React component or a neutral geometry library. React could
+host it through a lifecycle wrapper, but the application would need to adapt
+our DTOs to CVAT-shaped `frameData` and object-state objects. Those objects
+include CVAT concepts such as client IDs, label and group objects, frame
+numbers, sources, attributes, z-order, lock state, and skeleton elements.
+
+Direct adoption would therefore require an adapter or maintained fork while
+leaving the following responsibilities in this application:
+
+- project annotation policy resolution;
+- grade and selected-feature resolution;
+- feature-backed and project-defined class identity;
+- allowed-tool and localization enforcement;
+- project-class multiplicity validation;
+- image/encounter target ownership and linked-panel isolation;
+- normalized annotation persistence and mask-tile APIs;
+- grading workflow, comments, submission, consensus, and navigation; and
+- RBAC/ABAC, lab/project scope, CSRF, revision, and audit enforcement.
+
+CVAT tags are also not a substitute for the deferred project-configured image
+tags in this plan. Image-level label vocabulary and assignments are domain data
+outside the canvas renderer.
+
+#### Selective reuse and reduced-fork option
+
+Adoption is not all-or-nothing. The MIT license permits the project to copy,
+modify, and redistribute selected `cvat-canvas` components while retaining the
+required notices. A reduced fork is therefore a valid implementation candidate
+if it saves more interaction work than it adds in long-term maintenance.
+
+The intended selection boundary is:
+
+| Treatment | CVAT capability or component | Project treatment |
+|---|---|---|
+| Keep or adapt | Interaction modes, cancellation, activation, selection, edit handles, polygon editing, coordinate transforms, keyboard/event conventions | Convert to typed, renderer-neutral workbench services and tests where practical |
+| Keep if justified | Rectangle, ellipse, polygon, point, grouping, slicing, joining, merging, mask-to-box calculation, RLE utilities | Retain only capabilities enabled by the project tool vocabulary or required by near-term assisted annotation |
+| Remove | Video interpolation/tracking, cuboids, skeletons, frame-specific tracking state, CVAT issue UI, CVAT label/group/attribute models, and unused complex operations | Exclude from the production bundle and public workbench contract |
+| Replace | CVAT `frameData`, object states, persistence, tags, class vocabulary, permissions, workflow, and submission | Use this application's typed annotation-context, policy, normalized storage, grading services, and APIs |
+| Replace for production masks | Fabric.js/Canvas2D mask editing and whole cropped-mask lifecycle | Use PixiJS dirty GPU tiles, worker encoding, and the normalized mask-tile API |
+| Add | Pyramid/cone geometry, retinal filters, loupe, CDR/RDR measurement, IndexedDB recovery, project class multiplicity, linked grading panels, and grading controls | Implement as first-class workbench modules governed by the project contract |
+
+There are two technically viable levels of reuse:
+
+1. **Source-level extraction.** Port small, cohesive algorithms and interaction
+   semantics into our own typed modules. This gives the cleanest domain and
+   renderer boundary and is preferred for coordinate helpers, polygon editing,
+   cancellation rules, and mask-to-box/RLE utilities.
+2. **Reduced interaction-layer fork.** Start from a pinned `cvat-canvas`
+   revision, delete unsupported shape/workflow paths, wrap the remaining engine
+   behind our DTOs, and progressively replace its image and mask layers. This
+   can accelerate mature vector editing, but it creates a maintained fork and
+   requires careful separation between the SVG coordinate system and the PixiJS
+   camera.
+
+The reduced fork must expose only our workbench interface. Flask APIs and the
+database must never receive CVAT object states, client IDs, label objects, or
+mask payloads. Translation occurs at the frontend adapter boundary, and saved
+coordinates remain original-image pixel coordinates under the normalized
+annotation contract.
+
+Removal must be structural rather than merely hiding toolbar buttons. Unused
+handlers, state transitions, dependencies, CSS, events, and serialization paths
+must be excluded so they cannot enlarge the bundle or become accidental public
+behavior. Conversely, useful CVAT capabilities should not be copied merely
+because they exist; each retained component needs a current project use case,
+unit tests, license attribution, and an identified maintainer.
+
+#### Product and maintenance concerns
+
+- SVG DOM rendering is proven for interactive vectors but does not provide the
+  GPU image, mask, loupe, and measurement composition required by this plan.
+  Performance with 4K/8K retinal images, large masks, and hundreds of visible
+  objects would require a local benchmark rather than an assumption based on
+  the full CVAT product.
+- CSS image filters do not provide our versioned retinal-image shader contract
+  and make it harder to guarantee identical rendering and measurement-layer
+  isolation across browsers.
+- The mask editor is Canvas2D/Fabric-based and does not meet the dirty GPU-tile
+  or worker-offloaded encoding requirements.
+- The upstream package uses older SVG.js plugin APIs and obtains some
+  dependencies from the CVAT monorepo. A standalone build must prove that its
+  dependency graph, CSS, and assets can be isolated and upgraded safely.
+- CVAT primarily supports Chromium. Its published browser notes do not claim
+  Safari/WebKit support, which conflicts with a tablet-capable workbench if
+  reference devices include iPads.
+- The engine includes video tracking, cuboids, skeletons, complex object
+  operations, and other state that this release does not require. These paths
+  can be removed in a fork, but safely untangling shared handlers and state is
+  implementation work and must be measured rather than assumed trivial.
+- It does not provide the existing pyramid/cone annotation, retinal loupe,
+  CDR/RDR measurement, local IndexedDB recovery, or our grading-card behavior.
+- Following the upstream `develop` branch directly would expose grading to
+  upstream API and behavior changes. A pinned version or fork would still need
+  security, compatibility, and accessibility ownership within this project.
+
+The CVAT repository and `cvat-canvas` sources use the MIT license. Any copied
+or adapted implementation must preserve the required copyright and license
+notice and must be recorded in the application's third-party notices.
+
+#### Decision
+
+The complete `cvat-canvas` package and CVAT domain model are not selected for
+wholesale adoption. Selective source reuse and a reduced interaction-layer fork
+remain explicit candidates. The React application, our typed workbench DTOs,
+project policy, normalized persistence, and grading services remain fixed
+architectural boundaries.
+
+PixiJS/WebGL2 remains the production image, filter, loupe, measurement, and
+full-resolution mask renderer. The bounded prototype in Phase 4 will decide
+whether vector interaction should be implemented directly in PixiJS or
+accelerated with a pruned CVAT-derived SVG interaction layer above the same
+camera. A hybrid is acceptable only if it maintains one authoritative camera
+transform and passes coordinate, latency, cleanup, and accessibility tests.
+
+The prototype must compare the reduced CVAT-derived path with the direct PixiJS
+path on the same 4K and 8K fixtures. It must test brush latency, memory
+stability, vector-object load, zoom/pan frame time, mask round trips, pen/touch
+behavior, Safari on any required iPad, dependency isolation, React lifecycle
+cleanup, and the effort required to remove upstream-only code. The performance
+and workflow acceptance gates in this document still apply; passing a basic box
+or polygon demonstration is not sufficient to select the interaction layer.
+
 ## 14. Server Validation
 
 On save, the server verifies:
@@ -721,6 +902,10 @@ parity gates have passed.
 
 - Add Vite, React, TypeScript, PixiJS, frontend unit testing, and production
   manifest integration into Flask templates.
+- Run the bounded vector-interaction prototype comparing direct PixiJS with a
+  pinned, reduced CVAT-derived SVG layer; record benchmark results, retained
+  source boundaries, removed dependencies, license notices, and the selected
+  implementation before completing the production toolset.
 - Implement the common state store, IndexedDB recovery, GPU camera, tiled image
   renderer, shaders, vector tools, mask worker, undo/redo, loupe, and CDR/RDR.
 

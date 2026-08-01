@@ -133,7 +133,6 @@ def test_update_profile_replaces_existing_site_rows_without_unique_violation(db_
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[],
         ),
     )
@@ -184,7 +183,6 @@ def test_encounter_set_profile_requires_project_scoped_type(db_session, monkeypa
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -244,7 +242,6 @@ def test_encounter_set_profile_rejects_multiple_package_policies(db_session, mon
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type_one.id,
@@ -307,7 +304,6 @@ def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, mo
             default_is_mydriatic=False,
             automated_remidio_populated=False,
             allow_remidio_zip_encounter_set=True,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -386,7 +382,6 @@ def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, mo
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -468,7 +463,6 @@ def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monke
             default_is_mydriatic=False,
             automated_remidio_populated=False,
             allow_iitk_zip_encounter_set=True,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -547,7 +541,6 @@ def test_generic_encounter_set_profile_does_not_allow_iitk_zip(db_session, monke
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -625,7 +618,6 @@ def test_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -693,7 +685,6 @@ def test_amd_report_triggered_image_policy_requires_matching_remidio_ocr_linkage
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -761,7 +752,6 @@ def test_encounter_set_profile_accepts_positive_plus_negative_controls_policy(db
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -830,7 +820,6 @@ def test_encounter_set_profile_rejects_invalid_positive_control_ratio(db_session
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -913,14 +902,6 @@ def test_encounter_set_profile_ignores_retired_profile_ai_workflow_input(db_sess
             allow_non_mydriatic=True,
             default_is_mydriatic=False,
             automated_remidio_populated=False,
-            ai_workflows=[
-                admin_service.AIWorkflowInput(
-                    disease_id=glaucoma_scheme.id,
-                    ai_model_id=ai_model.id,
-                    upload_kind=UPLOAD_KIND_ENCOUNTER_SET,
-                    auto_inference_policy="remidio_glaucoma_report_present",
-                )
-            ],
             encounter_set_configs=[
                 EncounterSetProfileInput(
                     encounter_set_type_id=encounter_set_type.id,
@@ -945,4 +926,4 @@ def test_encounter_set_profile_ignores_retired_profile_ai_workflow_input(db_sess
 
     assert result.success is True
     profile = db_session.query(UploadProfile).filter_by(name="Encounter AI profile").one()
-    assert profile.ai_workflows == []
+    assert not hasattr(profile, "ai_workflows")

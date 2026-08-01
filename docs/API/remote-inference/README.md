@@ -26,7 +26,7 @@ Form requests use repeated `automated_remote_inference_workflow` values as `dise
 
 JSON requests use an `automated_remote_inference_workflows` array of objects with those six fields. Unsupported disease/upload paths are rejected. Submitting no rows deactivates the project's automated rules.
 
-The old Upload Profile `ai_workflows` editor, reusable `/admin/remote-inference-policies` page, and their APIs were removed without redirects or runtime fallback. Migration `e9f0a1b2c3d4` copies effective project-policy rules that match current project profile capabilities, then deactivates all legacy policy assignments and Upload Profile AI rows for audit retention.
+The old Upload Profile `ai_workflows` editor, reusable `/admin/remote-inference-policies` page, and their APIs were removed without redirects or runtime fallback. Migration `e9f0a1b2c3d4` copies effective project-policy rules that match current project profile capabilities. Follow-up migration `f0a1b2c3d4e5` permanently drops all four retired legacy configuration tables.
 
 Manual migration checklist for old Upload Profile rows:
 
@@ -103,7 +103,7 @@ Validation errors return HTTP `400`; missing projects return `404`; insufficient
 
 `GET /uploads/encountersets/wadhwani_inference`
 
-The project selector includes active projects that have an active project-level Wadhwani Glaucoma `encounter_set` manual workflow and an EncounterSet in the caller's upload scope. The submission route repeats the project workflow check. Upload Profile AI workflow bindings and Automated Remote Inference Policy assignments do not grant manual submission permission.
+The project selector includes active projects that have an active project-level Wadhwani Glaucoma `encounter_set` manual workflow and an EncounterSet in the caller's upload scope. The submission route repeats the project workflow check. Automated project rules do not grant manual submission permission.
 
 ## Resume an interrupted EncounterSet batch
 

@@ -2861,7 +2861,6 @@ from upload_profiles.models import (  # noqa: E402,F401
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
     UploadProfile,
-    UploadProfileAIWorkflow,
     UploadProfileArea,
     UploadProfileCamera,
     UploadProfileDisease,

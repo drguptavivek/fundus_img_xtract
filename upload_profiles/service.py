@@ -73,7 +73,6 @@ class UploadProfileDTO:
     camera_ids: frozenset[int]
     area_ids: frozenset[int]
     upload_kinds: frozenset[str]
-    ai_workflows: tuple[dict[str, Any], ...]
     encounter_set_type_ids: frozenset[int]
     encounter_set_types: tuple[dict[str, Any], ...]
     task_prioritization_json: dict[str, Any]
@@ -498,9 +497,6 @@ def _profile_to_dto(
     assignment_id: int | None,
 ) -> UploadProfileDTO:
     disease_names = {row.disease_id: row.disease.name for row in profile.diseases}
-    # Automated inference is project-owned; retained as an empty DTO field until
-    # older mobile clients no longer deserialize this optional property.
-    ai_workflows: tuple[dict[str, Any], ...] = ()
     return UploadProfileDTO(
         profile_id=profile.id,
         project_upload_profile_id=project_upload_profile_id,
@@ -519,7 +515,6 @@ def _profile_to_dto(
         camera_ids=frozenset(row.camera_id for row in profile.cameras),
         area_ids=frozenset(row.area_id for row in profile.areas),
         upload_kinds=frozenset(row.upload_kind for row in profile.upload_kinds),
-        ai_workflows=ai_workflows,
         encounter_set_type_ids=frozenset(row.encounter_set_type_id for row in profile.encounter_set_types if row.active),
         encounter_set_types=tuple(
             _encounter_set_type_payload(row)

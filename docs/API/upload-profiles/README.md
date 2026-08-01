@@ -123,15 +123,11 @@ Profile create/update fields:
   - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
   - `remidio_amd_report_present` requires `remidio_ocr_linkage = amd`
   - `remidio_glaucoma_report_present` requires `remidio_ocr_linkage = glaucoma`
-- `ai_workflows` repeated values in `disease_id:ai_model_id:upload_kind` format. A fourth part may be supplied as `disease_id:ai_model_id:upload_kind:auto_inference_policy`; omitted policy defaults to `always` for backward compatibility. Supported policies are `always`, `never`, and `remidio_glaucoma_report_present`. EncounterSet remote inference should now be configured at project level with Remote Inference Policies; upload-profile AI workflows remain as a legacy fallback.
-  - For `direct_image`, `pregraded`, and `remidio`, the disease and upload kind must be enabled on the profile.
-  - For `encounter_set`, the disease must be one of the selected EncounterSet package image-level grading schemes. Project Remote Inference Policies decide whether image-scoped AI inference tasks are created on image receipt, on report receipt, after verification, or manual-only. Human grading tasks are still created after verification.
-  - For EncounterSet Wadhwani workflows, `remidio_glaucoma_report_present` is satisfied by glaucoma Remidio report/OCR evidence or by disc-focused Remidio image metadata such as `fundus_field`, `image_segment`, or `focus`. Glaucoma report/OCR evidence queues disc-focused and macula-focused images; when disc-focused image metadata is the only glaucoma signal, only those disc-focused images are queued.
 - `allow_mydriatic`, `allow_non_mydriatic`, `default_is_mydriatic` checkbox-style booleans, used only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `camera_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
 - `area_ids` repeated integers, required only when `direct_image`, `pregraded`, or `remidio` is enabled
 
-Duplicate copies profile options and workflow settings, but not project mappings or user assignments.
+Duplicate copies profile options and grading settings, but not project mappings or user assignments.
 
 Project profile enablement fields for `/api/upload-profiles/projects/<project_id>/profiles`:
 

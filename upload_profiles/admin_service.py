@@ -65,14 +65,6 @@ class InvestigatorCreateInput:
 
 
 @dataclass(frozen=True)
-class AIWorkflowInput:
-    disease_id: int
-    ai_model_id: int
-    upload_kind: str
-    auto_inference_policy: str = "always"
-
-
-@dataclass(frozen=True)
 class EncounterSetProfileInput:
     encounter_set_type_id: int
     image_grading_scheme_ids: list[int]
@@ -118,7 +110,6 @@ class UploadProfileInput:
     allow_non_mydriatic: bool
     default_is_mydriatic: bool
     automated_remidio_populated: bool
-    ai_workflows: list[AIWorkflowInput]
     encounter_set_configs: list[EncounterSetProfileInput]
     task_prioritization_json: dict[str, Any] | None = None
     description: str | None = None
@@ -621,9 +612,6 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
         )
         for config in sorted(encounter_set_configs.values(), key=lambda item: item.encounter_set_type_id)
     ]
-    # Profile-owned AI rules are retired. Clearing the relationship preserves
-    # old rows only until this profile is next edited.
-    profile.ai_workflows = []
     return None
 
 
@@ -879,7 +867,6 @@ def _clear_profile_children(db, profile: UploadProfile) -> None:
     profile.areas = []
     profile.upload_kinds = []
     profile.encounter_set_types = []
-    profile.ai_workflows = []
     db.flush()
 
 

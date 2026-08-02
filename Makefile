@@ -69,6 +69,15 @@ mobile-pwa-build: ## Build Flutter PWA into static/mobile-pwa for Flask /mobile/
 	mkdir -p $(MOBILE_PWA_DIR)
 	cp -R apps/fundus_glaucoma_mobile/build/web/. $(MOBILE_PWA_DIR)/
 
+.PHONY: grading-workbench-build
+grading-workbench-build: ## Build the React/PixiJS grading workbench assets.
+	npm run build:grading-workbench
+
+.PHONY: grading-workbench-test
+grading-workbench-test: ## Run workbench frontend tests and TypeScript checks.
+	npm run test:grading-workbench
+	npm run typecheck:grading-workbench
+
 .PHONY: rebuild-builders
 rebuild-builders: ## Build venv builder images.
 	$(COMPOSE) build $(BUILDERS)

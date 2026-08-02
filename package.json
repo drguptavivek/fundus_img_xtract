@@ -1,17 +1,32 @@
 {
   "name": "fundus-img-xtract",
   "private": true,
+  "dependencies": {
+    "pixi.js": "8.19.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
   "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@types/node": "^24.7.2",
+    "@vitejs/plugin-react": "6.0.5",
     "bootstrap": "^5.3.3",
-    "sass": "^1.91.0"
+    "jsdom": "30.0.1",
+    "sass": "1.102.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
   },
   "scripts": {
     "build:css": "sass --no-source-map --style=compressed --load-path=node_modules/bootstrap/scss assets/scss/bootstrap-theme.scss static/css/bootstrap.min.css",
     "build:css:light": "sass --no-source-map --style=compressed --load-path=node_modules/bootstrap/scss assets/scss/bootstrap-theme-light.scss static/css/bootstrap.light.min.css",
     "build:css:dark": "sass --no-source-map --style=compressed --load-path=node_modules/bootstrap/scss assets/scss/bootstrap-theme-dark.scss static/css/bootstrap.dark.min.css",
     "build:css:all": "npm run build:css && npm run build:css:light && npm run build:css:dark",
-    "watch:css": "sass --style=compressed --load-path=node_modules/bootstrap/scss --watch assets/scss/bootstrap-theme.scss:static/css/bootstrap.min.css"
+    "watch:css": "sass --style=compressed --load-path=node_modules/bootstrap/scss --watch assets/scss/bootstrap-theme.scss:static/css/bootstrap.min.css",
+    "build:grading-workbench": "vite build --config vite.grading-workbench.config.mts",
+    "test:grading-workbench": "vitest run --config vitest.grading-workbench.config.mts",
+    "typecheck:grading-workbench": "tsc --project tsconfig.grading-workbench.json --noEmit"
   },
   "version": "1.0.0",
   "description": "To extract data from remedio camera zip files Uses PyTesseract, pyUPDF",

@@ -7,7 +7,17 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Dual Grading Task</h3>
-  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
+  <div class="d-flex gap-2">
+    {% if not linked_mode %}
+    <a
+      class="btn btn-sm btn-outline-primary"
+      href="{{ url_for('grading.standalone_task_workbench', task_uuid=task.uuid, slot=current_slot) }}"
+    >
+      Open standalone viewer
+    </a>
+    {% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
+  </div>
 </div>
 
 <!-- Task Information Row -->

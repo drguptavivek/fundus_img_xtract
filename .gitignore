@@ -58,7 +58,9 @@ build/
 
 node_modules/**/*
 package-lock.json
+!package-lock.json
 yarn.lock
+/static/grading-workbench/
 
 /backups/**/*
 

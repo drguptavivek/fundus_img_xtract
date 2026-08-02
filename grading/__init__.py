@@ -45,6 +45,7 @@ from .encounter_set_grading import register_routes as register_encounter_set_rou
 from .encounter_set_package_grading import register_routes as register_encounter_set_package_routes
 from .regrade_tasks import register_routes as register_regrade_task_routes
 from .wadhwani_glaucoma_inference import register_routes as register_wadhwani_glaucoma_inference_routes
+from .workbench import register_routes as register_workbench_routes
 
 # Register routes with the blueprint
 bp.add_url_rule("/", view_func=index, methods=["GET"])
@@ -67,3 +68,4 @@ register_encounter_set_routes(bp)
 register_encounter_set_package_routes(bp)
 register_regrade_task_routes(bp)
 register_wadhwani_glaucoma_inference_routes(bp)
+register_workbench_routes(bp)

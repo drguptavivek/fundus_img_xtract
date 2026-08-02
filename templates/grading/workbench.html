@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>Grading Workbench</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    {% for stylesheet in workbench_styles %}
+      <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet) }}">
+    {% endfor %}
+  </head>
+  <body class="grading-workbench-page">
+    <main
+      id="grading-workbench-root"
+      data-workspace-url="{{ workspace_url }}"
+      data-task-ref="{{ task_uuid }}"
+      data-slot="{{ slot }}"
+    >
+      <div class="grading-workbench-bootstrap-state" role="status">
+        Loading grading workbench…
+      </div>
+    </main>
+    <script type="module" src="{{ url_for('static', filename=workbench_script) }}"></script>
+  </body>
+</html>

@@ -1,6 +1,20 @@
 # syntax=docker/dockerfile:1.6
 
 # ======================================================================
+# GRADING WORKBENCH FRONTEND BUILDER
+# ======================================================================
+FROM node:24-alpine AS grading-workbench-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY frontend/grading-workbench ./frontend/grading-workbench
+COPY tsconfig.grading-workbench.json vite.grading-workbench.config.mts ./
+RUN npm run build:grading-workbench
+
+# ======================================================================
 # COMMON BASE — shared runtime deps + uv
 # ======================================================================
 FROM python:3.13.9-slim AS common-base
@@ -73,6 +87,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
 # Application code
 # ======================================================================
 COPY . .
+COPY --from=grading-workbench-builder /app/static/grading-workbench /app/static/grading-workbench
 
 RUN mkdir -p \
         /app/logs \
@@ -115,6 +130,7 @@ WORKDIR /app
 FROM common-base AS web-base
 
 COPY . .
+COPY --from=grading-workbench-builder /app/static/grading-workbench /app/static/grading-workbench
 
 RUN mkdir -p \
         /app/logs \

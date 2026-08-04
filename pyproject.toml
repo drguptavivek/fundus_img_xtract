@@ -42,6 +42,7 @@ web = [
     "typing-extensions==4.15.0",
     "werkzeug==3.1.8",
     "wtforms==3.2.1",
+    "tomli-w==1.2.0",
     "beautifulsoup4==4.14.3",
     "openpyxl==3.1.5",
     "requests==2.33.1",

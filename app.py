@@ -61,6 +61,13 @@ def _parse_cors_origins() -> list[str]:
 
 
 def _configure_base_settings(app: Flask) -> None:
+    login_disabled = _env_bool("LOGIN_DISABLED", "false")
+    flask_environment = os.getenv("FLASK_ENV", "development").strip().lower()
+    if login_disabled and flask_environment not in {"development", "test", "testing"}:
+        raise RuntimeError(
+            "LOGIN_DISABLED is an unsafe override and may only be enabled in a development or test environment."
+        )
+    app.config["LOGIN_DISABLED"] = login_disabled
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))
     app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
     app.config["BASE_URL"] = (get_env("BASE_URL") or "").rstrip("/")
@@ -586,10 +593,18 @@ def _register_auth(app: Flask) -> None:
     login_manager.login_view = "auth.login"
 
 
+def _register_login_disabled_override(app: Flask) -> None:
+    from auth.login_disabled import register_login_disabled_override
+
+    register_login_disabled_override(app)
+
+
 def _register_login_guard(app: Flask) -> None:
     @app.before_request
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
+        if app.config.get("LOGIN_DISABLED"):
+            return None
         path = request.path or "/"
 
         # Allow routes that handle their own authentication (e.g. via JWT)
@@ -1001,6 +1016,7 @@ def create_app():
 
     _register_blueprints(app)
     _register_auth(app)
+    _register_login_disabled_override(app)
     _register_login_guard(app)
     _register_stack_trace_handlers(app)
     _register_error_handlers(app)

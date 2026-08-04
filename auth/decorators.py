@@ -81,6 +81,8 @@ def reauth_required(timeout=600):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            if current_app.config.get("LOGIN_DISABLED"):
+                return f(*args, **kwargs)
             if not current_user.is_authenticated:
                 return current_app.login_manager.unauthorized()
 

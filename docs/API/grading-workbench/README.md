@@ -1,9 +1,51 @@
 # Standalone Grading Workbench
 
-This route family provides the first runnable slice of the standalone React and
-PixiJS grading workbench. The current release is read-only: it resolves one
-ordinary dual-grading task and displays its secured image. Grade selection,
-annotation mutation, and submission are not enabled yet.
+This route family provides the interactive foundation of the standalone React
+and PixiJS grading workbench. It resolves the secured image set, every related
+grading panel, each panel's classification and feature vocabulary, existing
+grader data, and the server-authoritative annotation policy. The client
+supports grading controls, linked-panel navigation, local annotation editing,
+filters, loupe, undo/redo, and IndexedDB draft recovery. Normalized annotation
+persistence and server submission are not enabled yet, so the Submit action is
+explicitly disabled and work remains local to the browser.
+
+Annotation editing has an explicit Pan/Select mode boundary. Pan, `V`, and
+`Escape` clear the current annotation selection and make dragging pan the image.
+In Select mode, unlocked annotations can be moved and resized; segmentation
+annotations can also be rotated, and brush masks can be edited with an eraser.
+Bounding boxes intentionally do not rotate. Hovering or selecting an annotation
+shows its compact duplicate, lock/unlock, rotate, move, edit, and delete controls.
+Canvas badges use the same stable ordinal shown in the compact annotation list,
+whose header can hide or show all annotations for the current image and panel.
+
+Workbench typography uses a fluid root scale: it preserves the compact desktop
+layout at ordinary widths and increases all rem-based labels on high-resolution
+wide displays. Muted and secondary text retain visibly distinct hierarchy while
+remaining legible against the black workspace background.
+
+Saved viewer presets use one active slot at a time. A small corner dot indicates
+that a slot contains saved data; only the applied slot receives the active
+underline. Right-clicking a populated slot (or pressing `Shift+F10`) opens its
+Fine tune action. Fine tune temporarily replaces the grading inspector so its
+controls can be adjusted while the full image remains visible. It previews and
+persists overall brightness, contrast, and saturation plus independent
+RGB-channel luminance and saturation. Cancel restores the exact pre-tuning
+viewer state, and none of these presentation-only adjustments changes source
+pixels.
+
+`N` is the protected normal/capture-level view rather than a user preset slot.
+It restores original RGB with neutral presentation controls. Every workspace
+and every newly selected encounter image opens at `N`; saved presets never
+carry across automatically. Zoom, pan, and loupe remain independent session
+controls and are neither stored in presets nor changed by selecting `N`.
+
+Fine Tune also shows logarithmic RGB/luminance histograms calculated from a
+bounded browser-decoded copy of the current image. It overlays the effective
+black and white window markers and active-channel P1, median, and P99 values;
+the histogram is neither uploaded nor persisted. See the
+[Grading Workbench Image Filters](../../16-NewFeature/imageMarking/07-workbench-image-filters.md)
+for the mode definitions, window/gamma recipe, shader order, and calibration
+limitations.
 
 ## Page route
 
@@ -37,7 +79,7 @@ submitting additional identifiers. GET requests do not require a CSRF token.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "context_revision": "64-character SHA-256 revision",
   "target": {
     "type": "task",
@@ -54,11 +96,61 @@ submitting additional identifiers. GET requests do not require a CSRF token.
     "uuid": "image-uuid",
     "source": "encounter_file",
     "url": "/media/img/image-uuid",
-    "filename": "fundus.jpg"
+    "filename": "fundus.jpg",
+    "position": null
+  },
+  "images": [
+    {
+      "uuid": "image-uuid",
+      "source": "encounter_file",
+      "url": "/media/img/image-uuid",
+      "filename": "fundus.jpg",
+      "position": null
+    }
+  ],
+  "active_image_uuid": "image-uuid",
+  "panels": [
+    {
+      "id": "task:task-uuid",
+      "task_uuid": "task-uuid",
+      "disease": { "id": 3, "name": "Glaucoma" },
+      "grading_scope": "image",
+      "target_level": "image",
+      "state": "pending",
+      "read_only": false,
+      "read_only_reason": null,
+      "grades": [
+        {
+          "id": 21,
+          "impression": "Referable glaucoma",
+          "display_order": 2,
+          "is_active": true,
+          "is_ungradable": false,
+          "guidelines": null,
+          "features": [
+            { "id": 87, "sr_no": 1, "label": "Disc haemorrhage" }
+          ]
+        }
+      ],
+      "existing_grade": null
+    }
+  ],
+  "annotation_context": {
+    "policy_source": "non_project_default",
+    "project_id": null,
+    "enabled": true,
+    "revision": 1,
+    "enabled_tools": ["box", "rect", "polygon", "brush_mask", "ellipse", "pyramid"],
+    "default_feature_policy": {
+      "localization": "box_or_segmentation",
+      "preferred_tool": "box",
+      "allowed_tools": ["box", "rect", "polygon", "brush_mask", "ellipse", "pyramid"]
+    },
+    "project_classes": []
   },
   "capabilities": {
     "view": true,
-    "annotate": false,
+    "annotate": true,
     "submit": false
   },
   "read_only_reasons": [
@@ -70,6 +162,33 @@ submitting additional identifiers. GET requests do not require a CSRF token.
 `image.source` is one of `encounter_file`, `direct_image`, or
 `encounter_set_image`. The image URL remains protected by the normal media
 route authorization and rate limits.
+
+`images` contains the ordered image strip for the resolved target. Ordinary
+tasks contain one image; EncounterSet/package workspaces contain all visible
+set images, or the encounter's ordinary image files when no set images exist.
+
+`panels` keeps linked disease vocabularies separate. For an EncounterSet
+package it includes its image-scoped panels before its encounter-scoped panels.
+Each panel independently reports its disease, grading target level, active
+grades/features, read-only state, and the current user's existing grade. The
+client must not merge features between panels.
+
+`capabilities.annotate` reports whether the resolved policy permits local
+annotation creation. `capabilities.submit` remains `false` until the normalized
+annotation and atomic grading submission APIs are available.
+Non-project targets receive the versioned all-tools fallback shown above.
+Project-backed targets return their saved project policy, or an explicitly
+disabled project context when the policy is absent or disabled. The context
+revision changes when the applied policy revision changes.
+
+The same resolved policy is available without the rest of the workspace DTO:
+
+```http
+GET /api/grading-tasks/{task_uuid}/annotation-context?slot={slot}
+```
+
+See the [Project Annotation Policy API](../project-annotation-policy/README.md)
+for its response and administration contract.
 
 Responses include `Cache-Control: no-store, private`.
 
@@ -95,3 +214,14 @@ make grading-workbench-build
 Production Docker builds compile the frontend in the dedicated
 `grading-workbench-builder` stage and copy the manifest and hashed assets into
 the web image.
+
+The standalone shell intentionally does not load Bootstrap. Its responsive
+layout supports desktop and tablet grading, while phone-sized viewports receive
+an explicit editing guard. Drafts are saved in IndexedDB under the resolved
+target and context revision; a stale or recovered draft is never silently
+submitted to the server.
+
+The entrypoint imports `pixi.js/unsafe-eval` before renderer initialization.
+Despite its name, this module installs Pixi's static synchronization fallbacks
+so the workbench operates under the application's strict CSP without adding
+`unsafe-eval` to `script-src`.

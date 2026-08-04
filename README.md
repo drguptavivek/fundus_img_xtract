@@ -222,7 +222,9 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Policy and implementation plan for package-based EncounterSet grading after verification
 - [EncounterSet Task Creation](docs/04-Grade/encounter_set_task_creation.md) - Verification-time creation rules for EncounterSet grading packages and image/encounter tasks
 - [Project Annotation Policy and GPU Grading Workbench](docs/16-NewFeature/imageMarking/06-project-annotation-policy.md) - Approved React, TypeScript, PixiJS, and WebGL2 grading-workbench plan with project-resolved tools, normalized annotations, and full-resolution segmentation masks
+- [Grading Workbench Image Filters](docs/16-NewFeature/imageMarking/07-workbench-image-filters.md) - Implemented frontend RGB histograms, limited N/E/RF/RF+ clinical views, protected shadow lift, WebGL transform order, preset controls, and calibration boundaries
 - [Standalone Grading Workbench API](docs/API/grading-workbench/README.md) - Authenticated task workspace DTO, standalone React/PixiJS page, build integration, and current read-only foundation scope
+- [Project Annotation Policy API](docs/API/project-annotation-policy/README.md) - Project-scoped tool, feature-default, ordered annotation-class configuration, task resolution, and JSON/TOML schema export contract
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

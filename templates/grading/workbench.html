@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark light">
+    <meta name="color-scheme" content="dark">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Grading Workbench</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fa_7.0.1.all.min.css') }}">
     {% for stylesheet in workbench_styles %}
       <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet) }}">
     {% endfor %}

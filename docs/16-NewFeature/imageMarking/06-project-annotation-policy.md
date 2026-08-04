@@ -2,6 +2,16 @@
 
 Status: Approved implementation plan
 
+Current implementation status (2026-08-03): the project policy domain/API,
+project administration UI, schema export, annotation-context resolution, and
+schema-v2 grading-workbench read API are implemented. The standalone React and
+PixiJS client now provides linked and EncounterSet panel navigation,
+classification/feature controls, policy-resolved classes and tools, vector and
+brush draft creation, annotation inspection/edit/delete, filters, loupe,
+undo/redo, and IndexedDB recovery. Server submission remains disabled until
+the normalized annotation/mask persistence and shared atomic grading commands
+specified in Phases 2, 3, and 5 are complete.
+
 ## 1. Purpose
 
 Define which annotation tools and annotation classes are available within a
@@ -21,7 +31,11 @@ The first public release covers:
 - choosing the annotation tools available in that project;
 - applying a default localization policy to grading-feature-backed classes;
 - configuring project-defined annotation classes;
+- ordering project-defined classes in the grading UI;
 - allowing or disallowing multiple instances for each project-defined class;
+- exporting the project annotation and classification schema as JSON or TOML;
+- applying the explicit all-tools, feature-class-only fallback to images that
+  do not belong to a project;
 - resolving the effective annotation palette for a grading task or linked
   grading panel;
 - validating submitted annotations against the resolved project policy;
@@ -65,7 +79,7 @@ responsibilities:
 
 ```text
 Project Annotation Policy
-  tools + feature defaults + feature overrides + project classes
+  tools + feature defaults + project classes
                               +
 Active Grading Context
   task/panel -> grading scheme -> selected grade -> selected features
@@ -87,8 +101,13 @@ The annotation policy answers only:
 - whether annotation is enabled for the project;
 - which drawing tools are available;
 - how grading features may be localized;
-- whether a particular grading feature overrides the project default; and
 - which additional project-defined classes are available.
+
+Images that do not belong to a project use a separate system fallback rather
+than an inferred project policy. The fallback enables every supported
+annotation tool, exposes no project-defined classes, and permits multiple
+instances of grading-feature-backed classes. It does not create a default
+project or a set of default classes.
 
 There is no disease identifier on the project annotation policy. Disease and
 grading-scheme scope are obtained from the active grading task or linked panel.
@@ -112,8 +131,7 @@ Rules:
   instances;
 - multiplicity is not configurable for grading features;
 - the project feature default controls allowed localization and preferred
-  tool; and
-- a project may override tools or localization for a specific grading feature.
+  tool.
 
 Selecting a feature is an image- or grading-target-level assertion that the
 finding is present. Drawing geometry localizes one or more instances of that
@@ -127,9 +145,11 @@ A project may define classes that are not grading features, such as
 
 Rules:
 
-- each class has a stable snake-case key and a display label;
+- each class has a stable snake-case key;
 - the class is owned by the project annotation policy;
-- the class declares its allowed localization and tools;
+- the class declares its localization and inherits project-level tools;
+- the class has a non-negative `display_order` controlling its position in the
+  grading UI;
 - `multiple_instances` is configurable for each class;
 - project-defined classes are not inferred from a disease or grading-scheme
   name; and
@@ -143,13 +163,16 @@ The first release uses stable tool keys:
 | Tool key | Purpose | Authoritative geometry |
 |---|---|---|
 | `box` | Draw and resize an axis-aligned bounding box | Pixel-space box |
+| `rect` | Segment a rectangular region | Pixel-space rectangular segmentation |
 | `polygon` | Draw or edit a closed outline | Pixel-space polygon |
 | `brush_mask` | Paint or erase a segmented region | Pixel-space/grid mask |
 | `ellipse` | Draw and resize an ellipse | Ellipse plus enclosing ROI |
 | `pyramid` | Draw the existing cone-like shape | Polygon plus enclosing ROI |
 
-The policy describes allowed user-facing tools. The storage service continues
-to validate the resulting geometry independently.
+`box` is exclusively the bounding-box tool. `rect`, `polygon`, `brush_mask`,
+`ellipse`, and `pyramid` are segmentation tools. Tools are enabled at project
+level and are not repeated on individual project-class rows. The storage
+service continues to validate the resulting geometry independently.
 
 ### 5.1 Localization policy
 
@@ -197,7 +220,7 @@ projected into the original image's pixel coordinate space.
 
 Empty segmentation does not have a valid bounding box and is incomplete.
 
-## 6. Multiple-Instance Rules
+## 6. Project-Class Instance Rules
 
 Multiplicity depends on the source of the class.
 
@@ -221,47 +244,43 @@ A single brush mask may contain disconnected painted regions while still
 being one annotation instance. Multiple instances mean independently
 selectable and editable annotation objects, not merely disconnected pixels.
 
+Multiplicity is enforced in both the workbench and the server. For a
+single-instance class, the workbench disables add-another and duplicate
+actions after the first active instance exists. Selecting the class again
+selects its existing instance. The server independently rejects a submission
+containing more than one active instance for the class, including submissions
+from a stale or modified browser.
+
 ## 7. Configuration Contract
 
 An illustrative resolved configuration is:
 
 ```json
 {
+  "policy_source": "project",
   "project_id": 7,
   "enabled": true,
   "revision": 1,
-  "enabled_tools": ["box", "polygon", "brush_mask"],
+  "enabled_tools": ["box", "rect", "polygon", "brush_mask"],
   "default_feature_policy": {
     "localization": "box_or_segmentation",
     "preferred_tool": "box",
-    "allowed_tools": ["box", "polygon", "brush_mask"]
+    "allowed_tools": ["box", "rect", "polygon", "brush_mask"]
   },
-  "feature_overrides": [
-    {
-      "grading_feature_id": 101,
-      "localization": "segmentation",
-      "preferred_tool": "polygon",
-      "allowed_tools": ["polygon", "brush_mask"]
-    }
-  ],
   "project_classes": [
     {
       "id": 21,
       "key": "iris",
-      "label": "Iris",
       "localization": "segmentation",
-      "preferred_tool": "polygon",
-      "allowed_tools": ["polygon"],
+      "display_order": 10,
       "multiple_instances": false,
       "active": true
     },
     {
       "id": 22,
       "key": "lesion",
-      "label": "Lesion",
       "localization": "box_or_segmentation",
-      "preferred_tool": "box",
-      "allowed_tools": ["box", "polygon", "brush_mask"],
+      "display_order": 20,
       "multiple_instances": true,
       "active": true
     }
@@ -269,8 +288,33 @@ An illustrative resolved configuration is:
 }
 ```
 
-`multiple_instances` is deliberately absent from `default_feature_policy` and
-`feature_overrides` because grading features always permit multiple instances.
+`multiple_instances` is configured independently for every project-defined
+class. Project classes do not carry per-class tool lists or preferred tools.
+
+For an image whose resolved `project_id` is `null`, the server returns the
+versioned non-project fallback instead:
+
+```json
+{
+  "policy_source": "non_project_default",
+  "project_id": null,
+  "enabled": true,
+  "revision": 1,
+  "enabled_tools": ["box", "rect", "polygon", "brush_mask", "ellipse", "pyramid"],
+  "default_feature_policy": {
+    "localization": "box_or_segmentation",
+    "preferred_tool": "box",
+    "allowed_tools": ["box", "rect", "polygon", "brush_mask", "ellipse", "pyramid"]
+  },
+  "project_classes": []
+}
+```
+
+The non-project fallback revision versions the system contract so a future
+change invalidates stale workbench contexts and drafts. Its class palette is
+limited to grading-feature-backed classes resolved from the selected grade.
+Those classes retain the fixed system rule that multiple instances are always
+allowed.
 
 ## 8. Runtime Resolution
 
@@ -307,6 +351,23 @@ ambiguous shared list.
 Project tools and project-defined classes may be shared, while feature-backed
 annotations retain their originating task/panel context.
 
+### 8.5 Images without a project
+
+When the authoritative image or encounter target has no project association,
+the resolver applies the versioned `non_project_default` configuration from
+Section 7. The resolver does not attempt to infer a project from the disease,
+lab unit, uploader, upload date, or filesystem folder.
+
+This rule is intentionally distinct from a project-backed target whose policy
+is absent or disabled:
+
+| Resolved target | Annotation behavior |
+|---|---|
+| `project_id` is null | All supported tools; grading-feature classes only; multiple instances allowed |
+| Project exists, policy absent | Annotations unavailable |
+| Project exists, policy disabled | Annotations unavailable |
+| Project exists, policy enabled | Tools and classes resolved from that project policy |
+
 ## 9. Persistence
 
 ### 9.1 `project_annotation_policies`
@@ -329,62 +390,41 @@ annotations retain their originating task/panel context.
 - optional `settings_json`
 - unique `(policy_id, tool_key)`
 
-### 9.3 `project_annotation_feature_overrides`
-
-- `id`
-- `policy_id`
-- `grading_feature_id`
-- `localization`
-- `preferred_tool_key`
-- `active`
-- unique `(policy_id, grading_feature_id)`
-
-There is no multiplicity column on feature overrides.
-
-### 9.4 `project_annotation_feature_override_tools`
-
-- `feature_override_id`
-- `tool_key`
-- unique `(feature_override_id, tool_key)`
-
-### 9.5 `project_annotation_classes`
+### 9.3 `project_annotation_classes`
 
 - `id`
 - `policy_id`
 - `key`
-- `label`
 - `localization`
-- `preferred_tool_key`
+- `display_order`
 - `multiple_instances`
 - `active`
 - timestamps and audit fields
 - unique active key within a policy
 
-### 9.6 `project_annotation_class_tools`
-
-- `project_annotation_class_id`
-- `tool_key`
-- unique `(project_annotation_class_id, tool_key)`
-
 Published/saved annotations must retain the policy revision and class label
 snapshot that applied when they were created. Deactivating a class or tool must
 not delete or reinterpret historical annotations.
 
-### 9.7 `annotation_sets`
+### 9.4 `annotation_sets`
 
 An annotation set is the normalized annotation owner for one submitted grade.
 
 - UUID primary key;
 - exactly one of `grade_id` or `intra_rater_grade_id` is non-null;
 - one set per owning grade;
-- schema version and applied policy revision;
+- schema version, policy source, and applied policy revision;
 - timestamps; and
 - a database check enforcing exactly one owner.
 
 The grade is flushed before its annotation set is created, but both writes are
 committed in the same grading transaction.
 
-### 9.8 `annotation_instances`
+`policy_source` is `project` or `non_project_default`. For the non-project
+fallback, the applied revision is the version of the system fallback contract
+and the project identifier snapshot is null.
+
+### 9.5 `annotation_instances`
 
 Each independently selectable object is one row containing:
 
@@ -393,7 +433,7 @@ Each independently selectable object is one row containing:
 - class source: `grading_feature`, `project_class`, or reserved structured
   measurement;
 - nullable grading-feature or project-class foreign key;
-- class key and label snapshots;
+- class key and grading-feature label snapshots where applicable;
 - applied policy revision;
 - geometry type and type-specific JSON;
 - server-derived `bbox_x`, `bbox_y`, `bbox_w`, and `bbox_h`;
@@ -404,7 +444,7 @@ Feature and project-class foreign keys must not make historical annotations
 unreadable after configuration deactivation. The snapshots remain the
 historical meaning of the annotation.
 
-### 9.9 `annotation_mask_tiles`
+### 9.6 `annotation_mask_tiles`
 
 Brush segmentation is stored in original-image pixel space as sparse
 `256 x 256` binary tiles. Only non-empty tiles are persisted.
@@ -430,12 +470,14 @@ and serialize typed DTOs.
 The service is responsible for:
 
 - loading the project from the grading task;
+- applying the versioned non-project fallback only when the resolved target
+  has no project;
 - enforcing lab/project scope;
 - resolving the correct task or linked-panel grading context;
 - deriving feature-backed classes from the selected grade;
-- applying project defaults and feature overrides;
+- applying the project-wide feature default;
 - adding active project-defined classes;
-- intersecting per-class tools with project-enabled tools;
+- resolving class localization against project-enabled tools;
 - validating multiplicity and geometry; and
 - returning stable DTOs for the grading UI and future consumers.
 
@@ -502,6 +544,8 @@ workspace response uses a common DTO containing:
 - separately scoped task panels;
 - eligible grades and features;
 - resolved annotation tools and classes;
+- annotation policy source and revision;
+- per-class localization and multiplicity;
 - secured image descriptors;
 - existing normalized annotations;
 - read-only reasons; and
@@ -517,12 +561,50 @@ workspace loaded; `422` for annotation or grading validation; `403` for scope
 or eligibility failures; and `400` for malformed transport data. Linked and
 package submissions are atomic.
 
-### 11.4 Viewer preference
+### 11.4 Project schema export
+
+```text
+GET /api/projects/<project_id>/schema.json
+GET /api/projects/<project_id>/schema.toml
+```
+
+The downloads contain one versioned document with project identity, the full
+administrator-visible annotation policy, and every grading/classification
+scheme referenced through active Upload & Grading Profiles assigned to the
+project. Classification schemes are deduplicated and retain association
+provenance plus their grades, features, active states, and display orders. JSON
+and TOML are semantically equivalent, private, non-cached attachments.
+
+### 11.5 Viewer preference
 
 Extend the existing viewer-settings API with
 `grading_interface: "legacy" | "workbench"`. Existing users default to
 `legacy` until they choose the new interface. Unsafe preference changes require
 CSRF.
+
+### 11.6 Frontend image-analysis boundary
+
+The grading workbench always receives and retains the original secured JPEG or
+PNG. It does not request server-generated channel images. On image load, the
+browser decodes a bounded copy, excludes transparent and black surround pixels,
+and derives RGB/luminance histograms for conservative percentile windowing.
+PixiJS/WebGL then applies presentation-only red-free channel isolation, levels,
+gamma, exposure, contrast, protected shadow lift, illumination flattening, and
+optional inversion to the image sprite. RF/RF+ may apply a fixed highlight
+shoulder and conservative detail adjustment as part of the mode; these are not
+grader-adjustable preset fields. The
+annotation layer remains separate and unfiltered.
+
+The deliberately limited clinical display modes are Normal (`N`, exact decoded
+capture view), protected shadow lift (`E`), software red-free simulation (`RF`,
+clinically tuned green-channel monochrome), and enhanced software red-free
+(`RF+`). `E` reproduces the legacy luminance-masked shadow lift while protecting
+the bright optic disc and other highlights. These are software RGB views from a
+colour image and must not
+be represented as true optical red-free, multispectral reflectance, or a new
+diagnostic acquisition. User presets persist only display parameters; they do
+not contain derived pixels, zoom, pan, or loupe state. The server may persist
+those parameters but does not perform the image manipulation.
 
 ## 12. Administration UI
 
@@ -537,18 +619,22 @@ The workspace contains:
    - localization;
    - preferred tool; and
    - allowed tools.
-4. Feature-specific overrides grouped by grading scheme and grade.
-5. Project-defined class management:
+4. Project-defined class management:
    - stable key;
-   - display label;
    - localization;
-   - preferred and allowed tools;
-   - multiple instances; and
-   - active state.
+   - sort order;
+   - multiple instances;
+   - active state; and
+   - add/delete actions.
 
 Mutations that affect tool selectors, class selectors, modal forms, or counts
 must refresh the shared annotation-policy workspace so hidden form options do
 not become stale.
+
+The implemented Projects workspace follows this contract: it loads and saves
+the policy through the project annotation-policy JSON API and refreshes the
+complete selected project workspace after a successful save. It also exposes
+JSON and TOML downloads for the combined annotation and classification schema.
 
 ## 13. React Grading Workbench
 
@@ -575,19 +661,29 @@ unsupported or view-only state rather than a compressed, unsafe grading form.
 
 When the grading screen loads:
 
-1. Resolve the task's project annotation policy.
-2. Hide annotation controls if the policy is absent or disabled.
-3. Show only project-enabled tools.
-4. After grade selection, resolve feature classes belonging to that grade.
-5. Activate a feature-backed class only after the feature is selected.
-6. Add active project-defined classes to the class selector.
-7. When a class is selected, enable only its permitted tools.
-8. Prefer the configured tool, normally `box`.
-9. Apply the fixed or configured multiplicity rule.
-10. Preserve existing locked annotation behavior and task/panel isolation.
+1. Resolve the task's project annotation policy or the explicit non-project
+   fallback.
+2. Hide annotation controls when a project-backed target has an absent or
+   disabled policy.
+3. For a non-project target, show all supported tools, grading-feature-backed
+   classes only, and no project-defined classes.
+4. For a project-backed target, show only project-enabled tools.
+5. After grade selection, resolve feature classes belonging to that grade.
+6. Activate a feature-backed class only after the feature is selected.
+7. Add active project-defined classes to the class selector only for an
+   enabled project policy.
+8. When a class is selected, apply its localization using the project-enabled
+   tools.
+9. Prefer the configured tool, normally `box`.
+10. Apply the fixed or configured multiplicity rule.
+11. Preserve existing locked annotation behavior and task/panel isolation.
 
 For a single-instance project class, selecting the class after an annotation
 exists selects that annotation instead of creating another.
+
+The workbench enforces project-class multiplicity proactively by disabling
+add-another and duplicate actions for an occupied single-instance class. These
+controls improve the workflow but do not replace server validation.
 
 ### 13.2 GPU viewport
 
@@ -801,12 +897,15 @@ or polygon demonstration is not sufficient to select the interaction layer.
 
 On save, the server verifies:
 
-- the task resolves to the project associated with the policy;
-- annotations are enabled for that project;
+- the task resolves either to the project associated with the policy or to an
+  authoritative null-project target using the non-project fallback;
+- annotations are enabled by the resolved project policy or non-project
+  fallback;
 - every tool is enabled by the project;
 - every feature-backed class belongs to the selected grade;
 - every feature-backed class corresponds to a selected feature;
 - every project-defined class is active and belongs to the project policy;
+- a non-project submission contains no project-defined class;
 - the submitted geometry type is allowed for the class;
 - single-instance project classes have at most one active annotation;
 - geometry coordinates are finite and within the original image bounds;
@@ -823,9 +922,14 @@ IDs, or policy revisions without resolving them from stored records.
 - A project policy with linked annotations is deactivated rather than deleted.
 - Project-defined class keys are stable and cannot be silently reused with a
   different meaning.
-- Saved annotations snapshot the display label and policy revision.
+- Saved annotations snapshot grading-feature labels where applicable and the
+  policy revision.
+- Saved project-class annotations retain their configured parent-class
+  identity.
 - A draft loaded under one policy revision must not be silently validated under
   a newer revision without warning or refresh.
+- A draft using the non-project fallback is stale when the version of that
+  fallback changes.
 
 ## 16. Compatibility with Current Geometry
 
@@ -909,6 +1013,13 @@ parity gates have passed.
 - Implement the common state store, IndexedDB recovery, GPU camera, tiled image
   renderer, shaders, vector tools, mask worker, undo/redo, loupe, and CDR/RDR.
 
+Implemented foundation slice: the production Vite/React/PixiJS shell, typed
+workspace parser/state, IndexedDB recovery, shared Pixi camera, WebGL filters,
+box/rect/polygon/brush/ellipse/pyramid draft tools, loupe, annotation inspector,
+class reassignment, visibility/locking, deletion, and undo/redo. Full-resolution
+mask tiling, CDR/RDR measurement, normalized persistence, and submission remain
+Phase 2/3/5 work and are not represented as complete by the client.
+
 ### Phase 5: Complete workflow parity
 
 - Implement standard dual grading and revisions.
@@ -931,8 +1042,12 @@ parity gates have passed.
 
 ### 19.1 Backend and migration
 
-- Unit-test defaults, overrides, tool intersections, multiplicity, geometry
-  conversion, derived boxes, tile checksums, and every workflow command.
+- Unit-test defaults, project-level tool validation, project-class CRUD and
+  multiplicity, geometry conversion, derived boxes, tile checksums, and every
+  workflow command.
+- Test the null-project fallback, all-tools resolution, absence of project
+  classes, fixed multiple-instance behavior, fallback revision conflicts, and
+  the distinction between null-project and missing project-policy targets.
 - Test SQL null, JSON null, all fourteen historical items, invalid metadata,
   repeat migration, downgrade behavior, and v1 round trips.
 - API-test login, roles, CSRF, project/lab scope, stale context, invalid
@@ -944,7 +1059,8 @@ host UID/GID and `uv run` command pattern.
 ### 19.2 Frontend and browser
 
 - Unit-test DTO parsing, state transitions, undo/redo, IndexedDB versioning,
-  mask tiling, shader parameters, and submission manifests.
+  mask tiling, shader parameters, project-class multiplicity controls, and
+  submission manifests.
 - Browser-test mouse, pen, and touch drawing; filters; zoom/pan; loupe; CDR/RDR;
   box-to-segmentation refinement; overlapping instances; local recovery;
   context loss; read-only states; and interface switching.
@@ -963,14 +1079,22 @@ vector objects:
 
 ## 20. Acceptance Criteria
 
-- A project administrator can configure project tools, feature defaults and
-  overrides, project classes, and project-class multiplicity.
+- A project administrator can configure project tools and feature defaults,
+  and add, update, activate, deactivate, or delete simple project-class rows
+  containing stable key, localization, sort order, and multiplicity.
+- A project administrator can export the project annotation and associated
+  classification schema as semantically equivalent JSON or TOML.
 - The same policy works across disease-specific, linked, unified EncounterSet,
   and image-level grading contexts without merging feature vocabularies.
+- Images without a project receive the versioned all-tools fallback with no
+  project-defined classes and multiple grading-feature instances, while
+  project-backed images never fall back around a missing or disabled policy.
 - Every current grading workflow is available through the new workbench and
   uses the same backend rules as the legacy interface.
 - Grading features always allow multiple instances; project classes enforce
   their configured multiplicity.
+- The workbench and server both enforce project-class multiplicity, while the
+  server remains authoritative.
 - Boxes can be refined into polygon or full-resolution brush segmentation with
   one authoritative geometry and a deterministic derived box.
 - Disabled classes and tools cannot create new annotations, while historical

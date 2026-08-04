@@ -5,7 +5,7 @@ from auth.roles import roles_required
 from utils.log_sanitize import sanitize_log_value
 from . import api_bp
 
-_VIEWER_FILTERS = {
+_VIEWER_SETTINGS_FILTERS = {
     "none",
     "redfree",
     "greenboost",
@@ -13,9 +13,18 @@ _VIEWER_FILTERS = {
     "gray",
     "contrast",
     "enhance",
+    "greenchannel",
+    "blueonly",
+    "redgreenfree",
+    "greenfree",
 }
-# TODO: add when UI/JS supports them:
-# greenchannel, blueonly, redgreenfree, greenfree
+
+_VIEWER_PRESET_FILTERS = {
+    "none",
+    "enhance",
+    "redfree",
+    "redfreeenhanced",
+}
 
 
 def _clamp_float(value, default, min_value, max_value):
@@ -118,7 +127,7 @@ def save_viewer_settings_impl(db):
             settings.contrast = _clamp_float(data.get('contrast', 1.0), 1.0, 0.5, 5.0)
         if 'filter' in data:
             value = str(data.get('filter', 'none'))
-            settings.filter = value if value in _VIEWER_FILTERS else "none"
+            settings.filter = value if value in _VIEWER_SETTINGS_FILTERS else "none"
 
         return jsonify({'success': True})
     except Exception as e:
@@ -145,14 +154,21 @@ def get_viewer_presets_impl(db):
             presets_dict[preset.slot_number] = {
                 'id': preset.id,
                 'name': preset.name,
-                'loupe_size': preset.loupe_size,
-                'loupe_zoom': preset.loupe_zoom,
-                'loupe_enabled': preset.loupe_enabled,
-                'zoom': preset.zoom,
-                'pan_x': preset.pan_x,
-                'pan_y': preset.pan_y,
                 'brightness': preset.brightness,
                 'contrast': preset.contrast,
+                'saturation': preset.saturation,
+                'red_luminance': preset.red_luminance,
+                'red_saturation': preset.red_saturation,
+                'green_luminance': preset.green_luminance,
+                'green_saturation': preset.green_saturation,
+                'blue_luminance': preset.blue_luminance,
+                'blue_saturation': preset.blue_saturation,
+                'gamma': preset.gamma,
+                'black_point': preset.black_point,
+                'white_point': preset.white_point,
+                'shadow_lift': preset.shadow_lift,
+                'flattening': preset.flattening,
+                'invert': preset.invert,
                 'filter': preset.filter
             }
         
@@ -195,16 +211,23 @@ def save_viewer_preset_impl(db, slot_number):
         
         # Update preset with provided data
         preset.name = data.get('name')
-        preset.loupe_size = _clamp_int(data.get('loupe_size', 200), 200, 100, 500)
-        preset.loupe_zoom = _clamp_float(data.get('loupe_zoom', 2.0), 2.0, 1.0, 4.0)
-        preset.loupe_enabled = bool(data.get('loupe_enabled', False))
-        preset.zoom = _clamp_int(data.get('zoom', 100), 100, 40, 500)
-        preset.pan_x = _clamp_int(data.get('pan_x', 0), 0, -600, 600)
-        preset.pan_y = _clamp_int(data.get('pan_y', 0), 0, -600, 600)
         preset.brightness = _clamp_float(data.get('brightness', 1.0), 1.0, 0.5, 5.0)
         preset.contrast = _clamp_float(data.get('contrast', 1.0), 1.0, 0.5, 5.0)
+        preset.saturation = _clamp_float(data.get('saturation', 1.0), 1.0, 0.0, 3.0)
+        preset.red_luminance = _clamp_float(data.get('red_luminance', 1.0), 1.0, 0.0, 3.0)
+        preset.red_saturation = _clamp_float(data.get('red_saturation', 1.0), 1.0, 0.0, 3.0)
+        preset.green_luminance = _clamp_float(data.get('green_luminance', 1.0), 1.0, 0.0, 3.0)
+        preset.green_saturation = _clamp_float(data.get('green_saturation', 1.0), 1.0, 0.0, 3.0)
+        preset.blue_luminance = _clamp_float(data.get('blue_luminance', 1.0), 1.0, 0.0, 3.0)
+        preset.blue_saturation = _clamp_float(data.get('blue_saturation', 1.0), 1.0, 0.0, 3.0)
+        preset.gamma = _clamp_float(data.get('gamma', 1.0), 1.0, 0.35, 2.5)
+        preset.black_point = _clamp_float(data.get('black_point', 0.0), 0.0, -0.2, 0.25)
+        preset.white_point = _clamp_float(data.get('white_point', 1.0), 1.0, 0.5, 1.2)
+        preset.shadow_lift = _clamp_float(data.get('shadow_lift', 0.0), 0.0, 0.0, 1.0)
+        preset.flattening = _clamp_float(data.get('flattening', 0.0), 0.0, 0.0, 1.0)
+        preset.invert = data.get('invert') is True
         value = str(data.get('filter', 'none'))
-        preset.filter = value if value in _VIEWER_FILTERS else "none"
+        preset.filter = value if value in _VIEWER_PRESET_FILTERS else "none"
 
         return jsonify({'success': True})
     except Exception as e:

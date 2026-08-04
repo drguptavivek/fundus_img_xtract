@@ -26,6 +26,7 @@
     "watch:css": "sass --style=compressed --load-path=node_modules/bootstrap/scss --watch assets/scss/bootstrap-theme.scss:static/css/bootstrap.min.css",
     "build:grading-workbench": "vite build --config vite.grading-workbench.config.mts",
     "test:grading-workbench": "vitest run --config vitest.grading-workbench.config.mts",
+    "test:admin-project-annotations": "vitest run --config vitest.admin-project-annotations.config.mts",
     "typecheck:grading-workbench": "tsc --project tsconfig.grading-workbench.json --noEmit"
   },
   "version": "1.0.0",

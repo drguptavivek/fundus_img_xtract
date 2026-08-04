@@ -34,6 +34,10 @@ The system implements a robust authentication system with the following security
 - **IP Locking**: IP addresses are automatically blocked after repeated failed attempts
 - **Login Attempt Logging**: All login attempts (success and failure) are logged with username, IP, and timestamp
 
+#### Unsafe Local Login Override
+
+For local UI testing only, `LOGIN_DISABLED=true` bypasses the global web login guard, Flask-Login route guards, role decorators, and re-authentication decorators. The application loads the active database user named `main_admin` and uses that real identity for request scoping and audit fields; if an active `main_admin` does not exist, protected web requests fail with HTTP 503 instead of running anonymously. Mobile bearer-token authentication is not bypassed. The setting defaults to `false`, emits a critical log when enabled, and application startup rejects it unless `FLASK_ENV` is `development`, `test`, or `testing`.
+
 #### Session Management
 - **Server-Side Sessions**: All session data is stored server-side in the database using FlaskSession model
 - **Session IDs**: Cryptographically secure session IDs (64-character hexadecimal) generated using secrets.token_hex()

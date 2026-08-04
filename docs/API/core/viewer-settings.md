@@ -67,14 +67,21 @@ Returns a dictionary keyed by slot number. Each slot value contains:
 
 - `id`
 - `name`
-- `loupe_size`
-- `loupe_zoom`
-- `loupe_enabled`
-- `zoom`
-- `pan_x`
-- `pan_y`
 - `brightness`
 - `contrast`
+- `saturation`
+- `red_luminance`
+- `red_saturation`
+- `green_luminance`
+- `green_saturation`
+- `blue_luminance`
+- `blue_saturation`
+- `gamma`
+- `black_point`
+- `white_point`
+- `shadow_lift`
+- `flattening`
+- `invert`
 - `filter`
 
 Example:
@@ -83,15 +90,22 @@ Example:
 {
   "1": {
     "id": 7,
-    "name": "Low zoom",
-    "loupe_size": 200,
-    "loupe_zoom": 2.0,
-    "loupe_enabled": false,
-    "zoom": 100,
-    "pan_x": 0,
-    "pan_y": 0,
+    "name": "Calibrated red-free",
     "brightness": 1.0,
     "contrast": 1.0,
+    "saturation": 1.0,
+    "red_luminance": 1.0,
+    "red_saturation": 1.0,
+    "green_luminance": 1.0,
+    "green_saturation": 1.0,
+    "blue_luminance": 1.0,
+    "blue_saturation": 1.0,
+    "gamma": 1.0,
+    "black_point": 0.0,
+    "white_point": 1.0,
+    "shadow_lift": 0.0,
+    "flattening": 0.0,
+    "invert": false,
     "filter": "none"
   }
 }
@@ -104,15 +118,54 @@ Valid slot numbers are `1` through `5`. The route creates or replaces the preset
 Body fields:
 
 - `name`
-- `loupe_size`
-- `loupe_zoom`
-- `loupe_enabled`
-- `zoom`
-- `pan_x`
-- `pan_y`
 - `brightness`
 - `contrast`
+- `saturation`
+- `red_luminance`
+- `red_saturation`
+- `green_luminance`
+- `green_saturation`
+- `blue_luminance`
+- `blue_saturation`
+- `gamma`
+- `black_point`
+- `white_point`
+- `shadow_lift`
+- `flattening`
+- `invert`
 - `filter`
+
+The seven color-tuning values use `1.0` as neutral and are clamped to
+`0.0-3.0`. They are stored per preset so a grader can fine-tune overall
+saturation and each RGB channel's luminance and saturation without altering the
+source image.
+
+Clinical enhancement values are display parameters only. The browser computes
+an image-specific histogram from the decoded JPEG/PNG, applies conservative
+auto-windowing, and runs the selected channel/levels/gamma/spatial enhancement
+pipeline in WebGL. The server continues to serve the original image and stores
+only the user's preset parameters. `none` is the exact decoded capture view;
+software RGB channel views are simulations and are not labelled as optical
+multispectral or true red-free acquisition.
+
+Clinical tuning ranges are: `gamma` `0.35-2.5`, `black_point` `-0.2-0.25`,
+`white_point` `0.5-1.2`, and `shadow_lift` and `flattening` `0-1`.
+
+Highlight protection and the small fixed spatial enhancement used by RF/RF+
+are implementation details of those validated modes, not grader-adjustable or
+persistent preset fields. Local contrast, denoise, and sharpen controls are not
+exposed because they can introduce halos, obscure small lesions, or amplify
+JPEG artefacts.
+
+Preset `filter` accepts only the routine clinical views: `none`, `enhance`,
+`redfree`, or `redfreeenhanced`. Unknown values are coerced to `none`.
+`enhance` uses the legacy luminance-masked shadow curve; `shadow_lift` controls
+its strength and can also be combined deliberately with a red-free view.
+
+Viewport zoom, pan, loupe size, loupe magnification, and loupe visibility are
+session controls rather than preset fields. They are ignored when submitted to
+the preset endpoint and are not returned by the preset endpoint. Applying or
+fine-tuning a preset therefore leaves the current viewport unchanged.
 
 ## `DELETE /api/viewer/presets/<int:slot_number>`
 

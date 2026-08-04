@@ -2,7 +2,7 @@
 from __future__ import annotations
 from functools import wraps
 from typing import Iterable, Dict, Any
-from flask import abort, redirect, url_for, g
+from flask import abort, current_app, redirect, url_for, g
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
@@ -68,6 +68,8 @@ def roles_required(*required: str, require_all: bool = False):
         @wraps(fn)
         @login_required
         def wrapper(*args, **kwargs):
+            if current_app.config.get("LOGIN_DISABLED"):
+                return fn(*args, **kwargs)
             if not current_user.is_authenticated:
                 return redirect(url_for("auth.login"))
             ok = (current_user.has_all_roles(*required) if require_all

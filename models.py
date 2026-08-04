@@ -2222,7 +2222,8 @@ class ViewerSettings(Base):
 class ViewerPresets(Base):
     """
     Stores user-specific viewer presets (up to 5 per user).
-    Each preset contains a complete snapshot of viewer settings.
+    Presets contain image-presentation settings only. Legacy viewport columns
+    remain mapped for database compatibility but are excluded from the API.
     """
     __tablename__ = "viewer_presets"
     
@@ -2233,7 +2234,7 @@ class ViewerPresets(Base):
     # Preset name (optional, for user reference)
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     
-    # All viewer settings for this preset
+    # Legacy viewport fields retained for schema compatibility; not preset API fields.
     loupe_size: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
     loupe_zoom: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
     loupe_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -2242,6 +2243,19 @@ class ViewerPresets(Base):
     pan_y: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     brightness: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     contrast: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    saturation: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    red_luminance: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    red_saturation: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    green_luminance: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    green_saturation: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    blue_luminance: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    blue_saturation: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    gamma: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    black_point: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    white_point: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    shadow_lift: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    flattening: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    invert: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     filter: Mapped[str] = mapped_column(String(32), default="none", nullable=False)
     
     # Timestamps
@@ -2262,8 +2276,24 @@ class ViewerPresets(Base):
         CheckConstraint("brightness >= 0 AND brightness <= 10.0", name="ck_viewer_presets_brightness"),
         CheckConstraint("contrast >= 0 AND contrast <= 10.0", name="ck_viewer_presets_contrast"),
         CheckConstraint(
-            "filter IN ('none','redfree','greenboost','bluemono','gray','contrast','enhance','greenchannel','blueonly','redgreenfree','greenfree')",
+            "saturation >= 0 AND saturation <= 3.0 AND "
+            "red_luminance >= 0 AND red_luminance <= 3.0 AND "
+            "red_saturation >= 0 AND red_saturation <= 3.0 AND "
+            "green_luminance >= 0 AND green_luminance <= 3.0 AND "
+            "green_saturation >= 0 AND green_saturation <= 3.0 AND "
+            "blue_luminance >= 0 AND blue_luminance <= 3.0 AND "
+            "blue_saturation >= 0 AND blue_saturation <= 3.0",
+            name="ck_viewer_presets_color_tuning_range",
+        ),
+        CheckConstraint(
+            "filter IN ('none','enhance','redfree','redfreeenhanced')",
             name="ck_viewer_presets_filter",
+        ),
+        CheckConstraint(
+            "gamma >= 0.35 AND gamma <= 2.5 AND black_point >= -0.2 AND black_point <= 0.25 AND "
+            "white_point >= 0.5 AND white_point <= 1.2 AND shadow_lift >= 0 AND shadow_lift <= 1 AND "
+            "flattening >= 0 AND flattening <= 1",
+            name="ck_viewer_presets_clinical_tuning_range",
         ),
     )
 
@@ -2886,4 +2916,9 @@ from remote_inference.models import (  # noqa: E402,F401
     DiseaseReportLinkage,
     ProjectAutomatedRemoteInferenceRule,
     ProjectManualRemoteInferenceWorkflow,
+)
+from project_annotations.models import (  # noqa: E402,F401
+    ProjectAnnotationClass,
+    ProjectAnnotationPolicy,
+    ProjectAnnotationTool,
 )

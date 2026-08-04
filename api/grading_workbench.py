@@ -45,3 +45,41 @@ def get_task_grading_workbench(task_uuid: str):
     response = jsonify(workspace.to_dict())
     response.headers["Cache-Control"] = "no-store, private"
     return response
+
+
+@api_bp.route(
+    "/grading-tasks/<string:task_uuid>/annotation-context",
+    methods=["GET"],
+)
+@roles_required("resident", "ophthalmologist", "admin")
+def get_task_annotation_context(task_uuid: str):
+    slot = request.args.get("slot", "")
+    try:
+        with get_db_session() as db:
+            workspace = service.resolve_task_workspace(
+                db,
+                user_id=current_user.id,
+                task_uuid=task_uuid,
+                slot=slot,
+                image_url_builder=lambda image_uuid: url_for(
+                    "media._imgForGradingByUUID",
+                    uuid_str=image_uuid,
+                ),
+            )
+    except InvalidWorkbenchTarget as exc:
+        return jsonify({"error": "invalid_target", "message": str(exc)}), 400
+    except WorkbenchTargetNotFound as exc:
+        return jsonify({"error": "not_found", "message": str(exc)}), 404
+    except WorkbenchAccessDenied as exc:
+        return jsonify({"error": "access_denied", "message": str(exc)}), 403
+    except WorkbenchImageUnavailable as exc:
+        return jsonify({"error": "image_unavailable", "message": str(exc)}), 422
+
+    response = jsonify(
+        {
+            "context_revision": workspace.context_revision,
+            "annotation_context": workspace.annotation_context.to_dict(),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store, private"
+    return response

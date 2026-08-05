@@ -982,11 +982,23 @@ def _create_negative_control_tasks_for_positive(
         eligible_images = _eligible_encounter_set_images(db, candidate)
         if not eligible_images:
             continue
+        if _encounter_has_negative_control_tasks(db, candidate.id, disease_id):
+            continue
         package = _get_or_create_runtime_package(db, candidate, package_config)
         selected += 1
         if package_config.get("_created"):
             created += 1
             package_config.pop("_created", None)
+        for encounter_scheme_id in sorted(set(package_config.get("encounter_scheme_ids", []))):
+            if _get_or_create_package_task(
+                db,
+                package=package,
+                encounter=candidate,
+                disease_id=encounter_scheme_id,
+                target_level="encounter",
+                source="profile_package_negative_control",
+            ):
+                created += 1
         for image in eligible_images:
             if _get_or_create_package_task(
                 db,
@@ -999,6 +1011,20 @@ def _create_negative_control_tasks_for_positive(
             ):
                 created += 1
     return created
+
+
+def _encounter_has_negative_control_tasks(db, encounter_id: int, disease_id: int) -> bool:
+    return db.query(GradingTask.id).outerjoin(
+        EncounterSetImage,
+        GradingTask.encounter_set_image_id == EncounterSetImage.id,
+    ).filter(
+        GradingTask.task_source == "profile_package_negative_control",
+        GradingTask.disease_id == disease_id,
+        or_(
+            GradingTask.patient_encounter_id == encounter_id,
+            EncounterSetImage.patient_encounter_id == encounter_id,
+        ),
+    ).first() is not None
 
 
 def _eligible_encounter_set_images(db, encounter: PatientEncounters) -> list[EncounterSetImage]:

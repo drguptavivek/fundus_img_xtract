@@ -588,7 +588,7 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
                     disease=amd,
                     is_default=True,
                     auto_create_policy="positive_plus_negative_controls",
-                    negative_controls_per_positive=1,
+                    negative_controls_per_positive=2,
                     display_order=1,
                 ),
             ],
@@ -625,6 +625,44 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
         created_at=datetime.now(),
     )
     db_session.add(negative_image)
+    used_negative_encounter = PatientEncounters(
+        uuid=str(uuid.uuid4()),
+        name="Previously Used Negative Control Set",
+        patient_id="NEG-SET-USED-001",
+        capture_date="2023-10-27",
+        capture_date_dt=date(2023, 10, 27),
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        is_set_based=True,
+        encounter_verified_status="verified",
+        referral_suggestion="no",
+        referral_positive_diseases_json=[],
+        project_id=encounter_set_data["project"].id,
+        upload_profile_id=encounter_set_data["upload_profile"].id,
+        metadata_json={"encounter_set_type_id": encounter_set_data["encounter_set_type"].id},
+    )
+    db_session.add(used_negative_encounter)
+    db_session.flush()
+    used_negative_image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        patient_encounter_id=used_negative_encounter.id,
+        spatial_position=1,
+        original_filename="previously_used_negative_control_1.jpg",
+        folder_rel="files/test_sets",
+        is_reviewed=True,
+        created_at=datetime.now(),
+    )
+    db_session.add(used_negative_image)
+    db_session.flush()
+    db_session.add(
+        GradingTask(
+            encounter_set_image_id=used_negative_image.id,
+            disease_id=amd.id,
+            lab_unit_id=encounter_set_data["lab_unit"].id,
+            state="pending",
+            grading_target_level="image",
+            task_source="profile_package_negative_control",
+        )
+    )
 
     encounter_set_data["image"].is_reviewed = True
     metadata = dict(encounter_set_data["attachment"].metadata_json or {})
@@ -675,8 +713,28 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
         )
         .one()
     )
+    control_encounter_task = (
+        db_session.query(GradingTask)
+        .filter(
+            GradingTask.encounter_set_package_id == control_package.id,
+            GradingTask.patient_encounter_id == negative_encounter.id,
+            GradingTask.grading_target_level == "encounter",
+            GradingTask.disease_id == glaucoma.id,
+        )
+        .one()
+    )
+    reused_control_package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == used_negative_encounter.id,
+            EncounterSetGradingPackage.code == "sampling_package",
+        )
+        .one_or_none()
+    )
     assert positive_task.task_source == "profile_package"
     assert control_task.task_source == "profile_package_negative_control"
+    assert control_encounter_task.task_source == "profile_package_negative_control"
+    assert reused_control_package is None
 
 
 def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targets(

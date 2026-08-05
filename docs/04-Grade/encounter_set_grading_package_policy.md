@@ -31,9 +31,9 @@ Image scheme auto-creation policies:
 - `remidio_dr_report_present`: create image tasks for this scheme only when the verified EncounterSet has DR Remidio report/OCR evidence.
 - `remidio_amd_report_present`: create image tasks for this scheme only when the verified EncounterSet has AMD Remidio report/OCR evidence.
 - `remidio_glaucoma_report_present`: create image tasks for this scheme only when the verified EncounterSet has glaucoma Remidio report/OCR evidence.
-- `positive_plus_negative_controls`: create image tasks when the verified EncounterSet is encounter-level positive for the scheme disease, then randomly sample negative control EncounterSets at the configured `1:X` positive-to-control ratio.
+- `positive_plus_negative_controls`: create image tasks when the verified EncounterSet is encounter-level positive for the scheme disease, then randomly sample previously unused negative control EncounterSets at the configured `1:X` positive-to-control ratio. Each selected control receives the package's configured encounter-level task as well as image tasks for all eligible clinical images.
 
-The sampling policy stores `negative_controls_per_positive` as `X`, with a valid range of `1` to `10`. Controls are sampled from verified EncounterSets in the same project, lab unit, upload profile, and EncounterSetType.
+The sampling policy stores `negative_controls_per_positive` as `X`, with a valid range of `1` to `10`. Controls are sampled from verified EncounterSets in the same project, lab unit, upload profile, and EncounterSetType. An encounter that already has a `profile_package_negative_control` image task for the sampled disease is not selected again.
 
 The Remidio report-triggered policies are exposed only for image-scoped grading schemes whose `remidio_ocr_linkage` is explicitly configured on the grading scheme:
 

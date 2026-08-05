@@ -30,9 +30,9 @@ def test_fixed_scheme_grade_button_targets_matching_grade_template(app):
         )
 
     assert 'data-scheme-id="42"' in markup
-    assert 'data-upload-profile-scheme-grade-template data-scheme-id="42"' in markup
+    assert 'data-scheme-name="AMD"' in markup
     assert 'aria-label="Show grades for AMD"' in markup
     assert 'title="Show grades for AMD"' in markup
-    assert '<div class="fw-semibold mb-1">AMD</div>' in markup
+    assert '<div class="fw-semibold mb-1">AMD</div>' not in markup
     assert "Referable AMD" in markup
     assert "Drusen" in markup

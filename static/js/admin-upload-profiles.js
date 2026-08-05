@@ -41,9 +41,9 @@
     badge.className = 'badge ' + className;
   }
 
-  function selectedSchemePopoverContent(button) {
+  function selectedSchemeGradeTemplate(button) {
     if (!button) {
-      return '<div class="text-muted small">No scheme selected.</div>';
+      return null;
     }
     const selectedMode = button.hasAttribute('data-upload-profile-selected-scheme-popover');
     let template = null;
@@ -62,6 +62,17 @@
         )
         : null;
     }
+    return template;
+  }
+
+  function selectedSchemePopoverTitle(button) {
+    const template = selectedSchemeGradeTemplate(button);
+    const schemeName = template?.dataset.schemeName || '';
+    return schemeName ? 'Grading Scheme: ' + schemeName : 'Grading Scheme';
+  }
+
+  function selectedSchemePopoverContent(button) {
+    const template = selectedSchemeGradeTemplate(button);
     return template ? template.innerHTML : '<div class="text-muted small">No scheme selected.</div>';
   }
 
@@ -91,7 +102,9 @@
         trigger: 'hover focus',
         placement: 'auto',
         container: 'body',
-        title: 'Grading scheme',
+        title: function () {
+          return selectedSchemePopoverTitle(button);
+        },
         content: function () {
           return selectedSchemePopoverContent(button);
         }

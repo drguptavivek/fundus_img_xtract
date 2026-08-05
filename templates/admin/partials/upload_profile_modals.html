@@ -1,8 +1,10 @@
 {% from "_forms.html" import csrf_field %}
 {% macro scheme_grade_template(scheme, template_id='') -%}
-<template data-upload-profile-scheme-grade-template data-scheme-id="{{ scheme.id }}" {% if template_id %}id="{{ template_id }}"{% endif %}>
+<template data-upload-profile-scheme-grade-template
+          data-scheme-id="{{ scheme.id }}"
+          data-scheme-name="{{ scheme.name }}"
+          {% if template_id %}id="{{ template_id }}"{% endif %}>
   <div class="small">
-    <div class="fw-semibold mb-1">{{ scheme.name }}</div>
     {% set active_grades = scheme.disease_gradings|selectattr('is_active')|sort(attribute='display_order')|list %}
     {% if active_grades %}
     <div class="vstack gap-1">

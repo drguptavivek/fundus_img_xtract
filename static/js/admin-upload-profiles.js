@@ -55,8 +55,11 @@
         ? wrap.querySelector('[data-upload-profile-scheme-grade-template][data-scheme-id="' + CSS.escape(selectedId) + '"]')
         : null;
     } else {
-      template = button.parentElement
-        ? button.parentElement.querySelector('[data-upload-profile-scheme-grade-template]')
+      const schemeId = button.dataset.schemeId || '';
+      template = schemeId && button.parentElement
+        ? button.parentElement.querySelector(
+          '[data-upload-profile-scheme-grade-template][data-scheme-id="' + CSS.escape(schemeId) + '"]'
+        )
         : null;
     }
     return template ? template.innerHTML : '<div class="text-muted small">No scheme selected.</div>';
@@ -87,7 +90,8 @@
         sanitize: false,
         trigger: 'hover focus',
         placement: 'auto',
-        title: button.getAttribute('title') || 'Grades',
+        container: 'body',
+        title: 'Grading scheme',
         content: function () {
           return selectedSchemePopoverContent(button);
         }
@@ -1583,6 +1587,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     bindPackageBuilderEvents(document);
+    initSchemeGradePopovers(document);
     initEditors(document);
     initProjectProfileLabFilters(document);
     bindProfileNavigation(document);
@@ -1602,6 +1607,8 @@
 
   document.body.addEventListener('htmx:afterSwap', function (event) {
     bindPackageBuilderEvents(document);
+    initSchemeGradePopovers(document);
+    initEditors(document);
     initProjectProfileLabFilters(event.detail.target || document);
     bindProfileNavigation(event.detail.target || document);
     applyUrlState(false);

@@ -1,8 +1,11 @@
 from uuid import uuid4
 
+import pytest
+
 from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dtos import AllocationInputDTO
 from grading_allocation.eligibility import is_user_eligible_for_task
+from grading_allocation.exceptions import AllocationConflictError
 from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
 from grading_allocation.resolver import resolve_task_allocation_context
 from grading_allocation.service import (
@@ -470,3 +473,71 @@ def test_service_enables_enforcement_after_both_capacities_are_covered(
     policy = set_project_enforcement(admin.id, project.id, enabled=True)
 
     assert policy.enforcement_enabled is True
+
+
+def test_service_rejects_enforcement_without_project_targets(
+    app,
+    db_session,
+):
+    suffix = uuid4().hex[:8]
+    project = Project(
+        title=f"Empty Allocation Project {suffix}",
+        code=f"EMPTY-ALLOC-{suffix}",
+        active=True,
+    )
+    db_session.add(project)
+    admin = UserFactory.create_admin(
+        db_session,
+        username=f"empty_allocation_admin_{suffix}",
+    )
+    db_session.flush()
+
+    with pytest.raises(AllocationConflictError, match="without an active grading target"):
+        set_project_enforcement(admin.id, project.id, enabled=True)
+
+
+def test_service_rejects_split_lab_capacity_coverage(
+    app,
+    db_session,
+    core_test_data,
+):
+    disease = db_session.merge(core_test_data["dr"])
+    resident_lab = db_session.merge(core_test_data["lab_a1"])
+    arbitrator_lab = db_session.merge(core_test_data["lab_a2"])
+    project, _profile = _project_with_image_target(db_session, disease)
+    suffix = uuid4().hex[:8]
+    admin = UserFactory.create_admin(db_session, username=f"split_lab_admin_{suffix}")
+    resident = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"split_lab_resident_{suffix}",
+        lab_units=[resident_lab],
+    )
+    arbitrator = UserFactory.create_ophthalmologist(
+        db_session,
+        username=f"split_lab_arbitrator_{suffix}",
+        lab_units=[arbitrator_lab],
+    )
+    for user, lab, capacity in (
+        (resident, resident_lab, AllocationCapacity.RESIDENT),
+        (arbitrator, arbitrator_lab, AllocationCapacity.ARBITRATOR),
+    ):
+        create_or_reactivate_allocation(
+            admin.id,
+            project.id,
+            AllocationInputDTO(
+                user_id=user.id,
+                lab_unit_id=lab.id,
+                scope=AllocationScope.DISEASE_IMAGE,
+                disease_id=disease.id,
+                capacity=capacity,
+            ),
+        )
+
+    with pytest.raises(AllocationConflictError) as exc_info:
+        set_project_enforcement(admin.id, project.id, enabled=True)
+
+    warning_codes = {
+        warning["code"] for warning in exc_info.value.details["warnings"]
+    }
+    assert warning_codes == {"grading_target_lab_capacity_missing"}

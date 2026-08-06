@@ -160,9 +160,12 @@ REST deactivation alias. It does not physically delete the row.
 
 Enabling is rejected with `409` unless:
 
+- at least one active grading target is derived for the project;
 - every disease-specific package has an unambiguous underlying disease;
 - every derived active target has at least one resident allocation; and
-- every derived active target has at least one arbitrator allocation.
+- every derived active target has at least one arbitrator allocation; and
+- every lab represented in a target's allocations has both resident and
+  arbitrator coverage.
 
 While enforcement is absent or disabled, project-owned tasks retain the legacy
 `UserDiseaseUnitRole` behavior. When enabled, the exact project, lab, semantic

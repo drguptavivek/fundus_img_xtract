@@ -1,0 +1,220 @@
+{% from "_forms.html" import csrf_field %}
+
+{% set allocation_state = grading_allocation_state %}
+{% set enforcement_enabled = allocation_state.policy.enforcement_enabled %}
+
+<div class="col-12" data-project-grading-allocation>
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+    <div>
+      <h3 class="h6 mb-1">Grading Allocation</h3>
+      <div class="small text-muted">
+        Assign project-derived grading targets to resident and arbitrator pools. Resident capacity covers both Resident and Resident 2.
+      </div>
+    </div>
+    <span class="badge {{ 'text-bg-success' if enforcement_enabled else 'text-bg-secondary' }}">
+      {{ 'Project allocation enforced' if enforcement_enabled else 'Legacy eligibility active' }}
+    </span>
+  </div>
+
+  <div class="border rounded p-3">
+    {% if allocation_state.targets %}
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Grading target</th>
+            <th>Source profiles</th>
+            <th class="text-center">Residents</th>
+            <th class="text-center">Arbitrators</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for target in allocation_state.targets %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ target.label }}</div>
+              <div class="small text-muted">{{ target.scope.replace('_', ' ')|title }}</div>
+            </td>
+            <td>
+              {% for profile in target.source_profiles %}
+              <span class="badge text-bg-light border">{{ profile.name }}</span>
+              {% endfor %}
+            </td>
+            <td class="text-center">
+              <span class="badge {{ 'text-bg-success' if target.coverage.resident else 'text-bg-warning' }}">
+                {{ target.coverage.resident }}
+              </span>
+            </td>
+            <td class="text-center">
+              <span class="badge {{ 'text-bg-success' if target.coverage.arbitrator else 'text-bg-warning' }}">
+                {{ target.coverage.arbitrator }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form class="bg-body-tertiary border rounded p-3 mb-3"
+          action="{{ url_for('fundus_api.create_project_grader_allocation', project_id=selected_project.id) }}"
+          method="post"
+          data-grading-allocation-form="create"
+          data-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}">
+      {{ csrf_field() }}
+      <div class="row g-2 align-items-end">
+        <div class="col-lg-4">
+          <label class="form-label" for="grading_target_{{ selected_project.id }}">Grading target</label>
+          <select class="form-select" id="grading_target_{{ selected_project.id }}" name="target_key" required>
+            <option value="">Select target</option>
+            {% for target in allocation_state.targets %}
+            <option value="{{ target.key }}"
+                    data-scope="{{ target.scope }}"
+                    data-disease-id="{{ target.disease_id or '' }}"
+                    data-encounter-set-type-id="{{ target.encounter_set_type_id or '' }}">
+              {{ target.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label" for="grading_lab_{{ selected_project.id }}">Lab unit</label>
+          <select class="form-select" id="grading_lab_{{ selected_project.id }}" name="lab_unit_id" required data-grading-allocation-lab>
+            <option value="">Select lab</option>
+            {% for lab_unit in lab_units %}
+            <option value="{{ lab_unit.id }}">{{ lab_unit.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label" for="grading_capacity_{{ selected_project.id }}">Capacity</label>
+          <select class="form-select" id="grading_capacity_{{ selected_project.id }}" name="capacity" required data-grading-allocation-capacity>
+            <option value="resident">Resident</option>
+            <option value="arbitrator">Arbitrator</option>
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-3">
+          <label class="form-label" for="grading_user_{{ selected_project.id }}">Grader</label>
+          <select class="form-select" id="grading_user_{{ selected_project.id }}" name="user_id" required data-grading-allocation-user>
+            <option value="">Select lab and capacity</option>
+            {% for user in users %}
+            {% set role_names = user.roles|map(attribute='name')|list %}
+            {% set capacities = [] %}
+            {% if 'resident' in role_names or 'ophthalmologist' in role_names %}
+              {% set _ = capacities.append('resident') %}
+            {% endif %}
+            {% if 'ophthalmologist' in role_names %}
+              {% set _ = capacities.append('arbitrator') %}
+            {% endif %}
+            {% if capacities %}
+            <option value="{{ user.id }}"
+                    data-capacities="{{ capacities|join(' ') }}"
+                    data-lab-unit-ids="{{ user.lab_units|map(attribute='id')|join(' ') }}">
+              {{ user.full_name or user.username }} ({{ user.username }})
+            </option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <div class="form-text" data-grading-allocation-user-help>Select a lab to show eligible users.</div>
+        </div>
+        <div class="col-lg-1 text-end">
+          <button class="btn btn-outline-primary w-100" type="submit">Add</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <div class="alert alert-info mb-3">
+      No grading targets are available. Enable and configure an Upload &amp; Grading Profile for this project first.
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+      <h4 class="h6 mb-0">Active allocations</h4>
+      <span class="badge text-bg-secondary">{{ allocation_state.allocations|length }}</span>
+    </div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>User</th><th>Lab unit</th><th>Target</th><th>Capacity</th><th></th></tr></thead>
+        <tbody>
+          {% for allocation in allocation_state.allocations %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ allocation.user_full_name or allocation.username }}</div>
+              <div class="small text-muted">{{ allocation.username }}</div>
+            </td>
+            <td>{{ allocation.lab_unit_name }}</td>
+            <td>
+              {% if allocation.scope == 'disease_image' %}
+                {{ allocation.disease_name }} / Images
+              {% elif allocation.scope == 'disease_encounter' %}
+                {{ allocation.disease_name }} / {{ allocation.encounter_set_type_name }} Encounter
+              {% else %}
+                {{ allocation.encounter_set_type_name }} / Unified Encounter
+              {% endif %}
+            </td>
+            <td><span class="badge text-bg-light border">{{ allocation.capacity|title }}</span></td>
+            <td class="text-end">
+              <form action="{{ url_for('fundus_api.deactivate_project_grader_allocation', project_id=selected_project.id, allocation_id=allocation.id) }}"
+                    method="post"
+                    data-grading-allocation-form="deactivate"
+                    data-http-method="DELETE"
+                    data-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}">
+                {{ csrf_field() }}
+                <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-3">No active grader allocations.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if allocation_state.warnings %}
+    <div class="alert alert-warning py-2">
+      <div class="fw-semibold small mb-1">Allocation is not ready for enforcement</div>
+      <ul class="small mb-0 ps-3">
+        {% for warning in allocation_state.warnings %}
+        <li>{{ warning.message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form class="d-flex flex-wrap justify-content-between align-items-center gap-3 border-top pt-3"
+          action="{{ url_for('fundus_api.update_project_grader_allocation_policy', project_id=selected_project.id) }}"
+          method="post"
+          data-grading-allocation-form="policy"
+          data-http-method="PUT"
+          data-next-enforcement-enabled="{{ 'false' if enforcement_enabled else 'true' }}"
+          data-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}">
+      {{ csrf_field() }}
+      <div>
+        <div class="fw-semibold">Enforce project allocation</div>
+        <div class="small text-muted">
+          When off, current disease-and-lab eligibility remains active. Projectless historical tasks always retain legacy eligibility.
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input"
+                 type="checkbox"
+                 role="switch"
+                 id="grading_enforcement_{{ selected_project.id }}"
+                 name="enforcement_enabled"
+                 {% if enforcement_enabled %}checked{% endif %}
+                 disabled>
+          <label class="form-check-label" for="grading_enforcement_{{ selected_project.id }}">
+            {{ 'Enabled' if enforcement_enabled else 'Disabled' }}
+          </label>
+        </div>
+        <button class="btn btn-sm {{ 'btn-outline-danger' if enforcement_enabled else 'btn-outline-success' }}"
+                type="submit"
+                {% if not enforcement_enabled and (allocation_state.warnings or not allocation_state.targets) %}disabled{% endif %}>
+          {{ 'Disable enforcement' if enforcement_enabled else 'Enable enforcement' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

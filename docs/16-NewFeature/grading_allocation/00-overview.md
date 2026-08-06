@@ -69,3 +69,12 @@ api/grading_allocations.py
 
 API details are documented in
 [`docs/API/grading-allocation/README.md`](../../API/grading-allocation/README.md).
+
+## Projects administration UI
+
+The project detail workspace under **Admin -> Projects** displays the targets
+derived from active Upload & Grading Profiles, resident/arbitrator coverage,
+active allocations, and readiness warnings. Managers can add or deactivate an
+allocation and explicitly enable enforcement from this workspace. Every
+mutation calls the JSON API and then refreshes the complete project workspace
+so target options, coverage, warnings, and enforcement state remain consistent.

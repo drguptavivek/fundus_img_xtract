@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
+from grading_allocation import service as grading_allocation_service
 from models import (
     Area,
     Camera,
@@ -340,6 +341,10 @@ def upload_project_workspace(project_id: int):
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))
         context.update(iitk_service.project_connection_context(db, project_id))
+        context["grading_allocation_state"] = grading_allocation_service.get_project_allocation_state(
+            current_user.id,
+            project_id,
+        )
         return render_template("admin/partials/project_detail_panel.html", **context)
 
 

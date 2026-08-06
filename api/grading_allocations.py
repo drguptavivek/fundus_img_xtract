@@ -19,6 +19,40 @@ from . import api_bp
 MANAGER_ROLES = ("admin", "local_admin", "data_manager")
 
 
+@api_bp.route(
+    "/projects/<int:project_id>/grader-allocation-candidates",
+    methods=["GET"],
+)
+@roles_required(*MANAGER_ROLES)
+def get_project_grader_allocation_candidates(project_id: int):
+    """Return role-compatible users for one managed allocation lab/capacity."""
+    try:
+        lab_unit_id = _required_int(request.args, "lab_unit_id")
+        try:
+            capacity = AllocationCapacity(str(request.args.get("capacity") or ""))
+        except ValueError as exc:
+            raise GradingAllocationError(
+                "capacity is invalid.",
+                details={
+                    "allowed_capacities": [item.value for item in AllocationCapacity]
+                },
+            ) from exc
+        candidates = service.list_grader_candidates(
+            current_user.id,
+            project_id,
+            lab_unit_id=lab_unit_id,
+            capacity=capacity,
+        )
+        return jsonify(
+            {
+                "success": True,
+                "candidates": [candidate.to_dict() for candidate in candidates],
+            }
+        )
+    except GradingAllocationError as exc:
+        return _error_response(exc)
+
+
 @api_bp.route("/projects/<int:project_id>/grader-allocations", methods=["GET"])
 @roles_required(*MANAGER_ROLES)
 def get_project_grader_allocations(project_id: int):

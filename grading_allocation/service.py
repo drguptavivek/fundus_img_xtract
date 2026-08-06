@@ -12,6 +12,7 @@ from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dtos import (
     AllocationInputDTO,
     AllocationPolicyDTO,
+    GraderCandidateDTO,
     GraderAllocationDTO,
     ProjectAllocationStateDTO,
     TargetIdentity,
@@ -112,10 +113,8 @@ def create_or_reactivate_allocation(
                 .scalars()
                 .one_or_none()
             )
-            if user is None:
+            if user is None or not user.is_active:
                 raise AllocationNotFoundError("Grader user not found.")
-            if dto.lab_unit_id not in {lab.id for lab in user.lab_units}:
-                raise GradingAllocationError("The grader is not assigned to the requested lab unit.")
             _validate_user_capacity(user, dto.capacity)
 
             row = _find_allocation(db, project_id, dto)
@@ -141,6 +140,40 @@ def create_or_reactivate_allocation(
             return _allocation_dto(row)
     except IntegrityError as exc:
         raise AllocationConflictError("An equivalent grader allocation already exists.") from exc
+
+
+def list_grader_candidates(
+    actor_user_id: int,
+    project_id: int,
+    *,
+    lab_unit_id: int,
+    capacity: AllocationCapacity,
+) -> tuple[GraderCandidateDTO, ...]:
+    """Return active users who can receive an explicit project allocation."""
+    with db_transaction_manager.transaction_scope() as db:
+        actor_lab_ids = _require_project_manager(db, actor_user_id, project_id)
+        _require_actor_lab(actor_lab_ids, lab_unit_id)
+        users = (
+            db.execute(
+                select(User)
+                .options(selectinload(User.roles), selectinload(User.lab_units))
+                .where(User.is_active.is_(True))
+                .order_by(User.full_name, User.username, User.id)
+            )
+            .scalars()
+            .all()
+        )
+        return tuple(
+            GraderCandidateDTO(
+                user_id=user.id,
+                username=user.username,
+                full_name=user.full_name,
+                roles=tuple(sorted(role.name for role in user.roles)),
+                is_member_of_lab=lab_unit_id in {lab.id for lab in user.lab_units},
+            )
+            for user in users
+            if _user_has_capacity(user, capacity)
+        )
 
 
 def set_allocation_active(
@@ -258,10 +291,21 @@ def _require_actor_lab(actor_lab_ids: set[int], lab_unit_id: int) -> None:
 
 
 def _validate_user_capacity(user: User, capacity: AllocationCapacity) -> None:
-    if capacity == AllocationCapacity.RESIDENT and not user.has_role("resident", "ophthalmologist"):
-        raise GradingAllocationError("Resident capacity requires the resident or ophthalmologist role.")
-    if capacity == AllocationCapacity.ARBITRATOR and not user.has_role("ophthalmologist"):
-        raise GradingAllocationError("Arbitrator capacity requires the ophthalmologist role.")
+    if _user_has_capacity(user, capacity):
+        return
+    if capacity == AllocationCapacity.RESIDENT:
+        raise GradingAllocationError(
+            "Resident capacity requires the resident, resident2, or ophthalmologist role."
+        )
+    raise GradingAllocationError(
+        "Arbitrator capacity requires the arbitrator or ophthalmologist role."
+    )
+
+
+def _user_has_capacity(user: User, capacity: AllocationCapacity) -> bool:
+    if capacity == AllocationCapacity.RESIDENT:
+        return user.has_role("resident", "resident2", "ophthalmologist")
+    return user.has_role("arbitrator", "ophthalmologist")
 
 
 def _validate_target_shape(target: TargetIdentity) -> None:

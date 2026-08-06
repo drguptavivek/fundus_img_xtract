@@ -77,8 +77,10 @@ def test_project_workspace_renders_grader_allocation_editor(
     assert f"{disease.name} / Non-EncounterSet Images" in body
     assert "Allocation is not ready for enforcement" in body
     assert resident.username in body
-    assert 'data-capacities="resident"' in body
+    assert (
+        f'/api/projects/{project.id}/grader-allocation-candidates'
+        in body
+    )
     assert arbitrator.username in body
-    assert 'data-capacities="resident arbitrator"' in body
     assert f'/api/projects/{project.id}/grader-allocations' in body
     assert f'/api/projects/{project.id}/grader-allocation-policy' in body

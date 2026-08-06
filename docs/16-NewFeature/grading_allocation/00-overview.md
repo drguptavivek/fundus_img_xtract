@@ -64,6 +64,11 @@ project tasks use legacy `UserDiseaseUnitRole` eligibility. Projectless tasks
 always use the legacy path. This permits allocation preparation and coverage
 review without changing live queues after the first assignment is saved.
 
+The EncounterSet package workbench evaluates this same eligibility for every
+image and encounter target. Targets outside the grader's allocation remain
+visible as locked context, and the workbench opens on the first target the
+grader can actually complete.
+
 ## Module boundaries
 
 ```text
@@ -92,3 +97,9 @@ active allocations, and readiness warnings. Managers can add or deactivate an
 allocation and explicitly enable enforcement from this workspace. Every
 mutation calls the JSON API and then refreshes the complete project workspace
 so target options, coverage, warnings, and enforcement state remain consistent.
+
+The grader selector loads role-compatible active users from the allocation API.
+A candidate does not need general membership in the task's lab: the allocation
+is itself the narrow grant for that project, target, capacity, and lab. The
+manager must still have administrative scope over the selected lab. Cross-lab
+candidates are identified in the selector so the access boundary is explicit.

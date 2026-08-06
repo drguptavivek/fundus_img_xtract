@@ -39,6 +39,30 @@ def test_ordered_package_tasks_groups_images_by_laterality_before_encounter_targ
     ]
 
 
+def test_task_panel_is_locked_when_target_is_not_allocated(monkeypatch):
+    task = _task(9, "image")
+    task.uuid = "task-uuid"
+    task.disease_id = 11
+    db = SimpleNamespace(
+        query=lambda model: SimpleNamespace(
+            filter=lambda *args, **kwargs: SimpleNamespace(
+                order_by=lambda *args, **kwargs: SimpleNamespace(all=lambda: [])
+            )
+        )
+    )
+    monkeypatch.setattr(package_grading, "current_user", SimpleNamespace(id=7))
+    monkeypatch.setattr(
+        package_grading,
+        "get_user_eligibility_for_task",
+        lambda session, user_id, task_id, slot: False,
+    )
+
+    panel = package_grading._task_panel(db, task, "resident")
+
+    assert panel["available"] is False
+    assert panel["unavailable_reason"] == "Not allocated to you"
+
+
 def test_package_submit_updates_task_state_with_task_id_and_db(app, monkeypatch):
     task = _task(42, "encounter")
     task.uuid = "task-uuid"

@@ -185,7 +185,9 @@
   }
 </style>
 
-<div class="container-fluid p-2 fgw-shell is-expanded" data-fgw-workbench>
+<div class="container-fluid p-2 fgw-shell is-expanded"
+     data-fgw-workbench
+     data-initial-target-index="{{ first_available_index }}">
   <form id="fullscreen-grading-form" class="h-100 d-flex flex-column" method="post" action="{{ url_for('grading.encounter_set_package_submit') }}">
     {{ csrf_field() }}
     <span id="imggr-preset-save-button" class="d-none">{{ csrf_field() }}</span>
@@ -219,7 +221,7 @@
       {% set viewer_uuid = task.uuid %}
       {% set image_meta = image.metadata_json if image and image.metadata_json else {} %}
       {% set image_laterality = (image_meta.get('laterality') or image_meta.get('eye') or '')|lower %}
-      <article class="fgw-panel {% if loop.first %}is-active{% endif %}"
+      <article class="fgw-panel {% if loop.index0 == first_available_index %}is-active{% endif %}"
                data-fgw-panel
                data-target-index="{{ loop.index0 }}"
                data-task-uuid="{{ task.uuid }}"
@@ -239,7 +241,10 @@
                   {% endif %}
                 </h2>
               </div>
-              <span class="badge text-bg-{{ 'success' if panel.available else 'secondary' }}">{{ 'Available' if panel.available else 'Locked' }}</span>
+              <span class="badge text-bg-{{ 'success' if panel.available else 'secondary' }}"
+                    {% if panel.unavailable_reason %}title="{{ panel.unavailable_reason }}"{% endif %}>
+                {{ 'Available' if panel.available else (panel.unavailable_reason or 'Locked') }}
+              </span>
             </div>
           </div>
           <div class="card-body p-2 d-flex flex-column">
@@ -442,7 +447,7 @@
           {% for panel in task_panels %}
           {% set task = panel.task %}
           {% set image = task.encounter_set_image %}
-          <button class="btn btn-sm btn-outline-secondary fgw-pager-button {% if loop.first %}active{% endif %}"
+          <button class="btn btn-sm btn-outline-secondary fgw-pager-button {% if loop.index0 == first_available_index %}active{% endif %}"
                   type="button"
                   title="{% if image %}Image {{ image.spatial_position }}{% else %}Encounter{% endif %}"
                   data-fgw-target-nav
@@ -471,7 +476,7 @@
     const expandIcon = root.querySelector('[data-fgw-expand-icon]');
     const viewerAdjustmentStoragePrefix = 'fgwViewerAdjustments';
     const viewerAdjustmentTtlMs = 15 * 60 * 1000;
-    let activeIndex = 0;
+    let activeIndex = Number(root.dataset.initialTargetIndex || 0);
 
     function viewerAdjustmentKey() {
       return viewerAdjustmentStoragePrefix + ':package:{{ package.uuid }}';

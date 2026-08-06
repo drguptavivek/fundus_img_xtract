@@ -18,6 +18,7 @@ from encounter_set_types.models import EncounterSetType
 from models import (
     Disease,
     DiseaseGrading,
+    DirectImageUpload,
     EncounterSetImage,
     EncounterSetGradingPackage,
     Grade,
@@ -38,6 +39,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
+from utils.utilsImgServe import _user_has_grading_access_to_image
 
 
 def _project_with_image_target(db_session, disease):
@@ -590,6 +592,50 @@ def test_service_creates_normalized_allocation_and_reports_coverage(
     assert state.policy.enforcement_enabled is False
     assert state.targets[0]["coverage"] == {"resident": 1, "arbitrator": 0}
     assert state.warnings[0]["missing_capacities"] == ["arbitrator"]
+
+
+def test_project_allocation_grants_cross_lab_grading_media_access(
+    app,
+    db_session,
+    core_test_data,
+):
+    disease = db_session.merge(core_test_data["dr"])
+    lab = db_session.merge(core_test_data["lab_unit"])
+    project, _profile = _project_with_image_target(db_session, disease)
+    suffix = uuid4().hex[:8]
+    admin = UserFactory.create_admin(db_session, username=f"media_admin_{suffix}")
+    resident = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"media_resident_{suffix}",
+        lab_units=[],
+    )
+    task = _direct_task(db_session, core_test_data, admin, disease, project=project)
+    create_or_reactivate_allocation(
+        admin.id,
+        project.id,
+        AllocationInputDTO(
+            user_id=resident.id,
+            lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT,
+        ),
+    )
+    db_session.add(
+        ProjectGradingAllocationPolicy(
+            project_id=project.id,
+            enforcement_enabled=True,
+        )
+    )
+    db_session.flush()
+
+    assert resident.lab_units == []
+    assert _user_has_grading_access_to_image(
+        db_session,
+        resident,
+        db_session.get(DirectImageUpload, task.direct_image_upload_id).uuid,
+    ) is True
 
 
 def test_service_enables_enforcement_after_both_capacities_are_covered(

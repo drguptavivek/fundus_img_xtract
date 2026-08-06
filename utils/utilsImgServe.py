@@ -20,6 +20,7 @@ from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.media_cache import bump_media_cache_version
 from sqlalchemy import and_, select, or_
 from db_transaction_manager import transaction_scope
+from grading_allocation.eligibility import is_user_eligible_for_task
 from utils.linkedGradingUtils import get_primary_disease_id
 
 
@@ -172,31 +173,39 @@ def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | 
 
 
 def _user_has_grading_access_to_image(db, user, uuid: str) -> bool:
-    """Check grading slot access across all tasks linked to an image UUID."""
+    """Check project-aware grading access across tasks linked to an image UUID."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
     tasks = (
-        db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+        db.query(GradingTask)
         .join(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
         .filter(EncounterFile.uuid == uuid)
         .all()
     )
     if not tasks:
         tasks = (
-            db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+            db.query(GradingTask)
             .join(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
             .filter(DirectImageUpload.uuid == uuid)
             .all()
         )
     if not tasks:
         tasks = (
-            db.query(GradingTask.lab_unit_id, GradingTask.disease_id)
+            db.query(GradingTask)
             .join(EncounterSetImage, GradingTask.encounter_set_image_id == EncounterSetImage.id)
             .filter(EncounterSetImage.uuid == uuid)
             .all()
         )
 
     return any(
-        _user_has_grading_slot(db, user, lab_unit_id, disease_id)
-        for lab_unit_id, disease_id in tasks
+        is_user_eligible_for_task(
+            db,
+            user_id=user.id,
+            task=task,
+            role_slot=role_slot,
+        )
+        for task in tasks
+        for role_slot in ("resident", "resident2", "arbitrator")
     )
 
 

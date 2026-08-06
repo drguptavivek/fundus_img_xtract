@@ -46,22 +46,21 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
             return redirect(url_for("grading.index"))
 
         tasks = _ordered_package_tasks(package)
-        eligible_tasks = [
-            task for task in tasks
-            if _task_available_for_slot(task, slot_type)
-            and get_user_eligibility_for_task(db, current_user.id, task.id, slot_type)
-        ]
-        if not eligible_tasks:
+        task_panels = [_task_panel(db, task, slot_type) for task in tasks]
+        if not any(panel["available"] for panel in task_panels):
             flash("No targets in this package are available for your grading slot.", "info")
             return redirect(url_for("grading.index"))
 
-        task_panels = [_task_panel(db, task, slot_type) for task in tasks]
+        first_available_index = next(
+            index for index, panel in enumerate(task_panels) if panel["available"]
+        )
         return render_template(
             "grading/encounter_set_package_grading.html",
             package=package,
             encounter=package.patient_encounter,
             tasks=tasks,
             task_panels=task_panels,
+            first_available_index=first_available_index,
             slot_type=slot_type,
             non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
         )
@@ -206,11 +205,25 @@ def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
         ),
         None,
     )
+    state_available = _task_available_for_slot(task, slot_type)
+    allocated = state_available and get_user_eligibility_for_task(
+        db,
+        current_user.id,
+        task.id,
+        slot_type,
+    )
+    if not state_available:
+        unavailable_reason = "Not available at this grading stage"
+    elif not allocated:
+        unavailable_reason = "Not allocated to you"
+    else:
+        unavailable_reason = None
     return {
         "task": task,
         "labels": labels,
         "existing_grade": existing,
-        "available": _task_available_for_slot(task, slot_type),
+        "available": allocated,
+        "unavailable_reason": unavailable_reason,
     }
 
 

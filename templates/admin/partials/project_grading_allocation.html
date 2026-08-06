@@ -143,25 +143,12 @@
           <label class="form-label" for="grading_user_{{ selected_project.id }}">Grader</label>
           <select class="form-select" id="grading_user_{{ selected_project.id }}" name="user_id" required data-grading-allocation-user>
             <option value="">Select lab and capacity</option>
-            {% for user in users %}
-            {% set role_names = user.roles|map(attribute='name')|list %}
-            {% set capacities = [] %}
-            {% if 'resident' in role_names or 'ophthalmologist' in role_names %}
-              {% set _ = capacities.append('resident') %}
-            {% endif %}
-            {% if 'ophthalmologist' in role_names %}
-              {% set _ = capacities.append('arbitrator') %}
-            {% endif %}
-            {% if capacities %}
-            <option value="{{ user.id }}"
-                    data-capacities="{{ capacities|join(' ') }}"
-                    data-lab-unit-ids="{{ user.lab_units|map(attribute='id')|join(' ') }}">
-              {{ user.full_name or user.username }} ({{ user.username }})
-            </option>
-            {% endif %}
-            {% endfor %}
           </select>
-          <div class="form-text" data-grading-allocation-user-help>Select a lab to show eligible users.</div>
+          <div class="form-text"
+               data-grading-allocation-user-help
+               data-candidates-url="{{ url_for('fundus_api.get_project_grader_allocation_candidates', project_id=selected_project.id) }}">
+            Select a lab to show eligible users.
+          </div>
         </div>
         <div class="col-lg-1 text-end">
           <button class="btn btn-outline-primary w-100" type="submit">Add</button>

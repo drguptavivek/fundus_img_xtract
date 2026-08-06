@@ -30,7 +30,7 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
         db_session,
         "resident",
         username=f"api_allocation_resident_{suffix}",
-        lab_units=[lab],
+        lab_units=[],
     )
     db_session.flush()
     _authenticate(client, admin)
@@ -41,6 +41,18 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     assert target["scope"] == "disease_image"
     assert target["task_family"] == "image_wise_non_set"
     assert target["diseases"] == [{"id": disease.id, "name": disease.name}]
+
+    candidates_response = client.get(
+        f"/api/projects/{project.id}/grader-allocation-candidates",
+        query_string={"lab_unit_id": lab.id, "capacity": "resident"},
+    )
+    assert candidates_response.status_code == 200
+    candidate = next(
+        row
+        for row in candidates_response.get_json()["candidates"]
+        if row["id"] == resident.id
+    )
+    assert candidate["is_member_of_lab"] is False
 
     create_response = client.post(
         f"/api/projects/{project.id}/grader-allocations",
@@ -62,6 +74,47 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     )
     assert delete_response.status_code == 200
     assert delete_response.get_json()["allocation"]["active"] is False
+
+
+def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
+    client,
+    db_session,
+    core_test_data,
+):
+    suffix = uuid4().hex[:8]
+    project = Project(
+        title=f"Cross Lab Candidates {suffix}",
+        code=f"CROSS-LAB-{suffix}",
+        active=True,
+    )
+    db_session.add(project)
+    admin = UserFactory.create_admin(
+        db_session,
+        username=f"cross_lab_admin_{suffix}",
+    )
+    ophthalmologist = UserFactory.create_by_role(
+        db_session,
+        "ophthalmologist",
+        username=f"cross_lab_ophthalmologist_{suffix}",
+        lab_units=[],
+    )
+    db_session.flush()
+    _authenticate(client, admin)
+
+    response = client.get(
+        f"/api/projects/{project.id}/grader-allocation-candidates",
+        query_string={
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "capacity": "arbitrator",
+        },
+    )
+
+    assert response.status_code == 200
+    candidates = response.get_json()["candidates"]
+    assert any(
+        row["id"] == ophthalmologist.id and row["is_member_of_lab"] is False
+        for row in candidates
+    )
 
 
 def test_grader_allocation_api_rejects_invalid_target_shape(

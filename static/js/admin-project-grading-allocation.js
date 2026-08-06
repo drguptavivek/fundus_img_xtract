@@ -29,36 +29,55 @@
     window.location.reload();
   }
 
-  function syncUserOptions(root) {
+  async function syncUserOptions(root) {
     const lab = root.querySelector('[data-grading-allocation-lab]')?.value || '';
     const capacity = root.querySelector('[data-grading-allocation-capacity]')?.value || '';
     const userSelect = root.querySelector('[data-grading-allocation-user]');
-    if (!userSelect) {
+    const help = root.querySelector('[data-grading-allocation-user-help]');
+    if (!userSelect || !help) {
       return;
     }
-
-    let visibleCount = 0;
-    Array.from(userSelect.options).forEach(function (option, index) {
-      if (index === 0) {
-        return;
-      }
-      const capacities = (option.dataset.capacities || '').split(/\s+/).filter(Boolean);
-      const labIds = (option.dataset.labUnitIds || '').split(/\s+/).filter(Boolean);
-      const visible = Boolean(lab && capacity && capacities.includes(capacity) && labIds.includes(lab));
-      option.hidden = !visible;
-      option.disabled = !visible;
-      if (visible) {
-        visibleCount += 1;
-      }
-    });
-    if (userSelect.selectedOptions[0]?.disabled) {
-      userSelect.value = '';
+    userSelect.replaceChildren(new Option('Select lab and capacity', ''));
+    if (!lab || !capacity) {
+      help.textContent = 'Select a lab to show eligible users.';
+      return;
     }
-    const help = root.querySelector('[data-grading-allocation-user-help]');
-    if (help) {
-      help.textContent = !lab
-        ? 'Select a lab to show eligible users.'
-        : (visibleCount ? visibleCount + ' eligible user(s).' : 'No eligible users in this lab.');
+    const requestId = String(Date.now()) + Math.random();
+    root.dataset.gradingCandidateRequest = requestId;
+    userSelect.disabled = true;
+    help.textContent = 'Loading eligible users...';
+    try {
+      const url = new URL(help.dataset.candidatesUrl, window.location.origin);
+      url.searchParams.set('lab_unit_id', lab);
+      url.searchParams.set('capacity', capacity);
+      const response = await window.fetch(url, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' }
+      });
+      const payload = await response.json().catch(function () { return {}; });
+      if (!response.ok || !payload.success) {
+        throw new Error(errorMessage(payload));
+      }
+      if (root.dataset.gradingCandidateRequest !== requestId) return;
+      const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+      candidates.forEach(function (candidate) {
+        const displayName = candidate.full_name || candidate.username;
+        const membership = candidate.is_member_of_lab ? '' : ' - project allocation';
+        userSelect.add(new Option(
+          displayName + ' (' + candidate.username + ')' + membership,
+          String(candidate.id)
+        ));
+      });
+      help.textContent = candidates.length
+        ? candidates.length + ' eligible user(s). Users outside this lab receive only this project allocation.'
+        : 'No role-compatible active users.';
+    } catch (error) {
+      if (root.dataset.gradingCandidateRequest !== requestId) return;
+      help.textContent = error.message || 'Could not load eligible users.';
+    } finally {
+      if (root.dataset.gradingCandidateRequest === requestId) {
+        userSelect.disabled = false;
+      }
     }
   }
 

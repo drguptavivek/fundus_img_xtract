@@ -43,7 +43,9 @@ roles:
 
 Administrators may manage every lab unit. Local administrators and data
 managers may read or mutate only allocations within their explicitly assigned
-lab units. The allocated grader must also be assigned to the requested lab.
+lab units. The allocated grader need not be a general member of the requested
+lab: the project allocation is the narrow authorization for that project,
+target, capacity, and lab.
 
 Browser-session mutations require the normal `X-CSRFToken` header. Requests
 are JSON unless otherwise stated.
@@ -66,6 +68,34 @@ Errors use a stable object:
 Expected status codes are `400` for validation, `403` for lab or role scope,
 `404` for missing projects/allocations/users, and `409` for duplicate or unsafe
 enforcement transitions.
+
+## List grader candidates
+
+`GET /api/projects/<project_id>/grader-allocation-candidates`
+
+Required query parameters:
+
+- `lab_unit_id`: the task lab the manager is assigning;
+- `capacity`: `resident` or `arbitrator`.
+
+The endpoint returns active users with a compatible global grading role.
+`is_member_of_lab` allows clients to disclose when the user will receive only
+the narrow project allocation rather than general lab membership.
+
+```json
+{
+  "success": true,
+  "candidates": [
+    {
+      "id": 2,
+      "username": "grader",
+      "full_name": "Example Grader",
+      "roles": ["ophthalmologist"],
+      "is_member_of_lab": false
+    }
+  ]
+}
+```
 
 ## Read project allocation state
 

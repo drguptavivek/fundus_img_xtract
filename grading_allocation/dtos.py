@@ -79,6 +79,24 @@ class AllocationInputDTO:
 
 
 @dataclass(frozen=True)
+class GraderCandidateDTO:
+    user_id: int
+    username: str
+    full_name: str | None
+    roles: tuple[str, ...]
+    is_member_of_lab: bool
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.user_id,
+            "username": self.username,
+            "full_name": self.full_name,
+            "roles": list(self.roles),
+            "is_member_of_lab": self.is_member_of_lab,
+        }
+
+
+@dataclass(frozen=True)
 class TaskAllocationContext:
     task_id: int
     project_id: int | None

@@ -186,5 +186,5 @@ def _legacy_eligible(
 
 def _user_has_capacity_role(user: User, capacity: AllocationCapacity) -> bool:
     if capacity == AllocationCapacity.RESIDENT:
-        return user.has_role("resident", "ophthalmologist")
-    return user.has_role("ophthalmologist")
+        return user.has_role("resident", "resident2", "ophthalmologist")
+    return user.has_role("arbitrator", "ophthalmologist")

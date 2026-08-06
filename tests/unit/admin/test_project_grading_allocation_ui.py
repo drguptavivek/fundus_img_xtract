@@ -70,7 +70,7 @@ def test_project_workspace_renders_grader_allocation_editor(
     body = response.get_data(as_text=True)
     assert "Grading Allocation" in body
     assert "Legacy eligibility active" in body
-    assert f"{disease.name} / Images" in body
+    assert f"{disease.name} / Non-EncounterSet Images" in body
     assert "Allocation is not ready for enforcement" in body
     assert resident.username in body
     assert 'data-capacities="resident"' in body

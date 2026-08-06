@@ -21,10 +21,10 @@ def resolve_task_allocation_context(db: Session, task: GradingTask) -> TaskAlloc
         )
     project_id = project_ids[0] if project_ids else None
 
-    if task.encounter_file_id is not None or task.direct_image_upload_id is not None or task.encounter_set_image_id is not None:
+    if task.encounter_file_id is not None or task.direct_image_upload_id is not None:
         target = TargetIdentity(AllocationScope.DISEASE_IMAGE, disease_id=task.disease_id)
-    elif task.patient_encounter_id is not None:
-        target = _encounter_target(db, task)
+    elif task.encounter_set_image_id is not None or task.patient_encounter_id is not None:
+        target = _encounter_set_target(db, task)
     else:
         target = None
 
@@ -57,7 +57,7 @@ def _add_project(candidates: set[int], project_id: int | None) -> None:
         candidates.add(project_id)
 
 
-def _encounter_target(db: Session, task: GradingTask) -> TargetIdentity | None:
+def _encounter_set_target(db: Session, task: GradingTask) -> TargetIdentity | None:
     package = task.encounter_set_package
     if package is None or package.upload_profile_est_grading_package_id is None:
         return None
@@ -74,7 +74,21 @@ def _encounter_target(db: Session, task: GradingTask) -> TargetIdentity | None:
             encounter_set_type_id=encounter_set_type_id,
         )
 
-    context_disease_id = config.default_image_grading_scheme_id
+    if task.encounter_set_image_id is not None:
+        context_disease_id = task.disease_id
+    else:
+        package_image_disease_ids = {
+            package_task.disease_id
+            for package_task in package.tasks
+            if package_task.encounter_set_image_id is not None
+        }
+        context_disease_id = (
+            next(iter(package_image_disease_ids))
+            if len(package_image_disease_ids) == 1
+            else None
+        )
+    if context_disease_id is None:
+        context_disease_id = config.default_image_grading_scheme_id
     if context_disease_id is None:
         active_image_schemes = [row for row in config.image_grading_schemes if row.active]
         if len(active_image_schemes) == 1:

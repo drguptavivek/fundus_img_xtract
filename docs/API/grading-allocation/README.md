@@ -7,9 +7,11 @@ moving task-creation rules out of Upload & Grading Profiles.
 
 An allocation has one of three scopes:
 
-- `disease_image`: image-wise grading for one disease across project sources;
-- `disease_encounter`: disease-specific EncounterSet grading; or
-- `encounter_set_unified`: unified person/encounter grading across diseases.
+- `disease_image`: non-EncounterSet image-wise grading for one disease;
+- `disease_encounter`: disease-specific EncounterSet grading, covering both
+  package image tasks and its encounter task; or
+- `encounter_set_unified`: unified EncounterSet grading across diseases,
+  covering all image and encounter tasks in the package.
 
 The assignable capacities are `resident` and `arbitrator`. `resident` covers
 both the Resident and Resident 2 sequencing slots. Runtime grading still
@@ -89,7 +91,7 @@ Example:
       "disease_name": "DR",
       "encounter_set_type_id": null,
       "encounter_set_type_name": null,
-      "label": "DR / Images",
+      "label": "DR / Non-EncounterSet Images",
       "grading_scheme_ids": [1],
       "source_profiles": [
         {"id": 1, "name": "Manual ZIP"},
@@ -190,3 +192,8 @@ projectless task
 
 Ambiguous source project ownership or an unresolved disease-specific encounter
 context fails closed when project enforcement is enabled.
+
+The task resolver treats direct uploads and classical encounter-file images as
+`disease_image`. An EncounterSet image carrying a runtime package ID resolves
+to that package's `disease_encounter` or `encounter_set_unified` target, exactly
+like its encounter-level task.

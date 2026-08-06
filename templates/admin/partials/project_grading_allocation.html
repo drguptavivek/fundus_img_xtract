@@ -33,7 +33,15 @@
           <tr>
             <td>
               <div class="fw-semibold">{{ target.label }}</div>
-              <div class="small text-muted">{{ target.scope.replace('_', ' ')|title }}</div>
+              <div class="small text-muted">
+                {% if target.scope == 'disease_image' %}
+                  Non-EncounterSet Image
+                {% elif target.scope == 'disease_encounter' %}
+                  Disease EncounterSet
+                {% else %}
+                  Unified EncounterSet
+                {% endif %}
+              </div>
             </td>
             <td>
               {% for profile in target.source_profiles %}
@@ -145,11 +153,11 @@
             <td>{{ allocation.lab_unit_name }}</td>
             <td>
               {% if allocation.scope == 'disease_image' %}
-                {{ allocation.disease_name }} / Images
+                {{ allocation.disease_name }} / Non-EncounterSet Images
               {% elif allocation.scope == 'disease_encounter' %}
-                {{ allocation.disease_name }} / {{ allocation.encounter_set_type_name }} Encounter
+                {{ allocation.disease_name }} / EncounterSet ({{ allocation.encounter_set_type_name }})
               {% else %}
-                {{ allocation.encounter_set_type_name }} / Unified Encounter
+                Unified EncounterSet ({{ allocation.encounter_set_type_name }})
               {% endif %}
             </td>
             <td><span class="badge text-bg-light border">{{ allocation.capacity|title }}</span></td>

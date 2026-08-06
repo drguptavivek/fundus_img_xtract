@@ -21,6 +21,9 @@ from upload_profiles.models import (
 )
 
 
+NON_ENCOUNTER_SET_UPLOAD_KINDS = {"direct_image", "pregraded", "remidio"}
+
+
 def derive_project_targets(
     db: Session,
     project_id: int,
@@ -39,6 +42,9 @@ def derive_project_targets(
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.diseases)
                 .selectinload(UploadProfileDisease.disease),
+                selectinload(ProjectUploadProfile.profile).selectinload(
+                    UploadProfile.upload_kinds
+                ),
                 selectinload(ProjectUploadProfile.profile)
                 .selectinload(UploadProfile.encounter_set_types)
                 .selectinload(UploadProfileEncounterSetType.encounter_set_type),
@@ -71,14 +77,16 @@ def derive_project_targets(
     warnings: list[dict[str, object]] = []
     for mapping in mappings:
         profile = mapping.profile
-        for profile_disease in profile.diseases:
-            _add_disease_image_target(
-                targets,
-                profile_id=profile.id,
-                profile_name=profile.name,
-                disease_id=profile_disease.disease_id,
-                disease_name=profile_disease.disease.name,
-            )
+        upload_kinds = {row.upload_kind for row in profile.upload_kinds}
+        if not upload_kinds or upload_kinds.intersection(NON_ENCOUNTER_SET_UPLOAD_KINDS):
+            for profile_disease in profile.diseases:
+                _add_disease_image_target(
+                    targets,
+                    profile_id=profile.id,
+                    profile_name=profile.name,
+                    disease_id=profile_disease.disease_id,
+                    disease_name=profile_disease.disease.name,
+                )
 
         for est_config in profile.encounter_set_types:
             if not est_config.active:
@@ -86,15 +94,6 @@ def derive_project_targets(
             est = est_config.encounter_set_type
             active_packages = [package for package in est_config.grading_packages if package.active]
             if not active_packages:
-                for image_scheme in est_config.image_grading_schemes:
-                    if image_scheme.active:
-                        _add_disease_image_target(
-                            targets,
-                            profile_id=profile.id,
-                            profile_name=profile.name,
-                            disease_id=image_scheme.disease_id,
-                            disease_name=image_scheme.disease.name,
-                        )
                 if est_config.encounter_grading_scheme_id:
                     _add_unified_target(
                         targets,
@@ -102,25 +101,36 @@ def derive_project_targets(
                         profile_name=profile.name,
                         encounter_set_type_id=est.id,
                         encounter_set_type_name=est.name,
-                        grading_scheme_ids=[est_config.encounter_grading_scheme_id],
+                        grading_scheme_ids=(
+                            [
+                                row.disease_id
+                                for row in est_config.image_grading_schemes
+                                if row.active
+                            ]
+                            + [est_config.encounter_grading_scheme_id]
+                        ),
                     )
+                else:
+                    for image_scheme in est_config.image_grading_schemes:
+                        if image_scheme.active:
+                            _add_disease_encounter_set_target(
+                                targets,
+                                profile_id=profile.id,
+                                profile_name=profile.name,
+                                disease_id=image_scheme.disease_id,
+                                disease_name=image_scheme.disease.name,
+                                encounter_set_type_id=est.id,
+                                encounter_set_type_name=est.name,
+                                grading_scheme_ids=[image_scheme.disease_id],
+                            )
                 continue
 
             for package in active_packages:
                 active_image_schemes = [row for row in package.image_grading_schemes if row.active]
-                for image_scheme in active_image_schemes:
-                    _add_disease_image_target(
-                        targets,
-                        profile_id=profile.id,
-                        profile_name=profile.name,
-                        disease_id=image_scheme.disease_id,
-                        disease_name=image_scheme.disease.name,
-                    )
-
                 encounter_scheme_ids = [
                     row.disease_id for row in package.encounter_grading_schemes if row.active
                 ]
-                if not encounter_scheme_ids:
+                if not active_image_schemes and not encounter_scheme_ids:
                     continue
                 if package.grading_mode == "unified":
                     _add_unified_target(
@@ -129,42 +139,37 @@ def derive_project_targets(
                         profile_name=profile.name,
                         encounter_set_type_id=est.id,
                         encounter_set_type_name=est.name,
-                        grading_scheme_ids=encounter_scheme_ids,
+                        grading_scheme_ids=(
+                            [row.disease_id for row in active_image_schemes]
+                            + encounter_scheme_ids
+                        ),
                     )
                     continue
 
-                context_disease = package.default_image_grading_scheme
-                if context_disease is None and len(active_image_schemes) == 1:
-                    context_disease = active_image_schemes[0].disease
-                if context_disease is None:
+                if not active_image_schemes:
                     warnings.append(
                         {
                             "code": "disease_encounter_context_missing",
                             "profile_id": profile.id,
                             "package_id": package.id,
                             "message": (
-                                f"Package '{package.name}' is disease-specific but has no unambiguous "
-                                "default image grading scheme."
+                                f"Package '{package.name}' is disease-specific but has no active "
+                                "image grading scheme to identify its disease."
                             ),
                         }
                     )
                     continue
-                identity = TargetIdentity(
-                    AllocationScope.DISEASE_ENCOUNTER,
-                    disease_id=context_disease.id,
-                    encounter_set_type_id=est.id,
-                )
-                target = targets.setdefault(
-                    identity,
-                    ProjectGradingTargetDTO(
-                        identity=identity,
-                        label=f"{context_disease.name} / Encounter",
-                        disease_name=context_disease.name,
+                for image_scheme in active_image_schemes:
+                    _add_disease_encounter_set_target(
+                        targets,
+                        profile_id=profile.id,
+                        profile_name=profile.name,
+                        disease_id=image_scheme.disease_id,
+                        disease_name=image_scheme.disease.name,
+                        encounter_set_type_id=est.id,
                         encounter_set_type_name=est.name,
-                    ),
-                )
-                target.source_profiles[profile.id] = profile.name
-                target.grading_scheme_ids.update(encounter_scheme_ids)
+                        grading_scheme_ids=[image_scheme.disease_id] + encounter_scheme_ids,
+                    )
 
     return sorted(targets.values(), key=lambda target: (target.label.lower(), target.identity.key)), warnings
 
@@ -187,12 +192,41 @@ def _add_disease_image_target(
         identity,
         ProjectGradingTargetDTO(
             identity=identity,
-            label=f"{disease_name} / Images",
+            label=f"{disease_name} / Non-EncounterSet Images",
             disease_name=disease_name,
         ),
     )
     target.source_profiles[profile_id] = profile_name
     target.grading_scheme_ids.add(disease_id)
+
+
+def _add_disease_encounter_set_target(
+    targets: dict[TargetIdentity, ProjectGradingTargetDTO],
+    *,
+    profile_id: int,
+    profile_name: str,
+    disease_id: int,
+    disease_name: str,
+    encounter_set_type_id: int,
+    encounter_set_type_name: str,
+    grading_scheme_ids: Iterable[int],
+) -> None:
+    identity = TargetIdentity(
+        AllocationScope.DISEASE_ENCOUNTER,
+        disease_id=disease_id,
+        encounter_set_type_id=encounter_set_type_id,
+    )
+    target = targets.setdefault(
+        identity,
+        ProjectGradingTargetDTO(
+            identity=identity,
+            label=f"{disease_name} / EncounterSet ({encounter_set_type_name})",
+            disease_name=disease_name,
+            encounter_set_type_name=encounter_set_type_name,
+        ),
+    )
+    target.source_profiles[profile_id] = profile_name
+    target.grading_scheme_ids.update(grading_scheme_ids)
 
 
 def _add_unified_target(
@@ -212,7 +246,7 @@ def _add_unified_target(
         identity,
         ProjectGradingTargetDTO(
             identity=identity,
-            label=f"{encounter_set_type_name} / Unified Encounter",
+            label=f"Unified EncounterSet ({encounter_set_type_name})",
             encounter_set_type_name=encounter_set_type_name,
         ),
     )

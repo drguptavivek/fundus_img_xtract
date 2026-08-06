@@ -15,18 +15,26 @@ module.
 
 ```text
 disease_image
-    project + disease
+    project + disease; direct/classical non-EncounterSet image tasks only
 
 disease_encounter
-    project + disease + EncounterSet type
+    project + disease + EncounterSet type; covers image and encounter tasks
+    in that disease-specific runtime package
 
 encounter_set_unified
-    project + EncounterSet type
+    project + EncounterSet type; covers every image and encounter task in a
+    unified runtime package
 ```
 
 Multiple active profiles may generate the same semantic target. The project
 allocation API deduplicates it and records every contributing profile for
 display. No grading target is manually invented by the allocation module.
+
+EncounterSet images do not use `disease_image`. They resolve through their
+runtime grading package to the same `disease_encounter` or
+`encounter_set_unified` allocation as the package's encounter-level task. This
+keeps EncounterSet grading separate from direct uploads, classical ZIP images,
+pregraded images, and classical Remidio images.
 
 ## Capacities
 

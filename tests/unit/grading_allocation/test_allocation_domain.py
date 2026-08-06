@@ -18,6 +18,7 @@ from encounter_set_types.models import EncounterSetType
 from models import (
     Disease,
     DiseaseGrading,
+    EncounterSetImage,
     EncounterSetGradingPackage,
     Grade,
     GradingTask,
@@ -34,6 +35,7 @@ from upload_profiles.models import (
     UploadProfileEncounterSetTypeGradingPackage,
     UploadProfileEncounterSetTypePackageEncounterScheme,
     UploadProfileEncounterSetTypePackageImageScheme,
+    UploadProfileKind,
 )
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
 
@@ -89,13 +91,14 @@ def test_targets_are_derived_from_active_project_profiles(db_session, core_test_
     assert targets[0].source_profiles == {profile.id: profile.name}
 
 
-def test_disease_encounter_target_and_task_context_use_package_default_disease(
+def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     db_session,
     core_test_data,
 ):
     disease = db_session.merge(core_test_data["dr"])
     lab = db_session.merge(core_test_data["lab_unit"])
     project, profile = _project_with_image_target(db_session, disease)
+    profile.upload_kinds.append(UploadProfileKind(upload_kind="encounter_set"))
     suffix = uuid4().hex[:8]
     encounter_scheme = Disease(
         name=f"DR Encounter Status {suffix}",
@@ -167,9 +170,29 @@ def test_disease_encounter_target_and_task_context_use_package_default_disease(
     )
     db_session.add(task)
     db_session.flush()
+    image = EncounterSetImage(
+        patient_encounter_id=encounter.id,
+        spatial_position=1,
+        original_filename=f"allocation_{suffix}.jpg",
+        folder_rel="tests/grading_allocation",
+        project_id=project.id,
+    )
+    db_session.add(image)
+    db_session.flush()
+    image_task = GradingTask(
+        encounter_set_image_id=image.id,
+        encounter_set_package_id=runtime_package.id,
+        disease_id=disease.id,
+        lab_unit_id=lab.id,
+        grading_target_level="image",
+        state="pending",
+    )
+    db_session.add(image_task)
+    db_session.flush()
 
     targets, warnings = derive_project_targets(db_session, project.id)
     context = resolve_task_allocation_context(db_session, task)
+    image_context = resolve_task_allocation_context(db_session, image_task)
 
     assert warnings == []
     assert any(
@@ -178,10 +201,53 @@ def test_disease_encounter_target_and_task_context_use_package_default_disease(
         and target.identity.encounter_set_type_id == encounter_set_type.id
         for target in targets
     )
+    assert not any(
+        target.identity.scope == AllocationScope.DISEASE_IMAGE
+        for target in targets
+    )
     assert context.target is not None
     assert context.target.scope == AllocationScope.DISEASE_ENCOUNTER
     assert context.target.disease_id == disease.id
     assert context.target.encounter_set_type_id == encounter_set_type.id
+    assert image_context.target == context.target
+
+    resident = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"encounter_set_resident_{suffix}",
+        lab_units=[lab],
+    )
+    db_session.add_all(
+        [
+            ProjectGradingAllocationPolicy(
+                project_id=project.id,
+                enforcement_enabled=True,
+            ),
+            ProjectGraderAllocation(
+                project_id=project.id,
+                user_id=resident.id,
+                lab_unit_id=lab.id,
+                scope=AllocationScope.DISEASE_ENCOUNTER.value,
+                disease_id=disease.id,
+                encounter_set_type_id=encounter_set_type.id,
+                capacity=AllocationCapacity.RESIDENT.value,
+                active=True,
+            ),
+        ]
+    )
+    db_session.flush()
+    assert is_user_eligible_for_task(
+        db_session,
+        user_id=resident.id,
+        task=task,
+        role_slot="resident",
+    ) is True
+    assert is_user_eligible_for_task(
+        db_session,
+        user_id=resident.id,
+        task=image_task,
+        role_slot="resident",
+    ) is True
 
 
 def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data):

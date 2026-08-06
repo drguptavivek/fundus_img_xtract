@@ -42,8 +42,11 @@ def start_grading(disease_id: int, role_slot: str):
         flash("You don't have permission to grade as a resident.", "danger")
         return redirect(url_for("grading.index"))
     
-    if role_slot in ['resident2', 'arbitrator'] and not current_user.has_role('ophthalmologist'):
-        flash("You don't have permission to grade as resident2 or arbitrator.", "danger")
+    if role_slot == "resident2" and not current_user.has_role("resident", "ophthalmologist"):
+        flash("You don't have permission to grade in a resident slot.", "danger")
+        return redirect(url_for("grading.index"))
+    if role_slot == "arbitrator" and not current_user.has_role("ophthalmologist"):
+        flash("You don't have permission to grade as arbitrator.", "danger")
         return redirect(url_for("grading.index"))
     
     # Get the disease
@@ -67,7 +70,7 @@ def start_grading(disease_id: int, role_slot: str):
 
         task = None
         effective_slot = role_slot
-        can_grade_resident2 = current_user.has_role('ophthalmologist')
+        can_grade_resident2 = current_user.has_role("resident", "ophthalmologist")
 
         if role_slot == 'resident':
             resident_message = None

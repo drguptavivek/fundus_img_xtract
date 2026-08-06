@@ -2887,3 +2887,7 @@ from remote_inference.models import (  # noqa: E402,F401
     ProjectAutomatedRemoteInferenceRule,
     ProjectManualRemoteInferenceWorkflow,
 )
+from grading_allocation.models import (  # noqa: E402,F401
+    ProjectGraderAllocation,
+    ProjectGradingAllocationPolicy,
+)

@@ -80,7 +80,12 @@ The grading configuration remains authoritative for:
 - which grades are available;
 - which features belong to each grade;
 - whether EncounterSet grading is unified or disease-specific; and
-- task creation and grader eligibility.
+- task creation.
+
+Project grader allocation is a separate concern. Upload & Grading Profiles
+define which tasks exist, while the project allocation module determines which
+resident pool or arbitrator pool may receive each resolved task target. Legacy
+projectless tasks retain disease-and-lab eligibility.
 
 The annotation policy answers only:
 

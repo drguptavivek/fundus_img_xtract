@@ -1330,7 +1330,9 @@ def dual_grading_submit():
                     next_task_uuid = None
 
                     with transaction_scope() as new_db:
-                        if slot in ("resident", "resident2") and current_user.has_role("ophthalmologist"):
+                        if slot in ("resident", "resident2") and current_user.has_role(
+                            "resident", "ophthalmologist"
+                        ):
                             resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=new_db)
                             if resident2_candidate is not None and not isinstance(resident2_candidate, str):
                                 next_task = resident2_candidate

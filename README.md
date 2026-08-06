@@ -222,6 +222,8 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Policy and implementation plan for package-based EncounterSet grading after verification
 - [EncounterSet Task Creation](docs/04-Grade/encounter_set_task_creation.md) - Verification-time creation rules for EncounterSet grading packages and image/encounter tasks
 - [Project Annotation Policy and GPU Grading Workbench](docs/16-NewFeature/imageMarking/06-project-annotation-policy.md) - Approved React, TypeScript, PixiJS, and WebGL2 grading-workbench plan with project-resolved tools, normalized annotations, and full-resolution segmentation masks
+- [Project Grader Allocation](docs/16-NewFeature/grading_allocation/00-overview.md) - Project-scoped resident/arbitrator allocation derived from active Upload & Grading Profile targets, with legacy projectless-task compatibility
+- [Project Grader Allocation API](docs/API/grading-allocation/README.md) - REST contract, authorization, target shapes, coverage, activation, and error behavior
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

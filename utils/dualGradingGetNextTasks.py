@@ -18,6 +18,7 @@ load_environment()
 from utils.dualGradingEligibility import (
     _get_user_eligible_lab_unit_ids,
     _has_user_graded_task_4weeks,
+    get_user_eligibility_for_task,
     has_user_graded_task,
 )
 from datetime import datetime, timedelta, timezone
@@ -221,6 +222,8 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         conflicting_slots = ["resident"]
 
     for task in tasks:
+        if not get_user_eligibility_for_task(db, user_id, task.id, role_slot):
+            continue
         if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
             continue
         _ensure_task_uuid(db, task)
@@ -264,6 +267,8 @@ def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible
 
     filtered_tasks = []
     for task in tasks:
+        if not get_user_eligibility_for_task(db, user_id, task.id, "resident"):
+            continue
         if has_user_graded_task(db, user_id, task.id, ["resident2"]):
             continue
         _ensure_task_uuid(db, task)
@@ -343,7 +348,7 @@ def get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id:
     Get the next eligible task for a resident2 user.
     
     Args:
-        user_id: The ID of the user (must be an ophthalmologist or admin)
+        user_id: The ID of a resident-capacity user
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
         db: Optional database session (if not provided, a new session will be created)
@@ -366,7 +371,7 @@ def _get_next_eligible_resident2_task_with_session(user_id: int, disease_id: int
     Internal function that gets the next eligible resident2 task using an existing session.
     
     Args:
-        user_id: The ID of the user (must be an ophthalmologist or admin)
+        user_id: The ID of a resident-capacity user
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
         db: Database session
@@ -555,13 +560,18 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
         )
         query = query.filter(~conflict_exists.exists())
 
-    # Use SELECT FOR UPDATE to lock the rows
-    # Order randomly and limit to 1 to get just one task locked
-    task = query.with_for_update().order_by(func.random()).first()
-    
-    if task and (role_slot in {"resident", "resident2"} or not _has_user_graded_task_4weeks(db, user_id, task.id)):
-        _ensure_task_uuid(db, task)
-        return task
+    # Resolve project allocation before locking. Re-run the original filtered
+    # query for the selected row under FOR UPDATE so its state is revalidated.
+    candidates = query.order_by(func.random()).yield_per(100)
+    for candidate in candidates:
+        if not get_user_eligibility_for_task(db, user_id, candidate.id, role_slot):
+            continue
+        if role_slot == "arbitrator" and _has_user_graded_task_4weeks(db, user_id, candidate.id):
+            continue
+        task = query.filter(GradingTask.id == candidate.id).with_for_update().first()
+        if task is not None:
+            _ensure_task_uuid(db, task)
+            return task
 
     return None
 
@@ -597,9 +607,7 @@ def _get_next_linked_followup_task_atomic_with_session(
     if not user:
         return None, None
 
-    slot_order = ["resident"]
-    if user.has_role("ophthalmologist"):
-        slot_order = ["resident2", "resident"]
+    slot_order = ["resident2", "resident"]
 
     for slot in slot_order:
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, primary_disease_id, slot)
@@ -695,12 +703,14 @@ def _atomically_get_and_lock_linked_followup_task(
         .filter(~conflict_exists.exists())
     )
 
-    task = query.with_for_update().order_by(func.random()).first()
-    if task is None:
-        return None
-
-    _ensure_task_uuid(db, task)
-    return task
+    for candidate in query.order_by(func.random()).yield_per(100):
+        if not get_user_eligibility_for_task(db, user_id, candidate.id, slot):
+            continue
+        task = query.filter(LinkedTask.id == candidate.id).with_for_update().first()
+        if task is not None:
+            _ensure_task_uuid(db, task)
+            return task
+    return None
 
 
 def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible_lab_unit_ids: list):
@@ -729,7 +739,7 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
          TaskTracker.role_slot == "resident"
     ).exists()
 
-    task = (
+    query = (
         db.query(GradingTask)
         .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
         .filter(GradingTask.disease_id == disease_id)
@@ -738,14 +748,14 @@ def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible
         .filter(resident2_exists.exists())
         .filter(~conflict_exists.exists())
         .filter(~tracker_exists)
-        .with_for_update()
-        .order_by(func.random())
-        .first()
     )
-
-    if task:
-        _ensure_task_uuid(db, task)
-        return task
+    for candidate in query.order_by(func.random()).yield_per(100):
+        if not get_user_eligibility_for_task(db, user_id, candidate.id, "resident"):
+            continue
+        task = query.filter(GradingTask.id == candidate.id).with_for_update().first()
+        if task is not None:
+            _ensure_task_uuid(db, task)
+            return task
 
     return None
 
@@ -819,7 +829,7 @@ def get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_u
     Get the next eligible task for a resident2 user with atomic locking to prevent race conditions.
     
     Args:
-        user_id: The ID of the user (must be an ophthalmologist or admin)
+        user_id: The ID of a resident-capacity user
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
         db: Optional database session (if not provided, a new session will be created)
@@ -842,7 +852,7 @@ def _get_next_eligible_resident2_task_atomic_with_session(user_id: int, disease_
     Internal function that gets the next eligible resident2 task with atomic locking using an existing session.
     
     Args:
-        user_id: The ID of the user (must be an ophthalmologist or admin)
+        user_id: The ID of a resident-capacity user
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
         db: Database session

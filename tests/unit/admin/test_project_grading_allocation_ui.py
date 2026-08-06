@@ -70,6 +70,10 @@ def test_project_workspace_renders_grader_allocation_editor(
     body = response.get_data(as_text=True)
     assert "Grading Allocation" in body
     assert "Legacy eligibility active" in body
+    assert "EncounterSet-scoped encounter schemes" in body
+    assert "Image-scoped EncounterSet schemes" in body
+    assert "Image-wise non-set schemes" in body
+    assert 'data-grading-target-family="image_wise_non_set"' in body
     assert f"{disease.name} / Non-EncounterSet Images" in body
     assert "Allocation is not ready for enforcement" in body
     assert resident.username in body

@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from grading_allocation.constants import AllocationCapacity, AllocationScope
+from grading_allocation.constants import (
+    AllocationCapacity,
+    AllocationScope,
+    task_family_for_scope,
+)
 
 
 @dataclass(frozen=True)
@@ -29,17 +33,26 @@ class ProjectGradingTargetDTO:
     encounter_set_type_name: str | None = None
     source_profiles: dict[int, str] = field(default_factory=dict)
     grading_scheme_ids: set[int] = field(default_factory=set)
+    diseases: dict[int, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "key": self.identity.key,
             "scope": self.identity.scope.value,
+            "task_family": task_family_for_scope(self.identity.scope).value,
             "disease_id": self.identity.disease_id,
             "disease_name": self.disease_name,
             "encounter_set_type_id": self.identity.encounter_set_type_id,
             "encounter_set_type_name": self.encounter_set_type_name,
             "label": self.label,
             "grading_scheme_ids": sorted(self.grading_scheme_ids),
+            "diseases": [
+                {"id": disease_id, "name": name}
+                for disease_id, name in sorted(
+                    self.diseases.items(),
+                    key=lambda item: (item[1].lower(), item[0]),
+                )
+            ],
             "source_profiles": [
                 {"id": profile_id, "name": name}
                 for profile_id, name in sorted(self.source_profiles.items())

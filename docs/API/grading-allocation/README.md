@@ -13,6 +13,19 @@ An allocation has one of three scopes:
 - `encounter_set_unified`: unified EncounterSet grading across diseases,
   covering all image and encounter tasks in the package.
 
+Each target also exposes a UI-oriented `task_family` without changing its
+normalized allocation identity:
+
+| `task_family` | Project UI group |
+|---|---|
+| `encounter_set_scoped` | EncounterSet-scoped encounter schemes |
+| `image_scoped_encounter_set` | Image-scoped EncounterSet schemes |
+| `image_wise_non_set` | Image-wise non-set schemes |
+
+The target's `diseases` array lists the image-disease vocabulary included in
+that task family. A unified EncounterSet target can therefore list several
+diseases while retaining one allocation key.
+
 The assignable capacities are `resident` and `arbitrator`. `resident` covers
 both the Resident and Resident 2 sequencing slots. Runtime grading still
 prevents one user from filling both slots on the same task. An arbitrator is
@@ -87,12 +100,14 @@ Example:
     {
       "key": "disease_image:1:none",
       "scope": "disease_image",
+      "task_family": "image_wise_non_set",
       "disease_id": 1,
       "disease_name": "DR",
       "encounter_set_type_id": null,
       "encounter_set_type_name": null,
       "label": "DR / Non-EncounterSet Images",
       "grading_scheme_ids": [1],
+      "diseases": [{"id": 1, "name": "DR"}],
       "source_profiles": [
         {"id": 1, "name": "Manual ZIP"},
         {"id": 7, "name": "Remidio API"}

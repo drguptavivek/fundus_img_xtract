@@ -37,7 +37,10 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
 
     get_response = client.get(f"/api/projects/{project.id}/grader-allocations")
     assert get_response.status_code == 200
-    assert get_response.get_json()["targets"][0]["scope"] == "disease_image"
+    target = get_response.get_json()["targets"][0]
+    assert target["scope"] == "disease_image"
+    assert target["task_family"] == "image_wise_non_set"
+    assert target["diseases"] == [{"id": disease.id, "name": disease.name}]
 
     create_response = client.post(
         f"/api/projects/{project.id}/grader-allocations",

@@ -89,6 +89,90 @@ def test_targets_are_derived_from_active_project_profiles(db_session, core_test_
     assert targets[0].identity.scope == AllocationScope.DISEASE_IMAGE
     assert targets[0].identity.disease_id == disease.id
     assert targets[0].source_profiles == {profile.id: profile.name}
+    assert targets[0].to_dict()["task_family"] == "image_wise_non_set"
+
+
+def test_unified_encounter_set_target_lists_its_image_diseases(
+    db_session,
+    core_test_data,
+):
+    dr = db_session.merge(core_test_data["dr"])
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    suffix = uuid4().hex[:8]
+    project = Project(
+        title=f"Unified Allocation {suffix}",
+        code=f"UNIFIED-{suffix}",
+        active=True,
+    )
+    profile = UploadProfile(name=f"Unified Profile {suffix}", active=True)
+    encounter_scheme = Disease(
+        name=f"Unified Encounter Scheme {suffix}",
+        grading_scope="encounter",
+    )
+    encounter_set_type = EncounterSetType(
+        name=f"Unified EncounterSet {suffix}",
+        code=f"unified_{suffix}",
+        metadata_schema_json={"fields": []},
+        asset_rules_json={},
+        active=True,
+    )
+    db_session.add_all([project, profile, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    profile.upload_kinds.append(UploadProfileKind(upload_kind="encounter_set"))
+    db_session.add(
+        ProjectUploadProfile(
+            project_id=project.id,
+            upload_profile_id=profile.id,
+            active=True,
+        )
+    )
+    est_config = UploadProfileEncounterSetType(
+        upload_profile_id=profile.id,
+        encounter_set_type_id=encounter_set_type.id,
+        active=True,
+    )
+    db_session.add(est_config)
+    db_session.flush()
+    package = UploadProfileEncounterSetTypeGradingPackage(
+        upload_profile_encounter_set_type_id=est_config.id,
+        name="Unified Package",
+        code="unified",
+        applicability="always",
+        grading_mode="unified",
+        default_image_grading_scheme_id=dr.id,
+        active=True,
+    )
+    db_session.add(package)
+    db_session.flush()
+    db_session.add_all(
+        [
+            UploadProfileEncounterSetTypePackageImageScheme(
+                package_id=package.id,
+                disease_id=dr.id,
+                is_default=True,
+                active=True,
+            ),
+            UploadProfileEncounterSetTypePackageImageScheme(
+                package_id=package.id,
+                disease_id=glaucoma.id,
+                active=True,
+            ),
+            UploadProfileEncounterSetTypePackageEncounterScheme(
+                package_id=package.id,
+                disease_id=encounter_scheme.id,
+                active=True,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    targets, warnings = derive_project_targets(db_session, project.id)
+
+    assert warnings == []
+    assert len(targets) == 1
+    payload = targets[0].to_dict()
+    assert payload["task_family"] == "encounter_set_scoped"
+    assert {row["name"] for row in payload["diseases"]} == {dr.name, glaucoma.name}
 
 
 def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
@@ -210,6 +294,15 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     assert context.target.disease_id == disease.id
     assert context.target.encounter_set_type_id == encounter_set_type.id
     assert image_context.target == context.target
+    disease_target = next(
+        target
+        for target in targets
+        if target.identity.scope == AllocationScope.DISEASE_ENCOUNTER
+    )
+    assert disease_target.to_dict()["task_family"] == "image_scoped_encounter_set"
+    assert disease_target.to_dict()["diseases"] == [
+        {"id": disease.id, "name": disease.name}
+    ]
 
     resident = UserFactory.create_by_role(
         db_session,

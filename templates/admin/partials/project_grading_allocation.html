@@ -2,6 +2,23 @@
 
 {% set allocation_state = grading_allocation_state %}
 {% set enforcement_enabled = allocation_state.policy.enforcement_enabled %}
+{% set task_families = [
+  {
+    'key': 'encounter_set_scoped',
+    'title': 'EncounterSet-scoped encounter schemes',
+    'description': 'One user pool receives every image-level and encounter-level task in the unified EncounterSet scheme.'
+  },
+  {
+    'key': 'image_scoped_encounter_set',
+    'title': 'Image-scoped EncounterSet schemes',
+    'description': 'The same disease-specific user pool receives that disease at both image and set level.'
+  },
+  {
+    'key': 'image_wise_non_set',
+    'title': 'Image-wise non-set schemes',
+    'description': 'Image tasks outside EncounterSets, such as direct, pregraded, classical ZIP, or classical Remidio images.'
+  }
+] %}
 
 <div class="col-12" data-project-grading-allocation>
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
@@ -17,53 +34,67 @@
   </div>
 
   <div class="border rounded p-3">
-    {% if allocation_state.targets %}
-    <div class="table-responsive mb-3">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Grading target</th>
-            <th>Source profiles</th>
-            <th class="text-center">Residents</th>
-            <th class="text-center">Arbitrators</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for target in allocation_state.targets %}
-          <tr>
-            <td>
-              <div class="fw-semibold">{{ target.label }}</div>
-              <div class="small text-muted">
-                {% if target.scope == 'disease_image' %}
-                  Non-EncounterSet Image
-                {% elif target.scope == 'disease_encounter' %}
-                  Disease EncounterSet
-                {% else %}
-                  Unified EncounterSet
-                {% endif %}
-              </div>
-            </td>
-            <td>
-              {% for profile in target.source_profiles %}
-              <span class="badge text-bg-light border">{{ profile.name }}</span>
+    {% for family in task_families %}
+      {% set family_targets = allocation_state.targets|selectattr('task_family', 'equalto', family.key)|list %}
+      <section class="mb-3" data-grading-target-family="{{ family.key }}">
+        <div class="mb-2">
+          <h4 class="h6 mb-1">{{ family.title }}</h4>
+          <div class="small text-muted">{{ family.description }}</div>
+        </div>
+        <div class="table-responsive border rounded">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Scheme target</th>
+                <th>Diseases</th>
+                <th>Source profiles</th>
+                <th class="text-center">Residents</th>
+                <th class="text-center">Arbitrators</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for target in family_targets %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ target.label }}</div>
+                </td>
+                <td>
+                  {% for disease in target.diseases %}
+                  <span class="badge text-bg-primary">{{ disease.name }}</span>
+                  {% else %}
+                  <span class="text-muted">All configured diseases</span>
+                  {% endfor %}
+                </td>
+                <td>
+                  {% for profile in target.source_profiles %}
+                  <span class="badge text-bg-light border">{{ profile.name }}</span>
+                  {% endfor %}
+                </td>
+                <td class="text-center">
+                  <span class="badge {{ 'text-bg-success' if target.coverage.resident else 'text-bg-warning' }}">
+                    {{ target.coverage.resident }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <span class="badge {{ 'text-bg-success' if target.coverage.arbitrator else 'text-bg-warning' }}">
+                    {{ target.coverage.arbitrator }}
+                  </span>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="5" class="text-center text-muted py-3">
+                  No schemes configured for this task family.
+                </td>
+              </tr>
               {% endfor %}
-            </td>
-            <td class="text-center">
-              <span class="badge {{ 'text-bg-success' if target.coverage.resident else 'text-bg-warning' }}">
-                {{ target.coverage.resident }}
-              </span>
-            </td>
-            <td class="text-center">
-              <span class="badge {{ 'text-bg-success' if target.coverage.arbitrator else 'text-bg-warning' }}">
-                {{ target.coverage.arbitrator }}
-              </span>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endfor %}
 
+    {% if allocation_state.targets %}
     <form class="bg-body-tertiary border rounded p-3 mb-3"
           action="{{ url_for('fundus_api.create_project_grader_allocation', project_id=selected_project.id) }}"
           method="post"
@@ -75,13 +106,20 @@
           <label class="form-label" for="grading_target_{{ selected_project.id }}">Grading target</label>
           <select class="form-select" id="grading_target_{{ selected_project.id }}" name="target_key" required>
             <option value="">Select target</option>
-            {% for target in allocation_state.targets %}
-            <option value="{{ target.key }}"
-                    data-scope="{{ target.scope }}"
-                    data-disease-id="{{ target.disease_id or '' }}"
-                    data-encounter-set-type-id="{{ target.encounter_set_type_id or '' }}">
-              {{ target.label }}
-            </option>
+            {% for family in task_families %}
+              {% set family_targets = allocation_state.targets|selectattr('task_family', 'equalto', family.key)|list %}
+              {% if family_targets %}
+              <optgroup label="{{ family.title }}">
+                {% for target in family_targets %}
+                <option value="{{ target.key }}"
+                        data-scope="{{ target.scope }}"
+                        data-disease-id="{{ target.disease_id or '' }}"
+                        data-encounter-set-type-id="{{ target.encounter_set_type_id or '' }}">
+                  {{ target.label }}
+                </option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
             {% endfor %}
           </select>
         </div>

@@ -36,6 +36,12 @@ runtime grading package to the same `disease_encounter` or
 keeps EncounterSet grading separate from direct uploads, classical ZIP images,
 pregraded images, and classical Remidio images.
 
+For allocation display, the API classifies these identities into three task
+families: `encounter_set_scoped`, `image_scoped_encounter_set`, and
+`image_wise_non_set`. The Projects workspace shows all three groups for every
+project, including an explicit empty state, and lists the included diseases for
+each configured scheme target.
+
 ## Capacities
 
 There are two assignable capacities:

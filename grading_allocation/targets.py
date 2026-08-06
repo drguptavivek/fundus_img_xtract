@@ -101,6 +101,11 @@ def derive_project_targets(
                         profile_name=profile.name,
                         encounter_set_type_id=est.id,
                         encounter_set_type_name=est.name,
+                        diseases=[
+                            (row.disease_id, row.disease.name)
+                            for row in est_config.image_grading_schemes
+                            if row.active
+                        ],
                         grading_scheme_ids=(
                             [
                                 row.disease_id
@@ -139,6 +144,10 @@ def derive_project_targets(
                         profile_name=profile.name,
                         encounter_set_type_id=est.id,
                         encounter_set_type_name=est.name,
+                        diseases=[
+                            (row.disease_id, row.disease.name)
+                            for row in active_image_schemes
+                        ],
                         grading_scheme_ids=(
                             [row.disease_id for row in active_image_schemes]
                             + encounter_scheme_ids
@@ -198,6 +207,7 @@ def _add_disease_image_target(
     )
     target.source_profiles[profile_id] = profile_name
     target.grading_scheme_ids.add(disease_id)
+    target.diseases[disease_id] = disease_name
 
 
 def _add_disease_encounter_set_target(
@@ -227,6 +237,7 @@ def _add_disease_encounter_set_target(
     )
     target.source_profiles[profile_id] = profile_name
     target.grading_scheme_ids.update(grading_scheme_ids)
+    target.diseases[disease_id] = disease_name
 
 
 def _add_unified_target(
@@ -236,6 +247,7 @@ def _add_unified_target(
     profile_name: str,
     encounter_set_type_id: int,
     encounter_set_type_name: str,
+    diseases: Iterable[tuple[int, str]],
     grading_scheme_ids: Iterable[int],
 ) -> None:
     identity = TargetIdentity(
@@ -252,3 +264,4 @@ def _add_unified_target(
     )
     target.source_profiles[profile_id] = profile_name
     target.grading_scheme_ids.update(grading_scheme_ids)
+    target.diseases.update(diseases)

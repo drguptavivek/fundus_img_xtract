@@ -107,11 +107,12 @@ Profile create/update fields:
 - `encounter_set_type_ids` repeated integers, required when `encounter_set` is enabled and invalid otherwise; each type must be active
 - `encounter_set_type_<id>_image_grading_scheme_ids` repeated integers for each selected EncounterSetType; one or more image-scoped grading schemes are allowed. The admin UI derives this from the package policy.
 - `encounter_set_type_<id>_default_image_grading_scheme_id` integer; compatibility fallback derived from the first selected image scheme in the package policy.
-- `encounter_set_type_<id>_encounter_grading_scheme_id` integer; required and must point to the one encounter-scoped grading scheme for the package.
-- `encounter_set_type_<id>_grading_packages_json` JSON array containing the single EncounterSet grading package policy. Package fields:
+- `encounter_set_type_<id>_encounter_grading_scheme_id` integer; required compatibility fallback and must point to an encounter-scoped grading scheme.
+- `encounter_set_type_<id>_grading_packages_json` JSON array containing the EncounterSet grading package policies. Package fields:
   - `name` string, required
   - `code` string, optional stable code derived from `name` when omitted
-  - `applicability` should be `always` for the single package policy
+  - `applicability` should be `always`
+  - `grading_mode` is `unified` or `disease_specific`
   - `image_grading_scheme_ids` array of image-scoped grading scheme IDs
   - `default_image_grading_scheme_id` optional image scheme ID that must be in `image_grading_scheme_ids`
   - `encounter_grading_scheme_ids` array containing the selected encounter-scoped grading scheme ID
@@ -119,6 +120,8 @@ Profile create/update fields:
   - `image_scheme_negative_controls_per_positive` object keyed by image scheme ID; values are integers from `1` to `10` when the corresponding policy is `positive_plus_negative_controls`
   - `display_order` integer, optional
   - `active` boolean, optional
+- A `unified` package may contain multiple image-scoped schemes and encounter-scoped schemes.
+- A `disease_specific` package must contain exactly one `image_grading_scheme_ids` value and exactly one `encounter_grading_scheme_ids` value. Each image scheme may appear in only one disease-specific package. Submit one package object per explicit image-to-encounter mapping; the server does not infer mappings from scheme names.
 - Remidio report-triggered `image_scheme_auto_create_policies` are accepted only when the image-scoped grading scheme has matching `remidio_ocr_linkage` configured on the grading scheme itself:
   - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
   - `remidio_amd_report_present` requires `remidio_ocr_linkage = amd`
@@ -200,7 +203,7 @@ Allowed diseases define valid disease targets for direct image, pregraded, and R
 
 Encounter-set upload does not use the Remidio default and should not ask for a free-floating disease target. The selected EncounterSetType provides metadata and asset policy. The Upload & Grading Profile mapping for that EncounterSetType provides image-level grading schemes, encounter-level grading schemes, and optional EncounterSet grading package definitions. An upload profile that enables only encounter-set uploads can therefore have no `disease_ids`.
 
-When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. For each selected type, the profile must configure image-scoped grading schemes and encounter-scoped grading schemes either directly or through EncounterSet grading package definitions. Multiple image-level and encounter-level schemes are allowed because the same metadata/asset contract may support different project workflows; one image scheme may be marked default for operational fallback. Upload UI must require the uploader to select one of those types for the encounter. Project mapping is via `project_upload_profiles`, not directly on the reusable profile template.
+When `encounter_set` is enabled, the profile must allow one or more active EncounterSetTypes. For each selected type, the profile must configure image-scoped grading schemes and encounter-scoped grading schemes either directly or through EncounterSet grading package definitions. Unified packages may group several schemes. Disease-specific mode stores one explicit image-to-encounter pair per package. One image scheme may be marked default for operational fallback. Upload UI must require the uploader to select one of those types for the encounter. Project mapping is via `project_upload_profiles`, not directly on the reusable profile template.
 
 Camera/site/mydriatic profile fields are not required for EncounterSet-only profiles and are ignored if no clinical image/ZIP mode is enabled. If EncounterSet workflows need camera, site, acquisition method, mydriatic state, or similar capture details, configure those as upload metadata fields on the EncounterSetType.
 
@@ -214,7 +217,7 @@ Automated Remidio API-populated profiles are a stricter EncounterSet-only subset
 - direct image, pregraded, and Remidio ZIP upload kinds are rejected
 - user assignment is rejected; routing uses API source bindings on the project-profile mapping
 
-See [EncounterSet Grading Package Policy](../../04-Grade/encounter_set_grading_package_policy.md) for the single package model, per-image-scheme auto-creation rules, ungradable-image omission, and package-scoped escalation policy.
+See [EncounterSet Grading Package Policy](../../04-Grade/encounter_set_grading_package_policy.md) for unified and disease-specific package models, per-image-scheme auto-creation rules, ungradable-image omission, and package-scoped escalation policy.
 
 `task_prioritization_json` is capture-only in this phase. It may record abnormal encounter prioritization, AI-abnormal prioritization, normal sampling percent, sampling strategy, source order, applicable upload kinds, and active state. It does not change task selection behavior yet.
 

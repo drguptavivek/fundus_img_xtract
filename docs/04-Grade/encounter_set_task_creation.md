@@ -21,11 +21,13 @@ No human grading work is created for an EncounterSet whose `encounter_verified_s
 
 The active Upload Profile and EncounterSetType mapping define the grading package policy.
 
-The package policy contains:
+Unified package policy contains:
 
 - one or more encounter-scoped grading schemes for the whole EncounterSet
 - one or more image-scoped grading schemes for clinical images
 - one auto-creation policy per image-scoped scheme
+
+Disease-specific mode represents every mapping as a separate package containing exactly one image-scoped scheme and exactly one encounter-scoped scheme. The configuration package ID is copied to the runtime package, so allocation and grading can use the same explicit target. Verification does not split multi-image packages or infer a matching encounter scheme from names; ambiguous disease-specific package shapes are rejected when the profile is saved.
 
 Current auto-creation policies are:
 
@@ -121,6 +123,8 @@ This evidence controls configured image-scheme and AI workflow auto-creation pol
 ## Fallbacks
 
 If a profile mapping has explicit active grading packages, those are used.
+
+In disease-specific mode, each explicit package is evaluated independently. A matching image policy creates image tasks on all eligible images and the package's paired encounter scheme creates the whole-EncounterSet task. In unified mode, all configured schemes remain in the same runtime package.
 
 If a profile mapping has no explicit package rows, the legacy mapping is converted into one default package:
 

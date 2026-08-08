@@ -850,7 +850,7 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
     package_configs = _encounter_set_package_configs(db, config, encounter)
 
     created = 0
-    for package_config in _expanded_encounter_set_package_configs(db, package_configs):
+    for package_config in package_configs:
         positive_control_scheme_ids = sorted(
             disease_id
             for disease_id, policy in package_config["image_scheme_policies"].items()
@@ -1169,57 +1169,6 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
         "encounter_scheme_ids": sorted(target_disease_ids),
         "source": "legacy_target_disease",
     }]
-
-
-def _expanded_encounter_set_package_configs(db, package_configs: list[dict]) -> list[dict]:
-    expanded: list[dict] = []
-    for package_config in package_configs:
-        if package_config.get("grading_mode") != "disease_specific":
-            expanded.append(package_config)
-            continue
-        image_scheme_ids = sorted(package_config["image_scheme_policies"])
-        encounter_scheme_ids = sorted(set(package_config["encounter_scheme_ids"]))
-        if len(image_scheme_ids) <= 1:
-            expanded.append(package_config)
-            continue
-        for image_scheme_id in image_scheme_ids:
-            child = dict(package_config)
-            child["name"] = _disease_specific_package_name(db, package_config["name"], image_scheme_id)
-            child["code"] = f"{package_config['code']}_{image_scheme_id}"
-            child["image_scheme_policies"] = {image_scheme_id: package_config["image_scheme_policies"][image_scheme_id]}
-            child["image_scheme_negative_controls_per_positive"] = {
-                image_scheme_id: package_config["image_scheme_negative_controls_per_positive"].get(image_scheme_id, 0)
-            }
-            child["encounter_scheme_ids"] = _matched_encounter_scheme_ids(db, image_scheme_id, encounter_scheme_ids)
-            expanded.append(child)
-    return expanded
-
-
-def _disease_specific_package_name(db, base_name: str, disease_id: int) -> str:
-    disease = db.get(Disease, disease_id)
-    return disease.name if disease else f"{base_name} {disease_id}"
-
-
-def _matched_encounter_scheme_ids(db, image_scheme_id: int, encounter_scheme_ids: list[int]) -> list[int]:
-    if len(encounter_scheme_ids) <= 1:
-        return encounter_scheme_ids
-    image_scheme = db.get(Disease, image_scheme_id)
-    if not image_scheme:
-        return encounter_scheme_ids
-    image_name = image_scheme.name.strip().lower()
-    linkage = (image_scheme.remidio_ocr_linkage or "").strip().lower()
-    matches = []
-    for encounter_scheme_id in encounter_scheme_ids:
-        encounter_scheme = db.get(Disease, encounter_scheme_id)
-        if not encounter_scheme:
-            continue
-        encounter_name = encounter_scheme.name.strip().lower()
-        if linkage and linkage in encounter_name:
-            matches.append(encounter_scheme_id)
-            continue
-        if image_name and image_name in encounter_name:
-            matches.append(encounter_scheme_id)
-    return matches or encounter_scheme_ids
 
 
 def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_config: dict) -> EncounterSetGradingPackage:

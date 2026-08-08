@@ -2,7 +2,7 @@
 
 ## Status
 
-Policy direction for the next EncounterSet grading implementation phase.
+Implemented policy for profile configuration and verification-time task creation.
 
 This policy supersedes the older single EncounterSet grading-task model for workflows that require disease-specific EncounterSet grading. The deprecated Strabismus/cardinal-gaze documents remain historical references only.
 
@@ -10,19 +10,21 @@ This policy supersedes the older single EncounterSet grading-task model for work
 
 Verification remains the gate for grading. EncounterSet grading packages must be created only after an EncounterSet has completed verification.
 
-Each Upload Profile EncounterSetType mapping defines one EncounterSet grading package policy. The package is configured with one encounter-level grading scheme and one or more image-level grading schemes.
+Each Upload Profile EncounterSetType mapping defines one or more explicit EncounterSet grading packages. A unified package may contain multiple image-level schemes. Disease-specific mode instead stores one package per image scheme, paired with exactly one encounter-level scheme.
 
 The package, not an individual image, is the queue-visible unit of work for package-based EncounterSet grading. A grader opens one package and completes all required targets for that package in one grading session.
 
 ## Package Configuration
 
-Admin upload-profile configuration should support one explicit EncounterSet grading package policy under each selected EncounterSetType.
+Admin upload-profile configuration supports explicit EncounterSet grading package policies under each selected EncounterSetType.
 
-Each package policy should include:
+Each unified package policy includes:
 
 - one encounter-level grading scheme for the whole EncounterSet
 - one or more image-level grading schemes
 - per-image-scheme auto-creation policy
+
+Each disease-specific package must include exactly one image-level scheme and exactly one encounter-level scheme. An image scheme may appear in only one disease-specific package for a selected EncounterSetType. This stored package relationship is the authoritative image-to-encounter mapping; task creation never guesses a pairing from grading-scheme names or OCR linkage.
 
 Image scheme auto-creation policies:
 
@@ -51,8 +53,8 @@ Remidio API ingestion is not itself a grading workflow policy. PRISTINE Remidio 
 When verification finalization succeeds:
 
 1. If the entire EncounterSet was excluded, create no grading packages or targets.
-2. Evaluate the configured package policy for the active Upload Profile and EncounterSetType mapping.
-3. Create one runtime EncounterSet grading package for the verified EncounterSet when at least one encounter or image target remains.
+2. Evaluate each configured package policy for the active Upload Profile and EncounterSetType mapping.
+3. Create one runtime EncounterSet grading package per applicable configured package when at least one encounter or image target remains.
 4. Create the encounter-level grading target from that package's encounter-level scheme.
 5. Create image-level grading targets from each selected image-level scheme whose auto-creation policy applies, for eligible clinical images only.
 6. Deduplicate targets by package, target level, image target, and grading scheme.
@@ -77,7 +79,7 @@ If all image targets for a package are omitted because all relevant images are u
 
 ## Disease-Specific Grader Policy
 
-Integrated screening workflows may include multiple image-level schemes in the same package. For example, an integrated DR/glaucoma EncounterSet package can grade every eligible image for DR and glaucoma while grading the EncounterSet once with the selected encounter-level scheme. DR and glaucoma image task creation can be controlled independently through the Remidio report-triggered auto-creation policies.
+Unified integrated-screening workflows may include multiple image-level schemes in the same package. Disease-specific workflows use separate explicit packages, for example one DR image/DR encounter package and one glaucoma image/glaucoma encounter package. The corresponding disease-specific user pool therefore receives both target levels without relying on a naming convention.
 
 ## Escalation Policy
 

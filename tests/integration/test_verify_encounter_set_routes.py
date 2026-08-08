@@ -554,6 +554,111 @@ def test_verify_encounter_set_finalize_creates_amd_report_triggered_image_task(
     assert [task.disease_id for task in image_tasks] == [amd.id]
 
 
+def test_verify_encounter_set_finalize_creates_explicit_disease_specific_packages(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="admin_verify_finalize_disease_specific",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    dr = db_session.merge(core_test_data["dr"])
+    dr_encounter_scheme = Disease(
+        name=f"DR Encounter Status {uuid.uuid4().hex[:8]}",
+        grading_scope="encounter",
+    )
+    glaucoma_encounter_scheme = Disease(
+        name=f"Glaucoma Encounter Status {uuid.uuid4().hex[:8]}",
+        grading_scope="encounter",
+    )
+    db_session.add_all([dr_encounter_scheme, glaucoma_encounter_scheme])
+    db_session.flush()
+
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.image_grading_schemes.append(
+        UploadProfileEncounterSetTypeImageGradingScheme(disease=dr, is_default=False, display_order=2)
+    )
+    dr_config_package = UploadProfileEncounterSetTypeGradingPackage(
+        name="DR disease package",
+        code="dr_disease_package",
+        applicability="always",
+        grading_mode="disease_specific",
+        default_image_grading_scheme=dr,
+        image_grading_schemes=[
+            UploadProfileEncounterSetTypePackageImageScheme(
+                disease=dr,
+                is_default=True,
+                auto_create_policy="remidio_dr_report_present",
+                display_order=1,
+            )
+        ],
+        encounter_grading_schemes=[
+            UploadProfileEncounterSetTypePackageEncounterScheme(disease=dr_encounter_scheme, display_order=1)
+        ],
+    )
+    glaucoma_config_package = UploadProfileEncounterSetTypeGradingPackage(
+        name="Glaucoma disease package",
+        code="glaucoma_disease_package",
+        applicability="always",
+        grading_mode="disease_specific",
+        default_image_grading_scheme=glaucoma,
+        image_grading_schemes=[
+            UploadProfileEncounterSetTypePackageImageScheme(
+                disease=glaucoma,
+                is_default=True,
+                auto_create_policy="remidio_glaucoma_report_present",
+                display_order=1,
+            )
+        ],
+        encounter_grading_schemes=[
+            UploadProfileEncounterSetTypePackageEncounterScheme(disease=glaucoma_encounter_scheme, display_order=1)
+        ],
+    )
+    profile_config.grading_packages.extend([dr_config_package, glaucoma_config_package])
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200
+    runtime_packages = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(EncounterSetGradingPackage.patient_encounter_id == encounter_set_data["encounter"].id)
+        .order_by(EncounterSetGradingPackage.code)
+        .all()
+    )
+    assert [package.code for package in runtime_packages] == ["dr_disease_package", "glaucoma_disease_package"]
+    expected_targets = {
+        "dr_disease_package": (dr_config_package.id, dr.id, dr_encounter_scheme.id),
+        "glaucoma_disease_package": (
+            glaucoma_config_package.id,
+            glaucoma.id,
+            glaucoma_encounter_scheme.id,
+        ),
+    }
+    for package in runtime_packages:
+        config_package_id, image_scheme_id, encounter_scheme_id = expected_targets[package.code]
+        assert package.grading_mode == "disease_specific"
+        assert package.upload_profile_est_grading_package_id == config_package_id
+        tasks = db_session.query(GradingTask).filter(GradingTask.encounter_set_package_id == package.id).all()
+        assert {(task.grading_target_level, task.disease_id) for task in tasks} == {
+            ("image", image_scheme_id),
+            ("encounter", encounter_scheme_id),
+        }
+        image_task = next(task for task in tasks if task.grading_target_level == "image")
+        encounter_task = next(task for task in tasks if task.grading_target_level == "encounter")
+        assert image_task.encounter_set_image_id == encounter_set_data["image"].id
+        assert image_task.patient_encounter_id is None
+        assert encounter_task.patient_encounter_id == encounter_set_data["encounter"].id
+        assert encounter_task.encounter_set_image_id is None
+
+
 def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_policy(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
 ):

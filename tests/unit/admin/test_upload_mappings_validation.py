@@ -62,6 +62,77 @@ def test_validate_mydriatic_flags_accepts_valid_combinations():
     ) is None
 
 
+def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_mapping(db_session):
+    image_scheme_one = Disease(name="Explicit Mapping Image One", grading_scope="image")
+    image_scheme_two = Disease(name="Explicit Mapping Image Two", grading_scope="image")
+    encounter_scheme = Disease(name="Explicit Mapping Encounter", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Explicit Mapping EncounterSet",
+        code="explicit_mapping_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([image_scheme_one, image_scheme_two, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    def validate(packages):
+        return admin_service._validate_encounter_set_configs(
+            db_session,
+            {
+                encounter_set_type.id: EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme_one.id, image_scheme_two.id],
+                    default_image_grading_scheme_id=image_scheme_one.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=packages,
+                )
+            },
+        )
+
+    assert "exactly one image grading scheme" in validate([
+        EncounterSetGradingPackageInput(
+            name="Ambiguous images",
+            code="ambiguous_images",
+            applicability="always",
+            grading_mode="disease_specific",
+            image_grading_scheme_ids=[image_scheme_one.id, image_scheme_two.id],
+            encounter_grading_scheme_ids=[encounter_scheme.id],
+            default_image_grading_scheme_id=image_scheme_one.id,
+        )
+    ])
+    assert "exactly one encounter grading scheme" in validate([
+        EncounterSetGradingPackageInput(
+            name="Missing encounter",
+            code="missing_encounter",
+            applicability="always",
+            grading_mode="disease_specific",
+            image_grading_scheme_ids=[image_scheme_one.id],
+            encounter_grading_scheme_ids=[],
+            default_image_grading_scheme_id=image_scheme_one.id,
+        )
+    ])
+    assert "only one disease-specific package" in validate([
+        EncounterSetGradingPackageInput(
+            name="First mapping",
+            code="first_mapping",
+            applicability="always",
+            grading_mode="disease_specific",
+            image_grading_scheme_ids=[image_scheme_one.id],
+            encounter_grading_scheme_ids=[encounter_scheme.id],
+            default_image_grading_scheme_id=image_scheme_one.id,
+        ),
+        EncounterSetGradingPackageInput(
+            name="Duplicate mapping",
+            code="duplicate_mapping",
+            applicability="always",
+            grading_mode="disease_specific",
+            image_grading_scheme_ids=[image_scheme_one.id],
+            encounter_grading_scheme_ids=[encounter_scheme.id],
+            default_image_grading_scheme_id=image_scheme_one.id,
+        ),
+    ])
+
+
 def test_update_project_changes_title_code_and_description(db_session, monkeypatch):
     @contextmanager
     def use_test_session():

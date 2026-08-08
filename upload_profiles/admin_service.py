@@ -718,6 +718,7 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             return "Default image grading scheme must be one of the selected image grading schemes."
         disease_ids.update(config.image_grading_scheme_ids)
         disease_ids.add(config.encounter_grading_scheme_id)
+        disease_specific_image_scheme_ids: set[int] = set()
         for package in _packages_for_config(config):
             if package.applicability not in {
                 "always",
@@ -730,6 +731,15 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
                 return "Unsupported EncounterSet grading package applicability."
             if package.grading_mode not in ENCOUNTER_SET_GRADING_MODES:
                 return "Unsupported EncounterSet grading package mode."
+            if package.grading_mode == "disease_specific":
+                if len(package.image_grading_scheme_ids) != 1:
+                    return f"Disease-specific package {package.name} must select exactly one image grading scheme."
+                if len(package.encounter_grading_scheme_ids) != 1:
+                    return f"Disease-specific package {package.name} must select exactly one encounter grading scheme."
+                image_scheme_id = package.image_grading_scheme_ids[0]
+                if image_scheme_id in disease_specific_image_scheme_ids:
+                    return "Each image grading scheme may appear in only one disease-specific package."
+                disease_specific_image_scheme_ids.add(image_scheme_id)
             if package.image_grading_scheme_ids and not package.default_image_grading_scheme_id:
                 return f"Select a default image grading scheme for package {package.name}."
             if package.default_image_grading_scheme_id and package.default_image_grading_scheme_id not in package.image_grading_scheme_ids:

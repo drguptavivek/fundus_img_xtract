@@ -134,6 +134,11 @@ These models track the raw data as it is uploaded and processed.
   - **Method Values**: 'match' (resident and resident2 agreed), 'adjudication' (arbitrator decision)
   - **Purpose**: Stores the final grading decision
 
+- **`review_grade_correction_archive`**: Immutable storage for review-grade rows moved out by a verified correction migration.
+  - **Key Fields**: `original_grade_id`, `task_id`, `migration_id`, `script_name`, `archived_at`, `payload_json`
+  - **Purpose**: Preserves the complete original grade snapshot and correction evidence without adding one-time correction fields to `grades`.
+  - **Integrity**: One archived snapshot per original grade and migration; identifiers intentionally have no foreign keys so the audit survives removal of the source grade row.
+
 - **`TaskTracker`**: Tracks when users start working on tasks.
   - **Key Fields**: `id`, `task_id`, `user_id`, `role_slot`, `started_at`
   - **Purpose**: Identifies and cleans up stuck tasks

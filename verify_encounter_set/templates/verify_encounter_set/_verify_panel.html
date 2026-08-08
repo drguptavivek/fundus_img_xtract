@@ -37,7 +37,7 @@
     {% set value = metadata.get(field.key) if metadata else none %}
     <div>
       <label class="form-label" for="{{ prefix }}__{{ field.key }}">
-        {{ field.label }}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
+        {{ field.label }}{% if field.required_for_task_routing %}<span class="badge text-bg-primary ms-1">Required for task routing</span>{% endif %}{% if field.is_pii %}<span class="badge text-bg-warning ms-1">PII</span>{% endif %}
       </label>
       {{ field_control(field, value, prefix ~ '__' ~ field.key) }}
     </div>
@@ -255,7 +255,7 @@
       {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
     </div>
     <div class="panel-actions">
-      <a class="btn btn-sm btn-primary" href="{{ url_for('verify_encounter_set.edit_image', uuid=selected_image.uuid) }}">
+      <a class="btn btn-sm btn-primary js-edit-image" href="{{ url_for('verify_encounter_set.edit_image', uuid=selected_image.uuid) }}">
         <i class="bi bi-pencil-square"></i> Edit Image
       </a>
       <button class="btn btn-sm btn-outline-success js-mark-reviewed" type="button" data-url="{{ url_for('verify_encounter_set.mark_reviewed', uuid=selected_image.uuid) }}">

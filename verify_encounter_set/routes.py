@@ -25,7 +25,11 @@ from services.encounter_referral_suggestion import (
 from services.encounter_set_ai_inference import create_wadhwani_task_ids_for_encounter, enqueue_wadhwani_for_task_ids
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
-from upload_profiles.image_task_routing import image_metadata_matches_rule
+from upload_profiles.image_task_routing import (
+    image_metadata_matches_rule,
+    missing_image_task_routing_fields,
+    required_image_task_routing_fields,
+)
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
@@ -313,6 +317,13 @@ def mark_reviewed(uuid):
         if not encounter:
             return jsonify({"success": False, "message": "Image not found"}), 404
 
+        missing_fields = missing_image_task_routing_fields(
+            img,
+            _active_encounter_set_type_config(encounter),
+        )
+        if missing_fields:
+            return _missing_routing_metadata_response(missing_fields)
+
         img.is_reviewed = True
         return jsonify({"success": True})
 
@@ -424,6 +435,13 @@ def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:
     fields = _metadata_fields_by_display_order(
         (encounter_set_type.metadata_schema_json or {}).get("fields", []) if encounter_set_type else []
     )
+    routing_field_keys = {
+        field.key for field in required_image_task_routing_fields(profile_config)
+    }
+    fields = [
+        {**field, "required_for_task_routing": field["key"] in routing_field_keys}
+        for field in fields
+    ]
     image_schemes = []
     if profile_config:
         image_schemes = [
@@ -477,6 +495,23 @@ def _active_encounter_set_type_config(encounter: PatientEncounters) -> UploadPro
             if config.encounter_set_type_id == type_id:
                 return config
     return active_configs[0]
+
+
+def _missing_routing_metadata_response(missing_fields, *, image_count: int = 1):
+    labels = [field.label for field in missing_fields]
+    label_text = ", ".join(labels)
+    if image_count == 1:
+        message = f"Select {label_text} before marking this image reviewed."
+    else:
+        message = (
+            f"Cannot complete this action: {image_count} applicable image(s) are missing "
+            f"required task-routing metadata: {label_text}."
+        )
+    return jsonify({
+        "success": False,
+        "message": message,
+        "missing_fields": [field.key for field in missing_fields],
+    }), 409
 
 
 def _metadata_fields_by_display_order(fields: list[dict]) -> list[dict]:
@@ -720,6 +755,42 @@ def finalize_verification(uuid):
             .filter_by(patient_encounter_id=encounter.id)\
             .with_for_update()\
             .all()
+
+        profile_config = _active_encounter_set_type_config(encounter)
+        required_routing_fields = required_image_task_routing_fields(profile_config)
+        routing_violations = [
+            {
+                "image_uuid": image.uuid,
+                "spatial_position": image.spatial_position,
+                "missing_fields": [field.key for field in missing],
+            }
+            for image in images
+            if (missing := missing_image_task_routing_fields(image, profile_config))
+        ]
+        if routing_violations:
+            missing_field_keys = {
+                field_key
+                for violation in routing_violations
+                for field_key in violation["missing_fields"]
+            }
+            missing_routing_fields = tuple(
+                field for field in required_routing_fields if field.key in missing_field_keys
+            )
+            labels = ", ".join(field.label for field in missing_routing_fields)
+            message = (
+                f"Cannot finalize: {len(routing_violations)} applicable image(s) are missing "
+                f"required task-routing metadata: {labels}. Complete image metadata before verification."
+            )
+            if request.headers.get("X-EncounterSet-Async") == "1":
+                return jsonify({
+                    "success": False,
+                    "message": message,
+                    "missing_fields": [field.key for field in missing_routing_fields],
+                    "images": routing_violations,
+                    "redirect_url": url_for("verify_encounter_set.verify_encounter", uuid=uuid),
+                }), 409
+            flash(message, "warning")
+            return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
 
         # Check all images are reviewed (safe - images are locked)
         unreviewed_count = sum(1 for img in images if not img.is_reviewed)
@@ -1356,6 +1427,13 @@ def save_edit(uuid):
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
 
+        missing_fields = missing_image_task_routing_fields(
+            img,
+            _active_encounter_set_type_config(encounter),
+        )
+        if missing_fields:
+            return _missing_routing_metadata_response(missing_fields)
+
         if img.s3_config_id or img.s3_object_key:
             return jsonify({
                 "success": False,
@@ -1429,6 +1507,13 @@ def mark_anonymized(uuid):
             if not is_valid:
                 return jsonify({"success": False, "message": "Permission denied"}), 403
 
+        missing_fields = missing_image_task_routing_fields(
+            img,
+            _active_encounter_set_type_config(encounter),
+        )
+        if missing_fields:
+            return _missing_routing_metadata_response(missing_fields)
+
         img.is_anonymized = True
         img.is_reviewed = True
 
@@ -1453,6 +1538,18 @@ def mark_all_anonymized(uuid):
             return jsonify({"success": False, "message": "Permission denied"}), 403
 
         images = db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all()
+        profile_config = _active_encounter_set_type_config(encounter)
+        missing_by_image = [
+            missing_image_task_routing_fields(image, profile_config)
+            for image in images
+        ]
+        missing_by_image = [missing for missing in missing_by_image if missing]
+        if missing_by_image:
+            missing_fields = tuple({field.key: field for missing in missing_by_image for field in missing}.values())
+            return _missing_routing_metadata_response(
+                missing_fields,
+                image_count=len(missing_by_image),
+            )
         count = 0
         for img in images:
             img.is_anonymized = True
@@ -1571,6 +1668,18 @@ def undo_not_gradable(uuid):
 
         img.is_not_gradable = False
         img.not_gradable_reason = None
-        # Keep is_reviewed = True since it was reviewed
+        missing_fields = missing_image_task_routing_fields(
+            img,
+            _active_encounter_set_type_config(encounter),
+        )
+        if missing_fields:
+            img.is_reviewed = False
 
-        return jsonify({"success": True})
+        return jsonify({
+            "success": True,
+            "is_reviewed": img.is_reviewed,
+            "message": (
+                "Ungradable status removed. Complete the required image metadata and review the image again."
+                if missing_fields else "Ungradable status removed."
+            ),
+        })

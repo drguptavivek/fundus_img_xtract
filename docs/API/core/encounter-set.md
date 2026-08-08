@@ -8,6 +8,8 @@ Auth and CSRF:
 - The browser-session `POST` route for image reordering requires CSRF protection.
 - The mobile upload route uses `@token_auth_required` and is exempt from the session CSRF guard.
 
+The existing verification workflow endpoints remain on the `verify_encounter_set` page blueprint. They return JSON for the JavaScript client and are documented below as compatibility endpoints; reusable new API behavior belongs under `/api/...`.
+
 ## Routes
 
 | Route | Method | Auth | Request | Response | Status codes |
@@ -16,6 +18,54 @@ Auth and CSRF:
 | `/api/v1/encounter-set/<uuid>/details` | `GET` | Session + login + `admin`, `local_admin`, `optometrist` | Path `uuid` | `{ "uuid": str, "patient_id": str, "patient_name": str, "capture_date": date \| datetime, "referral_suggestion": "yes" \| "no" \| "missing", "referral_positive_diseases": [str], "images": [{"uuid": str, "spatial_position": int, "referral_needed_or_positive_image": "yes" \| "no" \| "missing", "url": str, "thumbnail_url": str \| null}] }` | `404` if the encounter is not found or not in scope. `403` on role failure. `500` on unexpected server error. |
 | `/api/v1/encounter-set/image/<uuid>/position` | `POST` | Session + login + `admin`, `local_admin`, `optometrist` + CSRF | JSON body `{ "spatial_position": int }` | `{ "message": "Position updated" }` | `400` for missing or invalid position, `404` if the image is missing, `403` if access is denied, `409` on a unique-position conflict, `500` on unexpected DB error. |
 | `/api/v1/encounter-set/upload` | `POST` | Bearer JWT via `@token_auth_required` + rate limit (`60 per minute`) | Multipart form-data | `{ "message": str, "encounter_id": int, "encounter_uuid": str, "image_uuid": str, "spatial_position": int, "referral_suggestion": "yes" \| "no" \| "missing", "referral_positive_diseases": [str], "referral_needed_or_positive_image": "yes" \| "no" \| "missing" }` | `400`, `401`, `403`, `404`, `413`, or `500` depending on validation and storage failure. |
+
+## Verification compatibility endpoints
+
+### `POST /verify_encounter_set/mark_reviewed/<image_uuid>`
+
+Requires a logged-in user with the `admin`, `optometrist`, or `data_manager` role, upload scope for the EncounterSet, and a session CSRF token in `X-CSRFToken`. The request has no body. The verification UI saves current metadata first and then calls this endpoint.
+
+Success:
+
+```json
+{ "success": true }
+```
+
+When an active auto-created image grading scheme routes tasks by metadata and the applicable image has no value for that field, the endpoint returns `409`:
+
+```json
+{
+  "success": false,
+  "message": "Select Laterality before marking this image reviewed.",
+  "missing_fields": ["laterality"]
+}
+```
+
+It returns `404` when the image does not exist or its EncounterSet is outside the caller's upload scope. Ungradable, non-task, and grader-hidden images are exempt from task-routing metadata validation.
+
+### `POST /verify_encounter_set/finalize/<encounter_uuid>`
+
+Requires a logged-in user with the `admin`, `optometrist`, or `data_manager` role, access to the EncounterSet lab unit, and `X-CSRFToken`. Send `X-EncounterSet-Async: 1` to receive JSON; the normal browser form receives redirects and flash messages.
+
+Finalization locks the encounter and its images, validates task-routing metadata, validates that all images are reviewed, records the verification audit fields, and creates configured grading tasks. Missing routing metadata returns `409` before any verification or grading-task changes:
+
+```json
+{
+  "success": false,
+  "message": "Cannot finalize: 1 applicable image(s) are missing required task-routing metadata: Laterality. Complete image metadata before verification.",
+  "missing_fields": ["laterality"],
+  "images": [
+    {
+      "image_uuid": "image-uuid",
+      "spatial_position": 1,
+      "missing_fields": ["laterality"]
+    }
+  ],
+  "redirect_url": "/verify_encounter_set/verify/encounter-uuid"
+}
+```
+
+An unreviewed image also returns `409`. A successful async response is `{ "success": true, "redirect_url": "..." }`.
 
 ## `GET /api/v1/encounter-set/unverified`
 

@@ -169,6 +169,7 @@ POST /verify_encounter_set/finalize/<encounter_uuid>
 
 **Prerequisites:**
 - All images have `is_reviewed=True`
+- Every gradable, task-eligible image has values for metadata fields used by active image-task routing rules (for example, `laterality`)
 
 **Actions:**
 - Sets `encounter_verified_status='verified'`

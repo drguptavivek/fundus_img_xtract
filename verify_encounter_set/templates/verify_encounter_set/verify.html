@@ -501,6 +501,15 @@
     }
 
     document.addEventListener('click', function (event) {
+      const editImage = event.target.closest('.js-edit-image');
+      if (editImage) {
+        event.preventDefault();
+        saveMetadataAsync()
+          .then(() => { window.location.href = editImage.href; })
+          .catch((error) => { alert(error.message); });
+        return;
+      }
+
       const openNotGradable = event.target.closest('.js-open-not-gradable');
       if (openNotGradable) {
         const panel = openNotGradable.closest('.image-panel-grid')?.querySelector('[data-ungradable-reason-panel]');
@@ -559,7 +568,10 @@
         payload = {image_uuid: button.dataset.uuid, position};
       }
       const url = reorder ? "{{ url_for('verify_encounter_set.update_position') }}" : button.dataset.url;
-      postJson(url, payload).then(() => {
+      const requestAction = reviewed
+        ? saveMetadataAsync().then(() => postJson(url, payload))
+        : postJson(url, payload);
+      requestAction.then(() => {
         if (reviewed || notGradable) {
           const active = document.querySelector('.verify-nav-item.active');
           const status = active?.querySelector('.small.text-muted');

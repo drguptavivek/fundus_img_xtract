@@ -52,6 +52,14 @@ After an auto-creation policy enables a scheme for an EncounterSet, the optional
 
 For Remidio laterality routing, the normalized field is `laterality`: `OD` represents right eye and `OS` represents left eye. The task creator never infers this mapping from grading-scheme names such as `RT` or `LT`.
 
+## Verification Metadata Gate
+
+When any active auto-created image scheme has a metadata routing rule, its configured image field becomes required during verification for every gradable, task-eligible clinical image. The image panel labels it **Required for task routing**.
+
+The verifier saves the current image metadata before handling **Verified**. It refuses to mark the image reviewed when a routing field is blank and returns HTTP `409` with `missing_fields` containing the configured field keys. EncounterSet finalization repeats this validation while the encounter and images are locked, so older or concurrently changed images cannot bypass the gate. The finalization error also identifies each affected image UUID and spatial position.
+
+Images marked ungradable and images that cannot create grading tasks are exempt. Removing the ungradable status resets an image to unreviewed when required routing metadata is still missing. Schemes configured with `auto_create_policy = never`, inactive schemes/packages, and profiles without metadata routing rules do not add verification requirements.
+
 Projects may configure a Remote Inference Policy. Each active disease rule separates:
 
 - `trigger_timing`: `on_image_received`, `on_report_received`, `after_verification`, or `manual_only`

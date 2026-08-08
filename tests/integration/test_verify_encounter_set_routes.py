@@ -152,6 +152,34 @@ def encounter_set_data(db_session, core_test_data):
         'upload_profile': upload_profile,
     }
 
+
+def _configure_laterality_task_routing(encounter_set_data, db_session):
+    config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    disease = config.default_image_grading_scheme
+    config.grading_packages = [
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="Laterality validation package",
+            code=f"laterality_validation_{uuid.uuid4().hex[:8]}",
+            grading_mode="unified",
+            default_image_grading_scheme=disease,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=disease,
+                    is_default=True,
+                    auto_create_policy="always",
+                    metadata_field_key="laterality",
+                    metadata_match_value="right",
+                    display_order=1,
+                )
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=disease, display_order=1)
+            ],
+        )
+    ]
+    db_session.flush()
+    return config
+
 def test_verify_encounter_set_index(client, auth_client_factory, encounter_set_data, db_session):
     """Test the index page lists pending encounter sets."""
     user = UserFactory.create_admin(db_session, username="admin_verify_index")
@@ -427,6 +455,68 @@ def test_verify_encounter_set_finalize_async_blocked(client, auth_client_factory
     assert response.status_code == 409
     assert response.json["success"] is False
     assert b"not yet reviewed" in response.data
+
+
+def test_mark_reviewed_requires_configured_image_routing_metadata(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="verify_mark_reviewed_laterality")
+    auth_client = auth_client_factory(user)
+    _configure_laterality_task_routing(encounter_set_data, db_session)
+    encounter_set_data["image"].metadata_json = {}
+    db_session.flush()
+
+    panel_response = auth_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}/panel/image"
+        f"?image_uuid={encounter_set_data['image'].uuid}"
+    )
+    assert panel_response.status_code == 200
+    assert b"Required for task routing" in panel_response.data
+
+    response = auth_client.post(
+        f"/verify_encounter_set/mark_reviewed/{encounter_set_data['image'].uuid}",
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert response.json["missing_fields"] == ["laterality"]
+    assert "Select Laterality" in response.json["message"]
+    db_session.refresh(encounter_set_data["image"])
+    assert encounter_set_data["image"].is_reviewed is False
+
+
+def test_finalize_rejects_reviewed_image_missing_configured_routing_metadata(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="verify_finalize_missing_laterality",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    _configure_laterality_task_routing(encounter_set_data, db_session)
+    encounter_set_data["image"].metadata_json = {}
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert response.json["missing_fields"] == ["laterality"]
+    assert response.json["images"] == [{
+        "image_uuid": encounter_set_data["image"].uuid,
+        "spatial_position": 1,
+        "missing_fields": ["laterality"],
+    }]
+    assert "Cannot finalize" in response.json["message"]
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status != "verified"
 
 
 def test_verify_encounter_set_finalize_async_close_redirects_to_browser(
@@ -951,6 +1041,8 @@ def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targ
         lab_units=[encounter_set_data['lab_unit']],
     )
     auth_client = auth_client_factory(user)
+    _configure_laterality_task_routing(encounter_set_data, db_session)
+    encounter_set_data['image'].metadata_json = {}
     encounter_set_data['image'].is_reviewed = True
     encounter_set_data['image'].is_not_gradable = True
     encounter_set_data['image'].not_gradable_reason = "Poor focus"

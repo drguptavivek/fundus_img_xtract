@@ -115,3 +115,4 @@ def test_review_template_requires_explicit_human_grade_selection():
     assert "change a Quality Assessment selection. A comment alone is not sufficient." in template
     assert 'href="{{ cancel_close_url }}"' in template
     assert "Cancel &amp; Close" in template
+    assert "-review-submit-v2" in template

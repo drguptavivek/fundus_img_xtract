@@ -504,5 +504,5 @@
     {% else %}null{% endif %}
   }
 </script>
-<script src="{{ url_for('static', filename='js/review-task-detail.js') }}"></script>
+<script src="{{ url_for('static', filename='js/review-task-detail.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-review-submit-v2"></script>
 {% endblock %}

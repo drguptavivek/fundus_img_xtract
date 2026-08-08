@@ -168,7 +168,7 @@
         return;
       }
       const hasSelection = Boolean(document.querySelector('input[name="grading_id"]:checked'));
-      const shouldShow = hasSelection || existingReviewGradeId !== null;
+      const shouldShow = hasSelection;
       reviewCommentBlock.style.display = shouldShow ? 'block' : 'none';
       reviewComment.disabled = !shouldShow;
       if (aiInfluenceBlock) {
@@ -245,14 +245,6 @@
         }
       }
     });
-
-    if (!document.querySelector('input[name="grading_id"]:checked') && existingReviewGradeId !== null) {
-      const matchingExisting = document.querySelector(`input[name="grading_id"][value="${existingReviewGradeId}"]`);
-      if (matchingExisting) {
-        matchingExisting.checked = true;
-        matchingExisting.dispatchEvent(new Event('change'));
-      }
-    }
 
     updateReviewCommentVisibility();
 

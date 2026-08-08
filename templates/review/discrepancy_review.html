@@ -259,11 +259,11 @@
           </div>
 
           <div class="col-md-3">
-            <label for="hasReviewSelect" class="form-label">Has Review</label>
+            <label for="hasReviewSelect" class="form-label">Human Review</label>
             <select class="form-select" id="hasReviewSelect" name="has_review">
               <option value="">All Tasks</option>
-              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Review</option>
-              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Review</option>
+              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Human Review</option>
+              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Human Review</option>
             </select>
           </div>
 

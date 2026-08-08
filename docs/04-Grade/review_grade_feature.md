@@ -51,6 +51,9 @@ This document describes the implementation of the Review Grade feature for the F
    - Added POST method handling for review grade submission
    - Added permission checking using existing utility functions
    - Added logic to create or update review grades
+   - Writes AI feedback only when submitted values differ from stored values
+   - Requires an explicit human-grade selection for every new review or revision
+   - Queues a per-disease image-listing refresh after successful submission
 
 ### Database Changes
 
@@ -76,6 +79,9 @@ This document describes the implementation of the Review Grade feature for the F
    - Added review grade form with radio buttons
    - Added comment field for review notes
    - Added JavaScript for visual feedback
+   - Existing reviews are displayed but are not preselected for resubmission
+   - AI-influence `yes` means "Updated based on AI result" and `no` means
+     "Updated NOT based on AI result"
 
 ## Security Considerations
 

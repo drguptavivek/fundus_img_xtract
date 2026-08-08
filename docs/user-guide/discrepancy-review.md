@@ -58,8 +58,16 @@ The system offers several filters to refine the displayed tasks:
 - **No AI Grade**: Show only tasks without an AI grade
 
 #### Review Grade Filter
-- **Has Review**: Show only tasks that have review grades
-- **No Review**: Show only tasks without review grades
+- **Has Human Review**: Show only tasks that have a `review`-role human grade
+- **No Human Review**: Show only tasks without a `review`-role human grade. AI-model feedback alone does not count as a human review.
+
+### Submitting AI Feedback and Human Review
+
+- AI-model quality status/comments and a human review grade are independent actions.
+- Prefilled AI feedback is not resubmitted unless its status or comment actually changes.
+- Clearing an existing AI status/comment is an explicit saved change.
+- Updating a human review requires selecting the intended grade again; an existing review is displayed for reference but is never selected implicitly.
+- When an AI grade is visible and a human grade is selected, the reviewer must record whether the update was based on the AI result.
 
 #### AI Model Filter
 - Select specific AI models to filter by

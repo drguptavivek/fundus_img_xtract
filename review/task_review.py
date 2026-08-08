@@ -33,6 +33,76 @@ AI_REVIEW_STATUS_LABELS: dict[str, str] = {
 }
 
 
+def _normalize_ai_review_status(value: object) -> str | None:
+    """Normalize a submitted or stored AI-review status for comparison."""
+    normalized = str(value or "").strip().lower()
+    return normalized or None
+
+
+def _normalize_ai_review_comment(value: object) -> str | None:
+    """Normalize a submitted or stored AI-review comment for comparison."""
+    normalized = str(value or "").strip()
+    return normalized or None
+
+
+def _collect_changed_ai_feedback(
+    ai_grades: list[Grade],
+    form: object,
+) -> tuple[list[dict[str, object]], bool]:
+    """Return only explicitly submitted AI feedback whose normalized value changed.
+
+    Presence checks distinguish an intentional clear (a present, empty field)
+    from a transport that omitted the AI-feedback controls entirely.
+    """
+    changed: list[dict[str, object]] = []
+    invalid_status = False
+    allowed_statuses = set(AI_REVIEW_STATUS_LABELS)
+
+    for ai_grade in ai_grades:
+        status_field = f"ai_review_status_{ai_grade.id}"
+        comment_field = f"ai_review_comment_{ai_grade.id}"
+        status_present = status_field in form
+        comment_present = comment_field in form
+        if not status_present and not comment_present:
+            continue
+
+        submitted_status = _normalize_ai_review_status(
+            form.get(status_field) if status_present else ai_grade.ai_review_status
+        )
+        submitted_comment = _normalize_ai_review_comment(
+            form.get(comment_field) if comment_present else ai_grade.ai_review_comment
+        )
+
+        if submitted_status and submitted_status not in allowed_statuses:
+            invalid_status = True
+            continue
+
+        current_status = _normalize_ai_review_status(ai_grade.ai_review_status)
+        current_comment = _normalize_ai_review_comment(ai_grade.ai_review_comment)
+        if submitted_status == current_status and submitted_comment == current_comment:
+            continue
+
+        changed.append(
+            {
+                "grade_obj": ai_grade,
+                "status": submitted_status,
+                "comment": submitted_comment,
+            }
+        )
+
+    return changed, invalid_status
+
+
+def _queue_review_listing_refresh() -> None:
+    """Refresh discrepancy-listing materialized views after the DB commit."""
+    try:
+        from celery_tasks.tasks.mv_tasks import refresh_image_listing_v2_task
+
+        refresh_image_listing_v2_task.delay(schedule_time="review_submission")
+    except Exception:
+        grades_logger.exception("Unable to queue image-listing refresh after review submission")
+
+
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
     """Return a best-effort parsed list of previously selected features."""
     if not selected_features_json:
@@ -329,30 +399,14 @@ def review_task_details(task_id: int):
                 },
             )
 
-            ai_feedback_payload: list[dict[str, object]] = []
-            ai_feedback_present = False
-            allowed_ai_statuses = set(AI_REVIEW_STATUS_LABELS.keys())
-            for ai_grade in ai_grades:
-                status_field = f"ai_review_status_{ai_grade.id}"
-                comment_field = f"ai_review_comment_{ai_grade.id}"
-                submitted_status = (request.form.get(status_field) or "").strip().lower() or None
-                submitted_comment = (request.form.get(comment_field) or "").strip() or None
-
-                if submitted_status and submitted_status not in allowed_ai_statuses:
-                    flash('Invalid AI review selection submitted.', 'error')
-                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
-
-                if submitted_status is None and submitted_comment is None:
-                    continue
-
-                ai_feedback_present = True
-                ai_feedback_payload.append(
-                    {
-                        "grade_obj": ai_grade,
-                        "status": submitted_status,
-                        "comment": submitted_comment,
-                    }
-                )
+            ai_feedback_payload, invalid_ai_status = _collect_changed_ai_feedback(
+                ai_grades,
+                request.form,
+            )
+            if invalid_ai_status:
+                flash('Invalid AI review selection submitted.', 'error')
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+            ai_feedback_changed = bool(ai_feedback_payload)
 
             if action == "cancel_next":
                 if return_to and is_safe_url(return_to) and effective_next_task_id:
@@ -394,8 +448,8 @@ def review_task_details(task_id: int):
 
             selected_features_json: str | None = None
 
-            if not grading_id and not ai_feedback_present:
-                flash('Please select a grade', 'error')
+            if not grading_id and not ai_feedback_changed:
+                flash('Please select a grade or change the AI feedback.', 'error')
                 return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             if grading_id and ai_visible and ai_influence not in {"yes", "no"}:
@@ -452,33 +506,32 @@ def review_task_details(task_id: int):
             previous_consensus_method = previous_consensus.method if previous_consensus else None
             previous_consensus_grade_id = previous_consensus.final_disease_grading_id if previous_consensus else None
 
-            # Determine if this is a revision
-            is_revision = existing_review_grade is not None
-            grade_type = "revision" if is_revision else "new"
-            grade_id = existing_review_grade.id if existing_review_grade else "N/A"
-            
-            # Capture previous values for logging (before updating)
-            prev_grade_id = None
-            prev_comment = None
-            
-            if is_revision:
-                prev_grade_id = existing_review_grade.disease_grading_id
-                prev_comment = existing_review_grade.comment
-            
-            # Create log message
-            log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: review] [Disease ID: {task.disease_id}] [Grade: {grading_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
-            if comment:
-                log_message += f" [Comments - {comment}]"
-
-            # If this is a revision, also log the previous grade and comment
-            if is_revision and prev_grade_id is not None:
-                prev_comment_display = prev_comment if prev_comment else "None"
-                log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
-
             ai_feedback_logs: list[str] = []
 
-            # Log using dedicated grades logger
-            grades_logger.info(log_message)
+            # Log a human grade only when it was explicitly selected. AI-only
+            # feedback must not be represented as a human grade revision.
+            if grading_id:
+                is_revision = existing_review_grade is not None
+                grade_type = "revision" if is_revision else "new"
+                grade_id = existing_review_grade.id if existing_review_grade else "N/A"
+                prev_grade_id = (
+                    existing_review_grade.disease_grading_id if existing_review_grade else None
+                )
+                prev_comment = existing_review_grade.comment if existing_review_grade else None
+                log_message = (
+                    f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] "
+                    f"[Task ID: {task_id}] [Slot Type: review] [Disease ID: {task.disease_id}] "
+                    f"[Grade: {grading_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
+                )
+                if comment:
+                    log_message += f" [Comments - {comment}]"
+                if is_revision and prev_grade_id is not None:
+                    prev_comment_display = prev_comment if prev_comment else "None"
+                    log_message += (
+                        f" [Previous Grade: {prev_grade_id}] "
+                        f"[Previous Comment: {prev_comment_display}]"
+                    )
+                grades_logger.info(log_message)
             
             comment = _apply_ai_influence_comment(comment, ai_influence) if grading_id else comment
 
@@ -550,6 +603,7 @@ def review_task_details(task_id: int):
 
             db.commit()
             invalidate_discrepancy_review_cache()
+            _queue_review_listing_refresh()
             success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
             flash(success_message, 'success')
             if return_to and is_safe_url(return_to):

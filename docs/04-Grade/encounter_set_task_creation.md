@@ -67,6 +67,28 @@ The verifier saves the current image metadata before handling **Verified**. It r
 
 Images marked ungradable and images that cannot create grading tasks are exempt. Removing the ungradable status resets an image to unreviewed when required routing metadata is still missing. Schemes configured with `auto_create_policy = never`, inactive schemes/packages, and profiles without metadata routing rules do not add verification requirements.
 
+## Project Positive-Disease Gate
+
+The verification summary does not accept free-text positive diseases. It lists
+the image grading scheme names exposed by active EncounterSet targets across the
+encounter's project Upload & Grading Profiles. Unified encounter-only schemes
+and grading schemes from other projects are not choices.
+
+`POST /verify_encounter_set/metadata/<encounter_uuid>` accepts repeated
+`metadata__encounter__referral_positive_diseases` form values. Values are
+canonicalized to the configured grading scheme names; an out-of-project value
+returns HTTP `400`. A referral-positive EncounterSet must have at least one
+configured choice. Finalization repeats the check under the encounter lock and
+returns HTTP `409` before creating tasks if the positive disease is missing or
+outside the project's current scheme set. Referral-negative EncounterSets store
+an empty positive-disease list.
+
+This classification drives disease-specific
+`positive_plus_negative_controls`: a referral-positive EncounterSet is positive
+only for its selected project schemes and is negative for the project's other
+schemes. Historical referral-positive rows with an empty disease list are not
+treated as positive for every disease.
+
 Projects may configure a Remote Inference Policy. Each active disease rule separates:
 
 - `trigger_timing`: `on_image_received`, `on_report_received`, `after_verification`, or `manual_only`

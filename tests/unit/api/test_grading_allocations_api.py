@@ -166,7 +166,7 @@ def test_project_encounter_set_queue_api_returns_current_users_queues(
         project_title="Integrated DR Glaucoma Screening",
         project_code="ICMR-VG",
         target_key="disease_encounter:1:15",
-        target_label="Glaucoma / EncounterSet (Remidio API Standard Encounter Set)",
+        target_label="Glaucoma / EncounterSet",
         encounter_set_type_name="Remidio API Standard Encounter Set",
         slots=(
             EncounterSetQueueSlotDTO(

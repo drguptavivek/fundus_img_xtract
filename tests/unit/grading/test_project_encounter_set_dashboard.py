@@ -14,7 +14,7 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
         project_title="Integrated DR Glaucoma Screening",
         project_code="ICMR-VG",
         target_key="disease_encounter:1:15",
-        target_label="Glaucoma / EncounterSet (Remidio API Standard Encounter Set)",
+        target_label="Glaucoma / EncounterSet",
         encounter_set_type_name="Remidio API Standard Encounter Set",
         slots=(
             EncounterSetQueueSlotDTO(
@@ -73,7 +73,7 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
     assert "Integrated DR Glaucoma Screening" in body
     assert "ICMR-VG" not in body
     assert "Glaucoma / EncounterSet" in body
-    assert body.count("Remidio API Standard Encounter Set") == 1
+    assert "Remidio API Standard Encounter Set" not in body
     assert "Resident (1 set)" in body
     assert "/grading/encounter_set_package/package-uuid/resident" in body
     assert "Legacy &amp; Image Grading" in body

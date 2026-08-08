@@ -259,7 +259,12 @@
       const key = inputKey(input);
       if (!key) return;
       try {
-        if (input.type === 'checkbox') {
+        if (input.matches('[data-positive-disease-option]')) {
+          const values = Array.from(
+            panelStage.querySelectorAll('[data-positive-disease-option]:checked')
+          ).map((option) => option.value);
+          localStorage.setItem(key, JSON.stringify(values));
+        } else if (input.type === 'checkbox') {
           localStorage.setItem(key, input.checked ? '1' : '0');
         } else if (input instanceof HTMLSelectElement && input.multiple) {
           const values = Array.from(input.selectedOptions).map((option) => option.value);
@@ -282,7 +287,11 @@
         return;
       }
       if (stored === null) return;
-      if (input.type === 'checkbox') {
+      if (input.matches('[data-positive-disease-option]')) {
+        let values = [];
+        try { values = JSON.parse(stored); } catch (error) { values = []; }
+        input.checked = values.includes(input.value);
+      } else if (input.type === 'checkbox') {
         input.checked = stored === '1';
       } else if (input instanceof HTMLSelectElement && input.multiple) {
         let values = [];
@@ -297,6 +306,11 @@
 
     function restorePanelInputs() {
       panelStage.querySelectorAll('[name^="metadata__"]').forEach(restoreInput);
+    }
+
+    function savePositiveDiseaseGroup() {
+      const option = panelStage.querySelector('[data-positive-disease-option]');
+      if (option) saveInput(option);
     }
 
     function updateSummaryChanges() {
@@ -388,11 +402,12 @@
           'X-EncounterSet-Async': '1'
         },
         body: new FormData(form)
-      }).then((response) => {
-        if (!response.ok) {
-          throw new Error('Unable to save verification fields');
+      }).then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.message || 'Unable to save verification fields');
         }
-        return response.json();
+        return payload;
       });
     }
 
@@ -413,7 +428,12 @@
 
     document.addEventListener('change', function (event) {
       const input = event.target.closest('[name^="metadata__"]');
-      if (input) saveInput(input);
+      if (input) {
+        saveInput(input);
+        if (input.name === 'metadata__encounter__referral_suggestion') {
+          savePositiveDiseaseGroup();
+        }
+      }
     });
 
     document.querySelectorAll('.verify-nav-item').forEach((button) => {

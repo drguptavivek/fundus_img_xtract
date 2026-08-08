@@ -4,6 +4,7 @@ from models import Disease, EncounterSetGradingPackage, PatientEncounters, Encou
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
+    ProjectUploadProfile,
     UploadProfile,
     UploadProfileEncounterSetType,
     UploadProfileEncounterSetTypeGradingPackage,
@@ -78,6 +79,14 @@ def encounter_set_data(db_session, core_test_data):
         )
     )
     db_session.add_all([project, encounter_set_type, upload_profile])
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfile(
+            project_id=project.id,
+            upload_profile_id=upload_profile.id,
+            active=True,
+        )
+    )
     db_session.flush()
     
     encounter = PatientEncounters(
@@ -290,6 +299,10 @@ def test_verify_encounter_set_summary_panel(client, auth_client_factory, encount
     assert b"Ungradable Images" in response.data
     assert b"Changed Fields" in response.data
     assert b"Referral Suggestion" in response.data
+    assert b"Positive Diseases" in response.data
+    assert b'data-positive-disease-option' in response.data
+    assert b'value="Glaucoma"' in response.data
+    assert b"Disease names or free text" not in response.data
     assert b"Level" in response.data
     assert b"Exclude EncounterSet" in response.data
     assert b"Exclude this EncounterSet from verification and grading?" in response.data
@@ -426,6 +439,8 @@ def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_cli
         data={
             "__present__metadata__encounter__referral_suggestion": "1",
             "metadata__encounter__referral_suggestion": "yes",
+            "__present__metadata__encounter__referral_positive_diseases": "1",
+            "metadata__encounter__referral_positive_diseases": "Glaucoma",
         },
         headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
     )
@@ -434,7 +449,59 @@ def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_cli
     assert response.json["success"] is True
     db_session.refresh(encounter_set_data['encounter'])
     assert encounter_set_data['encounter'].referral_suggestion == "yes"
+    assert encounter_set_data['encounter'].referral_positive_diseases_json == ["Glaucoma"]
     assert "referral_suggestion" not in (encounter_set_data['encounter'].metadata_json.get("encounter") or {})
+
+
+def test_verify_encounter_set_rejects_positive_disease_outside_project_schemes(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="admin_verify_invalid_positive_disease")
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={
+            "__present__metadata__encounter__referral_suggestion": "1",
+            "metadata__encounter__referral_suggestion": "yes",
+            "__present__metadata__encounter__referral_positive_diseases": "1",
+            "metadata__encounter__referral_positive_diseases": "Dry AMD",
+        },
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 400
+    assert response.json["success"] is False
+    assert "this project's grading schemes" in response.json["message"]
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].referral_suggestion == "missing"
+
+
+def test_verify_encounter_set_finalize_requires_project_positive_disease(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="verify_finalize_positive_disease_required",
+        lab_units=[encounter_set_data['lab_unit']],
+    )
+    auth_client = auth_client_factory(user)
+    encounter_set_data['encounter'].referral_suggestion = "yes"
+    encounter_set_data['encounter'].referral_positive_diseases_json = []
+    encounter_set_data['image'].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert "select at least one positive disease" in response.json["message"]
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].encounter_verified_status != "verified"
 
 
 def test_verify_encounter_set_finalize_async_blocked(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
@@ -719,6 +786,8 @@ def test_verify_encounter_set_finalize_routes_image_tasks_by_metadata_rule(
         created_at=datetime.now(),
     )
     db_session.add_all([left_image, unmatched_image])
+    encounter_set_data["encounter"].referral_suggestion = "no"
+    encounter_set_data["encounter"].referral_positive_diseases_json = []
     db_session.flush()
 
     response = auth_client.post(
@@ -726,7 +795,7 @@ def test_verify_encounter_set_finalize_routes_image_tasks_by_metadata_rule(
         headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json()
     package = db_session.query(EncounterSetGradingPackage).filter_by(
         patient_encounter_id=encounter_set_data["encounter"].id,
         code="laterality_package",

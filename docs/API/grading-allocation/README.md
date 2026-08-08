@@ -257,7 +257,7 @@ here are excluded from the legacy/image queue cards on `/grading/`.
       },
       "target": {
         "key": "disease_encounter:1:15",
-        "label": "Glaucoma / EncounterSet (Remidio API Standard Encounter Set)",
+        "label": "Glaucoma / EncounterSet",
         "encounter_set_type_name": "Remidio API Standard Encounter Set"
       },
       "slots": [

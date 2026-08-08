@@ -35,6 +35,10 @@ from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
 from marshmallow import Schema, fields, validate, ValidationError
 from . import bp
+from .project_disease_options import (
+    canonicalize_project_positive_diseases,
+    list_project_positive_disease_options,
+)
 
 
 # =========================================================================
@@ -198,7 +202,7 @@ def update_metadata(uuid):
         if not encounter or not encounter.is_set_based:
             abort(404)
 
-        profile = _encounter_set_verification_profile(encounter)
+        profile = _encounter_set_verification_profile(db, encounter)
         editable_fields = {
             (field["scope"], field["key"]): field
             for field in profile["metadata_fields"]
@@ -216,6 +220,42 @@ def update_metadata(uuid):
             manual_referral_positive_diseases = normalize_referral_positive_diseases(
                 request.form.getlist(referral_diseases_form_name)
             )
+            canonical_diseases, invalid_diseases = canonicalize_project_positive_diseases(
+                db,
+                project_id=encounter.project_id,
+                values=manual_referral_positive_diseases,
+            )
+            if invalid_diseases:
+                return _verification_validation_response(
+                    "Positive diseases must come from this project's grading schemes. "
+                    f"Invalid value(s): {', '.join(invalid_diseases)}.",
+                    encounter_uuid=encounter.uuid,
+                )
+            manual_referral_positive_diseases = list(canonical_diseases)
+
+        effective_referral_suggestion = manual_referral_suggestion or encounter.referral_suggestion
+        effective_positive_diseases = (
+            manual_referral_positive_diseases
+            if manual_referral_positive_diseases is not None
+            else list(encounter.referral_positive_diseases_json or [])
+        )
+        referral_fields_touched = (
+            manual_referral_suggestion is not None
+            or manual_referral_positive_diseases is not None
+        )
+        if referral_fields_touched and effective_referral_suggestion == "yes":
+            canonical_diseases, invalid_diseases = canonicalize_project_positive_diseases(
+                db,
+                project_id=encounter.project_id,
+                values=effective_positive_diseases,
+            )
+            if invalid_diseases or not canonical_diseases:
+                return _verification_validation_response(
+                    "Select at least one positive disease from this project's grading schemes "
+                    "before saving a referral-positive EncounterSet.",
+                    encounter_uuid=encounter.uuid,
+                )
+            effective_positive_diseases = list(canonical_diseases)
         for scope in ("patient", "encounter"):
             section = dict(encounter_metadata.get(scope) or {})
             for (field_scope, key), field in editable_fields.items():
@@ -294,6 +334,10 @@ def update_metadata(uuid):
             encounter.referral_suggestion_updated_at = utcnow()
         if manual_referral_positive_diseases is not None:
             encounter.referral_positive_diseases_json = manual_referral_positive_diseases
+        elif manual_referral_suggestion == "no":
+            encounter.referral_positive_diseases_json = []
+        elif manual_referral_suggestion == "yes":
+            encounter.referral_positive_diseases_json = effective_positive_diseases
 
         flash("Verification metadata updated.", "success")
         if request.headers.get("X-EncounterSet-Async") == "1":
@@ -369,7 +413,7 @@ def _verification_context(db, uuid: str) -> dict:
         "images": images,
         "attachments": attachments,
         "ocr_summaries": _encounter_set_ocr_summaries(attachments),
-        "verification_profile": _encounter_set_verification_profile(encounter),
+        "verification_profile": _encounter_set_verification_profile(db, encounter),
     }
 
 
@@ -428,7 +472,7 @@ def _encounter_set_ocr_summaries(attachments: list[EncounterSetAttachment]) -> l
     return summaries
 
 
-def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:
+def _encounter_set_verification_profile(db, encounter: PatientEncounters) -> dict:
     """Return the EncounterSetType/profile contract used by verification UI."""
     profile_config = _active_encounter_set_type_config(encounter)
     encounter_set_type = profile_config.encounter_set_type if profile_config else None
@@ -454,6 +498,15 @@ def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:
                 key=lambda item: (item.display_order, item.disease.name if item.disease else "", item.disease_id),
             )
         ]
+    positive_disease_options = list_project_positive_disease_options(
+        db,
+        project_id=encounter.project_id,
+    )
+    selected_positive_diseases, _invalid_values = canonicalize_project_positive_diseases(
+        db,
+        project_id=encounter.project_id,
+        values=list(encounter.referral_positive_diseases_json or []),
+    )
     return {
         "encounter_set_type": encounter_set_type,
         "profile_config": profile_config,
@@ -473,6 +526,14 @@ def _encounter_set_verification_profile(encounter: PatientEncounters) -> dict:
         "image_grading_schemes": image_schemes,
         "encounter_grading_scheme": profile_config.encounter_grading_scheme if profile_config else None,
         "default_image_grading_scheme": profile_config.default_image_grading_scheme if profile_config else None,
+        "positive_disease_options": [
+            {
+                "disease_id": option.disease_id,
+                "name": option.name,
+                "selected": option.name in selected_positive_diseases,
+            }
+            for option in positive_disease_options
+        ],
     }
 
 
@@ -495,6 +556,20 @@ def _active_encounter_set_type_config(encounter: PatientEncounters) -> UploadPro
             if config.encounter_set_type_id == type_id:
                 return config
     return active_configs[0]
+
+
+def _verification_validation_response(message: str, *, encounter_uuid: str, status: int = 400):
+    if request.headers.get("X-EncounterSet-Async") == "1":
+        return jsonify({
+            "success": False,
+            "message": message,
+            "redirect_url": url_for(
+                "verify_encounter_set.verify_encounter",
+                uuid=encounter_uuid,
+            ),
+        }), status
+    flash(message, "warning")
+    return redirect(url_for("verify_encounter_set.verify_encounter", uuid=encounter_uuid))
 
 
 def _missing_routing_metadata_response(missing_fields, *, image_count: int = 1):
@@ -806,12 +881,33 @@ def finalize_verification(uuid):
             flash(message, "warning")
             return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
 
+        # Preserve an explicit verifier decision. OCR is only the fallback when
+        # no referral decision has been stored yet.
+        if normalize_referral_suggestion(encounter.referral_suggestion) == "missing":
+            update_encounter_referral_suggestion_from_attachments(
+                db,
+                encounter.id,
+                preserve_existing_when_missing=True,
+            )
+
+        if encounter.referral_suggestion == "yes":
+            canonical_diseases, invalid_diseases = canonicalize_project_positive_diseases(
+                db,
+                project_id=encounter.project_id,
+                values=list(encounter.referral_positive_diseases_json or []),
+            )
+            if invalid_diseases or not canonical_diseases:
+                return _verification_validation_response(
+                    "Cannot finalize: select at least one positive disease from this project's "
+                    "grading schemes for a referral-positive EncounterSet.",
+                    encounter_uuid=encounter.uuid,
+                    status=409,
+                )
+            encounter.referral_positive_diseases_json = list(canonical_diseases)
+        elif encounter.referral_suggestion == "no":
+            encounter.referral_positive_diseases_json = []
+
         # Finalize (atomic - encounter and images locked until commit)
-        update_encounter_referral_suggestion_from_attachments(
-            db,
-            encounter.id,
-            preserve_existing_when_missing=True,
-        )
         encounter.encounter_verified_status = 'verified'
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = utcnow()
@@ -1171,7 +1267,7 @@ def _encounter_is_positive_for_disease(db, encounter: PatientEncounters, disease
         return False
     positive_diseases = encounter.referral_positive_diseases_json or []
     if not positive_diseases:
-        return True
+        return False
     disease = db.get(Disease, disease_id)
     return bool(disease and _positive_disease_list_matches(disease, positive_diseases))
 

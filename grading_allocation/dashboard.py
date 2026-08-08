@@ -162,7 +162,11 @@ def list_project_encounter_set_queues(
                     project_title=project.title,
                     project_code=project.code,
                     target_key=target_identity.key,
-                    target_label=target.label,
+                    target_label=(
+                        f"{target.disease_name} / EncounterSet"
+                        if target.disease_name
+                        else "Unified EncounterSet"
+                    ),
                     encounter_set_type_name=target.encounter_set_type_name,
                     slots=slots,
                 )

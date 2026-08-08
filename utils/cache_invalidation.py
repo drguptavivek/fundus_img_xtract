@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
+
 from flask import current_app
+import redis
 
 from app_cache import cache
 from utils.log_sanitize import sanitize_log_value
+from utils.redis_connection import build_redis_url
 
 DISCREPANCY_REVIEW_CACHE_KEY_PREFIX = "discrepancy-review:"
 
@@ -77,3 +81,11 @@ def invalidate_discrepancy_review_cache() -> int:
     except Exception:
         current_app.logger.exception("Failed to invalidate discrepancy-review cache")
         return 0
+
+
+def invalidate_discrepancy_review_cache_from_worker() -> int:
+    """Invalidate discrepancy pages without requiring a Flask application context."""
+    client = redis.Redis.from_url(build_redis_url())
+    prefix = os.getenv("CACHE_KEY_PREFIX", "fim:cache:")
+    keys = list(client.scan_iter(match=f"{prefix}{DISCREPANCY_REVIEW_CACHE_KEY_PREFIX}*", count=1000))
+    return int(client.delete(*keys)) if keys else 0

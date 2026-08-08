@@ -8,7 +8,6 @@ Create Date: 2026-01-31 02:40:41.359265
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.engine.reflection import Inspector
 
 # revision identifiers, used by Alembic.
 revision: str = 'fc94d51475fd'
@@ -20,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema with idempotency and data safety."""
     conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
     
     # 1. Add uuid column if it doesn't exist
     columns = [c['name'] for c in inspector.get_columns('patient_encounters')]
@@ -47,7 +46,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
     tables = inspector.get_table_names()
     
     if 'patient_encounters' in tables:

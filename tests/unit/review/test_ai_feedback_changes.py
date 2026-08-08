@@ -3,7 +3,7 @@ from pathlib import Path
 from werkzeug.datastructures import MultiDict
 
 from models import Grade
-from review.task_review import _collect_changed_ai_feedback
+from review.task_review import _collect_changed_ai_feedback, _has_changed_ai_assessment
 
 
 def _ai_grade(**overrides):
@@ -76,6 +76,23 @@ def test_invalid_changed_status_is_rejected():
     assert changed == []
 
 
+def test_ai_assessment_requires_allowed_changed_nonempty_status():
+    grade = _ai_grade()
+
+    assert _has_changed_ai_assessment(
+        [grade], MultiDict({"ai_review_status_901": "minor_miss"})
+    ) is True
+    assert _has_changed_ai_assessment(
+        [grade], MultiDict({"ai_review_status_901": "ok"})
+    ) is False
+    assert _has_changed_ai_assessment(
+        [grade], MultiDict({"ai_review_status_901": "", "ai_review_comment_901": "Text only"})
+    ) is False
+    assert _has_changed_ai_assessment(
+        [grade], MultiDict({"ai_review_status_901": "invalid"})
+    ) is False
+
+
 def test_review_template_requires_explicit_human_grade_selection():
     template = Path("templates/review/task_detail_review.html").read_text(encoding="utf-8")
     script = Path("static/js/review-task-detail.js").read_text(encoding="utf-8")
@@ -85,3 +102,16 @@ def test_review_template_requires_explicit_human_grade_selection():
     assert "const shouldShow = hasSelection;" in script
     assert ">Updated based on AI result</label>" in template
     assert ">Updated NOT based on AI result</label>" in template
+    assert 'name="review_grade_updated_at"' in template
+    assert 'name="consensus_decided_at"' in template
+    assert 'name="ai_reviewed_at_{{ ai_grade.id }}"' in template
+    assert template.count("data-review-write-action") == 2
+    assert 'data-next-task-available="{{ \'1\' if next_task_id else \'0\' }}" disabled' in template
+    assert "const hasAiFeedbackWrite = hasChangedAiAssessment();" in script
+    assert "const hasWrite = (hasHumanGrade || hasAiFeedbackWrite) && humanSelectionComplete;" in script
+    assert "button.disabled = !hasWrite || (needsNextTask && !saveNextAvailable);" in script
+    assert "cancelNextButton.disabled = !cancelNextAvailable;" in script
+    assert "updateReviewSubmissionState();" in script
+    assert "change a Quality Assessment selection. A comment alone is not sufficient." in template
+    assert 'href="{{ cancel_close_url }}"' in template
+    assert "Cancel &amp; Close" in template

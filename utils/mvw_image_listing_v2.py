@@ -78,8 +78,14 @@ def _build_mv_sql(
     disease_name: str,
     *,
     include_encounter_set_images: bool = False,
+    prefer_updated_role_grade: bool = True,
 ) -> str:
     disease_name_literal = _escape_literal(disease_name)
+    role_grade_order = (
+        "COALESCE(g.updated_at, g.created_at) DESC, g.id DESC"
+        if prefer_updated_role_grade
+        else "g.created_at DESC"
+    )
     final_preference_expr = sql_preference_final_grade("rg")
     final_double_match_expr = sql_double_match_final_grade("rg")
     encounter_set_image_select = ""
@@ -281,7 +287,7 @@ def _build_mv_sql(
             g.created_at
         FROM grades g
         JOIN disease_tasks t ON t.task_id = g.task_id
-        ORDER BY g.task_id, g.role_slot, g.created_at DESC
+        ORDER BY g.task_id, g.role_slot, {role_grade_order}
     ),
     role_grade_pivot AS (
         SELECT
@@ -533,3 +539,26 @@ def ensure_per_disease_image_listing_mvs(
                 sanitize_log_value(str(exc)),
             )
     return results
+
+
+def refresh_image_listing_mv_for_disease(disease_id: int, *, schedule_time: str) -> dict:
+    """Refresh exactly one existing disease listing MV and propagate failures."""
+    with transaction_scope() as db:
+        disease = db.query(Disease.id, Disease.name).filter(Disease.id == disease_id).one_or_none()
+        if disease is None:
+            raise ValueError(f"Disease {disease_id} does not exist")
+        mv_name = _mv_name(str(disease.name), int(disease.id))
+        exists = db.execute(
+            text("SELECT 1 FROM pg_matviews WHERE matviewname = :name"),
+            {"name": mv_name},
+        ).scalar()
+        if not exists:
+            raise RuntimeError(f"Materialized view {mv_name} does not exist")
+        db.execute(text(f"REFRESH MATERIALIZED VIEW {mv_name}"))
+    return {
+        "disease_id": disease_id,
+        "materialized_view": mv_name,
+        "schedule_time": schedule_time,
+        "refreshed": 1,
+        "errors": 0,
+    }

@@ -161,7 +161,60 @@
       ? aiInfluenceBlock.querySelectorAll('input[name="ai_influence"]')
       : [];
     const actionField = document.getElementById('action-field');
+    const writeSubmitButtons = reviewForm
+      ? reviewForm.querySelectorAll('[data-review-write-action]')
+      : [];
+    const cancelNextButton = reviewForm
+      ? reviewForm.querySelector('button[type="submit"][value="cancel_next"]')
+      : null;
+    const saveNextButton = reviewForm
+      ? reviewForm.querySelector('button[type="submit"][value="save_next"]')
+      : null;
+    const cancelNextAvailable = Boolean(cancelNextButton && !cancelNextButton.disabled);
+    const saveNextAvailable = Boolean(
+      saveNextButton && saveNextButton.dataset.nextTaskAvailable === '1'
+    );
+    const aiFeedbackInputs = reviewForm
+      ? reviewForm.querySelectorAll(
+        'select[name^="ai_review_status_"], textarea[name^="ai_review_comment_"]'
+      )
+      : [];
+    const aiStatusInputs = reviewForm
+      ? reviewForm.querySelectorAll('select[name^="ai_review_status_"]')
+      : [];
+    const initialAiAssessments = new Map(
+      Array.from(aiStatusInputs, input => [input.name, input.value.trim()])
+    );
     let pendingSubmit = false;
+
+    function hasChangedAiAssessment() {
+      return Array.from(aiStatusInputs).some(input => {
+        const currentValue = input.value.trim();
+        return currentValue !== '' && currentValue !== initialAiAssessments.get(input.name);
+      });
+    }
+
+    function updateReviewSubmissionState() {
+      const hasHumanGrade = Boolean(
+        document.querySelector('input[name="grading_id"]:checked')
+      );
+      const hasAiFeedbackWrite = hasChangedAiAssessment();
+      const hasAiInfluenceAnswer = Boolean(
+        document.querySelector('input[name="ai_influence"]:checked')
+      );
+      const humanSelectionComplete = !hasHumanGrade
+        || aiStatusInputs.length === 0
+        || hasAiInfluenceAnswer;
+      const hasWrite = (hasHumanGrade || hasAiFeedbackWrite) && humanSelectionComplete;
+
+      writeSubmitButtons.forEach(button => {
+        const needsNextTask = button.value === 'save_next';
+        button.disabled = !hasWrite || (needsNextTask && !saveNextAvailable);
+      });
+      if (cancelNextButton) {
+        cancelNextButton.disabled = !cancelNextAvailable;
+      }
+    }
 
     function updateReviewCommentVisibility() {
       if (!reviewCommentBlock || !reviewComment) {
@@ -206,6 +259,7 @@
 
       renderReviewFeatures(Number.NaN, false);
       updateReviewCommentVisibility();
+      updateReviewSubmissionState();
     }
 
     const clearButton = document.getElementById('review-clear');
@@ -230,6 +284,7 @@
           }
         }
         updateReviewCommentVisibility();
+        updateReviewSubmissionState();
       });
 
       if (input.checked) {
@@ -247,6 +302,14 @@
     });
 
     updateReviewCommentVisibility();
+    aiFeedbackInputs.forEach(input => {
+      input.addEventListener('input', updateReviewSubmissionState);
+      input.addEventListener('change', updateReviewSubmissionState);
+    });
+    aiInfluenceRadios.forEach(input => {
+      input.addEventListener('change', updateReviewSubmissionState);
+    });
+    updateReviewSubmissionState();
 
     if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
       const overrideModal = new bootstrap.Modal(overrideModalEl);

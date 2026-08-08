@@ -20,11 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema - Add unique constraint on encounter_set_image position"""
-    from sqlalchemy.engine.reflection import Inspector
-
     # Add unique constraint on encounter_set_images (idempotent)
     conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
 
     # Check if constraint already exists (idempotent - safe to re-run)
     constraints = [c['name'] for c in inspector.get_unique_constraints('encounter_set_images')]
@@ -39,11 +37,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema - Remove unique constraint on encounter_set_image position"""
-    from sqlalchemy.engine.reflection import Inspector
-
     # Remove unique constraint on encounter_set_images (idempotent)
     conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
 
     constraints = [c['name'] for c in inspector.get_unique_constraints('encounter_set_images')]
     if 'uq_encounter_set_image_position' in constraints:

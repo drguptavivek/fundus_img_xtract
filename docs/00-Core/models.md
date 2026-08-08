@@ -139,6 +139,11 @@ These models track the raw data as it is uploaded and processed.
   - **Purpose**: Preserves the complete original grade snapshot and correction evidence without adding one-time correction fields to `grades`.
   - **Integrity**: One archived snapshot per original grade and migration; identifiers intentionally have no foreign keys so the audit survives removal of the source grade row.
 
+- **`review_submission_history`**: Append-only transactional before/after history for review submissions.
+  - **Key Fields**: `request_id`, `task_id`, `actor_user_id`, `action_type`, `recorded_at`, `before_json`, `after_json`, `version_tokens_json`
+  - **Purpose**: Audits human review, consensus, and AI-feedback changes in the same transaction as the source rows.
+  - **Integrity**: Identifiers intentionally have no foreign keys so the audit remains available if a source task or user is later removed.
+
 - **`TaskTracker`**: Tracks when users start working on tasks.
   - **Key Fields**: `id`, `task_id`, `user_id`, `role_slot`, `started_at`
   - **Purpose**: Identifies and cleans up stuck tasks

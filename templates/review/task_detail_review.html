@@ -165,6 +165,9 @@
         <div class="card-body">
           <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}{% if task_detail_query_string %}?{{ task_detail_query_string }}{% endif %}" id="review-form">
             {{ csrf_field() }}
+            <input type="hidden" name="review_grade_id" value="{{ existing_review_grade.id if existing_review_grade else '' }}">
+            <input type="hidden" name="review_grade_updated_at" value="{{ existing_review_grade.updated_at.isoformat() if existing_review_grade and existing_review_grade.updated_at else '' }}">
+            <input type="hidden" name="consensus_decided_at" value="{{ existing_consensus.decided_at.isoformat() if existing_consensus and existing_consensus.decided_at else '' }}">
             <input type="hidden" id="action-field" name="action" value="">
             <input type="hidden" name="next_task_id" value="{{ next_task_id or '' }}">
 
@@ -262,9 +265,11 @@
                   <div class="alert alert-info small mb-3">
                     <strong>When to use:</strong> If the AI output seems off, record whether the AI was OK, a minor miss, or
                     a major miss, and add a short rationale. This does <em>not</em> change the final grade.
+                    <div class="mt-1"><strong>Required to submit AI feedback:</strong> change a Quality Assessment selection. A comment alone is not sufficient.</div>
                   </div>
                   {% if ai_grades %}
                   {% for ai_grade in ai_grades %}
+                  <input type="hidden" name="ai_reviewed_at_{{ ai_grade.id }}" value="{{ ai_grade.reviewed_at_token or '' }}">
                   <div class="border rounded p-3 mb-3">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                       <div>
@@ -361,15 +366,18 @@
                 {% endif %}
 
                 <div class="d-flex flex-column gap-2">
-                  <button type="submit" name="action" value="save" class="btn btn-primary">
+                  <button type="submit" name="action" value="save" class="btn btn-primary" data-review-write-action disabled>
                     {% if existing_review_grade %}Update Review{% else %}Submit Review{% endif %}
                   </button>
-                  <button type="submit" name="action" value="save_next" class="btn btn-outline-primary" {% if not next_task_id %}disabled{% endif %}>
+                  <button type="submit" name="action" value="save_next" class="btn btn-outline-primary" data-review-write-action data-next-task-available="{{ '1' if next_task_id else '0' }}" disabled>
                     Save &amp; Next
                   </button>
                   <button type="submit" name="action" value="cancel_next" class="btn btn-outline-secondary" {% if not next_task_id %}disabled{% endif %}>
                     Cancel &amp; Next
                   </button>
+                  <a href="{{ cancel_close_url }}" class="btn btn-outline-secondary">
+                    Cancel &amp; Close
+                  </a>
                   <button type="button" class="btn btn-outline-secondary" id="review-clear">
                     Clear Selections
                   </button>

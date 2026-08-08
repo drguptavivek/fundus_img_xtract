@@ -53,3 +53,21 @@ Production correction result after backup `backup_20260808_053755_db.tar.gz`:
 The downgrade restores archived review rows and original tags only if no later
 human review or consensus change exists. Archive rows are retained as the audit
 trail. No correction-specific columns were added to `grades`.
+
+## Transactional submission history and concurrency
+
+Migration `d4f6a8b2c1e9` adds the append-only `review_submission_history` table.
+Every successful human review, AI-feedback update, or combined submission stores
+the complete before/after review, consensus, and affected AI-grade snapshots in
+the same PostgreSQL transaction as the source changes. Failed or stale
+submissions therefore create neither source changes nor audit rows.
+
+Review forms carry version tokens for the review row, consensus, and AI feedback.
+The POST path locks the task and mutable rows, rejects stale tokens, and asks the
+reviewer to reload. Multiple reviewers remain allowed; after an explicit reload,
+the most recently updated review wins. Disease listing MVs order review rows by
+`updated_at DESC, id DESC` to implement that contract deterministically.
+
+Review saves mark only the affected disease MV dirty. Redis coalesces bursts into
+one trailing refresh. The worker retries refresh errors and invalidates all
+discrepancy-review page caches only after the refreshed snapshot is available.

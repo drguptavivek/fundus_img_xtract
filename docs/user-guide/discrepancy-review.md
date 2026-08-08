@@ -66,8 +66,20 @@ The system offers several filters to refine the displayed tasks:
 - AI-model quality status/comments and a human review grade are independent actions.
 - Prefilled AI feedback is not resubmitted unless its status or comment actually changes.
 - Clearing an existing AI status/comment is an explicit saved change.
+- A submission must include either a selected human review grade or a Quality
+  Assessment changed from its loaded value; an AI comment by itself and an
+  unchanged prefilled assessment are not sufficient.
 - Updating a human review requires selecting the intended grade again; an existing review is displayed for reference but is never selected implicitly.
 - When an AI grade is visible and a human grade is selected, the reviewer must record whether the update was based on the AI result.
+- **Clear Selections** disables Submit and Save & Next when no valid AI-feedback
+  change remains. Cancel & Next stays available when another task exists.
+- **Cancel & Close** returns to the originating discrepancy-review list without
+  saving, preserving its filters when the task was opened from that list.
+- Multiple reviewers may review the same task. The last successfully submitted
+  review wins, but a reviewer working from an older page must reload before
+  replacing a newer review, consensus, or AI-feedback assessment.
+- The discrepancy list is refreshed in the background for the affected disease;
+  a saved detail page is authoritative while that short refresh completes.
 
 #### AI Model Filter
 - Select specific AI models to filter by

@@ -20,6 +20,13 @@ from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.review_navigation import get_next_review_tasks
 from utils.cache_invalidation import invalidate_discrepancy_review_cache
+from review_history import (
+    StaleReviewSubmissionError,
+    assert_version_token,
+    record_submission_history,
+    snapshot_consensus,
+    snapshot_grade,
+)
 from datetime import datetime, timezone
 from . import bp
 
@@ -93,12 +100,26 @@ def _collect_changed_ai_feedback(
     return changed, invalid_status
 
 
-def _queue_review_listing_refresh() -> None:
+def _has_changed_ai_assessment(ai_grades: list[Grade], form: object) -> bool:
+    """Return whether an allowed AI assessment changed from its loaded value."""
+    allowed_statuses = set(AI_REVIEW_STATUS_LABELS)
+    return any(
+        (
+            submitted_status := _normalize_ai_review_status(
+                form.get(f"ai_review_status_{ai_grade.id}")
+            )
+        ) in allowed_statuses
+        and submitted_status != _normalize_ai_review_status(ai_grade.ai_review_status)
+        for ai_grade in ai_grades
+    )
+
+
+def _queue_review_listing_refresh(disease_id: int) -> None:
     """Refresh discrepancy-listing materialized views after the DB commit."""
     try:
-        from celery_tasks.tasks.mv_tasks import refresh_image_listing_v2_task
+        from celery_tasks.tasks.mv_tasks import queue_debounced_image_listing_refresh
 
-        refresh_image_listing_v2_task.delay(schedule_time="review_submission")
+        queue_debounced_image_listing_refresh(disease_id)
     except Exception:
         grades_logger.exception("Unable to queue image-listing refresh after review submission")
 
@@ -343,6 +364,11 @@ def review_task_details(task_id: int):
             redirect_kwargs["ai_model_id"] = ai_model_id_filter
         if return_to:
             redirect_kwargs["return_to"] = return_to
+        cancel_close_url = (
+            return_to
+            if return_to and is_safe_url(return_to)
+            else url_for("review.discrepancy_review")
+        )
         if next_task_id:
             redirect_kwargs["next_task_id"] = next_task_id
         ai_grades = ai_grades_query.all()
@@ -362,6 +388,9 @@ def review_task_details(task_id: int):
                     "ai_probability": _extract_ai_probability(ai_grade.comment),
                     "review_status": ai_grade.ai_review_status,
                     "review_comment": ai_grade.ai_review_comment,
+                    "reviewed_at_token": (
+                        ai_grade.ai_reviewed_at.isoformat() if ai_grade.ai_reviewed_at else ""
+                    ),
                 }
             )
         ai_visible = bool(ai_grades_for_display)
@@ -372,6 +401,34 @@ def review_task_details(task_id: int):
 
         # Handle POST request for submitting review grade
         if request.method == 'POST' and can_review:
+            # Serialize all review submissions for this task, then lock the
+            # mutable rows whose version tokens are checked below.
+            db.query(GradingTask).filter(GradingTask.id == task_id).with_for_update().one()
+            previous_consensus = (
+                db.query(Consensus)
+                .filter(Consensus.task_id == task_id)
+                .with_for_update()
+                .first()
+            )
+            existing_review_grade = (
+                db.query(Grade)
+                .filter(
+                    Grade.task_id == task_id,
+                    Grade.grader_user_id == current_user.id,
+                    Grade.role_slot == "review",
+                )
+                .with_for_update()
+                .first()
+            )
+            locked_ai_grades = (
+                db.query(Grade)
+                .filter(Grade.id.in_([grade.id for grade in ai_grades]))
+                .with_for_update()
+                .all()
+                if ai_grades
+                else []
+            )
+            ai_grades = locked_ai_grades
             grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
             ai_influence = (request.form.get('ai_influence') or '').strip().lower()
@@ -399,15 +456,8 @@ def review_task_details(task_id: int):
                 },
             )
 
-            ai_feedback_payload, invalid_ai_status = _collect_changed_ai_feedback(
-                ai_grades,
-                request.form,
-            )
-            if invalid_ai_status:
-                flash('Invalid AI review selection submitted.', 'error')
-                return redirect(url_for('review.review_task_details', **redirect_kwargs))
-            ai_feedback_changed = bool(ai_feedback_payload)
-
+            # Cancellation is navigation only. Do not validate stale form
+            # values or interpret any selected grade/AI controls as a write.
             if action == "cancel_next":
                 if return_to and is_safe_url(return_to) and effective_next_task_id:
                     return redirect(
@@ -429,6 +479,45 @@ def review_task_details(task_id: int):
                     return redirect(return_to)
                 return redirect(url_for('review.discrepancy_review'))
 
+            ai_feedback_payload, invalid_ai_status = _collect_changed_ai_feedback(
+                ai_grades,
+                request.form,
+            )
+            if invalid_ai_status:
+                flash('Invalid AI review selection submitted.', 'error')
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+            ai_feedback_changed = bool(ai_feedback_payload)
+            has_changed_ai_assessment = _has_changed_ai_assessment(ai_grades, request.form)
+
+            try:
+                if grading_id:
+                    expected_review_id = request.form.get("review_grade_id", type=int)
+                    current_review_id = existing_review_grade.id if existing_review_grade else None
+                    if expected_review_id != current_review_id:
+                        raise StaleReviewSubmissionError(
+                            "Your human review changed after this page was loaded. Reload and try again."
+                        )
+                    assert_version_token(
+                        label="Your human review",
+                        expected=request.form.get("review_grade_updated_at"),
+                        current=existing_review_grade.updated_at if existing_review_grade else None,
+                    )
+                    assert_version_token(
+                        label="Consensus",
+                        expected=request.form.get("consensus_decided_at"),
+                        current=previous_consensus.decided_at if previous_consensus else None,
+                    )
+                for payload in ai_feedback_payload:
+                    ai_grade_obj = payload["grade_obj"]
+                    assert_version_token(
+                        label=f"AI feedback for grade {ai_grade_obj.id}",
+                        expected=request.form.get(f"ai_reviewed_at_{ai_grade_obj.id}"),
+                        current=ai_grade_obj.ai_reviewed_at,
+                    )
+            except StaleReviewSubmissionError as exc:
+                flash(str(exc), "warning")
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+
             selected_feature_ids: list[int] = []
             for raw_feature in raw_selected_features:
                 if raw_feature is None or raw_feature == "":
@@ -447,6 +536,13 @@ def review_task_details(task_id: int):
                     seen_feature_ids.add(feature_id)
 
             selected_features_json: str | None = None
+
+            if not grading_id and not has_changed_ai_assessment:
+                flash(
+                    "Change an AI quality assessment or select a human review grade.",
+                    'error',
+                )
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             if not grading_id and not ai_feedback_changed:
                 flash('Please select a grade or change the AI feedback.', 'error')
@@ -502,9 +598,17 @@ def review_task_details(task_id: int):
                 )
 
             ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            previous_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
             previous_consensus_method = previous_consensus.method if previous_consensus else None
             previous_consensus_grade_id = previous_consensus.final_disease_grading_id if previous_consensus else None
+
+            history_before = {
+                "review_grade": snapshot_grade(existing_review_grade),
+                "consensus": snapshot_consensus(previous_consensus),
+                "ai_feedback": {
+                    str(payload["grade_obj"].id): snapshot_grade(payload["grade_obj"])
+                    for payload in ai_feedback_payload
+                },
+            }
 
             ai_feedback_logs: list[str] = []
 
@@ -536,6 +640,7 @@ def review_task_details(task_id: int):
             comment = _apply_ai_influence_comment(comment, ai_influence) if grading_id else comment
 
             # Create or update review grade
+            review_grade_obj = existing_review_grade
             if grading_id and disease_grading:
                 if existing_review_grade:
                     existing_review_grade.disease_grading_id = grading_id
@@ -560,6 +665,7 @@ def review_task_details(task_id: int):
                         updated_at=datetime.now(timezone.utc)
                     )
                     db.add(new_review_grade)
+                    review_grade_obj = new_review_grade
 
                 # If task already final, overwrite/create consensus with review grade
                 if task.state == "final":
@@ -601,9 +707,41 @@ def review_task_details(task_id: int):
                     "; ".join(ai_feedback_logs),
                 )
 
+            db.flush()
+            action_type = (
+                "combined" if grading_id and ai_feedback_changed
+                else "human_review" if grading_id
+                else "ai_feedback"
+            )
+            record_submission_history(
+                db,
+                task_id=task_id,
+                actor_user_id=current_user.id,
+                action_type=action_type,
+                before=history_before,
+                after={
+                    "review_grade": snapshot_grade(review_grade_obj) if grading_id else None,
+                    "consensus": snapshot_consensus(previous_consensus),
+                    "ai_feedback": {
+                        str(payload["grade_obj"].id): snapshot_grade(payload["grade_obj"])
+                        for payload in ai_feedback_payload
+                    },
+                },
+                version_tokens={
+                    "review_grade_updated_at": request.form.get("review_grade_updated_at"),
+                    "consensus_decided_at": request.form.get("consensus_decided_at"),
+                    "ai_reviewed_at": {
+                        str(payload["grade_obj"].id): request.form.get(
+                            f"ai_reviewed_at_{payload['grade_obj'].id}"
+                        )
+                        for payload in ai_feedback_payload
+                    },
+                },
+            )
+
             db.commit()
             invalidate_discrepancy_review_cache()
-            _queue_review_listing_refresh()
+            _queue_review_listing_refresh(task.disease_id)
             success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
             flash(success_message, 'success')
             if return_to and is_safe_url(return_to):
@@ -698,6 +836,7 @@ def review_task_details(task_id: int):
             ai_grade_meta=ai_grade_meta,
             ai_model_id_filter=ai_model_id_filter,
             return_to=return_to,
+            cancel_close_url=cancel_close_url,
             next_task_id=next_task_id,
             task_detail_query_string=request.query_string.decode("utf-8"),
         )

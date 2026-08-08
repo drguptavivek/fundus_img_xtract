@@ -1,13 +1,17 @@
+import json
 from contextlib import contextmanager
 
 import pytest
+from werkzeug.datastructures import MultiDict
 
+from api.upload_profiles import _encounter_set_packages_from_request
 from encounter_set_types.models import EncounterSetType
 from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import (
     EncounterSetGradingPackageInput,
     EncounterSetProfileInput,
+    ImageMetadataTaskRuleInput,
     ProjectCreateInput,
     UploadProfileInput,
     validate_mydriatic_flags,
@@ -60,6 +64,167 @@ def test_validate_mydriatic_flags_accepts_valid_combinations():
         allow_non_mydriatic=False,
         default_is_mydriatic=True,
     ) is None
+
+
+def test_upload_profile_api_parses_image_metadata_task_rules():
+    form = MultiDict(
+        {
+            "encounter_set_type_9_grading_packages_json": json.dumps(
+                [
+                    {
+                        "name": "Laterality package",
+                        "code": "laterality_package",
+                        "image_grading_scheme_ids": [13, 15],
+                        "encounter_grading_scheme_ids": [14],
+                        "default_image_grading_scheme_id": 15,
+                        "image_scheme_metadata_rules": {
+                            "13": {"field_key": "laterality", "match_value": "OD"},
+                            "15": {"field_key": "laterality", "match_value": "OS"},
+                        },
+                    }
+                ]
+            )
+        }
+    )
+
+    package = _encounter_set_packages_from_request(form, 9)[0]
+
+    assert package.image_scheme_metadata_rules == {
+        13: ImageMetadataTaskRuleInput(field_key="laterality", match_value="OD"),
+        15: ImageMetadataTaskRuleInput(field_key="laterality", match_value="OS"),
+    }
+
+
+def test_image_metadata_task_rule_must_use_schema_image_field_and_allowed_value(db_session):
+    image_scheme = Disease(name="Laterality Image Scheme", grading_scope="image")
+    encounter_scheme = Disease(name="Laterality Encounter Scheme", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Laterality EncounterSet",
+        code="laterality_encounter_set",
+        metadata_schema_json={
+            "fields": [
+                {
+                    "key": "laterality",
+                    "label": "Laterality",
+                    "scope": "image",
+                    "type": "select",
+                    "options": [{"value": "OD", "label": "Right"}, {"value": "OS", "label": "Left"}],
+                },
+                {"key": "site_code", "label": "Site", "scope": "encounter", "type": "text"},
+            ]
+        },
+        active=True,
+    )
+    db_session.add_all([image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+
+    def validate(rule):
+        return admin_service._validate_encounter_set_configs(
+            db_session,
+            {
+                encounter_set_type.id: EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="Laterality package",
+                            code="laterality_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[image_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=image_scheme.id,
+                            image_scheme_metadata_rules={image_scheme.id: rule},
+                        )
+                    ],
+                )
+            },
+        )
+
+    assert validate(ImageMetadataTaskRuleInput(field_key="laterality", match_value="OD")) is None
+    assert "not allowed" in validate(ImageMetadataTaskRuleInput(field_key="laterality", match_value="RIGHT"))
+    assert "not a scalar image field" in validate(ImageMetadataTaskRuleInput(field_key="site_code", match_value="AIIMS"))
+
+
+def test_create_profile_persists_image_metadata_task_rule(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    manager = User(username="metadata_rule_manager", full_name="Metadata Rule Manager", password_hash="x", is_active=True)
+    hospital = Hospital(name="Metadata Rule Hospital")
+    lab = LabUnit(name="Metadata Rule Lab", hospital=hospital)
+    manager.lab_units.append(lab)
+    image_scheme = Disease(name="Metadata Rule Image", grading_scope="image")
+    encounter_scheme = Disease(name="Metadata Rule Encounter", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Metadata Rule EncounterSet",
+        code="metadata_rule_encounter_set",
+        metadata_schema_json={
+            "fields": [
+                {
+                    "key": "laterality",
+                    "label": "Laterality",
+                    "scope": "image",
+                    "type": "select",
+                    "options": [{"value": "OD", "label": "Right"}, {"value": "OS", "label": "Left"}],
+                }
+            ]
+        },
+        active=True,
+    )
+    db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
+    db_session.flush()
+    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
+
+    result = admin_service.create_profile(
+        manager.id,
+        UploadProfileInput(
+            name="Metadata-routed profile",
+            disease_ids=[],
+            default_disease_ids=[],
+            camera_ids=[],
+            area_ids=[],
+            upload_kinds=[UPLOAD_KIND_ENCOUNTER_SET],
+            allow_mydriatic=False,
+            allow_non_mydriatic=True,
+            default_is_mydriatic=False,
+            automated_remidio_populated=False,
+            encounter_set_configs=[
+                EncounterSetProfileInput(
+                    encounter_set_type_id=encounter_set_type.id,
+                    image_grading_scheme_ids=[image_scheme.id],
+                    default_image_grading_scheme_id=image_scheme.id,
+                    encounter_grading_scheme_id=encounter_scheme.id,
+                    grading_packages=[
+                        EncounterSetGradingPackageInput(
+                            name="Metadata-routed package",
+                            code="metadata_routed_package",
+                            applicability="always",
+                            image_grading_scheme_ids=[image_scheme.id],
+                            encounter_grading_scheme_ids=[encounter_scheme.id],
+                            default_image_grading_scheme_id=image_scheme.id,
+                            image_scheme_metadata_rules={
+                                image_scheme.id: ImageMetadataTaskRuleInput(
+                                    field_key="laterality",
+                                    match_value="OD",
+                                )
+                            },
+                        )
+                    ],
+                )
+            ],
+        ),
+    )
+
+    assert result.success is True
+    profile = db_session.query(UploadProfile).filter_by(name="Metadata-routed profile").one()
+    configured_scheme = profile.encounter_set_types[0].grading_packages[0].image_grading_schemes[0]
+    assert configured_scheme.metadata_field_key == "laterality"
+    assert configured_scheme.metadata_match_value == "OD"
 
 
 def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_mapping(db_session):

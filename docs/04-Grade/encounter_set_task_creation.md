@@ -26,6 +26,7 @@ Unified package policy contains:
 - one or more encounter-scoped grading schemes for the whole EncounterSet
 - one or more image-scoped grading schemes for clinical images
 - one auto-creation policy per image-scoped scheme
+- an optional exact image metadata field/value rule per image-scoped scheme
 
 Disease-specific mode represents every mapping as a separate package containing exactly one image-scoped scheme and exactly one encounter-scoped scheme. The configuration package ID is copied to the runtime package, so allocation and grading can use the same explicit target. Verification does not split multi-image packages or infer a matching encounter scheme from names; ambiguous disease-specific package shapes are rejected when the profile is saved.
 
@@ -46,6 +47,10 @@ Report-triggered policy options are allowed only for image-scoped grading scheme
 - `glaucoma`: can use `remidio_glaucoma_report_present`
 
 This linkage is configured on the grading scheme itself, not inferred from the scheme name.
+
+After an auto-creation policy enables a scheme for an EncounterSet, the optional image metadata rule is evaluated separately for each eligible image. The configured key must be a scalar image field declared by the selected EncounterSetType schema. Values are matched exactly against normalized `EncounterSetImage.metadata_json`; list-valued fields match when any item equals the configured value. Missing values do not match. An absent rule preserves the existing behavior of targeting every eligible image.
+
+For Remidio laterality routing, the normalized field is `laterality`: `OD` represents right eye and `OS` represents left eye. The task creator never infers this mapping from grading-scheme names such as `RT` or `LT`.
 
 Projects may configure a Remote Inference Policy. Each active disease rule separates:
 

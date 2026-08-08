@@ -118,10 +118,16 @@ Profile create/update fields:
   - `encounter_grading_scheme_ids` array containing the selected encounter-scoped grading scheme ID
   - `image_scheme_auto_create_policies` object keyed by image scheme ID; values are `never`, `always`, `remidio_dr_report_present`, `remidio_amd_report_present`, `remidio_glaucoma_report_present`, or `positive_plus_negative_controls`
   - `image_scheme_negative_controls_per_positive` object keyed by image scheme ID; values are integers from `1` to `10` when the corresponding policy is `positive_plus_negative_controls`
+  - `image_scheme_metadata_rules` optional object keyed by image scheme ID. Each value has:
+    - `field_key`: exact key of a scalar `scope = image` field in the selected EncounterSetType metadata schema
+    - `match_value`: exact provider-normalized metadata value that enables this scheme for an individual image
   - `display_order` integer, optional
   - `active` boolean, optional
 - A `unified` package may contain multiple image-scoped schemes and encounter-scoped schemes.
 - A `disease_specific` package must contain exactly one `image_grading_scheme_ids` value and exactly one `encounter_grading_scheme_ids` value. Each image scheme may appear in only one disease-specific package. Submit one package object per explicit image-to-encounter mapping; the server does not infer mappings from scheme names.
+- Image metadata rules are optional. If a scheme has no rule, its applicable auto-creation policy targets every eligible image. If a rule is present, both `field_key` and `match_value` are required. The field must exist as a non-JSON image field in the selected EncounterSetType schema. For schema fields with configured options, `match_value` must be one of the exact option values. Missing image metadata does not match.
+- Provider data is matched from `EncounterSetImage.metadata_json`, which contains the normalized fields declared by the EncounterSetType. Raw-provider JSON paths are not accepted as routing keys. For `remidio_api_standard`, use `laterality = OD` for right-eye images and `laterality = OS` for left-eye images.
+- Profile response package entries expose the persisted rule on each image scheme as `metadata_field_key` and `metadata_match_value`; both are `null` when no image filter is configured.
 - Remidio report-triggered `image_scheme_auto_create_policies` are accepted only when the image-scoped grading scheme has matching `remidio_ocr_linkage` configured on the grading scheme itself:
   - `remidio_dr_report_present` requires `remidio_ocr_linkage = dr`
   - `remidio_amd_report_present` requires `remidio_ocr_linkage = amd`
@@ -169,7 +175,7 @@ curl -X POST /api/upload-profiles \
   -F "encounter_set_type_9_image_grading_scheme_ids=11" \
   -F "encounter_set_type_9_default_image_grading_scheme_id=8" \
   -F "encounter_set_type_9_encounter_grading_scheme_id=18" \
-  -F 'encounter_set_type_9_grading_packages_json=[{"name":"EncounterSet Package","code":"encounter_set","applicability":"always","image_grading_scheme_ids":[8,11],"default_image_grading_scheme_id":8,"encounter_grading_scheme_ids":[18],"image_scheme_auto_create_policies":{"8":"remidio_dr_report_present","11":"remidio_glaucoma_report_present"},"active":true}]' \
+  -F 'encounter_set_type_9_grading_packages_json=[{"name":"EncounterSet Package","code":"encounter_set","applicability":"always","image_grading_scheme_ids":[8,11],"default_image_grading_scheme_id":8,"encounter_grading_scheme_ids":[18],"image_scheme_auto_create_policies":{"8":"always","11":"always"},"image_scheme_metadata_rules":{"8":{"field_key":"laterality","match_value":"OD"},"11":{"field_key":"laterality","match_value":"OS"}},"active":true}]' \
   -F "camera_ids=7" \
   -F "area_ids=1" \
   -F "allow_mydriatic=on" \

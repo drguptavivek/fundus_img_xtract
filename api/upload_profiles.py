@@ -150,6 +150,14 @@ def _encounter_set_packages_from_request(form, encounter_set_type_id: int):
                             for key, value in (row.get("image_scheme_negative_controls_per_positive") or {}).items()
                             if str(key).isdigit()
                         },
+                        image_scheme_metadata_rules={
+                            int(key): upload_profile_service.ImageMetadataTaskRuleInput(
+                                field_key=str(value.get("field_key") or ""),
+                                match_value=str(value.get("match_value") or ""),
+                            )
+                            for key, value in (row.get("image_scheme_metadata_rules") or {}).items()
+                            if str(key).isdigit() and isinstance(value, dict)
+                        },
                     )
                 )
     return packages

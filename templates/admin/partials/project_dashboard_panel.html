@@ -126,6 +126,7 @@
                 {% set package_image_schemes = [] %}
                 {% set package_image_auto_policies = {} %}
                 {% set package_image_control_ratios = {} %}
+                {% set package_image_metadata_rules = {} %}
                 {% for package_image in package.image_grading_schemes if package_image.active %}
                   {% set package_image_grades = [] %}
                   {% if package_image.disease %}
@@ -149,10 +150,18 @@
                     'grades': package_image_grades,
                     'auto_create_policy': package_image.auto_create_policy,
                     'negative_controls_per_positive': package_image.negative_controls_per_positive,
+                    'metadata_field_key': package_image.metadata_field_key,
+                    'metadata_match_value': package_image.metadata_match_value,
                     'remidio_ocr_linkage': package_image.disease.remidio_ocr_linkage if package_image.disease else 'none'
                   }) %}
                   {% set _ = package_image_auto_policies.update({package_image.disease_id|string: package_image.auto_create_policy}) %}
                   {% set _ = package_image_control_ratios.update({package_image.disease_id|string: package_image.negative_controls_per_positive}) %}
+                  {% if package_image.metadata_field_key and package_image.metadata_match_value %}
+                    {% set _ = package_image_metadata_rules.update({package_image.disease_id|string: {
+                      'field_key': package_image.metadata_field_key,
+                      'match_value': package_image.metadata_match_value
+                    }}) %}
+                  {% endif %}
                 {% endfor %}
                 {% set package_encounter_schemes = [] %}
                 {% for package_encounter in package.encounter_grading_schemes if package_encounter.active %}
@@ -188,6 +197,7 @@
                   'default_image_grading_scheme_id': package.default_image_grading_scheme_id,
                   'image_scheme_auto_create_policies': package_image_auto_policies,
                   'image_scheme_negative_controls_per_positive': package_image_control_ratios,
+                  'image_scheme_metadata_rules': package_image_metadata_rules,
                   'image_grading_schemes': package_image_schemes,
                   'encounter_grading_schemes': package_encounter_schemes
                 }) %}

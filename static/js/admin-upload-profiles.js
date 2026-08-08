@@ -377,6 +377,13 @@
       if (selectedImages.length === 0) {
         return false;
       }
+      const metadataRulesComplete = Array.from(selectedImages).every(function (input) {
+        const rule = imageMetadataRuleValue(row, input.value);
+        return !rule || Boolean(rule.match_value);
+      });
+      if (!metadataRulesComplete) {
+        return false;
+      }
       if (selectedEncounterSetGradingMode(row) !== 'disease_specific') {
         return Boolean(row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value);
       }
@@ -465,6 +472,7 @@
     const encounterIds = Array.isArray(pkg.encounter_grading_scheme_ids) ? pkg.encounter_grading_scheme_ids.map(String) : [];
     const policies = pkg.image_scheme_auto_create_policies || {};
     const controls = pkg.image_scheme_negative_controls_per_positive || {};
+    const metadataRules = pkg.image_scheme_metadata_rules || {};
     const name = String(pkg.name || pkg.code || 'Package ' + (index + 1)).trim();
     return {
       name: name,
@@ -482,6 +490,15 @@
         const raw = controls[diseaseId] ?? controls[Number(diseaseId)] ?? 0;
         const value = Math.max(0, Math.min(10, parseInt(raw, 10) || 0));
         acc[diseaseId] = value;
+        return acc;
+      }, {}),
+      image_scheme_metadata_rules: imageIds.reduce(function (acc, diseaseId) {
+        const raw = metadataRules[diseaseId] || metadataRules[Number(diseaseId)] || {};
+        const fieldKey = String(raw.field_key || '').trim();
+        const matchValue = String(raw.match_value || '').trim();
+        if (fieldKey || matchValue) {
+          acc[diseaseId] = { field_key: fieldKey, match_value: matchValue };
+        }
         return acc;
       }, {}),
       display_order: Number.isFinite(Number(pkg.display_order)) ? Number(pkg.display_order) : index,
@@ -535,6 +552,7 @@
         encounter_grading_scheme_ids: normalized.encounter_grading_scheme_ids.map(Number).filter(Number.isFinite),
         image_scheme_auto_create_policies: normalized.image_scheme_auto_create_policies,
         image_scheme_negative_controls_per_positive: normalized.image_scheme_negative_controls_per_positive,
+        image_scheme_metadata_rules: normalized.image_scheme_metadata_rules,
         display_order: index,
         active: normalized.active
       };
@@ -630,6 +648,15 @@
         input.value = '3';
       }
     });
+    row.querySelectorAll('[data-upload-profile-image-metadata-field]').forEach(function (select) {
+      const imageRow = select.closest('[data-upload-profile-est-image-row]');
+      const rulePackage = packages.find(function (item) {
+        return (item.image_grading_scheme_ids || []).map(String).includes(String(select.dataset.schemeId));
+      });
+      const rule = rulePackage?.image_scheme_metadata_rules[String(select.dataset.schemeId)];
+      select.value = rule?.field_key || '';
+      syncImageMetadataRuleControl(imageRow, rule?.match_value || '');
+    });
     row.querySelectorAll('[data-upload-profile-disease-encounter-scheme]').forEach(function (select) {
       const encounterPackage = packages.find(function (item) {
         return (item.image_grading_scheme_ids || []).map(String).includes(String(select.dataset.schemeId));
@@ -681,6 +708,79 @@
     return select?.value || '';
   }
 
+  function syncImageMetadataRuleControl(imageRow, pendingValue) {
+    if (!imageRow) {
+      return;
+    }
+    const field = imageRow.querySelector('[data-upload-profile-image-metadata-field]');
+    const valueSelect = imageRow.querySelector('[data-upload-profile-image-metadata-value-select]');
+    const valueInput = imageRow.querySelector('[data-upload-profile-image-metadata-value-input]');
+    if (!field || !valueSelect || !valueInput) {
+      return;
+    }
+    const selectedOption = field.selectedOptions && field.selectedOptions.length ? field.selectedOptions[0] : null;
+    const fieldType = selectedOption?.dataset.fieldType || '';
+    let options = parseJson(selectedOption?.dataset.fieldOptions, []);
+    if (!Array.isArray(options)) {
+      options = [];
+    }
+    if (fieldType === 'boolean') {
+      options = [
+        { value: 'true', label: 'True' },
+        { value: 'false', label: 'False' }
+      ];
+    }
+    const currentValue = pendingValue !== undefined
+      ? String(pendingValue || '')
+      : (valueSelect.classList.contains('d-none') ? valueInput.value : valueSelect.value);
+    const hasField = Boolean(field.value);
+    const usesOptions = hasField && options.length > 0;
+    valueSelect.replaceChildren();
+    if (usesOptions) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Select exact value';
+      valueSelect.appendChild(placeholder);
+      options.forEach(function (option) {
+        const row = typeof option === 'object' && option !== null ? option : { value: option, label: option };
+        const item = document.createElement('option');
+        item.value = String(row.value ?? '');
+        item.textContent = String(row.label || row.value || '');
+        valueSelect.appendChild(item);
+      });
+      valueSelect.value = currentValue;
+    } else if (hasField) {
+      valueInput.value = currentValue;
+    } else {
+      valueInput.value = '';
+    }
+    valueSelect.classList.toggle('d-none', !usesOptions);
+    valueInput.classList.toggle('d-none', !hasField || usesOptions);
+    const checkbox = imageRow.querySelector('[data-upload-profile-est-image-scheme]');
+    const enabled = Boolean(checkbox && checkbox.checked && !checkbox.disabled);
+    field.disabled = !enabled;
+    valueSelect.disabled = !enabled || !usesOptions;
+    valueInput.disabled = !enabled || !hasField || usesOptions;
+  }
+
+  function imageMetadataRuleValue(row, imageSchemeId) {
+    const fieldControl = row.querySelector('[data-upload-profile-image-metadata-field][data-scheme-id="' + CSS.escape(String(imageSchemeId)) + '"]');
+    const imageRow = fieldControl?.closest('[data-upload-profile-est-image-row]');
+    if (!imageRow) {
+      return null;
+    }
+    const field = imageRow.querySelector('[data-upload-profile-image-metadata-field]');
+    if (!field?.value) {
+      return null;
+    }
+    const valueSelect = imageRow.querySelector('[data-upload-profile-image-metadata-value-select]');
+    const valueInput = imageRow.querySelector('[data-upload-profile-image-metadata-value-input]');
+    const matchValue = valueSelect && !valueSelect.classList.contains('d-none')
+      ? valueSelect.value
+      : (valueInput?.value || '').trim();
+    return { field_key: field.value, match_value: matchValue };
+  }
+
   function syncSinglePackageField(row) {
     const images = selectedImageChoices(row);
     const encounter = row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value || '';
@@ -688,6 +788,7 @@
     const existingPackages = packagesFromField(row);
     const policies = {};
     const controls = {};
+    const metadataRules = {};
     images.forEach(function (choice) {
       const policy = row.querySelector('[data-upload-profile-image-auto-policy][data-scheme-id="' + CSS.escape(choice.id) + '"]');
       const control = row.querySelector('[data-upload-profile-negative-controls][data-scheme-id="' + CSS.escape(choice.id) + '"]');
@@ -696,6 +797,10 @@
       controls[choice.id] = policyValue === 'positive_plus_negative_controls'
         ? Math.max(1, Math.min(10, parseInt(control?.value || '0', 10) || 0))
         : 0;
+      const metadataRule = imageMetadataRuleValue(row, choice.id);
+      if (metadataRule) {
+        metadataRules[choice.id] = metadataRule;
+      }
     });
     const defaultField = row.querySelector('[data-upload-profile-est-default-image-scheme]');
     if (defaultField) {
@@ -724,6 +829,7 @@
           encounter_grading_scheme_ids: selectedEncounter ? [selectedEncounter] : [],
           image_scheme_auto_create_policies: { [choice.id]: policies[choice.id] },
           image_scheme_negative_controls_per_positive: { [choice.id]: controls[choice.id] },
+          image_scheme_metadata_rules: metadataRules[choice.id] ? { [choice.id]: metadataRules[choice.id] } : {},
           active: true
         };
       }));
@@ -740,6 +846,7 @@
       encounter_grading_scheme_ids: encounter ? [encounter] : [],
       image_scheme_auto_create_policies: policies,
       image_scheme_negative_controls_per_positive: controls,
+      image_scheme_metadata_rules: metadataRules,
       active: true
     }]);
     syncImagePolicyControls(row);
@@ -775,6 +882,7 @@
       if (staticText) {
         staticText.classList.toggle('opacity-50', !enabled);
       }
+      syncImageMetadataRuleControl(imageRow);
     });
     syncSchemeGradePopoverButtons(row);
   }
@@ -896,7 +1004,7 @@
       if (!form.dataset.uploadProfileBound) {
         form.addEventListener('input', function (event) {
           const packageRow = event.target.closest('[data-upload-profile-est-option]');
-          if (!packageRow || !event.target.matches('[data-upload-profile-negative-controls]')) {
+          if (!packageRow || !event.target.matches('[data-upload-profile-negative-controls], [data-upload-profile-image-metadata-value-input]')) {
             return;
           }
           syncSinglePackageField(packageRow);
@@ -912,6 +1020,17 @@
             return;
           }
           if (packageRow && event.target.matches('[data-upload-profile-negative-controls]')) {
+            syncSinglePackageField(packageRow);
+            syncModeCards(form);
+            return;
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-image-metadata-field]')) {
+            syncImageMetadataRuleControl(event.target.closest('[data-upload-profile-est-image-row]'), '');
+            syncSinglePackageField(packageRow);
+            syncModeCards(form);
+            return;
+          }
+          if (packageRow && event.target.matches('[data-upload-profile-image-metadata-value-select]')) {
             syncSinglePackageField(packageRow);
             syncModeCards(form);
             return;
@@ -1255,10 +1374,13 @@
             'Image',
             function (scheme) {
               const policy = imageAutoPolicyLabel(scheme.auto_create_policy);
+              const metadataRule = scheme.metadata_field_key && scheme.metadata_match_value
+                ? ' · ' + scheme.metadata_field_key + ' = ' + scheme.metadata_match_value
+                : '';
               if (scheme.auto_create_policy === 'positive_plus_negative_controls') {
-                return 'Creation mode: ' + policy + ' 1:' + (scheme.negative_controls_per_positive || 0);
+                return 'Creation mode: ' + policy + ' 1:' + (scheme.negative_controls_per_positive || 0) + metadataRule;
               }
-              return 'Creation mode: ' + policy;
+              return 'Creation mode: ' + policy + metadataRule;
             }
           );
           packages.appendChild(packageBlock);

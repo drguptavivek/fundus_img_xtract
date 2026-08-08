@@ -23,6 +23,7 @@ Each unified package policy includes:
 - one encounter-level grading scheme for the whole EncounterSet
 - one or more image-level grading schemes
 - per-image-scheme auto-creation policy
+- optional per-image-scheme provider metadata field/value match
 
 Each disease-specific package must include exactly one image-level scheme and exactly one encounter-level scheme. An image scheme may appear in only one disease-specific package for a selected EncounterSetType. This stored package relationship is the authoritative image-to-encounter mapping; task creation never guesses a pairing from grading-scheme names or OCR linkage.
 
@@ -48,6 +49,12 @@ Do not infer Remidio OCR linkage from grading scheme names. A project may have m
 
 Remidio API ingestion is not itself a grading workflow policy. PRISTINE Remidio API profiles and integrated-screening Remidio API profiles may ingest the same kind of source data while using different package definitions.
 
+### Image metadata routing
+
+An image scheme may optionally select one scalar image field from the EncounterSetType metadata schema and one exact match value. The auto-creation policy is evaluated for the EncounterSet first; the metadata rule then filters individual eligible images for that scheme. A missing field, null value, or different value does not match. With no rule, existing all-eligible-image behavior is preserved.
+
+Rules use normalized `EncounterSetImage.metadata_json` keys, not grading-scheme names and not arbitrary raw-provider JSON paths. Select-field values come from the EncounterSetType schema. For Remidio laterality, configure `laterality = OD` for a right-eye scheme and `laterality = OS` for a left-eye scheme.
+
 ## Runtime Creation
 
 When verification finalization succeeds:
@@ -56,7 +63,7 @@ When verification finalization succeeds:
 2. Evaluate each configured package policy for the active Upload Profile and EncounterSetType mapping.
 3. Create one runtime EncounterSet grading package per applicable configured package when at least one encounter or image target remains.
 4. Create the encounter-level grading target from that package's encounter-level scheme.
-5. Create image-level grading targets from each selected image-level scheme whose auto-creation policy applies, for eligible clinical images only.
+5. Create image-level grading targets from each selected image-level scheme whose auto-creation policy applies, filtering each eligible clinical image by the scheme's optional provider metadata rule.
 6. Deduplicate targets by package, target level, image target, and grading scheme.
 
 Eligible clinical images are images that are:

@@ -554,6 +554,104 @@ def test_verify_encounter_set_finalize_creates_amd_report_triggered_image_task(
     assert [task.disease_id for task in image_tasks] == [amd.id]
 
 
+def test_verify_encounter_set_finalize_routes_image_tasks_by_metadata_rule(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="verify_laterality_routing",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    right_scheme = Disease(name=f"Retina RT {uuid.uuid4().hex[:8]}", grading_scope="image")
+    left_scheme = Disease(name=f"Retina LT {uuid.uuid4().hex[:8]}", grading_scope="image")
+    encounter_scheme = Disease(name=f"Retina Person {uuid.uuid4().hex[:8]}", grading_scope="encounter")
+    db_session.add_all([right_scheme, left_scheme, encounter_scheme])
+    db_session.flush()
+
+    config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    config.encounter_grading_scheme = encounter_scheme
+    config.default_image_grading_scheme = right_scheme
+    config.image_grading_schemes = [
+        UploadProfileEncounterSetTypeImageGradingScheme(disease=right_scheme, is_default=True, display_order=1),
+        UploadProfileEncounterSetTypeImageGradingScheme(disease=left_scheme, is_default=False, display_order=2),
+    ]
+    config.grading_packages = [
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="Laterality package",
+            code="laterality_package",
+            grading_mode="unified",
+            default_image_grading_scheme=right_scheme,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=right_scheme,
+                    is_default=True,
+                    auto_create_policy="always",
+                    metadata_field_key="laterality",
+                    metadata_match_value="right",
+                    display_order=1,
+                ),
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=left_scheme,
+                    is_default=False,
+                    auto_create_policy="always",
+                    metadata_field_key="laterality",
+                    metadata_match_value="left",
+                    display_order=2,
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=encounter_scheme, display_order=1)
+            ],
+        )
+    ]
+    right_image = encounter_set_data["image"]
+    right_image.is_reviewed = True
+    left_image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        spatial_position=2,
+        original_filename="left.jpg",
+        folder_rel="files/test_sets",
+        metadata_json={"laterality": "left"},
+        is_reviewed=True,
+        created_at=datetime.now(),
+    )
+    unmatched_image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        spatial_position=3,
+        original_filename="unknown.jpg",
+        folder_rel="files/test_sets",
+        metadata_json={"laterality": "unknown"},
+        is_reviewed=True,
+        created_at=datetime.now(),
+    )
+    db_session.add_all([left_image, unmatched_image])
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200
+    package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        code="laterality_package",
+    ).one()
+    tasks = db_session.query(GradingTask).filter_by(encounter_set_package_id=package.id).all()
+    assert {
+        (task.grading_target_level, task.disease_id, task.encounter_set_image_id)
+        for task in tasks
+    } == {
+        ("encounter", encounter_scheme.id, None),
+        ("image", right_scheme.id, right_image.id),
+        ("image", left_scheme.id, left_image.id),
+    }
+
+
 def test_verify_encounter_set_finalize_creates_explicit_disease_specific_packages(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token, core_test_data
 ):

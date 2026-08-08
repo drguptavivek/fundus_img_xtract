@@ -25,6 +25,7 @@ from services.encounter_referral_suggestion import (
 from services.encounter_set_ai_inference import create_wadhwani_task_ids_for_encounter, enqueue_wadhwani_for_task_ids
 from upload_profiles.models import PatientEncounterTargetDisease
 from upload_profiles.models import UploadProfile, UploadProfileEncounterSetType, UploadProfileEncounterSetTypeImageGradingScheme
+from upload_profiles.image_task_routing import image_metadata_matches_rule
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
@@ -887,6 +888,11 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
 
         for image in eligible_images:
             for disease_id in image_scheme_ids:
+                if not image_metadata_matches_rule(
+                    image.metadata_json,
+                    package_config["image_scheme_metadata_rules"].get(disease_id),
+                ):
+                    continue
                 if _get_or_create_package_task(
                     db,
                     package=package,
@@ -980,7 +986,15 @@ def _create_negative_control_tasks_for_positive(
         if not _encounter_is_negative_for_disease(db, candidate, disease_id):
             continue
         eligible_images = _eligible_encounter_set_images(db, candidate)
-        if not eligible_images:
+        matching_images = [
+            image
+            for image in eligible_images
+            if image_metadata_matches_rule(
+                image.metadata_json,
+                package_config["image_scheme_metadata_rules"].get(disease_id),
+            )
+        ]
+        if not matching_images:
             continue
         if _encounter_has_negative_control_tasks(db, candidate.id, disease_id):
             continue
@@ -999,7 +1013,7 @@ def _create_negative_control_tasks_for_positive(
                 source="profile_package_negative_control",
             ):
                 created += 1
-        for image in eligible_images:
+        for image in matching_images:
             if _get_or_create_package_task(
                 db,
                 package=package,
@@ -1127,6 +1141,14 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
                     scheme.disease_id: scheme.negative_controls_per_positive
                     for scheme in package.image_grading_schemes if scheme.active
                 },
+                "image_scheme_metadata_rules": {
+                    scheme.disease_id: {
+                        "field_key": scheme.metadata_field_key,
+                        "match_value": scheme.metadata_match_value,
+                    }
+                    for scheme in package.image_grading_schemes
+                    if scheme.active and scheme.metadata_field_key and scheme.metadata_match_value
+                },
                 "encounter_scheme_ids": [
                     scheme.disease_id for scheme in package.encounter_grading_schemes if scheme.active
                 ],
@@ -1144,8 +1166,9 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
             "code": "default",
                 "applicability": "always",
                 "grading_mode": "unified",
-                "image_scheme_policies": {disease_id: "always" for disease_id in image_scheme_ids},
+            "image_scheme_policies": {disease_id: "always" for disease_id in image_scheme_ids},
             "image_scheme_negative_controls_per_positive": {disease_id: 0 for disease_id in image_scheme_ids},
+            "image_scheme_metadata_rules": {},
             "encounter_scheme_ids": encounter_scheme_ids,
             "source": "profile_default",
         }]
@@ -1166,6 +1189,7 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
         "grading_mode": "unified",
         "image_scheme_policies": {},
         "image_scheme_negative_controls_per_positive": {},
+        "image_scheme_metadata_rules": {},
         "encounter_scheme_ids": sorted(target_disease_ids),
         "source": "legacy_target_disease",
     }]

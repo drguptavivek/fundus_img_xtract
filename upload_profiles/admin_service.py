@@ -74,6 +74,12 @@ class EncounterSetProfileInput:
 
 
 @dataclass(frozen=True)
+class ImageMetadataTaskRuleInput:
+    field_key: str
+    match_value: str
+
+
+@dataclass(frozen=True)
 class EncounterSetGradingPackageInput:
     name: str
     code: str
@@ -83,6 +89,7 @@ class EncounterSetGradingPackageInput:
     default_image_grading_scheme_id: int | None = None
     image_scheme_auto_create_policies: dict[int, str] | None = None
     image_scheme_negative_controls_per_positive: dict[int, int] | None = None
+    image_scheme_metadata_rules: dict[int, ImageMetadataTaskRuleInput] | None = None
     grading_mode: str = "unified"
 
 
@@ -413,6 +420,8 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
                                 is_default=scheme.is_default,
                                 auto_create_policy=scheme.auto_create_policy,
                                 negative_controls_per_positive=scheme.negative_controls_per_positive,
+                                metadata_field_key=scheme.metadata_field_key,
+                                metadata_match_value=scheme.metadata_match_value,
                                 display_order=scheme.display_order,
                                 active=scheme.active,
                             )
@@ -593,6 +602,12 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
                             is_default=disease_id == package.default_image_grading_scheme_id,
                             auto_create_policy=(package.image_scheme_auto_create_policies or {}).get(disease_id, "always"),
                             negative_controls_per_positive=(package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0),
+                            metadata_field_key=(package.image_scheme_metadata_rules or {}).get(disease_id).field_key
+                            if (package.image_scheme_metadata_rules or {}).get(disease_id)
+                            else None,
+                            metadata_match_value=(package.image_scheme_metadata_rules or {}).get(disease_id).match_value
+                            if (package.image_scheme_metadata_rules or {}).get(disease_id)
+                            else None,
                             display_order=scheme_index,
                             active=True,
                         )
@@ -665,6 +680,14 @@ def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -
                 disease_id: int((package.image_scheme_negative_controls_per_positive or {}).get(disease_id, 0) or 0)
                 for disease_id in image_scheme_ids
             },
+            image_scheme_metadata_rules={
+                disease_id: ImageMetadataTaskRuleInput(
+                    field_key=rule.field_key.strip(),
+                    match_value=rule.match_value.strip(),
+                )
+                for disease_id in image_scheme_ids
+                if (rule := (package.image_scheme_metadata_rules or {}).get(disease_id)) is not None
+            },
         )
     return list(normalized.values())
 
@@ -687,6 +710,7 @@ def _packages_for_config(config: EncounterSetProfileInput) -> list[EncounterSetG
             default_image_grading_scheme_id=config.default_image_grading_scheme_id,
             image_scheme_auto_create_policies={disease_id: "always" for disease_id in config.image_grading_scheme_ids},
             image_scheme_negative_controls_per_positive={disease_id: 0 for disease_id in config.image_grading_scheme_ids},
+            image_scheme_metadata_rules={},
         )
     ]
 
@@ -695,14 +719,16 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
     if not configs:
         return None
     encounter_set_type_ids = set(configs)
-    valid_encounter_set_type_ids = set(
-        db.execute(
-            select(EncounterSetType.id).where(
+    encounter_set_types = {
+        row.id: row
+        for row in db.execute(
+            select(EncounterSetType).where(
                 EncounterSetType.id.in_(encounter_set_type_ids),
                 EncounterSetType.active.is_(True),
             )
         ).scalars().all()
-    )
+    }
+    valid_encounter_set_type_ids = set(encounter_set_types)
     if valid_encounter_set_type_ids != encounter_set_type_ids:
         return "EncounterSetTypes must be active."
 
@@ -764,6 +790,32 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             ]
             if invalid_ratios:
                 return f"Negative controls per positive must be between 0 and 10 in package {package.name}."
+            metadata_rule_scheme_ids = set((package.image_scheme_metadata_rules or {}).keys())
+            if not metadata_rule_scheme_ids.issubset(set(package.image_grading_scheme_ids)):
+                return f"Image metadata rules must reference selected image grading schemes in package {package.name}."
+            schema_fields = {
+                str(field.get("key") or ""): field
+                for field in (encounter_set_types[config.encounter_set_type_id].metadata_schema_json or {}).get("fields", [])
+                if isinstance(field, dict) and field.get("scope") == "image" and field.get("type") != "json"
+            }
+            for rule in (package.image_scheme_metadata_rules or {}).values():
+                field_key = rule.field_key.strip()
+                match_value = rule.match_value.strip()
+                if not field_key or not match_value:
+                    return f"Image metadata routing requires both a field and match value in package {package.name}."
+                if len(field_key) > 128 or len(match_value) > 255:
+                    return f"Image metadata routing field or value is too long in package {package.name}."
+                field = schema_fields.get(field_key)
+                if field is None:
+                    return f"Image metadata routing field '{field_key}' is not a scalar image field for this EncounterSetType."
+                options = field.get("options")
+                if isinstance(options, list) and options:
+                    allowed_values = {
+                        str(option.get("value") if isinstance(option, dict) else option)
+                        for option in options
+                    }
+                    if match_value not in allowed_values:
+                        return f"Image metadata routing value '{match_value}' is not allowed for field '{field_key}'."
             disease_ids.update(package.image_grading_scheme_ids)
             disease_ids.update(package.encounter_grading_scheme_ids)
 

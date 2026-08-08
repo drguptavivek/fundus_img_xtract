@@ -644,6 +644,8 @@ def _encounter_set_type_payload(row: UploadProfileEncounterSetType) -> dict[str,
                     "is_default": scheme.is_default,
                     "auto_create_policy": scheme.auto_create_policy,
                     "negative_controls_per_positive": scheme.negative_controls_per_positive,
+                    "metadata_field_key": scheme.metadata_field_key,
+                    "metadata_match_value": scheme.metadata_match_value,
                     "display_order": scheme.display_order,
                 }
                 for scheme in sorted(

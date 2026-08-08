@@ -356,6 +356,8 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
     auto_create_policy: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
     negative_controls_per_positive: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    metadata_field_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    metadata_match_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -376,6 +378,12 @@ class UploadProfileEncounterSetTypePackageImageScheme(Base):
         CheckConstraint(
             "((auto_create_policy = 'positive_plus_negative_controls' AND negative_controls_per_positive >= 1 AND negative_controls_per_positive <= 10) OR (auto_create_policy <> 'positive_plus_negative_controls' AND negative_controls_per_positive >= 0 AND negative_controls_per_positive <= 10))",
             name="ck_up_est_pkg_image_negative_controls_per_positive",
+        ),
+        CheckConstraint(
+            "((metadata_field_key IS NULL AND metadata_match_value IS NULL) OR "
+            "(metadata_field_key IS NOT NULL AND btrim(metadata_field_key) <> '' AND "
+            "metadata_match_value IS NOT NULL AND btrim(metadata_match_value) <> ''))",
+            name="ck_up_est_pkg_image_metadata_rule_complete",
         ),
         Index("ix_up_est_pkg_image_scheme_package_active", "package_id", "active"),
     )

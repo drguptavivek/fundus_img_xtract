@@ -465,6 +465,7 @@
                             <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 18rem; z-index: 2;">Image-Level Grading Scheme</th>
                             <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 18rem; z-index: 2;">Encounter-Level Grading</th>
                             <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 17rem; z-index: 2;">Image Task Creation Mode</th>
+                            <th scope="col" class="position-sticky top-0 bg-light" style="min-width: 20rem; z-index: 2;">Provider Image Metadata Match</th>
                             <th scope="col" class="position-sticky top-0 bg-light" style="width: 11rem; z-index: 2;">Positive-Negative Ratio</th>
                           </tr>
                         </thead>
@@ -526,6 +527,35 @@
                             <option value="positive_plus_negative_controls">Positive + sampled negative controls</option>
                             <option value="always" selected>Always</option>
                           </select>
+                        </td>
+                        <td>
+                          <div class="vstack gap-1" data-upload-profile-image-metadata-rule>
+                            <select class="form-select form-select-sm"
+                                    aria-label="Provider image metadata field for {{ disease.name }}"
+                                    data-upload-profile-image-metadata-field
+                                    data-scheme-id="{{ disease.id }}">
+                              <option value="">All eligible images</option>
+                              {% for field in (encounter_set_type.metadata_schema_json.get('fields', []) if encounter_set_type.metadata_schema_json else []) if field.get('scope') == 'image' and field.get('type') != 'json' %}
+                              <option value="{{ field.get('key') }}"
+                                      data-field-type="{{ field.get('type') }}"
+                                      data-field-options="{{ (field.get('options') or [])|tojson|forceescape }}">
+                                {{ field.get('label') }} ({{ field.get('key') }})
+                              </option>
+                              {% endfor %}
+                            </select>
+                            <select class="form-select form-select-sm d-none"
+                                    aria-label="Provider image metadata value for {{ disease.name }}"
+                                    data-upload-profile-image-metadata-value-select
+                                    data-scheme-id="{{ disease.id }}"></select>
+                            <input class="form-control form-control-sm d-none"
+                                   type="text"
+                                   maxlength="255"
+                                   placeholder="Exact value"
+                                   aria-label="Exact provider image metadata value for {{ disease.name }}"
+                                   data-upload-profile-image-metadata-value-input
+                                   data-scheme-id="{{ disease.id }}">
+                            <span class="form-text">Optional exact match. Empty means every eligible image.</span>
+                          </div>
                         </td>
                         <td>
                           <label class="input-group input-group-sm w-auto mb-0 opacity-50"

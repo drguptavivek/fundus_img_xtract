@@ -37,7 +37,14 @@ Current auto-creation policies are:
 - `remidio_dr_report_present`: create image targets only when DR Remidio report/OCR evidence exists
 - `remidio_amd_report_present`: create image targets only when AMD Remidio report/OCR evidence exists
 - `remidio_glaucoma_report_present`: create image targets only when glaucoma Remidio report/OCR evidence exists
-- `positive_plus_negative_controls`: create image targets only when the EncounterSet is positive for the scheme disease, then randomly sample up to `negative_controls_per_positive` previously unused negative control EncounterSets for the same disease; the control ratio must be `1` to `10`. Each selected control receives the package's configured encounter target plus image targets for all eligible clinical images.
+- `positive_plus_negative_controls`: keep the package dormant until the
+  EncounterSet is positive for the scheme disease, then create its encounter
+  target plus image targets for all eligible clinical images and randomly
+  sample up to `negative_controls_per_positive` previously unused negative
+  controls for the same disease. The control ratio must be `1` to `10`. Each
+  selected control receives the same complete linked package. An encounter with
+  an incompatible legacy runtime package using the same code is not eligible as
+  a control.
 
 Report-triggered policy options are allowed only for image-scoped grading schemes whose `remidio_ocr_linkage` is explicitly configured:
 
@@ -155,7 +162,7 @@ When a grader receives a task that belongs to an EncounterSet package, the task 
 /grading/encounter_set_package/<package_uuid>/<slot_type>
 ```
 
-The package workbench presents all available package targets for the grader's role slot. The submission saves grades for the available targets and then syncs the package state from the child task states.
+The package workbench presents all available package targets for the grader's role slot. Selecting a grade reveals its configured feature checkboxes. On image targets, selecting a feature activates the same sanitized feature-geometry annotation controls used by the standard grading workflow; each image task retains its own geometry context while the grader navigates the package. The submission validates and saves grades, selected features, and image geometry for all available targets before syncing the package state from the child task states.
 
 Package states are:
 

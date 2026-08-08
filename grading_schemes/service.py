@@ -571,6 +571,11 @@ def _sanitize_guidelines_html(value: str | None) -> str | None:
     return cleaned or None
 
 
+def sanitize_guidelines_html(value: str | None) -> str | None:
+    """Return guideline rich text containing only the supported safe tags."""
+    return _sanitize_guidelines_html(value)
+
+
 def _scheme_summary(
     scheme: Disease,
     usage: dict[str, int],

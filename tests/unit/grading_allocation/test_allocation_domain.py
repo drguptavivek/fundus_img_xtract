@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 
 from grading_allocation.constants import AllocationCapacity, AllocationScope
+from grading_allocation.dashboard import list_project_encounter_set_queues
 from grading_allocation.dtos import AllocationInputDTO
 from grading_allocation.eligibility import is_user_eligible_for_task
 from grading_allocation.exceptions import AllocationConflictError
@@ -39,6 +40,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
+from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.utilsImgServe import _user_has_grading_access_to_image
 
 
@@ -308,7 +310,7 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
 
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"encounter_set_resident_{suffix}",
         lab_units=[lab],
     )
@@ -328,6 +330,13 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
                 capacity=AllocationCapacity.RESIDENT.value,
                 active=True,
             ),
+            UserDiseaseUnitRole(
+                user_id=resident.id,
+                disease_id=disease.id,
+                lab_unit_id=lab.id,
+                can_grade_resident=True,
+                active=True,
+            ),
         ]
     )
     db_session.flush()
@@ -343,6 +352,24 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
         task=image_task,
         role_slot="resident",
     ) is True
+    queues = list_project_encounter_set_queues(db_session, user_id=resident.id)
+    assert len(queues) == 1
+    assert queues[0].project_id == project.id
+    assert queues[0].target_key == (
+        f"disease_encounter:{disease.id}:{encounter_set_type.id}"
+    )
+    assert queues[0].slots[0].slot == "resident"
+    assert queues[0].slots[0].package_count == 1
+    assert queues[0].slots[0].task_count == 2
+
+    mixed_kpis = get_user_kpi_pending_task_count_data(db_session, resident.id)
+    separated_kpis = get_user_kpi_pending_task_count_data(
+        db_session,
+        resident.id,
+        exclude_enforced_project_encounter_sets=True,
+    )
+    assert mixed_kpis[disease.name]["resident_pending"] == 1
+    assert separated_kpis[disease.name]["resident_pending"] == 0
 
 
 def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data):
@@ -556,7 +583,7 @@ def test_disabled_project_policy_preserves_legacy_eligibility(db_session, core_t
     ) is True
 
 
-def test_service_creates_normalized_allocation_and_reports_coverage(
+def test_service_creates_normalized_allocation_and_treats_arbitrator_as_optional(
     app,
     db_session,
     core_test_data,
@@ -591,7 +618,7 @@ def test_service_creates_normalized_allocation_and_reports_coverage(
     assert allocation.capacity == "resident"
     assert state.policy.enforcement_enabled is False
     assert state.targets[0]["coverage"] == {"resident": 1, "arbitrator": 0}
-    assert state.warnings[0]["missing_capacities"] == ["arbitrator"]
+    assert state.warnings == ()
 
 
 def test_project_allocation_grants_cross_lab_grading_media_access(
@@ -638,7 +665,7 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
     ) is True
 
 
-def test_service_enables_enforcement_after_both_capacities_are_covered(
+def test_service_enables_enforcement_with_resident_coverage_only(
     app,
     db_session,
     core_test_data,
@@ -654,26 +681,17 @@ def test_service_enables_enforcement_after_both_capacities_are_covered(
         username=f"policy_resident_{suffix}",
         lab_units=[lab],
     )
-    arbitrator = UserFactory.create_ophthalmologist(
-        db_session,
-        username=f"policy_arbitrator_{suffix}",
-        lab_units=[lab],
+    create_or_reactivate_allocation(
+        admin.id,
+        project.id,
+        AllocationInputDTO(
+            user_id=resident.id,
+            lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT,
+        ),
     )
-    for user, capacity in (
-        (resident, AllocationCapacity.RESIDENT),
-        (arbitrator, AllocationCapacity.ARBITRATOR),
-    ):
-        create_or_reactivate_allocation(
-            admin.id,
-            project.id,
-            AllocationInputDTO(
-                user_id=user.id,
-                lab_unit_id=lab.id,
-                scope=AllocationScope.DISEASE_IMAGE,
-                disease_id=disease.id,
-                capacity=capacity,
-            ),
-        )
 
     policy = set_project_enforcement(admin.id, project.id, enabled=True)
 
@@ -701,48 +719,44 @@ def test_service_rejects_enforcement_without_project_targets(
         set_project_enforcement(admin.id, project.id, enabled=True)
 
 
-def test_service_rejects_split_lab_capacity_coverage(
+def test_service_rejects_enforcement_with_arbitrator_but_no_resident(
     app,
     db_session,
     core_test_data,
 ):
     disease = db_session.merge(core_test_data["dr"])
-    resident_lab = db_session.merge(core_test_data["lab_a1"])
-    arbitrator_lab = db_session.merge(core_test_data["lab_a2"])
+    lab = db_session.merge(core_test_data["lab_a2"])
     project, _profile = _project_with_image_target(db_session, disease)
     suffix = uuid4().hex[:8]
     admin = UserFactory.create_admin(db_session, username=f"split_lab_admin_{suffix}")
-    resident = UserFactory.create_by_role(
-        db_session,
-        "resident",
-        username=f"split_lab_resident_{suffix}",
-        lab_units=[resident_lab],
-    )
     arbitrator = UserFactory.create_ophthalmologist(
         db_session,
         username=f"split_lab_arbitrator_{suffix}",
-        lab_units=[arbitrator_lab],
+        lab_units=[lab],
     )
-    for user, lab, capacity in (
-        (resident, resident_lab, AllocationCapacity.RESIDENT),
-        (arbitrator, arbitrator_lab, AllocationCapacity.ARBITRATOR),
-    ):
-        create_or_reactivate_allocation(
-            admin.id,
-            project.id,
-            AllocationInputDTO(
-                user_id=user.id,
-                lab_unit_id=lab.id,
-                scope=AllocationScope.DISEASE_IMAGE,
-                disease_id=disease.id,
-                capacity=capacity,
-            ),
-        )
+    create_or_reactivate_allocation(
+        admin.id,
+        project.id,
+        AllocationInputDTO(
+            user_id=arbitrator.id,
+            lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.ARBITRATOR,
+        ),
+    )
 
     with pytest.raises(AllocationConflictError) as exc_info:
         set_project_enforcement(admin.id, project.id, enabled=True)
 
-    warning_codes = {
-        warning["code"] for warning in exc_info.value.details["warnings"]
-    }
-    assert warning_codes == {"grading_target_lab_capacity_missing"}
+    assert exc_info.value.details["warnings"] == [
+        {
+            "code": "grading_target_capacity_missing",
+            "target_key": f"disease_image:{disease.id}:none",
+            "missing_capacities": ["resident"],
+            "message": (
+                f"Target 'disease_image:{disease.id}:none' has no active "
+                "resident allocation."
+            ),
+        }
+    ]

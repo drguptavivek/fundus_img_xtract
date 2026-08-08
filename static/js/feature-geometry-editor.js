@@ -258,6 +258,9 @@
     if (ctx.sectionEl.style.display === "none") return false;
     const panel = ctx.sectionEl.closest(".linked-grading-panel");
     if (!panel) return true;
+    if (panel.matches("[data-fgw-panel]")) {
+      return panel.classList.contains("is-active");
+    }
     const item = panel.closest(".carousel-item");
     return !item || item.classList.contains("active");
   }
@@ -1120,6 +1123,8 @@
     if (ctx.panelTopEl && ctx.panelBottomEl) return;
     const sidebarHost = resolveSidebarHost(ctx);
     if (!sidebarHost) return;
+    const placeholder = sidebarHost.querySelector("[data-annotation-placeholder]");
+    if (placeholder) placeholder.classList.add("d-none");
 
     const panel = document.createElement("div");
     panel.className = "fgx-panel";
@@ -2415,6 +2420,11 @@
       state.pendingCreateType = null;
       clearSelectedBox();
       redraw();
+      return;
+    }
+
+    if (!item) {
+      setStatus(ctx, "Choose an Add annotation tool before drawing on the image.");
       return;
     }
 
@@ -3820,6 +3830,13 @@
       _historyLastSig: null,
       _historyLastSnapshot: clonePayload(initial),
       _suspendHistory: false,
+      viewerRoot: null,
+      main: null,
+      mainImg: null,
+      canvas: null,
+      canvasContext: null,
+      imageMutationObserver: null,
+      imageResizeObserver: null,
     };
 
     ensurePanel(ctx);
@@ -3891,6 +3908,8 @@
       return;
     }
 
+    activateContextViewer(ctx);
+
     syncFeatureSelection(ctx);
     updatePanelFeatureOptions(ctx);
     updateGridLabel(ctx);
@@ -3919,44 +3938,61 @@
     redraw();
   }
 
-  function createCanvasOverlay() {
-    const viewerRoot = document.querySelector(".imggr-viewer-root");
+  function activateContextViewer(ctx) {
+    if (!ctx || !ctx.viewerRoot || !ctx.main || !ctx.mainImg || !ctx.canvas) return false;
+    state.viewerRoot = ctx.viewerRoot;
+    state.main = ctx.main;
+    state.mainImg = ctx.mainImg;
+    state.canvas = ctx.canvas;
+    state.ctx = ctx.canvasContext;
+    state.viewerRoot.classList.add("fgx-geometry-active");
+    if (state.boxActionsEl && state.boxActionsEl.parentElement !== state.main) {
+      state.boxActionsEl.style.display = "none";
+      state.main.appendChild(state.boxActionsEl);
+    }
+    ensureBoxActions();
+    setCanvasPointerMode();
+    return true;
+  }
+
+  function createCanvasOverlayForContext(ctx) {
+    const panel = ctx.sectionEl?.closest(".linked-grading-panel");
+    const viewerRoot = panel
+      ? panel.querySelector(".imggr-viewer-root")
+      : document.querySelector(".imggr-viewer-root");
     const main = viewerRoot?.querySelector(".imggr-main");
     const img = main?.querySelector(".imggr-main-img");
     if (!viewerRoot || !main || !img) return false;
-
-    state.viewerRoot = viewerRoot;
-    state.main = main;
-    state.mainImg = img;
-    state.viewerRoot.classList.add("fgx-geometry-active");
 
     const canvas = document.createElement("canvas");
     canvas.className = "fgx-overlay-canvas";
     canvas.setAttribute("aria-hidden", "true");
     main.appendChild(canvas);
-    state.canvas = canvas;
-    state.ctx = canvas.getContext("2d");
-    ensureBoxActions();
+    ctx.viewerRoot = viewerRoot;
+    ctx.main = main;
+    ctx.mainImg = img;
+    ctx.canvas = canvas;
+    ctx.canvasContext = canvas.getContext("2d");
 
-    canvas.addEventListener("pointerdown", handlePointerDown);
-    canvas.addEventListener("pointermove", handlePointerMove);
-    canvas.addEventListener("pointerup", handlePointerUp);
-    canvas.addEventListener("pointercancel", handlePointerUp);
-    canvas.addEventListener("pointerleave", handlePointerUp);
-    main.addEventListener("click", handleMainClickForSelection);
-    main.addEventListener("pointerdown", handleMainPointerDown);
-    main.addEventListener("pointerup", handleMainPointerUp);
-    main.addEventListener("pointercancel", handleMainPointerUp);
-    main.addEventListener("pointerleave", handleMainPointerUp);
-    main.addEventListener("pointermove", handleMainPointerMoveForPanSync);
-    main.addEventListener("wheel", handleMainWheelForPanSync, { passive: true });
-
-    window.addEventListener("keydown", handleKeyDown, { capture: true });
-    window.addEventListener("keyup", handleKeyUp, { capture: true });
-    window.addEventListener("resize", redraw);
+    const withContext = (handler) => (event) => {
+      activateContextViewer(ctx);
+      handler(event);
+    };
+    canvas.addEventListener("pointerdown", withContext(handlePointerDown));
+    canvas.addEventListener("pointermove", withContext(handlePointerMove));
+    canvas.addEventListener("pointerup", withContext(handlePointerUp));
+    canvas.addEventListener("pointercancel", withContext(handlePointerUp));
+    canvas.addEventListener("pointerleave", withContext(handlePointerUp));
+    main.addEventListener("click", withContext(handleMainClickForSelection));
+    main.addEventListener("pointerdown", withContext(handleMainPointerDown));
+    main.addEventListener("pointerup", withContext(handleMainPointerUp));
+    main.addEventListener("pointercancel", withContext(handleMainPointerUp));
+    main.addEventListener("pointerleave", withContext(handleMainPointerUp));
+    main.addEventListener("pointermove", withContext(handleMainPointerMoveForPanSync));
+    main.addEventListener("wheel", withContext(handleMainWheelForPanSync), { passive: true });
 
     try {
-      state.imageMutationObserver = new MutationObserver((records) => {
+      ctx.imageMutationObserver = new MutationObserver((records) => {
         if (Array.isArray(records) && records.some((r) => r.attributeName === "src")) {
           clearSelectedBox();
           state.drawing = null;
@@ -3964,9 +4000,9 @@
           state.painting = null;
           hideBoxActions();
         }
-        redraw();
+        if (activeContext() === ctx) redraw();
       });
-      state.imageMutationObserver.observe(img, {
+      ctx.imageMutationObserver.observe(img, {
         attributes: true,
         attributeFilter: ["style", "class", "src"],
       });
@@ -3974,15 +4010,28 @@
 
     if (typeof ResizeObserver !== "undefined") {
       try {
-        state.imageResizeObserver = new ResizeObserver(() => {
-          redraw();
+        ctx.imageResizeObserver = new ResizeObserver(() => {
+          if (activeContext() === ctx) redraw();
         });
-        state.imageResizeObserver.observe(main);
-        state.imageResizeObserver.observe(img);
+        ctx.imageResizeObserver.observe(main);
+        ctx.imageResizeObserver.observe(img);
       } catch (_) {}
     }
 
     return true;
+  }
+
+  function createCanvasOverlays() {
+    let created = false;
+    state.contexts.forEach((ctx) => {
+      created = createCanvasOverlayForContext(ctx) || created;
+    });
+    const ctx = activeContext();
+    if (ctx) activateContextViewer(ctx);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    window.addEventListener("resize", redraw);
+    return created;
   }
 
   function setupObservers() {
@@ -4022,6 +4071,9 @@
         window.setTimeout(queueRefresh, 0);
       }
     });
+
+    document.addEventListener("fgw:panel-changed", queueRefresh);
+    document.addEventListener("fgw:features-changed", queueRefresh);
 
     const carousel = document.getElementById("linked-grading-carousel");
     if (carousel) {
@@ -4071,9 +4123,10 @@
 
   function init() {
     ensureStyle();
-    if (!createCanvasOverlay()) return;
     discoverContexts();
     if (!state.contexts.size) return;
+    pickActiveContext();
+    if (!createCanvasOverlays()) return;
     setupObservers();
     queueRefresh();
     redraw();

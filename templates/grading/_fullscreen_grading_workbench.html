@@ -188,7 +188,7 @@
 <div class="container-fluid p-2 fgw-shell is-expanded"
      data-fgw-workbench
      data-initial-target-index="{{ first_available_index }}">
-  <form id="fullscreen-grading-form" class="h-100 d-flex flex-column" method="post" action="{{ url_for('grading.encounter_set_package_submit') }}">
+  <form id="fullscreen-grading-form" class="h-100 d-flex flex-column" method="post" action="{{ url_for('grading.encounter_set_package_submit') }}" data-grading-form="true">
     {{ csrf_field() }}
     <span id="imggr-preset-save-button" class="d-none">{{ csrf_field() }}</span>
     <input type="hidden" name="package_uuid" value="{{ package.uuid }}">
@@ -221,8 +221,12 @@
       {% set viewer_uuid = task.uuid %}
       {% set image_meta = image.metadata_json if image and image.metadata_json else {} %}
       {% set image_laterality = (image_meta.get('laterality') or image_meta.get('eye') or '')|lower %}
-      <article class="fgw-panel {% if loop.index0 == first_available_index %}is-active{% endif %}"
+      {% if image %}
+      <input type="hidden" name="feature_geometry_json_{{ task.uuid }}" data-feature-geometry-field="{{ task.uuid }}">
+      {% endif %}
+      <article class="fgw-panel linked-grading-panel {% if loop.index0 == first_available_index %}is-active{% endif %}"
                data-fgw-panel
+               data-read-only="{{ 'false' if panel.available else 'true' }}"
                data-target-index="{{ loop.index0 }}"
                data-task-uuid="{{ task.uuid }}"
                data-available="{{ '1' if panel.available else '0' }}"
@@ -292,6 +296,11 @@
             <div id="fgw-imggr-view-{{ viewer_uuid }}" class="imggr-viewer-root flex-grow-1" data-enc-id="{{ image.uuid }}" data-imggr-lite-mode="false">
               <div class="imggr-stage position-relative flex-grow-1 w-100">
                 <div class="imggr-annot-layout d-flex h-100">
+                  <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host>
+                    <div class="small text-muted" data-annotation-placeholder>
+                      Annotation tools load here after selecting a feature. Reload this page if they do not appear.
+                    </div>
+                  </aside>
                   <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
                     <div class="imggr-main rounded position-relative" data-fixed-viewport="true">
                       <img class="imggr-main-img" src="{{ url_for('media._encounterSetImageByUUID', uuid_str=image.uuid) }}" alt="Image {{ image.spatial_position }}" data-index="0">
@@ -423,10 +432,18 @@
                       {% if not panel.available %}disabled{% endif %}>
                 <span class="fw-semibold">{{ label.impression }}</span>
                 {% if label.guidelines %}
-                <span class="d-block small text-muted">{{ label.guidelines }}</span>
+                <span class="d-block small text-muted">{{ panel.guideline_html_by_label_id.get(label.id, "") }}</span>
                 {% endif %}
               </button>
               {% endfor %}
+            </div>
+
+            <div class="mt-3" data-features-section style="display: none;">
+              <label class="form-label small fw-semibold">Relevant Features</label>
+              <div class="d-flex flex-column gap-2" data-features-container></div>
+              {% if image %}
+              <div class="form-text">Select a feature, then use the annotation controls beside the image.</div>
+              {% endif %}
             </div>
 
             <label class="form-label small fw-semibold mt-3" for="comment_{{ task.uuid }}">Comment</label>
@@ -466,6 +483,14 @@
 
 <script src="{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}" defer></script>
 <script>
+  window.linkedGradingData = {{ package_grading_data | tojson }};
+  window.currentUserId = {{ current_user_id | tojson }};
+  window.currentSlot = {{ slot_type | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=(config.get('ASSETS_VERSION','') ~ '-package3')) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=(config.get('ASSETS_VERSION','') ~ '-package3')) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=(config.get('ASSETS_VERSION','') ~ '-package3')) }}"></script>
+<script>
   (function () {
     const root = document.querySelector('[data-fgw-workbench]');
     if (!root) return;
@@ -477,6 +502,65 @@
     const viewerAdjustmentStoragePrefix = 'fgwViewerAdjustments';
     const viewerAdjustmentTtlMs = 15 * 60 * 1000;
     let activeIndex = Number(root.dataset.initialTargetIndex || 0);
+
+    function existingFeatureIds(panelData) {
+      const ids = [];
+      (panelData && Array.isArray(panelData.existingSelectedFeatures)
+        ? panelData.existingSelectedFeatures
+        : []).forEach(function (item) {
+          const value = item && typeof item === 'object' ? item.id : item;
+          const numeric = Number(value);
+          if (!Number.isNaN(numeric)) ids.push(numeric);
+        });
+      return ids;
+    }
+
+    function renderFeatures(panel, gradeId) {
+      if (!panel) return;
+      const section = panel.querySelector('[data-features-section]');
+      const container = panel.querySelector('[data-features-container]');
+      if (!section || !container) return;
+      const panelData = window.linkedGradingData
+        ? window.linkedGradingData[panel.dataset.taskUuid]
+        : null;
+      const grading = panelData && Array.isArray(panelData.features)
+        ? panelData.features.find(function (item) { return String(item.id) === String(gradeId); })
+        : null;
+      const features = grading && Array.isArray(grading.features)
+        ? grading.features.slice()
+        : [];
+      container.innerHTML = '';
+      if (!features.length) {
+        section.style.display = 'none';
+        document.dispatchEvent(new CustomEvent('fgw:features-changed'));
+        return;
+      }
+      const selectedIds = existingFeatureIds(panelData);
+      features.sort(function (a, b) {
+        return Number(a.sr_no || 0) - Number(b.sr_no || 0) || Number(a.id) - Number(b.id);
+      }).forEach(function (feature) {
+        const checkboxId = 'fgw-feature-' + panel.dataset.taskUuid + '-' + feature.id;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check';
+        const checkbox = document.createElement('input');
+        checkbox.className = 'form-check-input';
+        checkbox.type = 'checkbox';
+        checkbox.name = 'selected_features_' + panel.dataset.taskUuid;
+        checkbox.id = checkboxId;
+        checkbox.value = String(feature.id);
+        checkbox.checked = selectedIds.includes(Number(feature.id));
+        checkbox.disabled = panel.dataset.available !== '1';
+        const label = document.createElement('label');
+        label.className = 'form-check-label';
+        label.htmlFor = checkboxId;
+        label.textContent = feature.label || '';
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(label);
+        container.appendChild(wrapper);
+      });
+      section.style.display = 'block';
+      document.dispatchEvent(new CustomEvent('fgw:features-changed'));
+    }
 
     function viewerAdjustmentKey() {
       return viewerAdjustmentStoragePrefix + ':package:{{ package.uuid }}';
@@ -579,6 +663,7 @@
       restoreViewerAdjustments(panels[activeIndex], true);
       initViewer(panels[activeIndex]);
       updateProgress();
+      document.dispatchEvent(new CustomEvent('fgw:panel-changed'));
     }
 
     function syncExpandedState() {
@@ -639,6 +724,7 @@
         panel.querySelectorAll('[data-fgw-grade-option]').forEach(function (button) {
           button.classList.toggle('is-selected', button === grade);
         });
+        renderFeatures(panel, grade.dataset.gradeId || '');
         updateProgress();
         return;
       }
@@ -673,6 +759,7 @@
         panel.querySelectorAll('[data-fgw-grade-option]').forEach(function (button) {
           button.classList.toggle('is-selected', button.dataset.gradeId === event.target.value);
         });
+        renderFeatures(panel, event.target.value);
         updateProgress();
       }
       if (event.target.matches('.imggr-bright, .imggr-contrast')) {
@@ -689,6 +776,10 @@
     window.addEventListener('load', function () {
       setActive(activeIndex);
       syncExpandedState();
+    });
+    panels.forEach(function (panel) {
+      const select = panel.querySelector('[data-fgw-grade-select]');
+      if (select && select.value) renderFeatures(panel, select.value);
     });
     setActive(0);
     syncExpandedState();

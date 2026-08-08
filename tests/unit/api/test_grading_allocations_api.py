@@ -1,6 +1,10 @@
 from uuid import uuid4
 
 from models import Project
+from grading_allocation.dtos import (
+    EncounterSetQueueSlotDTO,
+    ProjectEncounterSetQueueDTO,
+)
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileDisease
 
@@ -142,3 +146,61 @@ def test_grader_allocation_api_rejects_invalid_target_shape(
 
     assert response.status_code == 400
     assert response.get_json()["error"]["code"] == "grading_allocation_error"
+
+
+def test_project_encounter_set_queue_api_returns_current_users_queues(
+    client,
+    db_session,
+    monkeypatch,
+):
+    grader = UserFactory.create_by_role(
+        db_session,
+        "ophthalmologist",
+        username=f"project_queue_api_{uuid4().hex[:8]}",
+        lab_units=[],
+    )
+    db_session.flush()
+    _authenticate(client, grader)
+    queue = ProjectEncounterSetQueueDTO(
+        project_id=3,
+        project_title="Integrated DR Glaucoma Screening",
+        project_code="ICMR-VG",
+        target_key="disease_encounter:1:15",
+        target_label="Glaucoma / EncounterSet (Remidio API Standard Encounter Set)",
+        encounter_set_type_name="Remidio API Standard Encounter Set",
+        slots=(
+            EncounterSetQueueSlotDTO(
+                slot="resident",
+                package_count=1,
+                task_count=1,
+                first_package_uuid="package-uuid",
+            ),
+        ),
+    )
+    observed = {}
+
+    def _queues(_db, *, user_id):
+        observed["user_id"] = user_id
+        return (queue,)
+
+    monkeypatch.setattr(
+        "api.grading_allocations.list_project_encounter_set_queues",
+        _queues,
+    )
+
+    response = client.get("/api/grading/project-encounter-set-queues")
+
+    assert response.status_code == 200
+    assert observed["user_id"] == grader.id
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["queues"][0]["project"]["code"] == "ICMR-VG"
+    assert payload["queues"][0]["slots"] == [
+        {
+            "slot": "resident",
+            "label": "Resident",
+            "package_count": 1,
+            "task_count": 1,
+            "first_package_uuid": "package-uuid",
+        }
+    ]

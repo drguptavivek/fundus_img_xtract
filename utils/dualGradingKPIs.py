@@ -14,6 +14,7 @@ from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, Direct
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
+from grading_allocation.dashboard import exclude_enforced_project_encounter_set_tasks
 from typing import Dict, Optional, List, Tuple
 
 
@@ -61,7 +62,12 @@ def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
     return query.filter(~mismatch_exists)
 
 
-def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str, int]]:
+def get_user_kpi_pending_task_count_data(
+    db,
+    user_id: int,
+    *,
+    exclude_enforced_project_encounter_sets: bool = False,
+) -> Dict[str, Dict[str, int]]:
     """
     Get KPI data for each core disease for pending tasks across all mapped lab units for each slot of a user.
     
@@ -175,6 +181,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                 ~resident_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
+            if exclude_enforced_project_encounter_sets:
+                q = exclude_enforced_project_encounter_set_tasks(q)
             q = apply_scoping(q, GradingTask, user, 'grading')
             resident_pending_count = q.count()
 
@@ -194,6 +202,10 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                 ~resident_tracker_exists.exists(),
                 ~resident_conflict_exists.exists(),
             )
+            if exclude_enforced_project_encounter_sets:
+                inconsistent_q = exclude_enforced_project_encounter_set_tasks(
+                    inconsistent_q
+                )
             inconsistent_q = apply_scoping(inconsistent_q, GradingTask, user, 'grading')
             inconsistent_count = inconsistent_q.count()
 
@@ -224,6 +236,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                 ~resident2_conflict_exists.exists(),
             )
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
+            if exclude_enforced_project_encounter_sets:
+                q = exclude_enforced_project_encounter_set_tasks(q)
             q = apply_scoping(q, GradingTask, user, 'grading')
             counts['resident2_pending'] = q.count()
         
@@ -283,6 +297,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             else:
                 base_q = base_q.filter(GradingTask.state == 'arbitration')
 
+            if exclude_enforced_project_encounter_sets:
+                base_q = exclude_enforced_project_encounter_set_tasks(base_q)
             q = apply_scoping(base_q, GradingTask, user, 'grading')
             
             # Use distinct because the join might produce multiple rows per primary task
@@ -520,7 +536,12 @@ def get_user_task_tracker_kpi_data(
     }
 
 
-def get_user_kpi_linked_followup_counts(db, user_id: int) -> Dict[str, List[Dict[str, int | str]]]:
+def get_user_kpi_linked_followup_counts(
+    db,
+    user_id: int,
+    *,
+    exclude_enforced_project_encounter_sets: bool = False,
+) -> Dict[str, List[Dict[str, int | str]]]:
     """
     Get counts of linked-task state mismatches by primary disease and linked disease.
     Combines resident and resident2 follow-up conditions.
@@ -628,6 +649,9 @@ def get_user_kpi_linked_followup_counts(db, user_id: int) -> Dict[str, List[Dict
         )
 
         q = apply_scoping(q, PrimaryTask, user, 'grading')
+        if exclude_enforced_project_encounter_sets:
+            q = exclude_enforced_project_encounter_set_tasks(q, PrimaryTask)
+            q = exclude_enforced_project_encounter_set_tasks(q, LinkedTask)
         rows = q.all()
         if rows:
             results[disease_name] = [

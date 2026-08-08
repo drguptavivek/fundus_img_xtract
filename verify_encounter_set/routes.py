@@ -923,11 +923,15 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
 
     created = 0
     for package_config in package_configs:
-        positive_control_scheme_ids = sorted(
+        sampling_scheme_ids = {
             disease_id
             for disease_id, policy in package_config["image_scheme_policies"].items()
             if policy == "positive_plus_negative_controls"
-            and _encounter_is_positive_for_disease(db, encounter, disease_id)
+        }
+        positive_control_scheme_ids = sorted(
+            disease_id
+            for disease_id in sampling_scheme_ids
+            if _encounter_is_positive_for_disease(db, encounter, disease_id)
         )
         image_scheme_ids = sorted(
             {
@@ -938,6 +942,11 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
         ) + positive_control_scheme_ids
         image_scheme_ids = sorted(set(image_scheme_ids))
         encounter_scheme_ids = sorted(set(package_config["encounter_scheme_ids"]))
+        if sampling_scheme_ids and not image_scheme_ids:
+            # A sampled negative remains dormant until a positive EncounterSet
+            # explicitly selects it as a control. Do not expose an orphaned
+            # encounter-only package while its image tasks are deferred.
+            continue
         if not encounter_scheme_ids and (not image_scheme_ids or not eligible_images):
             continue
 
@@ -1056,6 +1065,12 @@ def _create_negative_control_tasks_for_positive(
             continue
         if not _encounter_is_negative_for_disease(db, candidate, disease_id):
             continue
+        if _encounter_has_incompatible_runtime_package(
+            db,
+            candidate_id=candidate.id,
+            package_config=package_config,
+        ):
+            continue
         eligible_images = _eligible_encounter_set_images(db, candidate)
         matching_images = [
             image
@@ -1096,6 +1111,28 @@ def _create_negative_control_tasks_for_positive(
             ):
                 created += 1
     return created
+
+
+def _encounter_has_incompatible_runtime_package(
+    db,
+    *,
+    candidate_id: int,
+    package_config: dict,
+) -> bool:
+    existing = (
+        db.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == candidate_id,
+            EncounterSetGradingPackage.code == package_config["code"],
+        )
+        .first()
+    )
+    if existing is None:
+        return False
+    return (
+        existing.upload_profile_est_grading_package_id
+        != package_config.get("config_id")
+    )
 
 
 def _encounter_has_negative_control_tasks(db, encounter_id: int, disease_id: int) -> bool:

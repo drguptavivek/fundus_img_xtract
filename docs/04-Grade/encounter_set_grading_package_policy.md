@@ -12,7 +12,7 @@ Verification remains the gate for grading. EncounterSet grading packages must be
 
 Each Upload Profile EncounterSetType mapping defines one or more explicit EncounterSet grading packages. A unified package may contain multiple image-level schemes. Disease-specific mode instead stores one package per image scheme, paired with exactly one encounter-level scheme.
 
-The package, not an individual image, is the queue-visible unit of work for package-based EncounterSet grading. A grader opens one package and completes all required targets for that package in one grading session.
+The package, not an individual image, is the queue-visible unit of work for package-based EncounterSet grading. A grader opens one package and completes all required targets for that package in one grading session. Selecting a grade reveals that grade's configured feature checkboxes. Image targets also expose the standard feature-geometry annotation tools, with an independent annotation payload for each constituent image.
 
 ## Package Configuration
 
@@ -34,7 +34,14 @@ Image scheme auto-creation policies:
 - `remidio_dr_report_present`: create image tasks for this scheme only when the verified EncounterSet has DR Remidio report/OCR evidence.
 - `remidio_amd_report_present`: create image tasks for this scheme only when the verified EncounterSet has AMD Remidio report/OCR evidence.
 - `remidio_glaucoma_report_present`: create image tasks for this scheme only when the verified EncounterSet has glaucoma Remidio report/OCR evidence.
-- `positive_plus_negative_controls`: create image tasks when the verified EncounterSet is encounter-level positive for the scheme disease, then randomly sample previously unused negative control EncounterSets at the configured `1:X` positive-to-control ratio. Each selected control receives the package's configured encounter-level task as well as image tasks for all eligible clinical images.
+- `positive_plus_negative_controls`: keep the whole package dormant until the
+  verified EncounterSet is encounter-level positive for the scheme disease,
+  then create its configured encounter task and image tasks for all eligible
+  clinical images. Next, randomly sample previously unused negative control
+  EncounterSets at the configured `1:X` positive-to-control ratio. Each selected
+  control receives the same complete, internally linked package. Candidates
+  with an incompatible legacy runtime package using the same code are skipped
+  so legacy and configured package definitions are never mixed.
 
 The sampling policy stores `negative_controls_per_positive` as `X`, with a valid range of `1` to `10`. Controls are sampled from verified EncounterSets in the same project, lab unit, upload profile, and EncounterSetType. An encounter that already has a `profile_package_negative_control` image task for the sampled disease is not selected again.
 
@@ -109,7 +116,7 @@ The full package progresses together because the grader completes the configured
 5. Update verification finalization to create runtime packages only after successful verification.
 6. Apply exclusion and ungradable-image filters before creating targets.
 7. Build a package-based grading screen that presents all targets for one package in one session.
-8. Save all grades for a package atomically for the current role slot.
+8. Save all grades, selected features, and per-image feature geometry for a package atomically for the current role slot.
 9. Implement package-scoped resident/resident2 comparison and arbitration.
 10. Update queues, dashboards, and counts to show package units rather than fragmented image tasks for package-based workflows.
 11. Add tests for per-image-scheme auto-creation policies, Remidio report-triggered image tasks, ungradable image omission, excluded EncounterSet omission, target deduplication, and package-scoped escalation.

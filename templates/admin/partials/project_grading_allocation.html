@@ -25,7 +25,7 @@
     <div>
       <h3 class="h6 mb-1">Grading Allocation</h3>
       <div class="small text-muted">
-        Assign project-derived grading targets to resident and arbitrator pools. Resident capacity covers both Resident and Resident 2.
+        Assign project-derived grading targets to resident and arbitrator pools. Resident capacity covers both Resident and Resident 2. Arbitrator allocation is optional and independent.
       </div>
     </div>
     <span class="badge {{ 'text-bg-success' if enforcement_enabled else 'text-bg-secondary' }}">
@@ -76,7 +76,7 @@
                   </span>
                 </td>
                 <td class="text-center">
-                  <span class="badge {{ 'text-bg-success' if target.coverage.arbitrator else 'text-bg-warning' }}">
+                  <span class="badge {{ 'text-bg-success' if target.coverage.arbitrator else 'text-bg-secondary' }}">
                     {{ target.coverage.arbitrator }}
                   </span>
                 </td>
@@ -226,7 +226,7 @@
       <div>
         <div class="fw-semibold">Enforce project allocation</div>
         <div class="small text-muted">
-          When off, current disease-and-lab eligibility remains active. Projectless historical tasks always retain legacy eligibility.
+          Resident coverage is required; arbitrator allocation is optional and independent. When off, current disease-and-lab eligibility remains active. Projectless historical tasks always retain legacy eligibility.
         </div>
       </div>
       <div class="d-flex align-items-center gap-2">

@@ -29,6 +29,7 @@ from models import LabUnit, Project, User
 
 
 MANAGER_ROLES = {"admin", "local_admin", "data_manager"}
+ENFORCEMENT_REQUIRED_CAPACITIES = (AllocationCapacity.RESIDENT,)
 
 
 def get_project_allocation_state(
@@ -84,7 +85,7 @@ def get_project_allocation_state(
             ),
             allocations=tuple(_allocation_dto(row) for row in allocations),
             warnings=tuple(
-                target_warnings + _readiness_warnings(coverage, allocations)
+                target_warnings + _readiness_warnings(coverage)
             ),
         )
 
@@ -231,10 +232,10 @@ def set_project_enforcement(
                 targets=[target.identity for target in targets],
                 allocations=allocations,
             )
-            warnings = _readiness_warnings(coverage, allocations)
+            warnings = _readiness_warnings(coverage)
             if warnings:
                 raise AllocationConflictError(
-                    "Every active grading target requires resident and arbitrator coverage before enforcement.",
+                    "Every active grading target requires resident coverage before enforcement.",
                     details={"warnings": warnings},
                 )
 
@@ -403,7 +404,11 @@ def _coverage(
 def _coverage_warnings(coverage: dict[str, dict[str, int]]) -> list[dict[str, object]]:
     warnings: list[dict[str, object]] = []
     for target_key, counts in coverage.items():
-        missing = [capacity for capacity, count in counts.items() if count == 0]
+        missing = [
+            capacity.value
+            for capacity in ENFORCEMENT_REQUIRED_CAPACITIES
+            if counts[capacity.value] == 0
+        ]
         if missing:
             warnings.append(
                 {
@@ -418,54 +423,5 @@ def _coverage_warnings(coverage: dict[str, dict[str, int]]) -> list[dict[str, ob
 
 def _readiness_warnings(
     coverage: dict[str, dict[str, int]],
-    allocations: list[ProjectGraderAllocation],
 ) -> list[dict[str, object]]:
-    warnings = _coverage_warnings(coverage)
-    complete_target_keys = {
-        target_key
-        for target_key, counts in coverage.items()
-        if all(count > 0 for count in counts.values())
-    }
-    lab_coverage: dict[tuple[str, int], dict[str, object]] = {}
-    for row in allocations:
-        if not row.active:
-            continue
-        identity = TargetIdentity(
-            scope=AllocationScope(row.scope),
-            disease_id=row.disease_id,
-            encounter_set_type_id=row.encounter_set_type_id,
-        )
-        if identity.key not in complete_target_keys:
-            continue
-        item = lab_coverage.setdefault(
-            (identity.key, row.lab_unit_id),
-            {
-                "lab_unit_name": row.lab_unit.name if row.lab_unit else str(row.lab_unit_id),
-                AllocationCapacity.RESIDENT.value: 0,
-                AllocationCapacity.ARBITRATOR.value: 0,
-            },
-        )
-        item[row.capacity] = int(item[row.capacity]) + 1
-
-    for (target_key, lab_unit_id), counts in sorted(lab_coverage.items()):
-        missing = [
-            capacity.value
-            for capacity in AllocationCapacity
-            if counts[capacity.value] == 0
-        ]
-        if not missing:
-            continue
-        lab_unit_name = str(counts["lab_unit_name"])
-        warnings.append(
-            {
-                "code": "grading_target_lab_capacity_missing",
-                "target_key": target_key,
-                "lab_unit_id": lab_unit_id,
-                "missing_capacities": missing,
-                "message": (
-                    f"Target '{target_key}' in lab '{lab_unit_name}' has no active "
-                    f"{', '.join(missing)} allocation."
-                ),
-            }
-        )
-    return warnings
+    return _coverage_warnings(coverage)

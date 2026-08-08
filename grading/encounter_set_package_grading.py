@@ -5,12 +5,19 @@ import logging
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from markupsafe import Markup
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
-from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
+from grading.grade_feature_submission import (
+    GradeFeatureValidationError,
+    parse_selected_features,
+    prepare_grade_feature_submission,
+    serialize_grade_features,
+)
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS, sanitize_guidelines_html
 from models import DiseaseGrading, EncounterSetGradingPackage, Grade, GradingTask
 from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
 from utils.dualGradingEligibility import get_user_eligibility_for_task, has_user_graded_task
@@ -62,7 +69,22 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
             task_panels=task_panels,
             first_available_index=first_available_index,
             slot_type=slot_type,
+            current_user_id=current_user.id,
             non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
+            package_grading_data={
+                panel["task"].uuid: {
+                    "features": panel["grading_features"],
+                    "existingSelectedFeatures": panel["existing_selected_features"],
+                    "existingFeatureGeometry": (
+                        panel["existing_grade"].feature_geometry_json
+                        if panel["existing_grade"]
+                        else None
+                    ),
+                    "readOnly": not panel["available"],
+                    "taskUuid": panel["task"].uuid,
+                }
+                for panel in task_panels
+            },
         )
 
 
@@ -81,7 +103,7 @@ def encounter_set_package_submit():
             flash("EncounterSet grading package not found.", "danger")
             return redirect(url_for("grading.index"))
 
-        changed = 0
+        submissions = []
         for task in _ordered_package_tasks(package):
             if not _task_available_for_slot(task, slot_type):
                 continue
@@ -120,10 +142,54 @@ def encounter_set_package_submit():
                 .first()
             )
             comment = request.form.get(f"comment_{task.uuid}", "")
+            try:
+                feature_submission = prepare_grade_feature_submission(
+                    db,
+                    task=task,
+                    label_id=label_id,
+                    raw_selected_features=request.form.getlist(
+                        f"selected_features_{task.uuid}"
+                    ),
+                    raw_feature_geometry=request.form.get(
+                        f"feature_geometry_json_{task.uuid}"
+                    ),
+                    existing_grade=existing_grade,
+                )
+            except GradeFeatureValidationError as exc:
+                flash(str(exc), "danger")
+                return redirect(
+                    url_for(
+                        "grading.encounter_set_package_grading",
+                        package_uuid=package_uuid,
+                        slot_type=slot_type,
+                    )
+                )
+
+            submissions.append(
+                (task, label_id, existing_grade, comment, feature_submission)
+            )
+
+        if not submissions:
+            flash("No package targets were updated.", "warning")
+            return redirect(
+                url_for(
+                    "grading.encounter_set_package_grading",
+                    package_uuid=package_uuid,
+                    slot_type=slot_type,
+                )
+            )
+
+        for task, label_id, existing_grade, comment, feature_submission in submissions:
             now = utcnow()
             if existing_grade:
                 existing_grade.disease_grading_id = label_id
                 existing_grade.comment = comment
+                existing_grade.selected_features_json = (
+                    feature_submission.selected_features_json
+                )
+                existing_grade.feature_geometry_json = (
+                    feature_submission.feature_geometry_json
+                )
                 existing_grade.updated_at = now
             else:
                 db.add(
@@ -133,20 +199,17 @@ def encounter_set_package_submit():
                         role_slot=slot_type,
                         disease_grading_id=label_id,
                         comment=comment,
+                        selected_features_json=feature_submission.selected_features_json,
+                        feature_geometry_json=feature_submission.feature_geometry_json,
                         created_at=now,
                     )
                 )
             db.flush()
             update_task_state_based_on_grades(task.id, db)
             cleanup_task_tracker(task.id, current_user.id, slot_type, db)
-            changed += 1
-
-        if changed == 0:
-            flash("No package targets were updated.", "warning")
-            return redirect(url_for("grading.encounter_set_package_grading", package_uuid=package_uuid, slot_type=slot_type))
 
         _sync_package_state(package)
-        flash(f"Submitted {changed} target grade(s) for {package.name}.", "success")
+        flash(f"Submitted {len(submissions)} target grade(s) for {package.name}.", "success")
         return redirect(url_for("grading.index"))
 
 
@@ -194,6 +257,7 @@ def _task_laterality_order(task: GradingTask) -> int:
 def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
     labels = (
         db.query(DiseaseGrading)
+        .options(selectinload(DiseaseGrading.features))
         .filter(DiseaseGrading.disease_id == task.disease_id, DiseaseGrading.is_active.is_(True))
         .order_by(DiseaseGrading.display_order)
         .all()
@@ -221,6 +285,14 @@ def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
     return {
         "task": task,
         "labels": labels,
+        "guideline_html_by_label_id": {
+            label.id: Markup(sanitize_guidelines_html(label.guidelines) or "")
+            for label in labels
+        },
+        "grading_features": serialize_grade_features(labels),
+        "existing_selected_features": parse_selected_features(
+            existing.selected_features_json if existing else None
+        ),
         "existing_grade": existing,
         "available": allocated,
         "unavailable_reason": unavailable_reason,

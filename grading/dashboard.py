@@ -7,6 +7,7 @@ from sqlalchemy import and_, desc, distinct, func
 
 
 from auth.roles import roles_required
+from grading_allocation.dashboard import list_project_encounter_set_queues
 from models import Session, PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
@@ -204,7 +205,15 @@ def index():
         ]
         
         # Calculate pending KPIs using the utility function
-        kpi_pending_data = get_user_kpi_pending_task_count_data(db, current_user.id)
+        project_encounter_set_queues = list_project_encounter_set_queues(
+            db,
+            user_id=current_user.id,
+        )
+        kpi_pending_data = get_user_kpi_pending_task_count_data(
+            db,
+            current_user.id,
+            exclude_enforced_project_encounter_sets=True,
+        )
         
         kpi_arbitration_breakdown_by_disease = {}
 
@@ -235,7 +244,11 @@ def index():
         kpi_completed_data = get_user_kpi_completed_task_count_data(db, current_user.id)
         task_tracker_kpi = get_user_task_tracker_kpi_data(db, current_user.id)
 
-        linked_followup_counts_by_disease = get_user_kpi_linked_followup_counts(db, current_user.id)
+        linked_followup_counts_by_disease = get_user_kpi_linked_followup_counts(
+            db,
+            current_user.id,
+            exclude_enforced_project_encounter_sets=True,
+        )
         
         # Process completed KPI data from the utility function
         for disease in all_diseases:
@@ -281,5 +294,8 @@ def index():
         user_eligibility=user_eligibility,
         diseases=diseases_data,
         linked_followup_counts_by_disease=linked_followup_counts_by_disease,
+        project_encounter_set_queues=[
+            queue.to_dict() for queue in project_encounter_set_queues
+        ],
         **history_panel_context,
     )

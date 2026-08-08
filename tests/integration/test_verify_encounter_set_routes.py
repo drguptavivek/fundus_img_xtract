@@ -946,16 +946,44 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
     )
     db_session.add(used_negative_image)
     db_session.flush()
+    incompatible_legacy_package = EncounterSetGradingPackage(
+        patient_encounter_id=used_negative_encounter.id,
+        name="Legacy EncounterSet Package",
+        code="sampling_package",
+        grading_mode="unified",
+        state="pending",
+    )
+    db_session.add(incompatible_legacy_package)
+    db_session.flush()
     db_session.add(
         GradingTask(
             encounter_set_image_id=used_negative_image.id,
+            encounter_set_package_id=incompatible_legacy_package.id,
             disease_id=amd.id,
             lab_unit_id=encounter_set_data["lab_unit"].id,
             state="pending",
             grading_target_level="image",
-            task_source="profile_package_negative_control",
+            task_source="profile_package",
         )
     )
+
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    db_session.flush()
+    dormant_created = _create_verified_encounter_set_tasks(
+        db_session,
+        negative_encounter,
+    )
+    dormant_package = (
+        db_session.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.patient_encounter_id == negative_encounter.id,
+            EncounterSetGradingPackage.code == "sampling_package",
+        )
+        .one_or_none()
+    )
+    assert dormant_created == 0
+    assert dormant_package is None
 
     encounter_set_data["image"].is_reviewed = True
     metadata = dict(encounter_set_data["attachment"].metadata_json or {})
@@ -1016,18 +1044,15 @@ def test_verify_encounter_set_finalize_samples_negative_controls_for_positive_po
         )
         .one()
     )
-    reused_control_package = (
-        db_session.query(EncounterSetGradingPackage)
-        .filter(
-            EncounterSetGradingPackage.patient_encounter_id == used_negative_encounter.id,
-            EncounterSetGradingPackage.code == "sampling_package",
-        )
-        .one_or_none()
-    )
+    incompatible_tasks = db_session.query(GradingTask).filter(
+        GradingTask.encounter_set_package_id == incompatible_legacy_package.id,
+    ).all()
     assert positive_task.task_source == "profile_package"
     assert control_task.task_source == "profile_package_negative_control"
     assert control_encounter_task.task_source == "profile_package_negative_control"
-    assert reused_control_package is None
+    assert [(task.disease_id, task.grading_target_level) for task in incompatible_tasks] == [
+        (amd.id, "image")
+    ]
 
 
 def test_verify_encounter_set_finalize_omits_ungradable_images_from_package_targets(

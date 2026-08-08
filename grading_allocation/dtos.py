@@ -182,3 +182,50 @@ class ProjectAllocationStateDTO:
             "allocations": [allocation.to_dict() for allocation in self.allocations],
             "warnings": list(self.warnings),
         }
+
+
+@dataclass(frozen=True)
+class EncounterSetQueueSlotDTO:
+    slot: str
+    package_count: int
+    task_count: int
+    first_package_uuid: str
+
+    def to_dict(self) -> dict:
+        return {
+            "slot": self.slot,
+            "label": {
+                "resident": "Resident",
+                "resident2": "Resident 2",
+                "arbitrator": "Arbitration",
+            }[self.slot],
+            "package_count": self.package_count,
+            "task_count": self.task_count,
+            "first_package_uuid": self.first_package_uuid,
+        }
+
+
+@dataclass(frozen=True)
+class ProjectEncounterSetQueueDTO:
+    project_id: int
+    project_title: str
+    project_code: str
+    target_key: str
+    target_label: str
+    encounter_set_type_name: str | None
+    slots: tuple[EncounterSetQueueSlotDTO, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "project": {
+                "id": self.project_id,
+                "title": self.project_title,
+                "code": self.project_code,
+            },
+            "target": {
+                "key": self.target_key,
+                "label": self.target_label,
+                "encounter_set_type_name": self.encounter_set_type_name,
+            },
+            "slots": [slot.to_dict() for slot in self.slots],
+        }

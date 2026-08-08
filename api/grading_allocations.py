@@ -9,14 +9,31 @@ from flask_login import current_user
 
 from auth.roles import roles_required
 from grading_allocation.constants import AllocationCapacity, AllocationScope
+from grading_allocation.dashboard import list_project_encounter_set_queues
 from grading_allocation.dtos import AllocationInputDTO
 from grading_allocation.exceptions import GradingAllocationError
 from grading_allocation import service
+from db_transaction_manager import transaction_scope
 
 from . import api_bp
 
 
 MANAGER_ROLES = ("admin", "local_admin", "data_manager")
+GRADER_ROLES = ("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+
+
+@api_bp.route("/grading/project-encounter-set-queues", methods=["GET"])
+@roles_required(*GRADER_ROLES)
+def get_project_encounter_set_queues():
+    """Return pending enforced-project EncounterSet queues eligible for the user."""
+    with transaction_scope() as db:
+        queues = list_project_encounter_set_queues(db, user_id=current_user.id)
+        return jsonify(
+            {
+                "success": True,
+                "queues": [queue.to_dict() for queue in queues],
+            }
+        )
 
 
 @api_bp.route(

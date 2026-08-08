@@ -1,5 +1,8 @@
 from uuid import uuid4
 
+from bs4 import BeautifulSoup
+
+from grading_allocation.models import ProjectGraderAllocation
 from models import Project
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
@@ -61,6 +64,19 @@ def test_project_workspace_renders_grader_allocation_editor(
         username=f"allocation_ui_arbitrator_{suffix}",
         lab_units=[lab],
     )
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=resident.id,
+            lab_unit_id=lab.id,
+            scope="disease_image",
+            disease_id=disease.id,
+            capacity="resident",
+            active=True,
+            created_by_user_id=admin.id,
+            updated_by_user_id=admin.id,
+        )
+    )
     db_session.flush()
     _authenticate(client, admin)
 
@@ -75,7 +91,8 @@ def test_project_workspace_renders_grader_allocation_editor(
     assert "Image-wise non-set schemes" in body
     assert 'data-grading-target-family="image_wise_non_set"' in body
     assert f"{disease.name} / Non-EncounterSet Images" in body
-    assert "Allocation is not ready for enforcement" in body
+    assert "Allocation is not ready for enforcement" not in body
+    assert "Arbitrator allocation is optional and independent" in body
     assert resident.username in body
     assert (
         f'/api/projects/{project.id}/grader-allocation-candidates'
@@ -84,3 +101,9 @@ def test_project_workspace_renders_grader_allocation_editor(
     assert arbitrator.username in body
     assert f'/api/projects/{project.id}/grader-allocations' in body
     assert f'/api/projects/{project.id}/grader-allocation-policy' in body
+    soup = BeautifulSoup(body, "html.parser")
+    policy_form = soup.find("form", attrs={"data-grading-allocation-form": "policy"})
+    assert policy_form is not None
+    enable_button = policy_form.find("button", string=lambda text: text and "Enable" in text)
+    assert enable_button is not None
+    assert not enable_button.has_attr("disabled")

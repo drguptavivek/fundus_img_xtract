@@ -113,7 +113,8 @@ The response contains:
 - source-profile attribution for each target;
 - active resident and arbitrator coverage counts;
 - scoped allocation rows; and
-- configuration or missing-coverage warnings.
+- configuration or missing-resident-coverage warnings. Arbitrator counts remain
+  informational and do not affect enforcement readiness.
 
 Example:
 
@@ -209,10 +210,13 @@ Enabling is rejected with `409` unless:
 
 - at least one active grading target is derived for the project;
 - every disease-specific package has an unambiguous underlying disease;
-- every derived active target has at least one resident allocation; and
-- every derived active target has at least one arbitrator allocation; and
-- every lab represented in a target's allocations has both resident and
-  arbitrator coverage.
+- every derived active target has at least one resident allocation.
+
+Arbitrator allocation is optional and independent of project enforcement. A
+project may enable enforcement with zero arbitrator allocations. If an
+arbitration task is later created, only an explicitly allocated project
+arbitrator is eligible; enforcement does not fall back to legacy arbitrator
+eligibility.
 
 While enforcement is absent or disabled, project-owned tasks retain the legacy
 `UserDiseaseUnitRole` behavior. When enabled, the exact project, lab, semantic
@@ -223,6 +227,52 @@ on legacy eligibility permanently.
 
 The server derives project and target context from the task source. Clients do
 not submit project, disease, or EncounterSet identifiers during grading.
+
+## Read the current grader's project EncounterSet queues
+
+`GET /api/grading/project-encounter-set-queues`
+
+Requires an authenticated grading role (`resident`, `resident2`,
+`ophthalmologist`, `arbitrator`, or `admin`). The response is scoped to the
+current user and contains only pending EncounterSet packages that:
+
+- belong to a project with allocation enforcement enabled;
+- resolve to an active project grading target; and
+- match the user's active project, lab, target, and capacity allocation.
+
+Each queue is grouped by project and semantic target. Slot entries report both
+pending package and task counts and provide the first eligible package UUID for
+the web or mobile client to open. Project-owned EncounterSet queues returned
+here are excluded from the legacy/image queue cards on `/grading/`.
+
+```json
+{
+  "success": true,
+  "queues": [
+    {
+      "project": {
+        "id": 3,
+        "title": "Integrated DR Glaucoma Screening",
+        "code": "ICMR-VG"
+      },
+      "target": {
+        "key": "disease_encounter:1:15",
+        "label": "Glaucoma / EncounterSet (Remidio API Standard Encounter Set)",
+        "encounter_set_type_name": "Remidio API Standard Encounter Set"
+      },
+      "slots": [
+        {
+          "slot": "resident",
+          "label": "Resident",
+          "package_count": 1,
+          "task_count": 1,
+          "first_package_uuid": "package-uuid"
+        }
+      ]
+    }
+  ]
+}
+```
 
 ```text
 project task + enabled policy

@@ -1,7 +1,11 @@
 from inspect import unwrap
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import grading.encounter_set_package_grading as package_grading
+from grading.grade_feature_submission import prepare_grade_feature_submission
+from markupsafe import Markup
 from grading.encounter_set_package_grading import _ordered_package_tasks
 
 
@@ -17,6 +21,23 @@ def _task(task_id, target_level, *, position=None, laterality=None, disease_name
         state=state,
         grades=[],
     )
+
+
+def _label_query(labels):
+    class LabelQuery:
+        def options(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return labels
+
+    return LabelQuery()
 
 
 def test_ordered_package_tasks_groups_images_by_laterality_before_encounter_target():
@@ -43,13 +64,7 @@ def test_task_panel_is_locked_when_target_is_not_allocated(monkeypatch):
     task = _task(9, "image")
     task.uuid = "task-uuid"
     task.disease_id = 11
-    db = SimpleNamespace(
-        query=lambda model: SimpleNamespace(
-            filter=lambda *args, **kwargs: SimpleNamespace(
-                order_by=lambda *args, **kwargs: SimpleNamespace(all=lambda: [])
-            )
-        )
-    )
+    db = SimpleNamespace(query=lambda model: _label_query([]))
     monkeypatch.setattr(package_grading, "current_user", SimpleNamespace(id=7))
     monkeypatch.setattr(
         package_grading,
@@ -61,6 +76,70 @@ def test_task_panel_is_locked_when_target_is_not_allocated(monkeypatch):
 
     assert panel["available"] is False
     assert panel["unavailable_reason"] == "Not allocated to you"
+
+
+def test_task_panel_sanitizes_guideline_rich_text_for_rendering(monkeypatch):
+    task = _task(10, "image")
+    task.uuid = "task-uuid"
+    task.disease_id = 11
+    label = SimpleNamespace(
+        id=3,
+        guidelines="<p><strong>Hard Signs</strong></p><script>alert(1)</script>",
+        features=[],
+        impression="Glaucoma",
+        display_order=1,
+        is_ungradable=False,
+    )
+    db = SimpleNamespace(query=lambda model: _label_query([label]))
+    monkeypatch.setattr(package_grading, "current_user", SimpleNamespace(id=7))
+    monkeypatch.setattr(
+        package_grading,
+        "get_user_eligibility_for_task",
+        lambda session, user_id, task_id, slot: True,
+    )
+
+    panel = package_grading._task_panel(db, task, "resident")
+
+    guideline_html = panel["guideline_html_by_label_id"][label.id]
+    assert isinstance(guideline_html, Markup)
+    assert guideline_html == "<p><strong>Hard Signs</strong></p>alert(1)"
+
+
+def test_grade_feature_submission_serializes_selected_features_in_display_order():
+    features = [
+        SimpleNamespace(id=7, label="RNFL loss", sr_no=2),
+        SimpleNamespace(id=6, label="Disc hemorrhage", sr_no=1),
+    ]
+    db = SimpleNamespace(query=lambda model: _label_query(features))
+    task = SimpleNamespace(encounter_set_image=None)
+
+    result = prepare_grade_feature_submission(
+        db,
+        task=task,
+        label_id=3,
+        raw_selected_features=["7", "6", "7"],
+        raw_feature_geometry=None,
+        existing_grade=None,
+    )
+
+    assert json.loads(result.selected_features_json) == [
+        {"id": 6, "label": "Disc hemorrhage", "sr_no": 1},
+        {"id": 7, "label": "RNFL loss", "sr_no": 2},
+    ]
+    assert result.feature_geometry_json is None
+
+
+def test_workbench_template_wires_features_and_per_image_annotation_contexts():
+    template = (
+        Path(package_grading.__file__).parents[1]
+        / "templates/grading/_fullscreen_grading_workbench.html"
+    ).read_text()
+
+    assert 'data-features-section' in template
+    assert "checkbox.name = 'selected_features_' + panel.dataset.taskUuid" in template
+    assert 'data-feature-geometry-field="{{ task.uuid }}"' in template
+    assert 'data-geometry-sidebar-host' in template
+    assert "feature-geometry-editor.js" in template
 
 
 def test_package_submit_updates_task_state_with_task_id_and_db(app, monkeypatch):

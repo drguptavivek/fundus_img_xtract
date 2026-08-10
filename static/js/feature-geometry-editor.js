@@ -273,15 +273,55 @@
       const n = Number(b.value);
       if (!Number.isNaN(n)) ids.push(n);
     });
+    const policy = ctx.annotationContext;
+    if (policy?.enabled && Array.isArray(policy.project_classes)) {
+      policy.project_classes.forEach((projectClass) => {
+        const id = Number(projectClass?.id);
+        if (projectClass?.active !== false && Number.isInteger(id) && id > 0) ids.push(-id);
+      });
+    }
     return ids;
   }
 
   function getFeatureLabel(ctx, featureId) {
+    if (featureId < 0) {
+      const projectClass = (ctx?.annotationContext?.project_classes || []).find(
+        (item) => Number(item.id) === -featureId
+      );
+      return projectClass?.key || `Project class ${-featureId}`;
+    }
     if (!ctx || !ctx.featuresContainerEl) return `Feature ${featureId}`;
     const box = ctx.featuresContainerEl.querySelector(`input[type="checkbox"][value="${featureId}"]`);
     if (!box) return `Feature ${featureId}`;
     const label = ctx.featuresContainerEl.querySelector(`label[for="${box.id}"]`);
     return label ? label.textContent.trim() : `Feature ${featureId}`;
+  }
+
+  function projectClassForFeature(ctx, featureId) {
+    if (!ctx || featureId >= 0) return null;
+    return (ctx.annotationContext?.project_classes || []).find(
+      (item) => Number(item.id) === -featureId
+    ) || null;
+  }
+
+  function toolsForLocalization(localization, enabledTools) {
+    const tools = Array.isArray(enabledTools) ? enabledTools : [];
+    if (localization === "none") return [];
+    if (localization === "box") return tools.filter((tool) => tool === "box");
+    if (localization === "segmentation") {
+      return tools.filter((tool) => ["rect", "polygon", "brush_mask", "ellipse", "pyramid"].includes(tool));
+    }
+    return tools;
+  }
+
+  function allowedToolsForFeature(ctx, featureId) {
+    const policy = ctx?.annotationContext;
+    if (!policy?.enabled || ctx?.historicalProjectClass) return [];
+    const projectClass = projectClassForFeature(ctx, featureId);
+    const localization = projectClass
+      ? projectClass.localization
+      : policy.default_feature_policy?.localization;
+    return toolsForLocalization(localization, policy.enabled_tools);
   }
 
   function createEmptyPayload(grid) {
@@ -305,7 +345,10 @@
 
     raw.items.forEach((item) => {
       if (!item || typeof item !== "object") return;
-      const featureId = Number(item.feature_id);
+      const isProjectClass = item.class_source === "project_class";
+      const featureId = isProjectClass
+        ? -Number(item.project_class_id)
+        : Number(item.feature_id);
       if (Number.isNaN(featureId)) return;
 
       const roiPixel = Array.isArray(item?.roi?.pixel) ? item.roi.pixel : null;
@@ -317,9 +360,12 @@
       const clean = {
         feature_id: featureId,
         feature_label: typeof item.feature_label === "string" ? item.feature_label : null,
+        class_source: isProjectClass ? "project_class" : "grading_feature",
+        project_class_id: isProjectClass ? Number(item.project_class_id) : null,
+        project_class_key: isProjectClass ? String(item.project_class_key || "") : null,
         _geometryType: (() => {
           const gt = typeof item.geometry_type === "string" ? item.geometry_type.toLowerCase() : "";
-          if (["box", "ellipse", "polygon", "pyramid", "region"].includes(gt)) return gt;
+          if (["box", "rect", "ellipse", "polygon", "pyramid", "region"].includes(gt)) return gt;
           return "box";
         })(),
         _locked: true,
@@ -407,7 +453,7 @@
   }
 
   function isBoxItem(item) {
-    return !item?._geometryType || item._geometryType === "box";
+    return !item?._geometryType || ["box", "rect"].includes(item._geometryType);
   }
 
   function isEllipseItem(item) {
@@ -462,7 +508,9 @@
   }
 
   function isCompleteItem(item) {
-    if (!item || !item.roi) return false;
+    if (!item) return false;
+    if (item._geometryType === "none") return true;
+    if (!item.roi) return false;
     return true;
   }
 
@@ -485,6 +533,16 @@
     const items = (ctx.payload.items || [])
       .filter((it) => selectedIds.has(it.feature_id) && isCompleteItem(it))
       .map((item) => {
+        const projectClass = projectClassForFeature(ctx, item.feature_id);
+        if (item._geometryType === "none" && projectClass) {
+          return {
+            class_source: "project_class",
+            project_class_id: Number(projectClass.id),
+            project_class_key: projectClass.key,
+            feature_label: projectClass.key,
+            geometry_type: "none",
+          };
+        }
         let roi = clampRoiToImage(item.roi);
         const ellipseRotation = Number.isFinite(item._ellipseRotation) ? item._ellipseRotation : 0;
         const polygonRaw = isBoxItem(item)
@@ -507,8 +565,8 @@
         const rows = sanitizeGrid(item.mask.rows ?? grid);
         const cols = sanitizeGrid(item.mask.cols ?? grid);
         const cells = normalizeCells(item.mask.cells || [], rows, cols);
-        return {
-          feature_id: item.feature_id,
+        const serialized = {
+          class_source: projectClass ? "project_class" : "grading_feature",
           feature_label: item.feature_label || getFeatureLabel(ctx, item.feature_id),
           geometry_type: item._geometryType || "box",
           roi: {
@@ -526,7 +584,9 @@
             cells,
           },
           dicom: {
-            tracking_id: `feature-${item.feature_id}`,
+            tracking_id: projectClass
+              ? `project-class-${projectClass.id}`
+              : `feature-${item.feature_id}`,
           },
           ellipse: isEllipseItem(item)
             ? {
@@ -534,6 +594,13 @@
               }
             : undefined,
         };
+        if (projectClass) {
+          serialized.project_class_id = Number(projectClass.id);
+          serialized.project_class_key = projectClass.key;
+        } else {
+          serialized.feature_id = item.feature_id;
+        }
+        return serialized;
       });
 
     if (!items.length) {
@@ -542,6 +609,7 @@
 
     return JSON.stringify({
       version: 1,
+      policy_revision: Number(ctx.annotationContext?.revision || 0),
       grid: { rows: grid, cols: grid },
       items,
     });
@@ -566,10 +634,18 @@
   }
 
   function createAnnotationItem(ctx, featureId) {
+    const projectClass = projectClassForFeature(ctx, featureId);
+    if (projectClass && projectClass.multiple_instances === false) {
+      const existing = getItemsForFeature(ctx, featureId)[0];
+      if (existing) return existing;
+    }
     const item = {
       _annId: ctx.nextAnnotationId,
       feature_id: featureId,
       feature_label: getFeatureLabel(ctx, featureId),
+      class_source: projectClass ? "project_class" : "grading_feature",
+      project_class_id: projectClass ? Number(projectClass.id) : null,
+      project_class_key: projectClass ? projectClass.key : null,
       _geometryType: "box",
       _ellipseRotation: 0,
       _locked: false,
@@ -679,6 +755,14 @@
 
   function setCanvasPointerMode() {
     if (!state.canvas) return;
+    if (
+      activeContext()?.annotationContext?.enabled !== true
+      || activeContext()?.historicalProjectClass
+    ) {
+      state.canvas.style.pointerEvents = "none";
+      state.canvas.style.cursor = "default";
+      return;
+    }
     const mode = effectiveMode();
     state.canvas.style.pointerEvents = mode === MODES.PAN ? "none" : "auto";
     state.canvas.style.cursor = mode === MODES.MOVE ? "move" : (mode === MODES.PAN ? "default" : "crosshair");
@@ -739,6 +823,8 @@
       const ctx = activeContext();
       const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi || state.activeFeatureId == null) return;
+      const projectClass = projectClassForFeature(ctx, state.activeFeatureId);
+      if (projectClass && projectClass.multiple_instances === false) return;
       const src = reorderRoi(item.roi);
       const dx = Math.max(10, (src[1][0] - src[0][0]) * 0.08);
       const dy = Math.max(10, (src[1][1] - src[0][1]) * 0.08);
@@ -787,8 +873,9 @@
       const item = ctx ? (getSelectedBoxItem(ctx) || getActiveAnnotationItem(ctx, false)) : null;
       if (!ctx || !item || !item.roi) return;
       const prevType = item._geometryType || "box";
-      const canConvert = prevType === "ellipse" || prevType === "box" || prevType === "pyramid";
+      const canConvert = ["ellipse", "box", "rect", "pyramid"].includes(prevType);
       if (!canConvert) return;
+      if (!allowedToolsForFeature(ctx, item.feature_id).includes("polygon")) return;
       item._geometryType = "polygon";
       if (prevType === "ellipse") {
         item.polygon = polygonFromEllipse(item.roi, Number(item._ellipseRotation) || 0, 48);
@@ -857,9 +944,16 @@
     }
     const convertBtn = state.boxActionsEl.querySelector("[data-fgx-box-convert-poly]");
     if (convertBtn) {
-      const show = isEllipseItem(item) || isBoxItem(item) || item._geometryType === "pyramid";
+      const show = (
+        isEllipseItem(item) || isBoxItem(item) || item._geometryType === "pyramid"
+      ) && allowedToolsForFeature(ctx, item.feature_id).includes("polygon");
       convertBtn.style.display = show ? "inline-flex" : "none";
       convertBtn.disabled = !show;
+    }
+    const duplicateBtn = state.boxActionsEl.querySelector("[data-fgx-box-dup]");
+    const projectClass = projectClassForFeature(ctx, item.feature_id);
+    if (duplicateBtn) {
+      duplicateBtn.disabled = projectClass?.multiple_instances === false;
     }
     const editPointsBtn = state.boxActionsEl.querySelector("[data-fgx-box-edit-points]");
     if (editPointsBtn) {
@@ -1034,6 +1128,8 @@
   function annotationTypeLabel(item) {
     const t = (item?._geometryType || "box").toLowerCase();
     if (t === "box") return "□";
+    if (t === "rect") return "▣";
+    if (t === "none") return "✓";
     if (t === "ellipse") return "◯";
     if (t === "pyramid") return "△";
     if (t === "polygon") return "⬠";
@@ -1043,6 +1139,7 @@
 
   function refreshAnnotationButtons(ctx) {
     const item = getActiveAnnotationItem(ctx, false);
+    const policyEnabled = ctx?.annotationContext?.enabled === true && !ctx?.historicalProjectClass;
     if (!item) {
       if (ctx.viewAnnotationBtn) ctx.viewAnnotationBtn.disabled = true;
       if (ctx.editAnnotationBtn) ctx.editAnnotationBtn.disabled = true;
@@ -1062,22 +1159,36 @@
       }
     }
     if (ctx.editAnnotationBtn) {
-      ctx.editAnnotationBtn.disabled = false;
-      ctx.editAnnotationBtn.classList.add("active");
+      ctx.editAnnotationBtn.disabled = !policyEnabled || item._geometryType === "none";
+      ctx.editAnnotationBtn.classList.toggle("active", policyEnabled && item._geometryType !== "none");
     }
     if (ctx.removeAnnotationBtn) {
-      ctx.removeAnnotationBtn.disabled = false;
+      ctx.removeAnnotationBtn.disabled = !policyEnabled;
     }
+    if (ctx.clearAllAnnotationsBtn) ctx.clearAllAnnotationsBtn.disabled = !policyEnabled;
   }
 
   function refreshFeatureDependentButtons(ctx) {
     if (!ctx || !ctx.panelTopEl) return;
     const hasFeature = state.activeFeatureId != null;
-    ctx.panelTopEl.querySelectorAll("[data-fgx-add-box], [data-fgx-add-ellipse], [data-fgx-add-pyramid], [data-fgx-mode=\"add\"], [data-fgx-mode=\"subtract\"]").forEach((btn) => {
-      btn.disabled = !hasFeature;
+    const allowed = new Set(hasFeature ? allowedToolsForFeature(ctx, state.activeFeatureId) : []);
+    const toolSelectors = [
+      ["[data-fgx-add-box]", "box"],
+      ["[data-fgx-add-rect]", "rect"],
+      ["[data-fgx-add-ellipse]", "ellipse"],
+      ["[data-fgx-add-pyramid]", "pyramid"],
+      ['[data-fgx-mode="add"]', "brush_mask"],
+      ['[data-fgx-mode="subtract"]', "brush_mask"],
+    ];
+    toolSelectors.forEach(([selector, tool]) => {
+      const button = ctx.panelTopEl.querySelector(selector);
+      if (button) button.disabled = !allowed.has(tool);
     });
-    if (ctx.brushDiameterEl) ctx.brushDiameterEl.disabled = !hasFeature;
-    if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !hasFeature;
+    if (ctx.brushDiameterEl) ctx.brushDiameterEl.disabled = !allowed.has("brush_mask");
+    if (ctx.fillOpacityEl) ctx.fillOpacityEl.disabled = !allowed.has("brush_mask");
+    const assertButton = ctx.panelTopEl.querySelector("[data-fgx-assert-class]");
+    const projectClass = hasFeature ? projectClassForFeature(ctx, state.activeFeatureId) : null;
+    if (assertButton) assertButton.disabled = projectClass?.localization !== "none";
     const undoBtn = ctx.panelTopEl.querySelector("[data-fgx-undo]");
     if (undoBtn) undoBtn.disabled = !ctx.undoStack?.length;
   }
@@ -1130,6 +1241,7 @@
     panel.className = "fgx-panel";
     panel.dataset.geometryContextKey = ctx.key;
     panel.innerHTML = `
+      <div class="alert alert-secondary py-2 px-3 mb-0 w-100 d-none" data-fgx-policy-status></div>
       <div class="fgx-group fgx-feature-row">
         <span class="fgx-block-label mb-0">Current Disease</span>
         <span class="fw-semibold" data-fgx-disease-label>—</span>
@@ -1164,8 +1276,14 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="move" title="Pointer / Select">
           <i class="fa-solid fa-arrow-pointer"></i>
         </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-assert-class title="Add image-level class assertion" aria-label="Add image-level class assertion">
+          <i class="fa-solid fa-check"></i>
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add bounding box (outline ROI)" aria-label="Add bounding box (outline ROI)">
           <i class="fa-solid fa-square"></i>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-rect title="Add rectangular segmentation" aria-label="Add rectangular segmentation">
+          <i class="fa-regular fa-square"></i>
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add ellipse ROI" aria-label="Add ellipse ROI">
           <i class="fa-solid fa-circle"></i>
@@ -1236,6 +1354,14 @@
     ctx.panelTopEl = panel;
     ctx.panelBottomEl = panel;
     ctx.diseaseLabelEl = panel.querySelector("[data-fgx-disease-label]");
+    ctx.policyStatusEl = panel.querySelector("[data-fgx-policy-status]");
+    if (!ctx.annotationContext?.enabled && ctx.policyStatusEl) {
+      ctx.policyStatusEl.textContent = "Annotations are disabled for this project.";
+      ctx.policyStatusEl.classList.remove("d-none");
+    } else if (ctx.historicalProjectClass && ctx.policyStatusEl) {
+      ctx.policyStatusEl.textContent = "Historical inactive annotation classes are preserved read-only for this grade.";
+      ctx.policyStatusEl.classList.remove("d-none");
+    }
     ctx.featureSelectEl = panel.querySelector("[data-fgx-feature]");
     ctx.annotationSelectEl = panel.querySelector("[data-fgx-annotation]");
     ctx.addAnnotationBtn = null;
@@ -1348,6 +1474,25 @@
       if (state.activeFeatureId == null) return;
       armCreateMode("box", MODES.ROI);
       setStatus(ctx, "Bounding box mode: draw outline ROI.");
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-assert-class]")?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      const projectClass = projectClassForFeature(ctx, state.activeFeatureId);
+      if (!projectClass || projectClass.localization !== "none") return;
+      const item = createAnnotationItem(ctx, state.activeFeatureId);
+      item._geometryType = "none";
+      updateAnnotationOptions(ctx);
+      refreshAnnotationButtons(ctx);
+      syncField(ctx);
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-add-rect]")?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      armCreateMode("rect", MODES.ROI);
+      setStatus(ctx, "Rectangular segmentation mode.");
       redraw();
     });
 
@@ -2335,6 +2480,7 @@
     if (item) ensureMask(item, grid);
     const pendingByMode = (
       (mode === MODES.ROI && state.pendingCreateType === "box")
+      || (mode === MODES.ROI && state.pendingCreateType === "rect")
       || (mode === MODES.ELLIPSE && state.pendingCreateType === "ellipse")
       || (mode === MODES.PYRAMID && state.pendingCreateType === "pyramid")
     );
@@ -3796,8 +3942,15 @@
     state.ctx.restore();
   }
 
-  function wireContext(sectionEl, featuresContainerEl, hiddenField, key, initialPayloadRaw) {
+  function wireContext(sectionEl, featuresContainerEl, hiddenField, key, initialPayloadRaw, annotationContext) {
     const initial = sanitizePayload(initialPayloadRaw, DEFAULT_GRID);
+    const historicalProjectClass = (initial.items || []).some((item) => {
+      if (item.class_source !== "project_class") return false;
+      const projectClass = (annotationContext?.project_classes || []).find(
+        (candidate) => Number(candidate.id) === Number(item.project_class_id)
+      );
+      return !projectClass || projectClass.active === false;
+    });
     let nextAnnotationId = 1;
     (initial.items || []).forEach((item) => {
       item._annId = nextAnnotationId;
@@ -3805,6 +3958,8 @@
     });
     const ctx = {
       key,
+      annotationContext: annotationContext || {},
+      historicalProjectClass,
       sectionEl,
       featuresContainerEl,
       hiddenField,
@@ -3838,6 +3993,8 @@
       imageMutationObserver: null,
       imageResizeObserver: null,
     };
+
+    hiddenField.disabled = annotationContext?.enabled !== true || historicalProjectClass;
 
     ensurePanel(ctx);
     updateGridLabel(ctx);
@@ -3878,7 +4035,8 @@
 
         const fromField = safeParse(hiddenField.value);
         const fromWindow = window.linkedGradingData?.[taskUuid]?.existingFeatureGeometry || null;
-        wireContext(sectionEl, containerEl, hiddenField, `linked:${taskUuid}`, fromField || fromWindow);
+        const annotationContext = window.linkedGradingData?.[taskUuid]?.annotationContext || {};
+        wireContext(sectionEl, containerEl, hiddenField, `linked:${taskUuid}`, fromField || fromWindow, annotationContext);
       });
       return;
     }
@@ -3891,7 +4049,7 @@
     const fromField = safeParse(hiddenField.value);
     const fromWindow = window.existingFeatureGeometry || null;
     const taskUuid = form.querySelector('input[name="task_uuid"]')?.value || window.taskId || "task";
-    wireContext(sectionEl, containerEl, hiddenField, `single:${taskUuid}`, fromField || fromWindow);
+    wireContext(sectionEl, containerEl, hiddenField, `single:${taskUuid}`, fromField || fromWindow, window.annotationContext || {});
   }
 
   function refreshContextsAndUi() {

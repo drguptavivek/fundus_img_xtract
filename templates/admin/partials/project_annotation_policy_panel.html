@@ -1,0 +1,103 @@
+<section class="col-12"
+         data-project-annotation-policy-panel
+         data-policy-url="{{ url_for('fundus_api.get_project_annotation_policy', project_id=selected_project.id) }}"
+         data-policy-save-url="{{ url_for('fundus_api.put_project_annotation_policy', project_id=selected_project.id) }}"
+         data-workspace-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+         data-workspace-reload-target="#project-detail-workspace">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <div>
+      <h3 class="h6 mb-1">Project Annotations</h3>
+      <p class="small text-muted mb-0">Configure the annotation tools and classes available to graders in this project.</p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-secondary"
+         href="{{ url_for('fundus_api.export_project_schema', project_id=selected_project.id, export_format='json') }}"
+         download>Export JSON</a>
+      <a class="btn btn-sm btn-outline-secondary"
+         href="{{ url_for('fundus_api.export_project_schema', project_id=selected_project.id, export_format='toml') }}"
+         download>Export TOML</a>
+      <span class="badge text-bg-secondary" data-annotation-policy-status>Loading</span>
+    </div>
+  </div>
+
+  <div class="border rounded p-3">
+    <div class="d-flex align-items-center gap-2 text-muted" data-annotation-policy-loading>
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <span>Loading annotation policy…</span>
+    </div>
+    <div class="alert alert-danger d-none mb-0" role="alert" data-annotation-policy-error></div>
+
+    <form class="d-none" data-annotation-policy-form novalidate>
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch"
+                 id="annotation_policy_enabled_{{ selected_project.id }}"
+                 data-annotation-policy-enabled>
+          <label class="form-check-label fw-semibold" for="annotation_policy_enabled_{{ selected_project.id }}">
+            Enable annotations for this project
+          </label>
+          <div class="form-text">A project-backed image never falls back to the non-project policy.</div>
+        </div>
+        <span class="small text-muted" data-annotation-policy-revision></span>
+      </div>
+
+      <fieldset class="mb-4" data-annotation-policy-dependent>
+        <legend class="h6">Available tools</legend>
+        {% for group_label, tools in [('Bounding box', [('box', 'Box')]), ('Segmentation', [('rect', 'Rect'), ('polygon', 'Polygon'), ('brush_mask', 'Brush'), ('ellipse', 'Ellipse'), ('pyramid', 'Pyramid')])] %}
+        <div class="mb-3">
+          <div class="small fw-semibold text-muted mb-2">{{ group_label }}</div>
+          <div class="row g-2">
+            {% for tool_key, tool_label in tools %}
+            <div class="col-sm-6 col-lg-4 col-xxl-2">
+              <div class="form-check border rounded px-5 py-2 h-100">
+                <input class="form-check-input" type="checkbox" value="{{ tool_key }}"
+                       id="annotation_tool_{{ selected_project.id }}_{{ tool_key }}"
+                       data-annotation-policy-tool>
+                <label class="form-check-label" for="annotation_tool_{{ selected_project.id }}_{{ tool_key }}">{{ tool_label }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </fieldset>
+
+      <fieldset class="mb-4" data-annotation-policy-dependent>
+        <legend class="h6">Default grading-feature policy</legend>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="annotation_default_localization_{{ selected_project.id }}">Localization</label>
+            <select class="form-select" id="annotation_default_localization_{{ selected_project.id }}" data-annotation-default-localization>
+              <option value="none">Image-level only</option>
+              <option value="box">Box</option>
+              <option value="segmentation">Segmentation</option>
+              <option value="box_or_segmentation">Box or segmentation</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="annotation_default_preferred_tool_{{ selected_project.id }}">Preferred tool</label>
+            <select class="form-select" id="annotation_default_preferred_tool_{{ selected_project.id }}" data-annotation-default-preferred-tool></select>
+          </div>
+        </div>
+        <div class="form-text mt-2">The default policy applies to grading features that support localization.</div>
+      </fieldset>
+
+      <fieldset class="mb-4" data-annotation-policy-dependent>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div>
+            <legend class="h6 mb-1">Project-defined classes</legend>
+            <p class="small text-muted mb-0">Classes inherit project tools. Deactivate obsolete classes to preserve annotation history.</p>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" type="button" data-annotation-add-project-class>Add class</button>
+        </div>
+        <div class="vstack gap-3" data-annotation-project-classes></div>
+        <div class="border rounded text-center text-muted py-3 small" data-annotation-project-classes-empty>No project-defined classes.</div>
+      </fieldset>
+
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-3">
+        <div class="small text-muted" data-annotation-policy-validation></div>
+        <button class="btn btn-primary" type="submit" data-annotation-policy-submit>Save Annotation Policy</button>
+      </div>
+    </form>
+  </div>
+</section>

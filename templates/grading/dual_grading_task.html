@@ -406,6 +406,7 @@
     window.currentSlot = "{{ current_slot or '' }}";
     window.featuresReadOnly = {{ (task.state == "final" and not is_arbitrator_revising_recent) | tojson}};
     window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
+    window.annotationContext = {{ (annotation_context or {}) | tojson }};
     window.nonGradableReasons = {{ (non_gradable_reasons or []) | tojson }};
     {% if existing_selected_features %}
     window.existingSelectedFeatures = {{ existing_selected_features | tojson}};

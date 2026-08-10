@@ -137,6 +137,7 @@
     window.nonGradableReasons = {{ (non_gradable_reasons or []) | tojson }};
     // Pass disease gradings with features to JavaScript
     window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
+    window.annotationContext = {{ (annotation_context or {}) | tojson }};
     // Pass existing selected features if available
     window.existingSelectedFeatures = null;
     window.existingFeatureGeometry = null;

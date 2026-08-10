@@ -33,6 +33,10 @@ from utils.feature_geometry import (
     prepare_feature_geometry_for_storage,
     validate_feature_geometry_payload,
 )
+from project_annotations.service import (
+    resolve_task_annotation_context,
+    validate_geometry_policy,
+)
 from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
 from utils.masterUtils import fetch_active_disease_gradings
@@ -505,6 +509,7 @@ def regrade_task_detail(regrade_task_id: int):
             non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
             is_admin=is_admin,
             regrade_adjudicators=regrade_adjudicators,
+            annotation_context=resolve_task_annotation_context(db, source_task).to_dict(),
         )
 
 
@@ -620,6 +625,14 @@ def regrade_task_submit(regrade_task_id: int):
             if not is_valid_geometry:
                 flash(geometry_error or "Invalid feature geometry submitted.", "danger")
                 return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+            annotation_context = resolve_task_annotation_context(db, source_task)
+            is_policy_valid, policy_error = validate_geometry_policy(
+                parsed_feature_geometry,
+                annotation_context,
+            )
+            if not is_policy_valid:
+                flash(policy_error or "Annotation policy validation failed.", "danger")
+                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
         existing_grade = fetch_existing_grade_for_user(
             db,
@@ -639,6 +652,7 @@ def regrade_task_submit(regrade_task_id: int):
                 parsed_feature_geometry,
                 image_metadata,
                 feature_metadata_by_id=feature_metadata_by_id if unique_feature_ids else None,
+                annotation_context=annotation_context.to_dict(),
             )
         if existing_grade and existing_grade.created_at:
             if (utcnow() - existing_grade.created_at) > timedelta(hours=24):

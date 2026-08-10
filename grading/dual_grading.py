@@ -63,6 +63,10 @@ from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tr
 from utils.notifications import send_notification_to_admins
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from db_transaction_manager import transaction_scope
+from project_annotations.service import (
+    resolve_task_annotation_context,
+    validate_geometry_policy,
+)
 from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
@@ -280,7 +284,8 @@ def revise_grading(grade_id: int):
                     eligibility_result["message"] if not eligibility_result["eligible"] else state_message
                 ),
                 non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
-                current_user_id=getattr(current_user, "id", None)
+                current_user_id=getattr(current_user, "id", None),
+                annotation_context=resolve_task_annotation_context(db, task).to_dict(),
             ))
             
             # Prevent caching of this page
@@ -665,6 +670,9 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         panel_existing_features = _parse_selected_features(
                             panel_existing_grade.selected_features_json if panel_existing_grade else None
                         )
+                        panel_annotation_context = resolve_task_annotation_context(
+                            db, panel_task
+                        ).to_dict()
 
                         if panel_existing_grade is not None:
                             show_save_next = False
@@ -701,6 +709,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                 "existing_feature_geometry": panel_existing_grade.feature_geometry_json if panel_existing_grade else None,
                                 "read_only": panel_read_only,
                                 "eligibility_error": eligibility_error,
+                                "annotation_context": panel_annotation_context,
                             }
                         )
 
@@ -711,6 +720,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             "existingFeatureGeometry": panel_existing_grade.feature_geometry_json if panel_existing_grade else None,
                             "readOnly": panel_read_only,
                             "taskUuid": panel_task.uuid,
+                            "annotationContext": panel_annotation_context,
                         }
 
                     linked_mode = len(linked_panels) > 1
@@ -780,6 +790,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 linked_followup_disease_id=linked_followup_disease_id,
                 image_metadata=image_metadata,
                 non_gradable_reasons=list(STANDARD_NON_GRADABLE_REASONS),
+                annotation_context=resolve_task_annotation_context(db, task).to_dict(),
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)
@@ -1116,6 +1127,14 @@ def dual_grading_submit():
                     if not is_valid_geometry:
                         flash(geometry_error or "Invalid feature geometry submitted.", "danger")
                         return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+                    annotation_context = resolve_task_annotation_context(db, task)
+                    is_policy_valid, policy_error = validate_geometry_policy(
+                        parsed_feature_geometry,
+                        annotation_context,
+                    )
+                    if not is_policy_valid:
+                        flash(policy_error or "Annotation policy validation failed.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
 
                 conflicting_slots = []
                 conflict_message = None
@@ -1142,6 +1161,7 @@ def dual_grading_submit():
                         parsed_feature_geometry,
                         image_metadata,
                         feature_metadata_by_id=feature_metadata_by_id if unique_feature_ids else None,
+                        annotation_context=annotation_context.to_dict(),
                     )
 
                 prev_grade_id = None

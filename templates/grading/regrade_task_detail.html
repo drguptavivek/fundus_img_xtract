@@ -202,6 +202,7 @@
   window.featuresReadOnly = false;
   window.nonGradableReasons = {{ (non_gradable_reasons or []) | tojson }};
   window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
+  window.annotationContext = {{ (annotation_context or {}) | tojson }};
   {% if existing_selected_features %}
   window.existingSelectedFeatures = {{ existing_selected_features | tojson }};
   {% else %}

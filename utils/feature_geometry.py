@@ -53,7 +53,14 @@ def validate_feature_geometry_payload(
         return False, "Invalid feature geometry payload."
 
     allowed_features = set(selected_feature_ids or [])
-    if items and not allowed_features:
+    if (
+        any(
+            isinstance(item, dict)
+            and item.get("class_source", "grading_feature") == "grading_feature"
+            for item in items
+        )
+        and not allowed_features
+    ):
         return False, "Feature geometry does not match selected features."
 
     width = image_metadata.width if image_metadata else None
@@ -63,11 +70,31 @@ def validate_feature_geometry_payload(
         if not isinstance(item, dict):
             return False, "Invalid feature geometry payload."
 
-        feature_id = item.get("feature_id")
-        if not isinstance(feature_id, int):
-            return False, "Invalid feature geometry payload."
-        if feature_id not in allowed_features:
-            return False, "Feature geometry does not match selected features."
+        class_source = item.get("class_source", "grading_feature")
+        if class_source == "grading_feature":
+            feature_id = item.get("feature_id")
+            if not isinstance(feature_id, int):
+                return False, "Invalid feature geometry payload."
+            if feature_id not in allowed_features:
+                return False, "Feature geometry does not match selected features."
+        elif class_source == "project_class":
+            project_class_id = item.get("project_class_id")
+            project_class_key = item.get("project_class_key")
+            if (
+                isinstance(project_class_id, bool)
+                or not isinstance(project_class_id, int)
+                or project_class_id <= 0
+                or not isinstance(project_class_key, str)
+                or not project_class_key
+            ):
+                return False, "Invalid project annotation class."
+        else:
+            return False, "Invalid annotation class source."
+
+        if item.get("geometry_type") == "none":
+            if class_source != "project_class":
+                return False, "Only project classes may use image-level assertions."
+            continue
 
         roi = item.get("roi")
         polygon = item.get("polygon")
@@ -115,6 +142,7 @@ def prepare_feature_geometry_for_storage(
     payload: dict | None,
     image_metadata: ImageMetadata | None,
     feature_metadata_by_id: dict[int, dict[str, Any]] | None = None,
+    annotation_context: dict[str, Any] | None = None,
 ) -> dict | None:
     """Normalize geometry payload and embed export-friendly derived fields."""
     if payload is None:
@@ -133,15 +161,35 @@ def prepare_feature_geometry_for_storage(
         normalized_grid_cols = DEFAULT_GRID_SIZE
 
     for item in payload.get("items", []):
-        feature_id = int(item["feature_id"])
-        roi = item["roi"]
-        polygon = item["polygon"]
-        mask = item["mask"]
+        class_source = item.get("class_source", "grading_feature")
+        feature_id = int(item["feature_id"]) if class_source == "grading_feature" else None
         geometry_type = item.get("geometry_type")
         if not isinstance(geometry_type, str):
             geometry_type = "box"
         geometry_type = geometry_type.strip().lower() or "box"
-        if geometry_type not in {"box", "ellipse", "polygon", "pyramid", "region"}:
+        if geometry_type == "none" and class_source == "project_class":
+            project_class_id = int(item["project_class_id"])
+            project_class_key = item.get("project_class_key")
+            normalized_items.append(
+                {
+                    "class_source": "project_class",
+                    "project_class_id": project_class_id,
+                    "project_class_key": project_class_key,
+                    "feature_label": item.get("feature_label") or project_class_key,
+                    "geometry_type": "none",
+                    "dicom": {
+                        "tracking_id": f"project-class-{project_class_id}",
+                        "tracking_uid": None,
+                        "finding_code": None,
+                        "finding_site_code": None,
+                    },
+                }
+            )
+            continue
+        roi = item["roi"]
+        polygon = item["polygon"]
+        mask = item["mask"]
+        if geometry_type not in {"box", "rect", "ellipse", "polygon", "pyramid", "region"}:
             geometry_type = "box"
 
         roi_pixel = _normalize_points(roi["pixel"])
@@ -160,13 +208,20 @@ def prepare_feature_geometry_for_storage(
         roi_bbox_norm = _bbox_from_points(roi_norm)
 
         dicom_payload = item.get("dicom") if isinstance(item.get("dicom"), dict) else {}
-        tracking_id = dicom_payload.get("tracking_id") or f"feature-{feature_id}"
-        feature_meta = feature_metadata_by_id.get(feature_id, {})
+        project_class_id = int(item["project_class_id"]) if class_source == "project_class" else None
+        project_class_key = item.get("project_class_key") if class_source == "project_class" else None
+        tracking_id = dicom_payload.get("tracking_id") or (
+            f"project-class-{project_class_id}" if project_class_id is not None else f"feature-{feature_id}"
+        )
+        feature_meta = feature_metadata_by_id.get(feature_id, {}) if feature_id is not None else {}
 
         normalized_item: dict[str, Any] = {
-            "feature_id": feature_id,
-            "feature_label": feature_meta.get("label"),
-            "feature_sr_no": feature_meta.get("sr_no"),
+            "class_source": class_source,
+            "feature_label": (
+                feature_meta.get("label")
+                if class_source == "grading_feature"
+                else item.get("feature_label") or project_class_key
+            ),
             "geometry_type": geometry_type,
             "roi": {
                 "type": "box",
@@ -195,6 +250,12 @@ def prepare_feature_geometry_for_storage(
                 "finding_site_code": dicom_payload.get("finding_site_code"),
             },
         }
+        if class_source == "grading_feature":
+            normalized_item["feature_id"] = feature_id
+            normalized_item["feature_sr_no"] = feature_meta.get("sr_no")
+        else:
+            normalized_item["project_class_id"] = project_class_id
+            normalized_item["project_class_key"] = project_class_key
         if geometry_type == "ellipse":
             ellipse_payload = item.get("ellipse") if isinstance(item.get("ellipse"), dict) else {}
             rotation_deg = ellipse_payload.get("rotation_deg")
@@ -202,7 +263,13 @@ def prepare_feature_geometry_for_storage(
                 normalized_item["ellipse"] = {"rotation_deg": float(rotation_deg)}
         normalized_items.append(normalized_item)
 
-    normalized_items.sort(key=lambda entry: (entry["feature_id"], entry["export"]["bbox_norm_xyxy"]))
+    normalized_items.sort(
+        key=lambda entry: (
+            entry["class_source"],
+            entry.get("feature_id") or entry.get("project_class_id") or 0,
+            entry.get("export", {}).get("bbox_norm_xyxy", []),
+        )
+    )
 
     normalized_payload: dict[str, Any] = {
         "version": EXPECTED_VERSION,
@@ -213,6 +280,10 @@ def prepare_feature_geometry_for_storage(
             "ai_ready": True,
         },
     }
+    if annotation_context:
+        normalized_payload["policy_source"] = annotation_context.get("policy_source")
+        normalized_payload["project_id"] = annotation_context.get("project_id")
+        normalized_payload["policy_revision"] = annotation_context.get("revision")
 
     if width is not None and height is not None:
         normalized_payload["image"] = {"width": width, "height": height}

@@ -3041,3 +3041,9 @@ from grading_allocation.models import (  # noqa: E402,F401
     ProjectGraderAllocation,
     ProjectGradingAllocationPolicy,
 )
+from project_annotations.models import (  # noqa: E402,F401
+    ProjectAnnotationClass,
+    ProjectAnnotationPolicy,
+    ProjectAnnotationPolicyRevision,
+    ProjectAnnotationTool,
+)

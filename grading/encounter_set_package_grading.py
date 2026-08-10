@@ -26,6 +26,7 @@ from grading.grade_feature_submission import (
 )
 from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS, sanitize_guidelines_html
 from models import DiseaseGrading, EncounterSetGradingPackage, EncounterSetGradingScope, Grade, GradingTask
+from project_annotations.service import resolve_task_annotation_context
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
 
@@ -104,6 +105,9 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
                     ),
                     "readOnly": not panel["available"],
                     "taskUuid": panel["task"].uuid,
+                    "annotationContext": resolve_task_annotation_context(
+                        db, panel["task"]
+                    ).to_dict(),
                 }
                 for panel in task_panels
             },

@@ -162,6 +162,7 @@ def test_workbench_template_wires_features_and_per_image_annotation_contexts():
     assert 'data-feature-geometry-field="{{ task.uuid }}"' in template
     assert 'data-geometry-sidebar-host' in template
     assert "feature-geometry-editor.js" in template
+    assert "window.linkedGradingData" in template
 
 
 def test_package_submit_delegates_atomic_package_dto_to_record_service(app, monkeypatch):

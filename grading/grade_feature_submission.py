@@ -6,6 +6,10 @@ import json
 from json import JSONDecodeError
 
 from models import DiseaseGrading, Grade, GradingTask, GradingsFeatures, ImageMetadata
+from project_annotations.service import (
+    resolve_task_annotation_context,
+    validate_geometry_policy,
+)
 from utils.feature_geometry import (
     parse_feature_geometry_payload,
     prepare_feature_geometry_for_storage,
@@ -94,6 +98,15 @@ def prepare_grade_feature_submission(
         )
         if not is_valid:
             raise GradeFeatureValidationError(error or "Invalid feature geometry submitted.")
+        annotation_context = resolve_task_annotation_context(db, task)
+        is_policy_valid, policy_error = validate_geometry_policy(
+            parsed_geometry,
+            annotation_context,
+        )
+        if not is_policy_valid:
+            raise GradeFeatureValidationError(
+                policy_error or "The annotation does not match the project policy."
+            )
         geometry = prepare_feature_geometry_for_storage(
             parsed_geometry,
             image_metadata,
@@ -101,6 +114,7 @@ def prepare_grade_feature_submission(
                 int(feature.id): {"label": feature.label, "sr_no": feature.sr_no}
                 for feature in features
             },
+            annotation_context=annotation_context.to_dict(),
         )
 
     return GradeFeatureSubmissionDTO(

@@ -163,3 +163,73 @@ def test_validate_accepts_high_resolution_mask_grid() -> None:
     is_valid, error = validate_feature_geometry_payload(payload, [101], SimpleNamespace(width=1000, height=1000))
     assert is_valid is True
     assert error == ""
+
+
+def test_project_class_geometry_does_not_require_selected_grading_feature() -> None:
+    payload = _valid_payload()
+    item = payload["items"][0]
+    item.pop("feature_id")
+    item.update(
+        class_source="project_class",
+        project_class_id=17,
+        project_class_key="optic_disc",
+        feature_label="optic_disc",
+        geometry_type="polygon",
+    )
+
+    is_valid, error = validate_feature_geometry_payload(
+        payload, [], SimpleNamespace(width=1000, height=1000)
+    )
+
+    assert is_valid is True
+    assert error == ""
+
+
+def test_prepare_project_class_geometry_snapshots_policy_identity() -> None:
+    payload = _valid_payload()
+    item = payload["items"][0]
+    item.pop("feature_id")
+    item.update(
+        class_source="project_class",
+        project_class_id=17,
+        project_class_key="optic_disc",
+        feature_label="Optic disc",
+        geometry_type="polygon",
+    )
+
+    prepared = prepare_feature_geometry_for_storage(
+        payload,
+        SimpleNamespace(width=1000, height=1000),
+        annotation_context={
+            "policy_source": "project",
+            "project_id": 9,
+            "revision": 4,
+        },
+    )
+
+    assert prepared["project_id"] == 9
+    assert prepared["policy_revision"] == 4
+    assert prepared["items"][0]["project_class_id"] == 17
+    assert prepared["items"][0]["project_class_key"] == "optic_disc"
+    assert "feature_id" not in prepared["items"][0]
+
+
+def test_image_level_project_class_assertion_requires_no_geometry() -> None:
+    payload = {
+        "version": 1,
+        "grid": {"rows": 8, "cols": 8},
+        "items": [{
+            "class_source": "project_class",
+            "project_class_id": 22,
+            "project_class_key": "gradable_field",
+            "feature_label": "Gradable field",
+            "geometry_type": "none",
+        }],
+    }
+    is_valid, error = validate_feature_geometry_payload(payload, [], None)
+    prepared = prepare_feature_geometry_for_storage(payload, None)
+
+    assert is_valid is True
+    assert error == ""
+    assert prepared["items"][0]["geometry_type"] == "none"
+    assert "export" not in prepared["items"][0]

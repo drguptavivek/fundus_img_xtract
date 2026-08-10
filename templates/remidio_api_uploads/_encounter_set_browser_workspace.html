@@ -144,7 +144,9 @@
           {% include "remidio_api_uploads/_encounter_set_project_badge.html" %}
           <span class="badge {{ 'text-bg-success' if detail.verified_status == 'verified' else 'text-bg-warning' }}">{{ detail.verified_status }}</span>
           {% if detail.source_kind == 'iitk_api' %}<span class="badge {{ 'text-bg-success' if detail.source_status == 'complete' else 'text-bg-warning' }}">IITK {{ detail.source_status }}</span>{% endif %}
-          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">Verify</a>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">
+            {{ 'View Verification' if detail.verified_status == 'verified' else 'Verify' }}
+          </a>
         </div>
       </div>
       <div class="card-body">

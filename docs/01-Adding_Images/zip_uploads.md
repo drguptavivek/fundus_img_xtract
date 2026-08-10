@@ -61,6 +61,13 @@ The importer stores the metadata JSON as a non-task `EncounterSetAttachment` wit
 
 After EncounterSet verification, pending grading tasks are created from the encounter target diseases configured by the selected UploadProfile mapping. The clinical images remain the grading evidence. PDF attachments can inform metadata/report type, but PDFs never create grading tasks directly.
 
+Verification is terminal. A verified EncounterSet remains available as a
+read-only verification record, but it cannot be reopened, re-finalized,
+excluded, or edited through verification image/metadata actions. Its original
+verifier and verification timestamp are preserved. The EncounterSet Browser
+uses **View Verification** for these records, and the verification screen's
+Back action returns to the same project/date/EncounterSet browser selection.
+
 ## Routes
 
 ### GET `/upload_files`

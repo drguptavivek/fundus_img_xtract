@@ -97,14 +97,15 @@
 <div class="verification-shell"
      data-encounter-uuid="{{ encounter.uuid }}"
      data-storage-prefix="verify-encounter-set:{{ encounter.uuid }}:"
+     data-verification-read-only="{{ 'true' if verification_read_only else 'false' }}"
      data-panel-count="{{ panel_count }}">
   <div class="verify-topbar">
     <div class="container-fluid py-3">
       <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
         <div>
           <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-            <h1 class="h4 mb-0">Verify EncounterSet</h1>
-            <span class="badge text-bg-warning">{{ encounter.encounter_verified_status|capitalize if encounter.encounter_verified_status else 'Pending' }}</span>
+            <h1 class="h4 mb-0">{{ 'EncounterSet Verification Record' if verification_read_only else 'Verify EncounterSet' }}</h1>
+            <span class="badge {{ 'text-bg-success' if verification_read_only else 'text-bg-warning' }}">{{ encounter.encounter_verified_status|capitalize if encounter.encounter_verified_status else 'Pending' }}</span>
             {% if encounter_set_type %}<span class="badge text-bg-light border">{{ encounter_set_type.name }}</span>{% endif %}
           </div>
           <div class="text-muted">
@@ -118,13 +119,25 @@
         </div>
         <div class="d-flex flex-wrap align-items-start gap-2">
           <span class="btn btn-light border disabled verify-counter" id="verify-panel-counter">1 / {{ panel_count }}</span>
-          <a href="{{ url_for('verify_encounter_set.index') }}" class="btn btn-outline-secondary">Back</a>
+          <a href="{{ back_url }}" class="btn btn-outline-secondary">Back</a>
         </div>
       </div>
     </div>
   </div>
 
   <div class="container-fluid py-4">
+    {% if verification_read_only %}
+    <div class="alert alert-success d-flex align-items-start gap-2" role="status">
+      <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
+      <div>
+        <div class="fw-semibold">This EncounterSet is already verified and is read-only.</div>
+        <div class="small">
+          Verified{% if encounter.encounter_verified_by %} by {{ encounter.encounter_verified_by }}{% endif %}
+          {% if encounter.encounter_verified_at %} on {{ encounter.encounter_verified_at | user_datetime }}{% endif %}.
+        </div>
+      </div>
+    </div>
+    {% endif %}
     <div class="verify-layout">
       <aside class="verify-rail" aria-label="Verification panels">
         <button class="verify-nav-item active"
@@ -196,6 +209,7 @@
     </div>
   </div>
 
+  {% if not verification_read_only %}
   <form id="verification-metadata-form" action="{{ url_for('verify_encounter_set.update_metadata', uuid=encounter.uuid) }}" method="post" class="d-none">
     {{ csrf_field() if csrf_field else '' }}
   </form>
@@ -206,6 +220,7 @@
     {{ csrf_field() if csrf_field else '' }}
     <input type="hidden" name="after" value="next">
   </form>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -215,6 +230,7 @@
   (function () {
     const shell = document.querySelector('.verification-shell');
     if (!shell) return;
+    const readOnly = shell.dataset.verificationReadOnly === 'true';
     const prefix = shell.dataset.storagePrefix;
     const encounterKey = 'verify-encounter-set:active';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -394,6 +410,7 @@
     }
 
     function saveMetadataAsync() {
+      if (readOnly) return Promise.resolve({success: true, read_only: true});
       const form = buildMetadataForm();
       return fetch(form.action, {
         method: 'POST',

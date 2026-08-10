@@ -3,19 +3,19 @@
 {% macro field_control(field, value, name) %}
   {% if field.type == 'boolean' %}
     <div class="form-check form-switch">
-      <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}" value="1" {% if value %}checked{% endif %}>
+      <input class="form-check-input" type="checkbox" name="{{ name }}" id="{{ name }}" value="1" {% if value %}checked{% endif %} {% if verification_read_only %}disabled{% endif %}>
       <label class="form-check-label" for="{{ name }}">Yes</label>
     </div>
   {% elif field.type == 'select' %}
     {% if field.selection_mode == 'multiple' %}
-      <select class="form-select" name="{{ name }}" id="{{ name }}" multiple>
+      <select class="form-select" name="{{ name }}" id="{{ name }}" multiple {% if verification_read_only %}disabled{% endif %}>
         {% set current_values = value if value is sequence and value is not string else [] %}
         {% for option in field.options or [] %}
         <option value="{{ option.value }}" {% if option.value in current_values %}selected{% endif %}>{{ option.label or option.value }}</option>
         {% endfor %}
       </select>
     {% else %}
-      <select class="form-select" name="{{ name }}" id="{{ name }}">
+      <select class="form-select" name="{{ name }}" id="{{ name }}" {% if verification_read_only %}disabled{% endif %}>
         <option value="">-</option>
         {% for option in field.options or [] %}
         <option value="{{ option.value }}" {% if value == option.value %}selected{% endif %}>{{ option.label or option.value }}</option>
@@ -23,10 +23,10 @@
       </select>
     {% endif %}
   {% elif field.type == 'text' %}
-    <textarea class="form-control" name="{{ name }}" id="{{ name }}" rows="3">{{ value or '' }}</textarea>
+    <textarea class="form-control" name="{{ name }}" id="{{ name }}" rows="3" {% if verification_read_only %}disabled{% endif %}>{{ value or '' }}</textarea>
   {% else %}
     {% set input_type = 'number' if field.type == 'number' else 'datetime-local' if field.type == 'datetime' else field.type %}
-    <input class="form-control" type="{{ input_type }}" name="{{ name }}" id="{{ name }}" value="{{ value or '' }}">
+    <input class="form-control" type="{{ input_type }}" name="{{ name }}" id="{{ name }}" value="{{ value or '' }}" {% if verification_read_only %}disabled{% endif %}>
   {% endif %}
 {% endmacro %}
 
@@ -246,7 +246,8 @@
         <select class="form-select"
                 id="image_referral_{{ selected_image.id }}"
                 name="metadata__image__{{ selected_image.id }}__referral_needed_or_positive_image"
-                data-original-value="{{ selected_image.referral_needed_or_positive_image or 'missing' }}">
+                data-original-value="{{ selected_image.referral_needed_or_positive_image or 'missing' }}"
+                {% if verification_read_only %}disabled{% endif %}>
           <option value="missing" {% if (selected_image.referral_needed_or_positive_image or 'missing') == 'missing' %}selected{% endif %}>Missing</option>
           <option value="yes" {% if selected_image.referral_needed_or_positive_image == 'yes' %}selected{% endif %}>Yes</option>
           <option value="no" {% if selected_image.referral_needed_or_positive_image == 'no' %}selected{% endif %}>No</option>
@@ -254,6 +255,7 @@
       </div>
       {{ editable_fields(image_fields, image_metadata, 'metadata__image__' ~ selected_image.id) }}
     </div>
+    {% if not verification_read_only %}
     <div class="panel-actions">
       <a class="btn btn-sm btn-primary js-edit-image" href="{{ url_for('verify_encounter_set.edit_image', uuid=selected_image.uuid) }}">
         <i class="bi bi-pencil-square"></i> Edit Image
@@ -267,7 +269,8 @@
       <button class="btn btn-sm btn-outline-danger js-open-not-gradable" type="button">Set Ungradable</button>
       {% endif %}
     </div>
-    {% if not selected_image.is_not_gradable %}
+    {% endif %}
+    {% if not verification_read_only and not selected_image.is_not_gradable %}
     <div class="ungradable-reason-panel d-none" data-ungradable-reason-panel>
       <label class="form-label" for="not-gradable-reason-{{ selected_image.uuid }}">Ungradable reason</label>
       <div class="d-flex flex-wrap gap-2 mb-2">
@@ -308,7 +311,7 @@
       <i class="bi bi-file-earmark"></i> View Document
       {% endif %}
     </a>
-    {% if is_pdf %}
+    {% if is_pdf and not verification_read_only %}
     <form action="{{ url_for('fundus_api.queue_encounter_set_attachment_ocr', attachment_id=selected_attachment.id) }}" method="post">
       {{ csrf_field() }}
       <button class="btn btn-sm btn-outline-primary" type="submit">
@@ -346,12 +349,12 @@
         <textarea class="form-control"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_result"
-                  rows="3">{{ dr_data.get('result') or '' }}</textarea>
+                  rows="3" {% if verification_read_only %}disabled{% endif %}>{{ dr_data.get('result') or '' }}</textarea>
         <label class="form-label mt-3" for="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result">Qualitative Result</label>
         <textarea class="form-control"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__dr_qualitative_result"
-                  rows="2">{{ dr_data.get('qualitative_result') or '' }}</textarea>
+                  rows="2" {% if verification_read_only %}disabled{% endif %}>{{ dr_data.get('qualitative_result') or '' }}</textarea>
       </div>
     </div>
     {% endif %}
@@ -364,12 +367,12 @@
         <textarea class="form-control"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_result"
-                  rows="3">{{ amd_data.get('result') or '' }}</textarea>
+                  rows="3" {% if verification_read_only %}disabled{% endif %}>{{ amd_data.get('result') or '' }}</textarea>
         <label class="form-label mt-3" for="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result">Qualitative Result</label>
         <textarea class="form-control"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__amd_qualitative_result"
-                  rows="2">{{ amd_data.get('qualitative_result') or '' }}</textarea>
+                  rows="2" {% if verification_read_only %}disabled{% endif %}>{{ amd_data.get('qualitative_result') or '' }}</textarea>
       </div>
     </div>
     {% endif %}
@@ -382,12 +385,12 @@
         <textarea class="form-control mb-3"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_result"
-                  rows="3">{{ glaucoma_data.get('result') or '' }}</textarea>
+                  rows="3" {% if verification_read_only %}disabled{% endif %}>{{ glaucoma_data.get('result') or '' }}</textarea>
         <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result">Qualitative Result</label>
         <textarea class="form-control mb-3"
                   name="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result"
                   id="metadata__attachment__{{ selected_attachment.id }}__ocr__glaucoma_qualitative_result"
-                  rows="2">{{ glaucoma_data.get('qualitative_result') or '' }}</textarea>
+                  rows="2" {% if verification_read_only %}disabled{% endif %}>{{ glaucoma_data.get('qualitative_result') or '' }}</textarea>
         <div class="row g-2">
           <div class="col-12 col-sm-6">
             <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right">Quantitative VCDR OD</label>
@@ -395,7 +398,7 @@
                    type="text"
                    name="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right"
                    id="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_right"
-                   value="{{ glaucoma_data.get('vcdr_right') or '' }}">
+                   value="{{ glaucoma_data.get('vcdr_right') or '' }}" {% if verification_read_only %}disabled{% endif %}>
           </div>
           <div class="col-12 col-sm-6">
             <label class="form-label" for="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left">Quantitative VCDR OS</label>
@@ -403,7 +406,7 @@
                    type="text"
                    name="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left"
                    id="metadata__attachment__{{ selected_attachment.id }}__ocr__vcdr_left"
-                   value="{{ glaucoma_data.get('vcdr_left') or '' }}">
+                   value="{{ glaucoma_data.get('vcdr_left') or '' }}" {% if verification_read_only %}disabled{% endif %}>
           </div>
         </div>
       </div>
@@ -425,12 +428,13 @@
       <label class="form-label" for="metadata__encounter__referral_suggestion">Referral Suggestion</label>
       <select class="form-select"
               name="metadata__encounter__referral_suggestion"
-              id="metadata__encounter__referral_suggestion">
+              id="metadata__encounter__referral_suggestion"
+              {% if verification_read_only %}disabled{% endif %}>
         {% for value, label in [('missing', 'Missing'), ('yes', 'Yes'), ('no', 'No')] %}
         <option value="{{ value }}" {% if encounter.referral_suggestion == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
-      <fieldset class="mt-3" data-positive-disease-group>
+      <fieldset class="mt-3" data-positive-disease-group {% if verification_read_only %}disabled{% endif %}>
         <legend class="form-label mb-1 fs-6">Positive Diseases</legend>
         {% if verification_profile.positive_disease_options %}
         <div class="border rounded-2 px-2 py-1 bg-light">
@@ -650,6 +654,11 @@
     {% endfor %}
   </div>
 
+  {% if verification_read_only %}
+  <div class="alert alert-light border mb-0" role="status">
+    Verification is complete. This record cannot be reopened or verified again.
+  </div>
+  {% else %}
   <div class="d-flex flex-wrap justify-content-end gap-2">
     <button class="btn btn-outline-danger me-auto" type="button"
             data-exclude-encounter-set
@@ -664,5 +673,6 @@
       <i class="bi bi-check-circle me-1"></i> Verify and Close
     </button>
   </div>
+  {% endif %}
 </div>
 {% endif %}

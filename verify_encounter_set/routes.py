@@ -208,6 +208,8 @@ def update_metadata(uuid):
         encounter = query.first()
         if not encounter or not encounter.is_set_based:
             abort(404)
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_response(encounter)
 
         profile = _encounter_set_verification_profile(db, encounter)
         editable_fields = {
@@ -367,6 +369,8 @@ def mark_reviewed(uuid):
         encounter = query.first()
         if not encounter:
             return jsonify({"success": False, "message": "Image not found"}), 404
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         missing_fields = missing_image_task_routing_fields(
             img,
@@ -421,6 +425,8 @@ def _verification_context(db, uuid: str) -> dict:
         "attachments": attachments,
         "ocr_summaries": _encounter_set_ocr_summaries(attachments),
         "verification_profile": _encounter_set_verification_profile(db, encounter),
+        "verification_read_only": encounter.encounter_verified_status == "verified",
+        "back_url": _encounter_set_browser_url(encounter),
     }
 
 
@@ -727,6 +733,8 @@ def update_position():
         if not encounter:
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         # Check if another image already occupies this position
         existing = db.query(EncounterSetImage).filter_by(
@@ -771,6 +779,9 @@ def exclude_encounter_set(uuid):
                 }), 403
             flash(message, "danger")
             return redirect(url_for("verify_encounter_set.index"))
+
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_response(encounter)
 
         payload = request.get_json(silent=True) or {}
         reason = (payload.get("reason") or request.form.get("reason") or "").strip()
@@ -831,6 +842,9 @@ def finalize_verification(uuid):
                 }), 403
             flash("You don't have permission to verify this encounter set.", "danger")
             return redirect(url_for("verify_encounter_set.index"))
+
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_response(encounter)
 
         # Lock all images while checking (atomic transaction)
         images = db.query(EncounterSetImage)\
@@ -945,6 +959,27 @@ def finalize_verification(uuid):
         response = redirect(redirect_url)
         response.headers["X-EncounterSet-Verified"] = "1"
         return response
+
+
+def _already_verified_response(encounter: PatientEncounters):
+    message = "This EncounterSet is already verified and is read-only."
+    if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+        return _already_verified_json_response(encounter)
+    flash(message, "warning")
+    return redirect(
+        url_for("verify_encounter_set.verify_encounter", uuid=encounter.uuid)
+    )
+
+
+def _already_verified_json_response(encounter: PatientEncounters):
+    return jsonify({
+        "success": False,
+        "message": "This EncounterSet is already verified and is read-only.",
+        "redirect_url": url_for(
+            "verify_encounter_set.verify_encounter",
+            uuid=encounter.uuid,
+        ),
+    }), 409
 
 
 def _encounter_set_browser_url(encounter: PatientEncounters) -> str:
@@ -1632,6 +1667,8 @@ def edit_image(uuid):
         if not encounter:
             # Encounter not found or user doesn't have access
             abort(404)
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_response(encounter)
 
         # P1.3: Validate S3 config access (defense-in-depth)
         if img.s3_config_id:
@@ -1700,6 +1737,8 @@ def save_edit(uuid):
         if not encounter:
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         missing_fields = missing_image_task_routing_fields(
             img,
@@ -1774,6 +1813,8 @@ def mark_anonymized(uuid):
         if not encounter:
             # Encounter not found or user doesn't have access
             return jsonify({"success": False, "message": "Image not found"}), 404
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         # P1.3: Validate S3 config access (defense-in-depth)
         if img.s3_config_id:
@@ -1810,6 +1851,8 @@ def mark_all_anonymized(uuid):
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if encounter.lab_unit_id not in allowed_lab_unit_ids:
             return jsonify({"success": False, "message": "Permission denied"}), 403
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         images = db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all()
         profile_config = _active_encounter_set_type_config(encounter)
@@ -1857,6 +1900,8 @@ def restore_original(uuid):
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if encounter.lab_unit_id not in allowed_lab_unit_ids:
             return jsonify({"success": False, "message": "Permission denied"}), 403
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         # Check if grading tasks are in progress
         task_states = db.execute(
@@ -1911,6 +1956,8 @@ def mark_not_gradable(uuid):
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if encounter.lab_unit_id not in allowed_lab_unit_ids:
             return jsonify({"success": False, "message": "Permission denied"}), 403
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         img.is_not_gradable = True
         img.not_gradable_reason = reason
@@ -1939,6 +1986,8 @@ def undo_not_gradable(uuid):
         allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if encounter.lab_unit_id not in allowed_lab_unit_ids:
             return jsonify({"success": False, "message": "Permission denied"}), 403
+        if encounter.encounter_verified_status == "verified":
+            return _already_verified_json_response(encounter)
 
         img.is_not_gradable = False
         img.not_gradable_reason = None

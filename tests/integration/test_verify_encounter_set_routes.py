@@ -13,7 +13,9 @@ from upload_profiles.models import (
     UploadProfileEncounterSetTypePackageImageScheme,
 )
 from tests.helpers.factories import UserFactory
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+
+from auth.utils import utcnow
 
 @pytest.fixture
 def encounter_set_data(db_session, core_test_data):
@@ -306,8 +308,58 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"Clinical Note" not in response.data
     assert b"Laterality" not in response.data
     assert b"Cardinal Gaze" not in response.data
+    expected_back_url = (
+        f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
+        f"&amp;month=2023-10&amp;date=2023-10-27"
+        f"&amp;encounter_id={encounter_set_data['encounter'].id}"
+    )
+    assert expected_back_url.encode() in response.data
     # The image appears in the left panel rail by UUID in thumbnail/panel URLs.
     assert encounter_set_data['image'].uuid.encode() in response.data
+
+
+def test_verified_encounter_set_detail_is_read_only(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_view_verified_set")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    encounter.encounter_verified_by = "original_verifier"
+    encounter.encounter_verified_at = utcnow() - timedelta(hours=1)
+    db_session.flush()
+
+    response = auth_client.get(f"/verify_encounter_set/verify/{encounter.uuid}")
+
+    assert response.status_code == 200
+    assert b"EncounterSet Verification Record" in response.data
+    assert b"already verified and is read-only" in response.data
+    assert b"original_verifier" in response.data
+    assert b'id="finalize-verification-form"' not in response.data
+    assert b'id="verification-metadata-form"' not in response.data
+
+
+def test_verified_encounter_set_browser_uses_view_label(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_browse_verified_set")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    db_session.flush()
+
+    response = auth_client.get(
+        "/uploads/encountersets/browse",
+        query_string={
+            "project_id": encounter.project_id,
+            "month": "2023-10",
+            "date": "2023-10-27",
+            "encounter_id": encounter.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"View Verification" in response.data
 
 
 def test_verify_encounter_set_patient_panel(client, auth_client_factory, encounter_set_data, db_session):
@@ -402,6 +454,26 @@ def test_verify_encounter_set_summary_panel(client, auth_client_factory, encount
     assert b">Save<" not in response.data
 
 
+def test_verified_encounter_set_summary_has_no_mutation_actions(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_verified_summary")
+    auth_client = auth_client_factory(user)
+    encounter_set_data["encounter"].encounter_verified_status = "verified"
+    db_session.flush()
+
+    response = auth_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}/panel/summary"
+    )
+
+    assert response.status_code == 200
+    assert b"cannot be reopened or verified again" in response.data
+    assert b"Verify and Close" not in response.data
+    assert b"Verify and Next" not in response.data
+    assert b"Exclude EncounterSet" not in response.data
+    assert b"data-positive-disease-group disabled" in response.data
+
+
 def test_verify_encounter_set_metadata_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
     """Editable EncounterSetType fields can be updated during verification."""
     user = UserFactory.create_admin(db_session, username="admin_verify_metadata")
@@ -451,6 +523,54 @@ def test_verify_encounter_set_metadata_partial_update(client, auth_client_factor
     assert encounter_set_data['encounter'].metadata_json["patient"]["patient_age_yrs"] == "57"
     assert encounter_set_data['encounter'].metadata_json["encounter"]["clinical_note"] == "initial note"
     assert encounter_set_data['image'].metadata_json["laterality"] == "right"
+
+
+def test_verified_encounter_set_rejects_metadata_changes(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="admin_locked_metadata")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    original_metadata = dict(encounter.metadata_json)
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter.uuid}",
+        data={"metadata__encounter__clinical_note": "must not change"},
+        headers={
+            "X-CSRFToken": csrf_token,
+            "X-EncounterSet-Async": "1",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert "already verified" in response.json["message"]
+    db_session.refresh(encounter)
+    assert encounter.metadata_json == original_metadata
+
+
+def test_verified_encounter_set_rejects_image_verification_changes(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="admin_locked_image")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    image = encounter_set_data["image"]
+    encounter.encounter_verified_status = "verified"
+    image.is_reviewed = False
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/mark_reviewed/{image.uuid}",
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    db_session.refresh(image)
+    assert image.is_reviewed is False
 
 
 def test_verify_encounter_set_ocr_metadata_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
@@ -1354,6 +1474,42 @@ def test_verify_encounter_set_finalize(client, auth_client_factory, encounter_se
     # Note: Due to the mock session wrapper's behavior (commit() only flushes),
     # we can't reliably check the DB state in tests. The route works correctly
     # in production - the session.commit() properly persists changes.
+
+
+def test_verified_encounter_set_rejects_repeat_finalization(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="repeat_finalize_blocked",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    original_verified_at = utcnow() - timedelta(days=2)
+    encounter.encounter_verified_status = "verified"
+    encounter.encounter_verified_by = "original_verifier"
+    encounter.encounter_verified_at = original_verified_at
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+    original_task_count = db_session.query(GradingTask).count()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter.uuid}",
+        headers={
+            "X-CSRFToken": csrf_token,
+            "X-EncounterSet-Async": "1",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json["success"] is False
+    assert "already verified" in response.json["message"]
+    db_session.refresh(encounter)
+    assert encounter.encounter_verified_by == "original_verifier"
+    assert encounter.encounter_verified_at == original_verified_at
+    assert db_session.query(GradingTask).count() == original_task_count
 
 def test_verify_encounter_set_wrong_role(client, auth_client_factory, encounter_set_data, db_session):
     """Test role restriction."""

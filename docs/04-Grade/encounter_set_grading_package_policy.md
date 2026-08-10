@@ -97,15 +97,20 @@ Unified integrated-screening workflows may include multiple image-level schemes 
 
 ## Escalation Policy
 
-Resident, resident2, and arbitrator workflow state is package-scoped.
+Resident, resident2, and arbitrator ownership is package-scoped; consensus and
+arbitration are set-scope decisions.
 
 - Resident completes every required target in the package.
 - Resident2 completes every required target in the same package.
-- Resident and resident2 submissions are compared across all targets in that package.
-- If any target differs according to configured grading rules, the package escalates to arbitration.
-- Arbitrators resolve mismatched targets while retaining visibility into the complete EncounterSet context.
+- Each resident slot may revise for 12 hours from its own initial submission. A revision does not restart the clock.
+- Resident and resident2 set-level grades are recalculated after every revision. Image-level differences remain observations.
+- No scope escalates before Resident2's initial submission plus 12 hours. The transition is reconciled lazily when grading, queue, dashboard, or record services read the package.
+- After that deadline, matching set grades become final match consensus and only mismatching disease/set scopes enter arbitration.
+- Arbitration is independently masked: the arbitrator receives the disputed scope's images and set target without Resident, Resident2, or AI grades.
 
-The full package progresses together because the grader completes the configured encounter target and applicable image targets in one session.
+The grader completes the full package in one session, but linked disease scopes
+can settle independently. The package becomes final only after every scope is
+final.
 
 ## Implementation Plan
 

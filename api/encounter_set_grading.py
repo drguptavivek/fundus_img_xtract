@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from encounter_sets.grading_policy import effective_project_policy_dto
-from encounter_sets.grading_records import package_record_dto
+from encounter_sets.grading_records import package_record_dto, reconcile_package_state
 from grading_allocation import service as grading_allocation_service
 from grading_allocation.exceptions import GradingAllocationError
 from models import (
@@ -87,8 +87,11 @@ def get_encounter_set_grading_records(encounter_uuid: str):
             )
             .filter(EncounterSetGradingPackage.patient_encounter_id == encounter.id)
             .order_by(EncounterSetGradingPackage.id)
+            .with_for_update()
             .all()
         )
+        for package in packages:
+            reconcile_package_state(db, package)
         return jsonify({
             "success": True,
             "encounter_uuid": encounter.uuid,

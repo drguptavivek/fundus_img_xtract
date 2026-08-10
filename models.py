@@ -1544,9 +1544,42 @@ class GradingTask(Base):
         # Unique per image/encounter×disease across all lab units
         UniqueConstraint('encounter_file_id', 'disease_id', name='uq_task_encounter_disease'),
         UniqueConstraint('direct_image_upload_id', 'disease_id', name='uq_task_direct_disease'),
-        UniqueConstraint('patient_encounter_id', 'disease_id', name='uq_task_patient_encounter_disease'),
-        UniqueConstraint('encounter_set_image_id', 'disease_id', name='uq_task_encounter_set_image_disease'),
-        UniqueConstraint('encounter_set_package_id', 'patient_encounter_id', 'encounter_set_image_id', 'disease_id', 'grading_target_level', name='uq_task_encounter_set_package_target'),
+        Index(
+            'uq_task_package_encounter_target',
+            'encounter_set_package_id',
+            'patient_encounter_id',
+            'disease_id',
+            'grading_target_level',
+            unique=True,
+            postgresql_where=text(
+                'encounter_set_package_id IS NOT NULL AND patient_encounter_id IS NOT NULL'
+            ),
+        ),
+        Index(
+            'uq_task_package_image_target',
+            'encounter_set_package_id',
+            'encounter_set_image_id',
+            'disease_id',
+            'grading_target_level',
+            unique=True,
+            postgresql_where=text(
+                'encounter_set_package_id IS NOT NULL AND encounter_set_image_id IS NOT NULL'
+            ),
+        ),
+        Index(
+            'uq_task_patient_encounter_disease_unscoped',
+            'patient_encounter_id',
+            'disease_id',
+            unique=True,
+            postgresql_where=text('encounter_set_package_id IS NULL'),
+        ),
+        Index(
+            'uq_task_encounter_set_image_disease_unscoped',
+            'encounter_set_image_id',
+            'disease_id',
+            unique=True,
+            postgresql_where=text('encounter_set_package_id IS NULL'),
+        ),
         CheckConstraint(
             "state IN ('pending','resident_done','resident2_done','arbitration','final')",
             name='ck_task_state_valid'
@@ -1567,6 +1600,11 @@ class EncounterSetGradingPackage(Base):
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), nullable=False, index=True)
     upload_profile_est_grading_package_id: Mapped[int | None] = mapped_column(
         ForeignKey('upload_profile_est_grading_packages.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    encounter_set_type_id: Mapped[int | None] = mapped_column(
+        ForeignKey('encounter_set_types.id', ondelete='RESTRICT'),
         nullable=True,
         index=True,
     )

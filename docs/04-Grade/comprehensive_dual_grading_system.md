@@ -111,11 +111,14 @@ EncounterSet packages use complete-set submissions and set-anchor consensus:
 - The workbench presents all root-disease images followed by its set grade, then all linked-disease images followed by that disease's set grade.
 - A role-slot submission is atomic across every currently editable package target. Missing any linked image or set grade leaves the package pending.
 - Resident/Resident2 consensus compares only each scope's set-level grade. Image-level grades remain independent observations and never create image consensus rows.
-- A DR match with DME mismatch finalizes the DR scope and sends only the DME images plus DME set target to masked arbitration.
+- Resident and Resident2 each may revise for 12 hours from that slot's initial package submission; revisions never extend the deadline.
+- No mismatch is exposed to arbitration during the revision period. Because Resident2 submits after Resident, arbitration eligibility is Resident2's initial submission plus 12 hours.
+- Before that deadline, matching and mismatching scopes remain provisional. Each revision recalculates their set-level relationship.
+- At the first lazy reconciliation after the deadline, a DR match finalizes while a DME mismatch sends only the DME images plus DME set target to masked arbitration.
 - The arbitrator never sees Resident, Resident2, or AI grades. The arbitrator submits fresh image and set grades; only the set target receives `Consensus(method="adjudication")`.
 - The package is final only when every disease/unified set scope is final. AI grades never affect package finality.
-- Runtime packages freeze their policy, labels, features, linked scopes, and policy revision. History validation never depends on the current project or Upload & Grading Profile.
-- Resident, Resident2, and arbitrator submissions can be revised by their owner for 12 hours. A pre-adjudication human revision recalculates set consensus and can open or cancel selective arbitration. Optimistic package revisions reject stale submissions.
+- Runtime packages freeze their EncounterSetType identity, policy, labels, features, linked scopes, and policy revision. History and queue meaning never depend on the current Upload & Grading Profile.
+- The arbitrator's existing 12-hour owner revision window is separate from the Resident/Resident2 waiting period. Optimistic package revisions reject stale submissions.
 
 ### 5. Finalization and Consensus
 

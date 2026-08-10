@@ -159,10 +159,17 @@
             {% if item.package_name %}<div class="small text-muted mt-2">{{ item.package_name }}</div>{% endif %}
             {% if item.can_view %}
             <div class="mt-3">
+              {% if item.record_kind == 'submission' %}
+              <a class="btn btn-sm {{ 'btn-outline-primary' if item.can_revise else 'btn-outline-secondary' }}"
+                 href="{{ url_for('grading.encounter_set_package_grading', package_uuid=item.package_uuid, slot_type=item.role_slot) }}">
+                {{ 'Revise' if item.can_revise else 'View' }}
+              </a>
+              {% else %}
               <a class="btn btn-sm {{ 'btn-outline-primary' if item.can_revise else 'btn-outline-secondary' }}"
                  href="{{ url_for('grading.revise_grading', grade_id=item.grade_id) }}">
                 {{ 'Revise' if item.can_revise else 'View' }}
               </a>
+              {% endif %}
             </div>
             {% endif %}
           </div>

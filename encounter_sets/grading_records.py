@@ -49,14 +49,18 @@ class EncounterSetSubmissionInputDTO:
 
 
 def editable_tasks(
-    package: EncounterSetGradingPackage, role_slot: str, grader_user_id: int
+    package: EncounterSetGradingPackage,
+    role_slot: str,
+    grader_user_id: int,
+    *,
+    now=None,
 ) -> list[GradingTask]:
     if role_slot not in HUMAN_ROLE_SLOTS:
         return []
-    now = utcnow()
+    now = now or utcnow()
     first_submission = _first_submission(package, role_slot, grader_user_id)
     within_revision = bool(
-        first_submission and now <= first_submission.created_at + REVISION_WINDOW
+        first_submission and now < first_submission.created_at + REVISION_WINDOW
     )
     result = []
     for scope in package.scopes:
@@ -87,6 +91,7 @@ def submit_package(
 ) -> EncounterSetGradingSubmission:
     if submission.role_slot not in HUMAN_ROLE_SLOTS:
         raise EncounterSetGradingError("Invalid package role slot.")
+    reconcile_package_state(db, package)
     if package.revision_number != submission.expected_package_revision:
         raise StaleEncounterSetPackageError(
             "This package changed after it was opened. Reload before submitting."
@@ -198,6 +203,44 @@ def submit_package(
     return event
 
 
+def reconcile_package_state(db, package: EncounterSetGradingPackage, *, now=None) -> bool:
+    """Lazily release expired set mismatches to masked arbitration queues."""
+    if not package.scopes or any(
+        len(
+            [
+                task
+                for task in scope.tasks
+                if task.grading_target_level == "encounter"
+            ]
+        )
+        != 1
+        for scope in package.scopes
+    ):
+        return False
+    before = _package_state_signature(package)
+    _recompute_package(db, package, now=now)
+    changed = before != _package_state_signature(package)
+    if changed:
+        package.revision_number += 1
+    return changed
+
+
+def reconcile_active_packages(db, *, now=None) -> int:
+    """Reconcile packages whose post-Resident2 waiting period may have changed."""
+    packages = (
+        db.query(EncounterSetGradingPackage)
+        .filter(
+            EncounterSetGradingPackage.state.in_(("resident2_done", "arbitration"))
+        )
+        .order_by(EncounterSetGradingPackage.id)
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+    return sum(
+        1 for package in packages if reconcile_package_state(db, package, now=now)
+    )
+
+
 def package_record_dto(
     package: EncounterSetGradingPackage,
     *,
@@ -224,6 +267,10 @@ def package_record_dto(
         "encounter_uuid": package.patient_encounter.uuid,
         "name": package.name,
         "code": package.code,
+        "encounter_set_type_id": package.encounter_set_type_id,
+        "encounter_set_type": (
+            (package.policy_snapshot_json or {}).get("encounter_set_type")
+        ),
         "grading_mode": package.grading_mode,
         "state": package.state,
         "record_origin": package.record_origin,
@@ -294,7 +341,15 @@ def package_record_dto(
     }
 
 
-def _recompute_package(db, package: EncounterSetGradingPackage) -> None:
+def _recompute_package(db, package: EncounterSetGradingPackage, *, now=None) -> None:
+    now = now or utcnow()
+    resident2_submission = _first_submission(
+        package, "resident2", package.resident2_user_id
+    )
+    arbitration_ready = bool(
+        resident2_submission
+        and now >= resident2_submission.created_at + REVISION_WINDOW
+    )
     for scope in package.scopes:
         set_tasks = [
             task for task in scope.tasks if task.grading_target_level == "encounter"
@@ -310,13 +365,14 @@ def _recompute_package(db, package: EncounterSetGradingPackage) -> None:
         if arbitrator:
             _upsert_consensus(db, package, scope, set_task, arbitrator, "adjudication")
             scope.state = "final"
+        elif resident and resident2 and not arbitration_ready:
+            _remove_consensus(db, set_task)
+            scope.state = "resident2_done"
         elif resident and resident2 and resident.disease_grading_id == resident2.disease_grading_id:
             _upsert_consensus(db, package, scope, set_task, resident2, "match")
             scope.state = "final"
         elif resident and resident2:
-            if set_task.consensus:
-                db.delete(set_task.consensus)
-                set_task.consensus = None
+            _remove_consensus(db, set_task)
             scope.state = "arbitration"
         elif resident:
             scope.state = "resident_done"
@@ -327,13 +383,17 @@ def _recompute_package(db, package: EncounterSetGradingPackage) -> None:
 
     states = {scope.state for scope in package.scopes}
     if states == {"final"}:
+        if package.state != "final" or package.completed_at is None:
+            package.completed_at = now
         package.state = "final"
-        package.completed_at = utcnow()
     elif "arbitration" in states:
         package.state = "arbitration"
         package.completed_at = None
-    elif states.issubset({"resident_done", "final"}):
-        package.state = "resident_done"
+    elif states.issubset({"resident_done", "resident2_done", "final"}):
+        if "resident2_done" in states:
+            package.state = "resident2_done"
+        else:
+            package.state = "resident_done"
         package.completed_at = None
     else:
         package.state = "pending"
@@ -342,6 +402,11 @@ def _recompute_package(db, package: EncounterSetGradingPackage) -> None:
 
 def _upsert_consensus(db, package, scope, task, grade, method: str) -> None:
     consensus = task.consensus
+    decision_changed = bool(
+        consensus is None
+        or consensus.method != method
+        or consensus.final_disease_grading_id != grade.disease_grading_id
+    )
     if consensus is None:
         consensus = Consensus(task_id=task.id)
         db.add(consensus)
@@ -354,7 +419,8 @@ def _upsert_consensus(db, package, scope, task, grade, method: str) -> None:
     consensus.scope_disease_id = scope.scope_disease_id
     consensus.scope_disease_name = _scope_disease_name(package, scope)
     consensus.decided_by_user_id = grade.grader_user_id if method == "adjudication" else None
-    consensus.decided_at = utcnow()
+    if decision_changed:
+        consensus.decided_at = utcnow()
     consensus.final_disease_name = grade.disease_name
     consensus.final_grade_name = grade.grade_name
     consensus.final_grade_description = grade.grade_description
@@ -367,10 +433,14 @@ def _validate_role_owner(package, role_slot: str, user_id: int) -> None:
         raise EncounterSetGradingError(
             "This package role slot is already owned by another grader."
         )
-    if role_slot == "resident" and package.resident2_user_id == user_id:
-        raise EncounterSetGradingError("One person cannot occupy both resident slots.")
-    if role_slot == "resident2" and package.resident_user_id == user_id:
-        raise EncounterSetGradingError("One person cannot occupy both resident slots.")
+    conflicting_owners = {
+        slot: getattr(package, f"{slot}_user_id")
+        for slot in HUMAN_ROLE_SLOTS - {role_slot}
+    }
+    if user_id in conflicting_owners.values():
+        raise EncounterSetGradingError(
+            "One person cannot occupy multiple EncounterSet grading slots."
+        )
 
 
 def _claim_role(package, role_slot: str, user_id: int) -> None:
@@ -419,6 +489,39 @@ def _scope_has_adjudication(scope) -> bool:
         task.consensus and task.consensus.method == "adjudication"
         for task in scope.tasks
         if task.grading_target_level == "encounter"
+    )
+
+
+def _remove_consensus(db, task: GradingTask) -> None:
+    if task.consensus is not None:
+        db.delete(task.consensus)
+        task.consensus = None
+
+
+def _package_state_signature(package: EncounterSetGradingPackage) -> tuple:
+    return (
+        package.state,
+        package.completed_at,
+        tuple(
+            (
+                scope.id,
+                scope.state,
+                tuple(
+                    (
+                        task.id,
+                        task.state,
+                        task.consensus.method if task.consensus else None,
+                        (
+                            task.consensus.final_disease_grading_id
+                            if task.consensus
+                            else None
+                        ),
+                    )
+                    for task in scope.tasks
+                ),
+            )
+            for scope in package.scopes
+        ),
     )
 
 

@@ -16,6 +16,7 @@ from tests.helpers.factories import UserFactory
 from datetime import date, datetime, timedelta
 
 from auth.utils import utcnow
+from verify_encounter_set.routes import _get_or_create_package_task
 
 @pytest.fixture
 def encounter_set_data(db_session, core_test_data):
@@ -1522,3 +1523,58 @@ def test_verify_encounter_set_wrong_role(client, auth_client_factory, encounter_
     
     response = auth_client.get("/verify_encounter_set/")
     assert response.status_code == 403
+def test_package_task_identity_does_not_reuse_another_package(
+    db_session, encounter_set_data, core_test_data
+):
+    encounter = encounter_set_data["encounter"]
+    image = encounter_set_data["image"]
+    disease = db_session.merge(core_test_data["glaucoma"])
+    packages = []
+    scopes = []
+    for index in range(2):
+        package = EncounterSetGradingPackage(
+            patient_encounter_id=encounter.id,
+            name=f"Package identity {index}",
+            code=f"package_identity_{index}_{uuid.uuid4().hex[:6]}",
+            grading_mode="disease_specific",
+            root_scope_disease_id=disease.id,
+            state="pending",
+        )
+        scope = EncounterSetGradingScope(
+            package=package,
+            scope_disease_id=disease.id,
+            image_grading_scheme_id=disease.id,
+            encounter_grading_scheme_id=disease.id,
+            link_role="root",
+            display_order=0,
+        )
+        db_session.add(package)
+        db_session.flush()
+        packages.append(package)
+        scopes.append(scope)
+
+    for package, scope in zip(packages, scopes, strict=True):
+        assert _get_or_create_package_task(
+            db_session,
+            package=package,
+            encounter=encounter,
+            disease_id=disease.id,
+            target_level="image",
+            source="test_package_identity",
+            scope=scope,
+            image=image,
+        ) is True
+        db_session.flush()
+
+    tasks = (
+        db_session.query(GradingTask)
+        .filter(
+            GradingTask.encounter_set_image_id == image.id,
+            GradingTask.disease_id == disease.id,
+            GradingTask.encounter_set_package_id.in_([row.id for row in packages]),
+        )
+        .all()
+    )
+    assert {task.encounter_set_package_id for task in tasks} == {
+        package.id for package in packages
+    }

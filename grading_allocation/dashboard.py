@@ -7,9 +7,12 @@ from collections import defaultdict
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
+from encounter_sets.grading_records import reconcile_active_packages
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
+    ProjectGradingTargetDTO,
     ProjectEncounterSetQueueDTO,
+    TargetIdentity,
 )
 from grading_allocation.eligibility import is_user_eligible_for_task
 from grading_allocation.models import ProjectGradingAllocationPolicy
@@ -18,6 +21,7 @@ from grading_allocation.targets import derive_project_targets
 from models import (
     EncounterSetGradingPackage,
     EncounterSetImage,
+    Disease,
     GradingTask,
     PatientEncounters,
     Project,
@@ -51,6 +55,8 @@ def list_project_encounter_set_queues(
     projects = {project.id: project for project in project_rows}
     if not projects:
         return ()
+
+    reconcile_active_packages(db)
 
     tasks = (
         db.execute(
@@ -108,7 +114,7 @@ def list_project_encounter_set_queues(
             continue
         target = targets_by_project[context.project_id].get(context.target)
         if target is None:
-            continue
+            target = _frozen_package_target(db, task.encounter_set_package, context.target)
         slot = next(
             (
                 candidate_slot
@@ -180,6 +186,41 @@ def list_project_encounter_set_queues(
                 queue.target_key,
             ),
         )
+    )
+
+
+def _frozen_package_target(
+    db: Session,
+    package: EncounterSetGradingPackage,
+    identity: TargetIdentity,
+) -> ProjectGradingTargetDTO:
+    """Build queue display data without consulting mutable profile policy."""
+    snapshot = package.policy_snapshot_json or {}
+    definitions = snapshot.get("grading_definitions") or {}
+    disease_name = None
+    if identity.disease_id is not None:
+        disease_name = (definitions.get(str(identity.disease_id)) or {}).get("name")
+        if disease_name is None:
+            disease = db.get(Disease, identity.disease_id)
+            disease_name = disease.name if disease else f"Disease {identity.disease_id}"
+    encounter_set_type_name = (snapshot.get("encounter_set_type") or {}).get("name")
+    if encounter_set_type_name is None:
+        encounter_set_type_name = f"EncounterSet type {identity.encounter_set_type_id}"
+    return ProjectGradingTargetDTO(
+        identity=identity,
+        label=(
+            f"{disease_name} / EncounterSet"
+            if disease_name
+            else "Unified EncounterSet"
+        ),
+        disease_name=disease_name,
+        encounter_set_type_name=encounter_set_type_name,
+        grading_scheme_ids={task.disease_id for task in package.tasks},
+        diseases={
+            int(disease_id): definition.get("name") or f"Disease {disease_id}"
+            for disease_id, definition in definitions.items()
+            if str(disease_id).isdigit()
+        },
     )
 
 

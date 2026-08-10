@@ -241,9 +241,11 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     runtime_package = EncounterSetGradingPackage(
         patient_encounter_id=encounter.id,
         upload_profile_est_grading_package_id=package_config.id,
+        encounter_set_type_id=encounter_set_type.id,
         name=package_config.name,
         code=package_config.code,
         grading_mode="disease_specific",
+        root_scope_disease_id=disease.id,
         state="pending",
     )
     db_session.add(runtime_package)
@@ -279,6 +281,8 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     db_session.flush()
 
     targets, warnings = derive_project_targets(db_session, project.id)
+    package_config.active = False
+    db_session.flush()
     context = resolve_task_allocation_context(db_session, task)
     image_context = resolve_task_allocation_context(db_session, image_task)
 

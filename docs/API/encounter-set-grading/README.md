@@ -42,6 +42,19 @@ The response includes:
 - immutable submission events and item snapshots;
 - explicit set-level consensus scope, method, disease, and final label.
 
+Runtime packages also freeze their EncounterSetType identity. Allocation and
+queue resolution therefore continue to work if the Upload & Grading Profile
+package that created the record is later changed or deactivated. Current
+project grader allocations still decide who may claim an unowned human slot.
+
+Resident and Resident2 each have 12 hours from their own initial package
+submission to revise. A revision never extends that deadline. Until 12 hours
+after Resident2's initial submission, set matches and mismatches remain in the
+`resident2_done` waiting state and no scope is available to an arbitrator. The
+first package, queue, dashboard, or record read after that deadline lazily
+reconciles every scope: matching set grades create `Consensus(method="match")`;
+only mismatching set scopes enter masked arbitration.
+
 While any scope in the linked package remains non-final, this endpoint returns
 only the requesting grader's role ownership, submissions, and grades. Other
 graders' observations and all consensus values remain masked, including when an
@@ -57,4 +70,8 @@ GET /api/encounter-sets/4f89504c-49ca-4ca4-9912-76168c29e824/grading-records
 Accept: application/json
 ```
 
-Both endpoints are read-only and do not require CSRF tokens. Error responses use HTTP `403` for an unmanaged project, `404` for an out-of-scope EncounterSet, and JSON validation/error details where applicable.
+Both endpoints are GET endpoints and do not require CSRF tokens. A frozen-record
+read may materialize a due time-based state transition, but it never changes a
+human grade or submission. Error responses use HTTP `403` for an unmanaged
+project, `404` for an out-of-scope EncounterSet, and JSON validation/error
+details where applicable.

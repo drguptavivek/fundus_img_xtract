@@ -1061,6 +1061,16 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
 
     created = 0
     for package_config in package_configs:
+        existing_package = (
+            db.query(EncounterSetGradingPackage)
+            .filter(
+                EncounterSetGradingPackage.patient_encounter_id == encounter.id,
+                EncounterSetGradingPackage.code == package_config["code"],
+            )
+            .first()
+        )
+        if existing_package is not None:
+            _restore_frozen_runtime_config(existing_package, package_config)
         sampling_scheme_ids = {
             disease_id
             for disease_id, policy in package_config["image_scheme_policies"].items()
@@ -1431,7 +1441,13 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
             [package for package in config.grading_packages if package.active],
             key=lambda item: (item.display_order, item.name, item.id),
         ):
-            packages.append(_policy_config(db, package_policy_from_model(package)))
+            packages.append(
+                _policy_config(
+                    db,
+                    package_policy_from_model(package),
+                    encounter_set_type=config.encounter_set_type,
+                )
+            )
         if packages:
             return packages
 
@@ -1460,7 +1476,13 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
             image_scheme_metadata_rules={},
             source="profile_default",
         )
-        return [_policy_config(db, policy)]
+        return [
+            _policy_config(
+                db,
+                policy,
+                encounter_set_type=config.encounter_set_type,
+            )
+        ]
 
     target_disease_ids = {
         row[0]
@@ -1498,7 +1520,19 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
     return [_policy_config(db, policy)]
 
 
-def _policy_config(db, policy: EncounterSetPackagePolicyDTO) -> dict:
+def _policy_config(
+    db,
+    policy: EncounterSetPackagePolicyDTO,
+    *,
+    encounter_set_type=None,
+) -> dict:
+    policy_snapshot = freeze_policy_snapshot(db, policy)
+    if encounter_set_type is not None:
+        policy_snapshot["encounter_set_type"] = {
+            "id": encounter_set_type.id,
+            "name": encounter_set_type.name,
+            "code": encounter_set_type.code,
+        }
     return {
         "config_id": policy.config_id,
         "name": policy.name,
@@ -1507,7 +1541,10 @@ def _policy_config(db, policy: EncounterSetPackagePolicyDTO) -> dict:
         "grading_mode": policy.grading_mode,
         "policy_revision": policy.policy_revision,
         "root_scope_disease_id": policy.root_scope_disease_id,
-        "policy_snapshot": freeze_policy_snapshot(db, policy),
+        "policy_snapshot": policy_snapshot,
+        "encounter_set_type_id": (
+            encounter_set_type.id if encounter_set_type is not None else None
+        ),
         "scopes": [
             {
                 "scope_disease_id": scope.scope_disease_id,
@@ -1542,11 +1579,12 @@ def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_con
     if package:
         if not package.grading_mode:
             package.grading_mode = package_config.get("grading_mode") or "unified"
-        _ensure_runtime_scopes(db, package, package_config)
+        _restore_frozen_runtime_config(package, package_config)
         return package
     package = EncounterSetGradingPackage(
         patient_encounter_id=encounter.id,
         upload_profile_est_grading_package_id=package_config["config_id"],
+        encounter_set_type_id=package_config.get("encounter_set_type_id"),
         name=package_config["name"],
         code=package_config["code"],
         applicability=package_config["applicability"],
@@ -1564,6 +1602,49 @@ def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_con
     _ensure_runtime_scopes(db, package, package_config)
     package_config["_created"] = True
     return package
+
+
+def _restore_frozen_runtime_config(package, package_config: dict) -> None:
+    """Make repeat task creation use the package snapshot, never current policy."""
+    snapshot_package = (package.policy_snapshot_json or {}).get("package") or {}
+    if snapshot_package:
+        for key in (
+            "applicability",
+            "grading_mode",
+            "root_scope_disease_id",
+            "image_scheme_policies",
+            "image_scheme_negative_controls_per_positive",
+            "image_scheme_metadata_rules",
+            "source",
+        ):
+            if key in snapshot_package:
+                package_config[key] = snapshot_package[key]
+        for key in (
+            "image_scheme_policies",
+            "image_scheme_negative_controls_per_positive",
+            "image_scheme_metadata_rules",
+        ):
+            package_config[key] = {
+                int(disease_id): value
+                for disease_id, value in (package_config.get(key) or {}).items()
+            }
+    package_config["scopes"] = [
+        dict(scope.scope_snapshot_json or {
+            "scope_disease_id": scope.scope_disease_id,
+            "image_grading_scheme_ids": (
+                [scope.image_grading_scheme_id]
+                if scope.image_grading_scheme_id is not None
+                else []
+            ),
+            "encounter_grading_scheme_id": scope.encounter_grading_scheme_id,
+            "parent_scope_disease_id": scope.parent_scope_disease_id,
+            "link_role": scope.link_role,
+        })
+        for scope in package.scopes
+    ]
+    package_config["encounter_scheme_ids"] = [
+        scope["encounter_grading_scheme_id"] for scope in package_config["scopes"]
+    ]
 
 
 def _ensure_runtime_scopes(db, package, package_config: dict) -> None:
@@ -1619,14 +1700,34 @@ def _get_or_create_package_task(
         filters.append(GradingTask.encounter_set_image_id == image.id)
     else:
         filters.append(GradingTask.patient_encounter_id == encounter.id)
-    existing = db.query(GradingTask).filter(*filters).first()
+    existing = (
+        db.query(GradingTask)
+        .filter(
+            *filters,
+            GradingTask.encounter_set_package_id == package.id,
+        )
+        .first()
+    )
     if existing:
-        if existing.encounter_set_package_id is None:
-            existing.encounter_set_package_id = package.id
-            existing.grading_target_level = target_level
-            existing.task_source = source
         if existing.encounter_set_scope_id is None:
             existing.encounter_set_scope_id = scope.id
+        return False
+
+    # Compatibility: adopt one historical task only when it has never belonged
+    # to any runtime package. A task owned by another package is never reused.
+    unscoped = (
+        db.query(GradingTask)
+        .filter(
+            *filters,
+            GradingTask.encounter_set_package_id.is_(None),
+        )
+        .first()
+    )
+    if unscoped:
+        unscoped.encounter_set_package_id = package.id
+        unscoped.encounter_set_scope_id = scope.id
+        unscoped.grading_target_level = target_level
+        unscoped.task_source = source
         return False
 
     task = GradingTask(

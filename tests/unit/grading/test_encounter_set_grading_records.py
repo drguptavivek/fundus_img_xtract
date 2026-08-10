@@ -1,13 +1,16 @@
 from uuid import uuid4
+from datetime import timedelta
 
 import pytest
 
+from auth.utils import utcnow
 from encounter_sets.grading_records import (
     EncounterSetGradingError,
     EncounterSetSubmissionInputDTO,
     TargetGradeInputDTO,
     editable_tasks,
     package_record_dto,
+    reconcile_package_state,
     submit_package,
 )
 from models import (
@@ -189,16 +192,13 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         ),
     ))
 
-    assert root_scope.state == "final"
-    assert root_set.consensus.method == "match"
+    assert root_scope.state == "resident2_done"
+    assert root_set.consensus is None
     assert root_image.consensus is None
-    assert linked_scope.state == "arbitration"
+    assert linked_scope.state == "resident2_done"
     assert linked_set.consensus is None
-    assert package.state == "arbitration"
-    assert {task.id for task in editable_tasks(package, "arbitrator", arbitrator.id)} == {
-        linked_image.id,
-        linked_set.id,
-    }
+    assert package.state == "resident2_done"
+    assert editable_tasks(package, "arbitrator", arbitrator.id) == []
 
     masked_record = package_record_dto(package, viewer_user_id=arbitrator.id)
     assert masked_record["role_owners"] == {
@@ -214,7 +214,7 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
     )
 
     # A resident revision inside the 12-hour window can resolve, then reopen,
-    # the linked scope before arbitration is completed.
+    # the linked mismatch while arbitration remains unavailable.
     submit_package(db_session, package, EncounterSetSubmissionInputDTO(
         package_uuid=package.uuid,
         role_slot="resident",
@@ -227,8 +227,8 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
             _target(linked_set, labels[linked_set.disease_id][1]),
         ),
     ))
-    assert linked_scope.state == "final"
-    assert linked_set.consensus.method == "match"
+    assert linked_scope.state == "resident2_done"
+    assert linked_set.consensus is None
     assert editable_tasks(package, "arbitrator", arbitrator.id) == []
 
     submit_package(db_session, package, EncounterSetSubmissionInputDTO(
@@ -243,14 +243,58 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
             _target(linked_set, labels[linked_set.disease_id][0]),
         ),
     ))
-    assert linked_scope.state == "arbitration"
+    assert linked_scope.state == "resident2_done"
     assert linked_set.consensus is None
+
+    resident2_initial = next(
+        event
+        for event in package.submissions
+        if event.role_slot == "resident2" and event.submission_kind == "initial"
+    )
+    resident2_initial.created_at -= timedelta(hours=13)
+    assert reconcile_package_state(db_session, package, now=utcnow()) is True
+    assert root_scope.state == "final"
+    assert root_set.consensus.method == "match"
+    assert linked_scope.state == "arbitration"
+    assert {task.id for task in editable_tasks(package, "arbitrator", arbitrator.id)} == {
+        linked_image.id,
+        linked_set.id,
+    }
+    resident_initial = next(
+        event
+        for event in package.submissions
+        if event.role_slot == "resident" and event.submission_kind == "initial"
+    )
+    assert editable_tasks(
+        package,
+        "resident",
+        resident.id,
+        now=resident_initial.created_at + timedelta(hours=12),
+    ) == []
+    assert editable_tasks(
+        package,
+        "resident2",
+        resident2.id,
+        now=utcnow(),
+    ) == []
+
+    with pytest.raises(EncounterSetGradingError, match="multiple EncounterSet"):
+        submit_package(db_session, package, EncounterSetSubmissionInputDTO(
+            package_uuid=package.uuid,
+            role_slot="arbitrator",
+            grader_user_id=resident.id,
+            expected_package_revision=6,
+            targets=(
+                _target(linked_image, labels[linked_image.disease_id][0]),
+                _target(linked_set, labels[linked_set.disease_id][1]),
+            ),
+        ))
 
     submit_package(db_session, package, EncounterSetSubmissionInputDTO(
         package_uuid=package.uuid,
         role_slot="arbitrator",
         grader_user_id=arbitrator.id,
-        expected_package_revision=5,
+        expected_package_revision=6,
         targets=(
             _target(linked_image, labels[linked_image.disease_id][0]),
             _target(linked_set, labels[linked_set.disease_id][1]),

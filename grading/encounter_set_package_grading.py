@@ -16,6 +16,7 @@ from encounter_sets.grading_records import (
     StaleEncounterSetPackageError,
     TargetGradeInputDTO,
     editable_tasks,
+    reconcile_package_state,
     submit_package,
 )
 from grading.grade_feature_submission import (
@@ -54,11 +55,12 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
         return redirect(url_for("grading.index"))
 
     with transaction_scope() as db:
-        package = _fetch_package(db, package_uuid)
+        package = _fetch_package(db, package_uuid, for_update=True)
         if not package:
             flash("EncounterSet grading package not found.", "danger")
             return redirect(url_for("grading.index"))
 
+        reconcile_package_state(db, package)
         editable = editable_tasks(package, slot_type, current_user.id)
         tasks = (
             _ordered_tasks(editable)
@@ -129,6 +131,7 @@ def encounter_set_package_submit():
             flash("EncounterSet grading package not found.", "danger")
             return redirect(url_for("grading.index"))
 
+        reconcile_package_state(db, package)
         expected_revision = _int_form_value("package_revision")
         if expected_revision is None:
             flash("The package revision is missing. Reload before submitting.", "danger")

@@ -219,6 +219,7 @@ def test_package_submit_delegates_atomic_package_dto_to_record_service(app, monk
     monkeypatch.setattr(package_grading, "current_user", SimpleNamespace(id=7))
     monkeypatch.setattr(package_grading, "get_user_eligibility_for_task", lambda session, user_id, task_id, slot: True)
     monkeypatch.setattr(package_grading, "editable_tasks", lambda package, slot, user_id: [task])
+    monkeypatch.setattr(package_grading, "reconcile_package_state", lambda *args: False)
     monkeypatch.setattr(package_grading, "_package_slot_eligible", lambda *args: True)
     monkeypatch.setattr(package_grading, "cleanup_task_tracker", lambda *args, **kwargs: None)
     monkeypatch.setattr(

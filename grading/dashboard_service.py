@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
+from auth.utils import utcnow
+from encounter_sets.grading_records import REVISION_WINDOW
 from grading_allocation.models import (
     ProjectGraderAllocation,
     ProjectGradingAllocationPolicy,
@@ -485,6 +487,18 @@ def _grade_query(db, *, user, history_type, disease_id):
 
 def _submission_card(submission, task_map):
     package = submission.package
+    initial_submission = min(
+        (
+            event
+            for event in package.submissions
+            if event.role_slot == submission.role_slot
+            and event.grader_user_id == submission.grader_user_id
+        ),
+        key=lambda event: event.created_at,
+        default=submission,
+    )
+    revision_deadline = initial_submission.created_at + REVISION_WINDOW
+    can_revise = utcnow() < revision_deadline
     set_grades = []
     image_grades = []
     disease_map = {}
@@ -528,6 +542,9 @@ def _submission_card(submission, task_map):
         "uuid": package.patient_encounter.uuid,
         "package_uuid": package.uuid,
         "package_name": package.name,
+        "can_view": can_revise,
+        "can_revise": can_revise,
+        "revision_deadline": revision_deadline,
         "diseases": [
             {"id": disease_id, "name": name}
             for disease_id, name in sorted(disease_map.items(), key=lambda row: row[1])

@@ -12,6 +12,7 @@ from uuid import uuid4
 from utils.env_loader import load_environment
 from db_transaction_manager import transaction_scope
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
+from encounter_sets.grading_records import reconcile_active_packages
 
 load_environment()
 
@@ -146,6 +147,9 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     Returns:
         List of filtered tasks
     """
+    if role_slot == "arbitrator":
+        reconcile_active_packages(db)
+
     # Build query for tasks
     query = db.query(GradingTask)
     
@@ -482,6 +486,9 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     Returns:
         The locked GradingTask or None if no eligible tasks are available
     """
+    if role_slot == "arbitrator":
+        reconcile_active_packages(db)
+
     # Build the base query
     query = db.query(GradingTask).filter(
         GradingTask.lab_unit_id.in_(eligible_lab_unit_ids),

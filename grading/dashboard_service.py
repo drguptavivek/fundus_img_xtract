@@ -10,7 +10,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
-from encounter_sets.grading_records import REVISION_WINDOW
+from grading.workbench.package_workflow import REVISION_WINDOW
 from grading_allocation.models import (
     ProjectGraderAllocation,
     ProjectGradingAllocationPolicy,
@@ -30,7 +30,7 @@ from models import (
     User,
     UserDiseaseUnitRole,
 )
-from utils.dualGradingRevisionUtils import check_revision_eligibility_by_task_state
+from grading.workbench.revisions import check_revision_eligibility_by_task_state
 from utils.hospital_scoping import apply_scoping
 from utils.timezone_choices import DEFAULT_TIMEZONE
 

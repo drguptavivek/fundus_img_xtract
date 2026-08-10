@@ -10,12 +10,27 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, or_, func, exists, case
-from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading, TaskTracker
+from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading
+from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
 from grading_allocation.dashboard import exclude_enforced_project_encounter_set_tasks
 from typing import Dict, Optional, List, Tuple
+
+
+def _active_workbench_lease_exists(db, task_entity, role_slot: str):
+    return (
+        db.query(GradingWorkbenchSessionTarget.id)
+        .join(GradingWorkbenchSession)
+        .filter(
+            GradingWorkbenchSessionTarget.task_id == task_entity.id,
+            GradingWorkbenchSessionTarget.role_slot == role_slot,
+            GradingWorkbenchSessionTarget.target_purpose == "editable",
+            GradingWorkbenchSessionTarget.released_at.is_(None),
+            GradingWorkbenchSession.status == "active",
+        )
+    )
 
 
 def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
@@ -36,6 +51,10 @@ def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
         and_(
             GradingTask.patient_encounter_id.isnot(None),
             GradingTask.patient_encounter_id == LinkedTask.patient_encounter_id,
+        ),
+        and_(
+            GradingTask.encounter_set_image_id.isnot(None),
+            GradingTask.encounter_set_image_id == LinkedTask.encounter_set_image_id,
         ),
     )
     mismatch_filter = or_(
@@ -157,12 +176,8 @@ def get_user_kpi_pending_task_count_data(
         
         # Count resident pending tasks (skip linked diseases: graded with primary)
         if has_resident2_role and info['can_grade_resident']:
-            resident_tracker_exists = (
-                db.query(TaskTracker.id)
-                .filter(
-                    TaskTracker.task_id == GradingTask.id,
-                    TaskTracker.role_slot == 'resident',
-                )
+            resident_tracker_exists = _active_workbench_lease_exists(
+                db, GradingTask, "resident"
             )
             resident_conflict_exists = (
                 db.query(Grade.id)
@@ -213,12 +228,8 @@ def get_user_kpi_pending_task_count_data(
         
         # Count resident2 pending tasks (skip linked diseases: graded with primary)
         if has_resident2_role and (info['can_grade_resident2'] or info['can_grade_resident']):
-            resident2_tracker_exists = (
-                db.query(TaskTracker.id)
-                .filter(
-                    TaskTracker.task_id == GradingTask.id,
-                    TaskTracker.role_slot == 'resident2',
-                )
+            resident2_tracker_exists = _active_workbench_lease_exists(
+                db, GradingTask, "resident2"
             )
             resident2_conflict_exists = (
                 db.query(Grade.id)
@@ -243,12 +254,8 @@ def get_user_kpi_pending_task_count_data(
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
         if has_resident2_role and info['can_arbitrate']:
-            arbitration_tracker_exists = (
-                db.query(TaskTracker.id)
-                .filter(
-                    TaskTracker.task_id == GradingTask.id,
-                    TaskTracker.role_slot == 'arbitrator',
-                )
+            arbitration_tracker_exists = _active_workbench_lease_exists(
+                db, GradingTask, "arbitrator"
             )
             # Base query for the current disease
             base_q = db.query(GradingTask).filter(
@@ -264,19 +271,11 @@ def get_user_kpi_pending_task_count_data(
 
             if linked_ids:
                 LinkedTask = aliased(GradingTask)
-                primary_tracker_exists = (
-                    db.query(TaskTracker.id)
-                    .filter(
-                        TaskTracker.task_id == GradingTask.id,
-                        TaskTracker.role_slot == 'arbitrator',
-                    )
+                primary_tracker_exists = _active_workbench_lease_exists(
+                    db, GradingTask, "arbitrator"
                 )
-                linked_tracker_exists = (
-                    db.query(TaskTracker.id)
-                    .filter(
-                        TaskTracker.task_id == LinkedTask.id,
-                        TaskTracker.role_slot == 'arbitrator',
-                    )
+                linked_tracker_exists = _active_workbench_lease_exists(
+                    db, LinkedTask, "arbitrator"
                 )
                 # Outer join to find any linked task that is in arbitration
                 base_q = base_q.outerjoin(
@@ -459,12 +458,14 @@ def get_user_task_tracker_kpi_data(
     *,
     stuck_after_minutes: int = 60,
 ) -> Dict[str, object]:
-    """Summarize task_tracker rows currently owned by a user."""
-    threshold = datetime.now(timezone.utc) - timedelta(minutes=stuck_after_minutes)
-
-    trackers = (
-        db.query(TaskTracker)
-        .filter(TaskTracker.user_id == user_id)
+    """Summarize durable workbench sessions currently held by a user."""
+    now = datetime.now(timezone.utc)
+    sessions = (
+        db.query(GradingWorkbenchSession)
+        .filter(
+            GradingWorkbenchSession.user_id == user_id,
+            GradingWorkbenchSession.status == "active",
+        )
         .all()
     )
 
@@ -482,16 +483,18 @@ def get_user_task_tracker_kpi_data(
     active_count = 0
     stale_count = 0
 
-    for tracker in trackers:
-        role = tracker.role_slot if tracker.role_slot in by_role else tracker.role_slot
+    for session in sessions:
+        role = session.role_slot
         if role in by_role:
             by_role[role] += 1
 
-        started_at = tracker.started_at
-        if started_at and started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=timezone.utc)
-
-        is_stale = bool(started_at and started_at < threshold)
+        idle_expiry = session.idle_expires_at
+        absolute_expiry = session.absolute_expires_at
+        if idle_expiry and idle_expiry.tzinfo is None:
+            idle_expiry = idle_expiry.replace(tzinfo=timezone.utc)
+        if absolute_expiry and absolute_expiry.tzinfo is None:
+            absolute_expiry = absolute_expiry.replace(tzinfo=timezone.utc)
+        is_stale = bool(idle_expiry <= now or absolute_expiry <= now)
         if is_stale:
             stale_count += 1
             if role in stale_by_role:
@@ -499,34 +502,25 @@ def get_user_task_tracker_kpi_data(
         else:
             active_count += 1
 
-    latest_resume_row = (
-        db.query(TaskTracker, GradingTask.uuid, Disease.name)
-        .join(GradingTask, GradingTask.id == TaskTracker.task_id)
-        .join(Disease, Disease.id == GradingTask.disease_id)
-        .filter(TaskTracker.user_id == user_id)
-        .order_by(
-            case((TaskTracker.started_at < threshold, 1), else_=0),
-            TaskTracker.started_at.desc(),
-            TaskTracker.id.desc(),
-        )
-        .first()
-    )
+    latest_session = max(sessions, key=lambda item: item.acquired_at, default=None)
 
     resume_task = None
-    if latest_resume_row:
-        tracker, task_uuid, disease_name = latest_resume_row
-        started_at = tracker.started_at
-        if started_at and started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=timezone.utc)
+    if latest_session:
+        first_target = min(latest_session.targets, key=lambda item: item.target_order, default=None)
+        task = db.get(GradingTask, first_target.task_id) if first_target else None
         resume_task = {
-            "task_uuid": task_uuid,
-            "slot_type": tracker.role_slot,
-            "disease_name": disease_name,
-            "is_stale": bool(started_at and started_at < threshold),
+            "session_uuid": latest_session.uuid,
+            "task_uuid": task.uuid if task else None,
+            "slot_type": latest_session.role_slot,
+            "disease_name": task.disease.name if task and task.disease else "Grading",
+            "is_stale": bool(
+                latest_session.idle_expires_at <= now
+                or latest_session.absolute_expires_at <= now
+            ),
         }
 
     return {
-        "total": len(trackers),
+        "total": len(sessions),
         "active": active_count,
         "stale": stale_count,
         "by_role": by_role,

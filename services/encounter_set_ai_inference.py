@@ -80,6 +80,7 @@ def create_wadhwani_task_ids_for_encounter(
                     encounter_set_image_id=image.id,
                     disease_id=disease_id,
                     lab_unit_id=encounter.lab_unit_id,
+                    source_upload_profile_id=encounter.upload_profile_id,
                     state="pending",
                     grading_target_level="image",
                     task_source="encounter_set_ai_inference",

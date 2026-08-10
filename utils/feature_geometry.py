@@ -189,7 +189,7 @@ def prepare_feature_geometry_for_storage(
         roi = item["roi"]
         polygon = item["polygon"]
         mask = item["mask"]
-        if geometry_type not in {"box", "rect", "ellipse", "polygon", "pyramid", "region"}:
+        if geometry_type not in {"box", "rect", "ellipse", "polygon", "pyramid", "region", "brush_mask"}:
             geometry_type = "box"
 
         roi_pixel = _normalize_points(roi["pixel"])
@@ -250,6 +250,13 @@ def prepare_feature_geometry_for_storage(
                 "finding_site_code": dicom_payload.get("finding_site_code"),
             },
         }
+        if item.get("instance_uuid"):
+            normalized_item["instance_uuid"] = str(item["instance_uuid"])
+        if isinstance(item.get("mask_tiles"), list):
+            # Binary tile payloads are validated and persisted by the grading
+            # workbench annotation service. Preserve them through this legacy
+            # JSON compatibility projection.
+            normalized_item["mask_tiles"] = item["mask_tiles"]
         if class_source == "grading_feature":
             normalized_item["feature_id"] = feature_id
             normalized_item["feature_sr_no"] = feature_meta.get("sr_no")

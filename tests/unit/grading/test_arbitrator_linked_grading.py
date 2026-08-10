@@ -173,7 +173,7 @@ def test_arbitrator_linked_grading_submit(client, db_session, core_test_data, ar
         lab_unit_id=lab_unit.id,
         can_grade_resident=False,
         can_grade_resident2=False,
-        can_grade_arbitrator=True
+        can_arbitrate=True
     )
     db_session.add(dr_role)
 
@@ -218,7 +218,7 @@ def test_arbitrator_linked_grading_submit(client, db_session, core_test_data, ar
         sess['_fresh'] = True
 
     response = client.post(
-        url_for('grading.dual_grading_submit'),
+        '/grading/task/submit',
         data={
             'linked_task_uuids': f"{primary_task.uuid},{linked_task.uuid}",
             'primary_task_uuid': primary_task.uuid,
@@ -276,7 +276,7 @@ def test_arbitrator_linked_final_task_readonly(client, db_session, core_test_dat
         user_id=arbitrator.id,
         disease_id=dr.id,
         lab_unit_id=lab_unit.id,
-        can_grade_arbitrator=True
+        can_arbitrate=True
     )
     db_session.add(dr_role)
 
@@ -317,7 +317,7 @@ def test_arbitrator_linked_final_task_readonly(client, db_session, core_test_dat
     with client.application.test_request_context():
         url = url_for('grading.dual_grading_task', task_uuid=primary_task.uuid, slot_type='arbitrator')
 
-    response = client.get(url)
+    response = client.get(url, follow_redirects=True)
 
     # Should load successfully
     assert response.status_code == 200

@@ -336,6 +336,7 @@ def _create_direct_upload_item(
                 direct_image_upload_id=upload.id,
                 disease_id=disease_id,
                 lab_unit_id=lab_unit_id,
+                source_upload_profile_id=upload_profile.profile_id,
                 state="pending",
             )
             db.add(task)

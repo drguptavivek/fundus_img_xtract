@@ -122,6 +122,11 @@ def make_celery_app() -> Celery:
             "schedule": celery_schedule(max(60, queue_monitor_interval)),
         }
 
+        beat_schedule["grading-workbench-expire-leases"] = {
+            "task": "celery_tasks.tasks.maintenance_tasks.expire_grading_workbench_sessions_task",
+            "schedule": crontab(minute="*/5", hour="*"),
+        }
+
         # Package update scan - daily at 3 AM UTC
         beat_schedule["package-update-scan-daily"] = {
             "task": "celery_tasks.tasks.package_update_tasks.run_package_update_scan_task",

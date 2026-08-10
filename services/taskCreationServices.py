@@ -160,17 +160,26 @@ def create_or_get_task(
                 state='pending',
             )
         elif kind == 'encounter':
+            encounter_file = db.get(EncounterFile, image_id)
+            source_profile_id = (
+                encounter_file.patient_encounter.upload_profile_id
+                if encounter_file and encounter_file.patient_encounter
+                else None
+            )
             task = GradingTask(
                 encounter_file_id=image_id,
                 disease_id=disease_id,
                 lab_unit_id=lab_unit_id,
+                source_upload_profile_id=source_profile_id,
                 state='pending',
             )
         else:  # encounter_set
+            encounter = db.get(PatientEncounters, patient_encounter_id)
             task = GradingTask(
                 patient_encounter_id=patient_encounter_id,
                 disease_id=disease_id,
                 lab_unit_id=lab_unit_id,
+                source_upload_profile_id=encounter.upload_profile_id if encounter else None,
                 state='pending',
             )
         db.add(task)

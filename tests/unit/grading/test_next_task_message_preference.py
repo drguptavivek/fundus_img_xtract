@@ -1,28 +1,18 @@
-import pytest
-
 from models import EncounterFile, GradingTask, UserDiseaseUnitRole
 from tests.helpers.test_factories import TestDataFactory
 import grading.start_grading as start_grading_module
-import grading.dual_grading as dual_grading_module
+from grading.workbench.errors import NoEligibleWork
 
 
-@pytest.mark.integration
 class TestNextTaskMessagePreference:
-    def test_start_grading_prefers_resident_message(
+    def test_start_grading_surfaces_workbench_queue_message(
         self, auth_client, ophthalmologist_hospital_a, core_test_data, monkeypatch
     ):
         resident_message = "Resident queue empty"
-        resident2_message = "Resident2 queue empty"
-
         monkeypatch.setattr(
             start_grading_module,
-            "get_next_eligible_resident2_task_atomic",
-            lambda *args, **kwargs: resident2_message,
-        )
-        monkeypatch.setattr(
-            start_grading_module,
-            "get_next_eligible_resident_task_atomic",
-            lambda *args, **kwargs: resident_message,
+            "acquire_next_workbench",
+            lambda *args, **kwargs: (_ for _ in ()).throw(NoEligibleWork(resident_message)),
         )
 
         client = auth_client(ophthalmologist_hospital_a)
@@ -33,9 +23,8 @@ class TestNextTaskMessagePreference:
 
         assert response.status_code == 200
         assert resident_message in response.get_data(as_text=True)
-        assert resident2_message not in response.get_data(as_text=True)
 
-    def test_save_next_prefers_resident_message(
+    def test_legacy_save_next_delegates_to_workbench_and_returns_to_queue(
         self,
         auth_client,
         ophthalmologist_hospital_a,
@@ -83,21 +72,6 @@ class TestNextTaskMessagePreference:
         db_session.add(user_role)
         db_session.flush()
 
-        resident_message = "Resident queue empty"
-        resident2_message = "Resident2 queue empty"
-
-        monkeypatch.setattr(dual_grading_module, "get_next_intra_rater_task", lambda *args, **kwargs: None)
-        monkeypatch.setattr(
-            dual_grading_module,
-            "get_next_eligible_resident2_task_atomic",
-            lambda *args, **kwargs: resident2_message,
-        )
-        monkeypatch.setattr(
-            dual_grading_module,
-            "get_next_eligible_resident_task_atomic",
-            lambda *args, **kwargs: resident_message,
-        )
-
         client = auth_client(ophthalmologist_hospital_a)
         response = client.post(
             "/grading/task/submit",
@@ -111,8 +85,4 @@ class TestNextTaskMessagePreference:
         )
 
         assert response.status_code in (302, 303)
-        with client.session_transaction() as sess:
-            flashes = sess.get("_flashes", [])
-        messages = [msg for _, msg in flashes]
-        assert resident_message in messages
-        assert resident2_message not in messages
+        assert f"/grading/grade/{task.disease_id}/resident" in response.headers["Location"]

@@ -218,6 +218,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Upload Metadata Field Definitions API](docs/API/upload-metadata/README.md) - Standalone metadata field masters reusable across upload workflows
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
 - [Consolidated Grading Workbench Module Plan](docs/15-DEVELOPMENT/grading_workbench_consolidation_plan.md) - Plan to fold ordinary and EncounterSet package grading into one session, lease, annotation, submission, history, and next-work module
+- [Grading Workbench API](docs/API/grading-workbench/README.md) - Durable acquisition, resumption, normalized workbench DTO, annotation, submission, and rapid next-work contracts
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Frozen package identity, complete-set submissions, 12-hour revision waiting, and disease-scope arbitration

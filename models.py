@@ -1486,6 +1486,9 @@ class GradingTask(Base):
     encounter_set_image_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_images.id', ondelete='CASCADE'), nullable=True, index=True)
     encounter_set_package_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='CASCADE'), nullable=True, index=True)
     encounter_set_scope_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_scopes.id', ondelete='CASCADE'), nullable=True, index=True)
+    source_upload_profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey('upload_profiles.id', ondelete='SET NULL'), nullable=True, index=True
+    )
     grading_target_level: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
     task_source: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
@@ -3084,4 +3087,13 @@ from project_annotations.models import (  # noqa: E402,F401
     ProjectAnnotationPolicy,
     ProjectAnnotationPolicyRevision,
     ProjectAnnotationTool,
+)
+from grading.workbench.models import (  # noqa: E402,F401
+    AnnotationInstance,
+    AnnotationMaskTile,
+    AnnotationSet,
+    GradingSubmissionEvent,
+    GradingSubmissionEventItem,
+    GradingWorkbenchSession,
+    GradingWorkbenchSessionTarget,
 )

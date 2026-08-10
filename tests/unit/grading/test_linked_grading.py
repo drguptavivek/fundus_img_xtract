@@ -108,7 +108,7 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
         with client.application.test_request_context():
             url = url_for('grading.dual_grading_task', task_uuid=task.uuid, slot_type='resident')
         
-        response = client.get(url)
+        response = client.get(url, follow_redirects=True)
     
     # 4. Assert Success (New Behavior)
     # Expectation: Page loads (200 OK) despite ineligibility for linked task.

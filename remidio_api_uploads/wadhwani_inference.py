@@ -415,6 +415,7 @@ def _create_or_reuse_image_tasks(db, *, project_id: int, image_ids: list[int], d
                 encounter_set_image_id=image.id,
                 disease_id=disease_id,
                 lab_unit_id=encounter.lab_unit_id,
+                source_upload_profile_id=encounter.upload_profile_id,
                 grading_target_level="image",
                 task_source="encounter_set_ai_inference",
             )

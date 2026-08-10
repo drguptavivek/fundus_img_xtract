@@ -1,15 +1,15 @@
 from flask import redirect, url_for, flash
 from flask_login import current_user
 from auth.roles import roles_required
-from models import Session, Disease
-from utils.dualGradingGetNextTasks import (
-    get_next_eligible_resident_task_atomic,
-    get_next_eligible_resident2_task_atomic,
-    get_next_eligible_arbitrator_task_atomic,
-    get_next_linked_followup_task_atomic,
-)
-from utils.linkedGradingUtils import get_primary_disease_id
+from models import Disease
 from db_transaction_manager import transaction_scope
+from grading.workbench.errors import ActiveSessionExists, WorkbenchError
+from grading.workbench.service import (
+    acquire_linked_followup_workbench,
+    acquire_next_workbench,
+    resume_workbench,
+)
+from grading.workbench_page import remember_session_token
   
 
 def register_routes(bp):
@@ -49,96 +49,39 @@ def start_grading(disease_id: int, role_slot: str):
         flash("You don't have permission to grade as arbitrator.", "danger")
         return redirect(url_for("grading.index"))
     
-    # Get the disease
-    db = Session()
-    try:
-        disease = db.query(Disease).filter(Disease.id == disease_id).first()
+    # Acquisition, linked/package expansion, configuration resolution, and the
+    # durable target lease are owned by the workbench service.
+    with transaction_scope() as db:
+        disease = db.get(Disease, disease_id)
         if not disease:
             flash("Disease not found.", "danger")
             return redirect(url_for("grading.index"))
-    finally:
-        db.close()
-    
-    # Get the next eligible task based on role slot using a single transaction scope
-    # This prevents DetachedInstanceError by keeping the session open until we access UUID
-    with transaction_scope() as db:
-        if role_slot in ("resident", "resident2"):
-            primary_disease_id = get_primary_disease_id(db, disease_id)
-            if primary_disease_id != disease_id:
-                flash("Linked disease grading must be completed via the primary disease queue.", "info")
-                return redirect(url_for("grading.start_grading", disease_id=primary_disease_id, role_slot=role_slot))
-
-        task = None
-        effective_slot = role_slot
-        can_grade_resident2 = current_user.has_role("resident", "ophthalmologist")
-
-        if role_slot == 'resident':
-            resident_message = None
-            resident2_message = None
-
-            if can_grade_resident2:
-                resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=db)
-                if resident2_candidate is not None and not isinstance(resident2_candidate, str):
-                    task = resident2_candidate
-                    effective_slot = 'resident2'
-                else:
-                    resident2_message = resident2_candidate
-
-            if task is None:
-                resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id, db=db)
-                if resident_candidate is not None and not isinstance(resident_candidate, str):
-                    task = resident_candidate
-                else:
-                    resident_message = resident_candidate
-
-            # Prefer resident2 informational messages if both are messages
-            if task is None:
-                task = resident_message if resident_message not in (None, "") else resident2_message
-
-        elif role_slot == 'resident2':
-            resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=db)
-            if resident2_candidate is not None and not isinstance(resident2_candidate, str):
-                task = resident2_candidate
-            else:
-                resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id, db=db)
-                if resident_candidate is not None and not isinstance(resident_candidate, str):
-                    task = resident_candidate
-                    effective_slot = 'resident'
-                else:
-                    if resident2_candidate not in (None, ""):
-                        task = resident_candidate if resident_candidate not in (None, "") else resident2_candidate
-                    else:
-                        task = resident_candidate
-
-        elif role_slot == 'arbitrator':
-            task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id, db=db)
-
-        # Handle the result within the same transaction
-        if task is None:
-            flash(f"No tasks available for {disease.name} as {effective_slot}.", "info")
-            return redirect(url_for("grading.index"))
-        elif isinstance(task, str):
-            # It's a helpful message
-            flash(task, "info")
-            return redirect(url_for("grading.index"))
-        else:
-            # It's a GradingTask object - access UUID while session is still open
-            task_uuid = task.uuid  # Direct access is safe within the transaction
-            if not task_uuid:
-                flash("Task UUID is missing. Please try again.", "danger")
+        try:
+            workbench, token = acquire_next_workbench(
+                db,
+                user_id=current_user.id,
+                disease_id=disease_id,
+                role_slot=role_slot,
+            )
+        except ActiveSessionExists as exc:
+            active_uuid = str(exc.details.get("session_uuid") or "")
+            if not active_uuid:
+                flash(str(exc), "warning")
                 return redirect(url_for("grading.index"))
-
-            if task.encounter_set_package_id and task.encounter_set_package:
-                return redirect(
-                    url_for(
-                        "grading.encounter_set_package_grading",
-                        package_uuid=task.encounter_set_package.uuid,
-                        slot_type=effective_slot,
-                    )
-                )
-
-            # Call dual_grading_task directly with slot_type as a parameter
-            return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=effective_slot))
+            workbench, token = resume_workbench(
+                db, session_uuid=active_uuid, user_id=current_user.id
+            )
+        except WorkbenchError as exc:
+            flash(str(exc), "info")
+            return redirect(url_for("grading.index"))
+        remember_session_token(
+            workbench.lease.session_uuid,
+            token,
+            workbench.lease.token_generation,
+        )
+        return redirect(
+            url_for("grading.workbench_page", session_uuid=workbench.lease.session_uuid)
+        )
 
 
 @roles_required("resident", "ophthalmologist")
@@ -150,23 +93,29 @@ def linked_followup(primary_disease_id: int, linked_disease_id: int):
             flash("Disease not found.", "danger")
             return redirect(url_for("grading.index"))
 
-        task, slot = get_next_linked_followup_task_atomic(
-            current_user.id,
-            primary_disease_id,
-            linked_disease_id,
-            db=db,
-        )
-
-        if task is None:
-            flash("No linked follow-up tasks available.", "info")
-            return redirect(url_for("grading.index"))
-
-        return redirect(
-            url_for(
-                "grading.dual_grading_task",
-                task_uuid=task.uuid,
-                slot_type=slot,
-                linked_followup="true",
+        try:
+            workbench, token = acquire_linked_followup_workbench(
+                db,
+                user_id=current_user.id,
+                primary_disease_id=primary_disease_id,
                 linked_disease_id=linked_disease_id,
             )
+        except ActiveSessionExists as exc:
+            active_uuid = str(exc.details.get("session_uuid") or "")
+            if not active_uuid:
+                flash(str(exc), "warning")
+                return redirect(url_for("grading.index"))
+            workbench, token = resume_workbench(
+                db, session_uuid=active_uuid, user_id=current_user.id
+            )
+        except WorkbenchError as exc:
+            flash(str(exc), "info")
+            return redirect(url_for("grading.index"))
+        remember_session_token(
+            workbench.lease.session_uuid,
+            token,
+            workbench.lease.token_generation,
         )
+        return redirect(url_for(
+            "grading.workbench_page", session_uuid=workbench.lease.session_uuid
+        ))

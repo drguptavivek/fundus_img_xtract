@@ -7,7 +7,7 @@ from collections import defaultdict
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
-from encounter_sets.grading_records import reconcile_active_packages
+from grading.workbench.package_workflow import reconcile_active_packages
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectGradingTargetDTO,

@@ -310,7 +310,7 @@
         {% if task_tracker_kpi.resume_task %}
         <div class="mt-3">
           <a
-            href="{{ url_for('grading.dual_grading_task', task_uuid=task_tracker_kpi.resume_task.task_uuid, slot_type=task_tracker_kpi.resume_task.slot_type) }}"
+            href="{{ url_for('grading.workbench_page', session_uuid=task_tracker_kpi.resume_task.session_uuid) }}"
             class="btn btn-warning btn-sm"
           >
             Resume {{ task_tracker_kpi.resume_task.disease_name }} ({{ task_tracker_kpi.resume_task.slot_type|capitalize }})
@@ -323,7 +323,7 @@
         </div>
         {% endif %}
         <div class="small text-muted mt-2">
-          Tasks older than {{ task_tracker_kpi.stuck_after_minutes }} minutes are treated as stuck and are cleared automatically by cleanup.
+          Workbenches release automatically after their idle or absolute lease expiry.
         </div>
         {% endif %}
       </div>

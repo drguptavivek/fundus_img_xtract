@@ -1753,6 +1753,8 @@ def _get_or_create_package_task(
         unscoped.encounter_set_scope_id = scope.id
         unscoped.grading_target_level = target_level
         unscoped.task_source = source
+        if unscoped.source_upload_profile_id is None:
+            unscoped.source_upload_profile_id = encounter.upload_profile_id
         return False
 
     task = GradingTask(
@@ -1760,6 +1762,7 @@ def _get_or_create_package_task(
         encounter_set_scope_id=scope.id,
         disease_id=disease_id,
         lab_unit_id=encounter.lab_unit_id,
+        source_upload_profile_id=encounter.upload_profile_id,
         state="pending",
         grading_target_level=target_level,
         task_source=source,

@@ -18,6 +18,7 @@ from utils.thumbnail_maintenance_scheduler import (
     run_maintenance_tasks,
 )
 from utils.dualGradingStuckTaskCleanup import reset_stuck_tasks
+from grading.workbench.service import expire_stale_sessions
 # Lazy import to avoid loading S3/nacl in beat container
 # from utils.s3_url_signing import auto_rotate_peppers
 
@@ -177,3 +178,19 @@ def reset_stuck_task_trackers_task(
         sanitize_log_value(reset_count),
     )
     return {"reset_count": reset_count, "stale_minutes": stale_minutes}
+
+
+@celery_app.task(name="celery_tasks.tasks.maintenance_tasks.expire_grading_workbench_sessions_task", bind=True, acks_late=True)
+def expire_grading_workbench_sessions_task(
+    self,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> dict:
+    _ = self, user_id, hospital_id
+    with transaction_scope() as db:
+        expired_count = expire_stale_sessions(db)
+    _LOGGER.info(
+        "Expired grading workbench sessions: count=%s",
+        sanitize_log_value(expired_count),
+    )
+    return {"expired_count": expired_count}

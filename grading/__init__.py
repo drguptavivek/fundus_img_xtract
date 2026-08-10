@@ -34,36 +34,37 @@ from flask import Blueprint
 
 bp = Blueprint("grading", __name__, url_prefix="/grading")
 
-# Import all route handlers
-from .dashboard import index
-from .dual_grading import register_routes as register_dual_grading_routes
-from .start_grading import register_routes as register_start_grading_routes
-from .intra_rater import register_routes as register_intra_rater_routes
-from .inter_rater_compare import register_routes as register_inter_rater_routes
-from .grader_statistics import register_routes as register_grader_statistics_routes
-from .encounter_set_grading import register_routes as register_encounter_set_routes
-from .encounter_set_package_grading import register_routes as register_encounter_set_package_routes
-from .regrade_tasks import register_routes as register_regrade_task_routes
-from .wadhwani_glaucoma_inference import register_routes as register_wadhwani_glaucoma_inference_routes
+_routes_configured = False
 
-# Register routes with the blueprint
-bp.add_url_rule("/", view_func=index, methods=["GET"])
 
-# Register dual grading routes
-register_dual_grading_routes(bp)
+def configure_blueprint() -> Blueprint:
+    """Register routes lazily so ORM model discovery cannot import Flask routes."""
+    global _routes_configured
+    if _routes_configured:
+        return bp
 
-# Register start grading routes
-register_start_grading_routes(bp)
+    from .dashboard import index
+    from .dual_grading import register_routes as register_dual_grading_routes
+    from .start_grading import register_routes as register_start_grading_routes
+    from .intra_rater import register_routes as register_intra_rater_routes
+    from .inter_rater_compare import register_routes as register_inter_rater_routes
+    from .grader_statistics import register_routes as register_grader_statistics_routes
+    from .encounter_set_grading import register_routes as register_encounter_set_routes
+    from .encounter_set_package_grading import register_routes as register_encounter_set_package_routes
+    from .regrade_tasks import register_routes as register_regrade_task_routes
+    from .wadhwani_glaucoma_inference import register_routes as register_wadhwani_glaucoma_inference_routes
+    from .workbench_page import register_routes as register_workbench_page_routes
 
-# Register intra-rater routes
-register_intra_rater_routes(bp)
-
-# Register inter-rater comparison routes
-register_inter_rater_routes(bp)
-register_grader_statistics_routes(bp)
-
-# Register encounter-set grading routes
-register_encounter_set_routes(bp)
-register_encounter_set_package_routes(bp)
-register_regrade_task_routes(bp)
-register_wadhwani_glaucoma_inference_routes(bp)
+    bp.add_url_rule("/", view_func=index, methods=["GET"])
+    register_dual_grading_routes(bp)
+    register_start_grading_routes(bp)
+    register_intra_rater_routes(bp)
+    register_inter_rater_routes(bp)
+    register_grader_statistics_routes(bp)
+    register_encounter_set_routes(bp)
+    register_encounter_set_package_routes(bp)
+    register_regrade_task_routes(bp)
+    register_wadhwani_glaucoma_inference_routes(bp)
+    register_workbench_page_routes(bp)
+    _routes_configured = True
+    return bp

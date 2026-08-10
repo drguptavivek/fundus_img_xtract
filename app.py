@@ -523,7 +523,7 @@ def _register_blueprints(app: Flask) -> None:
     from media import bp as media_bp
     from account import account_bp
     from audit import bp as audit_bp
-    from grading import bp as grading_bp
+    from grading import configure_blueprint
     from direct_uploads import bp as direct_uploads_bp
     from remidio_api_uploads import bp as remidio_api_uploads_bp
     from remedio_zip_uploads import bp as remedio_zip_uploads_bp
@@ -557,7 +557,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(media_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(audit_bp)
-    app.register_blueprint(grading_bp)
+    app.register_blueprint(configure_blueprint())
     app.register_blueprint(direct_uploads_bp)
     app.register_blueprint(remidio_api_uploads_bp)
     app.register_blueprint(remedio_zip_uploads_bp)

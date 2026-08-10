@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+
+{% block title %}Grading Workbench{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="grading-workbench"
+     data-session-uuid="{{ workbench.lease.session_uuid }}"
+     data-token-generation="{{ workbench.lease.token_generation }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Grading Workbench</h1>
+      <div class="small text-muted">
+        {{ workbench.workflow_config.package_name or workbench.lease.workflow|capitalize }}
+        &middot; {{ workbench.lease.role_slot|capitalize }}
+        &middot; {{ workbench.panels|length }} target(s)
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <span class="badge text-bg-light border align-self-center" data-lease-status></span>
+      <button class="btn btn-sm btn-outline-danger" type="button" data-release-workbench>Release</button>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="alert alert-danger d-none" role="alert" data-workbench-error></div>
+  <form data-workbench-form>
+    {{ csrf_field() }}
+    <div id="workbench-panels"
+         class="carousel slide{% if workbench.lease.workflow == 'linked' %} linked-grading-carousel{% endif %}"
+         data-linked-mode="{{ 'true' if workbench.lease.workflow == 'linked' else 'false' }}"
+         data-bs-interval="false">
+      <div class="carousel-inner">
+        {% for panel in workbench.panels %}
+        <section class="carousel-item {% if loop.first %}active{% endif %} linked-grading-panel"
+                 data-task-uuid="{{ panel.task_uuid }}"
+                 data-target-level="{{ panel.target_level }}"
+                 data-read-only="{{ 'false' if panel.editable else 'true' }}">
+          <input type="hidden" name="{{ panel.fields.geometry }}"
+                 data-feature-geometry-field="{{ panel.task_uuid }}">
+          <input type="hidden" name="{{ panel.fields.annotation_policy_revision }}"
+                 value="{{ panel.annotation.policy_revision }}">
+          <div class="row g-3">
+            <div class="col-12 col-xl-8">
+              <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div>
+                    <span class="small text-muted text-uppercase">{{ panel.target_level }} target</span>
+                    <h2 class="h6 mb-0">{{ panel.disease_name }}</h2>
+                  </div>
+                  <span class="badge text-bg-light border">{{ panel.task_state }}</span>
+                </div>
+                <div class="card-body p-2" style="min-height: 32rem;">
+                  {% if panel.media %}
+                  <div class="imggr-viewer-root h-100" data-enc-id="{{ panel.media.image_uuid }}" data-imggr-lite-mode="false">
+                    <div class="imggr-stage position-relative h-100">
+                      <div class="imggr-annot-layout d-flex h-100 gap-2">
+                        <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host>
+                          <div class="small text-muted" data-annotation-placeholder>Select a grading feature to annotate.</div>
+                        </aside>
+                        <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
+                          <div class="imggr-main rounded position-relative bg-black" data-fixed-viewport="true">
+                            <img class="imggr-main-img" src="{{ panel.media.media_url }}"
+                                 alt="{{ panel.disease_name }} image" data-index="0">
+                            <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="imggr-loupe" aria-hidden="true"></div>
+                    </div>
+                  </div>
+                  {% else %}
+                  <div class="h-100 d-flex flex-column justify-content-center align-items-center text-center p-4">
+                    <i class="fa-solid fa-notes-medical fa-2x text-muted mb-3" aria-hidden="true"></i>
+                    <p class="mb-1">Encounter-level grading target</p>
+                    <p class="small text-muted mb-0">This target intentionally has no primary image.</p>
+                    {% if panel.evidence %}
+                    <div class="row g-2 mt-3 w-100" aria-label="Related encounter image evidence">
+                      {% for evidence in panel.evidence %}
+                      <div class="col-6 col-md-4">
+                        <img class="img-fluid rounded border"
+                             src="{{ evidence.thumbnail_url or evidence.media_url }}"
+                             alt="Related {{ evidence.source_type }} evidence{% if evidence.laterality %}, {{ evidence.laterality }}{% endif %}">
+                      </div>
+                      {% endfor %}
+                    </div>
+                    {% endif %}
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-4">
+              <div class="card h-100">
+                <div class="card-header"><strong>{{ panel.disease_name }}</strong></div>
+                <div class="card-body">
+                  <label class="form-label" for="grade-{{ panel.task_uuid }}">Grade</label>
+                  <select class="form-select" id="grade-{{ panel.task_uuid }}"
+                          name="{{ panel.fields.label }}" data-grade-select required
+                          {% if not panel.editable %}disabled{% endif %}>
+                    <option value="">Select grade</option>
+                    {% for grade in panel.grades %}
+                    <option value="{{ grade.id }}"
+                            {% if panel.existing_grade and panel.existing_grade.disease_grading_id == grade.id %}selected{% endif %}>
+                      {{ grade.impression }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text mb-3" data-grade-guidelines></div>
+                  <fieldset class="mb-3 d-none" data-feature-fieldset>
+                    <legend class="h6">Relevant features</legend>
+                    <div class="vstack gap-2" data-feature-options></div>
+                  </fieldset>
+                  <label class="form-label" for="comment-{{ panel.task_uuid }}">Comment</label>
+                  <textarea class="form-control" id="comment-{{ panel.task_uuid }}"
+                            name="{{ panel.fields.comment }}" rows="4"
+                            {% if not panel.editable %}disabled{% endif %}>{{ panel.existing_grade.comment if panel.existing_grade else '' }}</textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+      <div class="btn-group" role="group" aria-label="Target navigation">
+        <button class="btn btn-outline-secondary" type="button" data-bs-target="#workbench-panels" data-bs-slide="prev">Previous</button>
+        <button class="btn btn-outline-secondary" type="button" data-bs-target="#workbench-panels" data-bs-slide="next">Next target</button>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit" name="action" value="save_close">Save &amp; Close</button>
+        <button class="btn btn-success" type="submit" name="action" value="save_next">Save &amp; Next</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+window.linkedGradingData = {
+  {% for panel in workbench.panels %}
+  {{ panel.task_uuid|tojson }}: {
+    taskUuid: {{ panel.task_uuid|tojson }},
+    features: {{ panel.grades|tojson }},
+    existingSelectedFeatures: {{ (panel.existing_grade.selected_feature_ids if panel.existing_grade else [])|tojson }},
+    existingFeatureGeometry: {{ panel.annotation.legacy_geometry|tojson }},
+    readOnly: {{ (not panel.editable)|tojson }},
+    annotationContext: {{ panel.annotation|tojson }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
+window.currentUserId = {{ current_user.id|tojson }};
+window.currentSlot = {{ workbench.lease.role_slot|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=config.get('ASSETS_VERSION','')) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=config.get('ASSETS_VERSION','')) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=config.get('ASSETS_VERSION','')) }}"></script>
+<script>
+(function () {
+  const root = document.getElementById('grading-workbench');
+  const token = {{ session_token|tojson }};
+  const fingerprint = {{ workbench.configuration_fingerprint|tojson }};
+  const sessionUuid = root.dataset.sessionUuid;
+  const generation = root.dataset.tokenGeneration;
+  const errorBox = root.querySelector('[data-workbench-error]');
+  const panels = Array.from(root.querySelectorAll('[data-task-uuid]'));
+  const editablePanels = panels.filter(panel => panel.dataset.readOnly !== 'true');
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrf,
+    'X-Workbench-Token': token,
+    'X-Workbench-Generation': generation
+  };
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.classList.remove('d-none');
+  }
+
+  function renderFeatures(panel) {
+    const select = panel.querySelector('[data-grade-select]');
+    const fieldset = panel.querySelector('[data-feature-fieldset]');
+    const host = panel.querySelector('[data-feature-options]');
+    const guidelines = panel.querySelector('[data-grade-guidelines]');
+    const data = window.linkedGradingData[panel.dataset.taskUuid];
+    const grade = data.features.find(item => String(item.id) === String(select.value));
+    host.innerHTML = '';
+    guidelines.textContent = grade?.guidelines || '';
+    const selected = new Set((data.existingSelectedFeatures || []).map(Number));
+    (grade?.features || []).forEach(feature => {
+      const id = `feature-${panel.dataset.taskUuid}-${feature.id}`;
+      const row = document.createElement('div');
+      row.className = 'form-check';
+      row.innerHTML = `<input class="form-check-input" type="checkbox" name="selected_features_${panel.dataset.taskUuid}" id="${id}" value="${feature.id}">
+        <label class="form-check-label" for="${id}"></label>`;
+      row.querySelector('input').checked = selected.has(Number(feature.id));
+      row.querySelector('input').disabled = data.readOnly;
+      row.querySelector('label').textContent = feature.label;
+      host.appendChild(row);
+    });
+    fieldset.classList.toggle('d-none', !(grade?.features || []).length);
+    document.dispatchEvent(new CustomEvent('fgw:features-changed'));
+  }
+
+  panels.forEach(panel => {
+    panel.querySelector('[data-grade-select]').addEventListener('change', () => renderFeatures(panel));
+    renderFeatures(panel);
+  });
+
+  async function api(path, options) {
+    const response = await fetch(path, {...options, headers});
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error?.message || 'Workbench request failed.');
+    return payload;
+  }
+
+  root.querySelector('[data-workbench-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    errorBox.classList.add('d-none');
+    const action = event.submitter?.value || 'save_close';
+    const observations = {};
+    try {
+      editablePanels.forEach(panel => {
+        const taskUuid = panel.dataset.taskUuid;
+        const geometryRaw = panel.querySelector('[data-feature-geometry-field]').value;
+        observations[taskUuid] = {
+          disease_grading_id: Number(panel.querySelector('[data-grade-select]').value),
+          comment: panel.querySelector('textarea').value,
+          selected_feature_ids: Array.from(panel.querySelectorAll('input[name^="selected_features_"]:checked')).map(item => Number(item.value)),
+          annotation_policy_revision: Number(panel.querySelector('input[name^="annotation_policy_revision_"]').value),
+          feature_geometry: geometryRaw ? JSON.parse(geometryRaw) : null
+        };
+      });
+      const body = {
+        action,
+        idempotency_key: crypto.randomUUID(),
+        configuration_fingerprint: fingerprint,
+        package_revision: {{ workbench.workflow_config.get('package_revision')|tojson }},
+        observations
+      };
+      const result = await api(`/api/grading/workbench/sessions/${sessionUuid}/submit`, {
+        method: 'POST', body: JSON.stringify(body)
+      });
+      if (action === 'save_next' && result.next_workbench?.workbench) {
+        const first = result.next_workbench.workbench.panels[0];
+        window.location.assign(`/grading/grade/${first.disease_id}/${result.next_workbench.workbench.lease.role_slot}`);
+      } else {
+        window.location.assign({{ url_for('grading.index')|tojson }});
+      }
+    } catch (error) {
+      showError(error.message);
+    }
+  });
+
+  root.querySelector('[data-release-workbench]').addEventListener('click', async () => {
+    try {
+      await api(`/api/grading/workbench/sessions/${sessionUuid}/release`, {method: 'POST', body: '{}'});
+      window.location.assign({{ url_for('grading.index')|tojson }});
+    } catch (error) { showError(error.message); }
+  });
+
+  const status = root.querySelector('[data-lease-status]');
+  const absoluteExpiry = new Date({{ workbench.lease.absolute_expires_at|tojson }});
+  function updateStatus() {
+    const minutes = Math.max(0, Math.ceil((absoluteExpiry - new Date()) / 60000));
+    status.textContent = `${minutes} min maximum remaining`;
+  }
+  updateStatus();
+  setInterval(updateStatus, 30000);
+  setInterval(() => api(`/api/grading/workbench/sessions/${sessionUuid}/heartbeat`, {method: 'POST', body: '{}'}).catch(error => showError(error.message)), {{ workbench.lease.heartbeat_interval_seconds }} * 1000);
+})();
+</script>
+{% endblock %}

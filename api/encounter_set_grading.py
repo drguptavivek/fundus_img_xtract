@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from encounter_sets.grading_policy import effective_project_policy_dto
-from encounter_sets.grading_records import package_record_dto, reconcile_package_state
+from grading.workbench.package_workflow import package_record_dto, reconcile_package_state
 from grading_allocation import service as grading_allocation_service
 from grading_allocation.exceptions import GradingAllocationError
 from models import (

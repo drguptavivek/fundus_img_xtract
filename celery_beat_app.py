@@ -99,6 +99,11 @@ def make_celery_beat_app() -> Celery:
             },
         }
 
+        beat_schedule["grading-workbench-expire-leases"] = {
+            "task": "celery_tasks.tasks.maintenance_tasks.expire_grading_workbench_sessions_task",
+            "schedule": crontab(minute="*/5", hour="*"),
+        }
+
         if not _env_bool("CELERY_BEAT_USE_DB_SCHEDULES", "true"):
             mv_times = _parse_times(os.getenv("MATERIALIZED_VIEW_SCHEDULE_TIMES", ""))
             for idx, schedule in enumerate(_times_to_crontab(mv_times)):

@@ -4,15 +4,30 @@
 
 This document is the implementation plan for replacing the separate ordinary-grading and EncounterSet package-grading runtime services with one deep `grading/workbench/` module.
 
-The module will be the sole owner of interactive human grading. It will serve standalone tasks, dynamically linked disease tasks, EncounterSet packages, encounter-level targets, revisions, intra-rater grading, regrading, and discrepancy review through one normalized workbench contract. It will also own task acquisition, durable leases, resumable grading sessions, annotation validation, state transitions, consensus updates, immutable submission history, and rapid acquisition of the next work item.
+The module is the sole runtime owner of ordinary, linked, revision, and
+EncounterSet package grading. It serves standalone tasks, dynamically linked
+disease tasks, EncounterSet packages, and encounter-level targets through one
+normalized workbench contract. It also owns task acquisition, durable leases,
+resumable grading sessions, annotation validation, state transitions,
+consensus updates, immutable submission history, and rapid acquisition of the
+next work item.
+
+Intra-rater, regrade, and discrepancy-review workflows are separate staged
+consumers. They must adopt the common observation/session/audit contracts when
+they are migrated, but they are not silently redefined by this ordinary/package
+refactor. Discrepancy review has a separate decision-complete module plan.
 
 This is a consolidation, not an adapter layered over duplicate implementations. Existing business logic will be moved into the module, all callers will be migrated, and the superseded ordinary/package implementations will be deleted before the refactor is considered complete.
 
 ## Decisions
 
-- `grading/workbench/` becomes the only runtime entry point for human `Grade` mutations.
+- `grading/workbench/` becomes the only runtime entry point for ordinary,
+  linked, revision, and package `Grade` mutations.
 - EncounterSet ingestion, package definition, package construction, and repair remain outside the module. Runtime grading of a constructed package moves into it.
 - One workbench DTO and one shared UI support one or many panels.
+- The refactor reuses the existing Flask, Jinja, Bootstrap, and JavaScript
+  workbench. React, TypeScript, PixiJS, WebGL, GPU rendering, and a replacement
+  frontend architecture are explicitly out of scope.
 - Every form field is task-qualified, including single-panel grading.
 - Linked grading is a dynamic task group, not a synthetic EncounterSet package.
 - EncounterSet packages remain frozen workflow and atomic-submission boundaries.
@@ -123,7 +138,7 @@ Fields are always named with the task UUID:
 
 ```text
 label_id_<task_uuid>
-comments_<task_uuid>
+comment_<task_uuid>
 selected_features_<task_uuid>
 feature_geometry_json_<task_uuid>
 annotation_policy_revision_<task_uuid>
@@ -178,7 +193,13 @@ The fingerprint includes semantic configuration and target membership, not volat
 
 ## Annotation handling
 
-Annotations remain observations on a task's `Grade`; they are not stored as mutable package annotations. Package and unified audit events snapshot the resulting grade and annotation identities.
+Annotations remain observations owned by a task's `Grade`; they are not stored
+as mutable package annotations. A normalized `AnnotationSet` with independent
+box, polygon/segmentation, and brush-mask instances is authoritative for new
+submissions. `Grade.feature_geometry_json` remains a compatibility projection
+for the existing Jinja/JavaScript editor, exports, and staged rollout. Package
+and unified audit events snapshot the resulting grade and annotation-set
+identities.
 
 Each panel receives:
 
@@ -204,6 +225,12 @@ Each panel receives:
 7. Enforce enabled tools, geometry types, localization, coordinate bounds, and multiplicity.
 8. Normalize ordering, identifiers, coordinates, and empty values.
 9. Return a typed `GradeObservationDTO`; it does not write ORM rows.
+
+The same submission transaction persists each normalized annotation instance.
+Brush-mask segmentation may use sparse PNG tiles; the server validates PNG
+dimensions, tile coordinates, duplicate positions, aggregate size, and
+SHA-256 checksums. This is a backend persistence contract and does not imply a
+new GPU or canvas implementation.
 
 Clearing annotation geometry is an explicit observation and must pass the same policy/revision checks as adding geometry. Unknown or stale policy revisions fail the entire submission. For package submissions, one invalid panel prevents all package writes.
 
@@ -297,9 +324,12 @@ Package submission continues to:
 
 Package construction, frozen-scope creation, policy planning, ingestion reconciliation, and repair utilities stay under EncounterSet ownership and call the workbench only when they need runtime grading/history behavior.
 
-### Revision, intra-rater, regrade, and review
+### Revision and later workflow consumers
 
-Each workflow supplies its target-group resolver, eligibility supplement, state transition, and completion/navigation policy through the same orchestrator. They do not parse annotations, mutate grades, acquire tasks, or write audit history independently.
+Revision grading is implemented by the workbench. Later intra-rater, regrade,
+and review migrations will supply their target-group resolver, eligibility
+supplement, state transition, and completion/navigation policy through the
+same orchestrator.
 
 The discrepancy-review module may retain review-specific read models and specialized history, but any human grade/consensus mutation uses the workbench transaction and links its specialized record to the unified event.
 
@@ -497,9 +527,9 @@ No internal re-export shim remains merely to avoid updating callers. A shim is a
 - Preserve specialized immutable package submissions and frozen snapshots.
 - Delete superseded package runtime service functions.
 
-### Phase 6: Remaining human workflows and unified audit
+### Phase 6: Follow-up human workflows and unified audit
 
-- Route revision, intra-rater, regrade, and discrepancy-review grade mutations through the orchestrator.
+- Route intra-rater, regrade, and discrepancy-review grade mutations through the orchestrator.
 - Link specialized review/package records to unified events.
 - Backfill available history and update history APIs.
 - Add admin audit inspection with existing scope rules.
@@ -632,7 +662,8 @@ Feature flags may select the old or new transport during early rollout, but both
 
 ## Definition of done
 
-- All interactive human grading workflows call the narrow workbench façade.
+- Ordinary, linked, revision, and EncounterSet package grading call the narrow
+  workbench façade; later workflows have explicit follow-up plans.
 - Ordinary and EncounterSet package runtime rules exist only inside `grading/workbench/`.
 - One shared DTO/UI handles image, linked, package, and encounter-only panels.
 - All four legacy/modern source types work without fake EncounterSets or fake images.
@@ -642,5 +673,7 @@ Feature flags may select the old or new transport during early rollout, but both
 - Annotation validation is common, policy-revision-safe, and atomic for packages.
 - Every accepted human submission/revision has immutable unified audit history; rejected requests retain metadata only.
 - Existing specialized history remains linked and accessible.
-- Old business services, direct mutation paths, duplicated validators, and `TaskTracker` callers are removed.
+- Old ordinary/package business services and duplicated validators are removed.
+  `TaskTracker` is no longer used for those queues and remains only for
+  separately staged legacy workflows until their migration.
 - Migrations, API documentation, operational documentation, and the full test matrix pass.

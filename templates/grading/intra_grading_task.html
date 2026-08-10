@@ -142,7 +142,7 @@
     window.existingSelectedFeatures = null;
     window.existingFeatureGeometry = null;
 </script>
-{% set annotation_assets_version = config.get('ASSETS_VERSION', '') ~ '-annotation-policy-v1' %}
+{% set annotation_assets_version = config.get('ASSETS_VERSION', '') ~ '-annotation-policy-v2' %}
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>

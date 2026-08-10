@@ -4098,6 +4098,11 @@
 
   function activateContextViewer(ctx) {
     if (!ctx || !ctx.viewerRoot || !ctx.main || !ctx.mainImg || !ctx.canvas) return false;
+    state.contexts.forEach((candidate) => {
+      if (candidate.canvas) {
+        candidate.canvas.style.display = candidate === ctx ? "block" : "none";
+      }
+    });
     state.viewerRoot = ctx.viewerRoot;
     state.main = ctx.main;
     state.mainImg = ctx.mainImg;
@@ -4115,9 +4120,11 @@
 
   function createCanvasOverlayForContext(ctx) {
     const panel = ctx.sectionEl?.closest(".linked-grading-panel");
-    const viewerRoot = panel
-      ? panel.querySelector(".imggr-viewer-root")
-      : document.querySelector(".imggr-viewer-root");
+    // The standard linked grader has one image viewer shared by all disease
+    // panels, while the EncounterSet workbench nests a viewer in each panel.
+    // Support both layouts instead of aborting linked-editor initialization.
+    const viewerRoot = panel?.querySelector(".imggr-viewer-root")
+      || document.querySelector(".imggr-viewer-root");
     const main = viewerRoot?.querySelector(".imggr-main");
     const img = main?.querySelector(".imggr-main-img");
     if (!viewerRoot || !main || !img) return false;
@@ -4125,6 +4132,7 @@
     const canvas = document.createElement("canvas");
     canvas.className = "fgx-overlay-canvas";
     canvas.setAttribute("aria-hidden", "true");
+    canvas.style.display = "none";
     main.appendChild(canvas);
     ctx.viewerRoot = viewerRoot;
     ctx.main = main;

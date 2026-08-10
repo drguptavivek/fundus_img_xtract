@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[3] / "templates" / "grading"
+STATIC_JS_DIR = Path(__file__).resolve().parents[3] / "static" / "js"
 
 
 def test_html_grader_annotation_assets_are_cache_busted() -> None:
@@ -39,3 +40,11 @@ def test_html_grader_annotation_assets_are_cache_busted() -> None:
             assert "v=" in asset_call.split("}}", maxsplit=1)[0], (
                 f"{asset_name} is not versioned in {template_name}"
             )
+
+
+def test_linked_grader_editor_falls_back_to_shared_viewer() -> None:
+    editor = (STATIC_JS_DIR / "feature-geometry-editor.js").read_text()
+
+    assert 'panel?.querySelector(".imggr-viewer-root")' in editor
+    assert '|| document.querySelector(".imggr-viewer-root")' in editor
+    assert 'candidate.canvas.style.display = candidate === ctx ? "block" : "none"' in editor

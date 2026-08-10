@@ -1,5 +1,14 @@
 from datetime import date
-from flask import render_template, request, redirect, url_for, flash, current_app, session
+from flask import (
+    after_this_request,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from flask_login import current_user
@@ -42,6 +51,7 @@ from utils.timezone_choices import (
     DEFAULT_TIMEZONE,
 )
 from app_cache import cache
+from grading_allocation.eligibility import invalidate_user_eligibility_cache
 
 
 def _can_access_user_detail(target_user: User) -> bool:
@@ -531,7 +541,14 @@ def edit_user(user_id: int):
 
                 db.add(user)
                 cache_key = f"auth:user:{user.id}"
-                cache.delete(cache_key)
+                changed_user_id = user.id
+
+                @after_this_request
+                def invalidate_role_caches(response):
+                    cache.delete(cache_key)
+                    invalidate_user_eligibility_cache(changed_user_id)
+                    return response
+
                 flash("Roles updated.", "success")
                 if request.headers.get("HX-Request") or request.args.get("format") == "partial":
                     return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))

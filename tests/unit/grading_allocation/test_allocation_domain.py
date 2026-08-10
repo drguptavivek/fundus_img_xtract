@@ -1,11 +1,17 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 
+from grading_allocation import eligibility as eligibility_module
 from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dashboard import list_project_encounter_set_queues
-from grading_allocation.dtos import AllocationInputDTO
-from grading_allocation.eligibility import is_user_eligible_for_task
+from grading_allocation.dtos import AllocationInputDTO, TargetIdentity, TaskAllocationContext
+from grading_allocation.eligibility import (
+    eligible_enforced_project_task_contexts,
+    is_user_eligible_for_task,
+)
 from grading_allocation.exceptions import AllocationConflictError
 from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
 from grading_allocation.resolver import resolve_task_allocation_context
@@ -42,6 +48,22 @@ from upload_profiles.models import (
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.utilsImgServe import _user_has_grading_access_to_image
+
+
+class _DictCache:
+    def __init__(self):
+        self.values = {}
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def set(self, key, value, timeout=None):
+        self.values[key] = value
+        return True
+
+    def delete(self, key):
+        self.values.pop(key, None)
+        return True
 
 
 def _project_with_image_target(db_session, disease):
@@ -356,6 +378,7 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
         task=image_task,
         role_slot="resident",
     ) is True
+
     queues = list_project_encounter_set_queues(db_session, user_id=resident.id)
     assert len(queues) == 1
     assert queues[0].project_id == project.id
@@ -374,6 +397,135 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     )
     assert mixed_kpis[disease.name]["resident_pending"] == 1
     assert separated_kpis[disease.name]["resident_pending"] == 0
+
+
+def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_live(
+    db_session,
+    core_test_data,
+    monkeypatch,
+):
+    disease = db_session.merge(core_test_data["dr"])
+    lab = db_session.merge(core_test_data["lab_unit"])
+    project, _profile = _project_with_image_target(db_session, disease)
+    resident = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"bulk_eligibility_{uuid4().hex[:8]}",
+        lab_units=[lab],
+    )
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=resident.id,
+            lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE.value,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT.value,
+            active=True,
+        )
+    )
+    db_session.flush()
+    project_id = project.id
+    lab_id = lab.id
+    disease_id = disease.id
+
+    monkeypatch.setattr(eligibility_module, "cache", _DictCache())
+    tasks = [SimpleNamespace(id=100_000 + index) for index in range(100)]
+
+    def context_for_task(_db, task):
+        return TaskAllocationContext(
+            task_id=task.id,
+            project_id=project_id,
+            lab_unit_id=lab_id,
+            target=TargetIdentity(
+                scope=AllocationScope.DISEASE_IMAGE,
+                disease_id=disease_id,
+            ),
+            source_project_ids=(project_id,),
+        )
+
+    monkeypatch.setattr(
+        eligibility_module,
+        "resolve_task_allocation_context",
+        context_for_task,
+    )
+    bind = db_session.get_bind()
+
+    def run_and_count_queries():
+        statements = []
+
+        def count_query(_conn, _cursor, statement, *_args, **_kwargs):
+            statements.append(statement)
+
+        event.listen(bind, "before_cursor_execute", count_query)
+        try:
+            contexts = eligible_enforced_project_task_contexts(
+                db_session,
+                user_id=resident.id,
+                task_slots=[(task, "resident") for task in tasks],
+                enforced_project_ids={project_id},
+            )
+        finally:
+            event.remove(bind, "before_cursor_execute", count_query)
+        return contexts, statements
+
+    cold_contexts, cold_statements = run_and_count_queries()
+    warm_contexts, warm_statements = run_and_count_queries()
+
+    assert len(cold_contexts) == 100
+    assert warm_contexts == cold_contexts
+    assert len(cold_statements) == 3, [
+        "FROM " + statement.replace("\n", " ").split(" FROM ", 1)[-1][:120]
+        for statement in cold_statements
+    ]
+    assert len(warm_statements) == 1, [
+        statement.splitlines()[0] for statement in warm_statements
+    ]
+
+
+def test_eligibility_snapshot_is_cached_and_invalidatable(
+    db_session,
+    core_test_data,
+    monkeypatch,
+):
+    disease = db_session.merge(core_test_data["dr"])
+    lab = db_session.merge(core_test_data["lab_unit"])
+    project, _profile = _project_with_image_target(db_session, disease)
+    resident = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"cached_eligibility_{uuid4().hex[:8]}",
+        lab_units=[lab],
+    )
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=resident.id,
+            lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE.value,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT.value,
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    fake_cache = _DictCache()
+    monkeypatch.setattr(eligibility_module, "cache", fake_cache)
+
+    first = eligibility_module._cached_user_eligibility_snapshot(
+        db_session,
+        user_id=resident.id,
+    )
+    second = eligibility_module._cached_user_eligibility_snapshot(
+        db_session,
+        user_id=resident.id,
+    )
+
+    assert first == second
+    assert len(fake_cache.values) == 1
+    eligibility_module.invalidate_user_eligibility_cache(resident.id)
+    assert fake_cache.values == {}
 
 
 def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data):

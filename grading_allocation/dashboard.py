@@ -14,9 +14,8 @@ from grading_allocation.dtos import (
     ProjectEncounterSetQueueDTO,
     TargetIdentity,
 )
-from grading_allocation.eligibility import is_user_eligible_for_task
+from grading_allocation.eligibility import eligible_enforced_project_task_contexts
 from grading_allocation.models import ProjectGradingAllocationPolicy
-from grading_allocation.resolver import resolve_task_allocation_context
 from grading_allocation.targets import derive_project_targets
 from models import (
     EncounterSetGradingPackage,
@@ -106,15 +105,8 @@ def list_project_encounter_set_queues(
         }
         for project_id in projects
     }
-    grouped: dict[tuple[int, object], dict[str, object]] = {}
-
+    task_slots = []
     for task in tasks:
-        context = resolve_task_allocation_context(db, task)
-        if context.project_id not in projects or context.target is None:
-            continue
-        target = targets_by_project[context.project_id].get(context.target)
-        if target is None:
-            target = _frozen_package_target(db, task.encounter_set_package, context.target)
         slot = next(
             (
                 candidate_slot
@@ -123,16 +115,25 @@ def list_project_encounter_set_queues(
             ),
             None,
         )
-        if slot is None or (task.id, slot) in tracker_keys:
-            continue
-        if not is_user_eligible_for_task(
-            db,
-            user_id=user_id,
-            task=task,
-            role_slot=slot,
-        ):
-            continue
+        if slot is not None and (task.id, slot) not in tracker_keys:
+            task_slots.append((task, slot))
+    eligible_contexts = eligible_enforced_project_task_contexts(
+        db,
+        user_id=user_id,
+        task_slots=task_slots,
+        enforced_project_ids=set(projects),
+    )
+    grouped: dict[tuple[int, object], dict[str, object]] = {}
 
+    for task, slot in task_slots:
+        context = eligible_contexts.get((task.id, slot))
+        if context is None:
+            continue
+        if context.project_id not in projects or context.target is None:
+            continue
+        target = targets_by_project[context.project_id].get(context.target)
+        if target is None:
+            target = _frozen_package_target(db, task.encounter_set_package, context.target)
         package = task.encounter_set_package
         if package is None:
             continue

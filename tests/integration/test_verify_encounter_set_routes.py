@@ -1,6 +1,16 @@
 import pytest
 import uuid
-from models import Disease, EncounterSetGradingPackage, EncounterSetGradingScope, PatientEncounters, EncounterSetImage, GradingTask, Project
+from models import (
+    Disease,
+    DiseaseGrading,
+    EncounterSetGradingPackage,
+    EncounterSetGradingScope,
+    Grade,
+    PatientEncounters,
+    EncounterSetImage,
+    GradingTask,
+    Project,
+)
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
@@ -17,6 +27,29 @@ from datetime import date, datetime, timedelta
 
 from auth.utils import utcnow
 from verify_encounter_set.routes import _get_or_create_package_task
+
+
+def _current_package_policy(db, encounter):
+    from verify_encounter_set.routes import (
+        _active_encounter_set_type_config,
+        _encounter_set_package_configs,
+    )
+
+    return _encounter_set_package_configs(
+        db, _active_encounter_set_type_config(encounter), encounter
+    )
+
+
+def _create_current_package_tasks(db, encounter, preserved_task_ids):
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    return _create_verified_encounter_set_tasks(
+        db,
+        encounter,
+        create_negative_controls=False,
+        adopt_unscoped_task_ids=preserved_task_ids,
+    )
+
 
 @pytest.fixture
 def encounter_set_data(db_session, core_test_data):
@@ -163,6 +196,161 @@ def encounter_set_data(db_session, core_test_data):
         'encounter_set_type': encounter_set_type,
         'upload_profile': upload_profile,
     }
+
+
+def test_rebuild_set_packages_preserves_only_ai_grades(
+    encounter_set_data, db_session
+):
+    from encounter_sets.package_repair import (
+        EncounterSetPackageRepairError,
+        apply_set_package_rebuild,
+        preview_set_package_rebuild,
+    )
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    encounter_set_data["image"].is_reviewed = True
+    _create_verified_encounter_set_tasks(db_session, encounter)
+    db_session.flush()
+
+    package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter.id
+    ).one()
+    tasks = db_session.query(GradingTask).filter_by(
+        encounter_set_package_id=package.id
+    ).all()
+    image_task = next(task for task in tasks if task.grading_target_level == "image")
+    set_task = next(task for task in tasks if task.grading_target_level == "encounter")
+    label = db_session.query(DiseaseGrading).filter_by(
+        disease_id=image_task.disease_id
+    ).first()
+    assert label is not None
+    grader = UserFactory.create_by_role(
+        db_session,
+        "resident",
+        username=f"package_repair_{uuid.uuid4().hex[:8]}",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    ai_grade = Grade(
+        task=image_task,
+        grader_user_id=grader.id,
+        role_slot="ai",
+        disease_grading_id=label.id,
+    )
+    archived_disease = Disease(
+        name=f"Archived AI disease {uuid.uuid4().hex[:8]}",
+        grading_scope="image",
+    )
+    db_session.add_all([ai_grade, archived_disease])
+    db_session.flush()
+    archived_label = DiseaseGrading(
+        disease_id=archived_disease.id,
+        impression="AI only",
+        display_order=1,
+    )
+    archived_ai_task = GradingTask(
+        encounter_set_package_id=package.id,
+        encounter_set_scope_id=image_task.encounter_set_scope_id,
+        encounter_set_image_id=image_task.encounter_set_image_id,
+        disease_id=archived_disease.id,
+        lab_unit_id=image_task.lab_unit_id,
+        state="pending",
+        grading_target_level="image",
+        task_source="legacy_ai_test",
+    )
+    db_session.add_all([archived_label, archived_ai_task])
+    db_session.flush()
+    archived_ai_grade = Grade(
+        task=archived_ai_task,
+        grader_user_id=grader.id,
+        role_slot="ai",
+        disease_grading_id=archived_label.id,
+    )
+    resident_image_grade = Grade(
+        task=image_task,
+        grader_user_id=grader.id,
+        role_slot="resident",
+        disease_grading_id=label.id,
+    )
+    resident_set_grade = Grade(
+        task=set_task,
+        grader_user_id=grader.id,
+        role_slot="resident",
+        disease_grading_id=label.id,
+    )
+    stale_shell = EncounterSetGradingPackage(
+        patient_encounter_id=encounter.id,
+        name="Empty stale shell",
+        code=f"stale_{uuid.uuid4().hex[:8]}",
+        grading_mode="unified",
+        state="final",
+        record_origin="legacy_partial",
+    )
+    db_session.add_all(
+        [
+            archived_ai_grade,
+            resident_image_grade,
+            resident_set_grade,
+            stale_shell,
+        ]
+    )
+    db_session.flush()
+    old_package_id = package.id
+    stale_shell_id = stale_shell.id
+    ai_task_id = image_task.id
+    ai_grade_id = ai_grade.id
+    archived_ai_task_id = archived_ai_task.id
+
+    preview = preview_set_package_rebuild(
+        db_session, policy_resolver=_current_package_policy
+    )
+    assert preview.package_count == 1
+    assert preview.supplemental_empty_package_ids == (stale_shell_id,)
+    assert preview.set_task_count == 1
+    assert preview.non_ai_grade_count == 2
+    assert preview.ai_grade_count == 2
+
+    with pytest.raises(EncounterSetPackageRepairError, match="Confirmation token"):
+        apply_set_package_rebuild(
+            db_session,
+            confirmation_token="wrong",
+            policy_resolver=_current_package_policy,
+            task_creator=_create_current_package_tasks,
+        )
+
+    result = apply_set_package_rebuild(
+        db_session,
+        confirmation_token=preview.confirmation_token,
+        policy_resolver=_current_package_policy,
+        task_creator=_create_current_package_tasks,
+    )
+    db_session.flush()
+
+    assert result.removed_package_count == 2
+    assert result.removed_non_ai_grade_count == 2
+    assert result.preserved_ai_grade_count == 2
+    assert db_session.get(EncounterSetGradingPackage, old_package_id) is None
+    assert db_session.get(EncounterSetGradingPackage, stale_shell_id) is None
+    preserved_grade = db_session.get(Grade, ai_grade_id)
+    assert preserved_grade is not None
+    assert preserved_grade.task_id == ai_task_id
+    assert preserved_grade.role_slot == "ai"
+    assert db_session.query(Grade).filter(
+        Grade.task_id.in_([task.id for task in tasks]),
+        Grade.role_slot != "ai",
+    ).count() == 0
+    rebuilt_package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter.id
+    ).one()
+    assert rebuilt_package.state == "pending"
+    assert (
+        db_session.get(GradingTask, ai_task_id).encounter_set_package_id
+        == rebuilt_package.id
+    )
+    archived_task = db_session.get(GradingTask, archived_ai_task_id)
+    assert archived_task.encounter_set_package_id is None
+    assert archived_task.state == "final"
 
 
 def test_linked_disease_package_creates_root_then_linked_image_and_set_scopes(

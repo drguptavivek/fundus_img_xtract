@@ -108,6 +108,7 @@ EncounterSet packages use complete-set submissions and set-anchor consensus:
 
 - `resident`, `resident2`, and `arbitrator` are workflow slots. The application roles authorized to open grading endpoints are `resident` and `ophthalmologist`.
 - A disease-specific package may contain a root disease and active linked diseases, for example DR and DME. They share one allocation and one role-slot owner.
+- Mutable profile policy must explicitly include every active linked image disease and one encounter-scoped grading scheme for each linked disease. Existing DR policies are backfilled with `DME Encounter Status` (`Normal`, `Abnormal`, `Cannot Grade`) before runtime packages are created.
 - The workbench presents all root-disease images followed by its set grade, then all linked-disease images followed by that disease's set grade.
 - A role-slot submission is atomic across every currently editable package target. Missing any linked image or set grade leaves the package pending.
 - Resident/Resident2 consensus compares only each scope's set-level grade. Image-level grades remain independent observations and never create image consensus rows.
@@ -118,6 +119,7 @@ EncounterSet packages use complete-set submissions and set-anchor consensus:
 - The arbitrator never sees Resident, Resident2, or AI grades. The arbitrator submits fresh image and set grades; only the set target receives `Consensus(method="adjudication")`.
 - The package is final only when every disease/unified set scope is final. AI grades never affect package finality.
 - Runtime packages freeze their EncounterSetType identity, policy, labels, features, linked scopes, and policy revision. History and queue meaning never depend on the current Upload & Grading Profile.
+- Rebuilding legacy runtime packages is an explicit maintenance operation: it previews and locks the exact population, discards human observations only when confirmed, preserves AI image observations, and recreates pending packages from current mutable policy without sampling unrelated negative-control EncounterSets.
 - The arbitrator's existing 12-hour owner revision window is separate from the Resident/Resident2 waiting period. Optimistic package revisions reject stale submissions.
 
 ### 5. Finalization and Consensus

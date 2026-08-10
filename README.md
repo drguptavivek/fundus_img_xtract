@@ -276,7 +276,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 ### Grading System (`docs/04-Grade/`)
 - [Dual Grading Workflow](docs/04-Grade/dual_grading.md) - Updated with current implementation details
-- [Comprehensive Dual Grading System](docs/04-Grade/comprehensive_dual_grading_system.md) - Complete three-tier dual grading documentation
+- [Comprehensive Dual Grading System](docs/04-Grade/comprehensive_dual_grading_system.md) - Three-tier grading plus linked EncounterSet package, revision, arbitration, and rebuild rules
 - [Dual Grading Implementation Details](docs/04-Grade/dual_grading_flow.md) - Technical implementation guide
 - [Dual Grading Utilities](docs/04-Grade/dual_grading_utils.md) - Comprehensive function documentation for dual grading
 - [Grading Edge Cases](docs/04-Grade/edge_cases.md) - Edge case analysis and resolution status

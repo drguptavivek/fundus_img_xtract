@@ -1036,7 +1036,13 @@ def _next_pending_encounter_uuid(db, *, encounter: PatientEncounters) -> str | N
     return next_encounter.uuid if next_encounter else None
 
 
-def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> int:
+def _create_verified_encounter_set_tasks(
+    db,
+    encounter: PatientEncounters,
+    *,
+    create_negative_controls: bool = True,
+    adopt_unscoped_task_ids: frozenset[int] | None = None,
+) -> int:
     """Create package-scoped grading tasks for a verified EncounterSet."""
     if encounter.encounter_verified_status == "excluded":
         return 0
@@ -1135,6 +1141,7 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
                 target_level="encounter",
                 source=package_config["source"],
                 scope=_runtime_scope(package, scope),
+                adopt_unscoped_task_ids=adopt_unscoped_task_ids,
             ):
                 created += 1
 
@@ -1164,16 +1171,20 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
                     source=package_config["source"],
                     image=image,
                     scope=_runtime_scope(package, scope),
+                    adopt_unscoped_task_ids=adopt_unscoped_task_ids,
                 ):
                     created += 1
-        for disease_id in positive_control_scheme_ids:
-            created += _create_negative_control_tasks_for_positive(
-                db,
-                positive_encounter=encounter,
-                disease_id=disease_id,
-                package_config=package_config,
-                controls_per_positive=package_config["image_scheme_negative_controls_per_positive"].get(disease_id, 0),
-            )
+        if create_negative_controls:
+            for disease_id in positive_control_scheme_ids:
+                created += _create_negative_control_tasks_for_positive(
+                    db,
+                    positive_encounter=encounter,
+                    disease_id=disease_id,
+                    package_config=package_config,
+                    controls_per_positive=package_config[
+                        "image_scheme_negative_controls_per_positive"
+                    ].get(disease_id, 0),
+                )
     if created:
         db.flush()
     return created
@@ -1691,6 +1702,7 @@ def _get_or_create_package_task(
     source: str,
     scope: EncounterSetGradingScope,
     image: EncounterSetImage | None = None,
+    adopt_unscoped_task_ids: frozenset[int] | None = None,
 ) -> bool:
     filters = [
         GradingTask.disease_id == disease_id,
@@ -1715,14 +1727,18 @@ def _get_or_create_package_task(
 
     # Compatibility: adopt one historical task only when it has never belonged
     # to any runtime package. A task owned by another package is never reused.
-    unscoped = (
-        db.query(GradingTask)
-        .filter(
-            *filters,
-            GradingTask.encounter_set_package_id.is_(None),
-        )
-        .first()
+    unscoped_query = db.query(GradingTask).filter(
+        *filters,
+        GradingTask.encounter_set_package_id.is_(None),
     )
+    if adopt_unscoped_task_ids is not None:
+        if not adopt_unscoped_task_ids:
+            unscoped_query = None
+        else:
+            unscoped_query = unscoped_query.filter(
+                GradingTask.id.in_(adopt_unscoped_task_ids)
+            )
+    unscoped = unscoped_query.first() if unscoped_query is not None else None
     if unscoped:
         unscoped.encounter_set_package_id = package.id
         unscoped.encounter_set_scope_id = scope.id

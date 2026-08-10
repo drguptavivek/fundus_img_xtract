@@ -74,18 +74,10 @@ def _encounter_set_target(db: Session, task: GradingTask) -> TargetIdentity | No
             encounter_set_type_id=encounter_set_type_id,
         )
 
-    if task.encounter_set_image_id is not None:
-        context_disease_id = task.disease_id
-    else:
-        package_image_disease_ids = {
-            package_task.disease_id
-            for package_task in package.tasks
-            if package_task.encounter_set_image_id is not None
-        }
-        context_disease_id = (
-            next(iter(package_image_disease_ids))
-            if len(package_image_disease_ids) == 1
-            else None
+    context_disease_id = package.root_scope_disease_id
+    if context_disease_id is None:
+        context_disease_id = (package.policy_snapshot_json or {}).get("package", {}).get(
+            "root_scope_disease_id"
         )
     if context_disease_id is None:
         context_disease_id = config.default_image_grading_scheme_id

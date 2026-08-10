@@ -60,6 +60,28 @@ def test_ordered_package_tasks_groups_images_by_laterality_before_encounter_targ
     ]
 
 
+def test_linked_package_completes_root_scope_before_linked_scope():
+    root_image = _task(1, "image", position=1, disease_name="DR")
+    root_set = _task(2, "encounter", disease_name="DR Set")
+    linked_image = _task(3, "image", position=1, disease_name="DME")
+    linked_set = _task(4, "encounter", disease_name="DME Set")
+    root_scope = SimpleNamespace(display_order=0)
+    linked_scope = SimpleNamespace(display_order=1)
+    root_image.encounter_set_scope = root_scope
+    root_set.encounter_set_scope = root_scope
+    linked_image.encounter_set_scope = linked_scope
+    linked_set.encounter_set_scope = linked_scope
+
+    ordered = package_grading._ordered_tasks([
+        linked_image,
+        root_set,
+        linked_set,
+        root_image,
+    ])
+
+    assert [task.id for task in ordered] == [1, 2, 3, 4]
+
+
 def test_task_panel_is_locked_when_target_is_not_allocated(monkeypatch):
     task = _task(9, "image")
     task.uuid = "task-uuid"
@@ -142,11 +164,18 @@ def test_workbench_template_wires_features_and_per_image_annotation_contexts():
     assert "feature-geometry-editor.js" in template
 
 
-def test_package_submit_updates_task_state_with_task_id_and_db(app, monkeypatch):
+def test_package_submit_delegates_atomic_package_dto_to_record_service(app, monkeypatch):
     task = _task(42, "encounter")
     task.uuid = "task-uuid"
     task.disease_id = 11
-    package = SimpleNamespace(uuid="package-uuid", name="Package", tasks=[task], state="pending")
+    package = SimpleNamespace(
+        uuid="package-uuid",
+        name="Package",
+        tasks=[task],
+        state="pending",
+        revision_number=3,
+        resident_user_id=None,
+    )
     db = SimpleNamespace(
         added=[],
         add=lambda grade: db.added.append(grade),
@@ -188,12 +217,13 @@ def test_package_submit_updates_task_state_with_task_id_and_db(app, monkeypatch)
     monkeypatch.setattr(package_grading, "_fetch_package", lambda session, uuid, for_update=False: package)
     monkeypatch.setattr(package_grading, "current_user", SimpleNamespace(id=7))
     monkeypatch.setattr(package_grading, "get_user_eligibility_for_task", lambda session, user_id, task_id, slot: True)
-    monkeypatch.setattr(package_grading, "has_user_graded_task", lambda session, user_id, task_id, slots: False)
+    monkeypatch.setattr(package_grading, "editable_tasks", lambda package, slot, user_id: [task])
+    monkeypatch.setattr(package_grading, "_package_slot_eligible", lambda *args: True)
     monkeypatch.setattr(package_grading, "cleanup_task_tracker", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         package_grading,
-        "update_task_state_based_on_grades",
-        lambda task_id, session: calls.append((task_id, session)),
+        "submit_package",
+        lambda session, submitted_package, dto: calls.append((session, submitted_package, dto)),
     )
 
     with app.test_request_context(
@@ -202,10 +232,15 @@ def test_package_submit_updates_task_state_with_task_id_and_db(app, monkeypatch)
         data={
             "package_uuid": package.uuid,
             "slot": "resident",
+            "package_revision": "3",
             f"label_id_{task.uuid}": "5",
         },
     ):
         response = unwrap(package_grading.encounter_set_package_submit)()
 
     assert response.status_code == 302
-    assert calls == [(task.id, db)]
+    assert len(calls) == 1
+    assert calls[0][0] is db
+    assert calls[0][1] is package
+    assert calls[0][2].expected_package_revision == 3
+    assert calls[0][2].targets[0].task_uuid == task.uuid

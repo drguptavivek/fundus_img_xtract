@@ -158,6 +158,16 @@ def _encounter_set_packages_from_request(form, encounter_set_type_id: int):
                             for key, value in (row.get("image_scheme_metadata_rules") or {}).items()
                             if str(key).isdigit() and isinstance(value, dict)
                         },
+                        root_image_grading_scheme_id=upload_profile_service.to_int(
+                            str(row.get("root_image_grading_scheme_id") or "")
+                        ),
+                        encounter_scheme_by_image_disease_id={
+                            int(key): int(value)
+                            for key, value in (
+                                row.get("encounter_scheme_by_image_disease_id") or {}
+                            ).items()
+                            if str(key).isdigit() and str(value).isdigit()
+                        },
                     )
                 )
     return packages

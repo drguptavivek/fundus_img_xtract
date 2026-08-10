@@ -1,6 +1,6 @@
 import pytest
 import uuid
-from models import Disease, EncounterSetGradingPackage, PatientEncounters, EncounterSetImage, GradingTask, Project
+from models import Disease, EncounterSetGradingPackage, EncounterSetGradingScope, PatientEncounters, EncounterSetImage, GradingTask, Project
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
@@ -160,6 +160,97 @@ def encounter_set_data(db_session, core_test_data):
         'encounter_set_type': encounter_set_type,
         'upload_profile': upload_profile,
     }
+
+
+def test_linked_disease_package_creates_root_then_linked_image_and_set_scopes(
+    encounter_set_data, db_session, core_test_data
+):
+    dr = db_session.merge(core_test_data["dr"])
+    dme = db_session.merge(core_test_data["dme"])
+    dr_set = Disease(
+        name=f"DR Set {uuid.uuid4().hex[:8]}", grading_scope="encounter"
+    )
+    dme_set = Disease(
+        name=f"DME Set {uuid.uuid4().hex[:8]}", grading_scope="encounter"
+    )
+    db_session.add_all([dr_set, dme_set])
+    db_session.flush()
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.grading_packages.append(
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="DR with DME",
+            code="dr_with_dme",
+            grading_mode="disease_specific",
+            policy_revision=1,
+            scope_config_json={
+                "schema_version": 1,
+                "root_image_grading_scheme_id": dr.id,
+                "scopes": [
+                    {
+                        "scope_disease_id": dr.id,
+                        "image_grading_scheme_ids": [dr.id],
+                        "encounter_grading_scheme_id": dr_set.id,
+                        "parent_scope_disease_id": None,
+                        "link_role": "root",
+                    },
+                    {
+                        "scope_disease_id": dme.id,
+                        "image_grading_scheme_ids": [dme.id],
+                        "encounter_grading_scheme_id": dme_set.id,
+                        "parent_scope_disease_id": dr.id,
+                        "link_role": "linked",
+                    },
+                ],
+            },
+            default_image_grading_scheme=dr,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dr, is_default=True, auto_create_policy="always", display_order=1
+                ),
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dme, is_default=False, auto_create_policy="always", display_order=2
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(
+                    disease=dr_set, display_order=1
+                ),
+                UploadProfileEncounterSetTypePackageEncounterScheme(
+                    disease=dme_set, display_order=2
+                ),
+            ],
+        )
+    )
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    _create_verified_encounter_set_tasks(db_session, encounter_set_data["encounter"])
+    db_session.flush()
+    package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        code="dr_with_dme",
+    ).one()
+    scopes = db_session.query(EncounterSetGradingScope).filter_by(
+        encounter_set_package_id=package.id
+    ).order_by(EncounterSetGradingScope.display_order).all()
+    tasks = db_session.query(GradingTask).filter_by(
+        encounter_set_package_id=package.id
+    ).all()
+
+    assert package.root_scope_disease_id == dr.id
+    assert [(scope.scope_disease_id, scope.link_role) for scope in scopes] == [
+        (dr.id, "root"),
+        (dme.id, "linked"),
+    ]
+    assert {(task.disease_id, task.grading_target_level) for task in tasks} == {
+        (dr.id, "image"),
+        (dr_set.id, "encounter"),
+        (dme.id, "image"),
+        (dme_set.id, "encounter"),
+    }
+    assert all(task.encounter_set_scope_id for task in tasks)
 
 
 def _configure_laterality_task_routing(encounter_set_data, db_session):

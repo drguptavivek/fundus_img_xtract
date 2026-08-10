@@ -168,17 +168,23 @@ def derive_project_targets(
                         }
                     )
                     continue
-                for image_scheme in active_image_schemes:
-                    _add_disease_encounter_set_target(
-                        targets,
-                        profile_id=profile.id,
-                        profile_name=profile.name,
-                        disease_id=image_scheme.disease_id,
-                        disease_name=image_scheme.disease.name,
-                        encounter_set_type_id=est.id,
-                        encounter_set_type_name=est.name,
-                        grading_scheme_ids=[image_scheme.disease_id] + encounter_scheme_ids,
-                    )
+                scope_config = package.scope_config_json or {}
+                root_id = scope_config.get("root_image_grading_scheme_id")
+                root_scheme = next(
+                    (row for row in active_image_schemes if row.disease_id == root_id),
+                    active_image_schemes[0],
+                )
+                _add_disease_encounter_set_target(
+                    targets,
+                    profile_id=profile.id,
+                    profile_name=profile.name,
+                    disease_id=root_scheme.disease_id,
+                    disease_name=root_scheme.disease.name,
+                    encounter_set_type_id=est.id,
+                    encounter_set_type_name=est.name,
+                    grading_scheme_ids=[row.disease_id for row in active_image_schemes] + encounter_scheme_ids,
+                    diseases=[(row.disease_id, row.disease.name) for row in active_image_schemes],
+                )
 
     return sorted(targets.values(), key=lambda target: (target.label.lower(), target.identity.key)), warnings
 
@@ -220,6 +226,7 @@ def _add_disease_encounter_set_target(
     encounter_set_type_id: int,
     encounter_set_type_name: str,
     grading_scheme_ids: Iterable[int],
+    diseases: Iterable[tuple[int, str]] | None = None,
 ) -> None:
     identity = TargetIdentity(
         AllocationScope.DISEASE_ENCOUNTER,
@@ -237,7 +244,7 @@ def _add_disease_encounter_set_target(
     )
     target.source_profiles[profile_id] = profile_name
     target.grading_scheme_ids.update(grading_scheme_ids)
-    target.diseases[disease_id] = disease_name
+    target.diseases.update(diseases or [(disease_id, disease_name)])
 
 
 def _add_unified_target(

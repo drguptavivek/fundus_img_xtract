@@ -473,12 +473,24 @@
     const policies = pkg.image_scheme_auto_create_policies || {};
     const controls = pkg.image_scheme_negative_controls_per_positive || {};
     const metadataRules = pkg.image_scheme_metadata_rules || {};
+    const scopeRows = Array.isArray(pkg.scope_config?.scopes) ? pkg.scope_config.scopes : [];
+    const encounterMap = pkg.encounter_scheme_by_image_disease_id || scopeRows.reduce(function (acc, scope) {
+      if (scope.scope_disease_id && scope.encounter_grading_scheme_id) {
+        acc[String(scope.scope_disease_id)] = String(scope.encounter_grading_scheme_id);
+      }
+      return acc;
+    }, {});
     const name = String(pkg.name || pkg.code || 'Package ' + (index + 1)).trim();
     return {
       name: name,
       code: String(pkg.code || slugifyPackageCode(name) || 'package_' + (index + 1)).trim(),
       applicability: pkg.applicability || 'always',
       grading_mode: ['unified', 'disease_specific'].includes(pkg.grading_mode) ? pkg.grading_mode : 'unified',
+      root_image_grading_scheme_id: pkg.root_image_grading_scheme_id ? String(pkg.root_image_grading_scheme_id) : '',
+      encounter_scheme_by_image_disease_id: Object.keys(encounterMap).reduce(function (acc, diseaseId) {
+        acc[String(diseaseId)] = String(encounterMap[diseaseId]);
+        return acc;
+      }, {}),
       image_grading_scheme_ids: imageIds,
       default_image_grading_scheme_id: pkg.default_image_grading_scheme_id ? String(pkg.default_image_grading_scheme_id) : (imageIds[0] || ''),
       encounter_grading_scheme_ids: encounterIds,
@@ -547,6 +559,12 @@
         code: normalized.code,
         applicability: normalized.applicability,
         grading_mode: normalized.grading_mode,
+        root_image_grading_scheme_id: normalized.root_image_grading_scheme_id ? Number(normalized.root_image_grading_scheme_id) : null,
+        encounter_scheme_by_image_disease_id: Object.fromEntries(
+          Object.entries(normalized.encounter_scheme_by_image_disease_id).map(function (entry) {
+            return [Number(entry[0]), Number(entry[1])];
+          }).filter(function (entry) { return Number.isFinite(entry[0]) && Number.isFinite(entry[1]); })
+        ),
         image_grading_scheme_ids: normalized.image_grading_scheme_ids.map(Number).filter(Number.isFinite),
         default_image_grading_scheme_id: normalized.default_image_grading_scheme_id ? Number(normalized.default_image_grading_scheme_id) : null,
         encounter_grading_scheme_ids: normalized.encounter_grading_scheme_ids.map(Number).filter(Number.isFinite),
@@ -661,7 +679,8 @@
       const encounterPackage = packages.find(function (item) {
         return (item.image_grading_scheme_ids || []).map(String).includes(String(select.dataset.schemeId));
       });
-      const encounterId = encounterPackage?.encounter_grading_scheme_ids?.[0];
+      const encounterId = encounterPackage?.encounter_scheme_by_image_disease_id?.[String(select.dataset.schemeId)]
+        || encounterPackage?.encounter_grading_scheme_ids?.[0];
       if (encounterId) {
         select.value = String(encounterId);
       }
@@ -782,7 +801,7 @@
   }
 
   function syncSinglePackageField(row) {
-    const images = selectedImageChoices(row);
+    let images = selectedImageChoices(row);
     const encounter = row.querySelector('[data-upload-profile-est-encounter-scheme]')?.value || '';
     const gradingMode = selectedEncounterSetGradingMode(row);
     const existingPackages = packagesFromField(row);
@@ -807,29 +826,70 @@
       defaultField.value = images[0]?.id || '';
     }
     if (gradingMode === 'disease_specific') {
-      const existingByImage = existingPackages.reduce(function (acc, pkg) {
-        (pkg.image_grading_scheme_ids || []).forEach(function (diseaseId) {
-          acc[String(diseaseId)] = pkg;
-        });
+      const selectedIds = new Set(images.map(function (choice) { return String(choice.id); }));
+      row.querySelectorAll('[data-upload-profile-est-image-scheme][data-linked-parent-id]').forEach(function (input) {
+        const parentId = String(input.dataset.linkedParentId || '');
+        if (parentId && selectedIds.has(parentId)) {
+          input.checked = true;
+          selectedIds.add(String(input.value));
+        }
+      });
+      images = selectedImageChoices(row);
+      const existingByRoot = existingPackages.reduce(function (acc, pkg) {
+        const rootId = String(pkg.root_image_grading_scheme_id || pkg.image_grading_scheme_ids?.[0] || '');
+        if (rootId) {
+          acc[rootId] = pkg;
+        }
         return acc;
       }, {});
-      writePackagesToField(row, images.map(function (choice) {
-        const existing = existingByImage[choice.id] || {};
-        const encounterIds = Array.isArray(existing.encounter_grading_scheme_ids) && existing.encounter_grading_scheme_ids.length
-          ? existing.encounter_grading_scheme_ids
-          : [];
-        const selectedEncounter = diseaseEncounterSchemeValue(row, choice.id) || encounterIds[0] || encounter;
+      const groups = images.reduce(function (acc, choice) {
+        const input = row.querySelector('[data-upload-profile-est-image-scheme][value="' + CSS.escape(choice.id) + '"]');
+        const rootId = String(input?.dataset.linkedParentId || choice.id);
+        (acc[rootId] ||= []).push(choice);
+        return acc;
+      }, {});
+      writePackagesToField(row, Object.entries(groups).map(function (entry) {
+        const rootId = entry[0];
+        const choices = entry[1];
+        const rootChoice = choices.find(function (choice) { return String(choice.id) === rootId; }) || choices[0];
+        choices.sort(function (left, right) {
+          if (String(left.id) === rootId) return -1;
+          if (String(right.id) === rootId) return 1;
+          return left.name.localeCompare(right.name);
+        });
+        const existing = existingByRoot[rootId] || {};
+        const encounterMap = {};
+        choices.forEach(function (choice) {
+          const prior = existing.encounter_scheme_by_image_disease_id?.[String(choice.id)];
+          const selected = diseaseEncounterSchemeValue(row, choice.id) || prior || '';
+          if (selected) {
+            encounterMap[String(choice.id)] = selected;
+          }
+        });
+        const encounterIds = Array.from(new Set(Object.values(encounterMap)));
+        const choicePolicies = {};
+        const choiceControls = {};
+        const choiceRules = {};
+        choices.forEach(function (choice) {
+          choicePolicies[choice.id] = policies[rootId] || policies[choice.id];
+          choiceControls[choice.id] = controls[rootId] || 0;
+          if (metadataRules[rootId]) {
+            choiceRules[choice.id] = metadataRules[rootId];
+          }
+        });
         return {
-          name: existing.name || (choice.name + ' EncounterSet Package'),
-          code: existing.code || (slugifyPackageCode(choice.name) + '_encounter_set'),
+          name: existing.name || (rootChoice.name + ' EncounterSet Package'),
+          code: existing.code || (slugifyPackageCode(rootChoice.name) + '_encounter_set'),
           applicability: existing.applicability || 'always',
           grading_mode: 'disease_specific',
-          image_grading_scheme_ids: [choice.id],
-          default_image_grading_scheme_id: choice.id,
-          encounter_grading_scheme_ids: selectedEncounter ? [selectedEncounter] : [],
-          image_scheme_auto_create_policies: { [choice.id]: policies[choice.id] },
-          image_scheme_negative_controls_per_positive: { [choice.id]: controls[choice.id] },
-          image_scheme_metadata_rules: metadataRules[choice.id] ? { [choice.id]: metadataRules[choice.id] } : {},
+          root_image_grading_scheme_id: rootId,
+          encounter_scheme_by_image_disease_id: encounterMap,
+          image_grading_scheme_ids: choices.map(function (choice) { return choice.id; }),
+          default_image_grading_scheme_id: rootId,
+          encounter_grading_scheme_ids: encounterIds,
+          image_scheme_auto_create_policies: choicePolicies,
+          image_scheme_negative_controls_per_positive: choiceControls,
+          image_scheme_metadata_rules: choiceRules,
           active: true
         };
       }));
@@ -1356,6 +1416,26 @@
             + ' · ' + ((pkg.grading_mode || 'unified') === 'disease_specific' ? 'Disease-specific' : 'Unified person-wise')
             + ' · ' + (pkg.applicability || 'always');
           packageBlock.appendChild(packageLine);
+
+          const configuredScopes = Array.isArray(pkg.scope_config?.scopes)
+            ? pkg.scope_config.scopes
+            : [];
+          if ((pkg.grading_mode || 'unified') === 'disease_specific' && configuredScopes.length) {
+            const imageNames = Object.fromEntries((pkg.image_grading_schemes || []).map(function (scheme) {
+              return [String(scheme.id), scheme.name];
+            }));
+            const encounterNames = Object.fromEntries((pkg.encounter_grading_schemes || []).map(function (scheme) {
+              return [String(scheme.id), scheme.name];
+            }));
+            const sequence = document.createElement('div');
+            sequence.className = 'small text-muted mt-1';
+            sequence.textContent = 'One complete-set allocation · sequence: ' + configuredScopes.map(function (scope) {
+              const diseaseName = imageNames[String(scope.scope_disease_id)] || ('Disease #' + scope.scope_disease_id);
+              const setName = encounterNames[String(scope.encounter_grading_scheme_id)] || ('Set scheme #' + scope.encounter_grading_scheme_id);
+              return diseaseName + ' images → ' + setName + ' set grade';
+            }).join(' → ');
+            packageBlock.appendChild(sequence);
+          }
 
           const encounterTitle = (pkg.grading_mode || 'unified') === 'disease_specific'
             ? 'Per-Disease Encounter-Level Grading'

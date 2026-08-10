@@ -16,6 +16,7 @@ from models import (
     DiseaseGrading,
     EncounterSetType,
     LabUnit,
+    LinkedDiseaseGrading,
     Project,
     ProjectInvestigator,
     User,
@@ -261,6 +262,14 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
             .unique()
             .all()
         ),
+        "linked_disease_parent_by_child": {
+            link.linked_disease_id: link.primary_disease_id
+            for link in db.execute(
+                select(LinkedDiseaseGrading).where(
+                    LinkedDiseaseGrading.is_active.is_(True)
+                )
+            ).scalars().all()
+        },
         "cameras": db.execute(select(Camera).order_by(Camera.name)).scalars().all(),
         "areas": db.execute(select(Area).order_by(Area.name)).scalars().all(),
         "encounter_set_types": (

@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from models import Disease, LabUnit, Project, ProjectInvestigator, User
+from models import Disease, LabUnit, LinkedDiseaseGrading, Project, ProjectInvestigator, User
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -91,6 +91,8 @@ class EncounterSetGradingPackageInput:
     image_scheme_negative_controls_per_positive: dict[int, int] | None = None
     image_scheme_metadata_rules: dict[int, ImageMetadataTaskRuleInput] | None = None
     grading_mode: str = "unified"
+    root_image_grading_scheme_id: int | None = None
+    encounter_scheme_by_image_disease_id: dict[int, int] | None = None
 
 
 IMAGE_SCHEME_AUTO_CREATE_POLICIES = {
@@ -411,6 +413,8 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
                         code=package.code,
                         applicability=package.applicability,
                         grading_mode=package.grading_mode,
+                        policy_revision=1,
+                        scope_config_json=package.scope_config_json,
                         default_image_grading_scheme_id=package.default_image_grading_scheme_id,
                         display_order=package.display_order,
                         active=package.active,
@@ -534,6 +538,12 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
     prioritization_result = normalize_task_prioritization(profile_input.task_prioritization_json, set(upload_kinds))
     if not prioritization_result.success:
         return prioritization_result.message
+    prior_policy_revisions = {
+        (config.encounter_set_type_id, package.code): package.policy_revision
+        for config in profile.encounter_set_types
+        for package in config.grading_packages
+    }
+
     profile.name = profile_input.name
     profile.description = profile_input.description
     profile.automated_remidio_populated = profile_input.automated_remidio_populated
@@ -593,6 +603,12 @@ def _apply_profile_input(db, profile: UploadProfile, profile_input: UploadProfil
                     code=package.code,
                     applicability=package.applicability,
                     grading_mode=package.grading_mode,
+                    policy_revision=(
+                        prior_policy_revisions.get(
+                            (config.encounter_set_type_id, package.code), 0
+                        ) + 1
+                    ),
+                    scope_config_json=_package_scope_config(package),
                     default_image_grading_scheme_id=package.default_image_grading_scheme_id,
                     display_order=index,
                     active=True,
@@ -688,6 +704,15 @@ def _normalize_package_inputs(packages: list[EncounterSetGradingPackageInput]) -
                 for disease_id in image_scheme_ids
                 if (rule := (package.image_scheme_metadata_rules or {}).get(disease_id)) is not None
             },
+            root_image_grading_scheme_id=package.root_image_grading_scheme_id,
+            encounter_scheme_by_image_disease_id={
+                int(disease_id): int(encounter_scheme_id)
+                for disease_id, encounter_scheme_id in (
+                    package.encounter_scheme_by_image_disease_id or {}
+                ).items()
+                if disease_id in image_scheme_ids
+                and encounter_scheme_id in encounter_scheme_ids
+            },
         )
     return list(normalized.values())
 
@@ -711,8 +736,56 @@ def _packages_for_config(config: EncounterSetProfileInput) -> list[EncounterSetG
             image_scheme_auto_create_policies={disease_id: "always" for disease_id in config.image_grading_scheme_ids},
             image_scheme_negative_controls_per_positive={disease_id: 0 for disease_id in config.image_grading_scheme_ids},
             image_scheme_metadata_rules={},
+            root_image_grading_scheme_id=config.default_image_grading_scheme_id,
+            encounter_scheme_by_image_disease_id=(
+                {config.default_image_grading_scheme_id: config.encounter_grading_scheme_id}
+                if config.default_image_grading_scheme_id and config.encounter_grading_scheme_id
+                else {}
+            ),
         )
     ]
+
+
+def _package_scope_config(package: EncounterSetGradingPackageInput) -> dict:
+    """Persist the mutable policy DTO without coupling runtime records to it."""
+    encounter_map = package.encounter_scheme_by_image_disease_id or {}
+    if package.grading_mode == "unified":
+        return {
+            "schema_version": 1,
+            "root_image_grading_scheme_id": None,
+            "scopes": [{
+                "scope_disease_id": None,
+                "image_grading_scheme_ids": list(package.image_grading_scheme_ids),
+                "encounter_grading_scheme_id": (
+                    package.encounter_grading_scheme_ids[0]
+                    if package.encounter_grading_scheme_ids
+                    else None
+                ),
+                "parent_scope_disease_id": None,
+                "link_role": "unified",
+            }],
+        }
+    root_id = package.root_image_grading_scheme_id
+    if root_id is None and len(package.image_grading_scheme_ids) == 1:
+        root_id = package.image_grading_scheme_ids[0]
+    ordered_disease_ids = sorted(
+        package.image_grading_scheme_ids,
+        key=lambda disease_id: (disease_id != root_id, disease_id),
+    )
+    return {
+        "schema_version": 1,
+        "root_image_grading_scheme_id": root_id,
+        "scopes": [
+            {
+                "scope_disease_id": disease_id,
+                "image_grading_scheme_ids": [disease_id],
+                "encounter_grading_scheme_id": encounter_map.get(disease_id),
+                "parent_scope_disease_id": None if disease_id == root_id else root_id,
+                "link_role": "root" if disease_id == root_id else "linked",
+            }
+            for disease_id in ordered_disease_ids
+        ],
+    }
 
 
 def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileInput]) -> str | None:
@@ -731,6 +804,13 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
     valid_encounter_set_type_ids = set(encounter_set_types)
     if valid_encounter_set_type_ids != encounter_set_type_ids:
         return "EncounterSetTypes must be active."
+
+    active_links = db.execute(
+        select(LinkedDiseaseGrading).where(LinkedDiseaseGrading.is_active.is_(True))
+    ).scalars().all()
+    linked_children_by_parent: dict[int, set[int]] = {}
+    for link in active_links:
+        linked_children_by_parent.setdefault(link.primary_disease_id, set()).add(link.linked_disease_id)
 
     disease_ids: set[int] = set()
     for config in configs.values():
@@ -758,14 +838,35 @@ def _validate_encounter_set_configs(db, configs: dict[int, EncounterSetProfileIn
             if package.grading_mode not in ENCOUNTER_SET_GRADING_MODES:
                 return "Unsupported EncounterSet grading package mode."
             if package.grading_mode == "disease_specific":
-                if len(package.image_grading_scheme_ids) != 1:
-                    return f"Disease-specific package {package.name} must select exactly one image grading scheme."
-                if len(package.encounter_grading_scheme_ids) != 1:
-                    return f"Disease-specific package {package.name} must select exactly one encounter grading scheme."
-                image_scheme_id = package.image_grading_scheme_ids[0]
-                if image_scheme_id in disease_specific_image_scheme_ids:
+                root_id = package.root_image_grading_scheme_id
+                if root_id is None and len(package.image_grading_scheme_ids) == 1:
+                    root_id = package.image_grading_scheme_ids[0]
+                if root_id not in package.image_grading_scheme_ids:
+                    return f"Disease-specific package {package.name} must identify its root image grading scheme."
+                expected_image_ids = {root_id}.union(linked_children_by_parent.get(root_id, set()))
+                if set(package.image_grading_scheme_ids) != expected_image_ids:
+                    return (
+                        f"Disease-specific package {package.name} must include its root and every active linked image grading scheme."
+                    )
+                encounter_map = package.encounter_scheme_by_image_disease_id or {}
+                if set(encounter_map) != expected_image_ids:
+                    return (
+                        f"Disease-specific package {package.name} requires one explicit set grading scheme for each disease scope."
+                    )
+                if set(encounter_map.values()) != set(package.encounter_grading_scheme_ids):
+                    return f"Disease-specific package {package.name} has an inconsistent disease-to-set scheme map."
+                root_policy = (package.image_scheme_auto_create_policies or {}).get(root_id, "always")
+                if any(
+                    (package.image_scheme_auto_create_policies or {}).get(disease_id, "always") != root_policy
+                    for disease_id in expected_image_ids
+                ):
+                    return f"Linked disease scopes in package {package.name} must share the root task-creation policy."
+                duplicates = disease_specific_image_scheme_ids.intersection(expected_image_ids)
+                if duplicates:
                     return "Each image grading scheme may appear in only one disease-specific package."
-                disease_specific_image_scheme_ids.add(image_scheme_id)
+                disease_specific_image_scheme_ids.update(expected_image_ids)
+            elif len(package.encounter_grading_scheme_ids) != 1:
+                return f"Unified package {package.name} must select exactly one set grading scheme."
             if package.image_grading_scheme_ids and not package.default_image_grading_scheme_id:
                 return f"Select a default image grading scheme for package {package.name}."
             if package.default_image_grading_scheme_id and package.default_image_grading_scheme_id not in package.image_grading_scheme_ids:

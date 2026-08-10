@@ -224,6 +224,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Project Annotation Policy and GPU Grading Workbench](docs/16-NewFeature/imageMarking/06-project-annotation-policy.md) - Approved React, TypeScript, PixiJS, and WebGL2 grading-workbench plan with project-resolved tools, normalized annotations, and full-resolution segmentation masks
 - [Project Grader Allocation](docs/16-NewFeature/grading_allocation/00-overview.md) - Project-scoped resident/arbitrator allocation derived from active Upload & Grading Profile targets, with legacy projectless-task compatibility
 - [Project Grader Allocation API](docs/API/grading-allocation/README.md) - REST contract, authorization, target shapes, coverage, activation, and error behavior
+- [EncounterSet Grading API](docs/API/encounter-set-grading/README.md) - Mutable effective policy plans and frozen package/scope/submission/consensus records
 - [API Documentation](docs/API/README.md) - Canonical JSON/API contracts for mobile, scoping, uploads, Remidio integration, analytics, admin, datasets, jobs, and KPI consumers
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes

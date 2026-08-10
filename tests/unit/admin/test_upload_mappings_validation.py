@@ -6,7 +6,7 @@ from werkzeug.datastructures import MultiDict
 
 from api.upload_profiles import _encounter_set_packages_from_request
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, Project, User
+from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, LinkedDiseaseGrading, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import (
     EncounterSetGradingPackageInput,
@@ -254,7 +254,7 @@ def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_map
             },
         )
 
-    assert "exactly one image grading scheme" in validate([
+    assert "identify its root" in validate([
         EncounterSetGradingPackageInput(
             name="Ambiguous images",
             code="ambiguous_images",
@@ -265,7 +265,7 @@ def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_map
             default_image_grading_scheme_id=image_scheme_one.id,
         )
     ])
-    assert "exactly one encounter grading scheme" in validate([
+    assert "explicit set grading scheme" in validate([
         EncounterSetGradingPackageInput(
             name="Missing encounter",
             code="missing_encounter",
@@ -274,6 +274,8 @@ def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_map
             image_grading_scheme_ids=[image_scheme_one.id],
             encounter_grading_scheme_ids=[],
             default_image_grading_scheme_id=image_scheme_one.id,
+            root_image_grading_scheme_id=image_scheme_one.id,
+            encounter_scheme_by_image_disease_id={},
         )
     ])
     assert "only one disease-specific package" in validate([
@@ -285,6 +287,8 @@ def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_map
             image_grading_scheme_ids=[image_scheme_one.id],
             encounter_grading_scheme_ids=[encounter_scheme.id],
             default_image_grading_scheme_id=image_scheme_one.id,
+            root_image_grading_scheme_id=image_scheme_one.id,
+            encounter_scheme_by_image_disease_id={image_scheme_one.id: encounter_scheme.id},
         ),
         EncounterSetGradingPackageInput(
             name="Duplicate mapping",
@@ -294,8 +298,58 @@ def test_disease_specific_encounter_set_packages_require_explicit_one_to_one_map
             image_grading_scheme_ids=[image_scheme_one.id],
             encounter_grading_scheme_ids=[encounter_scheme.id],
             default_image_grading_scheme_id=image_scheme_one.id,
+            root_image_grading_scheme_id=image_scheme_one.id,
+            encounter_scheme_by_image_disease_id={image_scheme_one.id: encounter_scheme.id},
         ),
     ])
+
+
+def test_linked_disease_scopes_share_one_package_with_independent_set_schemes(db_session):
+    dr = Disease(name="Linked DR Policy", grading_scope="image")
+    dme = Disease(name="Linked DME Policy", grading_scope="image")
+    dr_set = Disease(name="Linked DR Set Policy", grading_scope="encounter")
+    dme_set = Disease(name="Linked DME Set Policy", grading_scope="encounter")
+    encounter_set_type = EncounterSetType(
+        name="Linked Disease EncounterSet",
+        code="linked_disease_encounter_set",
+        metadata_schema_json={"fields": []},
+        active=True,
+    )
+    db_session.add_all([dr, dme, dr_set, dme_set, encounter_set_type])
+    db_session.flush()
+    db_session.add(LinkedDiseaseGrading(
+        primary_disease_id=dr.id,
+        linked_disease_id=dme.id,
+        is_active=True,
+    ))
+    db_session.flush()
+
+    error = admin_service._validate_encounter_set_configs(
+        db_session,
+        {encounter_set_type.id: EncounterSetProfileInput(
+            encounter_set_type_id=encounter_set_type.id,
+            image_grading_scheme_ids=[dr.id, dme.id],
+            default_image_grading_scheme_id=dr.id,
+            encounter_grading_scheme_id=dr_set.id,
+            grading_packages=[EncounterSetGradingPackageInput(
+                name="DR with DME",
+                code="dr_with_dme",
+                applicability="always",
+                grading_mode="disease_specific",
+                image_grading_scheme_ids=[dr.id, dme.id],
+                encounter_grading_scheme_ids=[dr_set.id, dme_set.id],
+                default_image_grading_scheme_id=dr.id,
+                root_image_grading_scheme_id=dr.id,
+                encounter_scheme_by_image_disease_id={
+                    dr.id: dr_set.id,
+                    dme.id: dme_set.id,
+                },
+                image_scheme_auto_create_policies={dr.id: "always", dme.id: "always"},
+            )],
+        )},
+    )
+
+    assert error is None
 
 
 def test_update_project_changes_title_code_and_description(db_session, monkeypatch):

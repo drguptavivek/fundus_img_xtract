@@ -9,6 +9,7 @@ from models import (
     AMDReport,
     DiabeticRetinopathyReport,
     Disease,
+    EncounterSetGradingScope,
     EncounterSetGradingPackage,
     GlaucomaReport,
     GlaucomaResultsCleaned,
@@ -17,6 +18,12 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
+from encounter_sets.grading_policy import (
+    EncounterSetPackagePolicyDTO,
+    EncounterSetScopePolicyDTO,
+    freeze_policy_snapshot,
+    package_policy_from_model,
+)
 from services.encounter_referral_suggestion import (
     normalize_referral_positive_diseases,
     normalize_referral_suggestion,
@@ -1024,6 +1031,11 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
             for disease_id, policy in package_config["image_scheme_policies"].items()
             if policy == "positive_plus_negative_controls"
         }
+        if (
+            package_config["grading_mode"] == "disease_specific"
+            and package_config.get("root_scope_disease_id") in sampling_scheme_ids
+        ):
+            sampling_scheme_ids = {package_config["root_scope_disease_id"]}
         positive_control_scheme_ids = sorted(
             disease_id
             for disease_id in sampling_scheme_ids
@@ -1037,6 +1049,19 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
             }
         ) + positive_control_scheme_ids
         image_scheme_ids = sorted(set(image_scheme_ids))
+        root_scope_disease_id = package_config.get("root_scope_disease_id")
+        if (
+            package_config["grading_mode"] == "disease_specific"
+            and root_scope_disease_id in image_scheme_ids
+        ):
+            # Linked scopes are one allocation unit. If the root (for example
+            # DR) applies, every linked image scheme (for example DME) is
+            # created for the same constituent images.
+            image_scheme_ids = sorted({
+                disease_id
+                for scope in package_config["scopes"]
+                for disease_id in scope["image_grading_scheme_ids"]
+            })
         encounter_scheme_ids = sorted(set(package_config["encounter_scheme_ids"]))
         if sampling_scheme_ids and not image_scheme_ids:
             # A sampled negative remains dormant until a positive EncounterSet
@@ -1051,7 +1076,12 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
             created += 1
             package_config.pop("_created", None)
 
+        scope_by_encounter_scheme_id = {
+            scope["encounter_grading_scheme_id"]: scope
+            for scope in package_config["scopes"]
+        }
         for disease_id in encounter_scheme_ids:
+            scope = scope_by_encounter_scheme_id[disease_id]
             if _get_or_create_package_task(
                 db,
                 package=package,
@@ -1059,14 +1089,25 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
                 disease_id=disease_id,
                 target_level="encounter",
                 source=package_config["source"],
+                scope=_runtime_scope(package, scope),
             ):
                 created += 1
 
         for image in eligible_images:
             for disease_id in image_scheme_ids:
+                scope = next(
+                    scope
+                    for scope in package_config["scopes"]
+                    if disease_id in scope["image_grading_scheme_ids"]
+                )
+                routing_disease_id = (
+                    package_config.get("root_scope_disease_id")
+                    if package_config["grading_mode"] == "disease_specific"
+                    else disease_id
+                ) or disease_id
                 if not image_metadata_matches_rule(
                     image.metadata_json,
-                    package_config["image_scheme_metadata_rules"].get(disease_id),
+                    package_config["image_scheme_metadata_rules"].get(routing_disease_id),
                 ):
                     continue
                 if _get_or_create_package_task(
@@ -1077,6 +1118,7 @@ def _create_verified_encounter_set_tasks(db, encounter: PatientEncounters) -> in
                     target_level="image",
                     source=package_config["source"],
                     image=image,
+                    scope=_runtime_scope(package, scope),
                 ):
                     created += 1
         for disease_id in positive_control_scheme_ids:
@@ -1186,6 +1228,11 @@ def _create_negative_control_tasks_for_positive(
             created += 1
             package_config.pop("_created", None)
         for encounter_scheme_id in sorted(set(package_config.get("encounter_scheme_ids", []))):
+            scope_config = next(
+                scope
+                for scope in package_config["scopes"]
+                if scope["encounter_grading_scheme_id"] == encounter_scheme_id
+            )
             if _get_or_create_package_task(
                 db,
                 package=package,
@@ -1193,19 +1240,37 @@ def _create_negative_control_tasks_for_positive(
                 disease_id=encounter_scheme_id,
                 target_level="encounter",
                 source="profile_package_negative_control",
+                scope=_runtime_scope(package, scope_config),
             ):
                 created += 1
+        image_disease_ids = (
+            {
+                scope_disease_id
+                for scope in package_config["scopes"]
+                for scope_disease_id in scope["image_grading_scheme_ids"]
+            }
+            if package_config["grading_mode"] == "disease_specific"
+            and disease_id == package_config.get("root_scope_disease_id")
+            else {disease_id}
+        )
         for image in matching_images:
-            if _get_or_create_package_task(
-                db,
-                package=package,
-                encounter=candidate,
-                disease_id=disease_id,
-                target_level="image",
-                source="profile_package_negative_control",
-                image=image,
-            ):
-                created += 1
+            for image_disease_id in image_disease_ids:
+                scope_config = next(
+                    scope
+                    for scope in package_config["scopes"]
+                    if image_disease_id in scope["image_grading_scheme_ids"]
+                )
+                if _get_or_create_package_task(
+                    db,
+                    package=package,
+                    encounter=candidate,
+                    disease_id=image_disease_id,
+                    target_level="image",
+                    source="profile_package_negative_control",
+                    scope=_runtime_scope(package, scope_config),
+                    image=image,
+                ):
+                    created += 1
     return created
 
 
@@ -1331,51 +1396,36 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
             [package for package in config.grading_packages if package.active],
             key=lambda item: (item.display_order, item.name, item.id),
         ):
-            packages.append({
-                "config_id": package.id,
-                "name": package.name,
-                "code": package.code,
-                "applicability": "always",
-                "grading_mode": package.grading_mode or "unified",
-                "image_scheme_policies": {
-                    scheme.disease_id: scheme.auto_create_policy
-                    for scheme in package.image_grading_schemes if scheme.active
-                },
-                "image_scheme_negative_controls_per_positive": {
-                    scheme.disease_id: scheme.negative_controls_per_positive
-                    for scheme in package.image_grading_schemes if scheme.active
-                },
-                "image_scheme_metadata_rules": {
-                    scheme.disease_id: {
-                        "field_key": scheme.metadata_field_key,
-                        "match_value": scheme.metadata_match_value,
-                    }
-                    for scheme in package.image_grading_schemes
-                    if scheme.active and scheme.metadata_field_key and scheme.metadata_match_value
-                },
-                "encounter_scheme_ids": [
-                    scheme.disease_id for scheme in package.encounter_grading_schemes if scheme.active
-                ],
-                "source": "profile_package",
-            })
+            packages.append(_policy_config(db, package_policy_from_model(package)))
         if packages:
             return packages
 
     if config:
         image_scheme_ids = [scheme.disease_id for scheme in config.image_grading_schemes if scheme.active]
         encounter_scheme_ids = [config.encounter_grading_scheme_id] if config.encounter_grading_scheme_id else []
-        return [{
-            "config_id": None,
-            "name": "Default",
-            "code": "default",
-                "applicability": "always",
-                "grading_mode": "unified",
-            "image_scheme_policies": {disease_id: "always" for disease_id in image_scheme_ids},
-            "image_scheme_negative_controls_per_positive": {disease_id: 0 for disease_id in image_scheme_ids},
-            "image_scheme_metadata_rules": {},
-            "encounter_scheme_ids": encounter_scheme_ids,
-            "source": "profile_default",
-        }]
+        if len(encounter_scheme_ids) != 1:
+            return []
+        policy = EncounterSetPackagePolicyDTO(
+            config_id=None,
+            name="Default",
+            code="default",
+            applicability="always",
+            grading_mode="unified",
+            policy_revision=None,
+            root_scope_disease_id=None,
+            scopes=(EncounterSetScopePolicyDTO(
+                scope_disease_id=None,
+                image_grading_scheme_ids=tuple(image_scheme_ids),
+                encounter_grading_scheme_id=encounter_scheme_ids[0],
+                parent_scope_disease_id=None,
+                link_role="unified",
+            ),),
+            image_scheme_policies={disease_id: "always" for disease_id in image_scheme_ids},
+            image_scheme_negative_controls_per_positive={disease_id: 0 for disease_id in image_scheme_ids},
+            image_scheme_metadata_rules={},
+            source="profile_default",
+        )
+        return [_policy_config(db, policy)]
 
     target_disease_ids = {
         row[0]
@@ -1385,18 +1435,64 @@ def _encounter_set_package_configs(db, config: UploadProfileEncounterSetType | N
     }
     if not target_disease_ids and encounter.disease_id:
         target_disease_ids = {encounter.disease_id}
-    return [{
-        "config_id": None,
-        "name": "Default",
-        "code": "default",
-        "applicability": "always",
-        "grading_mode": "unified",
-        "image_scheme_policies": {},
-        "image_scheme_negative_controls_per_positive": {},
-        "image_scheme_metadata_rules": {},
-        "encounter_scheme_ids": sorted(target_disease_ids),
-        "source": "legacy_target_disease",
-    }]
+    # The legacy fallback cannot express multiple independent set anchors.
+    # Preserve its previous behavior only when the target is unambiguous.
+    if len(target_disease_ids) != 1:
+        return []
+    encounter_scheme_id = next(iter(target_disease_ids))
+    policy = EncounterSetPackagePolicyDTO(
+        config_id=None,
+        name="Default",
+        code="default",
+        applicability="always",
+        grading_mode="unified",
+        policy_revision=None,
+        root_scope_disease_id=None,
+        scopes=(EncounterSetScopePolicyDTO(
+            scope_disease_id=None,
+            image_grading_scheme_ids=(),
+            encounter_grading_scheme_id=encounter_scheme_id,
+            parent_scope_disease_id=None,
+            link_role="unified",
+        ),),
+        image_scheme_policies={},
+        image_scheme_negative_controls_per_positive={},
+        image_scheme_metadata_rules={},
+        source="legacy_target_disease",
+    )
+    return [_policy_config(db, policy)]
+
+
+def _policy_config(db, policy: EncounterSetPackagePolicyDTO) -> dict:
+    return {
+        "config_id": policy.config_id,
+        "name": policy.name,
+        "code": policy.code,
+        "applicability": policy.applicability,
+        "grading_mode": policy.grading_mode,
+        "policy_revision": policy.policy_revision,
+        "root_scope_disease_id": policy.root_scope_disease_id,
+        "policy_snapshot": freeze_policy_snapshot(db, policy),
+        "scopes": [
+            {
+                "scope_disease_id": scope.scope_disease_id,
+                "image_grading_scheme_ids": list(scope.image_grading_scheme_ids),
+                "encounter_grading_scheme_id": scope.encounter_grading_scheme_id,
+                "parent_scope_disease_id": scope.parent_scope_disease_id,
+                "link_role": scope.link_role,
+            }
+            for scope in policy.scopes
+        ],
+        "image_scheme_policies": dict(policy.image_scheme_policies),
+        "image_scheme_negative_controls_per_positive": dict(
+            policy.image_scheme_negative_controls_per_positive
+        ),
+        "image_scheme_metadata_rules": dict(policy.image_scheme_metadata_rules),
+        "encounter_scheme_ids": [
+            scope.encounter_grading_scheme_id for scope in policy.scopes
+        ],
+        "source": policy.source,
+    }
 
 
 def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_config: dict) -> EncounterSetGradingPackage:
@@ -1411,6 +1507,7 @@ def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_con
     if package:
         if not package.grading_mode:
             package.grading_mode = package_config.get("grading_mode") or "unified"
+        _ensure_runtime_scopes(db, package, package_config)
         return package
     package = EncounterSetGradingPackage(
         patient_encounter_id=encounter.id,
@@ -1419,13 +1516,53 @@ def _get_or_create_runtime_package(db, encounter: PatientEncounters, package_con
         code=package_config["code"],
         applicability=package_config["applicability"],
         grading_mode=package_config.get("grading_mode") or "unified",
+        root_scope_disease_id=package_config.get("root_scope_disease_id"),
+        policy_schema_version=1,
+        policy_revision=package_config.get("policy_revision"),
+        policy_snapshot_json=package_config.get("policy_snapshot"),
+        record_origin="native",
         state="pending",
         metadata_json={"source": package_config["source"], "grading_mode": package_config.get("grading_mode") or "unified"},
     )
     db.add(package)
     db.flush()
+    _ensure_runtime_scopes(db, package, package_config)
     package_config["_created"] = True
     return package
+
+
+def _ensure_runtime_scopes(db, package, package_config: dict) -> None:
+    scopes_by_disease_id = {scope.scope_disease_id: scope for scope in package.scopes}
+    for index, scope_config in enumerate(package_config["scopes"]):
+        scope_disease_id = scope_config["scope_disease_id"]
+        scope = scopes_by_disease_id.get(scope_disease_id)
+        if scope is None:
+            image_ids = scope_config["image_grading_scheme_ids"]
+            scope = EncounterSetGradingScope(
+                package=package,
+                scope_disease_id=scope_disease_id,
+                image_grading_scheme_id=image_ids[0] if len(image_ids) == 1 else None,
+                encounter_grading_scheme_id=scope_config["encounter_grading_scheme_id"],
+                parent_scope_disease_id=scope_config["parent_scope_disease_id"],
+                link_role=scope_config["link_role"],
+                state="pending",
+                display_order=index,
+                scope_snapshot_json=dict(scope_config),
+            )
+            db.add(scope)
+            db.flush()
+            scopes_by_disease_id[scope_disease_id] = scope
+
+
+def _runtime_scope(
+    package: EncounterSetGradingPackage, scope_config: dict
+) -> EncounterSetGradingScope:
+    scope_disease_id = scope_config["scope_disease_id"]
+    return next(
+        scope
+        for scope in package.scopes
+        if scope.scope_disease_id == scope_disease_id
+    )
 
 
 def _get_or_create_package_task(
@@ -1436,6 +1573,7 @@ def _get_or_create_package_task(
     disease_id: int,
     target_level: str,
     source: str,
+    scope: EncounterSetGradingScope,
     image: EncounterSetImage | None = None,
 ) -> bool:
     filters = [
@@ -1452,10 +1590,13 @@ def _get_or_create_package_task(
             existing.encounter_set_package_id = package.id
             existing.grading_target_level = target_level
             existing.task_source = source
+        if existing.encounter_set_scope_id is None:
+            existing.encounter_set_scope_id = scope.id
         return False
 
     task = GradingTask(
         encounter_set_package_id=package.id,
+        encounter_set_scope_id=scope.id,
         disease_id=disease_id,
         lab_unit_id=encounter.lab_unit_id,
         state="pending",

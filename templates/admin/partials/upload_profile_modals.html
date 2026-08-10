@@ -481,7 +481,8 @@
                                    name="encounter_set_type_{{ encounter_set_type.id }}_image_grading_scheme_ids"
                                    value="{{ disease.id }}"
                                    id="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}"
-                                   data-upload-profile-est-image-scheme>
+                                   data-upload-profile-est-image-scheme
+                                   data-linked-parent-id="{{ linked_disease_parent_by_child.get(disease.id, '') }}">
                             <label class="form-check-label" for="encounter_set_type_{{ encounter_set_type.id }}_image_scheme_{{ disease.id }}">
                               <span class="fw-semibold">{{ disease.name }}</span>
                               <span class="d-block text-muted small">Create image-level grading tasks for this scheme</span>

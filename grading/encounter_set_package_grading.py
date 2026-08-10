@@ -9,8 +9,15 @@ from markupsafe import Markup
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
-from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
+from encounter_sets.grading_records import (
+    EncounterSetGradingError,
+    EncounterSetSubmissionInputDTO,
+    StaleEncounterSetPackageError,
+    TargetGradeInputDTO,
+    editable_tasks,
+    submit_package,
+)
 from grading.grade_feature_submission import (
     GradeFeatureValidationError,
     parse_selected_features,
@@ -18,9 +25,8 @@ from grading.grade_feature_submission import (
     serialize_grade_features,
 )
 from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS, sanitize_guidelines_html
-from models import DiseaseGrading, EncounterSetGradingPackage, Grade, GradingTask
-from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
-from utils.dualGradingEligibility import get_user_eligibility_for_task, has_user_graded_task
+from models import DiseaseGrading, EncounterSetGradingPackage, EncounterSetGradingScope, Grade, GradingTask
+from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
 
 logger = logging.getLogger("grading.encounter_set_package")
@@ -40,7 +46,7 @@ def register_routes(bp):
 
 
 @login_required
-@roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+@roles_required("resident", "ophthalmologist")
 def encounter_set_package_grading(package_uuid: str, slot_type: str):
     if slot_type not in {"resident", "resident2", "arbitrator"}:
         flash("Invalid grading slot.", "danger")
@@ -52,8 +58,24 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
             flash("EncounterSet grading package not found.", "danger")
             return redirect(url_for("grading.index"))
 
-        tasks = _ordered_package_tasks(package)
-        task_panels = [_task_panel(db, task, slot_type) for task in tasks]
+        editable = editable_tasks(package, slot_type, current_user.id)
+        tasks = (
+            _ordered_tasks(editable)
+            if slot_type == "arbitrator"
+            else _ordered_package_tasks(package)
+        )
+        slot_eligible = _package_slot_eligible(db, package, editable, slot_type)
+        editable_ids = {task.id for task in editable}
+        task_panels = [
+            _task_panel(
+                db,
+                task,
+                slot_type,
+                package=package,
+                available=slot_eligible and task.id in editable_ids,
+            )
+            for task in tasks
+        ]
         if not any(panel["available"] for panel in task_panels):
             flash("No targets in this package are available for your grading slot.", "info")
             return redirect(url_for("grading.index"))
@@ -89,7 +111,7 @@ def encounter_set_package_grading(package_uuid: str, slot_type: str):
 
 
 @login_required
-@roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+@roles_required("resident", "ophthalmologist")
 def encounter_set_package_submit():
     package_uuid = request.form.get("package_uuid")
     slot_type = request.form.get("slot")
@@ -103,16 +125,17 @@ def encounter_set_package_submit():
             flash("EncounterSet grading package not found.", "danger")
             return redirect(url_for("grading.index"))
 
+        expected_revision = _int_form_value("package_revision")
+        if expected_revision is None:
+            flash("The package revision is missing. Reload before submitting.", "danger")
+            return redirect(url_for("grading.encounter_set_package_grading", package_uuid=package_uuid, slot_type=slot_type))
+        editable = editable_tasks(package, slot_type, current_user.id)
+        if not _package_slot_eligible(db, package, editable, slot_type):
+            flash("This package slot is not allocated to you.", "danger")
+            return redirect(url_for("grading.index"))
+
         submissions = []
-        for task in _ordered_package_tasks(package):
-            if not _task_available_for_slot(task, slot_type):
-                continue
-            if not get_user_eligibility_for_task(db, current_user.id, task.id, slot_type):
-                continue
-            if slot_type in {"resident", "resident2"}:
-                conflicting_slots = ["resident2"] if slot_type == "resident" else ["resident"]
-                if has_user_graded_task(db, current_user.id, task.id, conflicting_slots):
-                    continue
+        for task in editable:
 
             label_id = _int_form_value(f"label_id_{task.uuid}")
             if not label_id:
@@ -124,7 +147,6 @@ def encounter_set_package_submit():
                 .filter(
                     DiseaseGrading.id == label_id,
                     DiseaseGrading.disease_id == task.disease_id,
-                    DiseaseGrading.is_active.is_(True),
                 )
                 .first()
             )
@@ -165,9 +187,13 @@ def encounter_set_package_submit():
                     )
                 )
 
-            submissions.append(
-                (task, label_id, existing_grade, comment, feature_submission)
-            )
+            submissions.append(TargetGradeInputDTO(
+                task_uuid=task.uuid,
+                disease_grading_id=label_id,
+                comment=comment,
+                selected_features_json=feature_submission.selected_features_json,
+                feature_geometry_json=feature_submission.feature_geometry_json,
+            ))
 
         if not submissions:
             flash("No package targets were updated.", "warning")
@@ -179,36 +205,24 @@ def encounter_set_package_submit():
                 )
             )
 
-        for task, label_id, existing_grade, comment, feature_submission in submissions:
-            now = utcnow()
-            if existing_grade:
-                existing_grade.disease_grading_id = label_id
-                existing_grade.comment = comment
-                existing_grade.selected_features_json = (
-                    feature_submission.selected_features_json
-                )
-                existing_grade.feature_geometry_json = (
-                    feature_submission.feature_geometry_json
-                )
-                existing_grade.updated_at = now
-            else:
-                db.add(
-                    Grade(
-                        task_id=task.id,
-                        grader_user_id=current_user.id,
-                        role_slot=slot_type,
-                        disease_grading_id=label_id,
-                        comment=comment,
-                        selected_features_json=feature_submission.selected_features_json,
-                        feature_geometry_json=feature_submission.feature_geometry_json,
-                        created_at=now,
-                    )
-                )
-            db.flush()
-            update_task_state_based_on_grades(task.id, db)
+        try:
+            submit_package(db, package, EncounterSetSubmissionInputDTO(
+                package_uuid=package.uuid,
+                role_slot=slot_type,
+                grader_user_id=current_user.id,
+                expected_package_revision=expected_revision,
+                targets=tuple(submissions),
+            ))
+        except StaleEncounterSetPackageError as exc:
+            flash(str(exc), "warning")
+            return redirect(url_for("grading.encounter_set_package_grading", package_uuid=package_uuid, slot_type=slot_type))
+        except EncounterSetGradingError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("grading.encounter_set_package_grading", package_uuid=package_uuid, slot_type=slot_type))
+
+        for task in editable:
             cleanup_task_tracker(task.id, current_user.id, slot_type, db)
 
-        _sync_package_state(package)
         flash(f"Submitted {len(submissions)} target grade(s) for {package.name}.", "success")
         return redirect(url_for("grading.index"))
 
@@ -218,9 +232,13 @@ def _fetch_package(db, package_uuid: str, *, for_update: bool = False) -> Encoun
         db.query(EncounterSetGradingPackage)
         .options(
             selectinload(EncounterSetGradingPackage.patient_encounter),
+            selectinload(EncounterSetGradingPackage.submissions),
+            selectinload(EncounterSetGradingPackage.scopes)
+            .selectinload(EncounterSetGradingScope.tasks),
             selectinload(EncounterSetGradingPackage.tasks).selectinload(GradingTask.disease),
             selectinload(EncounterSetGradingPackage.tasks).selectinload(GradingTask.encounter_set_image),
             selectinload(EncounterSetGradingPackage.tasks).selectinload(GradingTask.grades).selectinload(Grade.label),
+            selectinload(EncounterSetGradingPackage.tasks).selectinload(GradingTask.consensus),
         )
         .filter(EncounterSetGradingPackage.uuid == package_uuid)
     )
@@ -230,9 +248,20 @@ def _fetch_package(db, package_uuid: str, *, for_update: bool = False) -> Encoun
 
 
 def _ordered_package_tasks(package: EncounterSetGradingPackage) -> list[GradingTask]:
+    return _ordered_tasks(
+        [task for task in package.tasks if task.state != "final" or task.grades]
+    )
+
+
+def _ordered_tasks(tasks: list[GradingTask]) -> list[GradingTask]:
     return sorted(
-        [task for task in package.tasks if task.state != "final" or task.grades],
+        tasks,
         key=lambda task: (
+            (
+                task.encounter_set_scope.display_order
+                if getattr(task, "encounter_set_scope", None)
+                else 0
+            ),
             1 if task.grading_target_level == "encounter" else 0,
             _task_laterality_order(task),
             task.encounter_set_image.spatial_position if task.encounter_set_image else 0,
@@ -254,14 +283,38 @@ def _task_laterality_order(task: GradingTask) -> int:
     return 2
 
 
-def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
-    labels = (
+def _task_panel(
+    db,
+    task: GradingTask,
+    slot_type: str,
+    *,
+    package=None,
+    available: bool | None = None,
+) -> dict:
+    label_ids = {
+        row.get("id")
+        for row in (
+            ((package.policy_snapshot_json if package else {}) or {})
+            .get("grading_definitions", {})
+            .get(str(task.disease_id), {})
+            .get("labels", [])
+        )
+    }
+    label_query = (
         db.query(DiseaseGrading)
         .options(selectinload(DiseaseGrading.features))
-        .filter(DiseaseGrading.disease_id == task.disease_id, DiseaseGrading.is_active.is_(True))
-        .order_by(DiseaseGrading.display_order)
-        .all()
     )
+    if package is not None:
+        label_query = label_query.filter(
+            DiseaseGrading.disease_id == task.disease_id,
+            DiseaseGrading.id.in_(label_ids),
+        )
+    else:
+        label_query = label_query.filter(
+            DiseaseGrading.disease_id == task.disease_id,
+            DiseaseGrading.is_active.is_(True),
+        )
+    labels = label_query.order_by(DiseaseGrading.display_order).all()
     existing = next(
         (
             grade for grade in task.grades
@@ -269,17 +322,17 @@ def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
         ),
         None,
     )
-    state_available = _task_available_for_slot(task, slot_type)
-    allocated = state_available and get_user_eligibility_for_task(
-        db,
-        current_user.id,
-        task.id,
-        slot_type,
-    )
-    if not state_available:
-        unavailable_reason = "Not available at this grading stage"
-    elif not allocated:
-        unavailable_reason = "Not allocated to you"
+    eligibility_checked = available is None
+    if eligibility_checked:
+        available = get_user_eligibility_for_task(
+            db, current_user.id, task.id, slot_type
+        )
+    if not available:
+        unavailable_reason = (
+            "Not allocated to you"
+            if eligibility_checked
+            else "Not available at this grading stage"
+        )
     else:
         unavailable_reason = None
     return {
@@ -294,36 +347,19 @@ def _task_panel(db, task: GradingTask, slot_type: str) -> dict:
             existing.selected_features_json if existing else None
         ),
         "existing_grade": existing,
-        "available": allocated,
+        "available": available,
         "unavailable_reason": unavailable_reason,
     }
 
 
-def _task_available_for_slot(task: GradingTask, slot_type: str) -> bool:
-    if slot_type == "resident":
-        return task.state in {"pending", "resident_done"}
-    if slot_type == "resident2":
-        return task.state in {"resident_done", "resident2_done", "arbitration"}
-    if slot_type == "arbitrator":
-        return task.state in {"arbitration", "final"}
-    return False
-
-
-def _sync_package_state(package: EncounterSetGradingPackage) -> None:
-    task_states = {task.state for task in package.tasks}
-    if not task_states:
-        return
-    if "arbitration" in task_states:
-        package.state = "arbitration"
-    elif task_states == {"final"}:
-        package.state = "final"
-        package.completed_at = utcnow()
-    elif task_states.issubset({"resident2_done", "final"}):
-        package.state = "resident2_done"
-    elif task_states.issubset({"resident_done", "resident2_done", "final"}):
-        package.state = "resident_done"
-    else:
-        package.state = "pending"
+def _package_slot_eligible(db, package, tasks, slot_type: str) -> bool:
+    owner_id = getattr(package, f"{slot_type}_user_id")
+    if owner_id is not None:
+        return owner_id == current_user.id
+    return any(
+        get_user_eligibility_for_task(db, current_user.id, task.id, slot_type)
+        for task in tasks
+    )
 
 
 def _int_form_value(name: str) -> int | None:

@@ -305,6 +305,8 @@ class UploadProfileEncounterSetTypeGradingPackage(Base):
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     applicability: Mapped[str] = mapped_column(String(64), nullable=False, default="always", server_default="always")
     grading_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="unified", server_default="unified")
+    policy_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    scope_config_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     default_image_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey("diseases.id", ondelete="RESTRICT"), nullable=True, index=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True, server_default="true")

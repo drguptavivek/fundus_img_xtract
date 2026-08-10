@@ -1485,6 +1485,7 @@ class GradingTask(Base):
     patient_encounter_id: Mapped[int | None] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), nullable=True, index=True)
     encounter_set_image_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_images.id', ondelete='CASCADE'), nullable=True, index=True)
     encounter_set_package_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='CASCADE'), nullable=True, index=True)
+    encounter_set_scope_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_scopes.id', ondelete='CASCADE'), nullable=True, index=True)
     grading_target_level: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
     task_source: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
@@ -1510,6 +1511,11 @@ class GradingTask(Base):
     encounter_set_package: Mapped['EncounterSetGradingPackage | None'] = relationship(
         'EncounterSetGradingPackage',
         back_populates='tasks',
+    )
+    encounter_set_scope: Mapped['EncounterSetGradingScope | None'] = relationship(
+        'EncounterSetGradingScope',
+        back_populates='tasks',
+        foreign_keys=[encounter_set_scope_id],
     )
     grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     consensus: Mapped['Consensus | None'] = relationship(
@@ -1568,6 +1574,15 @@ class EncounterSetGradingPackage(Base):
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     applicability: Mapped[str | None] = mapped_column(String(64), nullable=True)
     grading_mode: Mapped[str] = mapped_column(String(32), default="unified", server_default="unified", nullable=False)
+    root_scope_disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='RESTRICT'), nullable=True, index=True)
+    policy_schema_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    policy_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    policy_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    record_origin: Mapped[str] = mapped_column(String(32), default="native", server_default="native", nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    resident_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    resident2_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    arbitrator_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     state: Mapped[str] = mapped_column(String(24), default='pending', nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -1578,6 +1593,19 @@ class EncounterSetGradingPackage(Base):
     tasks: Mapped[list['GradingTask']] = relationship(
         'GradingTask',
         back_populates='encounter_set_package',
+        cascade='all, delete-orphan',
+        lazy='selectin',
+    )
+    scopes: Mapped[list['EncounterSetGradingScope']] = relationship(
+        'EncounterSetGradingScope',
+        back_populates='package',
+        cascade='all, delete-orphan',
+        lazy='selectin',
+        order_by='EncounterSetGradingScope.display_order',
+    )
+    submissions: Mapped[list['EncounterSetGradingSubmission']] = relationship(
+        'EncounterSetGradingSubmission',
+        back_populates='package',
         cascade='all, delete-orphan',
         lazy='selectin',
     )
@@ -1592,7 +1620,116 @@ class EncounterSetGradingPackage(Base):
             "grading_mode IN ('unified','disease_specific')",
             name='ck_encounter_set_grading_package_mode',
         ),
+        CheckConstraint(
+            "record_origin IN ('native','legacy_reconstructed','legacy_partial')",
+            name='ck_encounter_set_grading_package_origin',
+        ),
         Index('ix_esgp_encounter_state', 'patient_encounter_id', 'state'),
+    )
+
+
+class EncounterSetGradingScope(Base):
+    """Frozen disease/set scope inside one runtime EncounterSet package."""
+
+    __tablename__ = 'encounter_set_grading_scopes'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid4()))
+    encounter_set_package_id: Mapped[int] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='CASCADE'), nullable=False, index=True)
+    scope_disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='RESTRICT'), nullable=True, index=True)
+    image_grading_scheme_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='RESTRICT'), nullable=True, index=True)
+    encounter_grading_scheme_id: Mapped[int] = mapped_column(ForeignKey('diseases.id', ondelete='RESTRICT'), nullable=False, index=True)
+    parent_scope_disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='RESTRICT'), nullable=True, index=True)
+    link_role: Mapped[str] = mapped_column(String(16), nullable=False, default='root', server_default='root')
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default='pending', server_default='pending', index=True)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
+    scope_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    package: Mapped['EncounterSetGradingPackage'] = relationship('EncounterSetGradingPackage', back_populates='scopes')
+    tasks: Mapped[list['GradingTask']] = relationship(
+        'GradingTask',
+        back_populates='encounter_set_scope',
+        foreign_keys='GradingTask.encounter_set_scope_id',
+        lazy='selectin',
+    )
+    scope_disease: Mapped['Disease | None'] = relationship('Disease', foreign_keys=[scope_disease_id])
+    image_grading_scheme: Mapped['Disease | None'] = relationship('Disease', foreign_keys=[image_grading_scheme_id])
+    encounter_grading_scheme: Mapped['Disease'] = relationship('Disease', foreign_keys=[encounter_grading_scheme_id])
+
+    __table_args__ = (
+        UniqueConstraint('encounter_set_package_id', 'scope_disease_id', name='uq_es_grading_scope_package_disease'),
+        CheckConstraint("link_role IN ('root','linked','unified')", name='ck_es_grading_scope_link_role'),
+        CheckConstraint("state IN ('pending','resident_done','resident2_done','arbitration','final')", name='ck_es_grading_scope_state'),
+    )
+
+
+class EncounterSetGradingSubmission(Base):
+    """Immutable package or scope submission audit event."""
+
+    __tablename__ = 'encounter_set_grading_submissions'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid4()))
+    encounter_set_package_id: Mapped[int] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='CASCADE'), nullable=False, index=True)
+    grader_user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False, index=True)
+    role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    submission_kind: Mapped[str] = mapped_column(String(16), nullable=False, default='initial', server_default='initial')
+    package_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default='true')
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default='native', server_default='native')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+    package: Mapped['EncounterSetGradingPackage'] = relationship('EncounterSetGradingPackage', back_populates='submissions')
+    grader: Mapped['User'] = relationship('User')
+    items: Mapped[list['EncounterSetGradingSubmissionItem']] = relationship(
+        'EncounterSetGradingSubmissionItem',
+        back_populates='submission',
+        cascade='all, delete-orphan',
+        lazy='selectin',
+    )
+
+    __table_args__ = (
+        CheckConstraint("role_slot IN ('resident','resident2','arbitrator')", name='ck_es_grading_submission_role'),
+        CheckConstraint("submission_kind IN ('initial','revision','legacy_import')", name='ck_es_grading_submission_kind'),
+        CheckConstraint("source IN ('native','legacy_backfill')", name='ck_es_grading_submission_source'),
+    )
+
+
+class EncounterSetGradingSubmissionItem(Base):
+    """Immutable value snapshot for one target in a package submission."""
+
+    __tablename__ = 'encounter_set_grading_submission_items'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey('encounter_set_grading_submissions.id', ondelete='CASCADE'), nullable=False)
+    encounter_set_scope_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_scopes.id', ondelete='SET NULL'), nullable=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='RESTRICT'), nullable=False)
+    grade_id: Mapped[int | None] = mapped_column(ForeignKey('grades.id', ondelete='SET NULL'), nullable=True)
+    target_level: Mapped[str] = mapped_column(String(24), nullable=False)
+    scope_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='SET NULL'), nullable=True)
+    scope_disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id', ondelete='RESTRICT'), nullable=False)
+    grade_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selected_features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feature_geometry_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    target_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    submission: Mapped['EncounterSetGradingSubmission'] = relationship('EncounterSetGradingSubmission', back_populates='items')
+
+    __table_args__ = (
+        UniqueConstraint('submission_id', 'task_id', name='uq_es_grading_submission_item_task'),
+        CheckConstraint("target_level IN ('image','encounter')", name='ck_es_grading_submission_item_target'),
+        CheckConstraint("scope_kind IN ('encounter_set_unified','encounter_set_disease')", name='ck_es_grading_submission_item_scope'),
+        Index('ix_esgsi_submission', 'submission_id'),
+        Index('ix_esgsi_scope', 'encounter_set_scope_id'),
+        Index('ix_esgsi_task', 'task_id'),
+        Index('ix_esgsi_grade', 'grade_id'),
+        Index('ix_esgsi_scope_disease', 'scope_disease_id'),
     )
 
 
@@ -1713,6 +1850,11 @@ class Consensus(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, unique=True)
     final_disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id'), nullable=False)
     method: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    consensus_scope: Mapped[str] = mapped_column(String(32), nullable=False, default='image', server_default='image', index=True)
+    encounter_set_package_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_packages.id', ondelete='SET NULL'), nullable=True, index=True)
+    encounter_set_scope_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_set_grading_scopes.id', ondelete='SET NULL'), nullable=True, index=True)
+    scope_disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id', ondelete='SET NULL'), nullable=True, index=True)
+    scope_disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     
@@ -1727,6 +1869,14 @@ class Consensus(Base):
 
     __table_args__ = (
         CheckConstraint("method IN ('match','adjudication','task_review','regrade')", name='ck_consensus_method_valid'),
+        CheckConstraint(
+            "consensus_scope IN ('image','encounter_set_unified','encounter_set_disease')",
+            name='ck_consensus_scope_valid',
+        ),
+        CheckConstraint(
+            "consensus_scope <> 'encounter_set_disease' OR scope_disease_id IS NOT NULL",
+            name='ck_consensus_disease_scope_present',
+        ),
     )
 
 

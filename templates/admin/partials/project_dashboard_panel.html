@@ -192,6 +192,8 @@
                   'code': package.code,
                   'applicability': package.applicability,
                   'grading_mode': package.grading_mode or 'unified',
+                  'root_image_grading_scheme_id': (package.scope_config_json or {}).get('root_image_grading_scheme_id'),
+                  'scope_config': package.scope_config_json or {},
                   'image_grading_scheme_ids': package_image_ids,
                   'encounter_grading_scheme_ids': package_encounter_ids,
                   'default_image_grading_scheme_id': package.default_image_grading_scheme_id,

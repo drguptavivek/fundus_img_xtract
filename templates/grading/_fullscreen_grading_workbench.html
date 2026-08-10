@@ -193,6 +193,7 @@
     <span id="imggr-preset-save-button" class="d-none">{{ csrf_field() }}</span>
     <input type="hidden" name="package_uuid" value="{{ package.uuid }}">
     <input type="hidden" name="slot" value="{{ slot_type }}">
+    <input type="hidden" name="package_revision" value="{{ package.revision_number }}">
 
     <header class="fgw-header border-bottom pb-2 mb-2">
       <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
@@ -371,7 +372,7 @@
                   {% for image_panel in task_panels %}
                     {% set image_task = image_panel.task %}
                     {% set target_image = image_task.encounter_set_image %}
-                    {% if target_image %}
+                    {% if target_image and image_task.encounter_set_scope_id == task.encounter_set_scope_id %}
                       {% set target_meta = target_image.metadata_json or {} %}
                       {% set target_laterality = (target_meta.get('laterality') or target_meta.get('eye') or '')|lower %}
                       {% if target_laterality in ['od', 'right', 'right eye', 'r'] %}

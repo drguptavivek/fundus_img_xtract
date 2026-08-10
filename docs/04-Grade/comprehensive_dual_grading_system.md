@@ -102,6 +102,21 @@ Task State: arbitration → Arbitrator Access → Review Both Grades → Final D
 - Make final consensus decision
 - Record rationale and supporting evidence
 
+### EncounterSet package exception
+
+EncounterSet packages use complete-set submissions and set-anchor consensus:
+
+- `resident`, `resident2`, and `arbitrator` are workflow slots. The application roles authorized to open grading endpoints are `resident` and `ophthalmologist`.
+- A disease-specific package may contain a root disease and active linked diseases, for example DR and DME. They share one allocation and one role-slot owner.
+- The workbench presents all root-disease images followed by its set grade, then all linked-disease images followed by that disease's set grade.
+- A role-slot submission is atomic across every currently editable package target. Missing any linked image or set grade leaves the package pending.
+- Resident/Resident2 consensus compares only each scope's set-level grade. Image-level grades remain independent observations and never create image consensus rows.
+- A DR match with DME mismatch finalizes the DR scope and sends only the DME images plus DME set target to masked arbitration.
+- The arbitrator never sees Resident, Resident2, or AI grades. The arbitrator submits fresh image and set grades; only the set target receives `Consensus(method="adjudication")`.
+- The package is final only when every disease/unified set scope is final. AI grades never affect package finality.
+- Runtime packages freeze their policy, labels, features, linked scopes, and policy revision. History validation never depends on the current project or Upload & Grading Profile.
+- Resident, Resident2, and arbitrator submissions can be revised by their owner for 12 hours. A pre-adjudication human revision recalculates set consensus and can open or cancel selective arbitration. Optimistic package revisions reject stale submissions.
+
 ### 5. Finalization and Consensus
 
 **Consensus Creation:**

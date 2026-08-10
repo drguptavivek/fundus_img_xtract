@@ -120,6 +120,7 @@ EncounterSet packages use complete-set submissions and set-anchor consensus:
 - The package is final only when every disease/unified set scope is final. AI grades never affect package finality.
 - Runtime packages freeze their EncounterSetType identity, policy, labels, features, linked scopes, and policy revision. History and queue meaning never depend on the current Upload & Grading Profile.
 - Rebuilding legacy runtime packages is an explicit maintenance operation: it previews and locks the exact population, discards human observations only when confirmed, preserves AI image observations, and recreates pending packages from current mutable policy without sampling unrelated negative-control EncounterSets.
+- `positive_plus_negative_controls` creates controls only while a positive EncounterSet is verified; grading never creates tasks. The bounded historical backfill is a one-time maintenance operation and refuses to run after negative-control tasks exist, preventing accidental ratio multiplication.
 - The arbitrator's existing 12-hour owner revision window is separate from the Resident/Resident2 waiting period. Optimistic package revisions reject stale submissions.
 
 ### 5. Finalization and Consensus

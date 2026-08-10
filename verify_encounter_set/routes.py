@@ -1228,6 +1228,7 @@ def _create_negative_control_tasks_for_positive(
     disease_id: int,
     package_config: dict,
     controls_per_positive: int,
+    candidate_encounter_ids: tuple[int, ...] | None = None,
 ) -> int:
     controls_per_positive = max(0, min(20, int(controls_per_positive or 0)))
     if controls_per_positive <= 0:
@@ -1235,20 +1236,28 @@ def _create_negative_control_tasks_for_positive(
     config = _active_encounter_set_type_config(positive_encounter)
     if not config:
         return 0
-    candidates = (
-        db.query(PatientEncounters)
-        .filter(
-            PatientEncounters.id != positive_encounter.id,
-            PatientEncounters.is_set_based.is_(True),
-            PatientEncounters.encounter_verified_status == "verified",
-            PatientEncounters.lab_unit_id == positive_encounter.lab_unit_id,
-            PatientEncounters.project_id == positive_encounter.project_id,
-            PatientEncounters.upload_profile_id == positive_encounter.upload_profile_id,
-        )
-        .order_by(func.random())
-        .limit(controls_per_positive * 4)
-        .all()
+    candidate_query = db.query(PatientEncounters).filter(
+        PatientEncounters.id != positive_encounter.id,
+        PatientEncounters.is_set_based.is_(True),
+        PatientEncounters.encounter_verified_status == "verified",
+        PatientEncounters.lab_unit_id == positive_encounter.lab_unit_id,
+        PatientEncounters.project_id == positive_encounter.project_id,
+        PatientEncounters.upload_profile_id == positive_encounter.upload_profile_id,
     )
+    if candidate_encounter_ids is None:
+        candidates = (
+            candidate_query.order_by(func.random())
+            .limit(controls_per_positive * 4)
+            .all()
+        )
+    else:
+        candidates = (
+            candidate_query.filter(
+                PatientEncounters.id.in_(candidate_encounter_ids)
+            )
+            .order_by(PatientEncounters.id)
+            .all()
+        )
     created = 0
     selected = 0
     for candidate in candidates:

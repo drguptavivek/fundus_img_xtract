@@ -1,0 +1,87 @@
+<section class="mb-4" aria-labelledby="grading-eligibility-heading">
+  <div class="card shadow-sm">
+    <div class="card-body p-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+        <div>
+          <h3 class="h5 mb-0" id="grading-eligibility-heading">My Grading Eligibility</h3>
+          <div class="small text-muted">Non-project permissions and explicit project allocations are shown separately.</div>
+        </div>
+        <a class="small" href="{{ url_for('fundus_api.get_my_grading_eligibility') }}">Eligibility API</a>
+      </div>
+
+      <div class="accordion accordion-flush border rounded overflow-hidden" id="gradingEligibilityAccordion">
+        <div class="accordion-item">
+          <h4 class="accordion-header" id="nonProjectEligibilityHeading">
+            <button class="accordion-button collapsed py-2 px-3 small fw-semibold" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#nonProjectEligibility"
+                    aria-expanded="false" aria-controls="nonProjectEligibility">
+              Non-project / legacy grading
+              <span class="badge text-bg-secondary ms-2">{{ grading_eligibility.non_project|length }}</span>
+            </button>
+          </h4>
+          <div id="nonProjectEligibility" class="accordion-collapse collapse"
+               aria-labelledby="nonProjectEligibilityHeading" data-bs-parent="#gradingEligibilityAccordion">
+            <div class="accordion-body p-0 overflow-auto" style="max-height: 12rem;">
+            {% if grading_eligibility.non_project %}
+              {% for item in grading_eligibility.non_project %}
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 px-2 py-1 border-bottom small">
+                <div class="text-truncate" title="{{ item.hospital.name }} · {{ item.lab_unit.name }}">
+                  <span class="fw-semibold">{{ item.disease.name }}</span>
+                  <span class="text-muted">· {{ item.hospital.name }} / {{ item.lab_unit.name }}</span>
+                </div>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for slot in item.role_slots %}
+                  <span class="badge text-bg-light border">{{ 'Resident 2' if slot == 'resident2' else slot|title }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="small text-muted px-2 py-2">No non-project grading permission.</div>
+            {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h4 class="accordion-header" id="projectEligibilityHeading">
+            <button class="accordion-button collapsed py-2 px-3 small fw-semibold" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#projectEligibility"
+                    aria-expanded="false" aria-controls="projectEligibility">
+              Project-wise grading
+              <span class="badge text-bg-secondary ms-2">{{ grading_eligibility.project|length }}</span>
+            </button>
+          </h4>
+          <div id="projectEligibility" class="accordion-collapse collapse"
+               aria-labelledby="projectEligibilityHeading" data-bs-parent="#gradingEligibilityAccordion">
+            <div class="accordion-body p-0 overflow-auto" style="max-height: 12rem;">
+            {% if grading_eligibility.project %}
+              {% for item in grading_eligibility.project %}
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 px-2 py-1 border-bottom small">
+                <div class="text-truncate" title="{{ item.project.title }} · {{ item.lab_unit.name }}">
+                  <span class="fw-semibold">{{ item.project.title }}</span>
+                  <span class="text-muted">
+                    · {{ item.disease.name if item.disease else (item.encounter_set_type.name if item.encounter_set_type else item.scope|replace('_', ' ')|title) }}
+                    · {{ item.lab_unit.name }}
+                  </span>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                  <span class="badge text-bg-light border">{{ item.capacity|replace('_', ' ')|title }}</span>
+                  {% if item.effective %}
+                  <span class="badge text-bg-success">Active</span>
+                  {% else %}
+                  <span class="badge text-bg-warning">Configured</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="small text-muted px-2 py-2">No explicit project grading allocation.</div>
+            {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

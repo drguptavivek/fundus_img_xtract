@@ -7,13 +7,14 @@ from sqlalchemy import and_, desc, distinct, func
 
 
 from auth.roles import roles_required
+from db_transaction_manager import transaction_scope
+from grading.dashboard_service import grader_eligibility_dto, grading_history_page
 from grading_allocation.dashboard import list_project_encounter_set_queues
-from models import Session, PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
+from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_linked_followup_counts
 from utils.dualGradingKPIs import get_user_task_tracker_kpi_data
-from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
  
@@ -24,93 +25,73 @@ def _build_history_panel_context(
     page: int,
     per_page: int,
     filter_date: str | None,
+    history_type: str,
+    disease_id: int | None,
 ):
-    my_items, total_mine = get_user_gradings_with_details(
+    history = grading_history_page(
         db,
         user_id=user_id,
+        requested_date=filter_date,
+        history_type=history_type,
+        disease_id=disease_id,
         page=page,
         per_page=per_page,
-        filter_date=filter_date,
-        exclude_role_slots={'review'}
     )
-
-    available_dates = db.query(
-        func.date(Grade.created_at).label('grading_date')
-    ).filter(
-        Grade.grader_user_id == user_id
-    ).group_by(
-        func.date(Grade.created_at)
-    ).order_by(
-        desc(func.date(Grade.created_at))
-    ).all()
-
-    date_list = [date[0] for date in available_dates]
-
-    prev_date = None
-    next_date = None
-
-    if filter_date and filter_date in date_list:
-        current_index = date_list.index(filter_date)
-        if current_index < len(date_list) - 1:
-            prev_date = date_list[current_index + 1]
-        if current_index > 0:
-            next_date = date_list[current_index - 1]
-
-    mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
-    mine_next_url = url_for('grading.index', date=next_date) if next_date else None
-
-    total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
-
-    page_prev_url = None
-    page_next_url = None
-    if total_pages_mine > 1:
-        if page > 1:
-            page_params = {'p': page - 1}
-            if filter_date:
-                page_params['date'] = filter_date
-            page_prev_url = url_for('grading.index', **page_params)
-
-        if page < total_pages_mine:
-            page_params = {'p': page + 1}
-            if filter_date:
-                page_params['date'] = filter_date
-            page_next_url = url_for('grading.index', **page_params)
-
-    type_counts = {}
-    for item in my_items:
-        grade_for = item.get('disease_name', 'Unknown')
-        type_counts[grade_for] = type_counts.get(grade_for, 0) + 1
+    def history_url(*, selected_date=None, selected_page=1):
+        params = {
+            "date": selected_date or history.selected_date,
+            "history_type": history.history_type,
+        }
+        if history.disease_id:
+            params["disease_id"] = history.disease_id
+        if selected_page > 1:
+            params["p"] = selected_page
+        return url_for("grading.index", **params)
 
     return {
-        'my_items': my_items,
-        'my_total': total_mine,
-        'my_page': page,
-        'my_total_pages': total_pages_mine,
-        'my_prev_url': mine_prev_url,
-        'my_next_url': mine_next_url,
-        'page_prev_url': page_prev_url,
-        'page_next_url': page_next_url,
-        'filter_date': filter_date,
-        'type_counts': type_counts,
+        "history": history.to_dict(),
+        "my_prev_url": (
+            history_url(selected_date=history.previous_date)
+            if history.previous_date else None
+        ),
+        "my_next_url": (
+            history_url(selected_date=history.next_date)
+            if history.next_date else None
+        ),
+        "page_prev_url": (
+            history_url(selected_page=history.page - 1)
+            if history.page > 1 else None
+        ),
+        "page_next_url": (
+            history_url(selected_page=history.page + 1)
+            if history.page < history.total_pages else None
+        ),
     }
 
 
 @roles_required("resident", "ophthalmologist")
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
-    db = Session()
-    try:
+    with transaction_scope() as db:
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
-        per_page = 50
+        per_page = 12
         filter_date = request.args.get('date', default=None, type=str)
-        history_panel_context = _build_history_panel_context(
-            db,
-            user_id=getattr(current_user, 'id', None),
-            page=page,
-            per_page=per_page,
-            filter_date=filter_date,
-        )
+        history_type = request.args.get("history_type", default="all", type=str)
+        disease_id = request.args.get("disease_id", default=None, type=int)
+        try:
+            history_panel_context = _build_history_panel_context(
+                db,
+                user_id=getattr(current_user, 'id', None),
+                page=page,
+                per_page=per_page,
+                filter_date=filter_date,
+                history_type=history_type,
+                disease_id=disease_id,
+            )
+        except ValueError as exc:
+            flash(str(exc), "warning")
+            return redirect(url_for("grading.index"))
 
         if request.headers.get("HX-Request") == "true":
             return render_template("grading/_history_panel.html", **history_panel_context)
@@ -122,6 +103,7 @@ def index():
         # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
         # Any user with role that allows them to grade (resident, ophthalmologist) can do resident grading
         raw_user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
+        eligibility = grader_eligibility_dto(db, user_id=current_user.id)
         user_eligibility: dict[str, dict[str, dict[str, list[str]]]] = {}
         if isinstance(raw_user_eligibility, Mapping):
             for hospital_name, lab_units in raw_user_eligibility.items():
@@ -270,9 +252,6 @@ def index():
                 kpi_resident_completed += disease_kpi.get('resident_completed', 0)
                 kpi_resident2_completed += disease_kpi.get('resident2_completed', 0)
                 kpi_arbitration_completed += disease_kpi.get('arbitration_completed', 0)
-    finally:
-        db.close()
-
     return render_template(
         "grading/index.html",
         is_resident=is_resident,
@@ -292,6 +271,7 @@ def index():
         kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
         task_tracker_kpi=task_tracker_kpi,
         user_eligibility=user_eligibility,
+        grading_eligibility=eligibility,
         diseases=diseases_data,
         linked_followup_counts_by_disease=linked_followup_counts_by_disease,
         project_encounter_set_queues=[

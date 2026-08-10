@@ -56,17 +56,26 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
                 "resume_task": None,
             },
             user_eligibility={},
+            grading_eligibility={"non_project": [], "project": []},
             linked_followup_counts_by_disease={},
-            my_items=[],
-            my_total=0,
-            my_page=1,
-            my_total_pages=1,
+            history={
+                "selected_date": "2026-08-10",
+                "used_latest_fallback": False,
+                "history_type": "all",
+                "disease_id": None,
+                "available_diseases": [],
+                "trends": [],
+                "items": [],
+                "total_cards": 0,
+                "total_tasks": 0,
+                "total_images": 0,
+                "page": 1,
+                "total_pages": 1,
+            },
             my_prev_url=None,
             my_next_url=None,
             page_prev_url=None,
             page_next_url=None,
-            filter_date=None,
-            type_counts={},
         )
 
     assert "Project EncounterSet Grading" in body
@@ -77,3 +86,9 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
     assert "Resident (1 set)" in body
     assert "/grading/encounter_set_package/package-uuid/resident" in body
     assert "Legacy &amp; Image Grading" in body
+    assert "My Grading Eligibility" in body
+    assert 'data-bs-target="#nonProjectEligibility"' in body
+    assert 'data-bs-target="#projectEligibility"' in body
+    assert 'class="accordion-button collapsed' in body
+    assert body.index("My Grading Eligibility") < body.index("My Grading History")
+    assert body.index("My Grading History") < body.index("<h3>Pending</h3>")

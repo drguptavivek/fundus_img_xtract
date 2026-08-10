@@ -1,234 +1,191 @@
-{% macro badge_for_for(val) %}
-{% set v = (val or '')|lower %}
-{% if v == 'glaucoma' %}
-<span class="badge rounded-pill badge-soft-primary">Glaucoma</span>
-{% elif v == 'dr' %}
-<span class="badge rounded-pill badge-soft-info">DR</span>
-{% elif v == 'amd' %}
-<span class="badge rounded-pill badge-soft-purple">AMD</span>
-{% else %}
-<span class="badge rounded-pill badge-soft-secondary">{{ val or '-' }}</span>
-{% endif %}
-{% endmacro %}
-
-{% macro badge_for_impression(val) %}
-{% set t = (val or '') %}
-{% if t|lower == 'normal' %}
-<span class="badge rounded-pill badge-soft-success">Normal</span>
-{% elif t|lower in ['glaucoma suspect','suspect'] %}
-<span class="badge rounded-pill badge-soft-warning">Glaucoma Suspect</span>
-{% elif t|lower == 'glaucoma' %}
-<span class="badge rounded-pill badge-soft-danger">Glaucoma</span>
-{% elif t|lower in ['other retinal','other'] %}
-<span class="badge rounded-pill badge-soft-info">Other Retinal</span>
-{% elif t|lower in ['not gradable','notgradable','ungradable'] %}
-<span class="badge rounded-pill badge-soft-secondary">Not gradable</span>
-{% else %}
-<span class="badge rounded-pill badge-soft-secondary">{{ val or '-' }}</span>
-{% endif %}
-{% endmacro %}
-
-<!-- History of My Gradings -->
-<div class="card card-aurora shadow-sm" id="gradingHistoryPanel">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <div class="d-flex align-items-center gap-3">
-      <strong>My Gradings and AI Grade Uploads</strong>
-      <div class="d-flex align-items-center gap-2 mb-0">
-        <label for="grading-date-filter" class="small mb-0">Filter by date:</label>
-        <input
-          type="date"
-          id="grading-date-filter"
-          name="date"
-          class="form-control form-control-sm"
-          style="width: auto;"
-          value="{{ filter_date or '' }}"
-          hx-trigger="change"
-          hx-get="{{ url_for('grading.index') }}"
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >
-        <a
-          id="clear-date-filter"
-          class="btn btn-sm btn-outline-secondary {% if not filter_date %}d-none{% endif %}"
-          href="{{ url_for('grading.index') }}"
-          hx-get="{{ url_for('grading.index') }}"
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Clear</a>
-      </div>
-      <div class="btn-group btn-group-sm" role="group">
-        <a
-          class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
-          href="{{ my_prev_url or '#' }}"
-          {% if my_prev_url %}hx-get="{{ my_prev_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Previous Date</a>
-        <a
-          class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
-          href="{{ my_next_url or '#' }}"
-          {% if my_next_url %}hx-get="{{ my_next_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Next Date</a>
+<div class="card card-aurora shadow-sm mb-4" id="gradingHistoryPanel">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+    <div>
+      <strong>My Grading History</strong>
+      <div class="small text-muted">
+        {{ history.selected_date }}
+        {% if history.used_latest_fallback %}
+        <span class="badge text-bg-info ms-1">Latest active grading day</span>
+        {% endif %}
       </div>
     </div>
-    <span class="small text-muted">{{ my_total or 0 }} total</span>
+    <a class="small" href="{{ url_for('fundus_api.get_my_grading_history', date=history.selected_date, type=history.history_type, disease_id=history.disease_id or '') }}">History API</a>
   </div>
+
   <div class="card-body">
-    <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
-      {% if type_counts %}
-      <span class="ms-auto small text-muted">
-        {% for k,v in type_counts.items() %}
-        <span class="me-2">{{ k }}: <strong>{{ v }}</strong></span>
-        {% endfor %}
-      </span>
-      {% endif %}
+    <form class="row g-2 align-items-end mb-3"
+          hx-get="{{ url_for('grading.index') }}"
+          hx-trigger="change"
+          hx-target="#gradingHistoryPanel"
+          hx-swap="outerHTML"
+          hx-push-url="true">
+      <div class="col-sm-4 col-lg-3">
+        <label class="form-label small" for="grading-date-filter">Grading day</label>
+        <input class="form-control form-control-sm" type="date" id="grading-date-filter" name="date" value="{{ history.selected_date }}">
+      </div>
+      <div class="col-sm-4 col-lg-3">
+        <label class="form-label small" for="grading-type-filter">Record type</label>
+        <select class="form-select form-select-sm" id="grading-type-filter" name="history_type">
+          <option value="all" {% if history.history_type == 'all' %}selected{% endif %}>Images and EncounterSets</option>
+          <option value="image" {% if history.history_type == 'image' %}selected{% endif %}>Single images</option>
+          <option value="encounter_set" {% if history.history_type == 'encounter_set' %}selected{% endif %}>EncounterSets</option>
+        </select>
+      </div>
+      <div class="col-sm-4 col-lg-3">
+        <label class="form-label small" for="grading-disease-filter">Disease</label>
+        <select class="form-select form-select-sm" id="grading-disease-filter" name="disease_id">
+          <option value="">All diseases</option>
+          {% for disease in history.available_diseases %}
+          <option value="{{ disease.id }}" {% if history.disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Today / latest</a>
+      </div>
+    </form>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Grading day navigation">
+        <a class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
+           href="{{ my_prev_url or '#' }}"
+           {% if my_prev_url %}hx-get="{{ my_prev_url }}"{% endif %}
+           hx-target="#gradingHistoryPanel" hx-swap="outerHTML" hx-push-url="true">
+          Previous Grading Day
+        </a>
+        <a class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
+           href="{{ my_next_url or '#' }}"
+           {% if my_next_url %}hx-get="{{ my_next_url }}"{% endif %}
+           hx-target="#gradingHistoryPanel" hx-swap="outerHTML" hx-push-url="true">
+          Next Grading Day
+        </a>
+      </div>
+      <span class="small text-muted">{{ history.total_cards }} history card{{ '' if history.total_cards == 1 else 's' }}</span>
     </div>
 
-    {% if my_items %}
-    <div class="theme-contrast p-3 rounded">
-      <div class="row g-3">
-        {% for g in my_items %}
-        <div class="col-md-6 col-lg-4">
-          <div class="card border h-100 shadow-sm">
-            <div class="card-body py-2 px-3">
-              <div class="d-flex justify-content-between align-items-start">
-                <div>
-                  <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                    {% set display_ts = g.updated_at if g.updated_at and g.created_at and g.updated_at > g.created_at else g.created_at %}
-                    {% set is_updated = g.updated_at and g.created_at and (g.updated_at - g.created_at).total_seconds() > 1 %}
-                    {% if is_updated %}
-                    {% set display_ts = g.updated_at %}
-                    {% else %}
-                    {% set display_ts = g.created_at %}
-                    {% endif %}
-                    <span class="small text-muted">{{ display_ts|user_datetime('%Y-%m-%d %H:%M') if display_ts else '-' }}</span>
-                    {% if is_updated %}
-                    <span class="badge bg-warning text-dark">Updated</span>
-                    {% else %}
-                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Graded</span>
-                    {% endif %}
-                    <span class="badge bg-secondary">{{ g.role_slot|title }}</span> {{ badge_for_for(g.disease_name)|safe }}
-                  </div>
-                  {% if g.task_id %}
-                  <div class="mb-1">
-                    Task:  <code class="small text-muted"> {{ g.task_id }} &nbsp; </code>
-                    {% if g.role_slot == 'ai' %}
-                      {{ badge_for_impression(g.grade_impression)|safe }}
-                      {% if g.ai_probability is not none %}
-                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
-                      {% endif %}
-                      {% if g.ai_model_name %}
-                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
-                      {% endif %}
-                    {% else %}
-                      {{ badge_for_impression(g.grade_impression)|safe }}
-                    {% endif %}
-                  </div>
-                  {% else %}
-                  <div class="mb-1">
-                    {{ badge_for_for(g.disease_name)|safe }} Grade =  &nbsp;
-                    {% if g.role_slot == 'ai' %}
-                      {{ badge_for_impression(g.grade_impression)|safe }}
-                      {% if g.ai_probability is not none %}
-                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
-                      {% endif %}
-                      {% if g.ai_model_name %}
-                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
-                      {% endif %}
-                    {% else %}
-                      {{ badge_for_impression(g.grade_impression)|safe }}
-                    {% endif %}
-                  </div>
-                  {% endif %}
-                  <div class="small text-muted mb-1">
-                    <code class="small">{{ g.image_uuid or '&#8212;' }}</code>
-                  </div>
-                  <div class="small text-muted">
-                    {{ g.lab_unit_name }} - {{ g.hospital_name }}
-                  </div>
-                  {% if g.comment and g.role_slot != 'ai' %}
-                  <div class="small mt-1">
-                    {{ g.comment }}
-                  </div>
-                  {% endif %}
-                </div>
-                <div>
-                  {% if g.image_uuid and g.role_slot != 'ai' and g.can_revise %}
-                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">Revise</a>
-                  {% elif g.image_uuid and g.role_slot != 'ai' %}
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">View</a>
-                  {% endif %}
-                </div>
+    <div class="row g-2 mb-4">
+      <div class="col-6 col-lg-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Total tasks</div>
+          <div class="h4 mb-0">{{ history.total_tasks }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted">Unique images</div>
+          <div class="h4 mb-0">{{ history.total_images }}</div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="border rounded p-3 h-100">
+          <div class="small text-muted mb-2">Last 7 grading sessions</div>
+          {% if history.trends %}
+          {% set max_tasks = history.trends | map(attribute='task_count') | max %}
+          <div class="d-flex align-items-end gap-2" style="height: 5.25rem" aria-label="Daily grading trend">
+            {% for point in history.trends %}
+            <div class="d-flex flex-column justify-content-end align-items-center flex-fill h-100" title="{{ point.date }}: {{ point.task_count }} tasks, {{ point.image_count }} images">
+              <span class="small fw-semibold">{{ point.task_count }}</span>
+              <div class="bg-primary rounded-top w-100" style="min-height: 2px; height: {{ ((point.task_count / (max_tasks or 1)) * 48) | round }}px"></div>
+              <span class="text-muted" style="font-size: .68rem">{{ point.date[5:] }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="small text-muted mt-1">Bar = tasks; hover for unique-image count.</div>
+          {% else %}
+          <div class="text-muted">No grading sessions yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if history['items'] %}
+    <div class="row g-3">
+      {% for item in history['items'] %}
+      <div class="col-md-6 col-xl-4">
+        <article class="card border h-100 shadow-sm">
+          <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+              <div class="d-flex flex-wrap gap-1">
+                <span class="badge {{ 'text-bg-primary' if item.type == 'encounter_set' else 'text-bg-info' }}">{{ item.type_label }}</span>
+                <span class="badge text-bg-light border text-dark">{{ item.scope_label }}</span>
+                <span class="badge {{ 'text-bg-warning' if item.role_slot == 'arbitrator' else 'text-bg-secondary' }}">
+                  {{ 'Resident 2' if item.role_slot == 'resident2' else ('AI' if item.role_slot == 'ai' else item.role_slot|title) }}
+                </span>
+              </div>
+              {% if item.is_revision %}<span class="badge text-bg-warning">Revision</span>{% endif %}
+            </div>
+
+            <div class="small text-muted mb-2">{{ item.timestamp | user_datetime('%Y-%m-%d %H:%M') }}</div>
+            <div class="mb-2">
+              <div class="small text-muted">Disease{{ 's' if item.diseases|length != 1 else '' }} graded</div>
+              <div class="d-flex flex-wrap gap-1">
+                {% for disease in item.diseases %}<span class="badge text-bg-light border text-dark">{{ disease.name }}</span>{% endfor %}
               </div>
             </div>
+
+            {% if item.set_grades %}
+            <div class="mb-2">
+              <div class="small text-muted">Set-level grade{{ 's' if item.set_grades|length != 1 else '' }}</div>
+              {% for grade in item.set_grades %}
+              <div><span class="fw-semibold">{{ grade.disease_name }}:</span> {{ grade.grade or '-' }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if item.type == 'image' and item.image_grades %}
+            {% for grade in item.image_grades %}
+            <div class="mb-2"><span class="fw-semibold">Image grade:</span> {{ grade.grade or '-' }}</div>
+            {% if grade.comment %}<div class="small mb-2">{{ grade.comment }}</div>{% endif %}
+            {% endfor %}
+            {% endif %}
+
+            {% if item.type == 'encounter_set' and item.image_grades %}
+            <details class="small mb-2">
+              <summary>{{ item.image_count }} image{{ '' if item.image_count == 1 else 's' }} · {{ item.task_count }} task observations</summary>
+              <div class="mt-2 d-flex flex-column gap-1">
+                {% for grade in item.image_grades %}
+                <div class="border-start ps-2">
+                  {{ grade.disease_name }}: <strong>{{ grade.grade or '-' }}</strong>
+                  {% if grade.image_uuid %}<div><code>{{ grade.image_uuid }}</code></div>{% endif %}
+                  {% if grade.comment %}<div class="text-muted">{{ grade.comment }}</div>{% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </details>
+            {% endif %}
+
+            <div class="small text-muted">{{ 'EncounterSet UUID' if item.type == 'encounter_set' else 'Image UUID' }}</div>
+            <code class="small text-break">{{ item.uuid or '-' }}</code>
+            {% if item.package_name %}<div class="small text-muted mt-2">{{ item.package_name }}</div>{% endif %}
+            {% if item.can_view %}
+            <div class="mt-3">
+              <a class="btn btn-sm {{ 'btn-outline-primary' if item.can_revise else 'btn-outline-secondary' }}"
+                 href="{{ url_for('grading.revise_grading', grade_id=item.grade_id) }}">
+                {{ 'Revise' if item.can_revise else 'View' }}
+              </a>
+            </div>
+            {% endif %}
           </div>
-        </div>
-        {% endfor %}
+        </article>
       </div>
+      {% endfor %}
     </div>
     {% else %}
-    <div class="text-center text-muted py-3">No gradings found.</div>
+    <div class="text-center text-muted py-4">No grading records match this day and filter.</div>
     {% endif %}
   </div>
-  <div class="card-footer d-flex justify-content-between align-items-center">
-    <div class="small text-muted">
-      {% if filter_date %}
-        Showing gradings for {{ filter_date }}
-        {% if my_total_pages > 1 %}
-          - Page {{ my_page }} of {{ my_total_pages }}
-        {% endif %}
-      {% else %}
-        Showing all gradings
-        {% if my_total_pages > 1 %}
-          - Page {{ my_page }} of {{ my_total_pages }}
-        {% endif %}
-      {% endif %}
-    </div>
-    <div class="d-flex gap-2">
-      <div class="btn-group btn-group-sm" role="group">
-        <a
-          class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
-          href="{{ my_prev_url or '#' }}"
-          {% if my_prev_url %}hx-get="{{ my_prev_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Previous Date</a>
-        <a
-          class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
-          href="{{ my_next_url or '#' }}"
-          {% if my_next_url %}hx-get="{{ my_next_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Next Date</a>
-      </div>
-      {% if my_total_pages > 1 %}
-      <div class="btn-group btn-group-sm" role="group">
-        <a
-          class="btn btn-outline-primary {% if not page_prev_url %}disabled{% endif %}"
-          href="{{ page_prev_url or '#' }}"
-          {% if page_prev_url %}hx-get="{{ page_prev_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Prev Page</a>
-        <a
-          class="btn btn-outline-primary {% if not page_next_url %}disabled{% endif %}"
-          href="{{ page_next_url or '#' }}"
-          {% if page_next_url %}hx-get="{{ page_next_url }}"{% endif %}
-          hx-target="#gradingHistoryPanel"
-          hx-swap="outerHTML"
-          hx-push-url="true"
-        >Next Page</a>
-      </div>
-      {% endif %}
+
+  <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div class="small text-muted">Page {{ history.page }} of {{ history.total_pages }}</div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="History result pages">
+      <a class="btn btn-outline-primary {% if not page_prev_url %}disabled{% endif %}"
+         href="{{ page_prev_url or '#' }}"
+         {% if page_prev_url %}hx-get="{{ page_prev_url }}"{% endif %}
+         hx-target="#gradingHistoryPanel" hx-swap="outerHTML" hx-push-url="true">Previous Page</a>
+      <a class="btn btn-outline-primary {% if not page_next_url %}disabled{% endif %}"
+         href="{{ page_next_url or '#' }}"
+         {% if page_next_url %}hx-get="{{ page_next_url }}"{% endif %}
+         hx-target="#gradingHistoryPanel" hx-swap="outerHTML" hx-push-url="true">Next Page</a>
     </div>
   </div>
 </div>

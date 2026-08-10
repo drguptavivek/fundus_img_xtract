@@ -220,35 +220,9 @@
 </section>
 
 
-<!-- Eligibility Details --> 
-<div class="row mb-4">
-  <div class="col-12">
-    <div class="card shadow-sm">
-      <div class="card-header"> <strong>Grading Eligibility</strong> </div>
-      <div class="card-body"> 
-        {% for hospital_name, lab_units in user_eligibility.items() %} 
-        <div class="mb-3 pb-2 border-bottom">
-          <h6 class="font-weight-bold mb-2">{{ hospital_name }}</h6>
-          <div class="d-flex flex-wrap gap-3"> 
-            {% for lab_unit_name, diseases in lab_units.items() %} 
-                          <span class="badge rounded-pill bg-light text-dark border border-secondary">{{ lab_unit_name }}</span> 
-            {% for disease_name, roles in diseases.items() %} 
-              <div> 
-                <span class="fw-bold">{{ disease_name }}:</span> 
-                {% for role in roles %}
-                {% set display_role = 'Resident' if role == 'Resident2' else role %}
-                <span class="badge {% if display_role == 'Resident' %}bg-primary{% else %}bg-warning{% endif %} ms-1"> {{ display_role }} </span>
-                {% endfor %} 
-              </div> 
-            {% endfor %} 
-            {% endfor %} 
-          </div>
-        </div> 
-        {% endfor %} 
-      </div>
-    </div>
-  </div>
-</div> 
+{% include "grading/_eligibility_panel.html" %}
+
+{% include "grading/_history_panel.html" %}
 
 
 <!-- KPIs Row -->
@@ -425,8 +399,6 @@
     </div>
   </div>  </div> 
   
-
-{% include "grading/_history_panel.html" %}
 
 {% endblock %}
 

@@ -45,6 +45,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "workbench.panels" in template
     assert "panel.fields.label" in template
     assert "data-grade-option" in template
+    assert "sanitizeGuidelineHtml" in template
+    assert "guidelines.innerHTML = sanitizeGuidelineHtml" in template
+    assert "const allowedTags = new Set(['UL', 'OL', 'LI', 'P', 'BR', 'STRONG', 'EM', 'B', 'I'])" in template
+    assert "removeAttribute(attribute.name)" in template
     assert 'class="col-6"' in template
     assert "panel.fields.geometry" in template
     assert "data-geometry-sidebar-host" in template

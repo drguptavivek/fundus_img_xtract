@@ -374,6 +374,19 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     return panel.querySelector('[data-grade-option]:checked')?.value || '';
   }
 
+  function sanitizeGuidelineHtml(value) {
+    const documentFragment = new DOMParser().parseFromString(value || '', 'text/html');
+    const allowedTags = new Set(['UL', 'OL', 'LI', 'P', 'BR', 'STRONG', 'EM', 'B', 'I']);
+    Array.from(documentFragment.body.querySelectorAll('*')).forEach(element => {
+      if (!allowedTags.has(element.tagName)) {
+        element.replaceWith(...Array.from(element.childNodes));
+        return;
+      }
+      Array.from(element.attributes).forEach(attribute => element.removeAttribute(attribute.name));
+    });
+    return documentFragment.body.innerHTML;
+  }
+
   let submitting = false;
   let activePanelIndex = panels.findIndex(panel => panel.classList.contains('active'));
 
@@ -418,7 +431,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     const data = window.linkedGradingData[panel.dataset.taskUuid];
     const grade = data.features.find(item => String(item.id) === String(selectedGrade(panel)));
     host.innerHTML = '';
-    guidelines.textContent = grade?.guidelines || '';
+    guidelines.innerHTML = sanitizeGuidelineHtml(grade?.guidelines || '');
     const selected = new Set((data.existingSelectedFeatures || []).map(Number));
     (grade?.features || []).forEach(feature => {
       const id = `feature-${panel.dataset.taskUuid}-${feature.id}`;

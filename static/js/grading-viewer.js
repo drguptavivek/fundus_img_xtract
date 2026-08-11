@@ -69,8 +69,10 @@
 
   // Helper function to get CSRF token from the save button
   function getCsrfToken() {
-    const csrfInput = document.querySelector('#imggr-preset-save-button input[name="csrf_token"]');
-    return csrfInput ? csrfInput.value : null;
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+      || document.querySelector('#imggr-preset-save-button input[name="csrf_token"]')?.value
+      || document.querySelector('input[name="csrf_token"]')?.value
+      || null;
   }
 
   // API functions for viewer presets only
@@ -175,7 +177,7 @@
       
       // Add CSRF token if available
       if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
+        headers['X-CSRFToken'] = csrfToken;
       }
       
       const response = await fetch(`/api/viewer/presets/${slotNumber}`, {
@@ -423,6 +425,7 @@
     
     // Get UUID from root element's data-enc-id attribute
     let uuid = root.dataset.encId;
+    const presetModalId = root.dataset.presetModalId || `imggr-preset-modal-${uuid}`;
 
     // Single image; just wire up fullscreen and activation
     fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); });
@@ -725,7 +728,12 @@
         filter: currentRadio(),
         brightness: bright ? parseFloat(bright.value) : 1,
         contrast: contr ? parseFloat(contr.value) : 1,
-        loupe_enabled: loupeEnabled
+        zoom: currentZoom,
+        pan_x: Math.round(imgPanX),
+        pan_y: Math.round(imgPanY),
+        loupe_enabled: loupeEnabled,
+        loupe_size: loupeSize,
+        loupe_zoom: loupeZoom
       };
     }
     
@@ -751,12 +759,29 @@
       }
       
       // Apply loupe state
-      if (preset.loupeEnabled !== undefined) {
-        setLoupeEnabled(preset.loupeEnabled);
+      if (preset.zoom !== undefined) {
+        currentZoom = clamp(Number(preset.zoom) || 100, ZOOM_MIN, ZOOM_MAX);
+      }
+      if (preset.pan_x !== undefined) {
+        imgPanX = Number(preset.pan_x) || 0;
+      }
+      if (preset.pan_y !== undefined) {
+        imgPanY = Number(preset.pan_y) || 0;
+      }
+      if (preset.loupe_size !== undefined) {
+        loupeSize = clamp(Number(preset.loupe_size) || DEFAULT_LOUPE_SIZE, LOUPE_SIZE_MIN, LOUPE_SIZE_MAX);
+        applyLoupeDimensions();
+      }
+      if (preset.loupe_zoom !== undefined) {
+        loupeZoom = clamp(Number(preset.loupe_zoom) || DEFAULT_LOUPE_ZOOM, LOUPE_ZOOM_MIN, LOUPE_ZOOM_MAX);
+      }
+      if (preset.loupe_enabled !== undefined) {
+        setLoupeEnabled(preset.loupe_enabled);
       }
       
       // Apply all changes
       applyFilter();
+      clampPanToBounds();
       applyImagePan();
       updateZoomDisplay();
       
@@ -764,23 +789,33 @@
     }
     
     async function updatePresetModal() {
-      const modal = document.getElementById(`imggr-preset-modal-${uuid}`);
+      const modal = document.getElementById(presetModalId);
       if (!modal) return;
       
       const presets = await loadViewerPresets();
       const currentSettings = getCurrentSettings();
       
       // Update current settings display
-      const filterDisplay = modal.querySelector('#current-filter-display');
-      const brightnessDisplay = modal.querySelector('#current-brightness-display');
-      const contrastDisplay = modal.querySelector('#current-contrast-display');
+      const filterDisplay = modal.querySelector('[data-current-filter], #current-filter-display');
+      const brightnessDisplay = modal.querySelector('[data-current-brightness], #current-brightness-display');
+      const contrastDisplay = modal.querySelector('[data-current-contrast], #current-contrast-display');
+      const zoomDisplay = modal.querySelector('[data-current-zoom]');
+      const panDisplay = modal.querySelector('[data-current-pan]');
+      const loupeDisplay = modal.querySelector('[data-current-loupe]');
       
       if (filterDisplay) filterDisplay.textContent = currentSettings.filter || 'None';
       if (brightnessDisplay) brightnessDisplay.textContent = (currentSettings.brightness || 1).toFixed(2);
       if (contrastDisplay) contrastDisplay.textContent = (currentSettings.contrast || 1).toFixed(2);
+      if (zoomDisplay) zoomDisplay.textContent = `${currentSettings.zoom}%`;
+      if (panDisplay) panDisplay.textContent = `${currentSettings.pan_x}, ${currentSettings.pan_y} px`;
+      if (loupeDisplay) {
+        loupeDisplay.textContent = currentSettings.loupe_enabled
+          ? `On · ${currentSettings.loupe_size}px · ${Number(currentSettings.loupe_zoom).toFixed(1)}x`
+          : 'Off';
+      }
       
       // Update preset slots
-      const slotsContainer = modal.querySelector('#preset-slots');
+      const slotsContainer = modal.querySelector('[data-preset-slots], #preset-slots');
       if (slotsContainer) {
         // Clear the slots container first
         slotsContainer.innerHTML = '';
@@ -788,38 +823,35 @@
         for (let i = 1; i <= 5; i++) {
           const preset = presets[i];
           const slotDiv = document.createElement('div');
-          slotDiv.className = 'col-12 mb-2';
+          slotDiv.className = 'card';
           
-          let presetInfo = 'Empty';
+          let presetInfo = '<span class="text-muted">Empty slot</span>';
           if (preset) {
             presetInfo = `
-              <strong>Filter:</strong> ${preset.filter || 'None'} |
-              <strong>Bright:</strong> ${(preset.brightness || 1).toFixed(1)} |
-              <strong>Contrast:</strong> ${(preset.contrast || 1).toFixed(1)}
+              <span><strong>Filter:</strong> ${preset.filter || 'none'}</span>
+              <span><strong>Brightness:</strong> ${Number(preset.brightness || 1).toFixed(2)}</span>
+              <span><strong>Contrast:</strong> ${Number(preset.contrast || 1).toFixed(2)}</span>
+              <span><strong>Zoom:</strong> ${Number(preset.zoom || 100)}%</span>
+              <span><strong>Pan:</strong> ${Number(preset.pan_x || 0)}, ${Number(preset.pan_y || 0)} px</span>
+              <span><strong>Loupe:</strong> ${preset.loupe_enabled ? `On · ${Number(preset.loupe_size || 200)}px · ${Number(preset.loupe_zoom || 2).toFixed(1)}x` : 'Off'}</span>
             `;
           }
           
           slotDiv.innerHTML = `
-            <div class="card">
-              <div class="card-body p-2">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <strong>Preset ${i}:</strong>
-                    <div class="small text-muted">${presetInfo}</div>
-                  </div>
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-primary save-preset-slot" data-preset="${i}">
-                      Save
-                    </button>
-                    ${preset ? `
-                      <button type="button" class="btn btn-sm btn-success apply-preset-btn" data-preset="${i}">
-                        Apply
-                      </button>
-                      <button type="button" class="btn btn-sm btn-danger delete-preset-btn" data-preset="${i}">
-                        Delete
-                      </button>
-                    ` : ''}
-                  </div>
+            <div class="card-body p-3">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="flex-grow-1">
+                  <strong>Preset ${i}</strong>
+                  <div class="small d-flex flex-wrap gap-3 mt-1">${presetInfo}</div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-sm btn-primary save-preset-slot" data-preset="${i}">
+                    Save current to ${i}
+                  </button>
+                  ${preset ? `
+                    <button type="button" class="btn btn-sm btn-outline-success apply-preset-btn" data-preset="${i}">Apply</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger delete-preset-btn" data-preset="${i}">Delete</button>
+                  ` : ''}
                 </div>
               </div>
             </div>
@@ -833,10 +865,15 @@
           btn.addEventListener('click', async (e) => {
             const presetNum = parseInt(e.target.dataset.preset);
             const currentSettings = getCurrentSettings();
-            await saveViewerPreset(presetNum, currentSettings);
+            const saved = await saveViewerPreset(presetNum, currentSettings);
+            if (!saved) {
+              showPresetStatus(modal, `Preset ${presetNum} could not be saved.`, 'danger');
+              return;
+            }
             
             // Update the modal to reflect the saved preset
-            updatePresetModal();
+            await updatePresetModal();
+            showPresetStatus(modal, `Current settings saved to preset ${presetNum}.`, 'success');
             
             // Show feedback
             const presetBtn = card.querySelector(`.imggr-preset-btn[data-preset="${presetNum}"]`);
@@ -875,10 +912,15 @@
             const presetNum = parseInt(e.target.dataset.preset);
             
             if (confirm('Are you sure you want to delete this preset?')) {
-              await deleteViewerPreset(presetNum);
+              const deleted = await deleteViewerPreset(presetNum);
+              if (!deleted) {
+                showPresetStatus(modal, `Preset ${presetNum} could not be deleted.`, 'danger');
+                return;
+              }
               
               // Update the modal to reflect the deletion
-              updatePresetModal();
+              await updatePresetModal();
+              showPresetStatus(modal, `Preset ${presetNum} deleted.`, 'success');
               
               // Show feedback
               const presetBtn = card.querySelector(`.imggr-preset-btn[data-preset="${presetNum}"]`);
@@ -890,6 +932,13 @@
           });
         });
       }
+    }
+
+    function showPresetStatus(modal, message, level) {
+      const status = modal.querySelector('[data-preset-status]');
+      if (!status) return;
+      status.textContent = message;
+      status.className = `alert alert-${level} py-2`;
     }
     
     let saveViewerSettingsTimer = null;
@@ -2041,8 +2090,11 @@
     }
     
     // Add event listener to modal show event to update preset slots
-    const modal = document.getElementById(`imggr-preset-modal-${uuid}`);
+    const modal = document.getElementById(presetModalId);
     if (modal) {
+      // Bootstrap modals must not remain inside the transformed/clipped viewer
+      // carousel; moving them to body also mirrors the older viewer behavior.
+      if (modal.parentElement !== document.body) document.body.appendChild(modal);
       modal.addEventListener('show.bs.modal', () => {
         updatePresetModal();
       });

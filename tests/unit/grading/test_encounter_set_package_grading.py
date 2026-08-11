@@ -97,6 +97,14 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template
+    assert 'data-preset-modal-id="imggr-preset-modal-{{ panel.task_uuid }}"' in template
+    assert "Choose which numbered slot should store the current viewer settings." in template
+    assert "data-current-zoom" in template
+    assert "data-current-pan" in template
+    assert "data-current-loupe" in template
+    assert "data-preset-slots" in template
+    assert "data-preset-status" in template
+    assert "preset-modal-v2" in template
     assert "data-clear-selection" in template
     assert "data.existingSelectedFeatures = []" in template
     assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
@@ -142,6 +150,24 @@ def test_geometry_editor_uses_annotations_heading():
     assert '["[data-fgx-add-freeform]", "polygon"]' in editor
     assert '(mode === MODES.POLYGON && state.pendingCreateType === "polygon")' in editor
     assert 'if (state.pendingCreateType === "polygon")' in editor
+
+
+def test_viewer_preset_modal_uses_explicit_modal_contract_and_full_settings():
+    viewer = (
+        Path(package_transport.__file__).parents[1]
+        / "static/js/grading-viewer.js"
+    ).read_text()
+
+    assert "const presetModalId = root.dataset.presetModalId" in viewer
+    assert "document.getElementById(presetModalId)" in viewer
+    assert "'X-CSRFToken'" in viewer
+    assert "loupe_enabled: loupeEnabled" in viewer
+    assert "loupe_size: loupeSize" in viewer
+    assert "loupe_zoom: loupeZoom" in viewer
+    assert "pan_x: Math.round(imgPanX)" in viewer
+    assert "Save current to ${i}" in viewer
+    assert "deleteViewerPreset(presetNum)" in viewer
+    assert "Preset ${presetNum} deleted." in viewer
 
 
 def test_cached_package_form_delegates_to_workbench_transport(app, monkeypatch):

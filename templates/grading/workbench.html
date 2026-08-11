@@ -225,6 +225,7 @@
                     </div>
                   </div>
                   <div class="imggr-viewer-root h-100" data-enc-id="{{ viewer_media.image_uuid }}"
+                       data-preset-modal-id="imggr-preset-modal-{{ panel.task_uuid }}"
                        data-imggr-lite-mode="false">
                     <div class="imggr-stage position-relative h-100">
                       <div class="imggr-annot-layout d-flex h-100 gap-2">
@@ -258,10 +259,34 @@
                       </div></div>
                     </div></div>
                   </div>
-                  <div class="modal fade" id="imggr-preset-modal-{{ panel.task_uuid }}" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-                      <div class="modal-header"><h5 class="modal-title">Save Viewer Preset</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-                      <div class="modal-body"><div class="small mb-3 p-2 rounded bg-body-tertiary"><div><strong>Filter:</strong> <span id="current-filter-display">None</span></div><div><strong>Brightness:</strong> <span id="current-brightness-display">1.0</span></div><div><strong>Contrast:</strong> <span id="current-contrast-display">1.0</span></div></div><div class="row g-2" id="preset-slots"></div></div>
+                  <div class="modal fade" id="imggr-preset-modal-{{ panel.task_uuid }}" tabindex="-1"
+                       aria-labelledby="imggr-preset-modal-label-{{ panel.task_uuid }}" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+                      <div class="modal-header">
+                        <div>
+                          <h5 class="modal-title" id="imggr-preset-modal-label-{{ panel.task_uuid }}">Viewer Presets</h5>
+                          <div class="small text-muted">Choose which numbered slot should store the current viewer settings.</div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                      </div>
+                      <div class="modal-body">
+                        <section class="border rounded bg-body-tertiary p-3 mb-3" aria-label="Current viewer settings">
+                          <h6 class="mb-2">Current viewer settings</h6>
+                          <div class="row g-2 small">
+                            <div class="col-6 col-md-4"><strong>Filter:</strong> <span data-current-filter>None</span></div>
+                            <div class="col-6 col-md-4"><strong>Brightness:</strong> <span data-current-brightness>1.00</span></div>
+                            <div class="col-6 col-md-4"><strong>Contrast:</strong> <span data-current-contrast>1.00</span></div>
+                            <div class="col-6 col-md-4"><strong>Zoom:</strong> <span data-current-zoom>100%</span></div>
+                            <div class="col-6 col-md-4"><strong>Pan:</strong> <span data-current-pan>0, 0 px</span></div>
+                            <div class="col-6 col-md-4"><strong>Loupe:</strong> <span data-current-loupe>Off</span></div>
+                          </div>
+                        </section>
+                        <div class="alert py-2 d-none" role="status" aria-live="polite" data-preset-status></div>
+                        <div class="vstack gap-2" data-preset-slots aria-label="Saved viewer preset slots"></div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                      </div>
                     </div></div>
                   </div>
                   {% else %}
@@ -381,7 +406,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>

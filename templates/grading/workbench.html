@@ -101,6 +101,11 @@
                       <button class="btn btn-outline-secondary" type="button" data-image-navigate="next" title="Next image"{% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length %} disabled{% endif %}>
                         <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span class="visually-hidden">Next image</span>
                       </button>
+                      {% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length and workbench.panels|selectattr('target_level', 'equalto', 'encounter')|list %}
+                      <button class="btn btn-outline-primary" type="button" data-encounter-navigate title="Continue to set grading">
+                        Grade set <i class="fa-solid fa-chevron-right ms-1" aria-hidden="true"></i>
+                      </button>
+                      {% endif %}
                     </div>
                     {% endif %}
                     <span class="badge text-bg-light border">{{ panel.task_state }}</span>
@@ -478,6 +483,11 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       const nextImageIndex = imageIndex + (button.dataset.imageNavigate === 'prev' ? -1 : 1);
       const nextPanel = imagePanels[nextImageIndex];
       if (nextPanel) carousel?.to(panels.indexOf(nextPanel));
+    });
+  });
+  root.querySelectorAll('[data-encounter-navigate]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (encounterPanel) carousel?.to(panels.indexOf(encounterPanel));
     });
   });
 

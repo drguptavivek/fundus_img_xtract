@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
 from json import JSONDecodeError
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -13,6 +12,11 @@ from auth.roles import roles_required
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
 from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
+from grading.workbench.revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
+from encounter_sets.permissions import (
+    CAPABILITY_REGRADE_ADJUDICATION,
+    user_has_task_capability,
+)
 from models import (
     Consensus,
     Disease,
@@ -72,7 +76,15 @@ def _fetch_regrade_task(db, regrade_task_id: int, allowed_lab_unit_ids: set[int]
     )
     if allowed_lab_unit_ids:
         query = query.where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
-    return db.execute(query).scalars().first()
+    row = db.execute(query).scalars().first()
+    if row and not user_has_task_capability(
+        db,
+        user=current_user,
+        task_id=row.source_task_id,
+        capability=CAPABILITY_REGRADE_ADJUDICATION,
+    ):
+        return None
+    return row
 
 
 def _resolve_image_uuid(task: GradingTask | None) -> str | None:
@@ -189,7 +201,7 @@ def regrade_tasks():
             created_at = grade.created_at
             can_revise = True
             if created_at:
-                can_revise = (now - created_at) <= timedelta(hours=24)
+                can_revise = (now - created_at) < REVISION_WINDOW
             recent_regrades.append(
                 {
                     "grade": grade,
@@ -489,7 +501,7 @@ def regrade_task_detail(regrade_task_id: int):
             if existing_grade:
                 existing_selected_features = _parse_selected_features(existing_grade.selected_features_json)
                 if existing_grade.created_at:
-                    allow_revision = (utcnow() - existing_grade.created_at) <= timedelta(hours=24)
+                    allow_revision = (utcnow() - existing_grade.created_at) < REVISION_WINDOW
 
         return render_template(
             "grading/regrade_task_detail.html",
@@ -655,8 +667,11 @@ def regrade_task_submit(regrade_task_id: int):
                 annotation_context=annotation_context.to_dict(),
             )
         if existing_grade and existing_grade.created_at:
-            if (utcnow() - existing_grade.created_at) > timedelta(hours=24):
-                flash("Revision window has closed (24 hours).", "warning")
+            if (utcnow() - existing_grade.created_at) >= REVISION_WINDOW:
+                flash(
+                    f"Revision window has closed ({REVISION_WINDOW_HOURS} hours).",
+                    "warning",
+                )
                 return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
         disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()

@@ -126,6 +126,11 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "configuration_refreshed" in template
     assert "Grading options changed. Reloading this package" in template
     assert "error.reloadRequired" in template
+    assert "/api/grading/workbench/sessions/${sessionUuid}/draft" in template
+    assert "data-draft-status" in template
+    assert "Draft restored" in template
+    assert "data-workbench-dashboard" in template
+    assert "await flushDraft()" in template
 
 
 def test_shared_jinja_workbench_compiles(app):

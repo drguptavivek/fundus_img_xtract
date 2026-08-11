@@ -75,6 +75,10 @@ def test_ordinary_submission_commits_grade_annotation_set_audit_and_lease_releas
     lab = db_session.merge(core_test_data["lab_unit"])
     label = db_session.merge(disease_grading_glaucoma_normal)
     task, session, token = _leased_encounter_task(db_session, user=user, disease=disease, lab=lab)
+    session.draft_observations_json = {
+        task.uuid: {"disease_grading_id": label.id, "comment": "Earlier draft"}
+    }
+    session.draft_updated_at = session.acquired_at
     payload = {
         "action": "save_close",
         "idempotency_key": "ordinary-submission-1",
@@ -110,6 +114,8 @@ def test_ordinary_submission_commits_grade_annotation_set_audit_and_lease_releas
     assert item.before_json is None
     assert item.after_json["disease_grading_id"] == label.id
     assert session.status == "completed"
+    assert session.draft_observations_json is None
+    assert session.draft_updated_at is None
     assert session.targets[0].released_at is not None
     history = submission_history(db_session, actor_user_id=user.id)
     assert history[0]["event_uuid"] == event.uuid

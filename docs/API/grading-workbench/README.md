@@ -108,6 +108,19 @@ is still wholly ungraded and its grading choices were refreshed after an admin
 scheme change; browser clients reload the same active session. Other
 configuration conflicts continue to return `configuration_changed`.
 
+### `PUT /api/grading/workbench/sessions/{session_uuid}/draft`
+
+Autosaves the current editable target observations for the active session. The
+request uses the same token, generation, CSRF, configuration fingerprint, and
+`observations` shape as submission, but grade selection may be `null` while the
+grader is still working. The target set must exactly match the editable lease.
+
+Drafts are stored on the workbench session and returned through each panel's
+`draft_observation` when the session is loaded or resumed. They restore grade
+choices, comments, selected features, and annotation geometry without creating
+official `Grade` rows, advancing package state, or unlocking the next grader.
+An accepted final submission clears the draft atomically with grade creation.
+
 ### `POST /api/grading/workbench/sessions/{session_uuid}/release`
 
 Releases all leased targets without creating grades. Expired sessions are also

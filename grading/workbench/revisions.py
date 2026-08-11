@@ -1,5 +1,5 @@
 """Revision eligibility owned by the grading workbench."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from typing import Optional, TYPE_CHECKING
 
@@ -8,9 +8,7 @@ if TYPE_CHECKING:
 
 from models import Grade, GradingTask
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
-
-
-REVISION_WINDOW_HOURS = 24
+from .revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
 
 
 def _normalize_grade_timestamp(value: Optional[datetime]) -> Optional[datetime]:
@@ -25,8 +23,8 @@ def _is_within_revision_window(grade_created_at: Optional[datetime]) -> bool:
     normalized_created_at = _normalize_grade_timestamp(grade_created_at)
     if normalized_created_at is None:
         return False
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=REVISION_WINDOW_HOURS)
-    return normalized_created_at >= cutoff
+    cutoff = datetime.now(timezone.utc) - REVISION_WINDOW
+    return normalized_created_at > cutoff
 
 
 def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_type: str, grade: Grade = None) -> dict:

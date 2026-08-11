@@ -33,9 +33,9 @@ Submission steps:
    - Overwrites any previous consensus for the source task
 6. Set `RegradeTask.status = 'regrade_done'`
 
-## Revision Window (24 Hours)
+## Revision Window (12 Hours)
 
-Regrade adjudicators can revise their own regrade for 24 hours:
+Regrade adjudicators can revise their own regrade for 12 hours:
 - UI disables submission once the window closes.
 - Server enforces the same check on submit.
 

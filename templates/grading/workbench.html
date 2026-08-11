@@ -64,13 +64,14 @@
     </div>
     <div class="d-flex flex-wrap gap-2">
       <span class="badge text-bg-light border align-self-center" data-workbench-progress></span>
+      <span class="badge text-bg-light border align-self-center" data-draft-status>Draft ready</span>
       <span class="badge text-bg-light border align-self-center" data-lease-status></span>
       <button class="btn btn-sm btn-outline-secondary" type="button" data-workbench-expand
               title="Restore grading view" aria-label="Restore grading view" aria-pressed="true">
         <i class="fa-solid fa-compress" aria-hidden="true" data-workbench-expand-icon></i>
       </button>
       <button class="btn btn-sm btn-outline-danger" type="button" data-release-workbench>Release</button>
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Dashboard</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}" data-workbench-dashboard>Dashboard</a>
     </div>
   </header>
 
@@ -99,6 +100,7 @@
         {% endfor %}
         {% set image_nav = namespace(index=0) %}
         {% for panel in workbench.panels %}
+        {% set saved_observation = panel.draft_observation or panel.existing_grade %}
         {% if panel.target_level == 'image' %}{% set image_nav.index = image_nav.index + 1 %}{% endif %}
         <section class="carousel-item {% if loop.first %}active{% endif %} linked-grading-panel"
                  data-task-uuid="{{ panel.task_uuid }}"
@@ -145,9 +147,10 @@
                         {% if image_panel.target_level == 'image' and image_panel.scope_id == panel.scope_id and image_bucket == bucket %}
                           {% set ns.count = ns.count + 1 %}
                           {% set selected = namespace(label='Pending') %}
-                          {% if image_panel.existing_grade %}
+                          {% set image_observation = image_panel.draft_observation or image_panel.existing_grade %}
+                          {% if image_observation %}
                             {% for option in image_panel.grades %}
-                              {% if option.id == image_panel.existing_grade.disease_grading_id %}{% set selected.label = option.impression %}{% endif %}
+                              {% if option.id == image_observation.disease_grading_id %}{% set selected.label = option.impression %}{% endif %}
                             {% endfor %}
                           {% endif %}
                           <div class="gwb-encounter-result">
@@ -332,7 +335,7 @@
                                id="grade-{{ panel.task_uuid }}-{{ grade.id }}"
                                name="{{ panel.fields.label }}" value="{{ grade.id }}"
                                data-grade-option required autocomplete="off"
-                               {% if panel.existing_grade and panel.existing_grade.disease_grading_id == grade.id %}checked{% endif %}
+                               {% if saved_observation and saved_observation.disease_grading_id == grade.id %}checked{% endif %}
                                {% if not panel.editable %}disabled{% endif %}>
                         <label class="btn btn-outline-primary w-100 h-100 d-flex align-items-center justify-content-center"
                                for="grade-{{ panel.task_uuid }}-{{ grade.id }}">
@@ -354,7 +357,7 @@
                   <label class="form-label" for="comment-{{ panel.task_uuid }}">Comment</label>
                   <textarea class="form-control" id="comment-{{ panel.task_uuid }}"
                             name="{{ panel.fields.comment }}" rows="4"
-                            {% if not panel.editable %}disabled{% endif %}>{{ panel.existing_grade.comment if panel.existing_grade else '' }}</textarea>
+                            {% if not panel.editable %}disabled{% endif %}>{{ saved_observation.comment if saved_observation else '' }}</textarea>
                   <div class="d-flex gap-2 justify-content-end mt-3 d-none" data-workbench-submit-actions>
                     <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench disabled>Save &amp; Close</button>
                     <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench disabled>Save &amp; Next</button>
@@ -374,7 +377,7 @@
         {% set pager_image = namespace(index=0) %}
         {% for panel in workbench.panels %}
         {% if panel.target_level == 'image' %}{% set pager_image.index = pager_image.index + 1 %}{% endif %}
-        <button class="btn btn-sm btn-outline-secondary{% if loop.first %} active{% endif %}{% if panel.existing_grade %} is-graded{% endif %}"
+        <button class="btn btn-sm btn-outline-secondary{% if loop.first %} active{% endif %}{% if panel.draft_observation or panel.existing_grade %} is-graded{% endif %}"
                 type="button" data-workbench-target="{{ loop.index0 }}"
                 title="{{ 'Image ' ~ (panel.image_position or loop.index) if panel.target_level == 'image' else 'Encounter target' }}">
           {{ pager_image.index if panel.target_level == 'image' else 'E' }}
@@ -396,8 +399,9 @@ window.linkedGradingData = {
   {{ panel.task_uuid|tojson }}: {
     taskUuid: {{ panel.task_uuid|tojson }},
     features: {{ panel.grades|tojson }},
-    existingSelectedFeatures: {{ (panel.existing_grade.selected_feature_ids if panel.existing_grade else [])|tojson }},
-    existingFeatureGeometry: {{ panel.annotation.legacy_geometry|tojson }},
+    existingSelectedFeatures: {{ (panel.draft_observation.selected_feature_ids if panel.draft_observation else (panel.existing_grade.selected_feature_ids if panel.existing_grade else []))|tojson }},
+    existingFeatureGeometry: {{ (panel.draft_observation.feature_geometry if panel.draft_observation else panel.annotation.legacy_geometry)|tojson }},
+    hasDraft: {{ (panel.draft_observation is not none)|tojson }},
     readOnly: {{ (not panel.editable)|tojson }},
     annotationContext: {{ panel.annotation|tojson }}
   }{% if not loop.last %},{% endif %}
@@ -429,6 +433,8 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
   const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
   const submitOverlayMessage = root.querySelector('[data-workbench-submit-overlay-message]');
+  const draftStatus = root.querySelector('[data-draft-status]');
+  const workbenchForm = root.querySelector('[data-workbench-form]');
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const headers = {
     'Content-Type': 'application/json',
@@ -456,6 +462,77 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 
   let submitting = false;
   let activePanelIndex = panels.findIndex(panel => panel.classList.contains('active'));
+  let draftDirty = false;
+  let draftTimer = null;
+  let draftSavePromise = null;
+
+  draftStatus.textContent = panels.some(
+    panel => window.linkedGradingData[panel.dataset.taskUuid]?.hasDraft
+  ) ? 'Draft restored' : 'Draft ready';
+
+  function collectObservations() {
+    const observations = {};
+    editablePanels.forEach(panel => {
+      const taskUuid = panel.dataset.taskUuid;
+      const selected = selectedGrade(panel);
+      const geometryRaw = panel.querySelector('[data-feature-geometry-field]').value;
+      observations[taskUuid] = {
+        disease_grading_id: selected ? Number(selected) : null,
+        comment: panel.querySelector('textarea').value,
+        selected_feature_ids: Array.from(
+          panel.querySelectorAll('input[name^="selected_features_"]:checked')
+        ).map(item => Number(item.value)),
+        annotation_policy_revision: Number(
+          panel.querySelector('input[name^="annotation_policy_revision_"]').value
+        ),
+        feature_geometry: geometryRaw ? JSON.parse(geometryRaw) : null
+      };
+    });
+    return observations;
+  }
+
+  async function flushDraft() {
+    window.clearTimeout(draftTimer);
+    draftTimer = null;
+    if (submitting || (!draftDirty && !draftSavePromise)) return;
+    if (draftSavePromise) {
+      await draftSavePromise;
+      if (draftDirty && !submitting) return flushDraft();
+      return;
+    }
+    draftDirty = false;
+    draftStatus.textContent = 'Saving draft…';
+    const body = {
+      configuration_fingerprint: fingerprint,
+      observations: collectObservations()
+    };
+    draftSavePromise = api(`/api/grading/workbench/sessions/${sessionUuid}/draft`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+    let saveFailed = false;
+    try {
+      await draftSavePromise;
+      draftStatus.textContent = 'Draft saved';
+    } catch (error) {
+      saveFailed = true;
+      draftDirty = true;
+      draftStatus.textContent = 'Draft not saved';
+      showMessage(error.message, 'warning');
+      if (error.reloadRequired) reloadForConfigurationChange(error.message);
+    } finally {
+      draftSavePromise = null;
+    }
+    if (draftDirty && !submitting && !saveFailed) scheduleDraft();
+  }
+
+  function scheduleDraft(delay = 450) {
+    if (submitting) return;
+    draftDirty = true;
+    draftStatus.textContent = 'Unsaved changes';
+    window.clearTimeout(draftTimer);
+    draftTimer = window.setTimeout(flushDraft, delay);
+  }
 
   function updateSubmissionControls() {
     const activePanel = panels[activePanelIndex];
@@ -521,6 +598,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   panels.forEach(panel => {
     panel.querySelectorAll('[data-grade-option]').forEach(option => {
       option.addEventListener('change', () => {
+        window.linkedGradingData[panel.dataset.taskUuid].existingSelectedFeatures = [];
         renderFeatures(panel);
         updateProgress();
       });
@@ -535,6 +613,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       panel.querySelector('[data-feature-geometry-field]').value = '';
       renderFeatures(panel);
       updateProgress();
+      scheduleDraft(0);
     });
     panel.querySelectorAll('[data-evidence-select]').forEach(button => {
       button.addEventListener('click', () => {
@@ -561,6 +640,29 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     });
   });
   updateProgress();
+
+  workbenchForm.addEventListener('input', event => {
+    if (
+      event.target.matches('textarea')
+      || event.target.matches('[data-feature-geometry-field]')
+    ) scheduleDraft();
+  });
+  workbenchForm.addEventListener('change', event => {
+    if (
+      event.target.matches('[data-grade-option]')
+      || event.target.matches('textarea')
+      || event.target.matches('input[name^="selected_features_"]')
+      || event.target.matches('[data-feature-geometry-field]')
+    ) scheduleDraft(0);
+  });
+
+  root.querySelector('[data-workbench-dashboard]').addEventListener('click', async event => {
+    event.preventDefault();
+    const destination = event.currentTarget.href;
+    await flushDraft();
+    if (draftSavePromise) await draftSavePromise;
+    if (!draftDirty) window.location.assign(destination);
+  });
 
   const carouselElement = root.querySelector('#workbench-panels');
   let carousel = null;
@@ -640,10 +742,11 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     window.setTimeout(() => window.location.reload(), 900);
   }
 
-  root.querySelector('[data-workbench-form]').addEventListener('submit', async event => {
+  workbenchForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (submitting) return;
     submitting = true;
+    window.clearTimeout(draftTimer);
     const action = event.submitter?.value || 'save_close';
     const clickedButton = event.submitter;
     const originalButtonHtml = clickedButton?.innerHTML;
@@ -657,25 +760,13 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     }
     showMessage('Saving grades…', 'info');
     clearInterval(heartbeatTimer);
-    const observations = {};
     try {
-      editablePanels.forEach(panel => {
-        const taskUuid = panel.dataset.taskUuid;
-        const geometryRaw = panel.querySelector('[data-feature-geometry-field]').value;
-        observations[taskUuid] = {
-          disease_grading_id: Number(selectedGrade(panel)),
-          comment: panel.querySelector('textarea').value,
-          selected_feature_ids: Array.from(panel.querySelectorAll('input[name^="selected_features_"]:checked')).map(item => Number(item.value)),
-          annotation_policy_revision: Number(panel.querySelector('input[name^="annotation_policy_revision_"]').value),
-          feature_geometry: geometryRaw ? JSON.parse(geometryRaw) : null
-        };
-      });
       const body = {
         action,
         idempotency_key: crypto.randomUUID(),
         configuration_fingerprint: fingerprint,
         package_revision: {{ workbench.workflow_config.get('package_revision')|tojson }},
-        observations
+        observations: collectObservations()
       };
       const result = await api(`/api/grading/workbench/sessions/${sessionUuid}/submit`, {
         method: 'POST', body: JSON.stringify(body)

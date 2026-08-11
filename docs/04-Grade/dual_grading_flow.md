@@ -93,8 +93,8 @@ create_or_update_consensus(task.id, db)
 ### Revision Implementation Details
 
 #### Time-Based Restrictions
-- **Arbitrator revision window**: Configurable via `ARBITRATOR_REVISION_HOURS` (default: 6)
-- **General exclusion**: 4-week restriction across all role slots
+- **Revision window**: 12 hours for Resident, Resident2, and Arbitrator grades
+- The same boundary is used by dashboard actions and revision submission checks
 - Time windows stored in UTC for consistency
 
 #### Revision Eligibility Functions

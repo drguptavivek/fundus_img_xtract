@@ -123,6 +123,7 @@ class WorkbenchPanelDTO:
     grades: tuple[WorkbenchGradeOptionDTO, ...]
     annotation: WorkbenchAnnotationDTO
     existing_grade: dict[str, Any] | None
+    draft_observation: dict[str, Any] | None
     task_state: str
     fields: dict[str, str]
 
@@ -141,6 +142,7 @@ class WorkbenchPanelDTO:
             "grades": [item.to_dict() for item in self.grades],
             "annotation": self.annotation.to_dict(),
             "existing_grade": self.existing_grade,
+            "draft_observation": self.draft_observation,
             "task_state": self.task_state,
             "fields": self.fields,
         }

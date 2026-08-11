@@ -11,6 +11,7 @@ from .acquisition import (
 )
 from .sessions import expire_stale, heartbeat, list_active, load, release, resume
 from .submission import submit
+from .drafts import save_draft
 from .history import submission_history
 from .audit import record_rejected_submission as _record_rejected_submission
 
@@ -89,6 +90,25 @@ def heartbeat_workbench(db, *, session_uuid: str, user_id: int, raw_token: str, 
         user_id=user_id,
         raw_token=raw_token,
         token_generation=token_generation,
+    )
+
+
+def save_workbench_draft(
+    db,
+    *,
+    session_uuid: str,
+    user_id: int,
+    raw_token: str,
+    token_generation: int,
+    payload: dict,
+):
+    return save_draft(
+        db,
+        session_uuid=session_uuid,
+        user_id=user_id,
+        raw_token=raw_token,
+        token_generation=token_generation,
+        payload=payload,
     )
 
 

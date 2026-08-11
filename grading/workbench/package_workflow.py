@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any
 
 from auth.utils import utcnow
@@ -16,9 +15,9 @@ from models import (
     Grade,
     GradingTask,
 )
+from .revision_policy import REVISION_WINDOW
 
 
-REVISION_WINDOW = timedelta(hours=12)
 HUMAN_ROLE_SLOTS = {"resident", "resident2", "arbitrator"}
 
 

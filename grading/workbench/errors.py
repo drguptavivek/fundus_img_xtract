@@ -71,6 +71,11 @@ class ConfigurationChanged(WorkbenchError):
     reload_required = True
 
 
+class DraftValidationError(WorkbenchError):
+    code = "draft_validation_error"
+    status_code = 422
+
+
 class AnnotationValidationError(WorkbenchError):
     code = "annotation_validation_error"
     status_code = 422

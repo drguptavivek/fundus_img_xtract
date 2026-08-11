@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from auth.utils import utcnow
 from grading.workbench.configuration import configuration_snapshot
 from grading.workbench.errors import AnnotationPolicyChanged, SessionSuperseded
+from grading.workbench.drafts import save_draft
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import (
     _assert_access,
@@ -22,7 +23,7 @@ from grading.workbench.sessions import (
     resume,
 )
 import grading.workbench.sessions as sessions_module
-from models import GradingTask
+from models import DiseaseGrading, Grade, GradingTask
 from tests.helpers.test_factories import TestDataFactory
 
 
@@ -119,6 +120,61 @@ def test_resume_rotates_token_and_old_tab_is_superseded(db_session, resident_use
             raw_token=old_token,
             token_generation=1,
         )
+
+
+def test_resume_restores_session_draft_without_creating_grade(
+    db_session, resident_user, core_test_data
+):
+    user = db_session.merge(resident_user)
+    lab = db_session.merge(core_test_data["lab_unit"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    task = _encounter_task(db_session, disease_id=disease.id, lab_unit_id=lab.id)
+    session, token = _session(db_session, user_id=user.id, task=task)
+    label = (
+        db_session.query(DiseaseGrading)
+        .filter(DiseaseGrading.disease_id == disease.id)
+        .order_by(DiseaseGrading.id)
+        .first()
+    )
+    target_config = session.configuration_snapshot_json["targets"][0]
+
+    result = save_draft(
+        db_session,
+        session_uuid=session.uuid,
+        user_id=user.id,
+        raw_token=token,
+        token_generation=1,
+        payload={
+            "configuration_fingerprint": session.configuration_fingerprint,
+            "observations": {
+                task.uuid: {
+                    "disease_grading_id": label.id,
+                    "comment": "Return to this observation",
+                    "selected_feature_ids": [],
+                    "annotation_policy_revision": target_config[
+                        "annotation_policy_revision"
+                    ],
+                    "feature_geometry": None,
+                }
+            },
+        },
+    )
+
+    assert result["target_count"] == 1
+    assert db_session.query(Grade).filter(Grade.task_id == task.id).count() == 0
+
+    workbench, _new_token = resume(
+        db_session, session_uuid=session.uuid, user_id=user.id
+    )
+
+    assert workbench.panels[0].existing_grade is None
+    assert workbench.panels[0].draft_observation == {
+        "disease_grading_id": label.id,
+        "comment": "Return to this observation",
+        "selected_feature_ids": [],
+        "annotation_policy_revision": target_config["annotation_policy_revision"],
+        "feature_geometry": None,
+    }
 
 
 def test_stored_token_load_revalidates_access_and_configuration(
@@ -246,12 +302,16 @@ def test_expiry_releases_target_without_changing_task_state(
     disease = db_session.merge(core_test_data["glaucoma"])
     task = _encounter_task(db_session, disease_id=disease.id, lab_unit_id=lab.id)
     session, _token = _session(db_session, user_id=user.id, task=task)
+    session.draft_observations_json = {task.uuid: {"comment": "discard me"}}
+    session.draft_updated_at = utcnow()
     session.idle_expires_at = utcnow() - timedelta(seconds=1)
     db_session.flush()
 
     assert expire_stale(db_session) == 1
     assert session.status == "expired"
     assert session.targets[0].released_at is not None
+    assert session.draft_observations_json is None
+    assert session.draft_updated_at is None
     assert task.state == "pending"
 
 

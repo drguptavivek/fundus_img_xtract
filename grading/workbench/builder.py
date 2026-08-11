@@ -21,6 +21,7 @@ from .sources import resolve_encounter_evidence, resolve_task_source
 
 def build_workbench(db, session: GradingWorkbenchSession, tasks: list[GradingTask]) -> WorkbenchDTO:
     purpose_by_task_id = {item.task_id: item.target_purpose for item in session.targets}
+    drafts = session.draft_observations_json or {}
     panels = tuple(
         _panel(
             db,
@@ -28,6 +29,7 @@ def build_workbench(db, session: GradingWorkbenchSession, tasks: list[GradingTas
             session.role_slot,
             session.user_id,
             editable=purpose_by_task_id.get(task.id) == "editable",
+            draft=drafts.get(task.uuid),
         )
         for task in tasks
     )
@@ -57,6 +59,7 @@ def _panel(
     user_id: int,
     *,
     editable: bool,
+    draft: dict | None,
 ) -> WorkbenchPanelDTO:
     source = resolve_task_source(db, task)
     labels = _labels(db, task)
@@ -115,6 +118,7 @@ def _panel(
             legacy_geometry=existing.feature_geometry_json if existing else None,
         ),
         existing_grade=_grade_dict(existing),
+        draft_observation=draft if isinstance(draft, dict) else None,
         task_state=task.state,
         fields={
             "label": f"label_id_{task.uuid}",

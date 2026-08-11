@@ -300,6 +300,8 @@ def _close(session, *, status: str, reason: str, now=None) -> None:
     now = now or utcnow()
     session.status = status
     session.close_reason = reason
+    session.draft_observations_json = None
+    session.draft_updated_at = None
     if status == "completed":
         session.completed_at = now
     elif status == "invalidated":

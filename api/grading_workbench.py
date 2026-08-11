@@ -22,6 +22,7 @@ from grading.workbench.service import (
     release_workbench,
     record_rejected_workbench_submission,
     resume_workbench,
+    save_workbench_draft,
     submit_workbench,
 )
 
@@ -220,6 +221,27 @@ def release_workbench_session(session_uuid: str):
                 token_generation=_generation(),
             )
             return jsonify({"success": True})
+    except WorkbenchError as exc:
+        return _error(exc)
+
+
+@api_bp.route("/grading/workbench/sessions/<string:session_uuid>/draft", methods=["PUT"])
+@roles_required(*GRADING_ROLES)
+def save_workbench_session_draft(session_uuid: str):
+    payload = request.get_json(silent=True) or {}
+    try:
+        with transaction_scope() as db:
+            draft = save_workbench_draft(
+                db,
+                session_uuid=session_uuid,
+                user_id=current_user.id,
+                raw_token=_token(),
+                token_generation=_generation(),
+                payload=payload,
+            )
+            response = jsonify({"success": True, "draft": draft})
+            response.headers["Cache-Control"] = "no-store, private"
+            return response
     except WorkbenchError as exc:
         return _error(exc)
 

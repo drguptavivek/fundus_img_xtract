@@ -48,6 +48,8 @@ class GradingWorkbenchSession(Base):
     queue_request_json: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
     configuration_snapshot_json: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False, default=dict)
     configuration_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    draft_observations_json: Mapped[dict | None] = mapped_column(JSON_TYPE, nullable=True)
+    draft_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

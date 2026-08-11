@@ -10,7 +10,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
-from grading.workbench.package_workflow import REVISION_WINDOW
+from grading.workbench.revision_policy import REVISION_WINDOW
 from grading_allocation.models import (
     ProjectGraderAllocation,
     ProjectGradingAllocationPolicy,

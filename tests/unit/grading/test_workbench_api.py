@@ -67,3 +67,34 @@ def test_save_next_returns_direct_workbench_url_and_remembers_browser_token(
         "/grading/workbench/next-session-uuid"
     )
     assert remembered == [("next-session-uuid", "next-private-token", 2)]
+
+
+def test_draft_endpoint_returns_saved_session_draft(app, monkeypatch):
+    monkeypatch.setattr(workbench_api, "current_user", SimpleNamespace(id=7))
+    monkeypatch.setattr(workbench_api, "transaction_scope", _Transaction)
+    monkeypatch.setattr(
+        workbench_api,
+        "save_workbench_draft",
+        lambda *args, **kwargs: {
+            "saved_at": "2026-08-11T10:00:00+00:00",
+            "target_count": 2,
+        },
+    )
+
+    with app.test_request_context(
+        "/api/grading/workbench/sessions/current-session/draft",
+        method="PUT",
+        json={"configuration_fingerprint": "fingerprint", "observations": {}},
+    ):
+        response = unwrap(workbench_api.save_workbench_session_draft)(
+            "current-session"
+        )
+
+    payload = response.get_json()
+    assert payload == {
+        "success": True,
+        "draft": {
+            "saved_at": "2026-08-11T10:00:00+00:00",
+            "target_count": 2,
+        },
+    }

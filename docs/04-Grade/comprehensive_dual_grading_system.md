@@ -179,27 +179,27 @@ PatientEncounter/DirectImageUpload (1) → GradingTask (many) → Grade (many) �
 - Can grade in `resident` role only
 - Access to `pending` tasks
 - Disease and lab unit scoping
-- Revision rights for 24 hours after submission
+- Revision rights for 12 hours after submission
 
 **Resident2:**
 - Can grade in `resident2` role only
 - Access to `resident_done` tasks
 - Independent assessment requirement
-- Revision rights for 24 hours after submission
+- Revision rights for 12 hours after submission
 
 **Arbitrator:**
 - Can grade in `arbitrator` role
 - Access to `arbitration` tasks
 - Full grading history access
-- Revision rights for 24 hours after submission
+- Revision rights for 12 hours after submission
 
 ### Permission Matrix
 
 | Role | Can Grade As | Task States Accessible | Revision Rights |
 |------|-------------|----------------------|----------------|
-| Resident | resident | pending | 24 hours post-submission |
-| Resident2 | resident2 | resident_done | 24 hours post-submission |
-| Arbitrator | arbitrator | arbitration | 24 hours post-submission |
+| Resident | resident | pending | 12 hours post-submission |
+| Resident2 | resident2 | resident_done | 12 hours post-submission |
+| Arbitrator | arbitrator | arbitration | 12 hours post-submission |
 
 ### Lab Unit Scoping
 
@@ -215,8 +215,8 @@ PatientEncounter/DirectImageUpload (1) → GradingTask (many) → Grade (many) �
 
 **Resident / Resident2 / Arbitrator:**
 - Can revise only their own submitted grade
-- Revisions are allowed for up to 24 hours after submission
-- After 24 hours, the grade becomes read-only for that user
+- Revisions are allowed for up to 12 hours after submission
+- After 12 hours, the grade becomes read-only for that user
 - If a revision changes grade agreement, the task state and consensus are recalculated automatically
 - Audit trail preservation
 

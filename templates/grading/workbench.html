@@ -208,9 +208,9 @@
     </div>
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
-      <div class="btn-group" role="group" aria-label="Target navigation">
-        <button class="btn btn-outline-secondary" type="button" data-bs-target="#workbench-panels" data-bs-slide="prev">Previous</button>
-        <button class="btn btn-outline-secondary" type="button" data-bs-target="#workbench-panels" data-bs-slide="next">Next target</button>
+      <div class="btn-group" role="group" aria-label="Workbench navigation">
+        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="prev">Previous</button>
+        <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="next">Next</button>
       </div>
       <div class="d-flex gap-2">
         <button class="btn btn-primary" type="submit" name="action" value="save_close">Save &amp; Close</button>
@@ -318,6 +318,25 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
           item.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
       });
+    });
+  });
+
+  root.querySelectorAll('[data-workbench-navigate]').forEach(button => {
+    button.addEventListener('click', () => {
+      const direction = button.dataset.workbenchNavigate;
+      const activePanel = root.querySelector('.carousel-item.active') || panels[0];
+      const evidence = Array.from(activePanel?.querySelectorAll('[data-evidence-select]') || []);
+      if (evidence.length > 1) {
+        const selectedIndex = evidence.findIndex(item => item.getAttribute('aria-pressed') === 'true');
+        const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
+        const delta = direction === 'prev' ? -1 : 1;
+        evidence[(currentIndex + delta + evidence.length) % evidence.length].click();
+        return;
+      }
+      if (panels.length > 1 && window.bootstrap?.Carousel) {
+        const carousel = window.bootstrap.Carousel.getOrCreateInstance(root.querySelector('#workbench-panels'));
+        direction === 'prev' ? carousel.prev() : carousel.next();
+      }
     });
   });
 

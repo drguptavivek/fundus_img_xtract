@@ -51,6 +51,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-evidence-viewer" in template
     assert "data-evidence-select" in template
     assert "state.setImage" in template
+    assert 'data-workbench-navigate="prev"' in template
+    assert 'data-workbench-navigate="next"' in template
+    assert "evidence[(currentIndex + delta + evidence.length) % evidence.length].click()" in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
     assert "imggr-bright" in template

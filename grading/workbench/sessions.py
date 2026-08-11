@@ -196,6 +196,26 @@ def _assert_configuration(db, *, session, tasks) -> None:
 
 
 def _assert_access(db, *, session, tasks, user_id: int) -> None:
+    if session.workflow == "package":
+        package = tasks[0].encounter_set_package
+        current_ids = {
+            task.id for task in editable_tasks(package, session.role_slot, user_id)
+        }
+        leased_ids = {item.task_id for item in session.targets}
+        if current_ids != leased_ids:
+            _close(session, status="invalidated", reason="package_allocation_changed")
+            raise WorkbenchAccessDenied(
+                "The EncounterSet package allocation changed. Acquire it again."
+            )
+        # Sessions acquired before revision-window package targets were marked
+        # editable can be repaired safely because the leased target set still
+        # exactly matches the package's authoritative editable target set.
+        for item in session.targets:
+            item.target_purpose = "editable"
+    elif session.workflow == "revision":
+        for item in session.targets:
+            item.target_purpose = "editable"
+
     editable_ids = {
         item.task_id for item in session.targets if item.target_purpose == "editable"
     }
@@ -206,16 +226,6 @@ def _assert_access(db, *, session, tasks, user_id: int) -> None:
             _close(session, status="invalidated", reason="allocation_changed")
             raise WorkbenchAccessDenied(
                 "Your grading allocation changed. Acquire another workbench."
-            )
-    if session.workflow == "package":
-        package = tasks[0].encounter_set_package
-        current_ids = {
-            task.id for task in editable_tasks(package, session.role_slot, user_id)
-        }
-        if current_ids != editable_ids:
-            _close(session, status="invalidated", reason="package_allocation_changed")
-            raise WorkbenchAccessDenied(
-                "The EncounterSet package allocation changed. Acquire it again."
             )
 
 

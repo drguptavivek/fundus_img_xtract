@@ -104,7 +104,13 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Grading Dashboard</h3>
   <div class="d-flex gap-2">
-    <!-- Action buttons for users with roles resident or ophthalmologist -->
+    {% if active_workbench %}
+    <a class="btn btn-primary" data-resume-workbench
+       href="{{ url_for('grading.workbench_page', session_uuid=active_workbench.session_uuid) }}">
+      <i class="fa-solid fa-play me-1" aria-hidden="true"></i>
+      Resume grading
+    </a>
+    {% endif %}
   </div>
 </div>
 

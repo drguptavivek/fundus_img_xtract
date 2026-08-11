@@ -9,6 +9,7 @@ from sqlalchemy import and_, desc, distinct, func
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.dashboard_service import grader_eligibility_dto, grading_history_page
+from grading.workbench.service import list_active_sessions
 from grading_allocation.dashboard import list_project_encounter_set_queues
 from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
@@ -191,6 +192,8 @@ def index():
             db,
             user_id=current_user.id,
         )
+        active_sessions = list_active_sessions(db, user_id=current_user.id)
+        active_workbench = active_sessions[0] if active_sessions else None
         kpi_pending_data = get_user_kpi_pending_task_count_data(
             db,
             current_user.id,
@@ -277,5 +280,6 @@ def index():
         project_encounter_set_queues=[
             queue.to_dict() for queue in project_encounter_set_queues
         ],
+        active_workbench=active_workbench,
         **history_panel_context,
     )

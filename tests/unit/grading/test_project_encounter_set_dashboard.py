@@ -30,6 +30,7 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
             "grading/index.html",
             v="test",
             project_encounter_set_queues=[queue.to_dict()],
+            active_workbench={"session_uuid": "active-workbench-uuid"},
             diseases=[],
             is_resident=False,
             is_resident2=False,
@@ -79,6 +80,8 @@ def test_grading_dashboard_separates_project_encounter_set_queues(
         )
 
     assert "Project EncounterSet Grading" in body
+    assert "Resume grading" in body
+    assert "/grading/workbench/active-workbench-uuid" in body
     assert "Integrated DR Glaucoma Screening" in body
     assert "ICMR-VG" not in body
     assert "Glaucoma / EncounterSet" in body

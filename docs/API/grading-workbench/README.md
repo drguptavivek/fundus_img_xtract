@@ -34,7 +34,8 @@ Supported image sources are `encounter_file`, `direct_image_upload`, and
 ### `GET /api/grading/workbench/me/active-sessions`
 
 Lists the current user's unexpired sessions for resumption. Tokens are never
-included.
+included. The server-rendered Grading Dashboard uses the most recent row to
+show a right-aligned **Resume grading** action.
 
 ### `POST /api/grading/workbench/acquire`
 
@@ -86,7 +87,10 @@ Loads an active session using both token headers.
 ### `POST /api/grading/workbench/sessions/{session_uuid}/resume`
 
 Rotates the session token and increments its generation. Older tabs receive
-`session_superseded`.
+`session_superseded`. Package and explicit revision sessions created before
+the revision-target editability fix are repaired on resume only when their
+full leased target set still exactly matches the package's current editable
+target set; a real target-set or allocation change remains a conflict.
 
 ### `POST /api/grading/workbench/sessions/{session_uuid}/heartbeat`
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +11,7 @@ from grading.workbench.configuration import configuration_snapshot
 from grading.workbench.errors import AnnotationPolicyChanged, SessionSuperseded
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import (
+    _assert_access,
     expire_stale,
     heartbeat,
     issue_token,
@@ -17,6 +19,7 @@ from grading.workbench.sessions import (
     new_session_times,
     resume,
 )
+import grading.workbench.sessions as sessions_module
 from models import GradingTask
 from tests.helpers.test_factories import TestDataFactory
 
@@ -174,3 +177,47 @@ def test_expiry_releases_target_without_changing_task_state(
     assert session.status == "expired"
     assert session.targets[0].released_at is not None
     assert task.state == "pending"
+
+
+def test_resume_repairs_pre_fix_package_target_purpose(monkeypatch):
+    package = SimpleNamespace()
+    task = SimpleNamespace(id=41, encounter_set_package=package)
+    target = SimpleNamespace(task_id=41, target_purpose="evidence")
+    session = SimpleNamespace(
+        workflow="package",
+        role_slot="resident",
+        targets=[target],
+    )
+    monkeypatch.setattr(
+        sessions_module,
+        "editable_tasks",
+        lambda package_arg, role_slot, user_id: [task],
+    )
+    monkeypatch.setattr(
+        sessions_module,
+        "get_user_eligibility_for_task",
+        lambda *args, **kwargs: True,
+    )
+
+    _assert_access(None, session=session, tasks=[task], user_id=7)
+
+    assert target.target_purpose == "editable"
+
+
+def test_resume_repairs_pre_fix_revision_target_purpose(monkeypatch):
+    task = SimpleNamespace(id=51)
+    target = SimpleNamespace(task_id=51, target_purpose="evidence")
+    session = SimpleNamespace(
+        workflow="revision",
+        role_slot="resident",
+        targets=[target],
+    )
+    monkeypatch.setattr(
+        sessions_module,
+        "get_user_eligibility_for_task",
+        lambda *args, **kwargs: True,
+    )
+
+    _assert_access(None, session=session, tasks=[task], user_id=7)
+
+    assert target.target_purpose == "editable"

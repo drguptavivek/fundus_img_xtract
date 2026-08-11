@@ -114,6 +114,7 @@ from .remidio import (
     stuck_remidio_uploads_status,
 )
 from .iitk import iitk_admin, iitk_workspace
+from .remidio_encounter_migration import remidio_encounter_migration
 
 
 # Register routes with the blueprint
@@ -138,6 +139,11 @@ admin_bp.add_url_rule("/encounter-set-types/<int:type_id>/edit", view_func=encou
 admin_bp.add_url_rule("/upload-metadata-fields", view_func=upload_metadata_fields_admin, methods=["GET"])
 admin_bp.add_url_rule("/upload-metadata-fields/list", view_func=upload_metadata_fields_list, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects", view_func=upload_projects_admin, methods=["GET"])
+admin_bp.add_url_rule(
+    "/remidio-api/encounter-migration",
+    view_func=remidio_encounter_migration,
+    methods=["GET"],
+)
 admin_bp.add_url_rule("/upload-projects/new/workspace", view_func=upload_project_create_workspace, methods=["GET"])
 admin_bp.add_url_rule("/upload-projects/<int:project_id>/workspace", view_func=upload_project_workspace, methods=["GET"])
 admin_bp.add_url_rule("/remidio", view_func=remidio_admin, methods=["GET"], endpoint="remidio_admin")

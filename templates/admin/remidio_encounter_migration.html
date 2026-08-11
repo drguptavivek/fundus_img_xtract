@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Remidio Encounter Migration{% endblock %}
+
+{% block content %}
+<div class="py-4" id="remidio-migration-app"
+     data-dates-url="{{ url_for('fundus_api.remidio_migration_source_dates') }}"
+     data-encounters-url="{{ url_for('fundus_api.remidio_migration_encounters') }}"
+     data-preview-url="{{ url_for('fundus_api.remidio_migration_preview') }}"
+     data-apply-url="{{ url_for('fundus_api.remidio_migration_apply') }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Remidio API Encounter Migration</h1>
+      <p class="text-muted mb-0">Correct EncounterSets that were routed to the wrong project.</p>
+    </div>
+    <span class="badge text-bg-warning">Admin only</span>
+  </div>
+
+  <div class="alert alert-warning" role="alert">
+    A move corrects Remidio project/profile/binding lineage, removes incomplete source grading work,
+    and resets verification to pending. EncounterSets with immutable submissions cannot be moved.
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-12 col-lg-4">
+          <label class="form-label" for="migration-source-project">Source project</label>
+          <select class="form-select" id="migration-source-project">
+            <option value="">Select source project</option>
+            {% for project in projects %}
+            <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+          <label class="form-label" for="migration-capture-date">Capture date</label>
+          <select class="form-select" id="migration-capture-date" disabled>
+            <option value="">Select source project first</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-6 col-lg-4">
+          <label class="form-label" for="migration-target-project">Target project</label>
+          <select class="form-select" id="migration-target-project">
+            <option value="">Select target project</option>
+            {% for project in projects %}
+            <option value="{{ project.id }}">{{ project.title }} ({{ project.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-lg-1 d-grid">
+          <button class="btn btn-primary" type="button" id="migration-load">Load</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3 d-none" id="migration-selection-card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <span class="fw-semibold">Remidio EncounterSets</span>
+        <span class="badge text-bg-secondary ms-1" id="migration-row-count">0</span>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="migration-select-all">Select movable</button>
+        <button type="button" class="btn btn-sm btn-primary" id="migration-preview" disabled>Preview move</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col" class="ps-3">Select</th>
+            <th scope="col">Encounter</th>
+            <th scope="col">Remidio Exam</th>
+            <th scope="col">Verification</th>
+            <th scope="col">Images</th>
+            <th scope="col">Tasks</th>
+            <th scope="col">Grades</th>
+            <th scope="col">Packages</th>
+            <th scope="col">Eligibility</th>
+          </tr>
+        </thead>
+        <tbody id="migration-rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm d-none" id="migration-preview-card">
+    <div class="card-header fw-semibold">Migration preview</div>
+    <div class="card-body">
+      <div id="migration-preview-summary"></div>
+      <div class="alert alert-warning d-none mt-3" id="migration-preview-warnings"></div>
+      <div class="mt-3">
+        <label class="form-label" for="migration-confirmation">Type the confirmation token</label>
+        <div class="input-group">
+          <span class="input-group-text font-monospace" id="migration-token-label"></span>
+          <input class="form-control font-monospace" id="migration-confirmation" autocomplete="off">
+          <button class="btn btn-danger" id="migration-apply" type="button" disabled>Move EncounterSets</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center bg-body bg-opacity-75"
+       style="z-index: 2000" id="migration-loader" aria-live="polite">
+    <div class="text-center">
+      <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Loading</span></div>
+      <div class="fw-semibold" id="migration-loader-message">Working…</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/remidio-encounter-migration.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+{% endblock %}

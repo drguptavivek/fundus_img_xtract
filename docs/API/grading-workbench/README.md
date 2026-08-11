@@ -37,6 +37,21 @@ to the append-only submission audit and removed before the targets are released.
 Supported image sources are `encounter_file`, `direct_image_upload`, and
 `encounter_set_image`. `patient_encounter` is a valid non-image target.
 
+### Browser loading and recovery
+
+The HTML workbench loads the initially active image with high priority. After
+that image and the initial page finish, it loads each remaining image panel and
+its metadata serially in target order. Inactive full-resolution images do not
+receive a `src` until their turn, preventing package workbenches from competing
+for bandwidth with several simultaneous image requests.
+
+The browser API wrapper reads the response body before parsing JSON. HTML error
+pages, login redirects, and temporary server restarts therefore produce a
+controlled workbench message rather than exposing a JSON parser exception.
+Network, HTTP 429, and HTTP 5xx draft-save failures retain the dirty draft and
+retry after two seconds; validation and authentication errors require user
+action and are not retried indefinitely.
+
 ## Endpoints
 
 ### `GET /api/grading/workbench/me/active-sessions`

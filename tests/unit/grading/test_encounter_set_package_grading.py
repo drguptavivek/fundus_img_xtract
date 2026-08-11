@@ -110,6 +110,7 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-preset-slots" in template
     assert "data-preset-status" in template
     assert "preset-modal-v2" in template
+    assert "serial-image-load-v1" in template
     assert "data-clear-selection" in template
     assert "data.existingSelectedFeatures = []" in template
     assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
@@ -136,6 +137,18 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "Draft restored" in template
     assert "data-workbench-dashboard" in template
     assert "await flushDraft()" in template
+    assert 'data-imggr-deferred="{{ \'false\' if loop.first else \'true\' }}"' in template
+    assert 'data-src="{{ viewer_media.media_url }}"' in template
+    assert 'fetchpriority="high"' in template
+    assert "async function preloadRemainingImagesSerially()" in template
+    assert "await loadPanelMedia(panel)" in template
+    assert "window.addEventListener('load'" in template
+    assert "const rawBody = await response.text()" in template
+    assert "payload = JSON.parse(rawBody)" in template
+    assert "error.code = 'network_error'" in template
+    assert "error.code = redirectedToLogin ? 'authentication_required' : 'non_json_response'" in template
+    assert "if (retryDraft) scheduleDraft(2000)" in template
+    assert "Your unsaved draft will retry" in template
 
 
 def test_shared_jinja_workbench_compiles(app):
@@ -172,6 +185,8 @@ def test_viewer_preset_modal_uses_explicit_modal_contract_and_full_settings():
     ).read_text()
 
     assert "const presetModalId = root.dataset.presetModalId" in viewer
+    assert "if (root.dataset.imggrDeferred !== 'true')" in viewer
+    assert "hydrateMetadata: fetchAndHydrateMetadata" in viewer
     assert "document.getElementById(presetModalId)" in viewer
     assert "'X-CSRFToken'" in viewer
     assert "loupe_enabled: loupeEnabled" in viewer

@@ -697,7 +697,9 @@
       }
     }
 
-    fetchAndHydrateMetadata();
+    if (root.dataset.imggrDeferred !== 'true') {
+      fetchAndHydrateMetadata();
+    }
     
     // Do not restore brightness/contrast/filters across images
     
@@ -2447,6 +2449,7 @@
       setZoomLevel,
       fitToContainer,
       setImage,
+      hydrateMetadata: fetchAndHydrateMetadata,
       getCurrentZoom: () => currentZoom,
       getCurrentLoupeEnabled: () => loupeEnabled, // Expose current loupe state as getter
       applyPreset: async (presetNum) => {

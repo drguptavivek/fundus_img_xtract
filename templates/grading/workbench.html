@@ -246,6 +246,7 @@
                   </div>
                   <div class="imggr-viewer-root h-100" data-enc-id="{{ viewer_media.image_uuid }}"
                        data-preset-modal-id="imggr-preset-modal-{{ panel.task_uuid }}"
+                       data-imggr-deferred="{{ 'false' if loop.first else 'true' }}"
                        data-imggr-lite-mode="false">
                     <div class="imggr-stage position-relative h-100">
                       <div class="imggr-annot-layout d-flex h-100 gap-2">
@@ -256,7 +257,9 @@
                         {% endif %}
                         <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
                           <div class="imggr-main rounded position-relative bg-black" data-fixed-viewport="true">
-                            <img class="imggr-main-img" src="{{ viewer_media.media_url }}"
+                            <img class="imggr-main-img"
+                                 {% if loop.first %}src="{{ viewer_media.media_url }}" fetchpriority="high"
+                                 {% else %}data-src="{{ viewer_media.media_url }}" fetchpriority="low"{% endif %}
                                  alt="{{ panel.disease_name }} image{% if viewer_media.laterality %}, {{ viewer_media.laterality }}{% endif %}"
                                  data-index="0">
                             <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
@@ -427,7 +430,7 @@ window.linkedGradingData = {
 window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2')) }}" defer></script>
+<script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
@@ -459,6 +462,40 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     'X-Workbench-Token': token,
     'X-Workbench-Generation': generation
   };
+
+  async function loadPanelMedia(panel) {
+    const viewer = panel?.querySelector('.imggr-viewer-root');
+    const image = viewer?.querySelector('.imggr-main-img');
+    if (!viewer || !image) return;
+
+    const deferredUrl = image.dataset.src;
+    const imageReady = deferredUrl
+      ? new Promise(resolve => {
+          const finish = () => resolve();
+          image.addEventListener('load', finish, {once: true});
+          image.addEventListener('error', finish, {once: true});
+          image.src = deferredUrl;
+          image.removeAttribute('data-src');
+          if (image.complete) resolve();
+        })
+      : Promise.resolve();
+    const metadataReady = Promise.resolve(
+      viewer.__imggrState?.hydrateMetadata?.()
+    ).catch(() => undefined);
+    await Promise.all([imageReady, metadataReady]);
+    viewer.dataset.imggrDeferred = 'false';
+  }
+
+  async function preloadRemainingImagesSerially() {
+    for (const panel of imagePanels) {
+      if (panel.classList.contains('active')) continue;
+      await loadPanelMedia(panel);
+    }
+  }
+
+  window.addEventListener('load', () => {
+    preloadRemainingImagesSerially().catch(() => undefined);
+  }, {once: true});
 
   function selectedGrade(panel) {
     return panel.querySelector('[data-grade-option]:checked')?.value || '';
@@ -528,11 +565,13 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       body: JSON.stringify(body)
     });
     let saveFailed = false;
+    let retryDraft = false;
     try {
       await draftSavePromise;
       draftStatus.textContent = 'Draft saved';
     } catch (error) {
       saveFailed = true;
+      retryDraft = Boolean(error.transient);
       draftDirty = true;
       draftStatus.textContent = 'Draft not saved';
       showMessage(error.message, 'warning');
@@ -540,7 +579,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     } finally {
       draftSavePromise = null;
     }
-    if (draftDirty && !submitting && !saveFailed) scheduleDraft();
+    if (draftDirty && !submitting) {
+      if (retryDraft) scheduleDraft(2000);
+      else if (!saveFailed) scheduleDraft();
+    }
   }
 
   function scheduleDraft(delay = 450) {
@@ -752,12 +794,38 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   });
 
   async function api(path, options) {
-    const response = await fetch(path, {...options, headers});
-    const payload = await response.json();
+    let response;
+    try {
+      response = await fetch(path, {...options, headers});
+    } catch (_) {
+      const error = new Error('The grading server is temporarily unavailable. Your unsaved draft will retry.');
+      error.code = 'network_error';
+      error.transient = true;
+      throw error;
+    }
+
+    const rawBody = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (_) {
+      const redirectedToLogin = response.redirected && /\/login(?:[/?#]|$)/.test(response.url);
+      const transient = response.status >= 500 || response.status === 429;
+      const message = redirectedToLogin
+        ? 'Your login session has expired. Reload this page and sign in again.'
+        : transient
+          ? 'The grading server is restarting or temporarily unavailable. Your unsaved draft will retry.'
+          : `The grading server returned an unexpected response (HTTP ${response.status}). Please reload before submitting.`;
+      const error = new Error(message);
+      error.code = redirectedToLogin ? 'authentication_required' : 'non_json_response';
+      error.transient = transient;
+      throw error;
+    }
     if (!response.ok || !payload.success) {
       const error = new Error(payload.error?.message || 'Workbench request failed.');
       error.code = payload.error?.code || 'workbench_error';
       error.reloadRequired = Boolean(payload.error?.reload_required);
+      error.transient = response.status >= 500 || response.status === 429;
       throw error;
     }
     return payload;

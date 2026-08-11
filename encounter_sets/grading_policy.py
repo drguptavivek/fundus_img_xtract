@@ -1,12 +1,19 @@
 """Mutable EncounterSet grading policy DTOs and frozen runtime snapshots."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from sqlalchemy.orm import selectinload
 
-from models import Disease, DiseaseGrading
+from auth.utils import utcnow
+from models import (
+    Disease,
+    DiseaseGrading,
+    EncounterSetGradingPackage,
+    GradingTask,
+)
 from upload_profiles.models import UploadProfileEncounterSetTypeGradingPackage
 from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileEncounterSetType
 
@@ -174,39 +181,135 @@ def freeze_policy_snapshot(db, policy: EncounterSetPackagePolicyDTO) -> dict[str
     disease_by_id = {disease.id: disease for disease in diseases}
     if set(disease_by_id) != disease_ids:
         raise EncounterSetPolicyError("A grading scheme in this package no longer exists.")
-    definitions = {}
-    for disease_id, disease in disease_by_id.items():
-        definitions[str(disease_id)] = {
-            "id": disease.id,
-            "name": disease.name,
-            "grading_scope": disease.grading_scope,
-            "labels": [
-                {
-                    "id": label.id,
-                    "impression": label.impression,
-                    "guidelines": label.guidelines,
-                    "is_ungradable": label.is_ungradable,
-                    "display_order": label.display_order,
-                    "features": [
-                        {
-                            "id": feature.id,
-                            "label": feature.label,
-                            "display_order": feature.sr_no,
-                        }
-                        for feature in sorted(label.features, key=lambda item: item.sr_no)
-                    ],
-                }
-                for label in sorted(
-                    (item for item in disease.disease_gradings if item.is_active),
-                    key=lambda item: item.display_order,
-                )
-            ],
-        }
+    definitions = {
+        str(disease_id): _freeze_disease_definition(disease)
+        for disease_id, disease in disease_by_id.items()
+    }
     return {
         "schema_version": POLICY_SCHEMA_VERSION,
         "policy_revision": policy.policy_revision,
         "package": asdict(policy),
         "grading_definitions": definitions,
+    }
+
+
+def refresh_ungraded_package_definitions(db, *, scheme_id: int) -> int:
+    """Refresh one scheme only in packages with no grading history.
+
+    A package becomes immutable as soon as any live Grade or package submission
+    exists. This preserves one definition for Resident, Resident2, and
+    Adjudicator while allowing a wholly ungraded Resident package to pick up a
+    successful administrator change.
+    """
+    disease = (
+        db.query(Disease)
+        .options(
+            selectinload(Disease.disease_gradings).selectinload(
+                DiseaseGrading.features
+            )
+        )
+        .populate_existing()
+        .filter(Disease.id == scheme_id)
+        .one_or_none()
+    )
+    if disease is None:
+        return 0
+
+    package_ids = [
+        package_id
+        for (package_id,) in (
+            db.query(GradingTask.encounter_set_package_id)
+            .filter(
+                GradingTask.disease_id == scheme_id,
+                GradingTask.encounter_set_package_id.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        if package_id is not None
+    ]
+    if not package_ids:
+        return 0
+
+    packages = (
+        db.query(EncounterSetGradingPackage)
+        .options(
+            selectinload(EncounterSetGradingPackage.tasks).selectinload(
+                GradingTask.grades
+            ),
+            selectinload(EncounterSetGradingPackage.submissions),
+        )
+        .filter(
+            EncounterSetGradingPackage.id.in_(package_ids),
+            EncounterSetGradingPackage.state == "pending",
+        )
+        .order_by(EncounterSetGradingPackage.id)
+        .with_for_update()
+        .all()
+    )
+    fresh_definition = _freeze_disease_definition(disease)
+    refreshed = 0
+    for package in packages:
+        if package.submissions or any(task.grades for task in package.tasks):
+            continue
+        snapshot = deepcopy(package.policy_snapshot_json or {})
+        definitions = deepcopy(snapshot.get("grading_definitions") or {})
+        old_definition = definitions.get(str(scheme_id))
+        if old_definition is None or old_definition == fresh_definition:
+            continue
+        revision_before = package.revision_number
+        definitions[str(scheme_id)] = deepcopy(fresh_definition)
+        snapshot["grading_definitions"] = definitions
+        package.policy_snapshot_json = snapshot
+        package.revision_number += 1
+        metadata = deepcopy(package.metadata_json or {})
+        history = list(metadata.get("grading_definition_refreshes") or [])
+        history.append({
+            "scheme_id": scheme_id,
+            "package_revision_before": revision_before,
+            "package_revision_after": package.revision_number,
+            "old_label_ids": [
+                item.get("id") for item in old_definition.get("labels", [])
+            ],
+            "new_label_ids": [
+                item.get("id") for item in fresh_definition.get("labels", [])
+            ],
+            "refreshed_at": utcnow().isoformat(),
+        })
+        metadata["grading_definition_refreshes"] = history
+        package.metadata_json = metadata
+        refreshed += 1
+    if refreshed:
+        db.flush()
+    return refreshed
+
+
+def _freeze_disease_definition(disease: Disease) -> dict[str, Any]:
+    return {
+        "id": disease.id,
+        "name": disease.name,
+        "grading_scope": disease.grading_scope,
+        "labels": [
+            {
+                "id": label.id,
+                "impression": label.impression,
+                "guidelines": label.guidelines,
+                "is_ungradable": label.is_ungradable,
+                "display_order": label.display_order,
+                "features": [
+                    {
+                        "id": feature.id,
+                        "label": feature.label,
+                        "display_order": feature.sr_no,
+                    }
+                    for feature in sorted(label.features, key=lambda item: item.sr_no)
+                ],
+            }
+            for label in sorted(
+                (item for item in disease.disease_gradings if item.is_active),
+                key=lambda item: (item.display_order, item.id),
+            )
+        ],
     }
 
 

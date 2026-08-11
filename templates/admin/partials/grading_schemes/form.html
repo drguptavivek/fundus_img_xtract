@@ -81,7 +81,7 @@
         </div>
         {% endif %}
         <div class="{{ 'col-lg-2' if is_edit else 'col-lg-2' }}">
-          <button class="btn btn-primary w-100" type="submit">{{ "Save Changes" if is_edit else "Create Scheme" }}</button>
+          <button class="btn btn-primary w-100" type="submit">{{ "Save Scheme Details" if is_edit else "Create Scheme" }}</button>
         </div>
       </div>
     </form>
@@ -97,6 +97,9 @@
     </div>
   </div>
   <div class="card-body">
+    <div class="alert alert-info py-2 small" role="note">
+      Grade options are separate forms. After changing a label, status, order, guidelines, or features, use the <strong>Save</strong> button in that grade's row.
+    </div>
     <div class="vstack gap-3">
       {% for grade in scheme.grades %}
       <form class="border rounded p-3 bg-primary-subtle"

@@ -103,6 +103,10 @@ target set; a real target-set or allocation change remains a conflict.
 ### `POST /api/grading/workbench/sessions/{session_uuid}/heartbeat`
 
 Refreshes liveness without extending the fixed 30-minute allocation deadline.
+The lease response includes `configuration_refreshed`. When true, the package
+is still wholly ungraded and its grading choices were refreshed after an admin
+scheme change; browser clients reload the same active session. Other
+configuration conflicts continue to return `configuration_changed`.
 
 ### `POST /api/grading/workbench/sessions/{session_uuid}/release`
 

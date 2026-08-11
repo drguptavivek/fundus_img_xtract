@@ -625,8 +625,19 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   async function api(path, options) {
     const response = await fetch(path, {...options, headers});
     const payload = await response.json();
-    if (!response.ok || !payload.success) throw new Error(payload.error?.message || 'Workbench request failed.');
+    if (!response.ok || !payload.success) {
+      const error = new Error(payload.error?.message || 'Workbench request failed.');
+      error.code = payload.error?.code || 'workbench_error';
+      error.reloadRequired = Boolean(payload.error?.reload_required);
+      throw error;
+    }
     return payload;
+  }
+
+  function reloadForConfigurationChange(message) {
+    clearInterval(heartbeatTimer);
+    showMessage(message || 'Grading options changed. Reloading this package…', 'warning');
+    window.setTimeout(() => window.location.reload(), 900);
   }
 
   root.querySelector('[data-workbench-form]').addEventListener('submit', async event => {
@@ -687,7 +698,11 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       updateSubmissionControls();
       if (clickedButton) clickedButton.innerHTML = originalButtonHtml;
       showMessage(error.message, 'danger');
-      heartbeatTimer = startHeartbeat();
+      if (error.reloadRequired) {
+        reloadForConfigurationChange(error.message);
+      } else {
+        heartbeatTimer = startHeartbeat();
+      }
     }
   });
 
@@ -709,7 +724,19 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   function startHeartbeat() {
     return window.setInterval(() => {
       if (submitting || document.hidden) return;
-      api(`/api/grading/workbench/sessions/${sessionUuid}/heartbeat`, {method: 'POST', body: '{}'}).catch(error => showMessage(error.message, 'danger'));
+      api(`/api/grading/workbench/sessions/${sessionUuid}/heartbeat`, {method: 'POST', body: '{}'})
+        .then(result => {
+          if (result.lease?.configuration_refreshed) {
+            reloadForConfigurationChange('Grading options changed. Reloading this package with the current choices…');
+          }
+        })
+        .catch(error => {
+          if (error.reloadRequired) {
+            reloadForConfigurationChange(error.message);
+          } else {
+            showMessage(error.message, 'danger');
+          }
+        });
     }, {{ workbench.lease.heartbeat_interval_seconds }} * 1000);
   }
   let heartbeatTimer = startHeartbeat();

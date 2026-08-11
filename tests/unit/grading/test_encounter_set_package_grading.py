@@ -123,6 +123,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "Grades saved. Opening the next case" in template
     assert "clearInterval(heartbeatTimer)" in template
     assert "result.next_workbench.workbench_url" in template
+    assert "configuration_refreshed" in template
+    assert "Grading options changed. Reloading this package" in template
+    assert "error.reloadRequired" in template
 
 
 def test_shared_jinja_workbench_compiles(app):

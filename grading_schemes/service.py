@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import get_db_session, transaction_scope
+from encounter_sets.grading_policy import refresh_ungraded_package_definitions
 from models import (
     AIModelDisease,
     DirectImageUpload,
@@ -214,7 +215,16 @@ def update_grading_scheme(scheme_id: int, scheme_input: GradingSchemeInput) -> M
             scheme.grading_scope = scheme_input.grading_scope
             scheme.remidio_ocr_linkage = _normalized_remidio_ocr_linkage(scheme_input)
             _set_parent_link(db, scheme_id, scheme_input.parent_scheme_id)
-            return MutationResult(True, "Grading scheme updated.", payload={"grading_scheme_id": scheme.id})
+            db.flush()
+            refreshed = refresh_ungraded_package_definitions(db, scheme_id=scheme_id)
+            return MutationResult(
+                True,
+                "Grading scheme updated.",
+                payload={
+                    "grading_scheme_id": scheme.id,
+                    "refreshed_ungraded_packages": refreshed,
+                },
+            )
     except IntegrityError:
         return MutationResult(False, "Duplicate or invalid grading scheme.", 400)
 
@@ -345,7 +355,17 @@ def create_grade(scheme_id: int, grade_input: GradeInput) -> MutationResult:
             db.flush()
             _replace_features(db, grade.id, grade_input.features)
             db.flush()
-            return MutationResult(True, "Grade created.", 201, payload={"grading_scheme_id": scheme_id, "grade_id": grade.id})
+            refreshed = refresh_ungraded_package_definitions(db, scheme_id=scheme_id)
+            return MutationResult(
+                True,
+                "Grade created.",
+                201,
+                payload={
+                    "grading_scheme_id": scheme_id,
+                    "grade_id": grade.id,
+                    "refreshed_ungraded_packages": refreshed,
+                },
+            )
     except IntegrityError:
         return MutationResult(False, "Duplicate or invalid grade configuration.", 400)
 
@@ -378,7 +398,16 @@ def update_grade(scheme_id: int, grade_id: int, grade_input: GradeInput) -> Muta
             db.query(GradingsFeatures).filter(GradingsFeatures.disease_grading_id == grade.id).delete(synchronize_session=False)
             _replace_features(db, grade.id, grade_input.features)
             db.flush()
-            return MutationResult(True, "Grade updated.", payload={"grading_scheme_id": scheme_id, "grade_id": grade.id})
+            refreshed = refresh_ungraded_package_definitions(db, scheme_id=scheme_id)
+            return MutationResult(
+                True,
+                "Grade updated.",
+                payload={
+                    "grading_scheme_id": scheme_id,
+                    "grade_id": grade.id,
+                    "refreshed_ungraded_packages": refreshed,
+                },
+            )
     except IntegrityError:
         return MutationResult(False, "Duplicate or invalid grade configuration.", 400)
 
@@ -390,7 +419,17 @@ def set_grade_active(scheme_id: int, grade_id: int, active: bool) -> MutationRes
         if grade is None or grade.disease_id != scheme_id:
             return MutationResult(False, "Grade not found for this grading scheme.", 404)
         grade.is_active = active
-        return MutationResult(True, "Grade activated." if active else "Grade deactivated.", payload={"grading_scheme_id": scheme_id, "grade_id": grade.id})
+        db.flush()
+        refreshed = refresh_ungraded_package_definitions(db, scheme_id=scheme_id)
+        return MutationResult(
+            True,
+            "Grade activated." if active else "Grade deactivated.",
+            payload={
+                "grading_scheme_id": scheme_id,
+                "grade_id": grade.id,
+                "refreshed_ungraded_packages": refreshed,
+            },
+        )
 
 
 def _validate_scheme_input(scheme_input: GradingSchemeInput) -> str | None:

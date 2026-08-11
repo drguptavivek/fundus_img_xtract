@@ -93,6 +93,10 @@ def heartbeat(db, *, session_uuid: str, user_id: int, raw_token: str, token_gene
     _authorize(session, user_id=user_id)
     _verify_active(session)
     _verify_token(session, raw_token=raw_token, token_generation=token_generation)
+    tasks = _tasks_for_session(db, session, for_update=True)
+    configuration_refreshed = _assert_configuration(
+        db, session=session, tasks=tasks
+    )
     now = utcnow()
     session.last_heartbeat_at = now
     session.idle_expires_at = min(now + timedelta(minutes=IDLE_MINUTES), session.absolute_expires_at)
@@ -101,6 +105,7 @@ def heartbeat(db, *, session_uuid: str, user_id: int, raw_token: str, token_gene
         "session_uuid": session.uuid,
         "idle_expires_at": session.idle_expires_at.isoformat(),
         "absolute_expires_at": session.absolute_expires_at.isoformat(),
+        "configuration_refreshed": configuration_refreshed,
     }
 
 
@@ -192,13 +197,69 @@ def _verify_token(session, *, raw_token: str, token_generation: int) -> None:
         raise SessionTokenInvalid("The grading session token is invalid.")
 
 
-def _assert_configuration(db, *, session, tasks) -> None:
-    _snapshot, fingerprint = configuration_snapshot(
+def _assert_configuration(db, *, session, tasks) -> bool:
+    snapshot, fingerprint = configuration_snapshot(
         db, tasks=tasks, workflow=session.workflow, role_slot=session.role_slot
     )
-    if fingerprint != session.configuration_fingerprint:
-        _close(session, status="invalidated", reason="configuration_changed")
-        raise ConfigurationChanged("Grading configuration changed. Reload and acquire the work again.")
+    if fingerprint == session.configuration_fingerprint:
+        return False
+    if _can_adopt_ungraded_package_configuration(
+        session=session,
+        tasks=tasks,
+        snapshot=snapshot,
+    ):
+        session.configuration_snapshot_json = snapshot
+        session.configuration_fingerprint = fingerprint
+        db.flush()
+        return True
+    _close(session, status="invalidated", reason="configuration_changed")
+    raise ConfigurationChanged("Grading configuration changed. Reload and acquire the work again.")
+
+
+def _can_adopt_ungraded_package_configuration(*, session, tasks, snapshot) -> bool:
+    if session.workflow != "package" or not tasks:
+        return False
+    package = tasks[0].encounter_set_package
+    if (
+        package is None
+        or package.state != "pending"
+        or package.submissions
+        or any(task.grades for task in package.tasks)
+    ):
+        return False
+
+    prior = session.configuration_snapshot_json or {}
+    if {
+        key: value
+        for key, value in prior.items()
+        if key not in {"targets", "workflow_config"}
+    } != {
+        key: value
+        for key, value in snapshot.items()
+        if key not in {"targets", "workflow_config"}
+    }:
+        return False
+    prior_targets = [
+        {key: value for key, value in target.items() if key != "label_ids"}
+        for target in prior.get("targets", [])
+    ]
+    current_targets = [
+        {key: value for key, value in target.items() if key != "label_ids"}
+        for target in snapshot.get("targets", [])
+    ]
+    if prior_targets != current_targets:
+        return False
+    prior_workflow = {
+        key: value
+        for key, value in (prior.get("workflow_config") or {}).items()
+        if key != "package_revision"
+    }
+    current_workflow = {
+        key: value
+        for key, value in (snapshot.get("workflow_config") or {}).items()
+        if key != "package_revision"
+    }
+    return prior_workflow == current_workflow
 
 
 def _assert_access(db, *, session, tasks, user_id: int) -> None:

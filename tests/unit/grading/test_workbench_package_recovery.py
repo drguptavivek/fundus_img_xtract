@@ -4,6 +4,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from auth.utils import utcnow
+from encounter_sets.grading_policy import refresh_ungraded_package_definitions
 from grading.workbench.models import (
     GradingSubmissionEvent,
     GradingWorkbenchSession,
@@ -162,6 +163,75 @@ def _partial_grade(db, task, user, role_slot, label, *, created_at):
     db.add(grade)
     db.flush()
     return grade
+
+
+def test_scheme_change_refreshes_only_wholly_ungraded_pending_package(
+    db_session, core_test_data
+):
+    package, _image_task, set_task, _labels, _users = _package_fixture(
+        db_session, core_test_data
+    )
+    original_revision = package.revision_number
+    new_label = DiseaseGrading(
+        disease_id=set_task.disease_id,
+        impression="Needs referral",
+        display_order=3,
+    )
+    db_session.add(new_label)
+    db_session.flush()
+
+    refreshed = refresh_ungraded_package_definitions(
+        db_session, scheme_id=set_task.disease_id
+    )
+
+    assert refreshed == 1
+    assert package.revision_number == original_revision + 1
+    definition = package.policy_snapshot_json["grading_definitions"][
+        str(set_task.disease_id)
+    ]
+    assert [item["impression"] for item in definition["labels"]] == [
+        "Negative",
+        "Positive",
+        "Needs referral",
+    ]
+    refresh_audit = package.metadata_json["grading_definition_refreshes"][-1]
+    assert refresh_audit["scheme_id"] == set_task.disease_id
+    assert refresh_audit["package_revision_before"] == original_revision
+    assert refresh_audit["package_revision_after"] == package.revision_number
+
+
+def test_scheme_change_does_not_refresh_after_any_resident_grade(
+    db_session, core_test_data
+):
+    package, image_task, set_task, labels, users = _package_fixture(
+        db_session, core_test_data
+    )
+    original_snapshot = package.policy_snapshot_json
+    original_revision = package.revision_number
+    _partial_grade(
+        db_session,
+        image_task,
+        users["resident"],
+        "resident",
+        labels[image_task.disease_id][0],
+        created_at=utcnow(),
+    )
+    db_session.add(
+        DiseaseGrading(
+            disease_id=set_task.disease_id,
+            impression="Needs referral",
+            display_order=3,
+        )
+    )
+    db_session.flush()
+
+    refreshed = refresh_ungraded_package_definitions(
+        db_session, scheme_id=set_task.disease_id
+    )
+
+    assert refreshed == 0
+    assert package.policy_snapshot_json == original_snapshot
+    assert package.revision_number == original_revision
 
 
 def test_partial_resident_stage_is_owner_resumable_and_never_unlocks_resident2(

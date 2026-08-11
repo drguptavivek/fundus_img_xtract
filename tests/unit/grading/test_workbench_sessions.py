@@ -12,6 +12,7 @@ from grading.workbench.errors import AnnotationPolicyChanged, SessionSuperseded
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import (
     _assert_access,
+    _can_adopt_ungraded_package_configuration,
     expire_stale,
     heartbeat,
     issue_token,
@@ -180,6 +181,37 @@ def test_workbench_allocation_has_one_fixed_thirty_minute_window():
 
     assert idle == absolute
     assert absolute - acquired == timedelta(minutes=30)
+
+
+def test_only_wholly_ungraded_package_can_adopt_label_revision():
+    package = SimpleNamespace(state="pending", submissions=[], tasks=[])
+    task = SimpleNamespace(grades=[], encounter_set_package=package)
+    package.tasks = [task]
+    prior = {
+        "schema_version": 1,
+        "workflow": "package",
+        "role_slot": "resident",
+        "targets": [{"task_uuid": "task", "label_ids": [1, 2]}],
+        "workflow_config": {"package_uuid": "pkg", "package_revision": 1},
+    }
+    current = {
+        **prior,
+        "targets": [{"task_uuid": "task", "label_ids": [1, 2, 3]}],
+        "workflow_config": {"package_uuid": "pkg", "package_revision": 2},
+    }
+    session = SimpleNamespace(
+        workflow="package", configuration_snapshot_json=prior
+    )
+
+    assert _can_adopt_ungraded_package_configuration(
+        session=session, tasks=[task], snapshot=current
+    ) is True
+
+    task.grades = [SimpleNamespace(role_slot="resident")]
+
+    assert _can_adopt_ungraded_package_configuration(
+        session=session, tasks=[task], snapshot=current
+    ) is False
 
 
 def test_active_session_listing_supports_resume_without_exposing_token(

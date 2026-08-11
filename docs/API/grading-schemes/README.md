@@ -158,6 +158,13 @@ Configured grades and grade features are deleted together with the unused scheme
 
 Creates a grade under a grading scheme.
 
+Successful scheme/grade mutations also return
+`refreshed_ungraded_packages`. Only pending EncounterSet packages with no
+persisted grade and no package submission are refreshed. The first Resident
+grade freezes the package definition permanently for the remaining Resident,
+Resident 2, and Adjudicator workflow; later scheme edits affect future
+packages but never reinterpret that package.
+
 Request:
 
 ```json

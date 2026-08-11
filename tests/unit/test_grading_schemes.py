@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import uuid4
 
 from grading_schemes.service import (
@@ -13,6 +14,19 @@ from grading_schemes.service import (
     update_grading_scheme,
 )
 from models import Disease, DiseaseGrading, GradingsFeatures, LinkedDiseaseGrading
+
+
+def test_admin_scheme_form_distinguishes_scheme_and_grade_saves(app):
+    template = (
+        Path(__file__).parents[2]
+        / "templates/admin/partials/grading_schemes/form.html"
+    ).read_text()
+
+    assert "Save Scheme Details" in template
+    assert "Grade options are separate forms." in template
+    assert app.jinja_env.get_template(
+        "admin/partials/grading_schemes/form.html"
+    ) is not None
 
 
 def test_create_and_list_grading_scheme_uses_disease_as_scheme(app, db_session):

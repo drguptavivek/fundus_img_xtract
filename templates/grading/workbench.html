@@ -299,6 +299,10 @@
                   <textarea class="form-control" id="comment-{{ panel.task_uuid }}"
                             name="{{ panel.fields.comment }}" rows="4"
                             {% if not panel.editable %}disabled{% endif %}>{{ panel.existing_grade.comment if panel.existing_grade else '' }}</textarea>
+                  <div class="d-flex gap-2 justify-content-end mt-3 d-none" data-workbench-submit-actions>
+                    <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench disabled>Save &amp; Close</button>
+                    <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench disabled>Save &amp; Next</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -308,8 +312,8 @@
       </div>
     </div>
 
+    {% if workbench.panels|length > 1 %}
     <footer class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-top pt-2 mt-2 gwb-footer">
-      {% if workbench.panels|length > 1 %}
       <div class="gwb-pager" data-workbench-pager aria-label="Workbench targets">
         {% set pager_image = namespace(index=0) %}
         {% for panel in workbench.panels %}
@@ -325,12 +329,8 @@
         <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="prev">Previous</button>
         <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="next">Next</button>
       </div>
-      {% endif %}
-      <div class="d-flex gap-2 d-none" data-workbench-submit-actions>
-        <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench disabled>Save &amp; Close</button>
-        <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench disabled>Save &amp; Next</button>
-      </div>
     </footer>
+    {% endif %}
   </form>
 </div>
 
@@ -368,7 +368,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const editableImagePanels = editablePanels.filter(panel => panel.dataset.targetLevel === 'image');
   const encounterPanel = panels.find(panel => panel.dataset.targetLevel === 'encounter');
   const contextualSubmission = Boolean(encounterPanel && imagePanels.length);
-  const submitActions = root.querySelector('[data-workbench-submit-actions]');
+  const submitActionGroups = Array.from(root.querySelectorAll('[data-workbench-submit-actions]'));
   const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
   const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
   const submitOverlayMessage = root.querySelector('[data-workbench-submit-overlay-message]');
@@ -402,9 +402,12 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 
   function updateSubmissionControls() {
     const activePanel = panels[activePanelIndex];
-    const showActions = !contextualSubmission || activePanel === encounterPanel;
+    const showActions = activePanel?.dataset.readOnly !== 'true'
+      && (!contextualSubmission || activePanel === encounterPanel);
     const allImagesGraded = editableImagePanels.every(panel => Boolean(selectedGrade(panel)));
-    submitActions.classList.toggle('d-none', !showActions);
+    submitActionGroups.forEach(group => {
+      group.classList.toggle('d-none', !showActions || group.closest('[data-task-uuid]') !== activePanel);
+    });
     submitButtons.forEach(button => {
       button.disabled = submitting || (contextualSubmission && !allImagesGraded);
     });

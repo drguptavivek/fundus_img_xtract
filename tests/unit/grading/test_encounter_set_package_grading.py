@@ -67,6 +67,8 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-workbench-progress" in template
     assert "data-workbench-pager" in template
     assert "data-workbench-submit-actions" in template
+    assert "submitActionGroups" in template
+    assert "group.closest('[data-task-uuid]') !== activePanel" in template
     assert "contextualSubmission" in template
     assert "allImagesGraded" in template
     assert "activePanel === encounterPanel" in template

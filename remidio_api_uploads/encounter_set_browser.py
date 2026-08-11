@@ -11,6 +11,7 @@ from auth.roles import ROLE_COLLABORATOR, roles_required
 from db_transaction_manager import get_db_session
 from encounter_sets.access import ENCOUNTER_SET_PII_ROLES
 from encounter_sets.models import EncounterSetAttachment
+from encounter_sets.permissions import CAPABILITY_BROWSE, apply_project_permission_scope
 from models import BASE_DIR, PatientEncounters
 from remidio_api_integration import service as remidio_service
 from utils.hospital_scoping import apply_scoping
@@ -82,6 +83,7 @@ def encounter_set_attachment(uuid: str):
             .filter(EncounterSetAttachment.uuid == uuid)
         )
         query = apply_scoping(query, PatientEncounters, current_user, "upload")
+        query = apply_project_permission_scope(query, PatientEncounters, current_user, CAPABILITY_BROWSE)
         attachment = query.first()
         if not attachment or not attachment.folder_rel or not attachment.stored_filename:
             abort(404)

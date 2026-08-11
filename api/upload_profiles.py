@@ -7,6 +7,13 @@ from flask_login import current_user
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import Project
+from encounter_sets.permissions import (
+    EncounterSetPermissionError,
+    ProjectEncounterSetPermissionInput,
+    list_project_permissions,
+    set_project_permission,
+)
+from upload_profiles.service import explicit_lab_unit_ids
 from upload_profiles import admin_service as upload_profile_service
 from services.project_referral_diseases import (
     list_configured_project_referral_disease_ids,
@@ -15,6 +22,43 @@ from services.project_referral_diseases import (
 )
 
 from . import api_bp
+
+
+def _request_bool(name: str, *, default: bool = False) -> bool:
+    payload = request.get_json(silent=True) if request.is_json else None
+    value = payload.get(name) if isinstance(payload, dict) else request.form.get(name)
+    if value is None:
+        return default
+    return value is True or str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _request_int(name: str) -> int:
+    payload = request.get_json(silent=True) if request.is_json else None
+    value = payload.get(name) if isinstance(payload, dict) else request.form.get(name)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise EncounterSetPermissionError(f"{name} must be an integer.") from exc
+
+
+def _permission_json(row) -> dict:
+    return {
+        "id": row.id,
+        "project_id": row.project_id,
+        "user_id": row.user_id,
+        "username": row.user.username if row.user else None,
+        "lab_unit_id": row.lab_unit_id,
+        "lab_unit_name": row.lab_unit.name if row.lab_unit else None,
+        "can_browse": row.can_browse,
+        "can_verify": row.can_verify,
+        "can_upload": row.can_upload,
+        "can_review_discrepancies": row.can_review_discrepancies,
+        "can_export_data": row.can_export_data,
+        "can_view_analytics": row.can_view_analytics,
+        "can_create_datasets": row.can_create_datasets,
+        "can_adjudicate_regrades": row.can_adjudicate_regrades,
+        "active": row.active,
+    }
 
 
 def _project_input_from_request() -> upload_profile_service.ProjectCreateInput:
@@ -241,6 +285,56 @@ def project_referral_diseases(project_id: int):
             },
         }
         return jsonify(payload)
+
+
+@api_bp.route("/projects/<int:project_id>/encounter-set-permissions", methods=["GET", "PUT", "POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def project_encounter_set_permissions(project_id: int):
+    """Read or upsert user/lab permissions for EncounterSet browsing and verification."""
+    with transaction_scope() as db:
+        if db.get(Project, project_id) is None:
+            return jsonify({"success": False, "error": "Project not found."}), 404
+        if request.method != "GET":
+            try:
+                row = set_project_permission(
+                    db,
+                    manager_user_id=current_user.id,
+                    project_id=project_id,
+                    data=ProjectEncounterSetPermissionInput(
+                        user_id=_request_int("user_id"),
+                        lab_unit_id=_request_int("lab_unit_id"),
+                        can_browse=_request_bool("can_browse"),
+                        can_verify=_request_bool("can_verify"),
+                        can_upload=_request_bool("can_upload"),
+                        can_review_discrepancies=_request_bool("can_review_discrepancies"),
+                        can_export_data=_request_bool("can_export_data"),
+                        can_view_analytics=_request_bool("can_view_analytics"),
+                        can_create_datasets=_request_bool("can_create_datasets"),
+                        can_adjudicate_regrades=_request_bool("can_adjudicate_regrades"),
+                        active=_request_bool("active", default=True),
+                    ),
+                )
+            except EncounterSetPermissionError as exc:
+                return jsonify({"success": False, "error": str(exc), "message": str(exc)}), 400
+            message = "EncounterSet permissions updated."
+        else:
+            row = None
+            message = "EncounterSet permissions loaded."
+
+        rows = list_project_permissions(
+            db,
+            project_id,
+            lab_unit_ids=explicit_lab_unit_ids(db, current_user.id),
+        )
+        return jsonify({
+            "success": True,
+            "message": message,
+            "data": {
+                "project_id": project_id,
+                "updated": _permission_json(row) if row else None,
+                "permissions": [_permission_json(item) for item in rows],
+            },
+        })
 
 
 @api_bp.route("/upload-profiles/investigators", methods=["POST"])

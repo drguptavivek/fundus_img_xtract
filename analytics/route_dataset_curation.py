@@ -129,6 +129,12 @@ def _filters_with_allowed(filters: Dict[str, Any], allowed_lab_units: Iterable[i
     """Apply allowed lab units to stored filters."""
     merged = dict(filters)
     merged["allowed_lab_units"] = list(allowed_lab_units)
+    merged["project_capability_columns"] = (
+        []
+        if current_user.has_role("admin") or current_user.is_master_admin
+        else ["can_create_datasets"]
+    )
+    merged["project_capability_user_id"] = current_user.id
     merged["final_grade_basis"] = normalize_final_grade_basis(merged.get("final_grade_basis"))
     return merged
 

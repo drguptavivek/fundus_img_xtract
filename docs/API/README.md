@@ -1,5 +1,7 @@
 # API Documentation
 
+- [Project EncounterSet Permissions](encounter-set-permissions/README.md) - Manage and enforce per-user project/lab browse and verify access.
+
 This index points at the route-family docs under `docs/API/`. Each page documents the live contract as implemented in code.
 
 ## Index

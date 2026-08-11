@@ -18,6 +18,7 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
+from encounter_sets.permissions import CAPABILITY_VERIFY, apply_project_permission_scope
 from encounter_sets.grading_policy import (
     EncounterSetPackagePolicyDTO,
     EncounterSetScopePolicyDTO,
@@ -46,6 +47,11 @@ from services.project_referral_diseases import (
     canonicalize_project_positive_diseases,
     list_project_positive_disease_options,
 )
+
+
+def _apply_verification_scope(query):
+    query = apply_scoping(query, PatientEncounters, current_user, "upload")
+    return apply_project_permission_scope(query, PatientEncounters, current_user, CAPABILITY_VERIFY)
 
 
 # =========================================================================
@@ -129,7 +135,7 @@ def index():
         )
 
         # Apply hospital scoping (operation='upload' for hospital-bound)
-        encounters = apply_scoping(encounters, PatientEncounters, current_user, 'upload')
+        encounters = _apply_verification_scope(encounters)
 
         encounters = encounters.order_by(PatientEncounters.id.desc()).all()
 
@@ -208,7 +214,7 @@ def update_metadata(uuid):
             )
             .filter_by(uuid=uuid)
         )
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
         if not encounter or not encounter.is_set_based:
             abort(404)
@@ -369,7 +375,7 @@ def mark_reviewed(uuid):
             return jsonify({"success": False, "message": "Image not found"}), 404
 
         query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
         if not encounter:
             return jsonify({"success": False, "message": "Image not found"}), 404
@@ -408,7 +414,7 @@ def _verification_context(db, uuid: str) -> dict:
         )
         .filter_by(uuid=uuid)
     )
-    query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+    query = _apply_verification_scope(query)
     encounter = query.first()
     if not encounter:
         abort(404)
@@ -731,7 +737,7 @@ def update_position():
 
         # Verify encounter is accessible (apply hospital scoping)
         query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
 
         if not encounter:
@@ -1017,7 +1023,7 @@ def _next_pending_encounter_uuid(db, *, encounter: PatientEncounters) -> str | N
         query = query.filter(PatientEncounters.project_id == encounter.project_id)
     if encounter.capture_date_dt:
         query = query.filter(PatientEncounters.capture_date_dt == encounter.capture_date_dt)
-    query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+    query = _apply_verification_scope(query)
     ordered = query.order_by(
         PatientEncounters.name.asc(),
         PatientEncounters.patient_id.asc(),
@@ -1794,7 +1800,7 @@ def edit_image(uuid):
 
         # Query encounter and apply hospital scoping
         query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
 
         if not encounter:
@@ -1864,7 +1870,7 @@ def save_edit(uuid):
 
         # Query encounter and apply hospital scoping
         query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
 
         if not encounter:
@@ -1940,7 +1946,7 @@ def mark_anonymized(uuid):
 
         # Query encounter and apply hospital scoping
         query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = apply_scoping(query, PatientEncounters, current_user, 'upload')
+        query = _apply_verification_scope(query)
         encounter = query.first()
 
         if not encounter:
@@ -1973,17 +1979,12 @@ def mark_anonymized(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def mark_all_anonymized(uuid):
     """Mark all images in an encounter set as anonymized."""
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-
     with transaction_scope() as db:
-        encounter = db.query(PatientEncounters).filter_by(uuid=uuid).first()
+        encounter = _apply_verification_scope(
+            db.query(PatientEncounters).filter_by(uuid=uuid)
+        ).first()
         if not encounter:
             return jsonify({"success": False, "message": "Encounter not found"}), 404
-
-        # Check access
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"success": False, "message": "Permission denied"}), 403
         if encounter.encounter_verified_status == "verified":
             return _already_verified_json_response(encounter)
 
@@ -2014,7 +2015,6 @@ def mark_all_anonymized(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def restore_original(uuid):
     """Restore the original image (remove edited version)."""
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
     from utils.fileUtils import abs_from_parts
     from utils.media_cache import bump_media_cache_version
     from models import GradingTask
@@ -2025,14 +2025,11 @@ def restore_original(uuid):
         if not img:
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        encounter = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id).first()
+        encounter = _apply_verification_scope(
+            db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
+        ).first()
         if not encounter:
             return jsonify({"success": False, "message": "Encounter not found"}), 404
-
-        # Check access
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"success": False, "message": "Permission denied"}), 403
         if encounter.encounter_verified_status == "verified":
             return _already_verified_json_response(encounter)
 
@@ -2068,8 +2065,6 @@ def restore_original(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def mark_not_gradable(uuid):
     """Mark an image as not gradable with a reason."""
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-
     data = request.json
     reason = data.get("reason", "").strip() if data else None
 
@@ -2081,14 +2076,11 @@ def mark_not_gradable(uuid):
         if not img:
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        encounter = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id).first()
+        encounter = _apply_verification_scope(
+            db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
+        ).first()
         if not encounter:
             return jsonify({"success": False, "message": "Encounter not found"}), 404
-
-        # Check access
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"success": False, "message": "Permission denied"}), 403
         if encounter.encounter_verified_status == "verified":
             return _already_verified_json_response(encounter)
 
@@ -2104,21 +2096,16 @@ def mark_not_gradable(uuid):
 @roles_required("admin", "optometrist", "data_manager")
 def undo_not_gradable(uuid):
     """Undo the not gradable status for an image."""
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-
     with transaction_scope() as db:
         img = db.query(EncounterSetImage).filter_by(uuid=uuid).first()
         if not img:
             return jsonify({"success": False, "message": "Image not found"}), 404
 
-        encounter = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id).first()
+        encounter = _apply_verification_scope(
+            db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
+        ).first()
         if not encounter:
             return jsonify({"success": False, "message": "Encounter not found"}), 404
-
-        # Check access
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            return jsonify({"success": False, "message": "Permission denied"}), 403
         if encounter.encounter_verified_status == "verified":
             return _already_verified_json_response(encounter)
 

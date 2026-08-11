@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
+from encounter_sets.models import ProjectEncounterSetPermission
 from models import Disease, LabUnit, LinkedDiseaseGrading, Project, ProjectInvestigator, User
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -309,6 +310,22 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
                     active=True,
                 )
                 db.add(assignment)
+            permission = db.execute(
+                select(ProjectEncounterSetPermission).where(
+                    ProjectEncounterSetPermission.project_id == project_profile.project_id,
+                    ProjectEncounterSetPermission.user_id == assignment_input.user_id,
+                    ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
+                )
+            ).scalar_one_or_none()
+            if permission is None:
+                permission = ProjectEncounterSetPermission(
+                    project_id=project_profile.project_id,
+                    user_id=assignment_input.user_id,
+                    lab_unit_id=lab_unit_id,
+                )
+                db.add(permission)
+            permission.can_upload = True
+            permission.active = True
             last_assignment = assignment
         try:
             db.flush()
@@ -331,6 +348,41 @@ def remove_project_profile_assignment(manager_user_id: int, assignment_input: Pr
         if not assignment or assignment.lab_unit_id not in scoped_lab_ids:
             return MutationResult(False, "Project upload profile assignment not found in your lab-unit scope.", 404)
         assignment.active = False
+        project_profile = db.get(ProjectUploadProfile, assignment.project_upload_profile_id)
+        remaining = db.execute(
+            select(ProjectUploadProfileAssignment.id)
+            .join(
+                ProjectUploadProfile,
+                ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id,
+            )
+            .where(
+                ProjectUploadProfile.project_id == project_profile.project_id,
+                ProjectUploadProfileAssignment.user_id == assignment.user_id,
+                ProjectUploadProfileAssignment.lab_unit_id == assignment.lab_unit_id,
+                ProjectUploadProfileAssignment.id != assignment.id,
+                ProjectUploadProfileAssignment.active.is_(True),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if remaining is None:
+            permission = db.execute(
+                select(ProjectEncounterSetPermission).where(
+                    ProjectEncounterSetPermission.project_id == project_profile.project_id,
+                    ProjectEncounterSetPermission.user_id == assignment.user_id,
+                    ProjectEncounterSetPermission.lab_unit_id == assignment.lab_unit_id,
+                )
+            ).scalar_one_or_none()
+            if permission:
+                permission.can_upload = False
+                permission.active = any((
+                    permission.can_browse,
+                    permission.can_verify,
+                    permission.can_review_discrepancies,
+                    permission.can_export_data,
+                    permission.can_view_analytics,
+                    permission.can_create_datasets,
+                    permission.can_adjudicate_regrades,
+                ))
         return MutationResult(True, "User removed from project upload profile.", payload={"assignment_id": assignment.id})
 
 

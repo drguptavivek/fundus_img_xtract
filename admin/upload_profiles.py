@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading_allocation import service as grading_allocation_service
+from encounter_sets.permissions import list_project_permissions
 from models import (
     Area,
     Camera,
@@ -350,6 +351,9 @@ def upload_project_workspace(project_id: int):
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
         context["configured_referral_disease_ids"] = set(
             list_configured_project_referral_disease_ids(db, project_id=project_id)
+        )
+        context["encounter_set_permissions"] = list_project_permissions(
+            db, project_id, lab_unit_ids=scoped_lab_ids
         )
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))

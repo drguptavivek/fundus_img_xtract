@@ -202,7 +202,10 @@ def _encounter_set_browser_projects(db: Session, user, *, no_pii: bool = False) 
 
 def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool = False):
     if not no_pii:
-        return apply_scoping(query, model_class, user, "upload")
+        from encounter_sets.permissions import CAPABILITY_BROWSE, apply_project_permission_scope
+
+        query = apply_scoping(query, model_class, user, "upload")
+        return apply_project_permission_scope(query, model_class, user, CAPABILITY_BROWSE)
     return query.join(ProjectInvestigator, ProjectInvestigator.project_id == PatientEncounters.project_id).filter(
         ProjectInvestigator.user_id == user.id,
         ProjectInvestigator.role == "collaborator",

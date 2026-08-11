@@ -45,6 +45,19 @@ AI_REVIEW_STATUS_FILTER_LABELS = {
 }
 
 
+def _project_listing_capabilities() -> list[str]:
+    if current_user.has_role("admin") or current_user.is_master_admin:
+        return []
+    columns: list[str] = []
+    if current_user.has_role("discrepancy_reviewer") or current_user.has_role("local_admin"):
+        columns.append("can_review_discrepancies")
+    if current_user.has_role("data_exporter", "data_manager"):
+        columns.append("can_export_data")
+    if current_user.has_role("dataset_creator"):
+        columns.append("can_create_datasets")
+    return columns
+
+
 def render_discrepancy_review(
     page_title: str | None = None,
     enforced_filters: Dict[str, str] | None = None,
@@ -232,6 +245,8 @@ def render_discrepancy_review(
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": allowed_lab_units,
+            "project_capability_columns": _project_listing_capabilities(),
+            "project_capability_user_id": current_user.id,
         }
 
         mv_name, where_sql, params, selected_ai_model_id = build_discrepancy_filter_query(db, filters)
@@ -474,6 +489,12 @@ def discrepancy_export():
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": list(allowed_lab_unit_ids),
+            "project_capability_columns": (
+                []
+                if current_user.has_role("admin") or current_user.is_master_admin
+                else ["can_export_data"]
+            ),
+            "project_capability_user_id": current_user.id,
             "include_original_filename": include_original_filename,
             "skip_image_zips": skip_image_zips,
         }

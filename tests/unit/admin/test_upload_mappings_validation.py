@@ -6,6 +6,7 @@ from werkzeug.datastructures import MultiDict
 
 from api.upload_profiles import _encounter_set_packages_from_request
 from encounter_set_types.models import EncounterSetType
+from encounter_sets.models import ProjectEncounterSetPermission
 from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, LinkedDiseaseGrading, Project, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import (
@@ -619,6 +620,13 @@ def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, mo
             active=True,
         )
     )
+    db_session.add(ProjectEncounterSetPermission(
+        project_id=project.id,
+        user_id=uploader.id,
+        lab_unit_id=lab.id,
+        can_upload=True,
+        active=True,
+    ))
     db_session.flush()
 
     resolved = validate_encounter_set_upload_scope(
@@ -696,6 +704,13 @@ def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, mo
             active=True,
         )
     )
+    db_session.add(ProjectEncounterSetPermission(
+        project_id=project.id,
+        user_id=uploader.id,
+        lab_unit_id=lab.id,
+        can_upload=True,
+        active=True,
+    ))
     db_session.flush()
 
     try:
@@ -778,6 +793,13 @@ def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monke
             active=True,
         )
     )
+    db_session.add(ProjectEncounterSetPermission(
+        project_id=project.id,
+        user_id=uploader.id,
+        lab_unit_id=lab.id,
+        can_upload=True,
+        active=True,
+    ))
     db_session.flush()
 
     resolved = validate_encounter_set_upload_scope(

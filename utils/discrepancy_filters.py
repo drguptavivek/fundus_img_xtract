@@ -14,6 +14,11 @@ from utils.final_grade_basis import (
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 AI_REVIEW_STATUS_MISSING = "missing"
+PROJECT_CAPABILITY_COLUMNS = {
+    "can_review_discrepancies",
+    "can_export_data",
+    "can_create_datasets",
+}
 
 
 def build_discrepancy_filter_query(
@@ -87,6 +92,59 @@ def build_discrepancy_filter_query(
         "allowed_lab_units": allowed_lab_units,
         "final_grade_basis": final_grade_basis,
     }
+
+    capability_columns = [
+        value
+        for value in filters.get("project_capability_columns", [])
+        if value in PROJECT_CAPABILITY_COLUMNS
+    ]
+    project_user_id = filters.get("project_capability_user_id")
+    if capability_columns and project_user_id:
+        capability_sql = " OR ".join(f"pap.{column} = TRUE" for column in capability_columns)
+        where_clauses.append(
+            f"""EXISTS (
+                SELECT 1
+                FROM grading_tasks project_task
+                LEFT JOIN patient_encounters task_encounter
+                  ON task_encounter.id = project_task.patient_encounter_id
+                LEFT JOIN encounter_set_images task_set_image
+                  ON task_set_image.id = project_task.encounter_set_image_id
+                LEFT JOIN patient_encounters set_image_encounter
+                  ON set_image_encounter.id = task_set_image.patient_encounter_id
+                LEFT JOIN encounter_files task_image
+                  ON task_image.id = project_task.encounter_file_id
+                LEFT JOIN patient_encounters task_image_encounter
+                  ON task_image_encounter.id = task_image.patient_encounter_id
+                LEFT JOIN direct_image_uploads task_direct
+                  ON task_direct.id = project_task.direct_image_upload_id
+                WHERE project_task.id = v.task_id
+                  AND (
+                    COALESCE(
+                      task_encounter.project_id,
+                      set_image_encounter.project_id,
+                      task_image.project_id,
+                      task_image_encounter.project_id,
+                      task_direct.project_id
+                    ) IS NULL
+                    OR EXISTS (
+                      SELECT 1
+                      FROM project_encounter_set_permissions pap
+                      WHERE pap.user_id = :project_capability_user_id
+                        AND pap.project_id = COALESCE(
+                          task_encounter.project_id,
+                          set_image_encounter.project_id,
+                          task_image.project_id,
+                          task_image_encounter.project_id,
+                          task_direct.project_id
+                        )
+                        AND pap.lab_unit_id = project_task.lab_unit_id
+                        AND pap.active = TRUE
+                        AND ({capability_sql})
+                    )
+                  )
+            )"""
+        )
+        params["project_capability_user_id"] = int(project_user_id)
 
     if lab_unit_id and lab_unit_id in allowed_lab_units:
         where_clauses.append("v.task_lab_unit_id = :lab_unit_id")

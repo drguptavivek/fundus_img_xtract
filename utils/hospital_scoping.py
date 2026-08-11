@@ -163,6 +163,18 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
 
     # Cross-hospital operations (NO hospital filter)
     if is_cross_hospital_operation(operation):
+        if (
+            operation in {"dataset_creation", "research", "training"}
+            and hasattr(model_class, "project_id")
+            and hasattr(model_class, "lab_unit_id")
+        ):
+            from encounter_sets.permissions import (
+                CAPABILITY_DATASET_CREATION,
+                apply_project_permission_scope,
+            )
+            return apply_project_permission_scope(
+                query, model_class, user, CAPABILITY_DATASET_CREATION
+            )
         # Grading uses Slot-LabUnit scoping (via UserDiseaseUnitRole)
         # No additional filtering needed here
         return query
@@ -212,6 +224,27 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
                 # Regular user with no lab units - no access
                 return apply_filter(query, model_class.id == None)
     
+    if (
+        operation in {"analytics", "dataset_creation"}
+        and hasattr(model_class, "project_id")
+        and hasattr(model_class, "lab_unit_id")
+    ):
+        from encounter_sets.permissions import (
+            CAPABILITY_ANALYTICS_VIEW,
+            CAPABILITY_DATASET_CREATION,
+            apply_project_permission_scope,
+        )
+        query = apply_project_permission_scope(
+            query,
+            model_class,
+            user,
+            (
+                CAPABILITY_ANALYTICS_VIEW
+                if operation == "analytics"
+                else CAPABILITY_DATASET_CREATION
+            ),
+        )
+
     return query
 
 

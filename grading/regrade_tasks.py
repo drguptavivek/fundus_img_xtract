@@ -15,6 +15,7 @@ from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from grading.workbench.revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
 from encounter_sets.permissions import (
     CAPABILITY_REGRADE_ADJUDICATION,
+    project_task_capability_clause,
     user_has_task_capability,
 )
 from models import (
@@ -154,6 +155,9 @@ def regrade_tasks():
             .where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
             .group_by(RegradeTask.disease_id)
         )
+        pending_query = pending_query.where(project_task_capability_clause(
+            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+        ))
         if not is_admin:
             pending_query = pending_query.where(RegradeTask.assigned_to_user_id == current_user.id)
 
@@ -177,6 +181,9 @@ def regrade_tasks():
             .join(RegradeTask, RegradeTask.id == latest_regrade_subq.c.regrade_task_id)
             .where(Grade.grader_user_id == current_user.id)
             .where(Grade.role_slot == "regrade_adj")
+            .where(project_task_capability_clause(
+                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            ))
         ).scalar() or 0
 
         total_pages = max(1, (recent_total + per_page - 1) // per_page)
@@ -189,6 +196,9 @@ def regrade_tasks():
             .join(RegradeTask, RegradeTask.id == latest_regrade_subq.c.regrade_task_id)
             .where(Grade.grader_user_id == current_user.id)
             .where(Grade.role_slot == "regrade_adj")
+            .where(project_task_capability_clause(
+                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            ))
             .order_by(Grade.created_at.desc())
             .offset(offset)
             .limit(per_page)
@@ -245,6 +255,9 @@ def regrade_tasks_reassign():
             .group_by(RegradeTask.assigned_to_user_id)
             .order_by(func.count(RegradeTask.id).desc())
         )
+        counts_query = counts_query.where(project_task_capability_clause(
+            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+        ))
         assignee_counts = db.execute(counts_query).all()
         total_pending = sum(row[1] for row in assignee_counts)
         unassigned_count = sum(row[1] for row in assignee_counts if row[0] is None)
@@ -272,6 +285,9 @@ def regrade_tasks_reassign():
             .where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
             .order_by(RegradeTask.id.desc())
         )
+        tasks_query = tasks_query.where(project_task_capability_clause(
+            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+        ))
         if assignee_id_raw == "unassigned":
             tasks_query = tasks_query.where(RegradeTask.assigned_to_user_id.is_(None))
         elif assignee_id is not None:
@@ -326,6 +342,9 @@ def regrade_tasks_reassign():
                 .filter(RegradeTask.id.in_(task_ids_int))
                 .filter(RegradeTask.status == "regrade_pending")
                 .filter(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
+                .filter(project_task_capability_clause(
+                    RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+                ))
                 .all()
             )
             if not tasks_to_update:
@@ -352,6 +371,18 @@ def regrade_tasks_reassign():
             task_lab_ids = {task.lab_unit_id for task in tasks_to_update if task.lab_unit_id}
             if not task_lab_ids.issubset(target_lab_ids):
                 flash("Target user is not assigned to all task lab units.", "danger")
+                return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
+
+            if any(
+                not user_has_task_capability(
+                    db,
+                    user=target_user,
+                    task_id=task.source_task_id,
+                    capability=CAPABILITY_REGRADE_ADJUDICATION,
+                )
+                for task in tasks_to_update
+            ):
+                flash("Target user lacks project regrade access for one or more tasks.", "danger")
                 return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
 
             for task in tasks_to_update:
@@ -396,6 +427,9 @@ def start_random_regrade_task():
             select(RegradeTask.id)
             .where(RegradeTask.status == "regrade_pending")
             .where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
+            .where(project_task_capability_clause(
+                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            ))
         )
         if disease_id:
             query = query.where(RegradeTask.disease_id == disease_id)

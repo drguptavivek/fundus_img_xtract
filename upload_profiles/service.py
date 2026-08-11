@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
 from db_transaction_manager import get_db_session
+from encounter_sets.models import ProjectEncounterSetPermission
 from models import Area, Camera, LabUnit, Project, User, user_lab_units
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -170,21 +171,38 @@ def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfile
     explicit_labs = explicit_lab_unit_ids(db, user_id)
     if not explicit_labs:
         return []
+    user = db.execute(
+        select(User).options(selectinload(User.roles)).where(User.id == user_id)
+    ).scalar_one_or_none()
+    statement = (
+        select(ProjectUploadProfileAssignment)
+        .join(ProjectUploadProfile, ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id)
+        .join(UploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
+        .join(Project, ProjectUploadProfile.project_id == Project.id)
+    )
+    if user is None or not (
+        getattr(user, "is_master_admin", False) or user.has_role("admin")
+    ):
+        statement = statement.join(
+            ProjectEncounterSetPermission,
+            (ProjectEncounterSetPermission.project_id == ProjectUploadProfile.project_id)
+            & (ProjectEncounterSetPermission.user_id == ProjectUploadProfileAssignment.user_id)
+            & (ProjectEncounterSetPermission.lab_unit_id == ProjectUploadProfileAssignment.lab_unit_id)
+            & ProjectEncounterSetPermission.active.is_(True)
+            & ProjectEncounterSetPermission.can_upload.is_(True),
+        )
+    statement = statement.where(
+        ProjectUploadProfileAssignment.user_id == user_id,
+        ProjectUploadProfileAssignment.lab_unit_id.in_(explicit_labs),
+        ProjectUploadProfileAssignment.active.is_(True),
+        ProjectUploadProfile.active.is_(True),
+        UploadProfile.active.is_(True),
+        UploadProfile.automated_remidio_populated.is_(False),
+        Project.active.is_(True),
+    )
     assignments = (
         db.execute(
-            select(ProjectUploadProfileAssignment)
-            .join(ProjectUploadProfile, ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id)
-            .join(UploadProfile, ProjectUploadProfile.upload_profile_id == UploadProfile.id)
-            .join(Project, ProjectUploadProfile.project_id == Project.id)
-            .where(
-                ProjectUploadProfileAssignment.user_id == user_id,
-                ProjectUploadProfileAssignment.lab_unit_id.in_(explicit_labs),
-                ProjectUploadProfileAssignment.active.is_(True),
-                ProjectUploadProfile.active.is_(True),
-                UploadProfile.active.is_(True),
-                UploadProfile.automated_remidio_populated.is_(False),
-                Project.active.is_(True),
-            )
+            statement
             .options(
                 selectinload(ProjectUploadProfileAssignment.lab_unit),
                 selectinload(ProjectUploadProfileAssignment.project_profile).selectinload(ProjectUploadProfile.project),

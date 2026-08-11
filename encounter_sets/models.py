@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,4 +60,57 @@ class EncounterSetAttachment(Base):
         Index("ix_esa_encounter_kind", "patient_encounter_id", "asset_kind"),
         Index("ix_esa_project_kind", "project_id", "asset_kind"),
         Index("ix_esa_s3_config_uuid", "s3_config_id", "uuid"),
+    )
+
+
+class ProjectEncounterSetPermission(Base):
+    """Project and lab scoped EncounterSet browse/verification authorization."""
+
+    __tablename__ = "project_encounter_set_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    lab_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("lab_units.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    can_browse: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    can_verify: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    can_upload: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    can_review_discrepancies: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    can_export_data: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    can_view_analytics: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    can_create_datasets: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    can_adjudicate_regrades: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    project: Mapped["Project"] = relationship("Project")
+    user: Mapped["User"] = relationship("User")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "user_id", "lab_unit_id",
+            name="uq_project_encounter_set_permission",
+        ),
+        Index(
+            "ix_project_encounter_set_permissions_lookup",
+            "user_id", "project_id", "lab_unit_id", "active",
+        ),
     )

@@ -21,6 +21,7 @@ from utils.media_cache import bump_media_cache_version
 from sqlalchemy import and_, select, or_
 from db_transaction_manager import transaction_scope
 from grading_allocation.eligibility import is_user_eligible_for_task
+from encounter_sets.models import ProjectEncounterSetPermission
 from utils.linkedGradingUtils import get_primary_disease_id
 
 
@@ -247,6 +248,44 @@ def _apply_encounter_set_media_scoping(query, user, context: str):
             ProjectInvestigator.active.is_(True),
         )
     return apply_scoping(query, PatientEncounters, user, context)
+
+
+def _user_has_encounter_set_media_access(db, user, image: EncounterSetImage) -> bool:
+    """Authorize an EncounterSet image through project workflow or grading scope."""
+    if getattr(user, "is_master_admin", False) or user.has_role("admin"):
+        return True
+
+    encounter = image.patient_encounter
+    project_id = image.project_id or (encounter.project_id if encounter else None)
+    lab_unit_id = encounter.lab_unit_id if encounter else None
+    if not project_id or not lab_unit_id:
+        return False
+
+    if user.has_role("collaborator") and db.query(ProjectInvestigator.id).filter(
+        ProjectInvestigator.project_id == project_id,
+        ProjectInvestigator.user_id == user.id,
+        ProjectInvestigator.role == "collaborator",
+        ProjectInvestigator.active.is_(True),
+    ).first():
+        return True
+
+    workflow_permission = db.query(ProjectEncounterSetPermission.id).filter(
+        ProjectEncounterSetPermission.project_id == project_id,
+        ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
+        ProjectEncounterSetPermission.user_id == user.id,
+        ProjectEncounterSetPermission.active.is_(True),
+        or_(
+            ProjectEncounterSetPermission.can_browse.is_(True),
+            ProjectEncounterSetPermission.can_verify.is_(True),
+            ProjectEncounterSetPermission.can_upload.is_(True),
+            ProjectEncounterSetPermission.can_review_discrepancies.is_(True),
+            ProjectEncounterSetPermission.can_export_data.is_(True),
+            ProjectEncounterSetPermission.can_view_analytics.is_(True),
+            ProjectEncounterSetPermission.can_create_datasets.is_(True),
+            ProjectEncounterSetPermission.can_adjudicate_regrades.is_(True),
+        ),
+    ).first()
+    return bool(workflow_permission or _user_has_grading_access_to_image(db, user, image.uuid))
 
 
 def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
@@ -917,7 +956,9 @@ def universalImageThumbnailByUUID(uuid: str):
         if direct_image:
             return _serve_direct_final_thumbnail(db, direct_image, uuid)
 
-        if encounter_set_image:
+        if encounter_set_image and _user_has_encounter_set_media_access(
+            db, current_user, encounter_set_image
+        ):
             return _serve_encounter_set_thumbnail(encounter_set_image, uuid)
 
         abort(404)
@@ -971,7 +1012,7 @@ def encounterSetImageByUUID(uuid: str):
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
         query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img:
+        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
             abort(404)
         return _serve_encounter_set_image(img, uuid)
 
@@ -983,7 +1024,7 @@ def encounterSetImageThumbnailByUUID(uuid: str):
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
         query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img:
+        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
             abort(404)
         
         return _serve_encounter_set_thumbnail(img, uuid)
@@ -998,7 +1039,7 @@ def encounterSetImageEditedByUUID(uuid: str):
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
         query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img:
+        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
             abort(404)
         if not img.edited_filename:
             abort(404, description="No edited version exists")

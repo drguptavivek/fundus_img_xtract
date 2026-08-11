@@ -472,6 +472,75 @@ def _configure_laterality_task_routing(encounter_set_data, db_session):
     db_session.flush()
     return config
 
+
+def test_project_manager_controls_encounter_set_browse_and_verify_access(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    lab_unit = encounter_set_data["lab_unit"]
+    manager = UserFactory.create_with_hospital(
+        db_session,
+        "local_admin",
+        lab_unit.hospital_id,
+        [lab_unit.id],
+        username="encounter_permission_manager",
+    )
+    user = UserFactory.create_with_hospital(
+        db_session,
+        "optometrist",
+        lab_unit.hospital_id,
+        [lab_unit.id],
+        username="encounter_permission_user",
+    )
+    manager_client = auth_client_factory(manager)
+    endpoint = (
+        f"/api/projects/{encounter_set_data['project'].id}/encounter-set-permissions"
+    )
+    response = manager_client.post(
+        endpoint,
+        data={
+            "user_id": user.id,
+            "lab_unit_id": lab_unit.id,
+            "can_browse": "true",
+            "active": "true",
+        },
+        headers={"X-CSRFToken": csrf_token},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["data"]["updated"]["can_verify"] is False
+
+    manager_client.get("/logout")
+    user_client = auth_client_factory(user)
+    response = user_client.get(
+        f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
+    )
+    assert response.status_code == 200
+    assert encounter_set_data["project"].title.encode() in response.data
+    response = user_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}"
+    )
+    assert response.status_code == 404
+
+    user_client.get("/logout")
+    manager_client = auth_client_factory(manager)
+    response = manager_client.post(
+        endpoint,
+        data={
+            "user_id": user.id,
+            "lab_unit_id": lab_unit.id,
+            "can_browse": "true",
+            "can_verify": "true",
+            "active": "true",
+        },
+        headers={"X-CSRFToken": csrf_token},
+    )
+    assert response.status_code == 200
+    manager_client.get("/logout")
+    user_client = auth_client_factory(user)
+    response = user_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}"
+    )
+    assert response.status_code == 200
+
 def test_verify_encounter_set_index(client, auth_client_factory, encounter_set_data, db_session):
     """Test the index page lists pending encounter sets."""
     user = UserFactory.create_admin(db_session, username="admin_verify_index")

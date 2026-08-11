@@ -20,6 +20,10 @@ from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.review_navigation import get_next_review_tasks
 from utils.cache_invalidation import invalidate_discrepancy_review_cache
+from encounter_sets.permissions import (
+    CAPABILITY_DISCREPANCY_REVIEW,
+    user_has_task_capability,
+)
 from review_history import (
     StaleReviewSubmissionError,
     assert_version_token,
@@ -236,6 +240,14 @@ def review_task_details(task_id: int):
         task = query.first()
         
         if not task:
+            from flask import abort
+            abort(404, description="Task not found or access denied")
+        if not user_has_task_capability(
+            db,
+            user=current_user,
+            task_id=task.id,
+            capability=CAPABILITY_DISCREPANCY_REVIEW,
+        ):
             from flask import abort
             abort(404, description="Task not found or access denied")
         

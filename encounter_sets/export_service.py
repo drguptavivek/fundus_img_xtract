@@ -14,6 +14,7 @@ from openpyxl import Workbook
 from sqlalchemy.orm import Session, selectinload
 
 from encounter_sets.models import EncounterSetAttachment
+from encounter_sets.permissions import CAPABILITY_DATA_EXPORT, apply_project_permission_scope
 from models import (
     AMDReport,
     DiabeticRetinopathyReport,
@@ -137,6 +138,7 @@ def _load_encounters(
         .order_by(PatientEncounters.capture_date_dt.asc(), PatientEncounters.id.asc())
     )
     query = apply_scoping(query, PatientEncounters, user, "upload")
+    query = apply_project_permission_scope(query, PatientEncounters, user, CAPABILITY_DATA_EXPORT)
     return query.all()
 
 

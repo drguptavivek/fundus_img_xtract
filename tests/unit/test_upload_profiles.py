@@ -1,6 +1,7 @@
 import pytest
 
 from models import Area, Camera, Disease, Hospital, LabUnit, Project, User
+from encounter_sets.models import ProjectEncounterSetPermission
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -60,6 +61,13 @@ def upload_profile_entities(db_session):
             active=True,
         )
     )
+    db_session.add(ProjectEncounterSetPermission(
+        project_id=project.id,
+        user_id=user.id,
+        lab_unit_id=lab.id,
+        can_upload=True,
+        active=True,
+    ))
     db_session.commit()
     return {
         "user": user,
@@ -80,6 +88,20 @@ def test_get_user_upload_profiles_returns_detached_safe_dto(db_session, upload_p
     assert dto.profile_id == upload_profile_entities["profile"].id
     assert dto.project_title == "Profile Project"
     assert dto.default_disease_id == upload_profile_entities["disease"].id
+
+
+def test_upload_profile_assignment_also_requires_project_upload_capability(
+    db_session, upload_profile_entities
+):
+    permission = db_session.query(ProjectEncounterSetPermission).filter_by(
+        project_id=upload_profile_entities["project"].id,
+        user_id=upload_profile_entities["user"].id,
+        lab_unit_id=upload_profile_entities["lab"].id,
+    ).one()
+    permission.can_upload = False
+    db_session.flush()
+
+    assert get_user_upload_profiles(db_session, upload_profile_entities["user"].id) == []
 
 
 def test_validate_direct_upload_scope_rejects_unprofiled_camera(db_session, upload_profile_entities):

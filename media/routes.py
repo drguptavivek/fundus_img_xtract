@@ -380,7 +380,7 @@ def _directImgFinalByUUID(uuid_str: str):
 
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
 @rate_limit("1000 per hour; 300 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)
@@ -463,7 +463,7 @@ def _universalImageThumbnailByUUID(uuid_str: str):
 # === Encounter Set Media Routes ===
 
 @bp.route("/encounter_set/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterSetImageByUUID(uuid_str: str):
     """Serve encounter set image by UUID."""
@@ -484,7 +484,7 @@ def _encounterSetImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/edited", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterSetImageEditedByUUID(uuid_str: str):
     """Serve encounter set edited image by UUID (only if edited version exists)."""

@@ -13,6 +13,10 @@ from models import LabUnit, RegradeTask, Role, User, user_lab_units
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.final_grade_basis import normalize_final_grade_basis
 from utils.hospital_scoping import apply_scoping
+from encounter_sets.permissions import (
+    CAPABILITY_REGRADE_ADJUDICATION,
+    user_has_task_capability,
+)
 from . import bp
 from .route_discrepancy_review import (
     AI_REVIEW_STATUS_FILTER_LABELS,
@@ -106,6 +110,12 @@ def create_regrade_tasks():
             "has_regrade": has_regrade,
             "regrade_grade": request.form.getlist("regrade_grade"),
             "allowed_lab_units": list(allowed_lab_unit_ids),
+            "project_capability_columns": (
+                []
+                if current_user.has_role("admin") or current_user.is_master_admin
+                else ["can_review_discrepancies"]
+            ),
+            "project_capability_user_id": current_user.id,
         }
 
         mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
@@ -126,6 +136,17 @@ def create_regrade_tasks():
         task_lab_unit_ids = {row.task_lab_unit_id for row in rows}
         if not task_lab_unit_ids.issubset(assigned_lab_unit_ids):
             flash("Selected adjudicator is not assigned to all task lab units.", "error")
+            return redirect(request.referrer or url_for("review.discrepancy_review", disease_id=disease_id))
+        if any(
+            not user_has_task_capability(
+                db,
+                user=assigned_user,
+                task_id=row.task_id,
+                capability=CAPABILITY_REGRADE_ADJUDICATION,
+            )
+            for row in rows
+        ):
+            flash("Selected adjudicator lacks project regrade access for one or more tasks.", "error")
             return redirect(request.referrer or url_for("review.discrepancy_review", disease_id=disease_id))
 
         task_ids = [row.task_id for row in rows]

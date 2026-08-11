@@ -1,8 +1,22 @@
 import pytest
 import uuid
 from models import PatientEncounters, EncounterSetImage, Project, ProjectInvestigator
+from encounter_sets.models import ProjectEncounterSetPermission
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
+
+
+def _grant_media_access(db_session, encounter_set_data, user, **capabilities):
+    row = ProjectEncounterSetPermission(
+        project_id=encounter_set_data["project"].id,
+        user_id=user.id,
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        active=True,
+        **capabilities,
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
 
 @pytest.fixture
 def encounter_set_data(db_session, core_test_data):
@@ -59,6 +73,7 @@ def test_access_encounter_set_image_authenticated(client, auth_client_factory, e
         username='test_set_viewer', 
         lab_units=[encounter_set_data['lab_unit']]
     )
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     auth_client = auth_client_factory(user)
     
     # Expect 404 because file doesn't exist on disk, but access is allowed
@@ -187,6 +202,7 @@ def test_access_encounter_set_thumbnail_authenticated(client, auth_client_factor
         username='test_thumb_viewer', 
         lab_units=[encounter_set_data['lab_unit']]
     )
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     auth_client = auth_client_factory(user)
     
     # Expect 404 because file doesn't exist, but route is reachable (not 401/403)
@@ -202,6 +218,7 @@ def test_universal_thumbnail_serves_encounter_set_image(
         username="test_universal_set_thumb_viewer",
         lab_units=[encounter_set_data["lab_unit"]],
     )
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     media_dir = tmp_path / "files" / "test_sets"
     thumbnail_dir = media_dir / "thumbnails"
     thumbnail_dir.mkdir(parents=True)
@@ -217,3 +234,24 @@ def test_universal_thumbnail_serves_encounter_set_image(
     assert response.status_code == 200
     assert response.headers["X-Thumbnail"] == "true"
     assert response.data == b"thumbnail bytes"
+
+
+def test_encounter_set_media_denies_lab_role_without_project_capability(
+    auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path
+):
+    user = UserFactory.create_ophthalmologist(
+        db_session,
+        username="test_unscoped_set_viewer",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    media_dir = tmp_path / "files" / "test_sets"
+    media_dir.mkdir(parents=True)
+    (media_dir / "test_pos_1.jpg").write_bytes(b"test image")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(
+        f"/media/encounter_set/img/{encounter_set_data['image'].uuid}"
+    )
+
+    assert response.status_code == 404

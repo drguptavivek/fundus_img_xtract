@@ -137,6 +137,123 @@
         </form>
       </div>
 
+      <div class="col-12">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div>
+            <h3 class="h6 mb-0">Project Access</h3>
+            <div class="small text-muted">Grant operational capabilities per user and lab unit for this project.</div>
+          </div>
+          <span class="badge text-bg-secondary">{{ encounter_set_permissions|selectattr('active')|list|length }} active</span>
+        </div>
+        <div class="border rounded p-3">
+          <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>User</th><th>Lab unit</th><th>Upload</th><th>Browse</th><th>Verify</th><th>Review</th><th>Export</th><th>Analytics</th><th>Dataset</th><th>Regrade</th><th></th></tr></thead>
+              <tbody>
+                {% for permission in encounter_set_permissions if permission.active %}
+                <tr>
+                  <td>{{ permission.user.full_name or permission.user.username }}</td>
+                  <td>{{ permission.lab_unit.name }}</td>
+                  <td>{{ 'Yes' if permission.can_upload else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_browse or permission.can_verify else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_verify else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_review_discrepancies else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_export_data else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_view_analytics else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_create_datasets else 'No' }}</td>
+                  <td>{{ 'Yes' if permission.can_adjudicate_regrades else 'No' }}</td>
+                  <td class="text-end">
+                    <form method="post"
+                          action="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                          hx-post="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                          hx-swap="none"
+                          data-json-api-htmx
+                          data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                          data-json-api-reload-target="#project-detail-workspace">
+                      {{ csrf_field() }}
+                      <input type="hidden" name="user_id" value="{{ permission.user_id }}">
+                      <input type="hidden" name="lab_unit_id" value="{{ permission.lab_unit_id }}">
+                      <input type="hidden" name="active" value="false">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="11" class="text-muted text-center py-3">No project access assigned.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <form class="row g-2 align-items-end"
+                method="post"
+                action="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                hx-post="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                hx-swap="none"
+                data-json-api-htmx
+                data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                data-json-api-reload-target="#project-detail-workspace">
+            {{ csrf_field() }}
+            <input type="hidden" name="active" value="true">
+            <div class="col-lg-4">
+              <label class="form-label" for="encounter_access_user_{{ selected_project.id }}">User</label>
+              <select class="form-select" id="encounter_access_user_{{ selected_project.id }}" name="user_id" required>
+                <option value="">Select user</option>
+                {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name or user.username }} ({{ user.username }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-lg-3">
+              <label class="form-label" for="encounter_access_lab_{{ selected_project.id }}">Lab unit</label>
+              <select class="form-select" id="encounter_access_lab_{{ selected_project.id }}" name="lab_unit_id" required>
+                <option value="">Select lab unit</option>
+                {% for lab_unit in lab_units %}
+                <option value="{{ lab_unit.id }}">{{ lab_unit.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-lg-3">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_upload" value="true" id="project_access_upload_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_upload_{{ selected_project.id }}">Uploader</label>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_browse" value="true" id="encounter_access_browse_{{ selected_project.id }}" checked>
+                <label class="form-check-label" for="encounter_access_browse_{{ selected_project.id }}">Browse</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="can_verify" value="true" id="encounter_access_verify_{{ selected_project.id }}">
+                <label class="form-check-label" for="encounter_access_verify_{{ selected_project.id }}">Verify</label>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_review_discrepancies" value="true" id="project_access_review_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_review_{{ selected_project.id }}">Discrepancy reviewer</label>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_export_data" value="true" id="project_access_export_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_export_{{ selected_project.id }}">Data exporter</label>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_view_analytics" value="true" id="project_access_analytics_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_analytics_{{ selected_project.id }}">Analytics viewer</label>
+              </div>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="can_create_datasets" value="true" id="project_access_dataset_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_dataset_{{ selected_project.id }}">Dataset creator</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="can_adjudicate_regrades" value="true" id="project_access_regrade_{{ selected_project.id }}">
+                <label class="form-check-label" for="project_access_regrade_{{ selected_project.id }}">Regrade adjudicator</label>
+              </div>
+            </div>
+            <div class="col-lg-2">
+              <button class="btn btn-outline-primary w-100" type="submit">Grant / Update Access</button>
+            </div>
+          </form>
+          <div class="form-text mt-2">Verify access also permits browsing so the verifier can locate the EncounterSet.</div>
+        </div>
+      </div>
+
       {% include "admin/partials/project_grading_allocation.html" %}
 
       {% include "admin/partials/project_annotation_policy_panel.html" %}

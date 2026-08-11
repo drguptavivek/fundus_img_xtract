@@ -312,7 +312,10 @@
       {% endif %}
     </a>
     {% if is_pdf and not verification_read_only %}
-    <form action="{{ url_for('fundus_api.queue_encounter_set_attachment_ocr', attachment_id=selected_attachment.id) }}" method="post">
+    <form action="{{ url_for('fundus_api.queue_encounter_set_attachment_ocr', attachment_id=selected_attachment.id) }}"
+          method="post"
+          data-verification-ocr-form
+          data-attachment-uuid="{{ selected_attachment.uuid }}">
       {{ csrf_field() }}
       <button class="btn btn-sm btn-outline-primary" type="submit">
         {{ 'Re-run OCR' if ocr.get('status') in ['completed', 'completed_no_reports_detected', 'failed'] else 'Run OCR' }}

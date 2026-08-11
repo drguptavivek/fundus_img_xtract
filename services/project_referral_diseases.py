@@ -8,9 +8,9 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from models import Disease, Project, ProjectReferralDisease
 from grading_allocation.constants import AllocationScope
 from grading_allocation.targets import derive_project_targets
-from models import Disease, Project, ProjectReferralDisease
 
 
 _ENCOUNTER_SET_SCOPES = {

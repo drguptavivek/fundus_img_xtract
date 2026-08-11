@@ -42,7 +42,7 @@ from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
 from marshmallow import Schema, fields, validate, ValidationError
 from . import bp
-from .project_disease_options import (
+from services.project_referral_diseases import (
     canonicalize_project_positive_diseases,
     list_project_positive_disease_options,
 )

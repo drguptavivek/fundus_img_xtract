@@ -85,7 +85,7 @@ def update_encounter_referral_suggestion_from_attachments(
     if encounter.project_id is not None and positive_diseases:
         # Keep raw provider evidence on the attachment, while persisting only
         # the project's grading or explicitly configured referral diseases.
-        from verify_encounter_set.project_disease_options import (
+        from services.project_referral_diseases import (
             canonicalize_project_positive_diseases,
         )
 

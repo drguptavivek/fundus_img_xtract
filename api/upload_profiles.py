@@ -8,7 +8,7 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from models import Project
 from upload_profiles import admin_service as upload_profile_service
-from verify_encounter_set.project_disease_options import (
+from services.project_referral_diseases import (
     list_configured_project_referral_disease_ids,
     list_project_positive_disease_options,
     replace_project_referral_diseases,

@@ -509,6 +509,10 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert encounter_set_data['image'].uuid.encode() in response.data
     assert b"event.persisted" in response.data
     assert b"back_forward" in response.data
+    assert b'id="verification-ocr-modal"' in response.data
+    assert b"pollOcrUntilTerminal" in response.data
+    assert b"JSON.stringify({force: true})" in response.data
+    assert b"Close and refresh report" in response.data
 
 
 def test_verified_encounter_set_detail_is_read_only(
@@ -630,6 +634,8 @@ def test_verify_encounter_set_document_panel_embeds_pdf(client, auth_client_fact
     assert b"class=\"document-frame\"" in response.data
     assert f"/uploads/encountersets/attachments/{encounter_set_data['attachment'].uuid}".encode() in response.data
     assert b"data-panel-next" in response.data
+    assert b"data-verification-ocr-form" in response.data
+    assert f'data-attachment-uuid="{encounter_set_data["attachment"].uuid}"'.encode() in response.data
     assert b"DR OCR" in response.data
     assert b"Glaucoma OCR" in response.data
     assert b"Qualitative Result" in response.data

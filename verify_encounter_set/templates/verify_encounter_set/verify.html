@@ -220,6 +220,40 @@
     {{ csrf_field() if csrf_field else '' }}
     <input type="hidden" name="after" value="next">
   </form>
+
+  <div class="modal fade"
+       id="verification-ocr-modal"
+       tabindex="-1"
+       aria-labelledby="verification-ocr-modal-title"
+       aria-hidden="true"
+       data-bs-backdrop="static"
+       data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="verification-ocr-modal-title">Running PDF OCR</h2>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex align-items-center gap-3">
+            <div class="spinner-border text-primary" role="status" data-verification-ocr-spinner>
+              <span class="visually-hidden">OCR running</span>
+            </div>
+            <div>
+              <div class="fw-semibold" data-verification-ocr-status>Queueing OCR…</div>
+              <div class="small text-muted" data-verification-ocr-detail>
+                The report panel will refresh when this window closes.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" type="button" data-bs-dismiss="modal" data-verification-ocr-close disabled>
+            Close and refresh report
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
@@ -238,6 +272,16 @@
     const counter = document.getElementById('verify-panel-counter');
     const panelCount = shell.dataset.panelCount || '1';
     let historyRefreshStarted = false;
+    const activeOcrStatuses = new Set(['queued', 'processing']);
+    const terminalOcrStatuses = new Set(['completed', 'completed_no_reports_detected', 'failed']);
+    const ocrModalElement = document.getElementById('verification-ocr-modal');
+    const ocrModalStatus = ocrModalElement?.querySelector('[data-verification-ocr-status]');
+    const ocrModalDetail = ocrModalElement?.querySelector('[data-verification-ocr-detail]');
+    const ocrModalSpinner = ocrModalElement?.querySelector('[data-verification-ocr-spinner]');
+    const ocrModalClose = ocrModalElement?.querySelector('[data-verification-ocr-close]');
+    let ocrPollTimer = null;
+    let ocrAttachmentUuid = null;
+    let refreshOcrPanelOnClose = false;
 
     // Back/Forward Cache can restore the pre-finalization DOM even after the
     // database status changed. Refresh once so status, controls, and messages
@@ -249,6 +293,113 @@
         historyRefreshStarted = true;
         window.location.reload();
       }
+    });
+
+    function stopOcrPolling() {
+      if (ocrPollTimer) {
+        window.clearTimeout(ocrPollTimer);
+        ocrPollTimer = null;
+      }
+    }
+
+    function showOcrProgress(status, detail, terminal) {
+      if (ocrModalStatus) ocrModalStatus.textContent = status;
+      if (ocrModalDetail) ocrModalDetail.textContent = detail || '';
+      if (ocrModalSpinner) ocrModalSpinner.classList.toggle('d-none', Boolean(terminal));
+      if (ocrModalClose) ocrModalClose.disabled = !terminal;
+    }
+
+    function ocrStatusText(data) {
+      const status = data?.status || 'queued';
+      if (status === 'queued') return ['OCR queued', 'Waiting for the OCR worker…'];
+      if (status === 'processing') return ['OCR running', 'Reading and classifying PDF report pages…'];
+      if (status === 'completed') return ['OCR completed', 'Close this window to load the new report data.'];
+      if (status === 'completed_no_reports_detected') {
+        return ['OCR completed: no reports detected', 'Close this window to refresh the report panel.'];
+      }
+      if (status === 'failed') return ['OCR failed', data?.error || 'The OCR worker reported an error.'];
+      return [`OCR ${status}`, 'Waiting for the OCR worker…'];
+    }
+
+    async function fetchOcrPayload(url, options) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || payload.message || 'Unable to run PDF OCR.');
+      }
+      return payload.data || {};
+    }
+
+    function pollOcrUntilTerminal(url) {
+      stopOcrPolling();
+      const tick = async () => {
+        try {
+          const data = await fetchOcrPayload(url, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {'Accept': 'application/json', 'X-CSRFToken': csrfToken}
+          });
+          const [statusText, detailText] = ocrStatusText(data);
+          const terminal = terminalOcrStatuses.has(data.status);
+          showOcrProgress(statusText, detailText, terminal);
+          if (terminal || !activeOcrStatuses.has(data.status)) {
+            refreshOcrPanelOnClose = true;
+            stopOcrPolling();
+            return;
+          }
+          ocrPollTimer = window.setTimeout(tick, 2000);
+        } catch (error) {
+          showOcrProgress('Unable to read OCR status', error.message, true);
+          refreshOcrPanelOnClose = true;
+          stopOcrPolling();
+        }
+      };
+      ocrPollTimer = window.setTimeout(tick, 1200);
+    }
+
+    async function runVerificationOcr(form) {
+      const modal = window.bootstrap?.Modal.getOrCreateInstance(ocrModalElement);
+      ocrAttachmentUuid = form.dataset.attachmentUuid || null;
+      refreshOcrPanelOnClose = false;
+      showOcrProgress('Queueing OCR…', 'Submitting the PDF to the OCR worker.', false);
+      modal?.show();
+      try {
+        const data = await fetchOcrPayload(form.action, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({force: true})
+        });
+        const [statusText, detailText] = ocrStatusText(data);
+        const terminal = terminalOcrStatuses.has(data.status);
+        showOcrProgress(statusText, detailText, terminal);
+        if (terminal) {
+          refreshOcrPanelOnClose = true;
+        } else {
+          pollOcrUntilTerminal(form.action);
+        }
+      } catch (error) {
+        showOcrProgress('Unable to queue OCR', error.message, true);
+      }
+    }
+
+    ocrModalElement?.addEventListener('hidden.bs.modal', function () {
+      stopOcrPolling();
+      if (!refreshOcrPanelOnClose || !ocrAttachmentUuid) return;
+      const documentButton = document.querySelector(
+        `.verify-nav-item[data-panel-key="document:${ocrAttachmentUuid}"]`
+      );
+      documentButton?.click();
+    });
+
+    document.addEventListener('submit', function (event) {
+      const ocrForm = event.target.closest('[data-verification-ocr-form]');
+      if (!ocrForm) return;
+      event.preventDefault();
+      runVerificationOcr(ocrForm);
     });
 
     function clearEncounterStorage() {

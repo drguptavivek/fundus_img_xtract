@@ -410,6 +410,7 @@ def _attachment_ocr_payload(attachment: EncounterSetAttachment, *, queued: bool)
         "failed_at": ocr.get("failed_at"),
         "error": ocr.get("error"),
         "dr_report": ocr.get("dr_report") if isinstance(ocr.get("dr_report"), dict) else None,
+        "amd_report": ocr.get("amd_report") if isinstance(ocr.get("amd_report"), dict) else None,
         "glaucoma_report": ocr.get("glaucoma_report") if isinstance(ocr.get("glaucoma_report"), dict) else None,
     }
 

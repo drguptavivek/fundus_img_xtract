@@ -27,7 +27,7 @@ from remote_inference.automated_service import project_automated_workflow_contex
 from remote_inference.manual_service import project_manual_workflow_context
 from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
-from verify_encounter_set.project_disease_options import list_configured_project_referral_disease_ids
+from services.project_referral_diseases import list_configured_project_referral_disease_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,

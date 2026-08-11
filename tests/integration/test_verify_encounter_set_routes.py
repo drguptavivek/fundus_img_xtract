@@ -489,6 +489,7 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     
     response = auth_client.get(f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}")
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store, private"
     assert encounter_set_data['encounter'].name.encode() in response.data
     assert encounter_set_data['encounter_set_type'].name.encode() in response.data
     assert b"verification-panel-stage" in response.data
@@ -506,6 +507,8 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert expected_back_url.encode() in response.data
     # The image appears in the left panel rail by UUID in thumbnail/panel URLs.
     assert encounter_set_data['image'].uuid.encode() in response.data
+    assert b"event.persisted" in response.data
+    assert b"back_forward" in response.data
 
 
 def test_verified_encounter_set_detail_is_read_only(
@@ -522,11 +525,28 @@ def test_verified_encounter_set_detail_is_read_only(
     response = auth_client.get(f"/verify_encounter_set/verify/{encounter.uuid}")
 
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store, private"
     assert b"EncounterSet Verification Record" in response.data
+    assert b'text-bg-success">Verified</span>' in response.data
+    assert b'text-bg-warning">Pending</span>' not in response.data
     assert b"already verified and is read-only" in response.data
     assert b"original_verifier" in response.data
     assert b'id="finalize-verification-form"' not in response.data
     assert b'id="verification-metadata-form"' not in response.data
+
+
+def test_verify_encounter_set_panel_is_not_browser_cached(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_verify_panel_cache")
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}/panel/patient"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store, private"
 
 
 def test_verified_encounter_set_browser_uses_view_label(

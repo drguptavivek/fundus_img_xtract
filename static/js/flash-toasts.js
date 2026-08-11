@@ -2,6 +2,20 @@
 (function () {
   'use strict';
 
+  function clearRenderedFlashToasts() {
+    document.querySelectorAll('#flash-toasts .toast').forEach(function (el) {
+      el.remove();
+    });
+  }
+
+  // A browser history snapshot must not replay messages that were already
+  // shown. Remove rendered flashes before caching the page and defensively on
+  // restoration for browsers with differing BFCache behavior.
+  window.addEventListener('pagehide', clearRenderedFlashToasts);
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) clearRenderedFlashToasts();
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     var container = document.getElementById('flash-toasts');
     if (!container) return;
@@ -32,6 +46,9 @@
 
     // Auto-show flashes as Bootstrap toasts (3s)
     document.querySelectorAll('#flash-toasts .toast').forEach(function (el) {
+      el.addEventListener('hidden.bs.toast', function () {
+        el.remove();
+      }, { once: true });
       try {
         if (window.bootstrap && window.bootstrap.Toast) {
           var inst = window.bootstrap.Toast.getOrCreateInstance(el, { autohide: true, delay: 3000 });

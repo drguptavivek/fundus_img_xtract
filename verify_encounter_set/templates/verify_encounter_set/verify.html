@@ -237,6 +237,19 @@
     const panelStage = document.getElementById('verification-panel-stage');
     const counter = document.getElementById('verify-panel-counter');
     const panelCount = shell.dataset.panelCount || '1';
+    let historyRefreshStarted = false;
+
+    // Back/Forward Cache can restore the pre-finalization DOM even after the
+    // database status changed. Refresh once so status, controls, and messages
+    // always come from the current server state.
+    window.addEventListener('pageshow', function (event) {
+      const navigation = window.performance?.getEntriesByType?.('navigation')?.[0];
+      const restoredFromHistory = event.persisted || navigation?.type === 'back_forward';
+      if (restoredFromHistory && !historyRefreshStarted) {
+        historyRefreshStarted = true;
+        window.location.reload();
+      }
+    });
 
     function clearEncounterStorage() {
       try {

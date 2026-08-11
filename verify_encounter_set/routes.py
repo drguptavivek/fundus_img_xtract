@@ -1,4 +1,4 @@
-from flask import after_this_request, render_template, abort, current_app, flash, redirect, url_for, request, jsonify
+from flask import after_this_request, render_template, abort, current_app, flash, make_response, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from auth.roles import roles_required
 from auth.utils import utcnow
@@ -146,10 +146,12 @@ def verify_encounter(uuid):
             flash("This encounter is not set-based.", "warning")
             return redirect(url_for("verify_encounter_set.index"))
 
-        return render_template(
+        response = make_response(render_template(
             "verify_encounter_set/verify.html",
             **context,
-        )
+        ))
+        response.headers["Cache-Control"] = "no-store, private"
+        return response
 
 
 @bp.route("/verify/<uuid>/panel/<panel>")
@@ -179,14 +181,16 @@ def verify_panel(uuid, panel):
             if selected_attachment is None:
                 abort(404)
 
-        return render_template(
+        response = make_response(render_template(
             "verify_encounter_set/_verify_panel.html",
             panel=panel,
             selected_image=selected_image,
             selected_image_index=selected_image_index,
             selected_attachment=selected_attachment,
             **context,
-        )
+        ))
+        response.headers["Cache-Control"] = "no-store, private"
+        return response
 
 
 @bp.route("/metadata/<uuid>", methods=["POST"])

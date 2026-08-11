@@ -422,7 +422,7 @@
     }
     
     // Get UUID from root element's data-enc-id attribute
-    const uuid = root.dataset.encId;
+    let uuid = root.dataset.encId;
 
     // Single image; just wire up fullscreen and activation
     fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); });
@@ -2335,6 +2335,20 @@
       setZoomLevel(100);
     }
 
+    function setImage({ imageUuid, mediaUrl, alt }) {
+      if (!imageUuid || !mediaUrl) return;
+      saveViewerSettingsToStorage({ immediate: true });
+      uuid = imageUuid;
+      root.dataset.encId = imageUuid;
+      const saved = readViewerZoomState(imageUuid);
+      currentZoom = saved?.zoom ?? 100;
+      imgPanX = saved?.panX ?? 0;
+      imgPanY = saved?.panY ?? 0;
+      if (alt) mainImg.alt = alt;
+      mainImg.src = mediaUrl;
+      fetchAndHydrateMetadata();
+    }
+
     function setPanPercent(nextPanX, nextPanY) {
       imgPanX = Number(nextPanX) || 0;
       imgPanY = Number(nextPanY) || 0;
@@ -2380,6 +2394,7 @@
       resetImagePan,
       setZoomLevel,
       fitToContainer,
+      setImage,
       getCurrentZoom: () => currentZoom,
       getCurrentLoupeEnabled: () => loupeEnabled, // Expose current loupe state as getter
       applyPreset: async (presetNum) => {

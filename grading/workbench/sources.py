@@ -135,7 +135,7 @@ def _media(db, source_type: str, image_uuid: str | None, laterality: str | None)
     return WorkbenchMediaDTO(
         source_type=source_type,
         image_uuid=image_uuid,
-        media_url=f"/media/{image_uuid}",
+        media_url=f"/media/img/{image_uuid}",
         thumbnail_url=f"/media/img/{image_uuid}/thumbnail",
         laterality=laterality,
         width=metadata.width if metadata else None,

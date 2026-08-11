@@ -51,17 +51,70 @@
                   <span class="badge text-bg-light border">{{ panel.task_state }}</span>
                 </div>
                 <div class="card-body p-2" style="min-height: 32rem;">
-                  {% if panel.media %}
-                  <div class="imggr-viewer-root h-100" data-enc-id="{{ panel.media.image_uuid }}" data-imggr-lite-mode="false">
+                  {% set viewer_media = panel.media or panel.evidence|first %}
+                  {% if viewer_media %}
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 imggr-top-row">
+                    <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+                      {% for value, label in [('none', 'None'), ('redfree', 'R'), ('greenboost', 'G'), ('bluemono', 'B'), ('gray', 'Y'), ('contrast', 'H'), ('enhance', 'E')] %}
+                      <input class="btn-check" type="radio" name="imggrFilter-{{ panel.task_uuid }}"
+                             id="imggr-{{ value }}-{{ panel.task_uuid }}" value="{{ value }}"
+                             {% if value == 'none' %}checked{% endif %}>
+                      <label class="btn btn-outline-secondary" for="imggr-{{ value }}-{{ panel.task_uuid }}">{{ label }}</label>
+                      {% endfor %}
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-grow-1">
+                      <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ panel.task_uuid }}">Zoom</label>
+                      <input id="imggr-zoom-slider-{{ panel.task_uuid }}" class="form-range imggr-zoom-slider flex-grow-1"
+                             type="range" min="10" max="400" step="5" value="100">
+                      <button type="button" class="btn btn-sm btn-outline-secondary imggr-zoom-fit">Fit</button>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <label class="small mb-0" for="imggr-bright-{{ panel.task_uuid }}" title="Brightness">
+                        <i class="fa-solid fa-sun" aria-hidden="true"></i>
+                      </label>
+                      <div class="imggr-range-wrap position-relative" style="width: 8rem;">
+                        <input id="imggr-bright-{{ panel.task_uuid }}" class="form-range imggr-bright form-range-light"
+                               type="range" min="0.5" max="5" step="0.05" value="1">
+                        <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-bright-tip d-none">1.00</span>
+                      </div>
+                      <label class="small mb-0" for="imggr-contrast-{{ panel.task_uuid }}" title="Contrast">
+                        <i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
+                      </label>
+                      <div class="imggr-range-wrap position-relative" style="width: 8rem;">
+                        <input id="imggr-contrast-{{ panel.task_uuid }}" class="form-range imggr-contrast form-range-light"
+                               type="range" min="0.5" max="5" step="0.05" value="1">
+                        <span class="badge bg-dark-subtle text-dark-emphasis imggr-range-tip imggr-contrast-tip d-none">1.00</span>
+                      </div>
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset" title="Reset filters">/</button>
+                      <div class="btn-group btn-group-sm" role="group" aria-label="Viewer presets">
+                        {% for preset in [1, 2, 3, 4, 5] %}
+                        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="{{ preset }}">{{ preset }}</button>
+                        {% endfor %}
+                      </div>
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset"
+                              data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ panel.task_uuid }}"
+                              id="imggr-preset-save-button-{{ panel.task_uuid }}">Save</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
+                              aria-pressed="false" aria-label="Toggle loupe magnifier">L</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
+                              data-bs-toggle="modal" data-bs-target="#imggr-shortcuts-modal-{{ panel.task_uuid }}"
+                              aria-label="Keyboard shortcuts">?</button>
+                    </div>
+                  </div>
+                  <div class="imggr-viewer-root h-100" data-enc-id="{{ viewer_media.image_uuid }}"
+                       data-imggr-lite-mode="false"{% if not panel.media %} data-evidence-viewer{% endif %}>
                     <div class="imggr-stage position-relative h-100">
                       <div class="imggr-annot-layout d-flex h-100 gap-2">
+                        {% if panel.media %}
                         <aside class="imggr-annot-sidebar border rounded bg-body-tertiary p-2" data-geometry-sidebar-host>
                           <div class="small text-muted" data-annotation-placeholder>Select a grading feature to annotate.</div>
                         </aside>
+                        {% endif %}
                         <div class="imggr-main-wrap d-flex justify-content-center flex-grow-1">
                           <div class="imggr-main rounded position-relative bg-black" data-fixed-viewport="true">
-                            <img class="imggr-main-img" src="{{ panel.media.media_url }}"
-                                 alt="{{ panel.disease_name }} image" data-index="0">
+                            <img class="imggr-main-img" src="{{ viewer_media.media_url }}"
+                                 alt="{{ panel.disease_name }} image{% if viewer_media.laterality %}, {{ viewer_media.laterality }}{% endif %}"
+                                 data-index="0">
                             <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
                           </div>
                         </div>
@@ -69,23 +122,46 @@
                       <div class="imggr-loupe" aria-hidden="true"></div>
                     </div>
                   </div>
-                  {% else %}
-                  <div class="h-100 d-flex flex-column justify-content-center align-items-center text-center p-4">
-                    <i class="fa-solid fa-notes-medical fa-2x text-muted mb-3" aria-hidden="true"></i>
-                    <p class="mb-1">Encounter-level grading target</p>
-                    <p class="small text-muted mb-0">This target intentionally has no primary image.</p>
-                    {% if panel.evidence %}
-                    <div class="row g-2 mt-3 w-100" aria-label="Related encounter image evidence">
+                  <div class="d-flex justify-content-between align-items-center gap-2 small text-muted mt-2">
+                    <span class="imggr-zoom-info"><span class="imggr-zoom-level">100%</span> zoom</span>
+                    <span class="imggr-dim-info">Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span></span>
+                  </div>
+                  {% if panel.evidence %}
+                    <div class="row g-2 mt-3 w-100" aria-label="Select related encounter image evidence">
                       {% for evidence in panel.evidence %}
                       <div class="col-6 col-md-4">
-                        <img class="img-fluid rounded border"
-                             src="{{ evidence.thumbnail_url or evidence.media_url }}"
-                             alt="Related {{ evidence.source_type }} evidence{% if evidence.laterality %}, {{ evidence.laterality }}{% endif %}">
+                        {% set evidence_alt %}Related {{ evidence.source_type }} evidence{% if evidence.laterality %}, {{ evidence.laterality }}{% endif %}{% endset %}
+                        <button class="btn p-1 w-100 border{% if loop.first %} border-primary{% endif %}"
+                                type="button" data-evidence-select
+                                data-image-uuid="{{ evidence.image_uuid }}"
+                                data-media-url="{{ evidence.media_url }}"
+                                data-image-alt="{{ evidence_alt|trim }}"
+                                aria-pressed="{{ 'true' if loop.first else 'false' }}">
+                          <img class="img-fluid rounded"
+                               src="{{ evidence.thumbnail_url or evidence.media_url }}"
+                               alt="{{ evidence_alt|trim }}">
+                        </button>
                       </div>
                       {% endfor %}
                     </div>
-                    {% endif %}
+                  {% endif %}
+                  <div class="modal fade" id="imggr-shortcuts-modal-{{ panel.task_uuid }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+                      <div class="modal-header"><h5 class="modal-title">Image Viewer Controls</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                      <div class="modal-body"><div class="row g-3 small">
+                        <div class="col-md-6"><h6 class="text-uppercase small">Image Controls</h6><div><kbd>Z</kbd>/<kbd>X</kbd> Zoom in/out</div><div><kbd>Home</kbd> Fit to container</div><div><kbd>Left click + drag</kbd> Pan image</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Pan base image</div></div>
+                        <div class="col-md-6"><h6 class="text-uppercase small">Viewer Tools</h6><div><kbd>L</kbd> Toggle loupe</div><div><kbd>[</kbd>/<kbd>]</kbd> Change loupe size</div><div><kbd>-</kbd>/<kbd>=</kbd> Change loupe zoom</div><div><kbd>1</kbd>-<kbd>5</kbd> Apply preset</div></div>
+                      </div></div>
+                    </div></div>
                   </div>
+                  <div class="modal fade" id="imggr-preset-modal-{{ panel.task_uuid }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+                      <div class="modal-header"><h5 class="modal-title">Save Viewer Preset</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                      <div class="modal-body"><div class="small mb-3 p-2 rounded bg-body-tertiary"><div><strong>Filter:</strong> <span id="current-filter-display">None</span></div><div><strong>Brightness:</strong> <span id="current-brightness-display">1.0</span></div><div><strong>Contrast:</strong> <span id="current-contrast-display">1.0</span></div></div><div class="row g-2" id="preset-slots"></div></div>
+                    </div></div>
+                  </div>
+                  {% else %}
+                  <div class="h-100" aria-label="No related images available"></div>
                   {% endif %}
                 </div>
               </div>
@@ -94,18 +170,25 @@
               <div class="card h-100">
                 <div class="card-header"><strong>{{ panel.disease_name }}</strong></div>
                 <div class="card-body">
-                  <label class="form-label" for="grade-{{ panel.task_uuid }}">Grade</label>
-                  <select class="form-select" id="grade-{{ panel.task_uuid }}"
-                          name="{{ panel.fields.label }}" data-grade-select required
-                          {% if not panel.editable %}disabled{% endif %}>
-                    <option value="">Select grade</option>
+                  <fieldset class="mb-3" data-grade-options>
+                    <legend class="form-label">Grade</legend>
+                    <div class="row g-2">
                     {% for grade in panel.grades %}
-                    <option value="{{ grade.id }}"
-                            {% if panel.existing_grade and panel.existing_grade.disease_grading_id == grade.id %}selected{% endif %}>
-                      {{ grade.impression }}
-                    </option>
+                      <div class="col-6">
+                        <input class="btn-check" type="radio"
+                               id="grade-{{ panel.task_uuid }}-{{ grade.id }}"
+                               name="{{ panel.fields.label }}" value="{{ grade.id }}"
+                               data-grade-option required autocomplete="off"
+                               {% if panel.existing_grade and panel.existing_grade.disease_grading_id == grade.id %}checked{% endif %}
+                               {% if not panel.editable %}disabled{% endif %}>
+                        <label class="btn btn-outline-primary w-100 h-100 d-flex align-items-center justify-content-center"
+                               for="grade-{{ panel.task_uuid }}-{{ grade.id }}">
+                          {{ grade.impression }}
+                        </label>
+                      </div>
                     {% endfor %}
-                  </select>
+                    </div>
+                  </fieldset>
                   <div class="form-text mb-3" data-grade-guidelines></div>
                   <fieldset class="mb-3 d-none" data-feature-fieldset>
                     <legend class="h6">Relevant features</legend>
@@ -175,18 +258,21 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     'X-Workbench-Generation': generation
   };
 
+  function selectedGrade(panel) {
+    return panel.querySelector('[data-grade-option]:checked')?.value || '';
+  }
+
   function showError(message) {
     errorBox.textContent = message;
     errorBox.classList.remove('d-none');
   }
 
   function renderFeatures(panel) {
-    const select = panel.querySelector('[data-grade-select]');
     const fieldset = panel.querySelector('[data-feature-fieldset]');
     const host = panel.querySelector('[data-feature-options]');
     const guidelines = panel.querySelector('[data-grade-guidelines]');
     const data = window.linkedGradingData[panel.dataset.taskUuid];
-    const grade = data.features.find(item => String(item.id) === String(select.value));
+    const grade = data.features.find(item => String(item.id) === String(selectedGrade(panel)));
     host.innerHTML = '';
     guidelines.textContent = grade?.guidelines || '';
     const selected = new Set((data.existingSelectedFeatures || []).map(Number));
@@ -206,8 +292,33 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   }
 
   panels.forEach(panel => {
-    panel.querySelector('[data-grade-select]').addEventListener('change', () => renderFeatures(panel));
+    panel.querySelectorAll('[data-grade-option]').forEach(option => {
+      option.addEventListener('change', () => renderFeatures(panel));
+    });
     renderFeatures(panel);
+    panel.querySelectorAll('[data-evidence-select]').forEach(button => {
+      button.addEventListener('click', () => {
+        const viewer = panel.querySelector('[data-evidence-viewer]');
+        const state = viewer?.__imggrState;
+        const image = viewer?.querySelector('.imggr-main-img');
+        if (state?.setImage) {
+          state.setImage({
+            imageUuid: button.dataset.imageUuid,
+            mediaUrl: button.dataset.mediaUrl,
+            alt: button.dataset.imageAlt
+          });
+        } else if (viewer && image) {
+          viewer.dataset.encId = button.dataset.imageUuid;
+          image.src = button.dataset.mediaUrl;
+          image.alt = button.dataset.imageAlt;
+        }
+        panel.querySelectorAll('[data-evidence-select]').forEach(item => {
+          const selected = item === button;
+          item.classList.toggle('border-primary', selected);
+          item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+      });
+    });
   });
 
   async function api(path, options) {
@@ -227,7 +338,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
         const taskUuid = panel.dataset.taskUuid;
         const geometryRaw = panel.querySelector('[data-feature-geometry-field]').value;
         observations[taskUuid] = {
-          disease_grading_id: Number(panel.querySelector('[data-grade-select]').value),
+          disease_grading_id: Number(selectedGrade(panel)),
           comment: panel.querySelector('textarea').value,
           selected_feature_ids: Array.from(panel.querySelectorAll('input[name^="selected_features_"]:checked')).map(item => Number(item.value)),
           annotation_policy_revision: Number(panel.querySelector('input[name^="annotation_policy_revision_"]').value),

@@ -9,8 +9,9 @@ Supports both local file serving and S3 storage with:
 - Local fallback when S3 unavailable
 """
 
+import logging
 import os
-from flask import request, redirect, abort, current_app
+from flask import request, redirect, abort
 from auth.roles import roles_required
 from utils.rate_limiter import rate_limit, rate_limit_with_feedback
 from utils.utilsImgServe import (
@@ -36,8 +37,8 @@ from models import DirectImageUpload, EncounterFile, EncounterFilePDF, S3Config
 
 from . import bp
 
-logger = current_app.logger if current_app else None
-audit_logger = current_app.audit_logger if current_app else None
+logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("security.audit")
 
 
 # ============================================================================

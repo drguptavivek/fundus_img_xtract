@@ -114,6 +114,8 @@ class WorkbenchPanelDTO:
     disease_id: int
     disease_name: str
     target_level: str
+    scope_id: int | None
+    image_position: int | None
     editable: bool
     unavailable_reason: str | None
     media: WorkbenchMediaDTO | None
@@ -130,6 +132,8 @@ class WorkbenchPanelDTO:
             "disease_id": self.disease_id,
             "disease_name": self.disease_name,
             "target_level": self.target_level,
+            "scope_id": self.scope_id,
+            "image_position": self.image_position,
             "editable": self.editable,
             "unavailable_reason": self.unavailable_reason,
             "media": self.media.to_dict() if self.media else None,

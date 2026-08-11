@@ -428,7 +428,12 @@ One package-style workbench renders:
 
 The frontend consumes only the DTO and workbench APIs. It does not infer workflow rules from the number of panels. Actions are driven by `allowed_actions`; package atomicity and linked follow-up are server-enforced.
 
-On load, the grading entry page checks active sessions and offers resume. Save & Next replaces workbench state using the returned JSON DTO. The frontend clears old annotation/viewer state between sessions, updates the stored token, and never builds a next-task URL from client assumptions.
+On load, the grading entry page checks active sessions and offers resume. Save
+& Next disables both submit actions, shows an in-button loader, pauses
+heartbeats, and navigates to the server-returned `workbench_url` after the
+accepted response. The API stores the newly issued token in the authenticated
+browser session before returning that URL. The frontend never builds a
+next-task URL from client assumptions or revisits the legacy grading route.
 
 During the two-hour compatibility window, old pages may submit through transport adapters that translate legacy field shapes to the typed submission request. Adapters call the same façade and cannot query eligibility, validate geometry, or write grades themselves. After the window, old endpoints return an upgrade/reload response and are removed in the next deployment.
 

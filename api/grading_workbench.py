@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from flask import jsonify, request
+from flask import jsonify, request, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.workbench.errors import WorkbenchError
+from grading.workbench.browser_session import remember_session_token
 from grading.workbench.service import (
     acquire_linked_followup_workbench,
     acquire_next_workbench,
@@ -257,7 +258,19 @@ def submit_workbench_session(session_uuid: str):
                             role_slot=str(queue["requested_slot"]),
                             lab_unit_id=queue.get("lab_unit_id"),
                         )
-                    next_payload = {"workbench": next_workbench.to_dict(), "session_token": token}
+                    remember_session_token(
+                        next_workbench.lease.session_uuid,
+                        token,
+                        next_workbench.lease.token_generation,
+                    )
+                    next_payload = {
+                        "workbench": next_workbench.to_dict(),
+                        "session_token": token,
+                        "workbench_url": url_for(
+                            "grading.workbench_page",
+                            session_uuid=next_workbench.lease.session_uuid,
+                        ),
+                    }
             except WorkbenchError as next_error:
                 next_payload = {"workbench": None, "reason": next_error.code}
         response = jsonify({

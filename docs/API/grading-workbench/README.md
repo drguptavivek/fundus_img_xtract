@@ -21,8 +21,10 @@ of this module.
 Every response uses schema version 1 and contains a durable lease, a
 configuration fingerprint, normalized source/profile context, and one or more
 panels. Panels expose task-qualified field names, grades, grading features,
-annotation policy/classes/tools, current grade, and normalized media metadata.
-Encounter-level targets deliberately have no media object.
+annotation policy/classes/tools, current grade, normalized media metadata,
+EncounterSet scope identity, and image position. Encounter-level targets
+deliberately have no primary media object; the HTML workbench uses the scoped
+image panels to show their live per-image grade results instead.
 
 Supported image sources are `encounter_file`, `direct_image_upload`, and
 `encounter_set_image`. `patient_encounter` is a valid non-image target.
@@ -40,10 +42,11 @@ included.
 {"disease_id": 4, "role_slot": "resident", "lab_unit_id": 8}
 ```
 
-The lab is optional. Selection, task row locking, linked/package expansion,
-configuration snapshotting, and durable lease creation occur in one database
-transaction. At most one active session per user/slot and one active lease per
-task/slot are permitted.
+The lab is optional. Selection, linked/package expansion, configuration
+snapshotting, task locking, and durable lease creation occur in one database
+transaction. Candidate authorization is bulk-resolved before the selected
+task is locked. At most one active session per user/slot and one active lease
+per task/slot are permitted.
 
 ### `POST /api/grading/workbench/linked-followups/acquire`
 
@@ -117,6 +120,13 @@ released by the expiry service.
 `observations` must exactly match every editable leased target. Package mode
 also requires the frozen package revision and commits all targets atomically.
 `save_next` commits the current submission before acquiring the next workbench.
+When another workbench is acquired, `next_workbench` includes its DTO, private
+session token, and a server-generated `workbench_url`. The same response also
+stores the token in the authenticated browser session, so HTML clients should
+navigate directly to `workbench_url`; they must not construct or revisit a
+legacy `/grading/grade/{disease_id}/{slot}` URL. If no next work is available,
+the completed submission still returns success with a null workbench and a
+reason code.
 
 Annotation instances support box/rectangle, ellipse, polygon, pyramid, and
 brush-mask geometry. Brush masks may include sparse PNG tiles up to 256x256;

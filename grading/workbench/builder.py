@@ -91,6 +91,12 @@ def _panel(
         disease_id=task.disease_id,
         disease_name=task.disease.name,
         target_level=target_level,
+        scope_id=task.encounter_set_scope_id,
+        image_position=(
+            task.encounter_set_image.spatial_position
+            if task.encounter_set_image is not None
+            else None
+        ),
         editable=editable,
         unavailable_reason=None if editable else "task_not_editable_in_slot",
         media=source.media,

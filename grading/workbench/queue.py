@@ -9,10 +9,17 @@ from __future__ import annotations
 from datetime import timedelta
 
 from sqlalchemy import and_, exists, func, or_
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, joinedload
 
-from grading_allocation.eligibility import eligible_lab_unit_ids, is_user_eligible_for_task
-from models import Grade, GradingTask, LinkedDiseaseGrading
+from grading_allocation.eligibility import (
+    eligible_enforced_project_task_contexts,
+    eligible_lab_unit_ids,
+    is_user_eligible_for_task,
+)
+from grading_allocation.exceptions import AllocationContextError
+from grading_allocation.models import ProjectGradingAllocationPolicy
+from grading_allocation.resolver import resolve_task_allocation_context
+from models import EncounterFile, EncounterSetImage, Grade, GradingTask, LinkedDiseaseGrading
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import reconcile_active_packages
 from .linked_tasks import get_linked_disease_ids
@@ -85,14 +92,85 @@ def select_next_task(db, *, user_id: int, disease_id: int, role_slot: str, lab_u
         )
         query = query.filter(~recent_user_grade.exists())
 
-    # The row lock protects selection until the unique durable lease is
-    # flushed.  SKIP LOCKED lets concurrent graders continue down the queue.
-    for candidate in query.order_by(func.random()).with_for_update(skip_locked=True).yield_per(50):
+    # Resolve project allocation in bulk. Calling the scalar eligibility
+    # service for every ineligible row made an empty Resident2 queue take tens
+    # of seconds before Save & Next could fall back to Resident work.
+    candidates = (
+        query.options(
+            joinedload(GradingTask.encounter_file).joinedload(EncounterFile.patient_encounter),
+            joinedload(GradingTask.direct_image),
+            joinedload(GradingTask.patient_encounter),
+            joinedload(GradingTask.encounter_set_image).joinedload(EncounterSetImage.patient_encounter),
+            joinedload(GradingTask.encounter_set_package),
+        )
+        .order_by(func.random())
+        .all()
+    )
+    enforced_project_ids = {
+        row[0]
+        for row in db.query(ProjectGradingAllocationPolicy.project_id)
+        .filter(ProjectGradingAllocationPolicy.enforcement_enabled.is_(True))
+        .all()
+    }
+    enforced_eligible = eligible_enforced_project_task_contexts(
+        db,
+        user_id=user_id,
+        task_slots=[(candidate, role_slot) for candidate in candidates],
+        enforced_project_ids=enforced_project_ids,
+    )
+    legacy_allowed_by_lab: dict[int, bool] = {}
+    for candidate in candidates:
+        try:
+            context = resolve_task_allocation_context(db, candidate)
+        except AllocationContextError:
+            continue
+        if context.project_id in enforced_project_ids:
+            if (candidate.id, role_slot) in enforced_eligible:
+                locked = _lock_available_candidate(db, candidate.id, role_slot)
+                if locked is not None:
+                    return locked
+            continue
+        if role_slot in {"resident", "resident2"}:
+            # The SQL queue already excludes the opposite resident slot. The
+            # remaining legacy decision depends only on this queue's user,
+            # disease, lab and capacity, so evaluate it once rather than once
+            # for thousands of tasks from the same queue.
+            if candidate.lab_unit_id not in legacy_allowed_by_lab:
+                legacy_allowed_by_lab[candidate.lab_unit_id] = is_user_eligible_for_task(
+                    db, user_id=user_id, task=candidate, role_slot=role_slot
+                )
+            if legacy_allowed_by_lab[candidate.lab_unit_id]:
+                locked = _lock_available_candidate(db, candidate.id, role_slot)
+                if locked is not None:
+                    return locked
+            continue
         if is_user_eligible_for_task(
             db, user_id=user_id, task=candidate, role_slot=role_slot
         ):
-            return candidate
+            locked = _lock_available_candidate(db, candidate.id, role_slot)
+            if locked is not None:
+                return locked
     return None
+
+
+def _lock_available_candidate(db, task_id: int, role_slot: str):
+    """Lock one still-unleased candidate without blocking another grader."""
+    active_lease = (
+        db.query(GradingWorkbenchSessionTarget.id)
+        .join(GradingWorkbenchSession)
+        .filter(
+            GradingWorkbenchSessionTarget.task_id == GradingTask.id,
+            GradingWorkbenchSessionTarget.role_slot == role_slot,
+            GradingWorkbenchSessionTarget.released_at.is_(None),
+            GradingWorkbenchSession.status == "active",
+        )
+    )
+    return (
+        db.query(GradingTask)
+        .filter(GradingTask.id == task_id, ~active_lease.exists())
+        .with_for_update(skip_locked=True)
+        .first()
+    )
 
 
 def select_linked_followup_task(

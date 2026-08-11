@@ -8,6 +8,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.workbench.errors import ActiveSessionExists, WorkbenchError
+from grading.workbench.browser_session import remember_session_token
 from grading.workbench.service import (
     acquire_revision_workbench,
     acquire_package_workbench,
@@ -23,13 +24,6 @@ def register_routes(bp):
         view_func=workbench_page,
         methods=["GET"],
     )
-
-
-def remember_session_token(session_uuid: str, token: str, generation: int) -> None:
-    flask_session[f"grading_workbench:{session_uuid}"] = {
-        "token": token,
-        "generation": generation,
-    }
 
 
 def open_task_workbench(task_uuid: str, role_slot: str):

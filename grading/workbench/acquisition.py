@@ -259,10 +259,10 @@ def _lease_candidate(
     db.add(session)
     db.flush()
     for order, task in enumerate(tasks):
-        target_purpose = (
-            "editable"
-            if _state_allows(task.state, effective_slot)
-            else "evidence"
+        target_purpose = _target_purpose(
+            task_state=task.state,
+            role_slot=effective_slot,
+            workflow=workflow,
         )
         grade = _current_grade(db, task_id=task.id, user_id=user_id, role_slot=effective_slot)
         session.targets.append(GradingWorkbenchSessionTarget(
@@ -349,6 +349,14 @@ def _same_source_conditions(task):
 
 def _state_allows(state: str, slot: str) -> bool:
     return state == {"resident": "pending", "resident2": "resident_done", "arbitrator": "arbitration"}[slot]
+
+
+def _target_purpose(*, task_state: str, role_slot: str, workflow: str) -> str:
+    # Revision-window package targets and explicit single-grade revisions are
+    # intentionally editable after their normal queue state has advanced.
+    if workflow in {"package", "revision"}:
+        return "editable"
+    return "editable" if _state_allows(task_state, role_slot) else "evidence"
 
 
 def _lock_tasks(db, tasks):

@@ -48,12 +48,17 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'class="col-6"' in template
     assert "panel.fields.geometry" in template
     assert "data-geometry-sidebar-host" in template
-    assert "data-evidence-viewer" in template
-    assert "data-evidence-select" in template
-    assert "state.setImage" in template
+    assert "gwb-shell is-expanded" in template
+    assert "data-workbench-expand" in template
+    assert "Image {{ image_nav.index }} of" in template
+    assert "data-image-navigate=\"prev\"" in template
+    assert "data-image-navigate=\"next\"" in template
+    assert "data-workbench-progress" in template
+    assert "data-workbench-pager" in template
+    assert "data-encounter-image-grade" in template
+    assert "No image targets" in template
     assert 'data-workbench-navigate="prev"' in template
     assert 'data-workbench-navigate="next"' in template
-    assert "evidence[(currentIndex + delta + evidence.length) % evidence.length].click()" in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
     assert "imggr-bright" in template
@@ -61,6 +66,11 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "imggr-loupe-toggle" in template
     assert "feature-geometry-editor.js" in template
     assert "/api/grading/workbench/sessions/${sessionUuid}/submit" in template
+    assert "spinner-border spinner-border-sm" in template
+    assert "Saving grades" in template
+    assert "Grades saved. Opening the next case" in template
+    assert "clearInterval(heartbeatTimer)" in template
+    assert "result.next_workbench.workbench_url" in template
 
 
 def test_shared_jinja_workbench_compiles(app):

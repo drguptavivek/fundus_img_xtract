@@ -1174,6 +1174,7 @@
       ["[data-fgx-add-rect]", "rect"],
       ["[data-fgx-add-ellipse]", "ellipse"],
       ["[data-fgx-add-pyramid]", "pyramid"],
+      ["[data-fgx-add-freeform]", "polygon"],
       ['[data-fgx-mode="add"]', "brush_mask"],
       ['[data-fgx-mode="subtract"]', "brush_mask"],
     ];
@@ -1296,6 +1297,9 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid title="Add pyramid segmentation" aria-label="Add pyramid segmentation">
           <i class="fa-solid fa-caret-up"></i><span class="ms-1">Pyramid</span>
         </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-freeform title="Add freeform polygon segmentation" aria-label="Add freeform polygon segmentation">
+          <i class="fa-solid fa-draw-polygon"></i><span class="ms-1">Freeform</span>
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Paint segmentation (+)">
           <i class="fa-solid fa-paintbrush"></i>
           <span class="ms-1">Brush +</span>
@@ -1343,7 +1347,7 @@
       </div>
       <div class="fgx-group w-100">
         <small class="text-muted">
-          Bounding box records an outline ROI. Rectangle, ellipse, pyramid, polygon, and brush are segmentation tools.
+          Bounding box records an outline ROI. Rectangle, ellipse, pyramid, freeform polygon, and brush are segmentation tools.
         </small>
       </div>
     `;
@@ -1504,6 +1508,13 @@
     panel.querySelector("[data-fgx-add-pyramid]")?.addEventListener("click", () => {
       if (state.activeFeatureId == null) return;
       armCreateMode("pyramid", MODES.PYRAMID);
+      redraw();
+    });
+
+    panel.querySelector("[data-fgx-add-freeform]")?.addEventListener("click", () => {
+      if (state.activeFeatureId == null) return;
+      armCreateMode("polygon", MODES.POLYGON);
+      setStatus(ctx, "Freeform segmentation mode: click to add points; click the first point or press Enter to complete.");
       redraw();
     });
 
@@ -2482,6 +2493,7 @@
       || (mode === MODES.ROI && state.pendingCreateType === "rect")
       || (mode === MODES.ELLIPSE && state.pendingCreateType === "ellipse")
       || (mode === MODES.PYRAMID && state.pendingCreateType === "pyramid")
+      || (mode === MODES.POLYGON && state.pendingCreateType === "polygon")
     );
     let createdPendingItem = false;
     if (pendingByMode && state.activeFeatureId != null) {
@@ -2489,6 +2501,12 @@
       item._geometryType = state.pendingCreateType;
       item._ellipseRotation = 0;
       ensureMask(item, grid);
+      if (state.pendingCreateType === "polygon") {
+        item.roi = null;
+        item.polygon = [];
+        item.mask.cells = [];
+        item._locked = false;
+      }
       setSelectedBox(ctx, item);
       updateAnnotationOptions(ctx);
       refreshAnnotationButtons(ctx);

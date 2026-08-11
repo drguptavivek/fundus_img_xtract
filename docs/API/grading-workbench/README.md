@@ -132,8 +132,9 @@ legacy `/grading/grade/{disease_id}/{slot}` URL. If no next work is available,
 the completed submission still returns success with a null workbench and a
 reason code.
 
-Annotation instances support box/rectangle, ellipse, polygon, pyramid, and
-brush-mask geometry. Brush masks may include sparse PNG tiles up to 256x256;
+Annotation instances support bounding box, rectangular segmentation, ellipse,
+freeform polygon segmentation, pyramid, and brush-mask geometry. Brush masks
+may include sparse PNG tiles up to 256x256;
 dimensions, duplicate positions, byte limits, and SHA-256 checksums are
 validated server-side. Normalized annotations belong to the resulting `Grade`
 through an `AnnotationSet`; `feature_geometry_json` remains a compatibility

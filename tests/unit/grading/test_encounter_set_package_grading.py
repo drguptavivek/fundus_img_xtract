@@ -133,6 +133,11 @@ def test_geometry_editor_uses_annotations_heading():
     assert 'data-fgx-tool-category="segmentation"' in editor
     assert '>Rectangle</span>' in editor
     assert 'not a bounding box' in editor
+    assert 'data-fgx-add-freeform' in editor
+    assert '>Freeform</span>' in editor
+    assert '["[data-fgx-add-freeform]", "polygon"]' in editor
+    assert '(mode === MODES.POLYGON && state.pendingCreateType === "polygon")' in editor
+    assert 'if (state.pendingCreateType === "polygon")' in editor
 
 
 def test_cached_package_form_delegates_to_workbench_transport(app, monkeypatch):

@@ -81,9 +81,16 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'data-workbench-navigate="next"' in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
+    assert "gwb-toolbar-left" in template
+    assert "gwb-toolbar-right" in template
+    assert "flex-basis: 100%" in template
+    assert "fa-circle-info" in template
     assert "imggr-bright" in template
     assert "imggr-contrast" in template
     assert "imggr-loupe-toggle" in template
+    assert "data-clear-selection" in template
+    assert "data.existingSelectedFeatures = []" in template
+    assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
     assert "feature-geometry-editor.js" in template
     assert "/api/grading/workbench/sessions/${sessionUuid}/submit" in template
     assert "spinner-border spinner-border-sm" in template
@@ -103,6 +110,16 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
 
 def test_shared_jinja_workbench_compiles(app):
     assert app.jinja_env.get_template("grading/workbench.html") is not None
+
+
+def test_geometry_editor_uses_annotations_heading():
+    editor = (
+        Path(package_transport.__file__).parents[1]
+        / "static/js/feature-geometry-editor.js"
+    ).read_text()
+
+    assert '<span class="fw-semibold">Annotations</span>' in editor
+    assert '>Current Disease</span>' not in editor
 
 
 def test_cached_package_form_delegates_to_workbench_transport(app, monkeypatch):

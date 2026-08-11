@@ -1243,8 +1243,7 @@
     panel.innerHTML = `
       <div class="alert alert-secondary py-2 px-3 mb-0 w-100 d-none" data-fgx-policy-status></div>
       <div class="fgx-group fgx-feature-row">
-        <span class="fgx-block-label mb-0">Current Disease</span>
-        <span class="fw-semibold" data-fgx-disease-label>—</span>
+        <span class="fw-semibold">Annotations</span>
       </div>
 
       <div class="fgx-group fgx-feature-row">

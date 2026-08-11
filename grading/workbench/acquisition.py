@@ -12,7 +12,7 @@ from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import editable_tasks, ordered_package_tasks, reconcile_package_state
 from .linked_tasks import get_linked_disease_ids, get_primary_disease_id
 from .queue import select_linked_followup_task, select_next_task
-from .sessions import issue_token, new_session_times
+from .sessions import expire_stale, issue_token, new_session_times
 from .revisions import is_user_eligible_for_revision
 
 
@@ -197,6 +197,7 @@ def acquire_linked_followup(
 
 
 def _assert_no_active_session(db, *, user_id, role_slot):
+    expire_stale(db)
     existing = (
         db.query(GradingWorkbenchSession)
         .filter(

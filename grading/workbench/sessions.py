@@ -28,7 +28,7 @@ from .package_workflow import editable_tasks
 
 
 IDLE_MINUTES = 30
-ABSOLUTE_HOURS = 2
+ABSOLUTE_MINUTES = 30
 
 
 def issue_token() -> tuple[str, str]:
@@ -130,14 +130,17 @@ def expire_stale(db) -> int:
     for session in rows:
         reason = "absolute_expiry" if session.absolute_expires_at <= now else "idle_expiry"
         _close(session, status="expired", reason=reason, now=now)
+    from .recovery import recover_incomplete_package_stages
+
+    recovery = recover_incomplete_package_stages(db, now=now)
     if rows:
         db.flush()
-    return len(rows)
+    return len(rows) + recovery.expired_session_count
 
 
 def new_session_times():
     now = utcnow()
-    absolute = now + timedelta(hours=ABSOLUTE_HOURS)
+    absolute = now + timedelta(minutes=ABSOLUTE_MINUTES)
     return now, now + timedelta(minutes=IDLE_MINUTES), absolute
 
 

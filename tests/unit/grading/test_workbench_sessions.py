@@ -175,6 +175,13 @@ def test_heartbeat_never_extends_absolute_expiry(db_session, resident_user, core
     assert result["idle_expires_at"] == session.absolute_expires_at.isoformat()
 
 
+def test_workbench_allocation_has_one_fixed_thirty_minute_window():
+    acquired, idle, absolute = new_session_times()
+
+    assert idle == absolute
+    assert absolute - acquired == timedelta(minutes=30)
+
+
 def test_active_session_listing_supports_resume_without_exposing_token(
     db_session, resident_user, core_test_data
 ):

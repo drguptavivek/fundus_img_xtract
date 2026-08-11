@@ -102,6 +102,14 @@ arbitration are set-scope decisions.
 
 - Resident completes every required target in the package.
 - Resident2 completes every required target in the same package.
+- Resident2 is unavailable until Resident has a complete package submission;
+  Arbitrator is unavailable until Resident2 has a complete package submission.
+  Individual target grades never satisfy this stage boundary.
+- Resident, Resident2, and Arbitrator allocations expire 30 minutes after
+  initial acquisition. Incomplete work remains resumable only by its original
+  grader during that window. On expiry, partial grades for that slot are
+  preserved in the append-only audit, removed from the live grade table, and
+  the package is recomputed for reassignment at the same stage.
 - Each resident slot may revise for 12 hours from its own initial submission. A revision does not restart the clock.
 - Resident and resident2 set-level grades are recalculated after every revision. Image-level differences remain observations.
 - No scope escalates before Resident2's initial submission plus 12 hours. The transition is reconciled lazily when grading, queue, dashboard, or record services read the package.

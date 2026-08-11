@@ -36,7 +36,7 @@ This is a consolidation, not an adapter layered over duplicate implementations. 
 - A durable workbench session and target lease replace `TaskTracker` as the concurrency mechanism.
 - A user may hold one active workbench session per grading role slot.
 - A task/role-slot target may have only one active lease across all users.
-- Idle lease expiry is 30 minutes; absolute session lifetime is 2 hours.
+- Idle and absolute lease expiry are both 30 minutes from initial acquisition.
 - The browser heartbeats once per minute while the workbench is visible and has recent user activity.
 - Resume rotates the session token and invalidates earlier browser tabs.
 - Save & Next commits the current submission first, then acquires the next workbench in a new transaction and returns it as JSON.
@@ -280,7 +280,7 @@ The token is returned once, stored by the browser in `sessionStorage`, and never
 ### Heartbeat, release, and expiry
 
 - The browser sends heartbeat every 60 seconds only while visible and after recent activity.
-- A heartbeat extends idle expiry to at most 30 minutes from the heartbeat and never beyond two hours from acquisition.
+- A heartbeat refreshes liveness but never extends the fixed 30-minute deadline from initial acquisition.
 - The UI warns five minutes before effective expiry.
 - Explicit Save & Close completes the submission and session.
 - Explicit abandon/release closes the session without changing clinical task state.

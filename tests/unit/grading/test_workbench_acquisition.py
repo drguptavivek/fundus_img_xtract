@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
+from auth.utils import utcnow
 from grading.workbench.acquisition import _target_purpose, acquire_next
 import grading.workbench.queue as queue_module
 from grading.workbench.errors import ActiveSessionExists
-from grading.workbench.models import GradingWorkbenchSessionTarget
+from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from grading.workbench.sessions import release
 from models import GradingTask
 from tests.helpers.test_factories import TestDataFactory
@@ -61,12 +64,28 @@ def test_acquire_creates_durable_lease_and_returns_complete_source_configuration
             lab_unit_id=lab.id,
         )
 
+    session = db_session.query(GradingWorkbenchSession).filter_by(
+        uuid=workbench.lease.session_uuid
+    ).one()
+    session.idle_expires_at = utcnow() - timedelta(seconds=1)
+    session.absolute_expires_at = utcnow() - timedelta(seconds=1)
+    db_session.flush()
+    replacement, replacement_token = acquire_next(
+        db_session,
+        user_id=user.id,
+        disease_id=disease.id,
+        role_slot="resident",
+        lab_unit_id=lab.id,
+    )
+    assert session.status == "expired"
+    assert replacement.lease.session_uuid != workbench.lease.session_uuid
+
     release(
         db_session,
-        session_uuid=workbench.lease.session_uuid,
+        session_uuid=replacement.lease.session_uuid,
         user_id=user.id,
-        raw_token=token,
-        token_generation=workbench.lease.token_generation,
+        raw_token=replacement_token,
+        token_generation=replacement.lease.token_generation,
     )
     assert lease.released_at is not None
 

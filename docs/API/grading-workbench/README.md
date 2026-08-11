@@ -26,6 +26,12 @@ EncounterSet scope identity, and image position. Encounter-level targets
 deliberately have no primary media object; the HTML workbench uses the scoped
 image panels to show their live per-image grade results instead.
 
+Every Resident, Resident 2, and Arbitrator allocation has one fixed 30-minute
+window from initial acquisition. Heartbeats preserve the session within that
+window but never extend it. An incomplete package session remains resumable
+only by its owner. At expiry, partial grades for that package slot are written
+to the append-only submission audit and removed before the targets are released.
+
 Supported image sources are `encounter_file`, `direct_image_upload`, and
 `encounter_set_image`. `patient_encounter` is a valid non-image target.
 
@@ -78,7 +84,9 @@ allocation, ownership, and durable lease validation.
 
 Acquires all currently editable targets in a frozen package for the supplied
 `role_slot`; package allocation, revision-window, and completeness rules remain
-authoritative.
+authoritative. Resident 2 requires a complete Resident package submission;
+Arbitrator requires a complete Resident 2 package submission. Individual image
+grades without that package submission never unlock the next slot.
 
 ### `GET /api/grading/workbench/sessions/{session_uuid}`
 
@@ -94,7 +102,7 @@ target set; a real target-set or allocation change remains a conflict.
 
 ### `POST /api/grading/workbench/sessions/{session_uuid}/heartbeat`
 
-Extends idle expiry without extending absolute expiry.
+Refreshes liveness without extending the fixed 30-minute allocation deadline.
 
 ### `POST /api/grading/workbench/sessions/{session_uuid}/release`
 

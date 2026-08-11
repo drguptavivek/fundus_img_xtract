@@ -88,6 +88,18 @@ def editable_tasks(
     within_revision = bool(
         first_submission and now < first_submission.created_at + REVISION_WINDOW
     )
+    partial_graders = {
+        grade.grader_user_id
+        for task in package.tasks
+        for grade in task.grades
+        if grade.role_slot == role_slot
+    }
+    if first_submission is None and partial_graders and partial_graders != {grader_user_id}:
+        return []
+    if role_slot == "resident2" and complete_package_submission(package, "resident") is None:
+        return []
+    if role_slot == "arbitrator" and complete_package_submission(package, "resident2") is None:
+        return []
     result = []
     for scope in package.scopes:
         if role_slot == "arbitrator":
@@ -104,12 +116,29 @@ def editable_tasks(
                 continue
             if first_submission and not within_revision:
                 continue
-            if role_slot == "resident2" and not _scope_has_role_grade(
-                scope, "resident"
-            ):
-                continue
         result.extend(scope.tasks)
     return result
+
+
+def complete_package_submission(
+    package: EncounterSetGradingPackage,
+    role_slot: str,
+) -> EncounterSetGradingSubmission | None:
+    """Return a complete stage submission that covers its required package targets."""
+    required_task_ids = {task.id for task in package.tasks}
+    candidates = sorted(
+        (
+            event
+            for event in package.submissions
+            if event.role_slot == role_slot and event.is_complete
+        ),
+        key=lambda event: event.created_at,
+    )
+    for event in candidates:
+        submitted_task_ids = {item.task_id for item in event.items}
+        if (role_slot == "arbitrator" and submitted_task_ids) or submitted_task_ids == required_task_ids:
+            return event
+    return None
 
 
 def submit_package(
@@ -369,9 +398,9 @@ def package_record_dto(
 
 def _recompute_package(db, package: EncounterSetGradingPackage, *, now=None) -> None:
     now = now or utcnow()
-    resident2_submission = _first_submission(
-        package, "resident2", package.resident2_user_id
-    )
+    resident_submission = complete_package_submission(package, "resident")
+    resident2_submission = complete_package_submission(package, "resident2")
+    arbitrator_submission = complete_package_submission(package, "arbitrator")
     arbitration_ready = bool(
         resident2_submission
         and now >= resident2_submission.created_at + REVISION_WINDOW
@@ -385,9 +414,18 @@ def _recompute_package(db, package: EncounterSetGradingPackage, *, now=None) -> 
                 "Every runtime scope must contain exactly one set-level target."
             )
         set_task = set_tasks[0]
-        resident = _role_grade(set_task, "resident", package.resident_user_id)
-        resident2 = _role_grade(set_task, "resident2", package.resident2_user_id)
-        arbitrator = _role_grade(set_task, "arbitrator", package.arbitrator_user_id)
+        resident = (
+            _role_grade(set_task, "resident", resident_submission.grader_user_id)
+            if resident_submission else None
+        )
+        resident2 = (
+            _role_grade(set_task, "resident2", resident2_submission.grader_user_id)
+            if resident2_submission else None
+        )
+        arbitrator = (
+            _role_grade(set_task, "arbitrator", arbitrator_submission.grader_user_id)
+            if arbitrator_submission else None
+        )
         if arbitrator:
             _upsert_consensus(db, package, scope, set_task, arbitrator, "adjudication")
             scope.state = "final"
@@ -485,7 +523,9 @@ def _first_submission(package, role_slot: str, user_id: int):
         (
             event
             for event in package.submissions
-            if event.role_slot == role_slot and event.grader_user_id == user_id
+            if event.role_slot == role_slot
+            and event.grader_user_id == user_id
+            and event.is_complete
         ),
         key=lambda event: event.created_at,
         default=None,
@@ -501,12 +541,6 @@ def _role_grade(task, role_slot: str, owner_id: int | None):
             and (owner_id is None or grade.grader_user_id == owner_id)
         ),
         None,
-    )
-
-
-def _scope_has_role_grade(scope, role_slot: str) -> bool:
-    return any(
-        grade.role_slot == role_slot for task in scope.tasks for grade in task.grades
     )
 
 

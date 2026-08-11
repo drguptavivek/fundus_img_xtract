@@ -64,6 +64,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-image-navigate=\"next\"" in template
     assert "data-encounter-navigate" in template
     assert "Grade set" in template
+    assert "{{ 'Image' if panel.target_level == 'image' else 'Set' }}:" in template
+    assert '<legend class="visually-hidden">Select grade</legend>' in template
+    assert template.index('text-uppercase fw-semibold mb-1">Grade') < template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:")
+    assert template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:") < template.index('data-image-navigate="prev"')
     assert "carousel?.to(panels.indexOf(encounterPanel))" in template
     assert "document.addEventListener('DOMContentLoaded', initializeCarousel" in template
     assert "carousel = window.bootstrap.Carousel.getOrCreateInstance" in template

@@ -127,21 +127,6 @@
                     <h2 class="h6 mb-0">{{ panel.disease_name }}</h2>
                   </div>
                   <div class="d-flex align-items-center gap-2">
-                    {% if panel.target_level == 'image' and set_context.enabled %}
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Image navigation">
-                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="prev" title="Previous image"{% if image_nav.index == 1 %} disabled{% endif %}>
-                        <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="visually-hidden">Previous image</span>
-                      </button>
-                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="next" title="Next image"{% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length %} disabled{% endif %}>
-                        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span class="visually-hidden">Next image</span>
-                      </button>
-                      {% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length and workbench.panels|selectattr('target_level', 'equalto', 'encounter')|list %}
-                      <button class="btn btn-outline-primary" type="button" data-encounter-navigate title="Continue to set grading">
-                        Grade set <i class="fa-solid fa-chevron-right ms-1" aria-hidden="true"></i>
-                      </button>
-                      {% endif %}
-                    </div>
-                    {% endif %}
                     <span class="badge text-bg-light border">{{ panel.task_state }}</span>
                   </div>
                 </div>
@@ -288,10 +273,33 @@
             </div>
             <div class="col-12 col-xl-4">
               <div class="card h-100 gwb-grade-card">
-                <div class="card-header"><strong>{{ panel.disease_name }}</strong></div>
+                <div class="card-header">
+                  <div class="small text-muted text-uppercase fw-semibold mb-1">Grade</div>
+                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h2 class="h6 mb-0">
+                      <span class="text-muted text-uppercase">{{ 'Image' if panel.target_level == 'image' else 'Set' }}:</span>
+                      {{ panel.disease_name }}
+                    </h2>
+                    {% if panel.target_level == 'image' and set_context.enabled %}
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Image navigation">
+                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="prev" title="Previous image"{% if image_nav.index == 1 %} disabled{% endif %}>
+                        <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="visually-hidden">Previous image</span>
+                      </button>
+                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="next" title="Next image"{% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length %} disabled{% endif %}>
+                        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span class="visually-hidden">Next image</span>
+                      </button>
+                      {% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length and encounter_panels %}
+                      <button class="btn btn-outline-primary" type="button" data-encounter-navigate title="Continue to set grading">
+                        Grade set <i class="fa-solid fa-chevron-right ms-1" aria-hidden="true"></i>
+                      </button>
+                      {% endif %}
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
                 <div class="card-body">
                   <fieldset class="mb-3" data-grade-options>
-                    <legend class="form-label">Grade</legend>
+                    <legend class="visually-hidden">Select grade</legend>
                     <div class="row g-2">
                     {% for grade in panel.grades %}
                       <div class="col-6">

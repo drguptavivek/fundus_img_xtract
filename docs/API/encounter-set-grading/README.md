@@ -3,7 +3,7 @@
 These read APIs intentionally expose two different contracts:
 
 - project policy describes mutable rules for future task creation;
-- grading records describe frozen runtime packages and never reinterpret history using the current project/profile configuration. A pending package may refresh its frozen grading definitions only while it has no persisted grade and no package submission. The first Resident grade freezes the definition for Resident, Resident 2, and Adjudicator.
+- grading records describe frozen runtime packages and never reinterpret history using the current project/profile configuration. A pending package may refresh its frozen grading definitions only while it has no persisted Resident, Resident 2, or Arbitrator grade and no package submission. AI observations do not freeze the human grading definition. The first human-slot grade freezes the definition for Resident, Resident 2, and Adjudicator.
 
 ## Effective project plan
 

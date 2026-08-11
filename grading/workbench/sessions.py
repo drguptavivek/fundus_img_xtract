@@ -25,6 +25,7 @@ from .errors import (
 )
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import editable_tasks
+from .roles import has_human_grades
 
 
 IDLE_MINUTES = 30
@@ -224,7 +225,7 @@ def _can_adopt_ungraded_package_configuration(*, session, tasks, snapshot) -> bo
         package is None
         or package.state != "pending"
         or package.submissions
-        or any(task.grades for task in package.tasks)
+        or has_human_grades(package.tasks)
     ):
         return False
 

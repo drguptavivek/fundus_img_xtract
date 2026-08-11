@@ -263,6 +263,12 @@ def test_only_wholly_ungraded_package_can_adopt_label_revision():
         session=session, tasks=[task], snapshot=current
     ) is True
 
+    task.grades = [SimpleNamespace(role_slot="ai")]
+
+    assert _can_adopt_ungraded_package_configuration(
+        session=session, tasks=[task], snapshot=current
+    ) is True
+
     task.grades = [SimpleNamespace(role_slot="resident")]
 
     assert _can_adopt_ungraded_package_configuration(

@@ -16,6 +16,7 @@ from models import (
 )
 from upload_profiles.models import UploadProfileEncounterSetTypeGradingPackage
 from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileEncounterSetType
+from grading.workbench.roles import has_human_grades
 
 
 POLICY_SCHEMA_VERSION = 1
@@ -250,7 +251,7 @@ def refresh_ungraded_package_definitions(db, *, scheme_id: int) -> int:
     fresh_definition = _freeze_disease_definition(disease)
     refreshed = 0
     for package in packages:
-        if package.submissions or any(task.grades for task in package.tasks):
+        if package.submissions or has_human_grades(package.tasks):
             continue
         snapshot = deepcopy(package.policy_snapshot_json or {})
         definitions = deepcopy(snapshot.get("grading_definitions") or {})

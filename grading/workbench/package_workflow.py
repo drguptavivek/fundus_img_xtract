@@ -16,9 +16,7 @@ from models import (
     GradingTask,
 )
 from .revision_policy import REVISION_WINDOW
-
-
-HUMAN_ROLE_SLOTS = {"resident", "resident2", "arbitrator"}
+from .roles import HUMAN_ROLE_SLOTS
 
 
 class EncounterSetGradingError(ValueError):

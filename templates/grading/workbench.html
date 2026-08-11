@@ -295,9 +295,9 @@
         <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="prev">Previous</button>
         <button class="btn btn-outline-secondary" type="button" data-workbench-navigate="next">Next</button>
       </div>
-      <div class="d-flex gap-2">
-        <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench>Save &amp; Close</button>
-        <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench>Save &amp; Next</button>
+      <div class="d-flex gap-2 d-none" data-workbench-submit-actions>
+        <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench disabled>Save &amp; Close</button>
+        <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench disabled>Save &amp; Next</button>
       </div>
     </footer>
   </form>
@@ -334,6 +334,11 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const panels = Array.from(root.querySelectorAll('[data-task-uuid]'));
   const imagePanels = panels.filter(panel => panel.dataset.targetLevel === 'image');
   const editablePanels = panels.filter(panel => panel.dataset.readOnly !== 'true');
+  const editableImagePanels = editablePanels.filter(panel => panel.dataset.targetLevel === 'image');
+  const encounterPanel = panels.find(panel => panel.dataset.targetLevel === 'encounter');
+  const contextualSubmission = Boolean(encounterPanel && imagePanels.length);
+  const submitActions = root.querySelector('[data-workbench-submit-actions]');
+  const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const headers = {
     'Content-Type': 'application/json',
@@ -347,6 +352,17 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   }
 
   let submitting = false;
+  let activePanelIndex = panels.findIndex(panel => panel.classList.contains('active'));
+
+  function updateSubmissionControls() {
+    const activePanel = panels[activePanelIndex];
+    const showActions = !contextualSubmission || activePanel === encounterPanel;
+    const allImagesGraded = editableImagePanels.every(panel => Boolean(selectedGrade(panel)));
+    submitActions.classList.toggle('d-none', !showActions);
+    submitButtons.forEach(button => {
+      button.disabled = submitting || (contextualSubmission && !allImagesGraded);
+    });
+  }
 
   function showMessage(message, level = 'danger') {
     messageBox.textContent = message;
@@ -356,10 +372,9 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   function updateProgress() {
     const graded = editablePanels.filter(panel => Boolean(selectedGrade(panel))).length;
     const total = editablePanels.length;
-    const editableImages = editablePanels.filter(panel => panel.dataset.targetLevel === 'image');
-    const gradedImages = editableImages.filter(panel => Boolean(selectedGrade(panel))).length;
+    const gradedImages = editableImagePanels.filter(panel => Boolean(selectedGrade(panel))).length;
     root.querySelector('[data-workbench-progress]').textContent =
-      `${gradedImages} of ${editableImages.length} images graded · ${editableImages.length - gradedImages} pending · ${graded} of ${total} targets`;
+      `${gradedImages} of ${editableImagePanels.length} images graded · ${editableImagePanels.length - gradedImages} pending · ${graded} of ${total} targets`;
     panels.forEach((panel, index) => {
       root.querySelector(`[data-workbench-target="${index}"]`)?.classList.toggle('is-graded', Boolean(selectedGrade(panel)));
       const grade = window.linkedGradingData[panel.dataset.taskUuid]?.features.find(
@@ -370,6 +385,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
         item.classList.toggle('text-muted', !grade);
       });
     });
+    updateSubmissionControls();
   }
 
   function renderFeatures(panel) {
@@ -431,13 +447,26 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   updateProgress();
 
   const carouselElement = root.querySelector('#workbench-panels');
-  const carousel = window.bootstrap?.Carousel
-    ? window.bootstrap.Carousel.getOrCreateInstance(carouselElement, {interval: false, wrap: false})
-    : null;
+  let carousel = null;
+  function initializeCarousel() {
+    if (window.bootstrap?.Carousel) {
+      carousel = window.bootstrap.Carousel.getOrCreateInstance(
+        carouselElement,
+        {interval: false, wrap: false}
+      );
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeCarousel, {once: true});
+  } else {
+    initializeCarousel();
+  }
   carouselElement.addEventListener('slid.bs.carousel', event => {
+    activePanelIndex = event.to;
     root.querySelectorAll('[data-workbench-target]').forEach((item, index) => {
       item.classList.toggle('active', index === event.to);
     });
+    updateSubmissionControls();
   });
   root.querySelectorAll('[data-workbench-target]').forEach(button => {
     button.addEventListener('click', () => carousel?.to(Number(button.dataset.workbenchTarget)));
@@ -484,7 +513,6 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     if (submitting) return;
     submitting = true;
     const action = event.submitter?.value || 'save_close';
-    const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
     const clickedButton = event.submitter;
     const originalButtonHtml = clickedButton?.innerHTML;
     submitButtons.forEach(button => { button.disabled = true; });
@@ -530,7 +558,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       }
     } catch (error) {
       submitting = false;
-      submitButtons.forEach(button => { button.disabled = false; });
+      updateSubmissionControls();
       if (clickedButton) clickedButton.innerHTML = originalButtonHtml;
       showMessage(error.message, 'danger');
       heartbeatTimer = startHeartbeat();

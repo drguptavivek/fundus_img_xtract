@@ -65,6 +65,9 @@ def load(db, *, session_uuid: str, user_id: int, raw_token: str, token_generatio
     _verify_active(session)
     _verify_token(session, raw_token=raw_token, token_generation=token_generation)
     tasks = _tasks_for_session(db, session)
+    _assert_access(db, session=session, tasks=tasks, user_id=user_id)
+    _assert_configuration(db, session=session, tasks=tasks)
+    db.flush()
     return build_workbench(db, session, tasks)
 
 

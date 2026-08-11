@@ -16,6 +16,7 @@ from grading.workbench.sessions import (
     heartbeat,
     issue_token,
     list_active,
+    load,
     new_session_times,
     resume,
 )
@@ -117,6 +118,42 @@ def test_resume_rotates_token_and_old_tab_is_superseded(db_session, resident_use
             raw_token=old_token,
             token_generation=1,
         )
+
+
+def test_stored_token_load_revalidates_access_and_configuration(
+    db_session,
+    resident_user,
+    core_test_data,
+    monkeypatch,
+):
+    user = db_session.merge(resident_user)
+    lab = db_session.merge(core_test_data["lab_unit"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    task = _encounter_task(db_session, disease_id=disease.id, lab_unit_id=lab.id)
+    session, token = _session(db_session, user_id=user.id, task=task)
+    calls = []
+    monkeypatch.setattr(
+        sessions_module,
+        "_assert_access",
+        lambda *args, **kwargs: calls.append("access"),
+    )
+    monkeypatch.setattr(
+        sessions_module,
+        "_assert_configuration",
+        lambda *args, **kwargs: calls.append("configuration"),
+    )
+    monkeypatch.setattr(sessions_module, "build_workbench", lambda *args: "workbench")
+
+    result = load(
+        db_session,
+        session_uuid=session.uuid,
+        user_id=user.id,
+        raw_token=token,
+        token_generation=1,
+    )
+
+    assert result == "workbench"
+    assert calls == ["access", "configuration"]
 
 
 def test_heartbeat_never_extends_absolute_expiry(db_session, resident_user, core_test_data):

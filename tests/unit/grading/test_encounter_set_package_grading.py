@@ -53,8 +53,14 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "Image {{ image_nav.index }} of" in template
     assert "data-image-navigate=\"prev\"" in template
     assert "data-image-navigate=\"next\"" in template
+    assert "document.addEventListener('DOMContentLoaded', initializeCarousel" in template
+    assert "carousel = window.bootstrap.Carousel.getOrCreateInstance" in template
     assert "data-workbench-progress" in template
     assert "data-workbench-pager" in template
+    assert "data-workbench-submit-actions" in template
+    assert "contextualSubmission" in template
+    assert "allImagesGraded" in template
+    assert "activePanel === encounterPanel" in template
     assert "data-encounter-image-grade" in template
     assert "No image targets" in template
     assert 'data-workbench-navigate="prev"' in template

@@ -34,9 +34,12 @@
   .gwb-adjustment-control .imggr-range-wrap { flex: 1 1 auto; width: auto; min-width: 0; }
   .gwb-adjustment-control .imggr-bright,
   .gwb-adjustment-control .imggr-contrast { display: block; width: 100%; min-width: 0; max-width: none; margin: 0; }
-  .gwb-encounter-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; overflow: auto; }
-  .gwb-encounter-result { border-top: 1px solid var(--bs-border-color); padding: .65rem 0; }
-  .gwb-encounter-result:first-child { border-top: 0; }
+  .gwb-encounter-summary { display: grid; flex: 1 1 auto; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; overflow: auto; }
+  .gwb-encounter-result { display: flex; align-items: center; gap: .75rem; width: 100%; border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem; color: var(--bs-body-color); background: var(--bs-body-bg); text-align: left; }
+  .gwb-encounter-result + .gwb-encounter-result { margin-top: .5rem; }
+  .gwb-encounter-result:hover, .gwb-encounter-result:focus-visible { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+  .gwb-encounter-result.is-pending { border-color: var(--bs-danger-border-subtle); }
+  .gwb-encounter-thumbnail { flex: 0 0 4.5rem; width: 4.5rem; height: 4.5rem; border-radius: .375rem; object-fit: cover; background: var(--bs-secondary-bg); }
   .gwb-footer { flex: 0 0 auto; }
   .gwb-pager { display: flex; gap: .35rem; max-width: min(48vw, 44rem); overflow-x: auto; }
   .gwb-pager .btn { min-width: 2.25rem; }
@@ -153,13 +156,27 @@
                               {% if option.id == image_observation.disease_grading_id %}{% set selected.label = option.impression %}{% endif %}
                             {% endfor %}
                           {% endif %}
-                          <div class="gwb-encounter-result">
-                            <div class="d-flex justify-content-between gap-2">
-                              <span class="fw-semibold">Image {{ image_panel.image_position or ns.count }}</span>
-                              <span class="small text-muted text-end">{{ image_panel.disease_name }}</span>
-                            </div>
-                            <div class="mt-1" data-encounter-image-grade data-source-task-uuid="{{ image_panel.task_uuid }}">{{ selected.label }}</div>
-                          </div>
+                          <button type="button"
+                                  class="gwb-encounter-result{% if not image_observation or not image_observation.disease_grading_id %} is-pending{% endif %}"
+                                  data-encounter-image-navigate="{{ image_panel.task_uuid }}"
+                                  aria-label="Open Image {{ image_panel.image_position or ns.count }} for grading">
+                            {% if image_panel.media %}
+                            <img class="gwb-encounter-thumbnail"
+                                 src="{{ image_panel.media.thumbnail_url or image_panel.media.media_url }}"
+                                 alt="Thumbnail of Image {{ image_panel.image_position or ns.count }}"
+                                 loading="lazy">
+                            {% endif %}
+                            <span class="flex-grow-1 min-w-0">
+                              <span class="d-flex justify-content-between gap-2">
+                                <span class="fw-semibold">Image {{ image_panel.image_position or ns.count }}</span>
+                                <span class="small text-muted text-end">{{ image_panel.disease_name }}</span>
+                              </span>
+                              <span class="badge rounded-pill mt-2 {{ 'text-bg-success' if image_observation and image_observation.disease_grading_id else 'text-bg-danger' }}"
+                                    data-encounter-image-grade
+                                    data-source-task-uuid="{{ image_panel.task_uuid }}">{{ selected.label }}</span>
+                            </span>
+                            <i class="fa-solid fa-chevron-right text-muted" aria-hidden="true"></i>
+                          </button>
                         {% endif %}
                       {% endfor %}
                       {% if ns.count == 0 %}<div class="small text-muted">No image targets</div>{% endif %}
@@ -565,7 +582,9 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       );
       root.querySelectorAll(`[data-encounter-image-grade][data-source-task-uuid="${panel.dataset.taskUuid}"]`).forEach(item => {
         item.textContent = grade?.impression || 'Pending';
-        item.classList.toggle('text-muted', !grade);
+        item.classList.toggle('text-bg-danger', !grade);
+        item.classList.toggle('text-bg-success', Boolean(grade));
+        item.closest('[data-encounter-image-navigate]')?.classList.toggle('is-pending', !grade);
       });
     });
     updateSubmissionControls();
@@ -701,6 +720,14 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   root.querySelectorAll('[data-encounter-navigate]').forEach(button => {
     button.addEventListener('click', () => {
       if (encounterPanel) carousel?.to(panels.indexOf(encounterPanel));
+    });
+  });
+  root.querySelectorAll('[data-encounter-image-navigate]').forEach(button => {
+    button.addEventListener('click', () => {
+      const imagePanel = panels.find(
+        panel => panel.dataset.taskUuid === button.dataset.encounterImageNavigate
+      );
+      if (imagePanel) carousel?.to(panels.indexOf(imagePanel));
     });
   });
 

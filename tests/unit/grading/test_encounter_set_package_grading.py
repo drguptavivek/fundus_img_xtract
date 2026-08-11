@@ -80,6 +80,11 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "allImagesGraded" in template
     assert "activePanel === encounterPanel" in template
     assert "data-encounter-image-grade" in template
+    assert "gwb-encounter-thumbnail" in template
+    assert "data-encounter-image-navigate" in template
+    assert "text-bg-danger" in template
+    assert "button.dataset.encounterImageNavigate" in template
+    assert "carousel?.to(panels.indexOf(imagePanel))" in template
     assert "No image targets" in template
     assert 'data-workbench-navigate="prev"' in template
     assert 'data-workbench-navigate="next"' in template

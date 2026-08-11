@@ -23,8 +23,10 @@ configuration fingerprint, normalized source/profile context, and one or more
 panels. Panels expose task-qualified field names, grades, grading features,
 annotation policy/classes/tools, current grade, normalized media metadata,
 EncounterSet scope identity, and image position. Encounter-level targets
-deliberately have no primary media object; the HTML workbench uses the scoped
-image panels to show their live per-image grade results instead.
+deliberately have no primary media object; the HTML workbench uses clickable
+thumbnail cards from the scoped image panels to show their live per-image grade
+results instead. Pending images use a red status pill, and selecting a card
+returns directly to that image target.
 
 Every Resident, Resident 2, and Arbitrator allocation has one fixed 30-minute
 window from initial acquisition. Heartbeats preserve the session within that

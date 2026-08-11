@@ -74,7 +74,7 @@
       <span class="small text-muted mt-1">Please wait while the next screen loads.</span>
     </div>
   </div>
-  <form class="gwb-form" data-workbench-form>
+  <form class="gwb-form" data-workbench-form data-grading-form="true">
     {{ csrf_field() }}
     <div id="workbench-panels"
          class="carousel slide gwb-carousel{% if workbench.lease.workflow == 'linked' %} linked-grading-carousel{% endif %}"
@@ -291,9 +291,9 @@
                     </div>
                   </fieldset>
                   <div class="form-text mb-3" data-grade-guidelines></div>
-                  <fieldset class="mb-3 d-none" data-feature-fieldset>
+                  <fieldset class="mb-3 d-none" data-feature-fieldset data-features-section>
                     <legend class="h6">Relevant features</legend>
-                    <div class="vstack gap-2" data-feature-options></div>
+                    <div class="vstack gap-2" data-feature-options data-features-container></div>
                   </fieldset>
                   <label class="form-label" for="comment-{{ panel.task_uuid }}">Comment</label>
                   <textarea class="form-control" id="comment-{{ panel.task_uuid }}"

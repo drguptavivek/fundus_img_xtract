@@ -52,6 +52,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'class="col-6"' in template
     assert "panel.fields.geometry" in template
     assert "data-geometry-sidebar-host" in template
+    assert 'data-grading-form="true"' in template
+    assert "data-features-section" in template
+    assert "data-features-container" in template
     assert "gwb-shell is-expanded" in template
     assert "data-workbench-expand" in template
     assert "Image {{ image_nav.index }} of" in template

@@ -374,9 +374,10 @@ window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}" defer></script>
-<script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=config.get('ASSETS_VERSION','')) }}"></script>
-<script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=config.get('ASSETS_VERSION','')) }}"></script>
-<script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=config.get('ASSETS_VERSION','')) }}"></script>
+{% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
+<script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
+<script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>
 <script>
 (function () {
   const root = document.getElementById('grading-workbench');

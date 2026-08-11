@@ -52,6 +52,12 @@ Network, HTTP 429, and HTTP 5xx draft-save failures retain the dirty draft and
 retry after two seconds; validation and authentication errors require user
 action and are not retried indefinitely.
 
+Each image panel includes the CDR/RDR measurement controls in the viewer
+toolbar. The grader marks the disc diameter and cup segment on the active
+image; the viewer calculates cup-to-disc and rim-to-disc ratios. **Done** adds
+the normalized measurement tag to the active target's comment and triggers the
+normal draft autosave path.
+
 ## Endpoints
 
 ### `GET /api/grading/workbench/me/active-sessions`

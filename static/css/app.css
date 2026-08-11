@@ -1235,15 +1235,15 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 }
 
 .imggr-cdr-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 
 .imggr-cdr-locked .imggr-zoom-slider,
 .imggr-cdr-locked .imggr-zoom-fit {
   opacity: 0.55;
   filter: grayscale(0.2);
-}
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
 }
 
 .imggr-shortcuts-trigger {

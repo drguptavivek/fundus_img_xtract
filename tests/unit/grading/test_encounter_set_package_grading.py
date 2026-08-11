@@ -90,6 +90,17 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'data-workbench-navigate="next"' in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
+    assert "imggr-cdr-toggle" in template
+    assert "imggr-cdr-clear" in template
+    assert "imggr-cdr-panel" in template
+    assert "imggr-cdr-status" in template
+    assert "imggr-cdr-value" in template
+    assert "imggr-rdr-value" in template
+    assert "imggr-cdr-done" in template
+    assert "Click two points to draw the disc diameter line" in template
+    assert template.index("imggr-cdr-toggle") < template.index(
+        'data-enc-id="{{ viewer_media.image_uuid }}"'
+    )
     assert "gwb-toolbar-left" in template
     assert "gwb-toolbar-right" in template
     assert "flex-basis: 100%" in template
@@ -111,6 +122,7 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-preset-status" in template
     assert "preset-modal-v2" in template
     assert "serial-image-load-v1" in template
+    assert "cdr-v1" in template
     assert "data-clear-selection" in template
     assert "data.existingSelectedFeatures = []" in template
     assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
@@ -149,6 +161,18 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "error.code = redirectedToLogin ? 'authentication_required' : 'non_json_response'" in template
     assert "if (retryDraft) scheduleDraft(2000)" in template
     assert "Your unsaved draft will retry" in template
+
+
+def test_cdr_overlay_css_is_a_complete_rule():
+    css = (
+        Path(package_transport.__file__).parents[1] / "static/css/app.css"
+    ).read_text()
+
+    overlay_rule = css[css.index(".imggr-cdr-overlay {") :]
+    overlay_rule = overlay_rule[: overlay_rule.index("}")]
+    assert "position: absolute" in overlay_rule
+    assert "inset: 0" in overlay_rule
+    assert "pointer-events: none" in overlay_rule
 
 
 def test_shared_jinja_workbench_compiles(app):

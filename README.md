@@ -219,6 +219,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
 - [Consolidated Grading Workbench Module Plan](docs/15-DEVELOPMENT/grading_workbench_consolidation_plan.md) - Plan to fold ordinary and EncounterSet package grading into one session, lease, annotation, submission, history, and next-work module
 - [Deep Discrepancy Review Module Plan](docs/15-DEVELOPMENT/discrepancy_review_deep_module_plan.md) - Cohesive review queues, canonical filters, leases/resume, AI assessment, workbench-backed human review, audit, refresh, export, and test plan
+- [Comprehensive Clinical Search Deep-Module Plan](docs/15-DEVELOPMENT/clinical_search_deep_module_plan.md) - Shared task-boundary search, canonical grading and signal semantics, project-configured referral diseases, immutable selections, discrepancy integration, and test plan
 - [Grading Workbench API](docs/API/grading-workbench/README.md) - Durable acquisition, resumption, normalized workbench DTO, annotation, submission, and rapid next-work contracts
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping

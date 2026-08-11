@@ -102,6 +102,41 @@
         </form>
       </div>
 
+      <div class="col-12">
+        <h3 class="h6">Referral Diseases</h3>
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.project_referral_diseases', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.project_referral_diseases', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <p class="text-muted small">
+            Grading-scheme diseases are always available. Select any additional diseases that this project may record for referral without creating grading tasks for them.
+          </p>
+          <div class="row g-2 mb-3">
+            {% for disease in diseases %}
+            <div class="col-sm-6 col-lg-4">
+              <div class="form-check">
+                <input class="form-check-input"
+                       type="checkbox"
+                       name="disease_ids"
+                       value="{{ disease.id }}"
+                       id="project_referral_disease_{{ selected_project.id }}_{{ disease.id }}"
+                       {% if disease.id in configured_referral_disease_ids %}checked{% endif %}>
+                <label class="form-check-label" for="project_referral_disease_{{ selected_project.id }}_{{ disease.id }}">
+                  {{ disease.name }}
+                </label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit">Save Referral Diseases</button>
+        </form>
+      </div>
+
       {% include "admin/partials/project_grading_allocation.html" %}
 
       {% include "admin/partials/project_annotation_policy_panel.html" %}

@@ -10,6 +10,7 @@ from models import (
     EncounterSetImage,
     GradingTask,
     Project,
+    ProjectReferralDisease,
 )
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
@@ -829,6 +830,66 @@ def test_verify_encounter_set_finalize_refreshes_referral_from_edited_ocr(
     assert encounter_set_data['encounter'].referral_suggestion == "no"
 
 
+def test_verify_encounter_set_finalize_allows_project_referral_only_ocr_disease(
+    client,
+    auth_client_factory,
+    encounter_set_data,
+    db_session,
+    csrf_token,
+    core_test_data,
+):
+    """A configured referral-only OCR disease is retained without a grading task scheme."""
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="verify_finalize_project_scoped_ocr",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    dr = db_session.merge(core_test_data["dr"])
+    amd = Disease(name="AMD Referral Only", remidio_ocr_linkage="amd")
+    db_session.add(amd)
+    db_session.flush()
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.image_grading_schemes.append(
+        UploadProfileEncounterSetTypeImageGradingScheme(
+            disease=dr,
+            is_default=False,
+            display_order=2,
+        )
+    )
+    db_session.add(
+        ProjectReferralDisease(
+            project_id=encounter_set_data["project"].id,
+            disease_id=amd.id,
+        )
+    )
+    encounter_set_data["attachment"].metadata_json = {
+        "ocr": {
+            "status": "completed",
+            "dr_report": {
+                "dr_data": {"result": "Signs of DR or AMD detected."}
+            },
+            "amd_report": {
+                "amd_data": {"result": "Signs of DR or AMD detected."}
+            },
+        }
+    }
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "verified"
+    assert encounter_set_data["encounter"].referral_suggestion == "yes"
+    assert encounter_set_data["encounter"].referral_positive_diseases_json == ["AMD Referral Only", "DR"]
+
+
 def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
     """Encounter-level referral suggestion is stored on the dedicated column."""
     user = UserFactory.create_admin(db_session, username="admin_verify_referral_suggestion")
@@ -853,7 +914,7 @@ def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_cli
     assert "referral_suggestion" not in (encounter_set_data['encounter'].metadata_json.get("encounter") or {})
 
 
-def test_verify_encounter_set_rejects_positive_disease_outside_project_schemes(
+def test_verify_encounter_set_rejects_positive_disease_outside_project_options(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
     user = UserFactory.create_admin(db_session, username="admin_verify_invalid_positive_disease")
@@ -872,7 +933,7 @@ def test_verify_encounter_set_rejects_positive_disease_outside_project_schemes(
 
     assert response.status_code == 400
     assert response.json["success"] is False
-    assert "this project's grading schemes" in response.json["message"]
+    assert "this project's grading or referral disease options" in response.json["message"]
     db_session.refresh(encounter_set_data['encounter'])
     assert encounter_set_data['encounter'].referral_suggestion == "missing"
 

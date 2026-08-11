@@ -82,6 +82,19 @@ def update_encounter_referral_suggestion_from_attachments(
     )
     suggestion = derive_referral_suggestion_from_attachment_metadata(metadata for (metadata,) in attachments)
     positive_diseases = derive_referral_positive_diseases_from_attachment_metadata(metadata for (metadata,) in attachments)
+    if encounter.project_id is not None and positive_diseases:
+        # Keep raw provider evidence on the attachment, while persisting only
+        # the project's grading or explicitly configured referral diseases.
+        from verify_encounter_set.project_disease_options import (
+            canonicalize_project_positive_diseases,
+        )
+
+        canonical_diseases, _unsupported_diseases = canonicalize_project_positive_diseases(
+            db,
+            project_id=encounter.project_id,
+            values=positive_diseases,
+        )
+        positive_diseases = list(canonical_diseases)
     if (
         preserve_existing_when_missing
         and suggestion == REFERRAL_SUGGESTION_MISSING

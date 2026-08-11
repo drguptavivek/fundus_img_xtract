@@ -5,7 +5,14 @@ from flask import flash, jsonify, request, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
+from db_transaction_manager import transaction_scope
+from models import Project
 from upload_profiles import admin_service as upload_profile_service
+from verify_encounter_set.project_disease_options import (
+    list_configured_project_referral_disease_ids,
+    list_project_positive_disease_options,
+    replace_project_referral_diseases,
+)
 
 from . import api_bp
 
@@ -201,6 +208,39 @@ def update_upload_profile_project(project_id: int):
     """Update a project for upload profile governance."""
     dto = _project_input_from_request()
     return _json_result(upload_profile_service.update_project(project_id, dto), redirect_endpoint="admin.upload_projects_admin")
+
+
+@api_bp.route("/projects/<int:project_id>/referral-diseases", methods=["GET", "PUT", "POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def project_referral_diseases(project_id: int):
+    """Read or replace referral-only diseases allowed by one project."""
+    with transaction_scope() as db:
+        if db.get(Project, project_id) is None:
+            return jsonify({"success": False, "error": "Project not found.", "message": "Project not found."}), 404
+        if request.method != "GET":
+            payload = request.get_json(silent=True) if request.is_json else None
+            raw_ids = payload.get("disease_ids", []) if isinstance(payload, dict) else request.form.getlist("disease_ids")
+            try:
+                disease_ids = [int(value) for value in raw_ids]
+                replace_project_referral_diseases(db, project_id=project_id, disease_ids=disease_ids)
+            except (TypeError, ValueError) as exc:
+                return jsonify({"success": False, "error": str(exc), "message": str(exc)}), 400
+
+        configured_ids = list_configured_project_referral_disease_ids(db, project_id=project_id)
+        options = list_project_positive_disease_options(db, project_id=project_id)
+        payload = {
+            "success": True,
+            "message": "Project referral diseases updated." if request.method != "GET" else "Project referral diseases loaded.",
+            "data": {
+                "project_id": project_id,
+                "configured_disease_ids": list(configured_ids),
+                "effective_diseases": [
+                    {"disease_id": option.disease_id, "name": option.name}
+                    for option in options
+                ],
+            },
+        }
+        return jsonify(payload)
 
 
 @api_bp.route("/upload-profiles/investigators", methods=["POST"])

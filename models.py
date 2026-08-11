@@ -457,10 +457,45 @@ class Project(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    referral_diseases: Mapped[List["ProjectReferralDisease"]] = relationship(
+        "ProjectReferralDisease",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     __table_args__ = (
         UniqueConstraint("title", name="uq_projects_title"),
         UniqueConstraint("code", name="uq_projects_code"),
         Index("ix_projects_active", "active"),
+    )
+
+
+class ProjectReferralDisease(Base):
+    """A disease a project may record as referral-positive without grading it."""
+
+    __tablename__ = "project_referral_diseases"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    disease_id: Mapped[int] = mapped_column(
+        ForeignKey("diseases.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="referral_diseases")
+    disease: Mapped["Disease"] = relationship("Disease")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "disease_id", name="uq_project_referral_disease"),
+        Index("ix_project_referral_diseases_project_active", "project_id", "active"),
     )
 
 

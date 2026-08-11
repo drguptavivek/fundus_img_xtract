@@ -1,4 +1,4 @@
-from models import PatientEncounters
+from models import Disease, PatientEncounters, Project, ProjectReferralDisease
 from encounter_sets.models import EncounterSetAttachment
 from services.encounter_referral_suggestion import (
     REFERRAL_SUGGESTION_MISSING,
@@ -151,3 +151,49 @@ def test_update_encounter_referral_suggestion_from_attachments(db_session):
     assert encounter.referral_suggestion == REFERRAL_SUGGESTION_YES
     assert encounter.referral_positive_diseases_json == ["DR"]
     assert encounter.referral_suggestion_updated_at is not None
+
+
+def test_update_filters_ocr_positive_diseases_to_project_options(db_session):
+    project = Project(title="OCR Referral Project", code="OCR_REFERRAL", active=True)
+    dr = Disease(name="OCR Referral DR", remidio_ocr_linkage="dr")
+    db_session.add_all([project, dr])
+    db_session.flush()
+    db_session.add(ProjectReferralDisease(project_id=project.id, disease_id=dr.id))
+    encounter = PatientEncounters(
+        name="Project Referral Test",
+        patient_id="MRN-PROJECT-REF",
+        capture_date="2026-08-11",
+        is_set_based=True,
+        project_id=project.id,
+    )
+    db_session.add(encounter)
+    db_session.flush()
+    db_session.add(
+        EncounterSetAttachment(
+            patient_encounter_id=encounter.id,
+            asset_kind="pdf",
+            original_filename="combined-report.pdf",
+            stored_filename="combined-report.pdf",
+            folder_rel="files/test",
+            metadata_json={
+                "ocr": {
+                    "dr_report": {
+                        "dr_data": {"result": "Signs of DR or AMD detected."}
+                    },
+                    "amd_report": {
+                        "amd_data": {"result": "Signs of DR or AMD detected."}
+                    },
+                }
+            },
+        )
+    )
+    db_session.flush()
+
+    suggestion = update_encounter_referral_suggestion_from_attachments(
+        db_session,
+        encounter.id,
+    )
+    db_session.refresh(encounter)
+
+    assert suggestion == REFERRAL_SUGGESTION_YES
+    assert encounter.referral_positive_diseases_json == ["OCR Referral DR"]

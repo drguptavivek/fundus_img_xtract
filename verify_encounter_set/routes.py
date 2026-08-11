@@ -236,7 +236,7 @@ def update_metadata(uuid):
             )
             if invalid_diseases:
                 return _verification_validation_response(
-                    "Positive diseases must come from this project's grading schemes. "
+                    "Positive diseases must come from this project's grading or referral disease options. "
                     f"Invalid value(s): {', '.join(invalid_diseases)}.",
                     encounter_uuid=encounter.uuid,
                 )
@@ -260,7 +260,7 @@ def update_metadata(uuid):
             )
             if invalid_diseases or not canonical_diseases:
                 return _verification_validation_response(
-                    "Select at least one positive disease from this project's grading schemes "
+                    "Select at least one positive disease from this project's grading or referral disease options "
                     "before saving a referral-positive EncounterSet.",
                     encounter_uuid=encounter.uuid,
                 )
@@ -920,7 +920,7 @@ def finalize_verification(uuid):
             if invalid_diseases or not canonical_diseases:
                 return _verification_validation_response(
                     "Cannot finalize: select at least one positive disease from this project's "
-                    "grading schemes for a referral-positive EncounterSet.",
+                    "grading or referral disease options for a referral-positive EncounterSet.",
                     encounter_uuid=encounter.uuid,
                     status=409,
                 )

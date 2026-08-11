@@ -27,6 +27,7 @@ from remote_inference.automated_service import project_automated_workflow_contex
 from remote_inference.manual_service import project_manual_workflow_context
 from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
+from verify_encounter_set.project_disease_options import list_configured_project_referral_disease_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -347,6 +348,9 @@ def upload_project_workspace(project_id: int):
             mapping.upload_profile_id for mapping in context["project_profile_mappings"] if mapping.active
         }
         context["selected_profile_id"] = request.args.get("profile_id", type=int)
+        context["configured_referral_disease_ids"] = set(
+            list_configured_project_referral_disease_ids(db, project_id=project_id)
+        )
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))
         context.update(iitk_service.project_connection_context(db, project_id))

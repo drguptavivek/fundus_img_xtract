@@ -9,6 +9,11 @@
   .gwb-shell.is-expanded { position: fixed; inset: 0; z-index: 1040; width: 100vw; height: 100dvh; min-height: 0; border: 0; border-radius: 0; }
   .gwb-submit-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(var(--bs-body-bg-rgb), .88); backdrop-filter: blur(2px); }
   .gwb-submit-overlay.d-none { display: none; }
+  .gwb-loader-mark { position: relative; width: 5rem; height: 5rem; margin: 0 auto 1rem; display: grid; place-items: center; }
+  .gwb-loader-mark::before { content: ''; position: absolute; inset: 0; border: .25rem solid transparent; border-top-color: var(--bs-primary); border-left-color: var(--bs-primary); border-radius: 50%; animation: gwb-loader-counter-spin .9s linear infinite; }
+  .gwb-loader-logo { width: 3.25rem; height: 3.25rem; object-fit: contain; animation: gwb-loader-logo-spin 2.2s linear infinite; }
+  @keyframes gwb-loader-logo-spin { to { transform: rotate(360deg); } }
+  @keyframes gwb-loader-counter-spin { to { transform: rotate(-360deg); } }
   .gwb-form, .gwb-carousel, .gwb-carousel .carousel-inner, .gwb-carousel .carousel-item, .gwb-panel-row { min-height: 0; height: 100%; }
   .gwb-form { display: flex; flex-direction: column; }
   .gwb-carousel { flex: 1 1 auto; overflow: hidden; }
@@ -62,7 +67,9 @@
   <div class="alert py-2 d-none" role="status" aria-live="polite" data-workbench-message></div>
   <div class="gwb-submit-overlay d-none" role="status" aria-live="assertive" aria-busy="true" data-workbench-submit-overlay>
     <div class="card border-0 shadow-lg text-center p-4">
-      <div class="spinner-border text-primary mx-auto mb-3" aria-hidden="true"></div>
+      <div class="gwb-loader-mark" aria-hidden="true">
+        <img class="gwb-loader-logo" src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="">
+      </div>
       <strong data-workbench-submit-overlay-message>Saving grades…</strong>
       <span class="small text-muted mt-1">Please wait while the next screen loads.</span>
     </div>

@@ -77,6 +77,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "/api/grading/workbench/sessions/${sessionUuid}/submit" in template
     assert "spinner-border spinner-border-sm" in template
     assert "data-workbench-submit-overlay" in template
+    assert "gwb-loader-logo" in template
+    assert "retina_svg_logo.svg" in template
+    assert "gwb-loader-counter-spin" in template
+    assert "rotate(-360deg)" in template
     assert "Saving grades and loading the next case" in template
     assert "submitOverlay.classList.remove('d-none')" in template
     assert "submitOverlay.classList.add('d-none')" in template

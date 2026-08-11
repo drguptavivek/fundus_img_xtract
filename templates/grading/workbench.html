@@ -7,6 +7,8 @@
 <style>
   .gwb-shell { width: 100%; height: calc(100dvh - 8rem); min-height: 42rem; padding: .5rem; display: flex; flex-direction: column; overflow: hidden; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .5rem; }
   .gwb-shell.is-expanded { position: fixed; inset: 0; z-index: 1040; width: 100vw; height: 100dvh; min-height: 0; border: 0; border-radius: 0; }
+  .gwb-submit-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(var(--bs-body-bg-rgb), .88); backdrop-filter: blur(2px); }
+  .gwb-submit-overlay.d-none { display: none; }
   .gwb-form, .gwb-carousel, .gwb-carousel .carousel-inner, .gwb-carousel .carousel-item, .gwb-panel-row { min-height: 0; height: 100%; }
   .gwb-form { display: flex; flex-direction: column; }
   .gwb-carousel { flex: 1 1 auto; overflow: hidden; }
@@ -58,6 +60,13 @@
   </header>
 
   <div class="alert py-2 d-none" role="status" aria-live="polite" data-workbench-message></div>
+  <div class="gwb-submit-overlay d-none" role="status" aria-live="assertive" aria-busy="true" data-workbench-submit-overlay>
+    <div class="card border-0 shadow-lg text-center p-4">
+      <div class="spinner-border text-primary mx-auto mb-3" aria-hidden="true"></div>
+      <strong data-workbench-submit-overlay-message>Saving grades…</strong>
+      <span class="small text-muted mt-1">Please wait while the next screen loads.</span>
+    </div>
+  </div>
   <form class="gwb-form" data-workbench-form>
     {{ csrf_field() }}
     <div id="workbench-panels"
@@ -344,6 +353,8 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const contextualSubmission = Boolean(encounterPanel && imagePanels.length);
   const submitActions = root.querySelector('[data-workbench-submit-actions]');
   const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
+  const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
+  const submitOverlayMessage = root.querySelector('[data-workbench-submit-overlay-message]');
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const headers = {
     'Content-Type': 'application/json',
@@ -526,6 +537,10 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     const clickedButton = event.submitter;
     const originalButtonHtml = clickedButton?.innerHTML;
     submitButtons.forEach(button => { button.disabled = true; });
+    submitOverlayMessage.textContent = action === 'save_next'
+      ? 'Saving grades and loading the next case…'
+      : 'Saving grades and closing the workbench…';
+    submitOverlay.classList.remove('d-none');
     if (clickedButton) {
       clickedButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
     }
@@ -568,6 +583,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       }
     } catch (error) {
       submitting = false;
+      submitOverlay.classList.add('d-none');
       updateSubmissionControls();
       if (clickedButton) clickedButton.innerHTML = originalButtonHtml;
       showMessage(error.message, 'danger');

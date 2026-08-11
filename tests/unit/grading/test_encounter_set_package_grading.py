@@ -76,6 +76,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "feature-geometry-editor.js" in template
     assert "/api/grading/workbench/sessions/${sessionUuid}/submit" in template
     assert "spinner-border spinner-border-sm" in template
+    assert "data-workbench-submit-overlay" in template
+    assert "Saving grades and loading the next case" in template
+    assert "submitOverlay.classList.remove('d-none')" in template
+    assert "submitOverlay.classList.add('d-none')" in template
     assert "Saving grades" in template
     assert "Grades saved. Opening the next case" in template
     assert "clearInterval(heartbeatTimer)" in template

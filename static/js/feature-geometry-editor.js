@@ -163,6 +163,8 @@
       .fgx-slider-row { display:flex; flex-wrap:nowrap; gap:.35rem; align-items:center; min-width:0; }
       .fgx-slider-row .form-range { min-width:0; }
       .fgx-tools-row--brush { flex: 1 0 100%; }
+      .fgx-tool-category { align-items:center; border:1px solid var(--bs-border-color); border-radius:.375rem; padding:.35rem; }
+      .fgx-tool-category .fgx-block-label { flex:1 0 100%; }
       @media (min-width: 992px) {
         .fgx-panel .fgx-slider-row { flex: 1 0 100%; }
       }
@@ -1057,26 +1059,21 @@
     if (!ctx || !ctx.featureSelectEl || !ctx.annotationSelectEl) return;
     const selected = getSelectedFeatureIds(ctx);
     const previous = state.activeFeatureId;
-    const selectedSet = new Set(selected.map((id) => String(id)));
-    const existingOptions = Array.from(ctx.featureSelectEl.options);
+    ctx.featureSelectEl.replaceChildren();
 
-    existingOptions.forEach((opt) => {
-      if (!selectedSet.has(opt.value)) {
-        opt.remove();
-      }
-    });
+    const gradingFeatureGroup = document.createElement("optgroup");
+    gradingFeatureGroup.label = "Selected grading features";
+    const projectClassGroup = document.createElement("optgroup");
+    projectClassGroup.label = "Project classes";
     selected.forEach((featureId) => {
-      const value = String(featureId);
-      const existing = ctx.featureSelectEl.querySelector(`option[value="${value}"]`);
-      if (!existing) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = getFeatureLabel(ctx, featureId);
-        ctx.featureSelectEl.appendChild(option);
-      } else {
-        existing.textContent = getFeatureLabel(ctx, featureId);
-      }
+      const option = document.createElement("option");
+      option.value = String(featureId);
+      option.textContent = getFeatureLabel(ctx, featureId);
+      option.dataset.classSource = featureId < 0 ? "project_class" : "grading_feature";
+      (featureId < 0 ? projectClassGroup : gradingFeatureGroup).appendChild(option);
     });
+    if (gradingFeatureGroup.children.length) ctx.featureSelectEl.appendChild(gradingFeatureGroup);
+    if (projectClassGroup.children.length) ctx.featureSelectEl.appendChild(projectClassGroup);
 
     if (!selected.length) {
       state.activeFeatureId = null;
@@ -1247,7 +1244,7 @@
       </div>
 
       <div class="fgx-group fgx-feature-row">
-        <span class="fgx-block-label mb-0">Feature</span>
+        <span class="fgx-block-label mb-0">Annotation class</span>
         <span class="fgx-color-dot" data-fgx-color></span>
         <select class="form-select form-select-sm" data-fgx-feature></select>
       </div>
@@ -1278,30 +1275,34 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-assert-class title="Add image-level class assertion" aria-label="Add image-level class assertion">
           <i class="fa-solid fa-check"></i>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add bounding box (outline ROI)" aria-label="Add bounding box (outline ROI)">
-          <i class="fa-solid fa-square"></i>
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-rect title="Add rectangular segmentation" aria-label="Add rectangular segmentation">
-          <i class="fa-regular fa-square"></i>
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add ellipse ROI" aria-label="Add ellipse ROI">
-          <i class="fa-solid fa-circle"></i>
-        </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid title="Add pyramid ROI" aria-label="Add pyramid ROI">
-          <i class="fa-solid fa-caret-up"></i>
-        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-undo title="Undo last change">
           <i class="fa-solid fa-rotate-left"></i>
         </button>
       </div>
-      <div class="fgx-group fgx-tools-row fgx-tools-row--brush">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Paint filled region (+)">
-          <i class="fa-solid fa-paintbrush"></i>
-          <span class="ms-1">+</span>
+      <div class="fgx-group fgx-tool-category" data-fgx-tool-category="bounding-box">
+        <span class="fgx-block-label">Bounding box</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-box title="Add bounding box (outline only)" aria-label="Add bounding box">
+          <i class="fa-solid fa-square"></i><span class="ms-1">Box</span>
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract" title="Erase filled region (-)">
+      </div>
+      <div class="fgx-group fgx-tool-category" data-fgx-tool-category="segmentation">
+        <span class="fgx-block-label">Segmentation</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-rect title="Add filled rectangular segmentation, not a bounding box" aria-label="Add rectangular segmentation">
+          <i class="fa-regular fa-square"></i><span class="ms-1">Rectangle</span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-ellipse title="Add elliptical segmentation" aria-label="Add elliptical segmentation">
+          <i class="fa-solid fa-circle"></i><span class="ms-1">Ellipse</span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-add-pyramid title="Add pyramid segmentation" aria-label="Add pyramid segmentation">
+          <i class="fa-solid fa-caret-up"></i><span class="ms-1">Pyramid</span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="add" title="Paint segmentation (+)">
+          <i class="fa-solid fa-paintbrush"></i>
+          <span class="ms-1">Brush +</span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-fgx-mode="subtract" title="Erase segmentation (-)">
           <i class="fa-solid fa-eraser"></i>
-          <span class="ms-1">-</span>
+          <span class="ms-1">Brush −</span>
         </button>
       </div>
 
@@ -1342,8 +1343,7 @@
       </div>
       <div class="fgx-group w-100">
         <small class="text-muted">
-          Use Rect./Ellipse/Cone/Polygon for identifying regions of interest for that feature.
-          Use Brush tools for marking <strong>exact</strong> lesion.
+          Bounding box records an outline ROI. Rectangle, ellipse, pyramid, polygon, and brush are segmentation tools.
         </small>
       </div>
     `;

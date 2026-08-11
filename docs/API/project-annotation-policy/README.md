@@ -205,9 +205,12 @@ Client-side validation provides immediate feedback, but the deep policy service
 remains authoritative for validation and project/lab scope.
 
 Each HTML grading panel receives its server-resolved annotation context. The
-existing canvas editor adds active project classes to the grading-feature
-palette, disables incompatible tool controls, enforces single-instance classes
-in the browser, and submits the applied policy revision. Dual, linked,
+existing canvas editor presents selected grading features and active project
+classes as separate groups in the annotation-class selector. Drawing controls
+are grouped as Bounding box versus Segmentation; Rectangle is explicitly a
+filled segmentation tool and is not the bounding-box tool. The editor disables
+incompatible controls, enforces single-instance classes in the browser, and
+submits the applied policy revision. Dual, linked,
 EncounterSet package, intra-rater, and regrade submission paths repeat tool,
 localization, class identity, multiplicity, and revision validation before
 normalizing `feature_geometry_json`.

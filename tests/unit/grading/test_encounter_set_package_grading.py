@@ -125,6 +125,14 @@ def test_geometry_editor_uses_annotations_heading():
 
     assert '<span class="fw-semibold">Annotations</span>' in editor
     assert '>Current Disease</span>' not in editor
+    assert 'gradingFeatureGroup.label = "Selected grading features"' in editor
+    assert 'projectClassGroup.label = "Project classes"' in editor
+    assert 'option.dataset.classSource = featureId < 0 ? "project_class" : "grading_feature"' in editor
+    assert '>Annotation class</span>' in editor
+    assert 'data-fgx-tool-category="bounding-box"' in editor
+    assert 'data-fgx-tool-category="segmentation"' in editor
+    assert '>Rectangle</span>' in editor
+    assert 'not a bounding box' in editor
 
 
 def test_cached_package_form_delegates_to_workbench_transport(app, monkeypatch):

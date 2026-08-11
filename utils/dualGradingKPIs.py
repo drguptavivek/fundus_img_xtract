@@ -9,8 +9,24 @@ This design allows for better transaction management and session reuse.
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import selectinload, aliased
-from sqlalchemy import and_, or_, func, exists, case
-from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading, LinkedDiseaseGrading
+from sqlalchemy import and_, or_, func, exists, case, select
+from models import (
+    DirectImageUpload,
+    Disease,
+    DiseaseGrading,
+    EncounterFile,
+    EncounterSetImage,
+    Grade,
+    GradingTask,
+    LabUnit,
+    LinkedDiseaseGrading,
+    User,
+    UserDiseaseUnitRole,
+)
+from grading_allocation.eligibility import eligible_enforced_project_task_contexts
+from grading_allocation.exceptions import AllocationContextError
+from grading_allocation.models import ProjectGradingAllocationPolicy
+from grading_allocation.resolver import resolve_task_allocation_context
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
@@ -81,6 +97,73 @@ def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
     return query.filter(~mismatch_exists)
 
 
+def _eligible_pending_tasks(
+    db,
+    query,
+    *,
+    user_id: int,
+    role_slot: str,
+    enforced_project_ids: set[int],
+):
+    """Apply authoritative allocation eligibility to mixed legacy KPI candidates."""
+    tasks = (
+        query.distinct()
+        .options(
+            selectinload(GradingTask.encounter_file).selectinload(
+                EncounterFile.patient_encounter
+            ),
+            selectinload(GradingTask.direct_image),
+            selectinload(GradingTask.patient_encounter),
+            selectinload(GradingTask.encounter_set_image).selectinload(
+                EncounterSetImage.patient_encounter
+            ),
+            selectinload(GradingTask.encounter_set_package),
+        )
+        .all()
+    )
+    if not tasks or not enforced_project_ids:
+        return tasks
+    eligible_contexts = eligible_enforced_project_task_contexts(
+        db,
+        user_id=user_id,
+        task_slots=[(task, role_slot) for task in tasks],
+        enforced_project_ids=enforced_project_ids,
+    )
+    eligible_tasks = []
+    for task in tasks:
+        try:
+            context = resolve_task_allocation_context(db, task)
+        except AllocationContextError:
+            continue
+        if context.project_id in enforced_project_ids:
+            if (task.id, role_slot) in eligible_contexts:
+                eligible_tasks.append(task)
+        else:
+            eligible_tasks.append(task)
+    return eligible_tasks
+
+
+def _pending_count(
+    db,
+    query,
+    *,
+    user_id: int,
+    role_slot: str,
+    enforced_project_ids: set[int],
+) -> int:
+    if not enforced_project_ids:
+        return query.count()
+    return len(
+        _eligible_pending_tasks(
+            db,
+            query,
+            user_id=user_id,
+            role_slot=role_slot,
+            enforced_project_ids=enforced_project_ids,
+        )
+    )
+
+
 def get_user_kpi_pending_task_count_data(
     db,
     user_id: int,
@@ -125,6 +208,18 @@ def get_user_kpi_pending_task_count_data(
     
     if not eligible_roles:
         return {}
+
+    enforced_project_ids = (
+        set(
+            db.execute(
+                select(ProjectGradingAllocationPolicy.project_id).where(
+                    ProjectGradingAllocationPolicy.enforcement_enabled.is_(True)
+                )
+            ).scalars()
+        )
+        if exclude_enforced_project_encounter_sets
+        else set()
+    )
     
     # Group eligible lab units by disease, including linked diseases from primary permissions
     disease_lab_units = {}
@@ -199,7 +294,13 @@ def get_user_kpi_pending_task_count_data(
             if exclude_enforced_project_encounter_sets:
                 q = exclude_enforced_project_encounter_set_tasks(q)
             q = apply_scoping(q, GradingTask, user, 'grading')
-            resident_pending_count = q.count()
+            resident_pending_count = _pending_count(
+                db,
+                q,
+                user_id=user_id,
+                role_slot="resident",
+                enforced_project_ids=enforced_project_ids,
+            )
 
             # Include inconsistent resident tasks that are assignable by resident slot
             resident2_exists = (
@@ -222,7 +323,13 @@ def get_user_kpi_pending_task_count_data(
                     inconsistent_q
                 )
             inconsistent_q = apply_scoping(inconsistent_q, GradingTask, user, 'grading')
-            inconsistent_count = inconsistent_q.count()
+            inconsistent_count = _pending_count(
+                db,
+                inconsistent_q,
+                user_id=user_id,
+                role_slot="resident",
+                enforced_project_ids=enforced_project_ids,
+            )
 
             counts['resident_pending'] = resident_pending_count + inconsistent_count
         
@@ -250,7 +357,13 @@ def get_user_kpi_pending_task_count_data(
             if exclude_enforced_project_encounter_sets:
                 q = exclude_enforced_project_encounter_set_tasks(q)
             q = apply_scoping(q, GradingTask, user, 'grading')
-            counts['resident2_pending'] = q.count()
+            counts['resident2_pending'] = _pending_count(
+                db,
+                q,
+                user_id=user_id,
+                role_slot="resident2",
+                enforced_project_ids=enforced_project_ids,
+            )
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
         if has_resident2_role and info['can_arbitrate']:
@@ -301,16 +414,25 @@ def get_user_kpi_pending_task_count_data(
             q = apply_scoping(base_q, GradingTask, user, 'grading')
             
             # Use distinct because the join might produce multiple rows per primary task
-            eligible_arbitration_rows = (
-                q.with_entities(
-                    GradingTask.id,
-                    GradingTask.state,
-                    GradingTask.encounter_file_id,
-                    GradingTask.direct_image_upload_id,
+            if enforced_project_ids:
+                eligible_arbitration_rows = _eligible_pending_tasks(
+                    db,
+                    q,
+                    user_id=user_id,
+                    role_slot="arbitrator",
+                    enforced_project_ids=enforced_project_ids,
                 )
-                .distinct()
-                .all()
-            )
+            else:
+                eligible_arbitration_rows = (
+                    q.with_entities(
+                        GradingTask.id,
+                        GradingTask.state,
+                        GradingTask.encounter_file_id,
+                        GradingTask.direct_image_upload_id,
+                    )
+                    .distinct()
+                    .all()
+                )
 
             counts['arbitration_pending'] = len(eligible_arbitration_rows)
             counts['arbitration_breakdown'] = {}

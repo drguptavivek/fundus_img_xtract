@@ -301,6 +301,15 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     )
     db_session.add(image_task)
     db_session.flush()
+    unconfigured_encounter_task = GradingTask(
+        patient_encounter_id=encounter.id,
+        disease_id=disease.id,
+        lab_unit_id=lab.id,
+        grading_target_level="encounter",
+        state="pending",
+    )
+    db_session.add(unconfigured_encounter_task)
+    db_session.flush()
 
     targets, warnings = derive_project_targets(db_session, project.id)
     package_config.active = False
@@ -378,6 +387,12 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
         task=image_task,
         role_slot="resident",
     ) is True
+    assert is_user_eligible_for_task(
+        db_session,
+        user_id=resident.id,
+        task=unconfigured_encounter_task,
+        role_slot="resident",
+    ) is False
 
     queues = list_project_encounter_set_queues(db_session, user_id=resident.id)
     assert len(queues) == 1
@@ -395,7 +410,7 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
         resident.id,
         exclude_enforced_project_encounter_sets=True,
     )
-    assert mixed_kpis[disease.name]["resident_pending"] == 1
+    assert mixed_kpis[disease.name]["resident_pending"] == 2
     assert separated_kpis[disease.name]["resident_pending"] == 0
 
 

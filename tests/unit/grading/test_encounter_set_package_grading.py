@@ -122,7 +122,8 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "data-preset-status" in template
     assert "preset-modal-v2" in template
     assert "serial-image-load-v1" in template
-    assert "cdr-v1" in template
+    assert "Clear CDR/RDR" in template
+    assert "cdr-v2" in template
     assert "data-clear-selection" in template
     assert "data.existingSelectedFeatures = []" in template
     assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
@@ -220,6 +221,9 @@ def test_viewer_preset_modal_uses_explicit_modal_contract_and_full_settings():
     assert "Save current to ${i}" in viewer
     assert "deleteViewerPreset(presetNum)" in viewer
     assert "Preset ${presetNum} deleted." in viewer
+    assert "function resetCdrForRedraw()" in viewer
+    assert "CDR/RDR cleared. Click two points" in viewer
+    assert "setCdrActive(false);\n        showCdrBubble('CDR/RDR added to comments.'" in viewer
 
 
 def test_cached_package_form_delegates_to_workbench_transport(app, monkeypatch):

@@ -1513,7 +1513,17 @@
       } else {
         if (cdrPanel) cdrPanel.classList.remove('is-active');
         clearCdrState();
+        setCdrOverlayVisible(false);
       }
+    }
+
+    function resetCdrForRedraw(){
+      clearCdrState();
+      cdrStep = 1;
+      updateCdrStatus('Active');
+      showCdrBubble('CDR/RDR cleared. Click two points to draw the disc diameter line.', true);
+      if (cdrClear) cdrClear.disabled = false;
+      setCdrOverlayVisible(true);
     }
 
     function projectPointToLine(point, lineStart, lineEnd){
@@ -1639,7 +1649,7 @@
         if (!cdrOverlay) return;
         resizeCdrOverlay();
         drawCdrOverlay();
-        setCdrOverlayVisible(true);
+        setCdrOverlayVisible(cdrActive);
       }, 1500);
     }
 
@@ -1649,7 +1659,7 @@
       requestAnimationFrame(() => {
         cdrDrawPending = false;
         drawCdrOverlay();
-        setCdrOverlayVisible(true);
+        setCdrOverlayVisible(cdrActive);
       });
     }
 
@@ -1986,14 +1996,7 @@
     }
     if (cdrClear) {
       cdrClear.addEventListener('click', () => {
-        clearCdrState();
-        cdrActive = false;
-        if (cdrToggle) {
-          cdrToggle.setAttribute('aria-pressed', 'false');
-          cdrToggle.classList.remove('active');
-        }
-        if (cdrPanel) cdrPanel.classList.remove('is-active');
-        setViewerControlsLocked(false);
+        resetCdrForRedraw();
       });
     }
 
@@ -2007,28 +2010,16 @@
         }
         const target = selectCommentTarget();
         if (!target) {
-          updateCdrStatus('');
+          setCdrActive(false);
           showCdrBubble('No comments field found to store CDR/RDR text.', false);
-          cdrActive = false;
-          if (cdrToggle) {
-            cdrToggle.setAttribute('aria-pressed', 'false');
-            cdrToggle.classList.remove('active');
-          }
-          setViewerControlsLocked(false);
           return;
         }
         const nextValue = upsertCdrTag(target.value || '', tag);
         target.value = nextValue;
         target.dispatchEvent(new Event('input', { bubbles: true }));
         target.dispatchEvent(new Event('change', { bubbles: true }));
-        updateCdrStatus('Saved');
+        setCdrActive(false);
         showCdrBubble('CDR/RDR added to comments.', false);
-        cdrActive = false;
-        if (cdrToggle) {
-          cdrToggle.setAttribute('aria-pressed', 'false');
-          cdrToggle.classList.remove('active');
-        }
-        setViewerControlsLocked(false);
       });
     }
 

@@ -56,7 +56,9 @@ Each image panel includes the CDR/RDR measurement controls in the viewer
 toolbar. The grader marks the disc diameter and cup segment on the active
 image; the viewer calculates cup-to-disc and rim-to-disc ratios. **Done** adds
 the normalized measurement tag to the active target's comment and triggers the
-normal draft autosave path.
+normal draft autosave path, then exits measurement mode so zoom and filter
+controls are available again. **Clear CDR/RDR** resets the current points and
+returns the open tool to disc-diameter step 1.
 
 ## Endpoints
 

@@ -84,6 +84,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "gwb-toolbar-left" in template
     assert "gwb-toolbar-right" in template
     assert "flex-basis: 100%" in template
+    assert "gwb-adjustment-control" in template
+    assert "flex-wrap: nowrap" in template
+    assert "overflow-x: auto" in template
     assert "fa-circle-info" in template
     assert "imggr-bright" in template
     assert "imggr-contrast" in template

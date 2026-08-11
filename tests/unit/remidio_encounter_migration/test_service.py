@@ -187,7 +187,10 @@ def test_preview_resolves_historical_target_binding(db_session, core_test_data):
 
     assert preview.target_project_upload_profile_id == runtime["target_mapping"].id
     assert preview.target_binding_ids == (runtime["target_binding"].id,)
-    assert "Inactive historical target binding" in preview.warnings[0]
+    assert "does not select grading schemes" in preview.warnings[0]
+    assert preview.target_bindings[0]["site_custom_identifier"].startswith("site-")
+    assert preview.target_bindings[0]["purpose"].startswith("Corrected Remidio import lineage")
+    assert preview.target_grading_packages == ()
 
 
 def test_apply_moves_lineage_and_resets_incomplete_work(db_session, core_test_data):

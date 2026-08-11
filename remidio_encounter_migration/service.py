@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from auth.utils import utcnow
+from encounter_sets.grading_policy import effective_project_policy_dto
 from encounter_sets.models import EncounterSetAttachment
 from grading.workbench.models import (
     GradingSubmissionEventItem,
@@ -15,6 +16,7 @@ from grading.workbench.models import (
 )
 from models import (
     Consensus,
+    Disease,
     EncounterSetGradingPackage,
     EncounterSetGradingSubmission,
     EncounterSetImage,
@@ -126,6 +128,12 @@ def preview_migration(
         target_upload_profile_id=mapping.upload_profile_id,
         target_upload_profile_name=mapping.profile.name,
         target_binding_ids=tuple(sorted({row.id for row in binding_by_encounter.values()})),
+        target_bindings=_target_binding_details(binding_by_encounter),
+        target_grading_packages=_target_grading_packages(
+            db,
+            target_project_id=target_project_id,
+            target_upload_profile_id=mapping.upload_profile_id,
+        ),
         warnings=tuple(warnings),
         confirmation_token=token,
         task_count=task_count,
@@ -482,7 +490,7 @@ def _resolve_target_lineage(db: Session, *, target_project_id: int, encounters):
             )
         elif not chosen.active:
             warnings.append(
-                f"Inactive historical target binding {chosen.id} will be used for this correction."
+                f"Routing binding {chosen.id} is inactive and will be used only to correct historical import lineage; it does not select grading schemes."
             )
         binding_by_encounter[encounter.id] = chosen
         mapping_ids.add(chosen.project_upload_profile_id)
@@ -508,6 +516,73 @@ def _work_ids(db: Session, encounter_ids: tuple[int, ...]):
     )).all()]
     package_ids = [row[0] for row in db.query(EncounterSetGradingPackage.id).filter(EncounterSetGradingPackage.patient_encounter_id.in_(encounter_ids)).all()]
     return task_ids, package_ids
+
+
+def _target_binding_details(binding_by_encounter) -> tuple[dict, ...]:
+    bindings = {binding.id: binding for binding in binding_by_encounter.values()}
+    return tuple(
+        {
+            "id": binding.id,
+            "active": bool(binding.active),
+            "active_from_date": binding.active_from_date.isoformat(),
+            "active_to_date": binding.active_to_date.isoformat() if binding.active_to_date else None,
+            "site_custom_identifier": binding.source_rule.site_custom_identifier,
+            "device_type": binding.source_rule.remidio_device_type,
+            "purpose": "Corrected Remidio import lineage only; this does not select grading schemes.",
+        }
+        for binding in sorted(bindings.values(), key=lambda row: row.id)
+    )
+
+
+def _target_grading_packages(
+    db: Session,
+    *,
+    target_project_id: int,
+    target_upload_profile_id: int,
+) -> tuple[dict, ...]:
+    plan = effective_project_policy_dto(db, target_project_id)
+    package_rows = [
+        row for row in plan.get("packages", [])
+        if row.get("profile", {}).get("id") == target_upload_profile_id
+    ]
+    disease_ids = {
+        disease_id
+        for row in package_rows
+        for scope in row.get("package", {}).get("scopes", ())
+        for disease_id in (
+            scope.get("scope_disease_id"),
+            scope.get("encounter_grading_scheme_id"),
+            *scope.get("image_grading_scheme_ids", ()),
+        )
+        if disease_id is not None
+    }
+    disease_names = {
+        row.id: row.name
+        for row in db.query(Disease).filter(Disease.id.in_(disease_ids)).all()
+    } if disease_ids else {}
+    return tuple(
+        {
+            "name": " ".join(str(row["package"]["name"]).split()),
+            "code": row["package"]["code"],
+            "grading_mode": row["package"]["grading_mode"],
+            "encounter_set_type": row.get("encounter_set_type", {}).get("name"),
+            "scopes": [
+                {
+                    "scope": disease_names.get(scope.get("scope_disease_id"), "Unified"),
+                    "image_schemes": [
+                        disease_names.get(disease_id, str(disease_id))
+                        for disease_id in scope.get("image_grading_scheme_ids", ())
+                    ],
+                    "set_scheme": disease_names.get(
+                        scope.get("encounter_grading_scheme_id"),
+                        str(scope.get("encounter_grading_scheme_id")),
+                    ),
+                }
+                for scope in row["package"].get("scopes", ())
+            ],
+        }
+        for row in package_rows
+    )
 
 
 def _invalidate_sessions(db: Session, task_ids: list[int], package_ids: list[int]) -> int:

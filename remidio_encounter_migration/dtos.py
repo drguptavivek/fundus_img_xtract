@@ -55,6 +55,8 @@ class MigrationPreviewDTO:
     target_upload_profile_id: int
     target_upload_profile_name: str
     target_binding_ids: tuple[int, ...]
+    target_bindings: tuple[dict, ...]
+    target_grading_packages: tuple[dict, ...]
     warnings: tuple[str, ...]
     confirmation_token: str
     task_count: int
@@ -71,6 +73,8 @@ class MigrationPreviewDTO:
             "target_upload_profile_id": self.target_upload_profile_id,
             "target_upload_profile_name": self.target_upload_profile_name,
             "target_binding_ids": list(self.target_binding_ids),
+            "target_bindings": list(self.target_bindings),
+            "target_grading_packages": list(self.target_grading_packages),
             "warnings": list(self.warnings),
             "confirmation_token": self.confirmation_token,
             "task_count": self.task_count,

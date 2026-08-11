@@ -70,8 +70,12 @@ Each row includes image/task/grade/package counts plus `movable` and `blockers`.
 }
 ```
 
-The response includes resolved target profile/binding details, reset counts,
-warnings, and a short-lived state-derived `confirmation_token`.
+The response includes the resolved target upload profile, its exact grading
+packages/scopes, Remidio source site/device and historical binding details,
+reset counts, warnings, and a short-lived state-derived `confirmation_token`.
+The Remidio binding records corrected import lineage; it does not choose the
+grading schemes. The admin UI displays and can copy the token, which must be
+entered exactly before apply is enabled.
 
 ### Apply
 

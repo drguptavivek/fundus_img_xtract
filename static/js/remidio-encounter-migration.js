@@ -33,6 +33,35 @@
     return element.innerHTML;
   }
 
+  function gradingPackageHtml(packages) {
+    if (!Array.isArray(packages) || !packages.length) {
+      return '<div class="alert alert-danger mb-0">No grading packages are configured for the resolved target profile.</div>';
+    }
+    return '<div class="fw-semibold mb-2">Target grading packages used after re-verification</div>' +
+      '<div class="list-group">' + packages.map(function (item) {
+        const scopes = (item.scopes || []).map(function (scope) {
+          const imageSchemes = (scope.image_schemes || []).join(', ') || 'None';
+          return '<li><strong>' + escapeHtml(scope.scope) + '</strong>: IMAGE — ' + escapeHtml(imageSchemes) +
+            '; SET — ' + escapeHtml(scope.set_scheme) + '</li>';
+        }).join('');
+        return '<div class="list-group-item"><div class="fw-semibold">' + escapeHtml(item.name) +
+          ' <span class="badge text-bg-light border">' + escapeHtml(item.grading_mode) + '</span></div>' +
+          '<div class="small text-muted">' + escapeHtml(item.encounter_set_type) + '</div><ul class="small mb-0 mt-1">' + scopes + '</ul></div>';
+      }).join('') + '</div>';
+  }
+
+  function routingHtml(bindings) {
+    if (!Array.isArray(bindings) || !bindings.length) return '';
+    return bindings.map(function (binding) {
+      const activeText = binding.active ? 'active' : 'inactive historical';
+      const dateRange = binding.active_from_date + ' to ' + (binding.active_to_date || 'open ended');
+      return '<div class="alert alert-info mb-2"><strong>Remidio routing correction:</strong> binding ' + binding.id +
+        ' maps site <code>' + escapeHtml(binding.site_custom_identifier) + '</code>, device <code>' +
+        escapeHtml(binding.device_type) + '</code> (' + activeText + '; ' + escapeHtml(dateRange) + '). ' +
+        '<strong>This records import lineage only and does not choose the grading schemes.</strong></div>';
+    }).join('');
+  }
+
   function setLoading(active, text) {
     document.getElementById('migration-loader-message').textContent = text || 'Working…';
     loader.classList.toggle('d-none', !active);
@@ -145,6 +174,8 @@
       document.getElementById('migration-preview-summary').innerHTML =
         '<p class="mb-2"><strong>' + preview.encounters.length + '</strong> EncounterSet(s) will move from <strong>' + escapeHtml(preview.source_project.title) + '</strong> to <strong>' + escapeHtml(preview.target_project.title) + '</strong>.</p>' +
         '<p class="mb-0">Target profile: <strong>' + escapeHtml(preview.target_upload_profile_name) + '</strong>. Reset: <strong>' + preview.task_count + '</strong> tasks, <strong>' + preview.grade_count + '</strong> draft grades, and <strong>' + preview.package_count + '</strong> pending packages.</p>';
+      document.getElementById('migration-target-grading').innerHTML = gradingPackageHtml(preview.target_grading_packages);
+      document.getElementById('migration-routing-lineage').innerHTML = routingHtml(preview.target_bindings);
       const warningBox = document.getElementById('migration-preview-warnings');
       warningBox.classList.toggle('d-none', !preview.warnings.length);
       warningBox.textContent = preview.warnings.join(' ');
@@ -162,6 +193,19 @@
   });
 
   confirmation.addEventListener('input', updateActions);
+  document.getElementById('migration-copy-token').addEventListener('click', async function () {
+    if (!preview) return;
+    try {
+      await navigator.clipboard.writeText(preview.confirmation_token);
+      confirmation.value = preview.confirmation_token;
+      updateActions();
+      notify('Confirmation token copied.', 'success');
+    } catch (_error) {
+      confirmation.value = preview.confirmation_token;
+      confirmation.select();
+      updateActions();
+    }
+  });
   applyButton.addEventListener('click', async function () {
     if (!preview || confirmation.value.trim() !== preview.confirmation_token) return;
     setLoading(true, 'Moving EncounterSets and resetting source tasks…');

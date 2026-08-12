@@ -73,6 +73,7 @@ class GradeChoiceDTO:
 @dataclass(frozen=True)
 class DiseaseDefinitionDTO:
     disease: str
+    target_level: str
     relationship: str
     grades: tuple[GradeChoiceDTO, ...]
 
@@ -86,7 +87,8 @@ class GradingTargetDTO:
     encounter_set_type: str
     package: str
     grading_mode: str
-    applicability: str
+    task_creation: str
+    package_applicability: str
     image_rules: tuple[str, ...]
     definitions: tuple[DiseaseDefinitionDTO, ...]
 

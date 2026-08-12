@@ -150,7 +150,7 @@ def _targets(db, mappings):
                     seen.add(key)
                     targets.append(GradingTargetDTO(f"single-{p.id}-{link.disease_id}", "Single-image disease-wise",
                         link.disease.name, p.name, "", "", "disease specific", "Uploader-selected",
-                        (), _definitions(db, link.disease)))
+                        "Uploader-selected", (), _definitions(db, link.disease, target_level="Image-level")))
         for est in p.encounter_set_types:
             if not est.active or not est.encounter_set_type.active:
                 continue
@@ -159,9 +159,28 @@ def _targets(db, mappings):
                     continue
                 encounter_schemes = [x for x in package.encounter_grading_schemes if x.active]
                 primary = encounter_schemes[0].disease if encounter_schemes else package.default_image_grading_scheme
+                root_id = _package_root_disease_id(package)
+                root_scheme = next((x for x in package.image_grading_schemes if x.active and x.disease_id == root_id), None)
+                active_image_schemes = [x for x in package.image_grading_schemes if x.active and x.auto_create_policy != "never"]
+                task_creation = _human(package.applicability)
                 rules = []
+                if root_scheme and root_scheme.auto_create_policy == "positive_plus_negative_controls":
+                    linked_names = [x.disease.name for x in active_image_schemes if x.disease_id != root_id]
+                    image_scope = root_scheme.disease.name
+                    if linked_names:
+                        image_scope += " and linked " + ", ".join(linked_names)
+                    task_creation = (
+                        f"Referral-positive {root_scheme.disease.name} EncounterSets; plus "
+                        f"{root_scheme.negative_controls_per_positive} {root_scheme.disease.name}-negative "
+                        f"control EncounterSets per positive"
+                    )
+                    rules.append(f"Image grading scope: {image_scope} tasks on the same selected images")
                 for scheme in package.image_grading_schemes:
                     if not scheme.active or scheme.auto_create_policy == "never":
+                        continue
+                    if root_scheme and root_scheme.auto_create_policy == "positive_plus_negative_controls":
+                        if scheme.metadata_field_key:
+                            rules.append(f"{scheme.disease.name}: only when {scheme.metadata_field_key} = {scheme.metadata_match_value}")
                         continue
                     rule = f"{scheme.disease.name}: {_human(scheme.auto_create_policy)}"
                     if scheme.negative_controls_per_positive:
@@ -170,24 +189,27 @@ def _targets(db, mappings):
                         rule += f"; when {scheme.metadata_field_key} = {scheme.metadata_match_value}"
                     rules.append(rule)
                 disease = primary.name if primary else "Unified EncounterSet"
-                definition_diseases = []
-                for configured in [*(x.disease for x in encounter_schemes),
-                                   *(x.disease for x in package.image_grading_schemes if x.active)]:
-                    if configured.id not in {x.id for x in definition_diseases}:
-                        definition_diseases.append(configured)
                 definitions = tuple(
-                    definition
-                    for configured in definition_diseases
-                    for definition in _definitions(db, configured)
+                    [
+                        _definition(db, scheme.disease, target_level="Encounter-level", relationship="Encounter grade")
+                        for scheme in encounter_schemes
+                    ]
+                    + [
+                        _definition(
+                            db, scheme.disease, target_level="Image-level",
+                            relationship="Root disease" if scheme.disease_id == root_id else "Linked disease",
+                        )
+                        for scheme in package.image_grading_schemes if scheme.active
+                    ]
                 )
                 targets.append(GradingTargetDTO(f"package-{package.id}",
                     "EncounterSet unified tasks" if package.grading_mode == "unified" else "EncounterSet disease-scoped tasks",
-                    disease, p.name, est.encounter_set_type.name, package.name, _human(package.grading_mode),
-                    _human(package.applicability), tuple(rules), definitions))
+                    disease, p.name, est.encounter_set_type.name, _clean_text(package.name), _human(package.grading_mode),
+                    task_creation, _human(package.applicability), tuple(rules), definitions))
     return tuple(targets)
 
 
-def _definitions(db, disease):
+def _definitions(db, disease, *, target_level):
     if disease is None:
         return ()
     diseases = [(disease, "Primary")]
@@ -200,9 +222,34 @@ def _definitions(db, disease):
         grades = db.execute(select(DiseaseGrading).options(selectinload(DiseaseGrading.features)).where(
             DiseaseGrading.disease_id == item.id, DiseaseGrading.is_active.is_(True)
         ).order_by(DiseaseGrading.display_order)).scalars()
-        result.append(DiseaseDefinitionDTO(item.name, relationship, tuple(
+        result.append(DiseaseDefinitionDTO(item.name, target_level, relationship, tuple(
             GradeChoiceDTO(g.impression, g.guidelines or "", tuple(f.label for f in sorted(g.features, key=lambda x: x.sr_no))) for g in grades)))
     return tuple(result)
+
+
+def _definition(db, disease, *, target_level, relationship):
+    grades = db.execute(select(DiseaseGrading).options(selectinload(DiseaseGrading.features)).where(
+        DiseaseGrading.disease_id == disease.id, DiseaseGrading.is_active.is_(True)
+    ).order_by(DiseaseGrading.display_order)).scalars()
+    return DiseaseDefinitionDTO(disease.name, target_level, relationship, tuple(
+        GradeChoiceDTO(g.impression, g.guidelines or "", tuple(
+            f.label for f in sorted(g.features, key=lambda x: x.sr_no)
+        )) for g in grades))
+
+
+def _package_root_disease_id(package):
+    scope_config = package.scope_config_json or {}
+    configured = scope_config.get("root_image_grading_scheme_id")
+    if not configured:
+        configured = next((
+            scope.get("scope_disease_id")
+            for scope in scope_config.get("scopes", [])
+            if isinstance(scope, dict) and scope.get("link_role") == "root"
+        ), None)
+    try:
+        return int(configured) if configured else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _annotation(db, project_id):
@@ -271,9 +318,39 @@ def _users(db, project_id, mappings, allowed_lab_ids):
 
 def _referrals(db, project_id, mappings):
     grading = {d.disease.name for m in mappings for d in m.profile.diseases}
+    sampled_roots = set()
+    linked_targets = set()
+    for mapping in mappings:
+        for est in mapping.profile.encounter_set_types:
+            if not est.active:
+                continue
+            for package in est.grading_packages:
+                if not package.active or package.applicability == "disabled":
+                    continue
+                root_id = _package_root_disease_id(package)
+                for scheme in package.image_grading_schemes:
+                    if not scheme.active:
+                        continue
+                    grading.add(scheme.disease.name)
+                    if scheme.disease_id == root_id and scheme.auto_create_policy == "positive_plus_negative_controls":
+                        sampled_roots.add(scheme.disease.name)
+                    elif scheme.disease_id != root_id:
+                        linked_targets.add(scheme.disease.name)
     explicit = {x.disease.name for x in db.execute(select(ProjectReferralDisease).options(selectinload(ProjectReferralDisease.disease)).where(
         ProjectReferralDisease.project_id == project_id, ProjectReferralDisease.active.is_(True))).scalars()}
-    return tuple(ReferralDiseaseDTO(name, "Grading target" if name in grading else "Referral only") for name in sorted(grading | explicit))
+    all_diseases = grading | explicit
+    result = []
+    for name in sorted(all_diseases):
+        if name in sampled_roots:
+            source = "Sampling trigger and grading target"
+        elif name in linked_targets:
+            source = "Linked grading target"
+        elif name in grading:
+            source = "Grading target"
+        else:
+            source = "Referral only"
+        result.append(ReferralDiseaseDTO(name, source))
+    return tuple(result)
 
 
 def _lab_visible(lab_id, allowed): return allowed is None or lab_id in allowed
@@ -282,6 +359,7 @@ def _grant_visible(grant, allowed):
     if grant.scope_type == "lab_unit": return grant.lab_unit_id in allowed
     return any(lab.hospital_id == grant.hospital_id for lab in grant.hospital.lab_units if lab.id in allowed)
 def _human(value): return str(value or "").replace("_", " ").strip().title()
+def _clean_text(value): return " ".join(str(value or "").split())
 def _labels(values):
     items = [str(x) for x in values if x]
     return ", ".join(items) if items else "None"

@@ -46,6 +46,15 @@ Wadhwani inference counts; and the currently effective, enabled configuration:
 Disabled configuration is omitted. Metadata field definitions may identify a
 field as PII, but metadata values are never returned.
 
+Each grading target distinguishes `package_applicability` (the stored outer
+package gate) from `task_creation` (the runtime-effective interpretation). For
+positive-plus-negative-control disease packages, `task_creation` identifies
+the referral-positive root disease and control ratio. Grade definitions carry
+`target_level` so encounter-level status grades and image-level disease grades
+can be rendered separately. Referral diseases identify whether they are a
+sampling trigger, linked grading target, ordinary grading target, or
+referral-only option.
+
 ## Remembered project navigation
 
 The HTML workspace stores the selected project ID in browser local storage.

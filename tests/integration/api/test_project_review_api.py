@@ -2,8 +2,10 @@ from datetime import date
 import uuid
 
 from data_authorization.models import ProjectRoleGrant
+from encounter_set_types.models import EncounterSetType
 from models import (
     DirectImageUpload,
+    Disease,
     EncounterSetGradingPackage,
     EncounterSetImage,
     GradingTask,
@@ -17,6 +19,10 @@ from upload_profiles.models import (
     ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileDisease,
+    UploadProfileEncounterSetType,
+    UploadProfileEncounterSetTypeGradingPackage,
+    UploadProfileEncounterSetTypePackageEncounterScheme,
+    UploadProfileEncounterSetTypePackageImageScheme,
     UploadProfileKind,
 )
 
@@ -65,11 +71,57 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
     db_session.flush()
     db_session.add_all([
         UploadProfileKind(upload_profile_id=profile.id, upload_kind="direct_image"),
+        UploadProfileKind(upload_profile_id=profile.id, upload_kind="encounter_set"),
         UploadProfileDisease(upload_profile_id=profile.id, disease_id=disease.id, is_default=True),
         ProjectUploadProfileAssignment(
             project_upload_profile_id=mapping.id,
             user_id=user.id,
             lab_unit_id=allowed_lab.id,
+            active=True,
+        ),
+    ])
+    encounter_disease = Disease(name="Review Glaucoma Encounter Status", grading_scope="encounter")
+    encounter_type = EncounterSetType(name="Review Encounter Type", code="review_encounter_type", active=True)
+    db_session.add_all([encounter_disease, encounter_type])
+    db_session.flush()
+    est_config = UploadProfileEncounterSetType(
+        upload_profile_id=profile.id,
+        encounter_set_type_id=encounter_type.id,
+        active=True,
+    )
+    db_session.add(est_config)
+    db_session.flush()
+    package_config = UploadProfileEncounterSetTypeGradingPackage(
+        upload_profile_encounter_set_type_id=est_config.id,
+        name="Review Glaucoma Package",
+        code="review_glaucoma",
+        applicability="always",
+        grading_mode="disease_specific",
+        scope_config_json={
+            "root_image_grading_scheme_id": disease.id,
+            "scopes": [{
+                "scope_disease_id": disease.id,
+                "image_grading_scheme_ids": [disease.id],
+                "encounter_grading_scheme_id": encounter_disease.id,
+                "parent_scope_disease_id": None,
+                "link_role": "root",
+            }],
+        },
+        active=True,
+    )
+    db_session.add(package_config)
+    db_session.flush()
+    db_session.add_all([
+        UploadProfileEncounterSetTypePackageImageScheme(
+            package_id=package_config.id,
+            disease_id=disease.id,
+            auto_create_policy="positive_plus_negative_controls",
+            negative_controls_per_positive=3,
+            active=True,
+        ),
+        UploadProfileEncounterSetTypePackageEncounterScheme(
+            package_id=package_config.id,
+            disease_id=encounter_disease.id,
             active=True,
         ),
     ])
@@ -166,6 +218,17 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         configuration = summary.get_json()["data"]
         assert [source["name"] for source in configuration["sources"]] == ["Review Direct Intake"]
         assert configuration["grading_targets"][0]["target_type"] == "Single-image disease-wise"
+        sampled_target = next(row for row in configuration["grading_targets"] if row["package"] == "Review Glaucoma Package")
+        assert sampled_target["package_applicability"] == "Always"
+        assert sampled_target["task_creation"] == (
+            "Referral-positive Glaucoma EncounterSets; plus 3 Glaucoma-negative "
+            "control EncounterSets per positive"
+        )
+        assert {item["target_level"] for item in sampled_target["definitions"]} == {
+            "Encounter-level", "Image-level"
+        }
+        referral = {item["disease"]: item["source"] for item in configuration["referral_diseases"]}
+        assert referral["Glaucoma"] == "Sampling trigger and grading target"
         assert configuration["configured_users"][0]["roles"] == ["collaborator"]
         assert "Hidden Disabled Intake" not in summary.get_data(as_text=True)
         summary_page = client.get(f"/projects/{project.id}/summary")

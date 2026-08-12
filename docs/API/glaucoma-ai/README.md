@@ -183,6 +183,7 @@ Status: `201 Created`
 - Duplicate direct images are represented as links to the existing canonical `DirectImageUpload`. The upload job item stores the existing image UUID and task ID, so the caller can display the previous thumbnail and the latest, pending, or newly queued Wadhwani result for the selected profile's model.
 - Successful uploads are stored as unverified direct images with a glaucoma task for AI inference. Human grading remains blocked until the image is verified through the normal verification workflow.
 - Wadhwani inference runs asynchronously through `celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task`. Poll `/recent/results` or `/<image_uuid>/result` for `inference.status`; use `/recent/results` when avoiding media reloads.
+- The Wadhwani client reuses process-local HTTPS connections and retries idempotent presigned S3 `PUT` uploads up to three times for transient connection, DNS, throttling, or server failures. Upload errors stored in inference runs omit the presigned URL and signature.
 
 ### Example
 

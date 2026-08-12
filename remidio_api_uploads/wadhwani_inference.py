@@ -28,8 +28,8 @@ WADHWANI_ENCOUNTER_SET_JOB_TYPE = "encounter_set_wadhwani_inference"
 WADHWANI_RETRY_JOB_TYPE = "wai_api_statistics_retry"
 AI_PROBABILITY_PATTERN = re.compile(r"AI probability:\s*([0-9.]+)", flags=re.IGNORECASE)
 PAGE_ROLES = ("admin", "local_admin", "data_manager")
-ENCOUNTER_SETS_PER_PAGE = 10
-MAX_ENCOUNTER_SETS_PER_BATCH = 10
+ENCOUNTER_SETS_PER_PAGE = 25
+MAX_ENCOUNTER_SETS_PER_BATCH = 25
 
 
 @dataclass(frozen=True)
@@ -163,7 +163,17 @@ def _page_context(
         include_prior=filters.include_prior,
         page=filters.page,
     )
-    encounters = _encounter_cards(db, filters, integration.ai_model_id if integration else None) if include_encounters else None
+    glaucoma = get_glaucoma_disease(db) if include_encounters else None
+    encounters = (
+        _encounter_cards(
+            db,
+            filters,
+            integration.ai_model_id if integration else None,
+            glaucoma.id if glaucoma else None,
+        )
+        if include_encounters
+        else None
+    )
     return {
         "page_title": "EncounterSet Wadhwani Inference",
         "linked_integration": integration,
@@ -185,7 +195,12 @@ def _cameras(db) -> list[dict[str, Any]]:
     return [{"id": camera.id, "name": camera.name} for camera in db.execute(select(Camera).order_by(Camera.name)).scalars().all()]
 
 
-def _encounter_cards(db, filters: InferenceFilters, ai_model_id: int | None) -> dict[str, Any]:
+def _encounter_cards(
+    db,
+    filters: InferenceFilters,
+    ai_model_id: int | None,
+    glaucoma_disease_id: int | None,
+) -> dict[str, Any]:
     if not filters.project_id:
         return {
             "rows": [],
@@ -231,7 +246,11 @@ def _encounter_cards(db, filters: InferenceFilters, ai_model_id: int | None) -> 
         if images:
             matched_rows.append({"encounter": encounter, "ocr": ocr_summary, "images": images})
 
-    status_by_image_id = _wadhwani_status_by_image(db, image_rows, ai_model_id) if image_rows and ai_model_id else {}
+    status_by_image_id = (
+        _wadhwani_status_by_image(db, image_rows, ai_model_id, glaucoma_disease_id)
+        if image_rows and ai_model_id and glaucoma_disease_id
+        else {}
+    )
     cards: list[dict[str, Any]] = []
     total_image_count = 0
     for row in matched_rows:
@@ -288,12 +307,22 @@ def _image_matches_filters(image, filters: InferenceFilters) -> bool:
     return True
 
 
-def _wadhwani_status_by_image(db, images: list[Any], ai_model_id: int) -> dict[int, dict[str, Any]]:
+def _wadhwani_status_by_image(
+    db,
+    images: list[Any],
+    ai_model_id: int,
+    glaucoma_disease_id: int,
+) -> dict[int, dict[str, Any]]:
     image_ids = [image.id for image in images]
     tasks = db.execute(
-        select(GradingTask).where(GradingTask.encounter_set_image_id.in_(image_ids))
+        select(GradingTask).where(
+            GradingTask.encounter_set_image_id.in_(image_ids),
+            GradingTask.disease_id == glaucoma_disease_id,
+        )
     ).scalars().all()
-    task_by_image_id = {task.encounter_set_image_id: task for task in tasks}
+    tasks_by_image_id: dict[int, list[GradingTask]] = {}
+    for task in tasks:
+        tasks_by_image_id.setdefault(task.encounter_set_image_id, []).append(task)
     task_ids = [task.id for task in tasks]
     latest_runs: dict[int, AIInferenceRun] = {}
     if task_ids:
@@ -313,10 +342,24 @@ def _wadhwani_status_by_image(db, images: list[Any], ai_model_id: int) -> dict[i
         ).scalars().all()
         for grade in grade_rows:
             grades.setdefault(grade.task_id, grade)
-    return {
-        image_id: _status_payload(task_by_image_id.get(image_id), latest_runs, grades)
-        for image_id in image_ids
-    }
+    status_by_image_id = {}
+    for image_id in image_ids:
+        image_tasks = tasks_by_image_id.get(image_id, [])
+        task_with_prior = next(
+            (
+                task
+                for task in sorted(image_tasks, key=lambda row: row.id, reverse=True)
+                if task.id in latest_runs or task.id in grades
+            ),
+            None,
+        )
+        fallback_task = min(image_tasks, key=lambda row: row.id) if image_tasks else None
+        status_by_image_id[image_id] = _status_payload(
+            task_with_prior or fallback_task,
+            latest_runs,
+            grades,
+        )
+    return status_by_image_id
 
 
 def _status_payload(task, latest_runs: dict[int, AIInferenceRun], grades: dict[int, Grade]) -> dict[str, Any]:

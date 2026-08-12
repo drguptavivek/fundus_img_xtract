@@ -55,6 +55,11 @@ can be rendered separately. Referral diseases identify whether they are a
 sampling trigger, linked grading target, ordinary grading target, or
 referral-only option.
 
+Grade `guidelines` are returned as sanitized rich text. Only the shared
+grading-scheme allow-list of basic formatting tags is retained; attributes and
+unsupported tags are removed. HTML clients may render this sanitized field,
+while other clients may convert it to plain text.
+
 ## Remembered project navigation
 
 The HTML workspace stores the selected project ID in browser local storage.

@@ -6,6 +6,7 @@ from encounter_set_types.models import EncounterSetType
 from models import (
     DirectImageUpload,
     Disease,
+    DiseaseGrading,
     EncounterSetGradingPackage,
     EncounterSetImage,
     GradingTask,
@@ -84,6 +85,12 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
     encounter_type = EncounterSetType(name="Review Encounter Type", code="review_encounter_type", active=True)
     db_session.add_all([encounter_disease, encounter_type])
     db_session.flush()
+    db_session.add(DiseaseGrading(
+        disease_id=encounter_disease.id,
+        impression="Formatted status",
+        guidelines='<p onclick="unsafe()">Readable <strong>guidance</strong>.</p>',
+        is_active=True,
+    ))
     est_config = UploadProfileEncounterSetType(
         upload_profile_id=profile.id,
         encounter_set_type_id=encounter_type.id,
@@ -227,6 +234,13 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert {item["target_level"] for item in sampled_target["definitions"]} == {
             "Encounter-level", "Image-level"
         }
+        encounter_definition = next(
+            item for item in sampled_target["definitions"]
+            if item["disease"] == "Review Glaucoma Encounter Status"
+        )
+        assert encounter_definition["grades"][0]["guidelines"] == (
+            "<p>Readable <strong>guidance</strong>.</p>"
+        )
         referral = {item["disease"]: item["source"] for item in configuration["referral_diseases"]}
         assert referral["Glaucoma"] == "Sampling trigger and grading target"
         assert configuration["configured_users"][0]["roles"] == ["collaborator"]
@@ -234,6 +248,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         summary_page = client.get(f"/projects/{project.id}/summary")
         assert summary_page.status_code == 200
         assert b"Effective configuration" in summary_page.data
+        assert b'<p>Readable <strong>guidance</strong>.</p>' in summary_page.data
+        assert b"onclick" not in summary_page.data
+        assert b"&lt;p&gt;Readable" not in summary_page.data
         assert b"SECRET PATIENT NAME" not in summary_page.data
 
         uploads = client.get(f"/projects/{project.id}/uploads")

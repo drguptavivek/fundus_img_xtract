@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from data_authorization.models import ProjectRoleGrant
 from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_schemes.service import sanitize_guidelines_html
 from iitk_api_integration.models import IITKApiProjectConfig
 from models import Disease, DiseaseGrading, LinkedDiseaseGrading, ProjectReferralDisease
 from project_annotations.models import ProjectAnnotationPolicy
@@ -223,7 +224,7 @@ def _definitions(db, disease, *, target_level):
             DiseaseGrading.disease_id == item.id, DiseaseGrading.is_active.is_(True)
         ).order_by(DiseaseGrading.display_order)).scalars()
         result.append(DiseaseDefinitionDTO(item.name, target_level, relationship, tuple(
-            GradeChoiceDTO(g.impression, g.guidelines or "", tuple(f.label for f in sorted(g.features, key=lambda x: x.sr_no))) for g in grades)))
+            GradeChoiceDTO(g.impression, sanitize_guidelines_html(g.guidelines) or "", tuple(f.label for f in sorted(g.features, key=lambda x: x.sr_no))) for g in grades)))
     return tuple(result)
 
 
@@ -232,7 +233,7 @@ def _definition(db, disease, *, target_level, relationship):
         DiseaseGrading.disease_id == disease.id, DiseaseGrading.is_active.is_(True)
     ).order_by(DiseaseGrading.display_order)).scalars()
     return DiseaseDefinitionDTO(disease.name, target_level, relationship, tuple(
-        GradeChoiceDTO(g.impression, g.guidelines or "", tuple(
+        GradeChoiceDTO(g.impression, sanitize_guidelines_html(g.guidelines) or "", tuple(
             f.label for f in sorted(g.features, key=lambda x: x.sr_no)
         )) for g in grades))
 

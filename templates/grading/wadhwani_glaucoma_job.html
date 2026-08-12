@@ -14,7 +14,7 @@
   <div
     id="wadhwaniJobStatus"
     hx-get="{{ url_for('grading.wadhwani_glaucoma_inference_job_status_partial', job_token=job_token) }}"
-    hx-trigger="load, every 2s"
+    hx-trigger="load, every 5s"
     hx-swap="innerHTML">
     <div class="card shadow-sm">
       <div class="card-body text-muted">Loading job status…</div>

@@ -19,7 +19,7 @@
 
   <div id="wadhwaniEncounterSetJobStatus"
        hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_job_status', job_token=job_token) }}"
-       hx-trigger="load, every 2s"
+       hx-trigger="load, every 5s"
        hx-swap="innerHTML">
     <div class="card shadow-sm"><div class="card-body text-muted">Loading job status…</div></div>
   </div>

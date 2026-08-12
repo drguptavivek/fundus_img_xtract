@@ -134,7 +134,10 @@ def encounter_set_wadhwani_inference_job_status(job_token: str):
         payload = _load_job_payload(db, job_token)
         if payload is None:
             abort(404)
-    return render_template("remidio_api_uploads/_wadhwani_inference_job_status.html", job=payload)
+    return (
+        render_template("remidio_api_uploads/_wadhwani_inference_job_status.html", job=payload),
+        286 if payload["done"] else 200,
+    )
 
 
 def _page_context(

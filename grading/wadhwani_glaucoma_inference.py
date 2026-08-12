@@ -176,7 +176,10 @@ def wadhwani_glaucoma_inference_job_status_partial(job_token: str):
         payload = _load_wadhwani_job_payload(db, job_token)
         if payload is None:
             abort(404)
-    return render_template("grading/_wadhwani_glaucoma_job_status.html", job=payload)
+    return (
+        render_template("grading/_wadhwani_glaucoma_job_status.html", job=payload),
+        286 if payload["done"] else 200,
+    )
 
 
 def _allowed_lab_units(db) -> list[LabUnit]:

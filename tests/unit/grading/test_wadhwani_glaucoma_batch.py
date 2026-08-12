@@ -54,6 +54,20 @@ def test_wadhwani_batch_page_renders_for_admin(client, login_user, db_session):
     assert b"Image-based Inference" in project_response.data
 
 
+def test_wadhwani_job_pages_poll_every_five_seconds(client, login_user):
+    login_user("test_admin", "Test@2026")
+
+    image_job = client.get("/grading/wadhwani-glaucoma-inference/jobs/image-job-token")
+    project_job = client.get(
+        "/uploads/encountersets/wadhwani_inference/jobs/project-job-token"
+    )
+
+    assert image_job.status_code == 200
+    assert b'hx-trigger="load, every 5s"' in image_job.data
+    assert project_job.status_code == 200
+    assert b'hx-trigger="load, every 5s"' in project_job.data
+
+
 def test_wadhwani_batch_submit_creates_job_and_enqueues_task(client, login_user, db_session, monkeypatch):
     _seed_linked_wadhwani_model(db_session)
     hospital = Hospital(name="AIIMS Submit")
@@ -93,6 +107,34 @@ def test_wadhwani_batch_submit_creates_job_and_enqueues_task(client, login_user,
 
     job = db_session.query(Job).filter(Job.upload_type == "wadhwani_glaucoma_inference").one()
     assert job.status == "queued"
+
+    queued_status = client.get(f"{location}/status")
+    assert queued_status.status_code == 200
+
+    job.status = "done"
+    db_session.flush()
+
+    done_status = client.get(f"{location}/status")
+    assert done_status.status_code == 286
+    assert b'data-job-done="true"' in done_status.data
+
+
+def test_encounter_set_terminal_job_status_stops_htmx_polling(client, login_user, db_session):
+    job = Job(
+        token="terminal-encounter-wadhwani-job",
+        status="partial",
+        upload_type="encounter_set_wadhwani_inference",
+    )
+    db_session.add(job)
+    db_session.flush()
+    login_user("test_admin", "Test@2026")
+
+    response = client.get(
+        "/uploads/encountersets/wadhwani_inference/jobs/terminal-encounter-wadhwani-job/status"
+    )
+
+    assert response.status_code == 286
+    assert b'data-job-done="true"' in response.data
 
 
 def test_wadhwani_batch_rejects_more_than_100_tasks(client, login_user, monkeypatch):

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy import exists, func, or_, select, true
 from sqlalchemy.orm import Session, aliased, selectinload
 
+from data_authorization.service import project_role_grant_exists_clause, user_has_project_role
 from models import LabUnit, Project, User, user_lab_units
 
 from .models import ProjectEncounterSetPermission
@@ -29,6 +30,18 @@ CAPABILITY_COLUMNS = {
     CAPABILITY_ANALYTICS_VIEW: ProjectEncounterSetPermission.can_view_analytics,
     CAPABILITY_DATASET_CREATION: ProjectEncounterSetPermission.can_create_datasets,
     CAPABILITY_REGRADE_ADJUDICATION: ProjectEncounterSetPermission.can_adjudicate_regrades,
+}
+
+CAPABILITY_ROLES = {
+    CAPABILITY_BROWSE: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
+    CAPABILITY_VERIFY: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
+    CAPABILITY_UPLOAD: frozenset({"admin", "local_admin", "data_manager", "fileUploader"}),
+    CAPABILITY_DISCREPANCY_REVIEW: frozenset({"discrepancy_reviewer"}),
+    # This capability currently protects the sole PII EMR reconciliation export.
+    CAPABILITY_DATA_EXPORT: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
+    CAPABILITY_ANALYTICS_VIEW: frozenset({"admin", "local_admin", "data_manager", "analytics_viewer"}),
+    CAPABILITY_DATASET_CREATION: frozenset({"admin", "dataset_creator"}),
+    CAPABILITY_REGRADE_ADJUDICATION: frozenset({"regrade_adjudicator"}),
 }
 
 
@@ -83,10 +96,59 @@ def apply_project_permission_scope(query, model_class, user: User, capability: s
         ProjectEncounterSetPermission.active.is_(True),
         capability_clause,
     )
-    condition = matching_permission
+    matching_role_grant = project_role_grant_exists_clause(
+        user_id=user.id,
+        project_id=model_class.project_id,
+        role_names=CAPABILITY_ROLES[capability],
+        hospital_id=getattr(model_class, "hospital_id", None),
+        lab_unit_id=getattr(model_class, "lab_unit_id", None),
+    )
+    condition = or_(matching_role_grant, matching_permission)
     if hasattr(query, "filter"):
         return query.filter(condition)
     return query.where(condition)
+
+
+def apply_classical_or_project_permission_scope(
+    query,
+    model_class,
+    user: User,
+    capability: str,
+    *,
+    classical_operation: str,
+):
+    """Keep classical and project authorization paths separate, then combine them.
+
+    Non-project rows use the established hospital/lab-unit scoper. Project rows
+    use only an explicit project role grant or the legacy project permission
+    compatibility row. This helper currently targets ORM ``Query`` callers.
+    """
+    if not hasattr(query, "session") or query.session is None:
+        raise TypeError("Classical/project combined scoping requires an ORM Query.")
+    if not hasattr(model_class, "project_id"):
+        raise TypeError("Combined project scoping requires a project_id column.")
+
+    from utils.hospital_scoping import apply_scoping
+
+    classical_ids = query.session.query(model_class.id).filter(
+        model_class.project_id.is_(None)
+    )
+    classical_ids = apply_scoping(
+        classical_ids,
+        model_class,
+        user,
+        classical_operation,
+    )
+    project_ids = apply_project_permission_scope(
+        query.session.query(model_class.id).filter(model_class.project_id.isnot(None)),
+        model_class,
+        user,
+        capability,
+    )
+    return query.filter(or_(
+        model_class.id.in_(classical_ids),
+        model_class.id.in_(project_ids),
+    ))
 
 
 def user_has_task_capability(
@@ -125,7 +187,7 @@ def user_has_task_capability(
         project_id = image.project_id if image else None
     if project_id is None:
         return True
-    return db.execute(
+    legacy_permission = db.execute(
         select(ProjectEncounterSetPermission.id).where(
             ProjectEncounterSetPermission.project_id == project_id,
             ProjectEncounterSetPermission.lab_unit_id == task.lab_unit_id,
@@ -134,6 +196,13 @@ def user_has_task_capability(
             CAPABILITY_COLUMNS[capability].is_(True),
         )
     ).scalar_one_or_none() is not None
+    return legacy_permission or user_has_project_role(
+        db,
+        user_id=user.id,
+        project_id=project_id,
+        role_names=CAPABILITY_ROLES[capability],
+        lab_unit_id=task.lab_unit_id,
+    )
 
 
 def project_task_capability_clause(task_id_column, user: User, capability: str):
@@ -166,6 +235,12 @@ def project_task_capability_clause(task_id_column, user: User, capability: str):
         ProjectEncounterSetPermission.active.is_(True),
         CAPABILITY_COLUMNS[capability].is_(True),
     )
+    role_grant_exists = project_role_grant_exists_clause(
+        user_id=user.id,
+        project_id=project_id,
+        role_names=CAPABILITY_ROLES[capability],
+        lab_unit_id=task.lab_unit_id,
+    )
     task_scope = select(1).select_from(task).outerjoin(
         task_encounter, task_encounter.id == task.patient_encounter_id
     ).outerjoin(
@@ -181,7 +256,7 @@ def project_task_capability_clause(task_id_column, user: User, capability: str):
     )
     return task_scope.where(
         task.id == task_id_column,
-        or_(project_id.is_(None), permission_exists),
+        or_(project_id.is_(None), role_grant_exists, permission_exists),
     ).exists()
 
 

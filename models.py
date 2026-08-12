@@ -3132,3 +3132,4 @@ from grading.workbench.models import (  # noqa: E402,F401
     GradingWorkbenchSession,
     GradingWorkbenchSessionTarget,
 )
+from data_authorization.models import ProjectRoleGrant  # noqa: E402,F401

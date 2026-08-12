@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import abort, render_template, request, send_file, url_for
 from flask_login import current_user
 
-from auth.roles import ROLE_COLLABORATOR, roles_required
+from auth.roles import ROLE_COLLABORATOR, roles_or_project_grant_required
 from db_transaction_manager import get_db_session
 from encounter_sets.access import ENCOUNTER_SET_PII_ROLES
 from encounter_sets.models import EncounterSetAttachment
@@ -24,35 +24,35 @@ COLLABORATOR_BROWSER_ROLES = (ROLE_COLLABORATOR, "collaborators")
 
 
 @bp.route("/uploads/encountersets/browse", methods=["GET"])
-@roles_required(*BROWSER_ROLES)
+@roles_or_project_grant_required(*BROWSER_ROLES)
 def encounter_set_browser():
     context = _browser_context()
     return render_template("remidio_api_uploads/encounter_set_browser.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse/workspace", methods=["GET"])
-@roles_required(*BROWSER_ROLES)
+@roles_or_project_grant_required(*BROWSER_ROLES)
 def encounter_set_browser_workspace():
     context = _browser_context()
     return render_template("remidio_api_uploads/_encounter_set_browser_workspace.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii", methods=["GET"])
-@roles_required(*COLLABORATOR_BROWSER_ROLES)
+@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
 def encounter_set_browser_no_pii():
     context = _browser_context(no_pii=True)
     return render_template("remidio_api_uploads/encounter_set_browser_no_pii.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii/workspace", methods=["GET"])
-@roles_required(*COLLABORATOR_BROWSER_ROLES)
+@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
 def encounter_set_browser_no_pii_workspace():
     context = _browser_context(no_pii=True)
     return render_template("remidio_api_uploads/_encounter_set_browser_workspace_no_pii.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii/<int:encounter_id>/download", methods=["GET"])
-@roles_required(*COLLABORATOR_BROWSER_ROLES)
+@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
 def encounter_set_browser_no_pii_download(encounter_id: int):
     with get_db_session() as db:
         result = remidio_service.build_no_pii_encounter_set_zip(
@@ -74,7 +74,7 @@ def encounter_set_browser_no_pii_download(encounter_id: int):
 
 
 @bp.route("/uploads/encountersets/attachments/<uuid>", methods=["GET"])
-@roles_required(*BROWSER_ROLES)
+@roles_or_project_grant_required(*BROWSER_ROLES)
 def encounter_set_attachment(uuid: str):
     with get_db_session() as db:
         query = (

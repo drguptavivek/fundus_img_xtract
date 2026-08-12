@@ -15,7 +15,7 @@
   </div>
   <div class="card-body">
     <div class="row g-4">
-      <div class="col-xl-5">
+      <div class="col-12">
         <h3 class="h6">Project Details</h3>
         <form method="post"
               action="{{ url_for('fundus_api.update_upload_profile_project', project_id=selected_project.id) }}"
@@ -38,67 +38,6 @@
             <textarea class="form-control" id="detail_project_description" name="description" rows="3">{{ selected_project.description or '' }}</textarea>
           </div>
           <button class="btn btn-primary" type="submit">Save Project</button>
-        </form>
-      </div>
-
-      <div class="col-xl-7">
-        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-          <h3 class="h6 mb-0">Investigators</h3>
-          <span class="badge text-bg-secondary">{{ project_investigators|length }}</span>
-        </div>
-        <div class="table-responsive mb-3">
-          <table class="table table-sm align-middle">
-            <thead><tr><th>User</th><th>Role</th></tr></thead>
-            <tbody>
-              {% for investigator in project_investigators %}
-              <tr>
-                <td>{{ investigator.user.full_name or investigator.user.username }}</td>
-                <td>{{ investigator.role.replace('_', ' ')|title }}</td>
-              </tr>
-              {% else %}
-              <tr><td colspan="2" class="text-muted text-center py-3">No investigators assigned.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-
-        <form class="border rounded p-3"
-              method="post"
-              action="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
-              hx-post="{{ url_for('fundus_api.add_upload_profile_investigator') }}"
-              hx-swap="none"
-              data-json-api-htmx
-              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
-              data-json-api-reload-target="#project-detail-workspace">
-          {{ csrf_field() }}
-          <input type="hidden" name="project_id" value="{{ selected_project.id }}">
-          <div class="row g-2 align-items-end">
-            <div class="col-md-5">
-              <label class="form-label" for="detail_investigator_search">Search User</label>
-              <input class="form-control" id="detail_investigator_search" type="search" placeholder="Type name or username" data-user-search="detail_investigator_user_id">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" for="detail_investigator_user_id">Matched User</label>
-              <select class="form-select" id="detail_investigator_user_id" name="user_id" required>
-                <option value="">Select user</option>
-                {% for user in users %}
-                <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label" for="detail_investigator_role">Role</label>
-              <select class="form-select" id="detail_investigator_role" name="role">
-                <option value="principal_investigator">Principal Investigator</option>
-                <option value="co_investigator" selected>Co-Investigator</option>
-                <option value="coordinator">Coordinator</option>
-                <option value="collaborator">Collaborator</option>
-              </select>
-            </div>
-            <div class="col-12 text-end">
-              <button class="btn btn-outline-primary" type="submit">Add Investigator</button>
-            </div>
-          </div>
         </form>
       </div>
 
@@ -141,116 +80,159 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <div>
             <h3 class="h6 mb-0">Project Access</h3>
-            <div class="small text-muted">Grant operational capabilities per user and lab unit for this project.</div>
+            <div class="small text-muted">Assign globally defined application roles within a project, hospital, or lab-unit scope.</div>
           </div>
-          <span class="badge text-bg-secondary">{{ encounter_set_permissions|selectattr('active')|list|length }} active</span>
+          <span class="badge text-bg-secondary">{{ project_access_rows|length }} scoped assignments</span>
         </div>
         <div class="border rounded p-3">
           <div class="table-responsive mb-3">
             <table class="table table-sm align-middle mb-0">
-              <thead><tr><th>User</th><th>Lab unit</th><th>Upload</th><th>Browse</th><th>Verify</th><th>Review</th><th>Export</th><th>Analytics</th><th>Dataset</th><th>Regrade</th><th></th></tr></thead>
+              <thead><tr><th>User</th><th>Hospital / Lab unit</th><th>Grants / Roles</th><th class="text-end">Edit</th></tr></thead>
               <tbody>
-                {% for permission in encounter_set_permissions if permission.active %}
+                {% for row in project_access_rows %}
+                {% set access_row_index = loop.index %}
                 <tr>
-                  <td>{{ permission.user.full_name or permission.user.username }}</td>
-                  <td>{{ permission.lab_unit.name }}</td>
-                  <td>{{ 'Yes' if permission.can_upload else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_browse or permission.can_verify else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_verify else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_review_discrepancies else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_export_data else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_view_analytics else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_create_datasets else 'No' }}</td>
-                  <td>{{ 'Yes' if permission.can_adjudicate_regrades else 'No' }}</td>
+                  <td>
+                    <div>{{ row.user_name }}</div>
+                    <div class="small text-muted">{{ row.username }}</div>
+                  </td>
+                  <td>{{ row.scope_label }}</td>
+                  <td>
+                    <div class="d-flex flex-wrap gap-1">
+                      {% for grant in row.grants %}
+                      <form method="post"
+                            action="{{ url_for('fundus_api.remove_project_role_grant', project_id=selected_project.id, grant_id=grant.id) }}"
+                            hx-post="{{ url_for('fundus_api.remove_project_role_grant', project_id=selected_project.id, grant_id=grant.id) }}"
+                            hx-swap="none"
+                            data-json-api-htmx
+                            data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                            data-json-api-reload-target="#project-detail-workspace"
+                            class="d-inline-flex">
+                        {{ csrf_field() }}
+                        <button class="badge text-bg-light border text-dark"
+                                type="submit"
+                                title="Remove {{ grant.role_name.replace('_', ' ') }} grant"
+                                aria-label="Remove {{ grant.role_name.replace('_', ' ') }} grant">
+                          {{ grant.role_name.replace('_', ' ')|title }} <span aria-hidden="true">&times;</span>
+                        </button>
+                      </form>
+                      {% endfor %}
+                    </div>
+                  </td>
                   <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#project-access-edit-{{ access_row_index }}"
+                            aria-expanded="false" aria-controls="project-access-edit-{{ access_row_index }}">Edit</button>
+                  </td>
+                </tr>
+                <tr class="collapse" id="project-access-edit-{{ access_row_index }}">
+                  <td colspan="4" class="bg-body-tertiary">
                     <form method="post"
-                          action="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
-                          hx-post="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                          action="{{ url_for('fundus_api.project_role_grants', project_id=selected_project.id) }}"
+                          hx-post="{{ url_for('fundus_api.project_role_grants', project_id=selected_project.id) }}"
                           hx-swap="none"
                           data-json-api-htmx
                           data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
                           data-json-api-reload-target="#project-detail-workspace">
                       {{ csrf_field() }}
-                      <input type="hidden" name="user_id" value="{{ permission.user_id }}">
-                      <input type="hidden" name="lab_unit_id" value="{{ permission.lab_unit_id }}">
-                      <input type="hidden" name="active" value="false">
-                      <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                      <input type="hidden" name="user_id" value="{{ row.user_id }}">
+                      <input type="hidden" name="original_scope_type" value="{{ row.scope_type }}">
+                      <input type="hidden" name="original_hospital_id" value="{{ row.hospital_id or '' }}">
+                      <input type="hidden" name="original_lab_unit_id" value="{{ row.lab_unit_id or '' }}">
+                      {% set assigned_role_names = row.grants|map(attribute='role_name')|list %}
+                      <div class="row g-2 align-items-end">
+                        <div class="col-lg-4">
+                          <label class="form-label" for="edit_project_scope_{{ access_row_index }}">Hospital / Lab-unit scope</label>
+                          <select class="form-select" id="edit_project_scope_{{ access_row_index }}" name="scope_key" required>
+                            <option value="project" {% if row.scope_type == 'project' %}selected{% endif %}>Project-wide</option>
+                            {% for hospital in scope_hospitals %}
+                            <option value="hospital:{{ hospital.id }}" {% if row.scope_type == 'hospital' and row.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }} (entire hospital)</option>
+                            {% endfor %}
+                            {% for lab_unit in lab_units %}
+                            <option value="lab_unit:{{ lab_unit.id }}" {% if row.scope_type == 'lab_unit' and row.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.hospital.name }} / {{ lab_unit.name }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-lg-8">
+                          <div class="form-label">Grants / Roles</div>
+                          <div class="d-flex flex-wrap gap-3">
+                            {% for role in project_role_options %}
+                            <div class="form-check">
+                              <input class="form-check-input" type="checkbox" name="role_names" value="{{ role.name }}"
+                                     id="edit_project_role_{{ access_row_index }}_{{ row.user_id }}_{{ role.id }}"
+                                     {% if role.name in assigned_role_names %}checked{% endif %}>
+                              <label class="form-check-label" for="edit_project_role_{{ access_row_index }}_{{ row.user_id }}_{{ role.id }}">
+                                {{ role.name.replace('_', ' ')|title }}
+                              </label>
+                            </div>
+                            {% endfor %}
+                          </div>
+                          <div class="form-text">Clear every role and save to remove this scoped assignment.</div>
+                        </div>
+                        <div class="col-12 text-end">
+                          <button class="btn btn-primary" type="submit">Save Roles</button>
+                        </div>
+                      </div>
                     </form>
                   </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="11" class="text-muted text-center py-3">No project access assigned.</td></tr>
+                <tr><td colspan="4" class="text-muted text-center py-3">No project access assigned.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
-          <form class="row g-2 align-items-end"
+          <form class="border-top pt-3"
                 method="post"
-                action="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
-                hx-post="{{ url_for('fundus_api.project_encounter_set_permissions', project_id=selected_project.id) }}"
+                action="{{ url_for('fundus_api.project_role_grants', project_id=selected_project.id) }}"
+                hx-post="{{ url_for('fundus_api.project_role_grants', project_id=selected_project.id) }}"
                 hx-swap="none"
                 data-json-api-htmx
                 data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
                 data-json-api-reload-target="#project-detail-workspace">
             {{ csrf_field() }}
-            <input type="hidden" name="active" value="true">
-            <div class="col-lg-4">
-              <label class="form-label" for="encounter_access_user_{{ selected_project.id }}">User</label>
-              <select class="form-select" id="encounter_access_user_{{ selected_project.id }}" name="user_id" required>
-                <option value="">Select user</option>
-                {% for user in users %}
-                <option value="{{ user.id }}">{{ user.full_name or user.username }} ({{ user.username }})</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-lg-3">
-              <label class="form-label" for="encounter_access_lab_{{ selected_project.id }}">Lab unit</label>
-              <select class="form-select" id="encounter_access_lab_{{ selected_project.id }}" name="lab_unit_id" required>
-                <option value="">Select lab unit</option>
-                {% for lab_unit in lab_units %}
-                <option value="{{ lab_unit.id }}">{{ lab_unit.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-lg-3">
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_upload" value="true" id="project_access_upload_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_upload_{{ selected_project.id }}">Uploader</label>
+            <div class="row g-2 align-items-end">
+              <div class="col-lg-4">
+                <label class="form-label" for="project_access_user_{{ selected_project.id }}">User</label>
+                <select class="form-select" id="project_access_user_{{ selected_project.id }}" name="user_id" required>
+                  <option value="">Select user</option>
+                  {% for user in users %}
+                  <option value="{{ user.id }}">{{ user.full_name or user.username }} ({{ user.username }})</option>
+                  {% endfor %}
+                </select>
               </div>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_browse" value="true" id="encounter_access_browse_{{ selected_project.id }}" checked>
-                <label class="form-check-label" for="encounter_access_browse_{{ selected_project.id }}">Browse</label>
+              <div class="col-lg-4">
+                <label class="form-label" for="project_access_scope_{{ selected_project.id }}">Hospital / Lab-unit scope</label>
+                <select class="form-select" id="project_access_scope_{{ selected_project.id }}" name="scope_key" required>
+                  <option value="">Select scope</option>
+                  <option value="project">Project-wide</option>
+                  {% for hospital in scope_hospitals %}
+                  <option value="hospital:{{ hospital.id }}">{{ hospital.name }} (entire hospital)</option>
+                  {% endfor %}
+                  {% for lab_unit in lab_units %}
+                  <option value="lab_unit:{{ lab_unit.id }}">{{ lab_unit.hospital.name }} / {{ lab_unit.name }}</option>
+                  {% endfor %}
+                </select>
               </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="can_verify" value="true" id="encounter_access_verify_{{ selected_project.id }}">
-                <label class="form-check-label" for="encounter_access_verify_{{ selected_project.id }}">Verify</label>
+              <div class="col-lg-4">
+                <button class="btn btn-outline-primary w-100" type="submit">Grant Roles</button>
               </div>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_review_discrepancies" value="true" id="project_access_review_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_review_{{ selected_project.id }}">Discrepancy reviewer</label>
+              <div class="col-12">
+                <div class="form-label">Grants / Roles</div>
+                <div class="d-flex flex-wrap gap-3">
+                  {% for role in project_role_options %}
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="role_names" value="{{ role.name }}"
+                           id="new_project_role_{{ selected_project.id }}_{{ role.id }}">
+                    <label class="form-check-label" for="new_project_role_{{ selected_project.id }}_{{ role.id }}">
+                      {{ role.name.replace('_', ' ')|title }}
+                    </label>
+                  </div>
+                  {% endfor %}
+                </div>
               </div>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_export_data" value="true" id="project_access_export_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_export_{{ selected_project.id }}">Data exporter</label>
-              </div>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_view_analytics" value="true" id="project_access_analytics_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_analytics_{{ selected_project.id }}">Analytics viewer</label>
-              </div>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="can_create_datasets" value="true" id="project_access_dataset_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_dataset_{{ selected_project.id }}">Dataset creator</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="can_adjudicate_regrades" value="true" id="project_access_regrade_{{ selected_project.id }}">
-                <label class="form-check-label" for="project_access_regrade_{{ selected_project.id }}">Regrade adjudicator</label>
-              </div>
-            </div>
-            <div class="col-lg-2">
-              <button class="btn btn-outline-primary w-100" type="submit">Grant / Update Access</button>
             </div>
           </form>
-          <div class="form-text mt-2">Verify access also permits browsing so the verifier can locate the EncounterSet.</div>
         </div>
       </div>
 

@@ -1,5 +1,9 @@
 # Project Upload Profiles API
 
+Project membership and scoped application roles are managed through the
+[Project Role Grants API](../project-authorization/README.md). The project
+management UI now uses these grants instead of per-capability columns.
+
 Browser admin pages render under `/admin/upload-profiles`. Project,
 investigator, and upload-profile mutations use JSON APIs under `/api/upload-profiles`.
 See `docs/API/upload-profiles/README.md` for the current profile contract.

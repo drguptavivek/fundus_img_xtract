@@ -9,6 +9,11 @@ from models import (
     DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR,
     GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage, ProjectInvestigator, UserDiseaseUnitRole, GradingTask
 )
+from data_authorization.service import (
+    project_role_grant_exists_clause,
+    user_has_any_project_role,
+    user_has_project_role,
+)
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
     thumbnail_exists_direct, thumbnail_exists_encounter,
@@ -18,7 +23,7 @@ from utils.image_processing import get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.media_cache import bump_media_cache_version
-from sqlalchemy import and_, select, or_
+from sqlalchemy import and_, exists, select, or_
 from db_transaction_manager import transaction_scope
 from grading_allocation.eligibility import is_user_eligible_for_task
 from encounter_sets.models import ProjectEncounterSetPermission
@@ -231,7 +236,15 @@ def _apply_lab_unit_scoping(query, model_class, user):
 
 
 def _apply_encounter_set_media_scoping(query, user, context: str):
-    if user and user.has_role("collaborator") and not user.has_role(
+    has_project_collaborator_grant = bool(
+        user
+        and user_has_any_project_role(
+            query.session,
+            user_id=user.id,
+            role_names={"collaborator"},
+        )
+    )
+    if user and (user.has_role("collaborator") or has_project_collaborator_grant) and not user.has_role(
         "fileUploader",
         "optometrist",
         "data_manager",
@@ -239,14 +252,19 @@ def _apply_encounter_set_media_scoping(query, user, context: str):
         "ophthalmologist",
         "resident",
     ):
-        return query.join(
-            ProjectInvestigator,
+        legacy_membership = exists().where(
             ProjectInvestigator.project_id == PatientEncounters.project_id,
-        ).filter(
             ProjectInvestigator.user_id == user.id,
             ProjectInvestigator.role == "collaborator",
             ProjectInvestigator.active.is_(True),
         )
+        project_grant = project_role_grant_exists_clause(
+            user_id=user.id,
+            project_id=PatientEncounters.project_id,
+            role_names={"collaborator"},
+            lab_unit_id=PatientEncounters.lab_unit_id,
+        )
+        return query.filter(or_(legacy_membership, project_grant))
     return apply_scoping(query, PatientEncounters, user, context)
 
 
@@ -261,12 +279,20 @@ def _user_has_encounter_set_media_access(db, user, image: EncounterSetImage) -> 
     if not project_id or not lab_unit_id:
         return False
 
-    if user.has_role("collaborator") and db.query(ProjectInvestigator.id).filter(
+    legacy_collaborator = user.has_role("collaborator") and db.query(ProjectInvestigator.id).filter(
         ProjectInvestigator.project_id == project_id,
         ProjectInvestigator.user_id == user.id,
         ProjectInvestigator.role == "collaborator",
         ProjectInvestigator.active.is_(True),
-    ).first():
+    ).first()
+    project_collaborator = user_has_project_role(
+        db,
+        user_id=user.id,
+        project_id=project_id,
+        role_names={"collaborator"},
+        lab_unit_id=lab_unit_id,
+    )
+    if legacy_collaborator or project_collaborator:
         return True
 
     workflow_permission = db.query(ProjectEncounterSetPermission.id).filter(

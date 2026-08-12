@@ -6,6 +6,7 @@ import uuid
 import yaml
 
 from models import EncounterSetImage, Hospital, LabUnit, PatientEncounters, Project, ProjectInvestigator, Role, User
+from data_authorization.models import ProjectRoleGrant
 from remidio_api_integration import service
 
 
@@ -76,6 +77,56 @@ def test_no_pii_browser_only_lists_active_collaborator_projects(db_session):
 
     assert [project["id"] for project in context["projects"]] == [allowed_project.id]
     assert blocked_project.id not in {project["id"] for project in context["projects"]}
+
+
+def test_project_only_collaborator_grant_does_not_require_global_role(db_session, app):
+    role = db_session.query(Role).filter_by(name="collaborator").one_or_none()
+    if role is None:
+        role = Role(name="collaborator")
+        db_session.add(role)
+        db_session.flush()
+    user = User(
+        username="project_only_no_pii_collaborator",
+        password_hash="x",
+        is_active=True,
+    )
+    project, encounter = _project_encounter(
+        db_session,
+        code="COLLAB_PROJECT_ONLY",
+        patient_id="MRN-PROJECT-ONLY",
+        patient_name="Project Only Patient",
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(ProjectRoleGrant(
+        project_id=project.id,
+        user_id=user.id,
+        role_id=role.id,
+        scope_type="project",
+        active=True,
+    ))
+    db_session.commit()
+
+    context = service.list_encounter_set_browser(
+        db_session,
+        user=user,
+        project_id=project.id,
+        encounter_id=encounter.id,
+        no_pii=True,
+    )
+
+    assert user.roles == []
+    assert context["detail"]["name"] == f"EncounterSet {encounter.uuid}"
+    assert context["detail"]["metadata_patient"] == {}
+
+    with app.test_client(user=user) as client:
+        response = client.get(
+            f"/uploads/encountersets/browse-no-pii?project_id={project.id}&encounter_id={encounter.id}"
+        )
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "MRN-PROJECT-ONLY" not in html
+    assert "Project Only Patient" not in html
 
 
 def test_no_pii_browser_redacts_patient_identifiers(db_session):

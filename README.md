@@ -214,7 +214,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSetType Policy and Direction](docs/01-Adding_Images/encounter_set_types.md) - Encounter-set schema, custody persistence, metadata contracts, and phased delivery model
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
 - [Project Referral Diseases API](docs/API/referral-diseases/README.md) - Project-owned referral-only disease choices extending grading-scheme defaults
-- [Project EncounterSet Permissions API](docs/API/encounter-set-permissions/README.md) - Project/lab grants for PII browser and verification access
+- [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project, hospital, or lab-unit scope
 - [Remidio EncounterSet Attachment OCR API](docs/API/remidio-attachment-ocr/README.md) - Queue, rerun, and poll PDF OCR from verification and browser workspaces
 - [Remidio API Encounter Migration](docs/API/remidio-api-encounter-migration/README.md) - Admin preview/apply workflow for correcting wrongly routed Remidio EncounterSets and resetting incomplete source grading work
 - [Project Remote Inference API](docs/API/remote-inference/README.md) - Project-owned automated and manual Wadhwani workflow controls

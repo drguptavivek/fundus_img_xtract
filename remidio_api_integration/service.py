@@ -12,10 +12,11 @@ from typing import Any, Callable
 from uuid import uuid4
 
 import yaml
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from auth.utils import utcnow
+from data_authorization.service import project_role_grant_exists_clause
 from db_transaction_manager import get_db_session
 from models import (
     AMDReport,
@@ -202,15 +203,31 @@ def _encounter_set_browser_projects(db: Session, user, *, no_pii: bool = False) 
 
 def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool = False):
     if not no_pii:
-        from encounter_sets.permissions import CAPABILITY_BROWSE, apply_project_permission_scope
+        from encounter_sets.permissions import (
+            CAPABILITY_BROWSE,
+            apply_classical_or_project_permission_scope,
+        )
 
-        query = apply_scoping(query, model_class, user, "upload")
-        return apply_project_permission_scope(query, model_class, user, CAPABILITY_BROWSE)
-    return query.join(ProjectInvestigator, ProjectInvestigator.project_id == PatientEncounters.project_id).filter(
+        return apply_classical_or_project_permission_scope(
+            query,
+            model_class,
+            user,
+            CAPABILITY_BROWSE,
+            classical_operation="upload",
+        )
+    legacy_membership = exists().where(
+        ProjectInvestigator.project_id == model_class.project_id,
         ProjectInvestigator.user_id == user.id,
         ProjectInvestigator.role == "collaborator",
         ProjectInvestigator.active.is_(True),
     )
+    project_grant = project_role_grant_exists_clause(
+        user_id=user.id,
+        project_id=model_class.project_id,
+        role_names={"collaborator"},
+        lab_unit_id=getattr(model_class, "lab_unit_id", None),
+    )
+    return query.filter(or_(legacy_membership, project_grant))
 
 
 def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> int:

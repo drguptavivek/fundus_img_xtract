@@ -6,11 +6,13 @@ from encounter_sets.permissions import (
     CAPABILITY_REGRADE_ADJUDICATION,
     CAPABILITY_VERIFY,
     ProjectEncounterSetPermissionInput,
+    apply_classical_or_project_permission_scope,
     apply_project_permission_scope,
     project_task_capability_clause,
     set_project_permission,
 )
-from models import Disease, GradingTask, PatientEncounters, Project, RegradeTask
+from data_authorization.models import ProjectRoleGrant
+from models import Disease, GradingTask, PatientEncounters, Project, RegradeTask, Role, User
 from tests.helpers.factories import UserFactory
 
 
@@ -176,6 +178,72 @@ def test_admin_role_bypasses_project_capability_rows(db_session, core_test_data)
         db_session.query(PatientEncounters), PatientEncounters, admin, CAPABILITY_VERIFY
     ).all()
     assert encounter.id in {row.id for row in rows}
+
+
+def test_combined_scope_uses_project_grants_and_preserves_classical_non_project_scope(
+    db_session,
+    core_test_data,
+):
+    lab_unit = db_session.merge(core_test_data["lab_unit"])
+    role = db_session.query(Role).filter_by(name="optometrist").one()
+    project_only_user = User(
+        username="project_only_combined_scope",
+        password_hash="x",
+        is_active=True,
+    )
+    classical_user = UserFactory.create_with_hospital(
+        db_session,
+        "optometrist",
+        lab_unit.hospital_id,
+        [lab_unit.id],
+        username="classical_combined_scope",
+    )
+    allowed_project = Project(title="Combined Allowed", code="COMBINED_ALLOWED", active=True)
+    blocked_project = Project(title="Combined Blocked", code="COMBINED_BLOCKED", active=True)
+    db_session.add_all([project_only_user, allowed_project, blocked_project])
+    db_session.flush()
+    allowed = _encounter(
+        db_session, project=allowed_project, lab_unit=lab_unit, suffix="COMBINED_ALLOWED"
+    )
+    blocked = _encounter(
+        db_session, project=blocked_project, lab_unit=lab_unit, suffix="COMBINED_BLOCKED"
+    )
+    classical = PatientEncounters(
+        name="Classical Encounter",
+        patient_id="PERM-CLASSICAL",
+        capture_date="2026-08-11",
+        capture_date_dt=date(2026, 8, 11),
+        lab_unit_id=lab_unit.id,
+        project_id=None,
+        is_set_based=True,
+        encounter_verified_status="pending",
+    )
+    db_session.add_all([
+        classical,
+        ProjectRoleGrant(
+            project_id=allowed_project.id,
+            user_id=project_only_user.id,
+            role_id=role.id,
+            scope_type="project",
+            active=True,
+        ),
+    ])
+    db_session.flush()
+
+    def scoped_ids(user):
+        rows = apply_classical_or_project_permission_scope(
+            db_session.query(PatientEncounters),
+            PatientEncounters,
+            user,
+            CAPABILITY_VERIFY,
+            classical_operation="upload",
+        ).all()
+        return {row.id for row in rows}
+
+    assert scoped_ids(project_only_user) == {allowed.id}
+    assert classical.id in scoped_ids(classical_user)
+    assert allowed.id not in scoped_ids(classical_user)
+    assert blocked.id not in scoped_ids(classical_user)
 
 
 def test_regrade_query_clause_requires_matching_project_capability(db_session, core_test_data):

@@ -7,9 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
+from data_authorization.exceptions import ProjectAuthorizationError
+from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, PROJECT_SCOPE
+from data_authorization.service import (
+    PROJECT_ASSIGNABLE_ROLE_NAMES,
+    list_project_role_grants,
+)
 from db_transaction_manager import transaction_scope
 from grading_allocation import service as grading_allocation_service
-from encounter_sets.permissions import list_project_permissions
 from models import (
     Area,
     Camera,
@@ -20,6 +25,7 @@ from models import (
     LinkedDiseaseGrading,
     Project,
     ProjectInvestigator,
+    Role,
     User,
     user_lab_units,
 )
@@ -250,6 +256,10 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
 
     return {
         "lab_units": lab_units,
+        "scope_hospitals": sorted(
+            {lab_unit.hospital for lab_unit in lab_units},
+            key=lambda hospital: hospital.name,
+        ),
         "scoped_lab_ids": scoped_lab_ids,
         "users": users,
         "projects": projects,
@@ -326,7 +336,6 @@ def upload_projects_admin():
 
 
 @roles_required("admin", "local_admin", "data_manager")
-@roles_required("admin", "local_admin", "data_manager")
 def upload_project_workspace(project_id: int):
     """Render one project management workspace fragment."""
     scoped_lab_ids = _manager_lab_unit_ids()
@@ -339,9 +348,6 @@ def upload_project_workspace(project_id: int):
         if not selected_project:
             return render_template("admin/partials/project_detail_panel.html", selected_project=None), 404
         context["selected_project"] = selected_project
-        context["project_investigators"] = [
-            investigator for investigator in context["investigators"] if investigator.project_id == project_id and investigator.active
-        ]
         context["project_profile_mappings"] = [
             mapping for mapping in context["project_profile_mappings"] if mapping.project_id == project_id
         ]
@@ -352,9 +358,17 @@ def upload_project_workspace(project_id: int):
         context["configured_referral_disease_ids"] = set(
             list_configured_project_referral_disease_ids(db, project_id=project_id)
         )
-        context["encounter_set_permissions"] = list_project_permissions(
-            db, project_id, lab_unit_ids=scoped_lab_ids
-        )
+        try:
+            grants = list_project_role_grants(db, actor=current_user, project_id=project_id)
+        except ProjectAuthorizationError:
+            grants = ()
+        context["project_access_rows"] = _group_project_access_rows(grants)
+        context["project_role_options"] = tuple(sorted(
+            db.execute(
+                select(Role).where(Role.name.in_(PROJECT_ASSIGNABLE_ROLE_NAMES)).order_by(Role.name)
+            ).scalars().all(),
+            key=lambda role: role.name.lower(),
+        ))
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))
         context.update(iitk_service.project_connection_context(db, project_id))
@@ -363,6 +377,45 @@ def upload_project_workspace(project_id: int):
             project_id,
         )
         return render_template("admin/partials/project_detail_panel.html", **context)
+
+
+def _group_project_access_rows(grants) -> list[dict]:
+    """Group active role grants by user and exact project data scope."""
+    rows: dict[tuple, dict] = {}
+    for grant in grants:
+        if not grant.active:
+            continue
+        key = (
+            grant.user_id,
+            grant.scope_type,
+            grant.hospital_id,
+            grant.lab_unit_id,
+        )
+        row = rows.setdefault(key, {
+            "user_id": grant.user_id,
+            "user_name": grant.user_name,
+            "username": grant.username,
+            "scope_type": grant.scope_type,
+            "hospital_id": grant.hospital_id,
+            "hospital_name": grant.hospital_name,
+            "lab_unit_id": grant.lab_unit_id,
+            "lab_unit_name": grant.lab_unit_name,
+            "grants": [],
+        })
+        row["grants"].append(grant)
+    for row in rows.values():
+        row["grants"].sort(key=lambda grant: grant.role_name.lower())
+        if row["scope_type"] == PROJECT_SCOPE:
+            row["scope_label"] = "Project-wide"
+        elif row["scope_type"] == HOSPITAL_SCOPE:
+            row["scope_label"] = row["hospital_name"] or "Hospital"
+        elif row["scope_type"] == LAB_UNIT_SCOPE:
+            names = [name for name in (row["hospital_name"], row["lab_unit_name"]) if name]
+            row["scope_label"] = " / ".join(names) or "Lab unit"
+    return sorted(
+        rows.values(),
+        key=lambda row: (row["user_name"].lower(), row["scope_label"].lower()),
+    )
 
 
 @roles_required("admin", "local_admin", "data_manager")

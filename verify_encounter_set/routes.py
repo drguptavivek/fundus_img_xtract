@@ -1,6 +1,6 @@
 from flask import after_this_request, render_template, abort, current_app, flash, make_response, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
-from auth.roles import roles_required
+from auth.roles import roles_or_project_grant_required
 from auth.utils import utcnow
 from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
@@ -18,7 +18,10 @@ from models import (
     EncounterSetImage,
 )
 from encounter_sets.models import EncounterSetAttachment
-from encounter_sets.permissions import CAPABILITY_VERIFY, apply_project_permission_scope
+from encounter_sets.permissions import (
+    CAPABILITY_VERIFY,
+    apply_classical_or_project_permission_scope,
+)
 from encounter_sets.grading_policy import (
     EncounterSetPackagePolicyDTO,
     EncounterSetScopePolicyDTO,
@@ -40,7 +43,6 @@ from upload_profiles.image_task_routing import (
 )
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
-from utils.hospital_scoping import apply_scoping
 from marshmallow import Schema, fields, validate, ValidationError
 from . import bp
 from services.project_referral_diseases import (
@@ -50,8 +52,13 @@ from services.project_referral_diseases import (
 
 
 def _apply_verification_scope(query):
-    query = apply_scoping(query, PatientEncounters, current_user, "upload")
-    return apply_project_permission_scope(query, PatientEncounters, current_user, CAPABILITY_VERIFY)
+    return apply_classical_or_project_permission_scope(
+        query,
+        PatientEncounters,
+        current_user,
+        CAPABILITY_VERIFY,
+        classical_operation="upload",
+    )
 
 
 # =========================================================================
@@ -120,7 +127,7 @@ def validate_s3_config_access(image, current_user, db):
 
 @bp.route("/")
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def index():
     """List encounter sets pending verification."""
     with transaction_scope() as db:
@@ -143,7 +150,7 @@ def index():
 
 @bp.route("/verify/<uuid>")
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def verify_encounter(uuid):
     """View and manage a specific encounter set for verification."""
     with transaction_scope() as db:
@@ -162,7 +169,7 @@ def verify_encounter(uuid):
 
 @bp.route("/verify/<uuid>/panel/<panel>")
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def verify_panel(uuid, panel):
     """Render one EncounterSet verification panel for HTMX loading."""
     if panel not in {"patient", "image", "document", "summary"}:
@@ -201,7 +208,7 @@ def verify_panel(uuid, panel):
 
 @bp.route("/metadata/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def update_metadata(uuid):
     """Persist EncounterSet verification metadata fields allowed by the EncounterSetType."""
     with transaction_scope() as db:
@@ -366,7 +373,7 @@ def update_metadata(uuid):
 
 @bp.route("/mark_reviewed/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_reviewed(uuid):
     """Mark an EncounterSet image as reviewed without implying anonymization."""
     with transaction_scope() as db:
@@ -713,7 +720,7 @@ def _parse_first_float(value) -> float | None:
 
 @bp.route("/update_position", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def update_position():
     """Update the spatial position of an image in an encounter set."""
     data = request.json
@@ -762,7 +769,7 @@ def update_position():
 
 @bp.route("/exclude/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def exclude_encounter_set(uuid):
     """Exclude an EncounterSet from verification and downstream task creation."""
     from auth.utils import utcnow
@@ -822,7 +829,7 @@ def exclude_encounter_set(uuid):
 
 @bp.route("/finalize/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def finalize_verification(uuid):
     """Mark an encounter set as verified and trigger task creation."""
     from auth.utils import utcnow
@@ -1787,7 +1794,7 @@ def _get_or_create_package_task(
 
 @bp.route("/edit/<uuid>", methods=["GET"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def edit_image(uuid):
     """Edit an encounter set image (crop/mask PII)."""
     from models import GradingTask
@@ -1841,7 +1848,7 @@ def edit_image(uuid):
 
 @bp.route("/save_edit/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def save_edit(uuid):
     """Save edited image data (crop/mask coordinates applied)."""
     import base64
@@ -1935,7 +1942,7 @@ def save_edit(uuid):
 
 @bp.route("/mark_anonymized/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_anonymized(uuid):
     """Mark an image as anonymized (PII masked)."""
 
@@ -1976,7 +1983,7 @@ def mark_anonymized(uuid):
 
 @bp.route("/mark_all_anonymized/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_all_anonymized(uuid):
     """Mark all images in an encounter set as anonymized."""
     with transaction_scope() as db:
@@ -2012,7 +2019,7 @@ def mark_all_anonymized(uuid):
 
 @bp.route("/restore_original/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def restore_original(uuid):
     """Restore the original image (remove edited version)."""
     from utils.fileUtils import abs_from_parts
@@ -2062,7 +2069,7 @@ def restore_original(uuid):
 
 @bp.route("/mark_not_gradable/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_not_gradable(uuid):
     """Mark an image as not gradable with a reason."""
     data = request.json
@@ -2093,7 +2100,7 @@ def mark_not_gradable(uuid):
 
 @bp.route("/undo_not_gradable/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin", "optometrist", "data_manager")
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def undo_not_gradable(uuid):
     """Undo the not gradable status for an image."""
     with transaction_scope() as db:

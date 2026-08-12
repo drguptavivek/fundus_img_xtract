@@ -20,6 +20,8 @@ ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"
 ROLE_REGRADE_ADJUDICATOR = "regrade_adjudicator"
 ROLE_COLLABORATOR = "collaborator"
+ROLE_PROJECT_PI = "project_pi"
+ROLE_SITE_PI = "site_pi"
 
 DEFAULT_ROLES = [
     "admin",
@@ -36,6 +38,11 @@ DEFAULT_ROLES = [
     ROLE_DATASET_CREATOR,
     ROLE_ANALYTICS_VIEWER,
     ROLE_COLLABORATOR,
+    ROLE_PROJECT_PI,
+    ROLE_SITE_PI,
+    "principal_investigator",
+    "co_investigator",
+    "coordinator",
 ]
 
 def ensure_roles(db, names: Iterable[str] = DEFAULT_ROLES) -> None:
@@ -84,6 +91,35 @@ def roles_any(*names: str):
 
 def roles_all(*names: str):
     return roles_required(*names, require_all=True)
+
+
+def roles_or_project_grant_required(*required: str):
+    """Coarse route gate for classical global roles or project-only role grants.
+
+    This decorator does not authorize a resource. Routes must still apply the
+    shared object-level project/hospital/lab scope before returning data.
+    """
+    def decorator(fn):
+        @wraps(fn)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for("auth.login"))
+            if current_user.has_role(*required):
+                return fn(*args, **kwargs)
+            from data_authorization.service import user_has_any_project_role
+
+            with get_db_session() as db:
+                has_project_grant = user_has_any_project_role(
+                    db,
+                    user_id=current_user.id,
+                    role_names=required,
+                )
+            if has_project_grant:
+                return fn(*args, **kwargs)
+            return abort(403)
+        return wrapper
+    return decorator
 
 # Dynamic role checking functions that can be used in templates or code
 def get_all_roles() -> list[str]:

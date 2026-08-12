@@ -60,6 +60,12 @@ grading-scheme allow-list of basic formatting tags is retained; attributes and
 unsupported tags are removed. HTML clients may render this sanitized field,
 while other clients may convert it to plain text.
 
+Unified EncounterSet package definitions are ordered as EncounterSet-level
+grading schemes, configured per-image grading schemes, and then any active
+linked disease schemes referenced by those per-image schemes. A configured
+per-image scheme is not labeled as linked merely because unified packages have
+no root disease scope.
+
 ## Remembered project navigation
 
 The HTML workspace stores the selected project ID in browser local storage.

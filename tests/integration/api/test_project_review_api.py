@@ -10,6 +10,7 @@ from models import (
     EncounterSetGradingPackage,
     EncounterSetImage,
     GradingTask,
+    LinkedDiseaseGrading,
     PatientEncounters,
     Project,
     Role,
@@ -81,6 +82,22 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
             active=True,
         ),
     ])
+    linked_disease = Disease(name="Review Linked Image Disease", grading_scope="image")
+    db_session.add(linked_disease)
+    db_session.flush()
+    db_session.add_all([
+        DiseaseGrading(
+            disease_id=linked_disease.id,
+            impression="Linked finding absent",
+            is_active=True,
+        ),
+        LinkedDiseaseGrading(
+            primary_disease_id=disease.id,
+            linked_disease_id=linked_disease.id,
+            display_order=0,
+            is_active=True,
+        ),
+    ])
     encounter_disease = Disease(name="Review Glaucoma Encounter Status", grading_scope="encounter")
     encounter_type = EncounterSetType(name="Review Encounter Type", code="review_encounter_type", active=True)
     db_session.add_all([encounter_disease, encounter_type])
@@ -98,6 +115,38 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
     )
     db_session.add(est_config)
     db_session.flush()
+    unified_package = UploadProfileEncounterSetTypeGradingPackage(
+        upload_profile_encounter_set_type_id=est_config.id,
+        name="Review Unified Package",
+        code="review_unified",
+        applicability="always",
+        grading_mode="unified",
+        scope_config_json={
+            "scopes": [{
+                "scope_disease_id": None,
+                "image_grading_scheme_ids": [disease.id],
+                "encounter_grading_scheme_id": encounter_disease.id,
+                "parent_scope_disease_id": None,
+                "link_role": "unified",
+            }],
+        },
+        active=True,
+    )
+    db_session.add(unified_package)
+    db_session.flush()
+    db_session.add_all([
+        UploadProfileEncounterSetTypePackageImageScheme(
+            package_id=unified_package.id,
+            disease_id=disease.id,
+            auto_create_policy="always",
+            active=True,
+        ),
+        UploadProfileEncounterSetTypePackageEncounterScheme(
+            package_id=unified_package.id,
+            disease_id=encounter_disease.id,
+            active=True,
+        ),
+    ])
     package_config = UploadProfileEncounterSetTypeGradingPackage(
         upload_profile_encounter_set_type_id=est_config.id,
         name="Review Glaucoma Package",
@@ -243,6 +292,15 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         )
         referral = {item["disease"]: item["source"] for item in configuration["referral_diseases"]}
         assert referral["Glaucoma"] == "Sampling trigger and grading target"
+        unified_target = next(row for row in configuration["grading_targets"] if row["package"] == "Review Unified Package")
+        assert [
+            (item["target_level"], item["disease"], item["relationship"])
+            for item in unified_target["definitions"]
+        ] == [
+            ("EncounterSet-level", "Review Glaucoma Encounter Status", "EncounterSet grading scheme"),
+            ("Per-image", "Glaucoma", "Per-image grading scheme"),
+            ("Linked disease", "Review Linked Image Disease", "Linked to Glaucoma"),
+        ]
         assert configuration["configured_users"][0]["roles"] == ["collaborator"]
         assert "Hidden Disabled Intake" not in summary.get_data(as_text=True)
         summary_page = client.get(f"/projects/{project.id}/summary")

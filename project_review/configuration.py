@@ -190,18 +190,11 @@ def _targets(db, mappings):
                         rule += f"; when {scheme.metadata_field_key} = {scheme.metadata_match_value}"
                     rules.append(rule)
                 disease = primary.name if primary else "Unified EncounterSet"
-                definitions = tuple(
-                    [
-                        _definition(db, scheme.disease, target_level="Encounter-level", relationship="Encounter grade")
-                        for scheme in encounter_schemes
-                    ]
-                    + [
-                        _definition(
-                            db, scheme.disease, target_level="Image-level",
-                            relationship="Root disease" if scheme.disease_id == root_id else "Linked disease",
-                        )
-                        for scheme in package.image_grading_schemes if scheme.active
-                    ]
+                definitions = _package_definitions(
+                    db,
+                    package=package,
+                    encounter_schemes=encounter_schemes,
+                    root_id=root_id,
                 )
                 targets.append(GradingTargetDTO(f"package-{package.id}",
                     "EncounterSet unified tasks" if package.grading_mode == "unified" else "EncounterSet disease-scoped tasks",
@@ -236,6 +229,65 @@ def _definition(db, disease, *, target_level, relationship):
         GradeChoiceDTO(g.impression, sanitize_guidelines_html(g.guidelines) or "", tuple(
             f.label for f in sorted(g.features, key=lambda x: x.sr_no)
         )) for g in grades))
+
+
+def _package_definitions(db, *, package, encounter_schemes, root_id):
+    image_schemes = [scheme for scheme in package.image_grading_schemes if scheme.active]
+    if package.grading_mode != "unified":
+        return tuple(
+            [
+                _definition(db, scheme.disease, target_level="Encounter-level", relationship="Encounter grade")
+                for scheme in encounter_schemes
+            ]
+            + [
+                _definition(
+                    db, scheme.disease, target_level="Image-level",
+                    relationship="Root disease" if scheme.disease_id == root_id else "Linked disease",
+                )
+                for scheme in image_schemes
+            ]
+        )
+
+    definitions = [
+        _definition(
+            db,
+            scheme.disease,
+            target_level="EncounterSet-level",
+            relationship="EncounterSet grading scheme",
+        )
+        for scheme in encounter_schemes
+    ]
+    definitions.extend(
+        _definition(
+            db,
+            scheme.disease,
+            target_level="Per-image",
+            relationship="Per-image grading scheme",
+        )
+        for scheme in image_schemes
+    )
+    configured_ids = {scheme.disease_id for scheme in image_schemes}
+    for scheme in image_schemes:
+        linked = db.execute(
+            select(LinkedDiseaseGrading)
+            .options(selectinload(LinkedDiseaseGrading.linked_disease))
+            .where(
+                LinkedDiseaseGrading.primary_disease_id == scheme.disease_id,
+                LinkedDiseaseGrading.is_active.is_(True),
+            )
+            .order_by(LinkedDiseaseGrading.display_order)
+        ).scalars()
+        definitions.extend(
+            _definition(
+                db,
+                link.linked_disease,
+                target_level="Linked disease",
+                relationship=f"Linked to {scheme.disease.name}",
+            )
+            for link in linked
+            if link.linked_disease_id not in configured_ids
+        )
+    return tuple(definitions)
 
 
 def _package_root_disease_id(package):
@@ -335,7 +387,7 @@ def _referrals(db, project_id, mappings):
                     grading.add(scheme.disease.name)
                     if scheme.disease_id == root_id and scheme.auto_create_policy == "positive_plus_negative_controls":
                         sampled_roots.add(scheme.disease.name)
-                    elif scheme.disease_id != root_id:
+                    elif package.grading_mode == "disease_specific" and root_id is not None and scheme.disease_id != root_id:
                         linked_targets.add(scheme.disease.name)
     explicit = {x.disease.name for x in db.execute(select(ProjectReferralDisease).options(selectinload(ProjectReferralDisease.disease)).where(
         ProjectReferralDisease.project_id == project_id, ProjectReferralDisease.active.is_(True))).scalars()}

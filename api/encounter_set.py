@@ -620,6 +620,7 @@ def upload_encounter_set_image():
             original_filename=file.filename,  # User's original name for reference only
             folder_rel=folder_rel,
             project_id=upload_profile.project_id,
+            hospital_id=upload_profile.hospital_id,
             camera_id=camera_id,
             area_id=area_id,
             is_mydriatic=is_mydriatic,

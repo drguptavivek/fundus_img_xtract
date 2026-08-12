@@ -1,3 +1,4 @@
+import logging
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -181,7 +182,9 @@ def test_capture_datetime_is_normalized_and_dated_in_utc(db_session, core_test_d
     assert encounter.metadata_json["encounter"]["capture_datetime"] == "2026-07-31T19:00:00Z"
 
 
-def test_site_mapping_routes_import_and_preserves_editable_site(db_session, core_test_data, app, monkeypatch, tmp_path):
+def test_site_mapping_routes_import_and_preserves_editable_site(
+    db_session, core_test_data, app, monkeypatch, tmp_path, caplog
+):
     rpc, delhi_lab = destination(db_session, "RPC AIIMS", "Deepsekhar Das")
     kalyani, kalyani_lab = destination(db_session, "AIIMS Kalyani", "Ophthalmology")
     runtime = setup_config(db_session, core_test_data)
@@ -202,8 +205,18 @@ def test_site_mapping_routes_import_and_preserves_editable_site(db_session, core
     metadata = dict(encounter.metadata_json)
     metadata["patient"] = {**metadata["patient"], "site_recruitment": "kalyani"}
     encounter.metadata_json = metadata
+    caplog.set_level(logging.INFO, logger="iitk_api_integration.service")
     remap_iitk_encounter_site(db_session, encounter)
     db_session.flush()
+
+    custody_log = next(
+        record for record in caplog.records
+        if record.message.startswith("IITK verification custody remap")
+    )
+    assert f"encounter_id={encounter.id}" in custody_log.message
+    assert f"old_lab_unit_id={delhi_lab.id}" in custody_log.message
+    assert f"new_lab_unit_id={kalyani_lab.id}" in custody_log.message
+    assert f"new_hospital_id={kalyani.id}" in custody_log.message
 
     _persist_session(runtime, source("partial", 1, ("primary",), site="delhi"), inventory("primary"), {})
     db_session.refresh(encounter)

@@ -27,6 +27,26 @@ Those concerns belong to `UploadProfile`.
 
 ## Scope and ownership
 
+### Data custody persistence
+
+Project membership describes the workflow in which an EncounterSet is used; it
+does not identify the hospital that owns or holds the source data. Custody is
+persisted as follows:
+
+- `PatientEncounters.lab_unit_id` is the authoritative lab unit for an
+  EncounterSet.
+- The owning hospital is `LabUnit.hospital_id` for that lab unit.
+- Every `EncounterSetImage.hospital_id` is materialized from the parent
+  EncounterSet's lab unit. Database triggers populate it on image insertion and
+  synchronize existing child images when the parent lab unit changes.
+- Manual image and ZIP intake use the uploader's validated hospital/lab unit.
+- Remidio API intake uses the matched date-effective routing binding's lab unit.
+- IITK API intake uses its upstream-site destination mapping, falling back to
+  the IITK project configuration when a site cannot be mapped locally.
+
+IITK site corrections made during verification log the previous and resolved
+custody identifiers. They do not create a separate database history record.
+
 ### 1) `EncounterSetType` scope
 
 - `EncounterSetType` does not belong directly to a project.

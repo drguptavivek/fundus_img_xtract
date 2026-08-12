@@ -586,6 +586,10 @@ def remap_iitk_encounter_site(db: Session, encounter: PatientEncounters) -> Site
         db, runtime, source_site=source_site,
         effective_site=_effective_encounter_site(encounter, source_site),
     )
+    old_lab_unit_id = encounter.lab_unit_id
+    images = db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all()
+    old_hospital_ids = sorted({image.hospital_id for image in images if image.hospital_id is not None})
+    hospital_changed = any(image.hospital_id != destination.hospital_id for image in images)
     encounter.lab_unit_id = destination.lab_unit_id
     upload.update({
         "source_site": destination.source_site, "site_mapping_status": destination.status,
@@ -593,8 +597,20 @@ def remap_iitk_encounter_site(db: Session, encounter: PatientEncounters) -> Site
     })
     metadata["upload"] = upload
     encounter.metadata_json = metadata
-    for image in db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all():
+    for image in images:
         image.hospital_id = destination.hospital_id
+    if old_lab_unit_id != destination.lab_unit_id or hospital_changed:
+        LOGGER.info(
+            "IITK verification custody remap encounter_id=%s source_site=%s effective_site=%s "
+            "old_lab_unit_id=%s new_lab_unit_id=%s old_hospital_ids=%s new_hospital_id=%s",
+            encounter.id,
+            sanitize_log_value(destination.source_site),
+            sanitize_log_value(destination.effective_site),
+            old_lab_unit_id,
+            destination.lab_unit_id,
+            old_hospital_ids,
+            destination.hospital_id,
+        )
     return destination
 
 

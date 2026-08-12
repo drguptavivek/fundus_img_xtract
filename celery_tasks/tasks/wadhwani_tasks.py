@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from celery_app import celery_app
@@ -13,7 +14,10 @@ from utils.log_sanitize import sanitize_log_value
 
 
 logger = logging.getLogger(__name__)
-WADHWANI_BATCH_CONCURRENCY = 3
+WADHWANI_BATCH_CONCURRENCY = 2
+WADHWANI_FINAL_RETRY_DELAY_SECONDS = 5
+WADHWANI_FINAL_RETRY_PASSES = 2
+WADHWANI_FINAL_RETRY_ITEM_GAP_SECONDS = 2
 
 
 def _process_wadhwani_item(job_token: str, task_id: int, user_id: int | None) -> bool:
@@ -63,6 +67,30 @@ def _process_wadhwani_item(job_token: str, task_id: int, user_id: int | None) ->
     return state == "error"
 
 
+def _run_wadhwani_initial_pass(job_token: str, task_ids: list[int], user_id: int | None) -> list[int]:
+    if not task_ids:
+        return []
+    with ThreadPoolExecutor(
+        max_workers=min(WADHWANI_BATCH_CONCURRENCY, len(task_ids)),
+        thread_name_prefix="wadhwani-batch",
+    ) as executor:
+        results = executor.map(
+            lambda task_id: _process_wadhwani_item(job_token, task_id, user_id),
+            task_ids,
+        )
+        return [task_id for task_id, failed in zip(task_ids, results, strict=True) if failed]
+
+
+def _run_wadhwani_retry_pass(job_token: str, task_ids: list[int], user_id: int | None) -> list[int]:
+    failed_task_ids: list[int] = []
+    for index, task_id in enumerate(task_ids):
+        if _process_wadhwani_item(job_token, task_id, user_id):
+            failed_task_ids.append(task_id)
+        if index < len(task_ids) - 1:
+            time.sleep(WADHWANI_FINAL_RETRY_ITEM_GAP_SECONDS)
+    return failed_task_ids
+
+
 @celery_app.task(name="celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task", bind=True, acks_late=True)
 def run_wadhwani_glaucoma_batch_task(
     self,
@@ -73,18 +101,13 @@ def run_wadhwani_glaucoma_batch_task(
 ) -> None:
     db_set_job_status(job_token, "processing")
 
-    error_count = 0
-    if task_ids:
-        with ThreadPoolExecutor(
-            max_workers=min(WADHWANI_BATCH_CONCURRENCY, len(task_ids)),
-            thread_name_prefix="wadhwani-batch",
-        ) as executor:
-            error_count = sum(
-                executor.map(
-                    lambda task_id: _process_wadhwani_item(job_token, task_id, user_id),
-                    task_ids,
-                )
-            )
+    failed_task_ids = _run_wadhwani_initial_pass(job_token, task_ids, user_id)
+    for _retry_pass in range(WADHWANI_FINAL_RETRY_PASSES):
+        if not failed_task_ids:
+            break
+        time.sleep(WADHWANI_FINAL_RETRY_DELAY_SECONDS)
+        failed_task_ids = _run_wadhwani_retry_pass(job_token, failed_task_ids, user_id)
+    error_count = len(failed_task_ids)
 
     if error_count and error_count < len(task_ids):
         db_set_job_status(job_token, "partial")

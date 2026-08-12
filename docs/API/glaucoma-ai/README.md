@@ -184,7 +184,7 @@ Status: `201 Created`
 - Successful uploads are stored as unverified direct images with a glaucoma task for AI inference. Human grading remains blocked until the image is verified through the normal verification workflow.
 - Wadhwani inference runs asynchronously through `celery_tasks.tasks.wadhwani_tasks.run_wadhwani_glaucoma_batch_task`. Poll `/recent/results` or `/<image_uuid>/result` for `inference.status`; use `/recent/results` when avoiding media reloads.
 - The Wadhwani client reuses process-local HTTPS connections and retries idempotent presigned S3 `PUT` uploads up to three times for transient connection, DNS, throttling, or server failures. Upload errors stored in inference runs omit the presigned URL and signature.
-- Each Wadhwani batch processes at most three images concurrently inside the existing general-worker container. HTTP sessions are thread-local, and unrelated queues retain the worker's existing execution model.
+- Each Wadhwani batch processes at most two images concurrently inside the existing general-worker container. After the original pass finishes, failed items receive up to two final retry passes. Each retry pass waits five seconds before starting, runs serially, and leaves a two-second gap between items. Retry processing stops early when every failure recovers. HTTP sessions are thread-local, and unrelated queues retain the worker's existing execution model.
 
 ### Example
 

@@ -76,10 +76,9 @@ def wadhwani_glaucoma_inference_page():
         ]
         final_grade_options = get_glaucoma_grade_options(db)
         zip_result_options = list_zip_glaucoma_result_options(db)
-
         filters = _filters_from_request(request.args)
         tasks = []
-        if integration and filters["source_type"] in {"zip", "direct"}:
+        if integration and filters["source_type"] in {"zip", "direct", "pregraded"}:
             tasks = list_eligible_wadhwani_glaucoma_tasks(
                 db,
                 ai_model_id=integration.ai_model_id,

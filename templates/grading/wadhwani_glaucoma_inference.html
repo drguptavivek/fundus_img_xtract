@@ -14,6 +14,9 @@
         {% endif %}
       </div>
     </div>
+    <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">
+      Project-based Inference
+    </a>
   </div>
 
   <div class="card shadow-sm mb-4">
@@ -35,6 +38,7 @@
               <option value="">Select Source</option>
               <option value="zip" {% if filters.source_type == 'zip' %}selected{% endif %}>ZIP</option>
               <option value="direct" {% if filters.source_type == 'direct' %}selected{% endif %}>Direct</option>
+              <option value="pregraded" {% if filters.source_type == 'pregraded' %}selected{% endif %}>Pregraded</option>
             </select>
           </div>
           <div class="col-md-3">
@@ -124,7 +128,7 @@
           </div>
         </div>
 
-        <div id="wadhwaniDirectFilters" class="row g-3 mt-1" {% if filters.source_type != 'direct' %}hidden{% endif %}>
+        <div id="wadhwaniDirectFilters" class="row g-3 mt-1" {% if filters.source_type not in ['direct', 'pregraded'] %}hidden{% endif %}>
           <div class="col-md-4">
             <label for="hospitalSelect" class="form-label">Hospital</label>
             <select class="form-select" id="hospitalSelect" name="hospital_id">

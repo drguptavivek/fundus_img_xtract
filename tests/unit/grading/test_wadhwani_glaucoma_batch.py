@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from models import AIModel, AIModelIntegration, Disease, LabUnit, Hospital, Job
+from utils.wadhwani_glaucoma_selector import (
+    MAX_MANUAL_WADHWANI_BATCH,
+    filter_still_eligible_task_ids,
+    list_eligible_wadhwani_glaucoma_tasks,
+)
 
 
 def _seed_linked_wadhwani_model(db_session):
@@ -35,6 +42,16 @@ def test_wadhwani_batch_page_renders_for_admin(client, login_user, db_session):
     assert response.status_code == 200
     assert b"Wadhwani Glaucoma Inference" in response.data
     assert b"Source Type" in response.data
+    assert b">ZIP</option>" in response.data
+    assert b">Direct</option>" in response.data
+    assert b"Pregraded" in response.data
+    assert b"Maximum 100 tasks" in response.data
+    assert b"Project-based Inference" in response.data
+
+    project_response = client.get("/uploads/encountersets/wadhwani_inference")
+
+    assert project_response.status_code == 200
+    assert b"Image-based Inference" in project_response.data
 
 
 def test_wadhwani_batch_submit_creates_job_and_enqueues_task(client, login_user, db_session, monkeypatch):
@@ -76,3 +93,101 @@ def test_wadhwani_batch_submit_creates_job_and_enqueues_task(client, login_user,
 
     job = db_session.query(Job).filter(Job.upload_type == "wadhwani_glaucoma_inference").one()
     assert job.status == "queued"
+
+
+def test_wadhwani_batch_rejects_more_than_100_tasks(client, login_user, monkeypatch):
+    enqueue_called = False
+
+    def _unexpected_enqueue(*args, **kwargs):
+        nonlocal enqueue_called
+        enqueue_called = True
+
+    monkeypatch.setattr("grading.wadhwani_glaucoma_inference.enqueue_task", _unexpected_enqueue)
+    login_user("test_admin", "Test@2026")
+
+    response = client.post(
+        "/grading/wadhwani-glaucoma-inference/run",
+        data={"selected_task_ids": [str(task_id) for task_id in range(1, 102)]},
+        follow_redirects=False,
+    )
+
+    assert MAX_MANUAL_WADHWANI_BATCH == 100
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/grading/wadhwani-glaucoma-inference/")
+    assert enqueue_called is False
+
+
+def test_submit_revalidation_accepts_zip_direct_and_pregraded_tasks(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _Rows:
+        @staticmethod
+        def all():
+            return [(12,)]
+
+    class _DB:
+        @staticmethod
+        def execute(statement, params):
+            captured["sql"] = str(statement)
+            captured["params"] = params
+            return _Rows()
+
+    monkeypatch.setattr(
+        "utils.wadhwani_glaucoma_selector.get_glaucoma_disease",
+        lambda db: SimpleNamespace(id=1),
+    )
+    monkeypatch.setattr(
+        "utils.wadhwani_glaucoma_selector.get_mv_name_for_disease",
+        lambda db, disease_id: "mv_test_glaucoma",
+    )
+
+    eligible = filter_still_eligible_task_ids(
+        _DB(),
+        ai_model_id=1,
+        allowed_lab_unit_ids=[3],
+        task_ids=[12, 13],
+    )
+
+    assert eligible == [12]
+    assert "v.upload_type = 'ZIP'" in captured["sql"]
+    assert "v.upload_type IN ('Direct', :pregraded_upload_type)" in captured["sql"]
+    assert "v.direct_image_upload_id IS NOT NULL" in captured["sql"]
+    assert captured["params"]["pregraded_upload_type"] == "Pregraded"
+
+
+def test_pregraded_preview_uses_separate_direct_image_source(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _Rows:
+        @staticmethod
+        def fetchall():
+            return []
+
+    class _DB:
+        @staticmethod
+        def execute(statement, params):
+            captured["sql"] = str(statement)
+            captured["params"] = params
+            return _Rows()
+
+    monkeypatch.setattr(
+        "utils.wadhwani_glaucoma_selector.get_glaucoma_disease",
+        lambda db: SimpleNamespace(id=1),
+    )
+    monkeypatch.setattr(
+        "utils.wadhwani_glaucoma_selector.get_mv_name_for_disease",
+        lambda db, disease_id: "mv_test_glaucoma",
+    )
+
+    tasks = list_eligible_wadhwani_glaucoma_tasks(
+        _DB(),
+        ai_model_id=1,
+        allowed_lab_unit_ids=[3],
+        filters={"source_type": "pregraded", "limit": "100"},
+    )
+
+    assert tasks == []
+    assert "v.upload_type = :pregraded_upload_type" in captured["sql"]
+    assert "v.direct_image_upload_id IS NOT NULL" in captured["sql"]
+    assert captured["params"]["pregraded_upload_type"] == "Pregraded"
+    assert captured["params"]["limit"] == 100

@@ -146,6 +146,14 @@ Files are stored in user-specific directories organized by date to prevent namin
 ### Duplicate Prevention
 Files are checked for duplicates using a SHA-256 content hash truncated to the database `file_hash` length. Duplicate attempts do not create a new `DirectImageUpload`, `DirectImageVerify`, verification job, thumbnail job, metadata job, PII job, or uploader upload-count increment. The upload job still records a duplicate `JobItem` that points to the canonical older image so web, mobile, and PWA clients can show the duplicate item, canonical thumbnail, and any current-profile Wadhwani AI result. If that AI result is missing or failed for the current upload profile's linked Wadhwani model, the canonical image task can be queued or retried for AI inference. Human grades are never copied for duplicate handling.
 
+Manual image-based Wadhwani glaucoma inference provides separate `ZIP`,
+`Direct`, and `Pregraded` source options. Pregraded tasks must be backed by a
+direct image. Administrators, local administrators, and data managers can
+preview and submit up to 100 eligible tasks per batch from
+`/grading/wadhwani-glaucoma-inference/`. The image-based page links to the
+separate project-based EncounterSet inference workspace, and that workspace
+links back to image-based inference.
+
 ### Upload Quotas
 Users have a persistent upload count (`file_upload_count`) that tracks the total number of files they have uploaded across all sessions. This count is stored in the database and incremented with each successful file upload.
 

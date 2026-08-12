@@ -1,4 +1,16 @@
 document.addEventListener("DOMContentLoaded", () => {
+  function toggleSourceFilters() {
+    const sourceTypeSelect = document.getElementById("sourceTypeSelect");
+    const zipFilters = document.getElementById("wadhwaniZipFilters");
+    const directFilters = document.getElementById("wadhwaniDirectFilters");
+    if (!sourceTypeSelect || !zipFilters || !directFilters) {
+      return;
+    }
+    const sourceType = sourceTypeSelect.value;
+    zipFilters.hidden = sourceType !== "zip";
+    directFilters.hidden = !["direct", "pregraded"].includes(sourceType);
+  }
+
   function stopJobPollingIfDone() {
     const jobContainer = document.getElementById("wadhwaniJobStatus");
     if (!jobContainer) {
@@ -10,24 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     jobContainer.removeAttribute("hx-trigger");
     jobContainer.removeAttribute("hx-get");
-  }
-
-  function currentSourceElements() {
-    return {
-      sourceTypeSelect: document.getElementById("sourceTypeSelect"),
-      zipFilters: document.getElementById("wadhwaniZipFilters"),
-      directFilters: document.getElementById("wadhwaniDirectFilters"),
-    };
-  }
-
-  function toggleSourceFilters() {
-    const { sourceTypeSelect, zipFilters, directFilters } = currentSourceElements();
-    if (!sourceTypeSelect || !zipFilters || !directFilters) {
-      return;
-    }
-    const sourceType = sourceTypeSelect.value;
-    zipFilters.hidden = sourceType !== "zip";
-    directFilters.hidden = sourceType !== "direct";
   }
 
   function updateRunButtonState() {

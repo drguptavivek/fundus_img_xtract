@@ -14,8 +14,9 @@ from utils.final_grade_basis import (
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 
 WADHWANI_PROVIDER = "wadhwani_glaucoma"
-MAX_MANUAL_WADHWANI_BATCH = 50
+MAX_MANUAL_WADHWANI_BATCH = 100
 DEFAULT_MANUAL_WADHWANI_LIMIT = 20
+PRE_GRADED_UPLOAD_TYPE = "Pregraded"
 
 
 @dataclass
@@ -91,7 +92,7 @@ def list_eligible_wadhwani_glaucoma_tasks(
     filters: dict[str, Any],
 ) -> list[WadhwaniEligibleTaskRow]:
     source_type = (filters.get("source_type") or "").strip().lower()
-    if source_type not in {"zip", "direct"}:
+    if source_type not in {"zip", "direct", "pregraded"}:
         return []
 
     glaucoma = get_glaucoma_disease(db)
@@ -128,13 +129,21 @@ def list_eligible_wadhwani_glaucoma_tasks(
                 "v.encounter_file_id IS NOT NULL",
             ]
         )
-    else:
+    elif source_type == "direct":
         where_clauses.extend(
             [
                 "v.upload_type = 'Direct'",
                 "v.direct_image_upload_id IS NOT NULL",
             ]
         )
+    else:
+        where_clauses.extend(
+            [
+                "v.upload_type = :pregraded_upload_type",
+                "v.direct_image_upload_id IS NOT NULL",
+            ]
+        )
+        params["pregraded_upload_type"] = PRE_GRADED_UPLOAD_TYPE
 
     lab_unit_id = _optional_int(filters.get("lab_unit_id"))
     if lab_unit_id:
@@ -273,7 +282,7 @@ def list_eligible_wadhwani_glaucoma_tasks(
         WadhwaniEligibleTaskRow(
             task_id=row.task_id,
             task_uuid=row.task_uuid,
-            source_type="zip" if row.upload_type == "ZIP" else "direct",
+            source_type=row.upload_type.lower(),
             image_uuid=row.image_uuid,
             image_filename=row.image_filename,
             hospital_name=row.hospital_name,
@@ -324,7 +333,7 @@ def filter_still_eligible_task_ids(
               )
               AND (
                 (v.upload_type = 'ZIP' AND v.encounter_file_id IS NOT NULL) OR
-                (v.upload_type = 'Direct' AND v.direct_image_upload_id IS NOT NULL)
+                (v.upload_type IN ('Direct', :pregraded_upload_type) AND v.direct_image_upload_id IS NOT NULL)
               )
             """
         ),
@@ -332,6 +341,7 @@ def filter_still_eligible_task_ids(
             "task_ids": task_ids,
             "allowed_lab_units": allowed_lab_unit_ids,
             "ai_model_id": ai_model_id,
+            "pregraded_upload_type": PRE_GRADED_UPLOAD_TYPE,
         },
     ).all()
     eligible_ids = {row[0] for row in rows}

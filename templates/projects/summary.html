@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ data.project.title }} · Project Summary{% endblock %}
+{% block content %}
+<div class="container-fluid px-3 px-lg-4 pb-5">
+  {% include "projects/_header.html" %}
+  {% with metrics=data.metrics %}{% include "projects/_metrics.html" %}{% endwith %}
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <h2 class="h5 mb-0">Effective configuration</h2>
+      <div class="small text-muted">How enabled upload profiles are interpreted for this project.</div>
+    </div>
+  </div>
+  <div class="row g-3">
+    {% for profile in data.profiles %}
+    <div class="col-12 col-xl-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span class="fw-semibold">{{ profile.name }}</span>
+          <span class="badge {{ 'text-bg-success' if profile.active else 'text-bg-secondary' }}">
+            {{ 'Enabled' if profile.active else 'Disabled' }}
+          </span>
+        </div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-4">Upload channels</dt>
+            <dd class="col-sm-8">{{ profile.upload_kinds|join(', ')|replace('_', ' ')|title or 'None' }}</dd>
+            <dt class="col-sm-4">Diseases</dt>
+            <dd class="col-sm-8">{{ profile.diseases|join(', ') or 'None configured' }}</dd>
+            <dt class="col-sm-4">EncounterSet types</dt>
+            <dd class="col-sm-8">{{ profile.encounter_set_types|join(', ') or 'None configured' }}</dd>
+            <dt class="col-sm-4">Grading packages</dt>
+            <dd class="col-sm-8">
+              {% for package in profile.grading_packages %}
+              <span class="badge text-bg-light border text-dark me-1 mb-1">{{ package }}</span>
+              {% else %}None configured{% endfor %}
+            </dd>
+            <dt class="col-sm-4">API intake</dt>
+            <dd class="col-sm-8">
+              <span class="badge {{ 'text-bg-primary' if profile.remidio_api_enabled else 'text-bg-light border text-dark' }}">Remidio {{ 'enabled' if profile.remidio_api_enabled else 'off' }}</span>
+              <span class="badge {{ 'text-bg-primary' if profile.iitk_enabled else 'text-bg-light border text-dark' }}">IITK {{ 'enabled' if profile.iitk_enabled else 'off' }}</span>
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-12"><div class="alert alert-warning">No upload profile is mapped to this project.</div></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

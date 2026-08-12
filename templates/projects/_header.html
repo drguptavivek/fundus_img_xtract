@@ -1,0 +1,45 @@
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <h1 class="h3 mb-0">{{ data.project.title }}</h1>
+      <span class="badge {{ 'text-bg-success' if data.project.active else 'text-bg-secondary' }}">
+        {{ 'Active' if data.project.active else 'Inactive' }}
+      </span>
+    </div>
+    <div class="text-muted mt-1">{{ data.project.code }} · Data scope: {{ data.scope.label }}</div>
+  </div>
+  <div class="dropdown">
+    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Change project
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      {% for project in projects %}
+      <li>
+        <a class="dropdown-item {{ 'active' if project.id == data.project.id else '' }}"
+           href="{{ url_for(request.endpoint, project_id=project.id) }}">
+          {{ project.title }} <span class="text-muted">{{ project.code }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-4" aria-label="Project sections">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if request.endpoint == 'projects.summary' else '' }}"
+       href="{{ url_for('projects.summary', project_id=data.project.id) }}">Summary</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if request.endpoint == 'projects.uploads' else '' }}"
+       href="{{ url_for('projects.uploads', project_id=data.project.id) }}">Uploads</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if request.endpoint == 'projects.gradings' else '' }}"
+       href="{{ url_for('projects.gradings', project_id=data.project.id) }}">Gradings</a>
+  </li>
+</ul>
+
+<div class="alert alert-light border py-2 small" role="note">
+  This workspace is non-PII. Counts and records are restricted to your project, hospital, or lab-unit grant.
+</div>

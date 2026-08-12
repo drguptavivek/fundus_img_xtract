@@ -4,6 +4,9 @@ Project membership and scoped application roles are managed through the
 [Project Role Grants API](../project-authorization/README.md). The project
 management UI now uses these grants instead of per-capability columns.
 
+The non-PII project summary, upload inventory, and grading aggregates are
+documented in the [Project Review API](../project-review/README.md).
+
 Browser admin pages render under `/admin/upload-profiles`. Project,
 investigator, and upload-profile mutations use JSON APIs under `/api/upload-profiles`.
 See `docs/API/upload-profiles/README.md` for the current profile contract.

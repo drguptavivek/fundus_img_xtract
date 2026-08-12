@@ -24,6 +24,11 @@
 
           {% if current_user.is_authenticated %}
 
+          <li class="nav-item">
+            <a class="nav-link {{ 'active' if request.blueprint == 'projects' else '' }}"
+              href="{{ url_for('projects.index') }}">Projects</a>
+          </li>
+
           {% if current_user_has('admin') %}
 
           {% endif %}

@@ -31,9 +31,28 @@ Returns projects in the caller's membership scope.
 
 Returns project/scope details; EncounterSet, single-image, total-image,
 pre-graded image, package, and task counts; Remidio DR/AMD/glaucoma report and
-Wadhwani inference counts; and an interpretation of upload profiles, upload
-kinds, diseases, EncounterSet types, grading packages/modes, and Remidio/IITK
-intake state.
+Wadhwani inference counts; and the currently effective, enabled configuration:
+
+- upload-profile sources and uploader-selectable modes, diseases, cameras,
+  areas, dilation states, EncounterSet types, and authorised assignments;
+- currently effective Remidio API bindings (including active date windows) and
+  active IITK API destination configuration, without credentials;
+- automated and manual analysis rules and their image/task eligibility;
+- active single-image and EncounterSet grading targets, task-creation rules,
+  current grade definitions, linked disease definitions, and features;
+- project annotation tools/classes, configured metadata field definitions,
+  referral diseases, and scoped project users/roles/allocations.
+
+Disabled configuration is omitted. Metadata field definitions may identify a
+field as PII, but metadata values are never returned.
+
+## Remembered project navigation
+
+The HTML workspace stores the selected project ID in browser local storage.
+Opening the top-level `Projects` link restores that project when it remains in
+the server-returned accessible project list; otherwise it opens the first
+accessible project. This navigation preference never grants access and is not
+used by the API authorization layer.
 
 ## Upload inventory
 

@@ -1,7 +1,7 @@
 """Thin HTML routes for the non-PII project review workspace."""
 from __future__ import annotations
 
-from flask import abort, redirect, render_template, request, url_for
+from flask import abort, render_template, request
 from flask_login import current_user, login_required
 
 from db_transaction_manager import transaction_scope
@@ -17,7 +17,7 @@ def index():
     with transaction_scope() as db:
         projects = list_projects(db, user=current_user)
     if projects:
-        return redirect(url_for("projects.summary", project_id=projects[0].id))
+        return render_template("projects/index.html", projects=projects)
     return render_template("projects/empty.html")
 
 

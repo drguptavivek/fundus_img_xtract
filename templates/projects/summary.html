@@ -5,48 +5,82 @@
   {% include "projects/_header.html" %}
   {% with metrics=data.metrics %}{% include "projects/_metrics.html" %}{% endwith %}
 
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <div>
-      <h2 class="h5 mb-0">Effective configuration</h2>
-      <div class="small text-muted">How enabled upload profiles are interpreted for this project.</div>
-    </div>
+  <div class="mb-3">
+    <h2 class="h5 mb-1">Effective configuration</h2>
+    <p class="small text-muted mb-0">Only enabled, currently applicable configuration is shown. No patient metadata values or PII are exposed here.</p>
   </div>
-  <div class="row g-3">
-    {% for profile in data.profiles %}
-    <div class="col-12 col-xl-6">
-      <div class="card h-100 shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span class="fw-semibold">{{ profile.name }}</span>
-          <span class="badge {{ 'text-bg-success' if profile.active else 'text-bg-secondary' }}">
-            {{ 'Enabled' if profile.active else 'Disabled' }}
-          </span>
-        </div>
-        <div class="card-body">
-          <dl class="row small mb-0">
-            <dt class="col-sm-4">Upload channels</dt>
-            <dd class="col-sm-8">{{ profile.upload_kinds|join(', ')|replace('_', ' ')|title or 'None' }}</dd>
-            <dt class="col-sm-4">Diseases</dt>
-            <dd class="col-sm-8">{{ profile.diseases|join(', ') or 'None configured' }}</dd>
-            <dt class="col-sm-4">EncounterSet types</dt>
-            <dd class="col-sm-8">{{ profile.encounter_set_types|join(', ') or 'None configured' }}</dd>
-            <dt class="col-sm-4">Grading packages</dt>
-            <dd class="col-sm-8">
-              {% for package in profile.grading_packages %}
-              <span class="badge text-bg-light border text-dark me-1 mb-1">{{ package }}</span>
-              {% else %}None configured{% endfor %}
-            </dd>
-            <dt class="col-sm-4">API intake</dt>
-            <dd class="col-sm-8">
-              <span class="badge {{ 'text-bg-primary' if profile.remidio_api_enabled else 'text-bg-light border text-dark' }}">Remidio {{ 'enabled' if profile.remidio_api_enabled else 'off' }}</span>
-              <span class="badge {{ 'text-bg-primary' if profile.iitk_enabled else 'text-bg-light border text-dark' }}">IITK {{ 'enabled' if profile.iitk_enabled else 'off' }}</span>
-            </dd>
-          </dl>
-        </div>
-      </div>
-    </div>
-    {% else %}
-    <div class="col-12"><div class="alert alert-warning">No upload profile is mapped to this project.</div></div>
-    {% endfor %}
-  </div>
+
+  {% if data.sources %}
+  <section class="card shadow-sm mb-3" aria-labelledby="sources-heading">
+    <div class="card-header"><h3 class="h6 mb-0" id="sources-heading">Sources</h3></div>
+    <div class="card-body"><div class="row g-3">
+      {% for source in data.sources %}
+      <div class="col-12 col-lg-6"><div class="border rounded p-3 h-100">
+        <div class="d-flex justify-content-between gap-2"><div><div class="small text-muted">{{ source.kind }}</div><strong>{{ source.name }}</strong></div>
+          <button class="btn btn-sm btn-outline-primary align-self-start" data-bs-toggle="modal" data-bs-target="#source-{{ source.id }}">Details</button></div>
+        <div class="small mt-2">{{ source.summary|replace('_', ' ')|title }}</div>
+        {% for badge in source.badges %}<span class="badge text-bg-light border text-dark me-1 mt-2">{{ badge }}</span>{% endfor %}
+      </div></div>
+      {% endfor %}
+    </div></div>
+  </section>
+  {% endif %}
+
+  {% if data.automated_analyses %}
+  <section class="card shadow-sm mb-3" aria-labelledby="analyses-heading">
+    <div class="card-header"><h3 class="h6 mb-0" id="analyses-heading">Automated analyses</h3></div>
+    <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Model</th><th>Disease</th><th>Mode</th><th>Applies to</th><th>Trigger and selection</th></tr></thead>
+      <tbody>{% for rule in data.automated_analyses %}<tr><td><strong>{{ rule.model }}</strong><div class="small text-muted">{{ rule.provider|replace('_',' ')|title }}</div></td><td>{{ rule.disease }}</td><td>{{ rule.mode }}</td><td>{{ rule.upload_kind|replace('_',' ')|title }}<div class="small text-muted">{{ rule.eligibility|replace('_',' ')|title }}</div></td><td>{{ rule.trigger|replace('_',' ')|title }}<div class="small text-muted">{{ rule.image_selection|replace('_',' ')|title }}</div></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% endif %}
+
+  {% if data.grading_targets %}
+  <section class="card shadow-sm mb-3" aria-labelledby="targets-heading">
+    <div class="card-header"><h3 class="h6 mb-0" id="targets-heading">Configured grading targets</h3></div>
+    <div class="card-body"><div class="row g-3">
+      {% for target in data.grading_targets %}<div class="col-12 col-xl-6"><div class="border rounded p-3 h-100">
+        <div class="small text-muted">{{ target.target_type }}</div><strong>{{ target.disease }}</strong>
+        {% if target.package %}<div>{{ target.package }} · {{ target.grading_mode }}</div>{% endif %}
+        <div class="small text-muted mt-1">{{ target.profile }}{% if target.encounter_set_type %} · {{ target.encounter_set_type }}{% endif %}</div>
+        <div class="mt-2"><span class="badge text-bg-light border text-dark">{{ target.applicability }}</span></div>
+        {% for rule in target.image_rules %}<div class="small mt-2">{{ rule }}</div>{% endfor %}
+        {% if target.definitions %}<button class="btn btn-sm btn-outline-primary mt-3" data-bs-toggle="modal" data-bs-target="#grades-{{ target.id }}">Grade definitions</button>{% endif %}
+      </div></div>{% endfor %}
+    </div><div class="small text-muted mt-3">Targets are effective through their upload profiles. Grade definitions are global definitions referenced by this project.</div></div>
+  </section>
+  {% endif %}
+
+  {% if data.annotation %}
+  <section class="card shadow-sm mb-3" aria-labelledby="annotation-heading"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div><h3 class="h6 mb-1" id="annotation-heading">Project annotation configuration</h3><div class="small text-muted">Revision {{ data.annotation.revision }} · {{ data.annotation.classes|length }} active classes · {{ data.annotation.tools|length }} enabled tools</div></div>
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#annotation-details">Annotation schema and classes</button>
+  </div></section>
+  {% endif %}
+
+  {% if data.metadata_fields %}
+  <section class="card shadow-sm mb-3" aria-labelledby="metadata-heading"><div class="card-header d-flex justify-content-between align-items-center"><div><h3 class="h6 mb-0" id="metadata-heading">Captured metadata</h3><div class="small text-muted">Configured field definitions only; values are never shown here.</div></div><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#metadata-details">View {{ data.metadata_fields|length }} fields</button></div></section>
+  {% endif %}
+
+  {% if data.referral_diseases %}
+  <section class="card shadow-sm mb-3" aria-labelledby="referrals-heading"><div class="card-body"><h3 class="h6" id="referrals-heading">Referral configuration</h3>
+    {% for item in data.referral_diseases %}<span class="badge text-bg-light border text-dark me-1">{{ item.disease }} · {{ item.source }}</span>{% endfor %}
+  </div></section>
+  {% endif %}
+
+  {% if data.configured_users %}
+  <section class="card shadow-sm mb-3" aria-labelledby="users-heading"><div class="card-header d-flex justify-content-between align-items-center"><div><h3 class="h6 mb-0" id="users-heading">Configured users</h3><div class="small text-muted">{{ data.configured_users|length }} active members · Grading allocation {{ 'enforced' if data.allocation_enforced else 'not enforced' }}</div></div><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#configured-users">View users</button></div></section>
+  {% endif %}
 </div>
+
+{% for source in data.sources %}<div class="modal fade" id="source-{{ source.id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><div class="small text-muted">{{ source.kind }}</div><h2 class="modal-title fs-5">{{ source.name }}</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><dl class="row mb-0">{% for label, value in source.details %}<dt class="col-sm-4">{{ label }}</dt><dd class="col-sm-8">{{ value }}</dd>{% endfor %}</dl></div></div></div></div>{% endfor %}
+
+{% for target in data.grading_targets %}{% if target.definitions %}<div class="modal fade" id="grades-{{ target.id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><div class="small text-muted">{{ target.target_type }}</div><h2 class="modal-title fs-5">{{ target.disease }} grade definitions</h2></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body">{% for definition in target.definitions %}<h3 class="h6">{{ definition.disease }} <span class="badge text-bg-light border text-dark">{{ definition.relationship }}</span></h3><div class="table-responsive mb-4"><table class="table table-sm"><thead><tr><th>Current grade</th><th>Guidance</th><th>Features</th></tr></thead><tbody>{% for grade in definition.grades %}<tr><td>{{ grade.impression }}</td><td>{{ grade.guidelines or '—' }}</td><td>{{ grade.features|join(', ') or '—' }}</td></tr>{% else %}<tr><td colspan="3" class="text-muted">No active grades.</td></tr>{% endfor %}</tbody></table></div>{% endfor %}</div></div></div></div>{% endif %}{% endfor %}
+
+{% if data.annotation %}<div class="modal fade" id="annotation-details" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5">Project annotation configuration</h2><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><dl class="row"><dt class="col-sm-4">Default localization</dt><dd class="col-sm-8">{{ data.annotation.default_localization }}</dd><dt class="col-sm-4">Preferred tool</dt><dd class="col-sm-8">{{ data.annotation.preferred_tool }}</dd><dt class="col-sm-4">Enabled tools</dt><dd class="col-sm-8">{{ data.annotation.tools|join(', ') }}</dd></dl><table class="table table-sm"><thead><tr><th>Class</th><th>Localization</th><th>Instances</th></tr></thead><tbody>{% for key, localization, instances in data.annotation.classes %}<tr><td>{{ key }}</td><td>{{ localization }}</td><td>{{ instances }}</td></tr>{% endfor %}</tbody></table></div></div></div></div>{% endif %}
+
+{% if data.metadata_fields %}<div class="modal fade" id="metadata-details" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">Captured metadata</h2><div class="small text-muted">PII field values remain restricted to EncounterSet processing and verification.</div></div><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Field</th><th>Scope / type</th><th>Capture</th><th>PII</th><th>Sources</th></tr></thead><tbody>{% for field in data.metadata_fields %}<tr><td><strong>{{ field.label }}</strong><div class="small text-muted">{{ field.key }}</div>{% if field.choices %}<div class="small">{{ field.choices|join(', ') }}</div>{% endif %}</td><td>{{ field.scope|title }} / {{ field.field_type|replace('_',' ')|title }}</td><td>{{ field.requirement }}{% if field.verifier_editable %}<div class="small">Verifier editable</div>{% endif %}</td><td>{{ 'PII' if field.is_pii else 'Non-PII' }}</td><td>{% for source in field.sources %}<span class="badge text-bg-light border text-dark me-1">{{ source }}</span>{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div></div></div></div>{% endif %}
+
+{% if data.configured_users %}<div class="modal fade" id="configured-users" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5">Configured users</h2><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>User</th><th>Scope</th><th>Roles / grants</th><th>Upload assignments</th><th>Grading slots</th></tr></thead><tbody>{% for member in data.configured_users %}<tr><td><strong>{{ member.name }}</strong></td><td>{{ member.scopes|join('; ') or 'Assignment scope only' }}</td><td>{{ member.roles|join(', ') or '—' }}</td><td>{{ member.upload_assignments|join('; ') or '—' }}</td><td>{{ member.grading_allocations|join('; ') or '—' }}</td></tr>{% endfor %}</tbody></table></div></div></div></div></div>{% endif %}
 {% endblock %}

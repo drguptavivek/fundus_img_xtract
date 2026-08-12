@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="container py-5 text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading project</span></div><p class="text-muted mt-3">Opening your project…</p></div>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+(function () {
+  var available = {{ projects|map(attribute='id')|list|tojson }};
+  var stored = Number(localStorage.getItem('selectedProjectId'));
+  var selected = available.indexOf(stored) !== -1 ? stored : available[0];
+  localStorage.setItem('selectedProjectId', String(selected));
+  window.location.replace({{ url_for('projects.summary', project_id=0)|tojson }}.replace('/0/', '/' + selected + '/'));
+}());
+</script>
+{% endblock %}

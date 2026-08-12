@@ -24,6 +24,9 @@
     </ul>
   </div>
 </div>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+try { localStorage.setItem('selectedProjectId', '{{ data.project.id }}'); } catch (error) {}
+</script>
 
 <ul class="nav nav-tabs mb-4" aria-label="Project sections">
   <li class="nav-item">

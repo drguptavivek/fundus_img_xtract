@@ -41,11 +41,108 @@ class ProjectProfileDTO:
 
 
 @dataclass(frozen=True)
+class ProjectSourceDTO:
+    id: str
+    kind: str
+    name: str
+    summary: str
+    badges: tuple[str, ...]
+    details: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ProjectAnalysisDTO:
+    id: int
+    mode: str
+    model: str
+    provider: str
+    disease: str
+    upload_kind: str
+    trigger: str
+    eligibility: str
+    image_selection: str
+
+
+@dataclass(frozen=True)
+class GradeChoiceDTO:
+    impression: str
+    guidelines: str
+    features: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiseaseDefinitionDTO:
+    disease: str
+    relationship: str
+    grades: tuple[GradeChoiceDTO, ...]
+
+
+@dataclass(frozen=True)
+class GradingTargetDTO:
+    id: str
+    target_type: str
+    disease: str
+    profile: str
+    encounter_set_type: str
+    package: str
+    grading_mode: str
+    applicability: str
+    image_rules: tuple[str, ...]
+    definitions: tuple[DiseaseDefinitionDTO, ...]
+
+
+@dataclass(frozen=True)
+class AnnotationConfigurationDTO:
+    revision: int
+    default_localization: str
+    preferred_tool: str
+    tools: tuple[str, ...]
+    classes: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class MetadataFieldDTO:
+    key: str
+    label: str
+    scope: str
+    field_type: str
+    requirement: str
+    verifier_editable: bool
+    is_pii: bool
+    choices: tuple[str, ...]
+    sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConfiguredUserDTO:
+    id: int
+    name: str
+    scopes: tuple[str, ...]
+    roles: tuple[str, ...]
+    upload_assignments: tuple[str, ...]
+    grading_allocations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReferralDiseaseDTO:
+    disease: str
+    source: str
+
+
+@dataclass(frozen=True)
 class ProjectSummaryDTO:
     project: ProjectChoiceDTO
     scope: ProjectScopeDTO
     metrics: tuple[ProjectMetricDTO, ...]
     profiles: tuple[ProjectProfileDTO, ...]
+    sources: tuple[ProjectSourceDTO, ...]
+    automated_analyses: tuple[ProjectAnalysisDTO, ...]
+    grading_targets: tuple[GradingTargetDTO, ...]
+    annotation: AnnotationConfigurationDTO | None
+    metadata_fields: tuple[MetadataFieldDTO, ...]
+    configured_users: tuple[ConfiguredUserDTO, ...]
+    allocation_enforced: bool
+    referral_diseases: tuple[ReferralDiseaseDTO, ...]
 
 
 @dataclass(frozen=True)

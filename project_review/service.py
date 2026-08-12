@@ -48,6 +48,7 @@ from .dto import (
     ProjectUploadPageDTO,
 )
 from .exceptions import ProjectReviewNotFound
+from .configuration import effective_configuration
 
 
 @dataclass(frozen=True)
@@ -128,11 +129,16 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         ProjectMetricDTO("remidio_glaucoma_reports", "Remidio glaucoma reports", report_counts["glaucoma"]),
         ProjectMetricDTO("wadhwani_inferences", "Wadhwani glaucoma inferences", wadhwani_count),
     )
+    allowed_labs = None if scope.project_wide else _allowed_lab_ids(db, scope)
+    configuration = effective_configuration(
+        db, project_id=project.id, allowed_lab_ids=allowed_labs
+    )
     return ProjectSummaryDTO(
         project=_project_dto(project),
         scope=_scope_dto(db, scope),
         metrics=metrics,
         profiles=_profile_configuration(db, project.id),
+        **configuration,
     )
 
 
@@ -269,7 +275,12 @@ def _direct_scope_clause(scope: _ResolvedScope):
 def _profile_configuration(db: Session, project_id: int) -> tuple[ProjectProfileDTO, ...]:
     mappings = db.execute(
         select(ProjectUploadProfile)
-        .where(ProjectUploadProfile.project_id == project_id)
+        .join(ProjectUploadProfile.profile)
+        .where(
+            ProjectUploadProfile.project_id == project_id,
+            ProjectUploadProfile.active.is_(True),
+            UploadProfile.active.is_(True),
+        )
         .options(
             selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.upload_kinds),
             selectinload(ProjectUploadProfile.profile).selectinload(UploadProfile.diseases).selectinload(UploadProfileDisease.disease),

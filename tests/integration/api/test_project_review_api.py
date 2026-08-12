@@ -12,6 +12,13 @@ from models import (
     Role,
     User,
 )
+from upload_profiles.models import (
+    ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
+    UploadProfile,
+    UploadProfileDisease,
+    UploadProfileKind,
+)
 
 
 def _role(db, name):
@@ -48,6 +55,24 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         lab_unit_id=allowed_lab.id,
         active=True,
     ))
+    profile = UploadProfile(name="Review Direct Intake", active=True)
+    hidden_profile = UploadProfile(name="Hidden Disabled Intake", active=False)
+    db_session.add_all([profile, hidden_profile])
+    db_session.flush()
+    mapping = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
+    hidden_mapping = ProjectUploadProfile(project_id=project.id, upload_profile_id=hidden_profile.id, active=True)
+    db_session.add_all([mapping, hidden_mapping])
+    db_session.flush()
+    db_session.add_all([
+        UploadProfileKind(upload_profile_id=profile.id, upload_kind="direct_image"),
+        UploadProfileDisease(upload_profile_id=profile.id, disease_id=disease.id, is_default=True),
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=mapping.id,
+            user_id=user.id,
+            lab_unit_id=allowed_lab.id,
+            active=True,
+        ),
+    ])
     allowed_encounter = PatientEncounters(
         uuid=str(uuid.uuid4()),
         name="SECRET PATIENT NAME",
@@ -127,8 +152,9 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
 
     with app.test_client(user=user) as client:
         index = client.get("/projects/")
-        assert index.status_code == 302
-        assert f"/projects/{project.id}/summary" in index.headers["Location"]
+        assert index.status_code == 200
+        assert b"selectedProjectId" in index.data
+        assert str(project.id).encode() in index.data
 
         summary = client.get(f"/api/projects/{project.id}/review/summary")
         assert summary.status_code == 200
@@ -137,6 +163,11 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
         assert metrics["single_uploads"] == 1
         assert metrics["total_images"] == 2
         assert metrics["grading_tasks"] == 2
+        configuration = summary.get_json()["data"]
+        assert [source["name"] for source in configuration["sources"]] == ["Review Direct Intake"]
+        assert configuration["grading_targets"][0]["target_type"] == "Single-image disease-wise"
+        assert configuration["configured_users"][0]["roles"] == ["collaborator"]
+        assert "Hidden Disabled Intake" not in summary.get_data(as_text=True)
         summary_page = client.get(f"/projects/{project.id}/summary")
         assert summary_page.status_code == 200
         assert b"Effective configuration" in summary_page.data

@@ -126,3 +126,11 @@ curl -X POST "/api/remote-inference/wadhwani/encounter-set-jobs/<job_token>/resu
 ```
 
 The browser status page exposes this operation as **Resume interrupted batch** only after the stale threshold has elapsed.
+
+## List recent EncounterSet Wadhwani jobs
+
+`GET /api/remote-inference/projects/<project_id>/wadhwani/encounter-set-jobs`
+
+Roles: `admin`, `local_admin`, or `data_manager`. The response contains at most the latest 10 EncounterSet Wadhwani jobs for the project, restricted to the caller's accessible lab units. Each row contains the job token, timestamps, state counts, and `status_url`.
+
+The endpoint returns JSON by default. An HTMX request with `HX-Request: true` returns the recent-jobs modal fragment used by `/uploads/encountersets/wadhwani_inference`.

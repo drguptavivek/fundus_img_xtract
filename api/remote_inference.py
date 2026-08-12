@@ -1,14 +1,14 @@
 """JSON APIs for project-owned manual remote inference workflows."""
 from __future__ import annotations
 
-from flask import flash, jsonify, request, url_for
+from flask import flash, jsonify, render_template, request, url_for
 from flask_login import current_user
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Project
 from remote_inference import automated_service, job_service, manual_service
-from upload_profiles.service import manager_lab_unit_ids
+from upload_profiles.service import get_user_lab_unit_ids, manager_lab_unit_ids
 
 from . import api_bp
 
@@ -88,6 +88,50 @@ def get_project_automated_remote_inference_workflows(project_id: int):
             for row in context["automated_remote_inference_workflows"]
         ]
     return jsonify(success=True, project_id=project_id, automated_workflows=rows)
+
+
+@api_bp.route("/remote-inference/projects/<int:project_id>/wadhwani/encounter-set-jobs", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager")
+def get_recent_project_wadhwani_encounter_set_jobs(project_id: int):
+    """Return the latest 10 scoped EncounterSet Wadhwani jobs for a project."""
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+    with get_db_session() as db:
+        if db.get(Project, project_id) is None:
+            return jsonify(success=False, error="Project not found."), 404
+        jobs = job_service.list_recent_encounter_set_wadhwani_jobs(
+            db,
+            project_id=project_id,
+            allowed_lab_unit_ids=allowed_lab_unit_ids,
+            limit=10,
+        )
+    if request.headers.get("HX-Request") == "true":
+        return render_template(
+            "remidio_api_uploads/_recent_wadhwani_jobs.html",
+            jobs=jobs,
+            project_id=project_id,
+        )
+    return jsonify(
+        success=True,
+        project_id=project_id,
+        jobs=[
+            {
+                "token": row.token,
+                "status": row.status,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "total_count": row.total_count,
+                "queued_count": row.queued_count,
+                "processing_count": row.processing_count,
+                "completed_count": row.completed_count,
+                "failed_count": row.failed_count,
+                "status_url": url_for(
+                    "remidio_api_uploads.encounter_set_wadhwani_inference_job",
+                    job_token=row.token,
+                ),
+            }
+            for row in jobs
+        ],
+    )
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/automated-workflows", methods=["POST", "PATCH"])

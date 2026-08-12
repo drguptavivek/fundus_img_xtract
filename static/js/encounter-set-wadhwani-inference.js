@@ -113,6 +113,27 @@
     });
   }
 
+  function refreshRecentJobs(projectId) {
+    var button = document.querySelector('[data-recent-wadhwani-jobs]');
+    var target = document.getElementById('recentWadhwaniJobsBody');
+    if (!button || !target || !projectId) {
+      return;
+    }
+    var template = button.getAttribute('data-recent-jobs-url-template') || '';
+    var url = template.replace(/\/0(?=\/|$)/, '/' + encodeURIComponent(projectId));
+    if (!url || url === template) {
+      return;
+    }
+    button.setAttribute('hx-get', url);
+    target.innerHTML = '<div class="text-muted">Loading recent jobs…</div>';
+    if (window.htmx) {
+      window.htmx.ajax('GET', url, {
+        target: target,
+        swap: 'innerHTML',
+      });
+    }
+  }
+
   function handleSelectionClick(event) {
     var allButton = event.target.closest('[data-select-all-visible-images]');
     if (allButton) {
@@ -147,6 +168,9 @@
     }
     if (event.target.name !== 'page') {
       setPage(1);
+    }
+    if (event.type === 'change' && event.target.name === 'project_id') {
+      refreshRecentJobs(event.target.value);
     }
   }
 

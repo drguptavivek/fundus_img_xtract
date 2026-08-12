@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from datetime import datetime
 from datetime import timedelta
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
@@ -15,7 +18,92 @@ from utils.celery_helpers import enqueue_task
 
 
 WADHWANI_ENCOUNTER_SET_JOB_TYPE = "encounter_set_wadhwani_inference"
+WADHWANI_RETRY_JOB_TYPE = "wai_api_statistics_retry"
 STALE_AFTER = timedelta(minutes=5)
+
+
+@dataclass(frozen=True)
+class RecentWadhwaniJob:
+    token: str
+    status: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    total_count: int
+    queued_count: int
+    processing_count: int
+    completed_count: int
+    failed_count: int
+
+
+def list_recent_encounter_set_wadhwani_jobs(
+    db,
+    *,
+    project_id: int,
+    allowed_lab_unit_ids: set[int],
+    limit: int = 10,
+) -> list[RecentWadhwaniJob]:
+    """Return recent project jobs restricted to the caller's lab-unit scope."""
+    if not allowed_lab_unit_ids:
+        return []
+    candidate_jobs = (
+        db.execute(
+            select(Job)
+            .options(selectinload(Job.items))
+            .where(
+                Job.project_id == project_id,
+                Job.upload_type.in_((WADHWANI_ENCOUNTER_SET_JOB_TYPE, WADHWANI_RETRY_JOB_TYPE)),
+            )
+            .order_by(Job.created_at.desc(), Job.id.desc())
+            .limit(100)
+        )
+        .scalars()
+        .all()
+    )
+    task_ids = {
+        task_id
+        for job in candidate_jobs
+        for item in job.items
+        if (task_id := task_id_from_job_item(item)) is not None
+    }
+    task_lab_by_id = {
+        task_id: lab_unit_id
+        for task_id, lab_unit_id in db.execute(
+            select(GradingTask.id, GradingTask.lab_unit_id).where(GradingTask.id.in_(task_ids))
+        ).all()
+    } if task_ids else {}
+    rows = []
+    result_limit = max(1, min(limit, 10))
+    for job in candidate_jobs:
+        job_task_lab_ids = {
+            task_lab_by_id[task_id]
+            for item in job.items
+            if (task_id := task_id_from_job_item(item)) in task_lab_by_id
+        }
+        if job_task_lab_ids:
+            if not job_task_lab_ids.issubset(allowed_lab_unit_ids):
+                continue
+        elif job.lab_unit_id not in allowed_lab_unit_ids:
+            continue
+        counts = {"queued": 0, "processing": 0, "ok": 0, "error": 0}
+        for item in job.items:
+            state = str(item.state or "queued").lower()
+            counts[state if state in counts else "queued"] += 1
+        rows.append(
+            RecentWadhwaniJob(
+                token=job.token,
+                status=job.status,
+                created_at=job.created_at,
+                updated_at=job.updated_at,
+                total_count=len(job.items),
+                queued_count=counts["queued"],
+                processing_count=counts["processing"],
+                completed_count=counts["ok"],
+                failed_count=counts["error"],
+            )
+        )
+        if len(rows) >= result_limit:
+            break
+    return rows
 
 
 def task_id_from_job_item(item: JobItem) -> int | None:

@@ -109,6 +109,36 @@
        hx-swap="innerHTML">
     <div class="card shadow-sm"><div class="card-body text-muted">Loading EncounterSet inference results…</div></div>
   </div>
+
+  {% if filters.project_id %}
+  <div class="d-flex justify-content-end mt-3">
+    <button class="btn btn-outline-secondary"
+            type="button"
+            data-recent-wadhwani-jobs
+            data-recent-jobs-url-template="{{ url_for('fundus_api.get_recent_project_wadhwani_encounter_set_jobs', project_id=0) }}"
+            data-bs-toggle="modal"
+            data-bs-target="#recentWadhwaniJobsModal"
+            hx-get="{{ url_for('fundus_api.get_recent_project_wadhwani_encounter_set_jobs', project_id=filters.project_id) }}"
+            hx-target="#recentWadhwaniJobsBody"
+            hx-swap="innerHTML">
+      <i class="fa-solid fa-clock-rotate-left me-1"></i>Recent WAI inference jobs
+    </button>
+  </div>
+
+  <div class="modal fade" id="recentWadhwaniJobsModal" tabindex="-1" aria-labelledby="recentWadhwaniJobsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="recentWadhwaniJobsModalLabel">Recent EncounterSet WAI inference jobs</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="recentWadhwaniJobsBody">
+          <div class="text-muted">Select the link to load the latest jobs.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 

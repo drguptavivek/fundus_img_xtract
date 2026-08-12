@@ -522,7 +522,7 @@ def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
         for run in db.execute(select(AIInferenceRun).where(AIInferenceRun.id.in_(inference_run_ids))).scalars().all()
     } if inference_run_ids else {}
     groups_by_key: dict[str, dict[str, Any]] = {}
-    summary = {"queued": 0, "processing": 0, "ok": 0, "error": 0}
+    summary = {"queued": 0, "processing": 0, "ok": 0, "error": 0, "positive": 0}
     for item in items:
         state = (item.state or "queued").lower()
         summary[state if state in summary else "queued"] += 1
@@ -533,6 +533,8 @@ def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
         grade = grades_by_id.get(parsed.get("grade_id")) if isinstance(parsed.get("grade_id"), int) else None
         run = runs_by_id.get(parsed.get("inference_run_id")) if isinstance(parsed.get("inference_run_id"), int) else None
         result_row = _result_row(run)
+        if _is_positive_wadhwani_result(grade, result_row):
+            summary["positive"] += 1
         encounter = image.patient_encounter if image else None
         group_key = encounter.uuid if encounter else "unknown"
         group = groups_by_key.setdefault(
@@ -557,6 +559,7 @@ def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                 "probability": _grade_probability(grade),
                 "prediction": result_row.get("prediction"),
                 "predicted_class_name": result_row.get("predicted_class_name"),
+                "predicted_class": result_row.get("predicted_class"),
                 "model_score": result_row.get("model_score"),
                 "confidence": result_row.get("confidence"),
                 "image": _image_card(image, _empty_status()) if image else None,
@@ -608,6 +611,14 @@ def _result_row(run: AIInferenceRun | None) -> dict[str, Any]:
         return {}
     rows = run.execute_response_json.get("results") or []
     return rows[0] or {} if rows else {}
+
+
+def _is_positive_wadhwani_result(grade: Grade | None, result_row: dict[str, Any]) -> bool:
+    prediction = str(result_row.get("prediction") or "").strip().lower()
+    predicted_class = result_row.get("predicted_class")
+    if prediction == "referrable" or predicted_class == 1 or str(predicted_class) == "1":
+        return True
+    return str(grade.grade_name or "").strip().lower() == "glaucoma" if grade else False
 
 
 def _grade_probability(grade: Grade | None) -> str | None:

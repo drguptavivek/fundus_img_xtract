@@ -124,7 +124,6 @@
     if (!url || url === template) {
       return;
     }
-    button.setAttribute('hx-get', url);
     target.innerHTML = '<div class="text-muted">Loading recent jobs…</div>';
     if (window.htmx) {
       window.htmx.ajax('GET', url, {
@@ -135,6 +134,13 @@
   }
 
   function handleSelectionClick(event) {
+    var recentJobsButton = event.target.closest('[data-recent-wadhwani-jobs]');
+    if (recentJobsButton) {
+      var projectSelect = document.getElementById('project_id');
+      refreshRecentJobs(projectSelect ? projectSelect.value : '');
+      return;
+    }
+
     var allButton = event.target.closest('[data-select-all-visible-images]');
     if (allButton) {
       setCheckboxes(document, true);

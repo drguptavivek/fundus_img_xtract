@@ -117,10 +117,7 @@
             data-recent-wadhwani-jobs
             data-recent-jobs-url-template="{{ url_for('fundus_api.get_recent_project_wadhwani_encounter_set_jobs', project_id=0) }}"
             data-bs-toggle="modal"
-            data-bs-target="#recentWadhwaniJobsModal"
-            hx-get="{{ url_for('fundus_api.get_recent_project_wadhwani_encounter_set_jobs', project_id=filters.project_id) }}"
-            hx-target="#recentWadhwaniJobsBody"
-            hx-swap="innerHTML">
+            data-bs-target="#recentWadhwaniJobsModal">
       <i class="fa-solid fa-clock-rotate-left me-1"></i>Recent WAI inference jobs
     </button>
   </div>

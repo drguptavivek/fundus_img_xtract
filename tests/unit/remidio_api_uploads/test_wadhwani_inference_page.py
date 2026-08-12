@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -150,6 +151,20 @@ def test_existing_image_filters_remain_conjunctive():
 def test_encounter_set_page_and_batch_limits_are_25():
     assert ENCOUNTER_SETS_PER_PAGE == 25
     assert MAX_ENCOUNTER_SETS_PER_BATCH == 25
+
+
+def test_recent_jobs_button_has_only_the_project_aware_javascript_loader():
+    project_root = Path(__file__).resolve().parents[3]
+    template = (
+        project_root / "templates/remidio_api_uploads/wadhwani_inference.html"
+    ).read_text(encoding="utf-8")
+    button = template.split('data-recent-wadhwani-jobs', 1)[1].split("</button>", 1)[0]
+    script = (
+        project_root / "static/js/encounter-set-wadhwani-inference.js"
+    ).read_text(encoding="utf-8")
+
+    assert "hx-get=" not in button
+    assert "refreshRecentJobs(projectSelect ? projectSelect.value : '')" in script
 
 
 def test_encounter_set_job_status_shows_positive_inference_count(

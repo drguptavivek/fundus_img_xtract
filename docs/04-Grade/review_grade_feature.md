@@ -13,6 +13,14 @@ This document describes the implementation of the Review Grade feature for the F
   - Has AI Grade (filters for tasks with AI grades where slot=ai)
   - No AI Grade (filters for tasks without AI grades)
 
+#### Human Review Filter
+- `Reviewed by Human` requires either a non-empty AI review status or a
+  replacement `role_slot=review` grade.
+- `Not Reviewed by Human` requires both to be absent.
+- AI is not required for a task to count as human-reviewed.
+- A replacement `role_slot=review` grade is optional and is filtered separately
+  as `Replacement Review Grade`.
+
 #### AI Model Filter
 - Added a multi-select dropdown filter for AI Models
 - Users can select one or more AI models to filter tasks by

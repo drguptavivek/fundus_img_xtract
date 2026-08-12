@@ -34,6 +34,7 @@ def build_discrepancy_filter_query(
     final_grades = filters.get("final_grade", [])
     final_grade_basis = normalize_final_grade_basis(filters.get("final_grade_basis"))
     has_ai_grade = filters.get("has_ai_grade")
+    has_human_review = filters.get("has_human_review")
     has_review = filters.get("has_review")
     has_regrade = filters.get("has_regrade")
     has_arbitrator = filters.get("has_arbitrator")
@@ -222,6 +223,32 @@ def build_discrepancy_filter_query(
     if selected_ai_model_id is not None:
         where_clauses.append("v.ai_models_json ? :ai_model_key")
         params["ai_model_key"] = str(selected_ai_model_id)
+
+    if has_human_review in {"yes", "no"}:
+        if selected_ai_model_id is not None:
+            selected_status = "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status'"
+            if has_human_review == "yes":
+                where_clauses.append(
+                    "(v.has_review = TRUE OR "
+                    f"COALESCE(NULLIF({selected_status}, ''), '') <> '')"
+                )
+            else:
+                where_clauses.append(
+                    "(v.has_review = FALSE AND "
+                    f"COALESCE(NULLIF({selected_status}, ''), '') = '')"
+                )
+        elif has_human_review == "yes":
+            where_clauses.append(
+                "(v.has_review = TRUE OR EXISTS ("
+                "SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                "WHERE COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> ''))"
+            )
+        else:
+            where_clauses.append(
+                "(v.has_review = FALSE AND NOT EXISTS ("
+                "SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
+                "WHERE COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> ''))"
+            )
 
     if ai_grades:
         valid_ai_grades = [g for g in ai_grades if g]

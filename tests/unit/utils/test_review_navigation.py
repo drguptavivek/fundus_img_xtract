@@ -49,6 +49,7 @@ def test_get_next_review_tasks_uses_discrepancy_filter_builder(monkeypatch):
         has_regrade="yes",
         has_arbitrator="yes",
         has_ai_grade="yes",
+        has_human_review="no",
         ai_model_id=1,
         final_grade_basis="double_match",
         ai_grades=["Glaucoma", "Suspect"],
@@ -70,6 +71,7 @@ def test_get_next_review_tasks_uses_discrepancy_filter_builder(monkeypatch):
     assert captured_filters["has_arbitrator"] == "yes"
     assert captured_filters["final_grade_basis"] == "double_match"
     assert captured_filters["ai_review_status"] == ["missing"]
+    assert captured_filters["has_human_review"] == "no"
     assert captured_filters["regrade_grade"] == ["Normal"]
     assert captured_filters["review_grade"] == ["Suspect"]
     assert captured_filters["final_grade"] == ["Normal"]

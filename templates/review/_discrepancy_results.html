@@ -27,6 +27,7 @@
         <input type="hidden" name="final_grade_basis" value="{{ filters.final_grade_basis or "preference" }}">
         {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{%
         endif %}
+        {% if filters.has_human_review %}<input type="hidden" name="has_human_review" value="{{ filters.has_human_review }}">{% endif %}
         {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
         {% if filters.has_arbitrator %}<input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator }}">{% endif %}
         {% if filters.has_consensus %}<input type="hidden" name="has_consensus" value="{{ filters.has_consensus }}">{%
@@ -73,6 +74,7 @@
         {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
         <input type="hidden" name="final_grade_basis" value="{{ filters.final_grade_basis or "preference" }}">
         <input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade or '' }}">
+        <input type="hidden" name="has_human_review" value="{{ filters.has_human_review or '' }}">
         <input type="hidden" name="has_review" value="{{ filters.has_review or '' }}">
         <input type="hidden" name="has_arbitrator" value="{{ filters.has_arbitrator or '' }}">
         <input type="hidden" name="has_regrade" value="{{ filters.has_regrade or '' }}">
@@ -119,6 +121,7 @@
                 final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                 has_ai_grade=filters.has_ai_grade,
+                has_human_review=filters.has_human_review,
                 has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -138,6 +141,7 @@
                 final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                 has_ai_grade=filters.has_ai_grade,
+                has_human_review=filters.has_human_review,
                 has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -166,6 +170,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -185,6 +190,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -218,6 +224,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
@@ -239,6 +246,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
@@ -272,6 +280,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -291,6 +300,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -323,6 +333,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
@@ -344,6 +355,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
@@ -371,6 +383,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -390,6 +403,7 @@
                     final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                     has_ai_grade=filters.has_ai_grade,
+                    has_human_review=filters.has_human_review,
                     has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -527,6 +541,7 @@
                   consensus_method=filters.consensus_method,
                   resident_compare=filters.resident_compare,
                   has_review=filters.has_review,
+                  has_human_review=filters.has_human_review,
                   has_regrade=filters.has_regrade,
                   has_arbitrator=filters.has_arbitrator,
                   has_ai_grade=filters.has_ai_grade,
@@ -580,6 +595,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                   has_regrade=filters.has_regrade,
                 has_arbitrator=filters.has_arbitrator,
@@ -600,6 +616,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -629,6 +646,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -648,6 +666,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -673,6 +692,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,
@@ -692,6 +712,7 @@
                   final_grade=filters.final_grade or [],
                 final_grade_basis=filters.final_grade_basis,
                   has_ai_grade=filters.has_ai_grade,
+                  has_human_review=filters.has_human_review,
                   has_review=filters.has_review,
                 has_arbitrator=filters.has_arbitrator,
                 has_consensus=filters.has_consensus,

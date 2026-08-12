@@ -57,13 +57,25 @@ The system offers several filters to refine the displayed tasks:
 - **Has AI Grade**: Show only tasks that include an AI grade
 - **No AI Grade**: Show only tasks without an AI grade
 
-#### Review Grade Filter
-- **Has Human Review**: Show only tasks that have a `review`-role human grade
-- **No Human Review**: Show only tasks without a `review`-role human grade. AI-model feedback alone does not count as a human review.
+#### Human Review Filter
+- **Reviewed by Human**: Show tasks where a reviewer assigned an AI review
+  status (`OK`, `Minor miss`, or `Major miss`) or submitted a replacement review
+  grade.
+- **Not Reviewed by Human**: Show tasks with neither an AI review status nor a
+  replacement review grade.
+- An AI grade is not required: a replacement review grade also establishes that
+  a human reviewed the task.
+
+#### Replacement Review Grade Filter
+- **Has Replacement Grade**: Show tasks where a reviewer decided to submit a
+  new `review`-role grade.
+- **No Replacement Grade**: Show tasks without a replacement grade. This does
+  not mean the task was not reviewed; most reviewed AI grades do not require a
+  new human grade.
 
 ### Submitting AI Feedback and Human Review
 
-- AI-model quality status/comments and a human review grade are independent actions.
+- AI-model quality status/comments and a replacement human review grade are independent actions.
 - Prefilled AI feedback is not resubmitted unless its status or comment actually changes.
 - Clearing an existing AI status/comment is an explicit saved change.
 - A submission must include either a selected human review grade or a Quality

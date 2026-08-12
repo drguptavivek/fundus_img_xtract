@@ -295,6 +295,7 @@ def review_task_details(task_id: int):
         has_consensus = _arg_or_return_to("has_consensus", return_to_query_args)
         has_review = _arg_or_return_to("has_review", return_to_query_args)
         has_ai_grade = _arg_or_return_to("has_ai_grade", return_to_query_args)
+        has_human_review = _arg_or_return_to("has_human_review", return_to_query_args)
         resident_grades = _arglist_or_return_to("resident_grade", return_to_query_args)
         resident2_grades = _arglist_or_return_to("resident2_grade", return_to_query_args)
         arbitrator_grades = _arglist_or_return_to("arbitrator_grade", return_to_query_args)
@@ -318,6 +319,7 @@ def review_task_details(task_id: int):
             "has_regrade": has_regrade,
             "has_arbitrator": has_arbitrator,
             "has_ai_grade": has_ai_grade,
+            "has_human_review": has_human_review,
             "final_grade_basis": final_grade_basis,
             "resident_compare": resident_compare,
         }
@@ -348,6 +350,7 @@ def review_task_details(task_id: int):
             has_regrade=has_regrade,
             has_arbitrator=has_arbitrator,
             has_ai_grade=has_ai_grade,
+            has_human_review=has_human_review,
             ai_model_id=ai_model_id_filter,
             final_grade_basis=final_grade_basis,
             ai_grades=ai_grades or None,

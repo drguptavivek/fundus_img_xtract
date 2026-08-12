@@ -152,6 +152,7 @@ def render_discrepancy_review(
         
         # Get AI grade filter
         has_ai_grade = request.args.get("has_ai_grade", type=str)
+        has_human_review = request.args.get("has_human_review", type=str)
         
         # Get review grade filter
         has_review = request.args.get("has_review", type=str)
@@ -233,6 +234,7 @@ def render_discrepancy_review(
             "regrade_grade": regrade_grades,
             "final_grade": final_grades,
             "has_ai_grade": has_ai_grade,
+            "has_human_review": has_human_review,
             "has_review": has_review,
             "has_regrade": has_regrade,
             "has_arbitrator": has_arbitrator,
@@ -392,6 +394,7 @@ def render_discrepancy_review(
                 "arbitrator_grade": arbitrator_grades,
                 "final_grade": final_grades,
                 "has_ai_grade": has_ai_grade,
+                "has_human_review": has_human_review,
                 "has_review": has_review,
                 "has_regrade": has_regrade,
                 "has_arbitrator": has_arbitrator,
@@ -477,6 +480,7 @@ def discrepancy_export():
             "regrade_grade": request.form.getlist("regrade_grade"),
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
+            "has_human_review": request.form.get("has_human_review", type=str),
             "has_review": request.form.get("has_review", type=str),
             "has_regrade": request.form.get("has_regrade", type=str),
             "has_arbitrator": request.form.get("has_arbitrator", type=str),

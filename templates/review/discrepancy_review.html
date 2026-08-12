@@ -259,11 +259,18 @@
           </div>
 
           <div class="col-md-3">
-            <label for="hasReviewSelect" class="form-label">Human Review</label>
+            <label for="hasReviewSelect" class="form-label d-flex align-items-center gap-2">
+              Replacement Review Grade
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
+                title="Whether a reviewer submitted an optional replacement grade (role_slot=review). This is separate from reviewing the AI result."
+                aria-label="Replacement review grade presence">
+                i
+              </button>
+            </label>
             <select class="form-select" id="hasReviewSelect" name="has_review">
               <option value="">All Tasks</option>
-              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Human Review</option>
-              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Human Review</option>
+              <option value="yes" {% if filters.has_review=='yes' %}selected{% endif %}>Has Replacement Grade</option>
+              <option value="no" {% if filters.has_review=='no' %}selected{% endif %}>No Replacement Grade</option>
             </select>
           </div>
 
@@ -396,6 +403,22 @@
           </div>
 
           <div class="col-md-3">
+            <label for="hasHumanReviewSelect" class="form-label d-flex align-items-center gap-2">
+              Human Review
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
+                title="Reviewed means a human assigned an AI review status or submitted a replacement review grade. AI is not required."
+                aria-label="Human review status definition">
+                i
+              </button>
+            </label>
+            <select class="form-select" id="hasHumanReviewSelect" name="has_human_review">
+              <option value="">All Tasks</option>
+              <option value="yes" {% if filters.has_human_review=='yes' %}selected{% endif %}>Reviewed by Human</option>
+              <option value="no" {% if filters.has_human_review=='no' %}selected{% endif %}>Not Reviewed by Human</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
             <label class="form-label">AI Models</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
@@ -491,6 +514,7 @@
     document.getElementById('diseaseSelect').value = '';
     document.getElementById('labUnitSelect').value = '';
     document.getElementById('hasAiGradeSelect').value = '';
+    document.getElementById('hasHumanReviewSelect').value = '';
     document.getElementById('hasReviewSelect').value = '';
     document.getElementById('hasConsensusSelect').value = '';
     document.getElementById('residentCompareSelect').value = '';

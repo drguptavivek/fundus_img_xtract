@@ -93,6 +93,7 @@ def create_regrade_tasks():
             "arbitrator_grade": request.form.getlist("arbitrator_grade"),
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
+            "has_human_review": request.form.get("has_human_review", type=str),
             "has_review": request.form.get("has_review", type=str),
             "has_arbitrator": has_arbitrator,
             "review_grade": request.form.getlist("review_grade"),

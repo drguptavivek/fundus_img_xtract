@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import local
 from typing import Any
 
 import requests
@@ -38,7 +39,15 @@ def _build_http_session() -> requests.Session:
     return session
 
 
-_HTTP_SESSION = _build_http_session()
+_HTTP_SESSION_STATE = local()
+
+
+def _http_session() -> requests.Session:
+    session = getattr(_HTTP_SESSION_STATE, "session", None)
+    if session is None:
+        session = _build_http_session()
+        _HTTP_SESSION_STATE.session = session
+    return session
 
 
 class WadhwaniClientError(RuntimeError):
@@ -65,7 +74,7 @@ def initialize_prediction(
     filename: str,
     content_type: str,
 ) -> dict[str, Any]:
-    response = _HTTP_SESSION.post(
+    response = _http_session().post(
         INITIALIZE_ENDPOINT,
         headers=_headers(client_id, bearer_token),
         json={
@@ -90,7 +99,7 @@ def initialize_prediction(
 
 def upload_prediction_file(*, upload_url: str, content_type: str, image_bytes: bytes) -> None:
     try:
-        response = _HTTP_SESSION.put(
+        response = _http_session().put(
             upload_url,
             headers={"Content-Type": content_type},
             data=image_bytes,
@@ -118,7 +127,7 @@ def execute_prediction(
     external_request_id: str,
     manifest: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    response = _HTTP_SESSION.post(
+    response = _http_session().post(
         f"{BASE_URL}/api/v1/predictions/{prediction_id}/execute",
         headers=_headers(client_id, bearer_token),
         json={

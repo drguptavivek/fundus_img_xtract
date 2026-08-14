@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-VIEWER_SCHEMA_VERSION = 1
+VIEWER_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,7 @@ class ViewerInferenceDTO:
     status: str | None = None
     model: str | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
+    count: int = 1
 
 
 @dataclass(frozen=True)

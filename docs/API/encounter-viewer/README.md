@@ -34,7 +34,7 @@ The DTO never contains patient name, MRN/patient identifier, source filenames, f
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "resource_kind": "encounter",
   "resource_id": "3918",
   "source_kind": "encounter_set",
@@ -60,13 +60,15 @@ The DTO never contains patient name, MRN/patient identifier, source filenames, f
     }
   ],
   "encounter_targets": [],
-  "inferences": [],
+  "inferences": [{"provider": "WAI", "disease": "Glaucoma", "result": "Normal", "count": 5}],
   "actions": [],
   "metadata": {}
 }
 ```
 
 Unauthorized clinical arrays are present only as empty arrays; no hidden availability indicators are returned.
+
+Every target grade includes its persisted workflow `role_slot` (`resident`, `resident2`, `arbitrator`, `regrade_adj`, `review`, or `ai`). The HTMX viewer renders every standard slot and labels an absent grade as not submitted. Identical inference summaries are collapsed into one entry; `count` reports how many matching image/task results contributed to that summary.
 
 ## HTMX response
 

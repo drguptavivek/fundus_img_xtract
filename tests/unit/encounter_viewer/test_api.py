@@ -33,10 +33,16 @@ def test_encounter_viewer_json_is_non_pii_and_uses_authenticated_media(
 ):
     lab = hospital_data["hospital_a"]["lab_units"][0]
     encounter, image = _encounter_with_image(db_session, lab.id)
-    db_session.add(DiabeticRetinopathyReport(
-        patient_encounter_id=encounter.id,
-        result="VISIBLE-REMIDIO-RESULT",
-    ))
+    db_session.add_all([
+        DiabeticRetinopathyReport(
+            patient_encounter_id=encounter.id,
+            result="VISIBLE-REMIDIO-RESULT",
+        ),
+        DiabeticRetinopathyReport(
+            patient_encounter_id=encounter.id,
+            result="VISIBLE-REMIDIO-RESULT",
+        ),
+    ])
     db_session.flush()
     user = _hospital_a_user(db_session, hospital_data, hosp_a_data_manager)
     client = auth_client(user)
@@ -46,22 +52,29 @@ def test_encounter_viewer_json_is_non_pii_and_uses_authenticated_media(
     assert response.status_code == 200
     payload = response.get_json()
     serialized = response.get_data(as_text=True)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["images"][0]["laterality"] == "OD"
     assert payload["images"][0]["focus"] == "disc"
     assert payload["images"][0]["media_url"] == f"/media/img/{image.uuid}"
     assert payload["images"][0]["thumbnail_url"] == f"/media/img/{image.uuid}/thumbnail"
     assert payload["inferences"][0]["result"] == "VISIBLE-REMIDIO-RESULT"
+    assert payload["inferences"][0]["count"] == 2
     assert "SECRET-MRN" not in serialized
     assert "Secret Patient" not in serialized
     assert response.headers["Cache-Control"] == "private, no-store"
 
 
 def test_encounter_viewer_htmx_returns_reusable_partial(
-    auth_client, hospital_data, hosp_a_data_manager, db_session
+    auth_client, hospital_data, hosp_a_data_manager, db_session, core_test_data
 ):
     lab = hospital_data["hospital_a"]["lab_units"][0]
     encounter, image = _encounter_with_image(db_session, lab.id)
+    TestDataFactory.create_grading_task(
+        db_session,
+        lab_unit_id=lab.id,
+        disease_id=core_test_data["glaucoma"].id,
+        encounter_file_id=image.id,
+    )
     client = auth_client(_hospital_a_user(db_session, hospital_data, hosp_a_data_manager))
 
     response = client.get(
@@ -73,6 +86,10 @@ def test_encounter_viewer_htmx_returns_reusable_partial(
     html = response.get_data(as_text=True)
     assert 'data-uev-root' in html
     assert 'data-uev-open-fullscreen' in html
+    assert f"Encounter evidence · {encounter.id}" in html
+    assert "Resident 2" in html
+    assert "Regrade adjudicator" in html
+    assert "Not submitted" in html
     assert f"/media/img/{image.uuid}" in html
     assert "SECRET-MRN" not in html
 

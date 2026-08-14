@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from typing import Any
 
@@ -364,7 +365,36 @@ def _evidence_from_tasks(db: Session, tasks: list[GradingTask], *, encounter):
     return (
         {key: tuple(value) for key, value in image_targets.items()},
         tuple(encounter_targets),
-        tuple(inferences),
+        _summarize_inferences(inferences),
+    )
+
+
+def _summarize_inferences(inferences: list[ViewerInferenceDTO]) -> tuple[ViewerInferenceDTO, ...]:
+    """Collapse identical encounter summaries without losing multiplicity."""
+    summarized: dict[tuple[str, ...], ViewerInferenceDTO] = {}
+    counts: dict[tuple[str, ...], int] = defaultdict(int)
+    for inference in inferences:
+        key = (
+            inference.provider,
+            inference.disease,
+            inference.result or "",
+            inference.status or "",
+            inference.model or "",
+            json.dumps(inference.metrics, sort_keys=True, default=str),
+        )
+        summarized.setdefault(key, inference)
+        counts[key] += inference.count
+    return tuple(
+        ViewerInferenceDTO(
+            provider=inference.provider,
+            disease=inference.disease,
+            result=inference.result,
+            status=inference.status,
+            model=inference.model,
+            metrics=inference.metrics,
+            count=counts[key],
+        )
+        for key, inference in summarized.items()
     )
 
 

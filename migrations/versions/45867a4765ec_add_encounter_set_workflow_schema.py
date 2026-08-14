@@ -81,7 +81,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     conn = op.get_bind()
-    inspector = Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
     
     # 4. Update grading_tasks table
     tables = inspector.get_table_names()

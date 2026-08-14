@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 import uuid
 
 import pytest
@@ -178,6 +179,31 @@ def test_create_batch_generates_intra_tasks(db_session, intra_rater_fixture):
     task = batch.tasks[0]
     assert task.grader_user_id == ctx["grader"].id
     assert task.state == "pending"
+
+
+def test_create_batch_does_not_infer_normal_from_grade_name(
+    db_session, intra_rater_fixture
+):
+    db = db_session
+    ctx = intra_rater_fixture
+    ctx["abnormal_grading"].impression = "Abnormal DR"
+    db.flush()
+
+    batch = IntraRaterService(db).create_batch(
+        BatchCreateParams(
+            disease_id=ctx["disease"].id,
+            grader_ids=[ctx["grader"].id],
+            target_images_per_grader=1,
+            created_by_user_id=ctx["grader"].id,
+            lab_unit_id=ctx["lab_unit"].id,
+            normal_grade_id=None,
+        )
+    )
+
+    snapshot = json.loads(batch.selection_snapshot_json)
+    grader_selection = snapshot[str(ctx["grader"].id)]
+    assert grader_selection["abnormal_count"] == 1
+    assert grader_selection["normal_count"] == 0
 
 
 def test_submit_grade_marks_task_completed(db_session, intra_rater_fixture):

@@ -75,7 +75,7 @@ class S3Config(Base):
     next_rotation_at: Mapped[datetime]
 
     # Fallback behavior
-    fallback_policy: Mapped[str]  # Deprecated - always local-first now
+    fallback_policy: Mapped[str]  # Schema compatibility only; always local-first
 
     # Lifecycle
     is_active: Mapped[bool]
@@ -85,6 +85,7 @@ class S3Config(Base):
 **Key Constraints:**
 - One active config per hospital (`unique(hospital_id, is_active)` where `is_active=True`)
 - Credentials encrypted with hospital-specific PyNaCl keys
+- Local fallback is fixed system behavior and has no administrative mutation control
 
 ### S3SyncStatus
 

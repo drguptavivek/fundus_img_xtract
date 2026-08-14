@@ -20,7 +20,6 @@ from utils.s3_validation import (
     validate_s3_region,
     validate_endpoint_url,
     validate_s3_config_name,
-    validate_fallback_policy,
     S3ValidationError,
 )
 from utils.s3_storage_backends import get_s3_client, check_s3_object_exists
@@ -142,7 +141,6 @@ def s3_config_create():
             addressing_style = request.form.get("addressing_style", "auto").strip().lower()
             access_key = request.form.get("access_key", "").strip()
             secret_key = request.form.get("secret_key", "").strip()
-            fallback_policy = request.form.get("fallback_policy", "never").strip().lower()
 
             # Auto-rotation settings
             auto_rotate_pepper = request.form.get("auto_rotate_pepper") == "on"
@@ -198,17 +196,6 @@ def s3_config_create():
             if addressing_style not in ("auto", "virtual", "path"):
                 errors.append("Invalid addressing style. Must be 'auto', 'virtual', or 'path'.")
 
-            # Fallback policy (DEPRECATED - now always local-first)
-            # The fallback_policy field is kept for backward compatibility but is ignored
-            # All S3 failures automatically fall back to local storage
-            try:
-                if not validate_fallback_policy(fallback_policy):
-                    errors.append("Invalid fallback policy.")
-                # Note: Policy is now always treated as "always" (local-first)
-                # even if set to "never" in the database
-            except ValueError as e:
-                errors.append(str(e))
-
             # Auto-rotation settings
             if auto_rotate_pepper:
                 if not rotation_time:
@@ -263,7 +250,8 @@ def s3_config_create():
                     auto_rotate_pepper=auto_rotate_pepper,
                     rotation_time=rotation_time,
                     rotation_timezone=rotation_timezone,
-                    fallback_policy=fallback_policy,
+                    # Retained in the schema for compatibility; runtime policy is fixed.
+                    fallback_policy="always",
                     is_active=False,  # Requires activation
                     created_by_id=current_user.id,
                 )
@@ -631,58 +619,6 @@ def s3_config_rotate_pepper(s3_config_id: int):
 
 
 # ============================================================================
-# Fallback Policy Route (Master Admin Only)
-# ============================================================================
-
-@roles_required("admin")
-def s3_config_set_fallback(s3_config_id: int):
-    """
-    Set fallback policy for S3 config (master admin only).
-    """
-    # Master admin check
-    if not _is_master_admin():
-        return jsonify({"success": False, "message": "Only master admin can set fallback policy"}), 403
-
-    with get_db_session() as db:
-        s3_config = db.query(S3Config).get(s3_config_id)
-        if not s3_config:
-            return jsonify({"success": False, "message": "Configuration not found"}), 404
-
-        if request.method == "POST":
-            fallback_policy = request.form.get("fallback_policy", "").strip().lower()
-
-            try:
-                if not validate_fallback_policy(fallback_policy):
-                    return jsonify({"success": False, "message": "Invalid fallback policy"}), 400
-
-                s3_config.fallback_policy = fallback_policy
-                s3_config.updated_at = datetime.now(timezone.utc)
-                db.commit()
-
-                audit_logger.info(
-                    "S3_FALLBACK_POLICY_SET | s3_config_id=%d | hospital_id=%s | policy=%s | set_by=%s",
-                    s3_config_id,
-                    s3_config.hospital_id,
-                    fallback_policy,
-                    getattr(current_user, 'username', 'unknown')
-                )
-
-                flash("Fallback policy updated.", "success")
-                return redirect(url_for("admin.s3_config_edit", s3_config_id=s3_config_id))
-
-            except Exception as e:
-                logger.error("Failed to set fallback policy: %s", e)
-                return jsonify({"success": False, "message": f"Failed to set fallback policy: {e}"}), 500
-
-        # GET request - show form
-        return render_template(
-            "admin/s3_config_fallback.html",
-            s3_config=s3_config,
-            hospital=db.query(Hospital).get(s3_config.hospital_id)
-        )
-
-
-# ============================================================================
 # API Endpoints for JS-based UI
 # ============================================================================
 
@@ -748,7 +684,8 @@ def s3_configs_api_list():
                 "endpoint_url": config.endpoint_url,
                 "is_active": config.is_active,
                 "is_archived": config.is_archived,
-                "fallback_policy": config.fallback_policy,
+                # Compatibility response field; policy is no longer configurable.
+                "fallback_policy": "always",
                 "auto_rotate_pepper": config.auto_rotate_pepper,
                 "pepper_rotated_at": config.pepper_rotated_at.isoformat() if config.pepper_rotated_at else None,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
@@ -918,7 +855,8 @@ def s3_config_api_create():
                 secret_key_encrypted=secret_key_encrypted,
                 url_signing_pepper=pepper_encrypted,
                 auto_rotate_pepper=False,
-                fallback_policy="never",
+                # Retained in the schema for compatibility; runtime policy is fixed.
+                fallback_policy="always",
                 is_active=False,
                 created_by_id=current_user.id,
             )

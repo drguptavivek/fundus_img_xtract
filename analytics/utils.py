@@ -404,31 +404,6 @@ def build_encounter_result_payload(
         images: List[Dict[str, Any]] = []
         for image in sorted(encounter.encounter_files, key=lambda ef: ((ef.eye_side or ""), ef.id)):
             image_task_details = tasks_by_image.get(f"encounter_file:{image.id}", [])
-            legacy_gradings: List[Dict[str, Any]] = []
-            for detail in image_task_details:
-                disease_name = detail.get("disease_name") or "unknown"
-                for slot_key in ("resident_grade", "resident2_grade", "arbitrator_grade"):
-                    slot_grade = detail.get(slot_key)
-                    if not slot_grade:
-                        continue
-                    legacy_gradings.append(
-                        {
-                            "graded_for": disease_name,
-                            "impression": slot_grade.impression,
-                            "grader": slot_grade.grader,
-                            "updated_at": slot_grade.updated_at,
-                        }
-                    )
-                for ai_grade in detail.get("ai_grades") or []:
-                    legacy_gradings.append(
-                        {
-                            "graded_for": disease_name,
-                            "impression": ai_grade.impression,
-                            "grader": f"{ai_grade.model_name} {ai_grade.model_version}",
-                            "updated_at": None,
-                        }
-                    )
-
             images.append(
                 {
                     "id": image.id,
@@ -440,7 +415,6 @@ def build_encounter_result_payload(
                     "position": None,
                     "focus": None,
                     "tasks": image_task_details,
-                    "legacy_gradings": legacy_gradings,
                 }
             )
         for image in sorted(encounter.encounter_set_images or [], key=lambda esi: (esi.spatial_position, esi.id)):
@@ -457,7 +431,6 @@ def build_encounter_result_payload(
                     "position": image.spatial_position,
                     "focus": metadata.get("focus") or metadata.get("centering"),
                     "tasks": image_task_details,
-                    "legacy_gradings": [],
                 }
             )
 

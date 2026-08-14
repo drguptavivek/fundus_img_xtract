@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, List, Optional, Sequence
 
 from flask import current_app
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import and_, case, exists, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from db_transaction_manager import transaction_scope
@@ -380,7 +380,8 @@ class IntraRaterService:
             .exists()
         )
 
-        # Order abnormal first: normal determined via normal_grade_id fallback to impression string heuristics
+        # Order the explicitly configured normal grade after all other grades.
+        # Without a configured normal grade, do not infer semantics from display text.
         query = query.order_by(
             self._normal_sort_expression(grading_alias, normal_grade_id),
             grade_alias.created_at.asc(),
@@ -412,7 +413,6 @@ class IntraRaterService:
                     grade_created_at=row.grade_created_at,
                     is_normal=self._is_normal_grade(
                         grading_id=row.grading_id,
-                        impression=row.impression,
                         normal_grade_id=normal_grade_id,
                     ),
                 )
@@ -424,24 +424,17 @@ class IntraRaterService:
         """Return SQL expression that sorts abnormal records first."""
         if normal_grade_id:
             return case((grading_alias.id == normal_grade_id, 1), else_=0).asc()
-        # Fallback: treat text containing "normal" (case-insensitive) as normal
-        return case(
-            (func.lower(grading_alias.impression).like("%normal%"), 1),
-            else_=0,
-        ).asc()
+        return grading_alias.id.asc()
 
     def _is_normal_grade(
         self,
         *,
         grading_id: int,
-        impression: Optional[str],
         normal_grade_id: Optional[int],
     ) -> bool:
         if normal_grade_id:
             return grading_id == normal_grade_id
-        if impression is None:
-            return False
-        return "normal" in impression.lower()
+        return False
 
     def _snapshot_to_json(self, snapshot: dict[int, SelectionOutcome]) -> str:
         payload = {str(grader_id): outcome.to_dict() for grader_id, outcome in snapshot.items()}

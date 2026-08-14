@@ -20,7 +20,7 @@ Before configuring S3 storage, you need:
 1. **S3-Compatible Account** - An account with your chosen provider
 2. **S3 Bucket** - A bucket created in your account
 3. **Access Credentials** - Access Key ID and Secret Access Key
-4. **Admin Access** - Admin role in the application (master admin for fallback policy changes)
+4. **Admin Access** - Admin role in the application
 
 ## Configuration Steps
 
@@ -209,8 +209,7 @@ To remove an old configuration:
 **Check**:
 1. Configuration is **active** (not just saved)
 2. Hospital ID matches the configuration
-3. Fallback policy isn't blocking uploads
-4. Check application logs for errors
+3. Check application logs for S3 upload errors; local fallback is automatic
 
 ### Addressing Style Issues
 

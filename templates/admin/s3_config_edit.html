@@ -219,30 +219,6 @@
                     </div>
                 </div>
 
-                <!-- Fallback Policy (DEPRECATED) -->
-                <div class="card shadow-sm mb-3 border-info">
-                    <div class="card-header py-2 bg-info bg-opacity-10">
-                        <strong><i class="fas fa-info-circle me-2"></i>Fallback Policy (Deprecated)</strong>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-info mb-2">
-                            <i class="fas fa-check-circle me-2"></i>
-                            <strong>Local-First Policy Active:</strong> All uploads automatically fall back to local storage on S3 failure.
-                        </div>
-                        <div class="mb-0">
-                            <label class="form-label text-muted">Stored Value (Not Used)</label>
-                            <div>
-                                <span class="badge bg-secondary">
-                                    {{ s3_config.fallback_policy.upper() }}
-                                </span>
-                                <span class="text-muted small ms-2">
-                                    <em>This stored value is now ignored. System always uses local-first policy.</em>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Submit -->
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary">

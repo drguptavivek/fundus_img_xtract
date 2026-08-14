@@ -84,7 +84,6 @@ from .package_updates import (
 from .s3_config import (
     s3_configs_list, s3_config_create, s3_config_edit, s3_config_delete,
     s3_config_activate, s3_config_test_connection, s3_config_rotate_pepper,
-    s3_config_set_fallback,
     s3_configs_api_list, s3_config_api_test_connection_modal, s3_config_api_create,
 )
 from .s3_sync_status import (
@@ -414,7 +413,6 @@ admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/delete", view_func=s3_conf
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/activate", view_func=s3_config_activate, methods=["POST"])
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/test-connection", view_func=s3_config_test_connection, methods=["POST"])
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/rotate-pepper", view_func=s3_config_rotate_pepper, methods=["POST"])
-admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/fallback", view_func=s3_config_set_fallback, methods=["GET", "POST"])
 # API endpoints for JS-based UI
 admin_bp.add_url_rule("/s3-configs/api/list", view_func=s3_configs_api_list, methods=["GET"])
 admin_bp.add_url_rule("/s3-configs/api/test-connection-modal", view_func=s3_config_api_test_connection_modal, methods=["POST"])

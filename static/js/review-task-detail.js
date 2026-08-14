@@ -161,6 +161,8 @@
       ? aiInfluenceBlock.querySelectorAll('input[name="ai_influence"]')
       : [];
     const actionField = document.getElementById('action-field');
+    const submitOverlay = document.querySelector('[data-review-submit-overlay]');
+    const submitOverlayMessage = document.querySelector('[data-review-submit-message]');
     const writeSubmitButtons = reviewForm
       ? reviewForm.querySelectorAll('[data-review-write-action]')
       : [];
@@ -186,6 +188,35 @@
       Array.from(aiStatusInputs, input => [input.name, input.value.trim()])
     );
     let pendingSubmit = false;
+    let pendingSubmitButton = null;
+    let writeSubmissionStarted = false;
+
+    function startReviewWriteSubmission(actionValue, submitter) {
+      if (!['save', 'save_next'].includes(actionValue) || writeSubmissionStarted) {
+        return false;
+      }
+
+      writeSubmissionStarted = true;
+      if (reviewForm) {
+        reviewForm.setAttribute('aria-busy', 'true');
+      }
+      if (submitOverlayMessage) {
+        submitOverlayMessage.textContent = actionValue === 'save_next'
+          ? 'Saving review and loading the next case…'
+          : 'Saving review and returning to the discrepancy list…';
+      }
+      if (submitOverlay) {
+        submitOverlay.classList.remove('d-none');
+        submitOverlay.setAttribute('aria-hidden', 'false');
+      }
+      writeSubmitButtons.forEach(button => {
+        button.setAttribute('aria-disabled', 'true');
+      });
+      if (submitter) {
+        submitter.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
+      }
+      return true;
+    }
 
     function hasChangedAiAssessment() {
       return Array.from(aiStatusInputs).some(input => {
@@ -319,6 +350,7 @@
         }
         const submitter = event.submitter;
         const actionValue = submitter && submitter.getAttribute('value');
+        pendingSubmitButton = submitter;
         if (actionField) {
           actionField.value = actionValue || 'save';
         }
@@ -351,12 +383,31 @@
       });
 
       confirmOverrideBtn.addEventListener('click', function () {
+        if (writeSubmissionStarted) {
+          return;
+        }
         pendingSubmit = true;
         overrideModal.hide();
         if (actionField && !actionField.value) {
           actionField.value = 'save';
         }
+        startReviewWriteSubmission(actionField ? actionField.value : 'save', pendingSubmitButton);
         reviewForm.submit();
+      });
+    }
+
+    if (reviewForm) {
+      reviewForm.addEventListener('submit', function (event) {
+        const submitter = event.submitter;
+        const actionValue = submitter && submitter.getAttribute('value');
+        if (actionValue === 'cancel_next' || event.defaultPrevented) {
+          return;
+        }
+        if (writeSubmissionStarted) {
+          event.preventDefault();
+          return;
+        }
+        startReviewWriteSubmission(actionValue || 'save', submitter);
       });
     }
   });

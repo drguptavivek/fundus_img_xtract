@@ -115,7 +115,21 @@ def test_review_template_requires_explicit_human_grade_selection():
     assert "change a Quality Assessment selection. A comment alone is not sufficient." in template
     assert 'href="{{ cancel_close_url }}"' in template
     assert "Cancel &amp; Close" in template
-    assert "-review-submit-v2" in template
+    assert "-review-submit-v3" in template
+
+
+def test_review_writes_use_grading_style_submission_overlay():
+    template = Path("templates/review/task_detail_review.html").read_text(encoding="utf-8")
+    script = Path("static/js/review-task-detail.js").read_text(encoding="utf-8")
+
+    assert "data-review-submit-overlay" in template
+    assert "retina_svg_logo.svg" in template
+    assert 'role="status" aria-live="assertive" aria-busy="true"' in template
+    assert "Saving review and loading the next case…" in script
+    assert "Saving review and returning to the discrepancy list…" in script
+    assert "actionValue === 'cancel_next' || event.defaultPrevented" in script
+    assert "startReviewWriteSubmission(actionField ? actionField.value : 'save', pendingSubmitButton);" in script
+    assert 'spinner-border spinner-border-sm me-2' in script
 
 
 def test_review_navigation_does_not_trust_submitted_next_task_id():

@@ -4,7 +4,7 @@ import requests
 
 from remidio_api_integration.client import RemidioClient
 from remidio_api_integration.errors import RemidioRemoteError
-from remidio_api_integration.schemas import RemidioSecrets
+from remidio_api_integration.schemas import RemidioDownloadContext, RemidioSecrets
 
 
 class FakeResponse:
@@ -104,10 +104,29 @@ def test_download_failure_never_renders_signed_url_in_error_outputs(caplog):
         "?GoogleAccessId=service@example.test&Expires=1786692609&Signature=top-secret"
     )
     client = RemidioClient(_secrets(), session=FailingDownloadSession())
+    context = RemidioDownloadContext(
+        routing_profile_id=3,
+        routing_profile_name="Prospective Retina",
+        remidio_api_binding_id=19,
+        remidio_api_source_rule_id=7,
+        project_id=3,
+        project_upload_profile_id=11,
+        lab_unit_id=4,
+        camera_id=2,
+        connection_id=2,
+        site_custom_identifier="comoph_4394",
+        patient_encounter_id=3936,
+        remidio_exam_row_id=812,
+        remidio_exam_id="6487588646944768",
+        asset_type="image",
+        remidio_asset_row_id=11162,
+        remidio_asset_id="6025072208773120",
+        device_type="FOP",
+    )
 
     with caplog.at_level(logging.WARNING, logger="remidio_api_integration.client"):
         try:
-            client.download_file(signed_url)
+            client.download_file(signed_url, context=context)
         except RemidioRemoteError as exc:
             error_text = str(exc)
             snapshot = exc.response_snapshot
@@ -118,5 +137,12 @@ def test_download_failure_never_renders_signed_url_in_error_outputs(caplog):
     assert "top-secret" not in combined_output
     assert "GoogleAccessId" not in combined_output
     assert "Signature" not in combined_output
+    assert "private-bucket/image.jpg" not in combined_output
     assert "[redacted-query]" in combined_output
+    assert "[redacted-path]" in combined_output
     assert "ConnectionError -> RuntimeError" in combined_output
+    assert snapshot["context"] == context.as_dict()
+    assert '"routing_profile_id": 3' in caplog.text
+    assert '"site_custom_identifier": "comoph_4394"' in caplog.text
+    assert '"patient_encounter_id": 3936' in caplog.text
+    assert '"remidio_exam_id": "6487588646944768"' in caplog.text

@@ -68,7 +68,7 @@ class FakeRemidioClient:
             ],
         }
 
-    def download_file(self, file_url, *, max_bytes):
+    def download_file(self, file_url, *, max_bytes, context=None):
         if file_url.endswith(".pdf"):
             return b"%PDF-1.4\n%test\n", "application/pdf"
         image = Image.new("RGB", (16, 16), color=(0, 255, 0))

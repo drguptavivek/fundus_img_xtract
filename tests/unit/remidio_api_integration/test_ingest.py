@@ -30,7 +30,11 @@ from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET
 
 
 class FakeRemidioClient:
-    def download_file(self, file_url, *, max_bytes):
+    def __init__(self):
+        self.download_contexts = []
+
+    def download_file(self, file_url, *, max_bytes, context=None):
+        self.download_contexts.append(context)
         if file_url.endswith(".pdf"):
             return b"%PDF-1.4\n%test\n", "application/pdf"
         image = Image.new("RGB", (16, 16), color=(255, 0, 0))
@@ -161,10 +165,11 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
     db_session.add_all([image, report])
     db_session.flush()
 
+    client = FakeRemidioClient()
     result = ingest_staged_files(
         db_session,
         connection_id=connection.id,
-        client=FakeRemidioClient(),
+        client=client,
         payload={"limit": 10},
     )
 
@@ -181,6 +186,14 @@ def test_ingest_staged_files_creates_encounter_set_image_pdf_and_targets(db_sess
     assert report.encounter_set_attachment_id is not None
     encounter = db_session.get(PatientEncounters, exam.patient_encounter_id)
     assert encounter.referral_suggestion == "yes"
+    assert [context.asset_type for context in client.download_contexts] == ["image", "report"]
+    for context in client.download_contexts:
+        assert context.remidio_api_binding_id == binding.id
+        assert context.remidio_api_source_rule_id == source_rule.id
+        assert context.project_id == project.id
+        assert context.site_custom_identifier == "rpc_test"
+        assert context.patient_encounter_id == encounter.id
+        assert context.remidio_exam_id == "exam-1"
 
     encounter_image = db_session.get(EncounterSetImage, image.encounter_set_image_id)
     attachment = db_session.get(EncounterSetAttachment, report.encounter_set_attachment_id)

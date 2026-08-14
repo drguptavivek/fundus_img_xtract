@@ -17,6 +17,50 @@ class RemidioSecrets:
 
 
 @dataclass(frozen=True)
+class RemidioDownloadContext:
+    """Non-PII lineage attached to one routed Remidio asset download."""
+
+    routing_profile_id: int | None
+    routing_profile_name: str | None
+    remidio_api_binding_id: int
+    remidio_api_source_rule_id: int
+    project_id: int
+    project_upload_profile_id: int
+    lab_unit_id: int
+    camera_id: int
+    connection_id: int
+    site_custom_identifier: str | None
+    patient_encounter_id: int
+    remidio_exam_row_id: int
+    remidio_exam_id: str
+    asset_type: str
+    remidio_asset_row_id: int
+    remidio_asset_id: str
+    device_type: str | None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "routing_profile_id": self.routing_profile_id,
+            "routing_profile_name": self.routing_profile_name,
+            "remidio_api_binding_id": self.remidio_api_binding_id,
+            "remidio_api_source_rule_id": self.remidio_api_source_rule_id,
+            "project_id": self.project_id,
+            "project_upload_profile_id": self.project_upload_profile_id,
+            "lab_unit_id": self.lab_unit_id,
+            "camera_id": self.camera_id,
+            "connection_id": self.connection_id,
+            "site_custom_identifier": self.site_custom_identifier,
+            "patient_encounter_id": self.patient_encounter_id,
+            "remidio_exam_row_id": self.remidio_exam_row_id,
+            "remidio_exam_id": self.remidio_exam_id,
+            "asset_type": self.asset_type,
+            "remidio_asset_row_id": self.remidio_asset_row_id,
+            "remidio_asset_id": self.remidio_asset_id,
+            "device_type": self.device_type,
+        }
+
+
+@dataclass(frozen=True)
 class RemidioImagePayload:
     remidio_image_id: str
     device_type: str | None

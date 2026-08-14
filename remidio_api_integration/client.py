@@ -13,7 +13,7 @@ import requests
 from utils.log_sanitize import sanitize_log_value
 
 from .errors import RemidioRemoteError
-from .schemas import RemidioSecrets
+from .schemas import RemidioDownloadContext, RemidioSecrets
 from .validation import require_token, sanitize_for_storage
 
 
@@ -80,7 +80,13 @@ class RemidioClient:
         )
         return self._request("GET", path, headers=self._gateway_headers(include_bearer=True))
 
-    def download_file(self, file_url: str, *, max_bytes: int = 100 * 1024 * 1024) -> tuple[bytes, str | None]:
+    def download_file(
+        self,
+        file_url: str,
+        *,
+        max_bytes: int = 100 * 1024 * 1024,
+        context: RemidioDownloadContext | None = None,
+    ) -> tuple[bytes, str | None]:
         """Download a Remidio signed file URL.
 
         Remidio exam payloads observed in the docs expose file download links in
@@ -97,34 +103,43 @@ class RemidioClient:
             started = perf_counter()
             response = self.session.get(normalized, timeout=self.timeout_seconds, stream=True)
         except requests.RequestException as exc:
-            safe_url = _redact_url_query(normalized)
+            safe_url = _redact_file_url(normalized)
             error_summary = _request_exception_summary(exc)
+            context_snapshot = context.as_dict() if context is not None else {}
             LOGGER.warning(
-                "Remidio file download failed url=%s error=%s",
+                "Remidio file download failed url=%s error=%s context=%s",
                 sanitize_log_value(safe_url, max_len=500),
                 error_summary,
+                sanitize_log_value(json.dumps(context_snapshot, sort_keys=True), max_len=2000),
             )
+            snapshot: dict[str, Any] = {"url": safe_url, "error": error_summary}
+            if context_snapshot:
+                snapshot["context"] = context_snapshot
             raise RemidioRemoteError(
                 f"Remidio file download failed: {error_summary}",
-                response_snapshot={"url": safe_url, "error": error_summary},
+                response_snapshot=snapshot,
             ) from exc
 
         if response.status_code < 200 or response.status_code >= 300:
             elapsed_ms = int((perf_counter() - started) * 1000)
+            context_snapshot = context.as_dict() if context is not None else {}
             snapshot = {
-                "url": _redact_url_query(normalized),
+                "url": _redact_file_url(normalized),
                 "status_code": response.status_code,
                 "elapsed_ms": elapsed_ms,
                 "content_type": response.headers.get("content-type"),
                 "content_length": response.headers.get("content-length"),
             }
+            if context_snapshot:
+                snapshot["context"] = context_snapshot
             LOGGER.warning(
-                "Remidio file download unsuccessful status=%s elapsed_ms=%s url=%s content_type=%s content_length=%s",
+                "Remidio file download unsuccessful status=%s elapsed_ms=%s url=%s content_type=%s content_length=%s context=%s",
                 sanitize_log_value(response.status_code),
                 sanitize_log_value(elapsed_ms),
                 sanitize_log_value(snapshot["url"], max_len=500),
                 sanitize_log_value(snapshot["content_type"]),
                 sanitize_log_value(snapshot["content_length"]),
+                sanitize_log_value(json.dumps(context_snapshot, sort_keys=True), max_len=2000),
             )
             raise RemidioRemoteError(
                 "Remidio file download was not successful.",
@@ -306,6 +321,14 @@ def _redact_url_query(value: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.query:
         return value
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "[redacted-query]", parsed.fragment))
+
+
+def _redact_file_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "[redacted-file-url]"
+    query = "[redacted-query]" if parsed.query else ""
+    return urlunsplit((parsed.scheme, parsed.netloc, "/[redacted-path]", query, ""))
 
 
 def _request_exception_summary(exc: requests.RequestException) -> str:

@@ -31,6 +31,7 @@ from .errors import RemidioConfigError, RemidioIntegrationError, RemidioRemoteEr
 from .mapper import map_exam_payload
 from .models import ProjectUploadProfileRemidioApiBinding, RemidioApiExamEncounter
 from .routing import resolve_binding_for_image
+from .schemas import RemidioDownloadContext
 
 
 MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -283,7 +284,19 @@ def _ingest_image(
                 "summary": summary.as_dict(),
             },
         )
-        content, content_type = client.download_file(_source_url(image), max_bytes=MAX_FILE_BYTES)
+        content, content_type = client.download_file(
+            _source_url(image),
+            max_bytes=MAX_FILE_BYTES,
+            context=_download_context(
+                exam=exam,
+                binding=binding,
+                encounter=encounter,
+                asset_type="image",
+                remidio_asset_row_id=image.id,
+                remidio_asset_id=image.remidio_image_id,
+                device_type=image.device_type,
+            ),
+        )
         extension = _image_extension(content, content_type, image.remidio_path)
         filename = f"{uuid4()}{extension}"
         folder_rel = _encounter_set_folder_rel(encounter)
@@ -410,7 +423,19 @@ def _ingest_report(
                 "summary": summary.as_dict(),
             },
         )
-        content, content_type = client.download_file(_source_url(report), max_bytes=MAX_FILE_BYTES)
+        content, content_type = client.download_file(
+            _source_url(report),
+            max_bytes=MAX_FILE_BYTES,
+            context=_download_context(
+                exam=exam,
+                binding=binding,
+                encounter=encounter,
+                asset_type="report",
+                remidio_asset_row_id=report.id,
+                remidio_asset_id=report.remidio_report_id,
+                device_type=None,
+            ),
+        )
         if not _looks_like_pdf(content, content_type, report.remidio_path):
             raise RemidioRemoteError("Downloaded Remidio report is not a PDF.")
         filename = f"{uuid4()}.pdf"
@@ -469,6 +494,38 @@ def _emit_progress(callback: Callable[[dict[str, Any]], None] | None, event: dic
         callback(event)
     except Exception as exc:  # noqa: BLE001
         logger.info("Remidio ingest progress update failed: %s", sanitize_log_value(exc))
+
+
+def _download_context(
+    *,
+    exam: RemidioExam,
+    binding: ProjectUploadProfileRemidioApiBinding,
+    encounter: PatientEncounters,
+    asset_type: str,
+    remidio_asset_row_id: int,
+    remidio_asset_id: str,
+    device_type: str | None,
+) -> RemidioDownloadContext:
+    routing_profile = binding.routing_profile
+    return RemidioDownloadContext(
+        routing_profile_id=binding.routing_profile_id,
+        routing_profile_name=routing_profile.name if routing_profile is not None else None,
+        remidio_api_binding_id=binding.id,
+        remidio_api_source_rule_id=binding.remidio_api_source_rule_id,
+        project_id=encounter.project_id,
+        project_upload_profile_id=binding.project_upload_profile_id,
+        lab_unit_id=binding.lab_unit_id,
+        camera_id=binding.camera_id,
+        connection_id=exam.remidio_connection_id,
+        site_custom_identifier=_site_identifier(exam),
+        patient_encounter_id=encounter.id,
+        remidio_exam_row_id=exam.id,
+        remidio_exam_id=exam.remidio_exam_id,
+        asset_type=asset_type,
+        remidio_asset_row_id=remidio_asset_row_id,
+        remidio_asset_id=remidio_asset_id,
+        device_type=device_type,
+    )
 
 
 def _emit_asset_progress(

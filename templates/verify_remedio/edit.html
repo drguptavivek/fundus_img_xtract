@@ -35,7 +35,8 @@
     </div>
   </div>
 
-  <form id="encounter-form" method="post" action="{{ url_for('verify_remedio.verify_save', encounter_id=encounter.id) }}">
+  <form id="encounter-form" method="post" action="{{ url_for('verify_remedio.verify_save', encounter_id=encounter.id) }}"
+    data-submission-guard data-submission-busy-label="Saving…">
     {{ csrf_field() }}
     <div class="card shadow-sm mb-3">
       <div class="card-header">
@@ -289,5 +290,6 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/submission-guard.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/verify_remedio_edit.js') }}?v={{ v }}"></script>
 {% endblock %}

@@ -74,6 +74,22 @@
     place-items: center;
     color: #667085;
   }
+  .verification-submit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--bs-body-bg-rgb), .88);
+    backdrop-filter: blur(2px);
+  }
+  .verification-submit-overlay.d-none { display: none; }
+  .verification-submit-loader { position: relative; width: 5rem; height: 5rem; margin: 0 auto 1rem; display: grid; place-items: center; }
+  .verification-submit-loader::before { content: ''; position: absolute; inset: 0; border: .25rem solid transparent; border-top-color: var(--bs-primary); border-left-color: var(--bs-primary); border-radius: 50%; animation: verification-loader-counter-spin .9s linear infinite; }
+  .verification-submit-logo { width: 3.25rem; height: 3.25rem; object-fit: contain; animation: verification-loader-logo-spin 2.2s linear infinite; }
+  @keyframes verification-loader-logo-spin { to { transform: rotate(360deg); } }
+  @keyframes verification-loader-counter-spin { to { transform: rotate(-360deg); } }
   .verify-counter {
     font-variant-numeric: tabular-nums;
   }
@@ -99,6 +115,16 @@
      data-storage-prefix="verify-encounter-set:{{ encounter.uuid }}:"
      data-verification-read-only="{{ 'true' if verification_read_only else 'false' }}"
      data-panel-count="{{ panel_count }}">
+  <div class="verification-submit-overlay d-none" role="status" aria-live="assertive" aria-busy="true"
+       aria-hidden="true" data-verification-submit-overlay>
+    <div class="card border-0 shadow-lg text-center p-4">
+      <div class="verification-submit-loader" aria-hidden="true">
+        <img class="verification-submit-logo" src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="">
+      </div>
+      <strong data-verification-submit-message>Saving verification…</strong>
+      <span class="small text-muted mt-1">Please wait while the next screen loads.</span>
+    </div>
+  </div>
   <div class="verify-topbar">
     <div class="container-fluid py-3">
       <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
@@ -260,6 +286,7 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
+<script src="{{ url_for('static', filename='js/submission-guard.js') }}?v={{ config.get('ASSETS_VERSION','') }}-verification-v1"></script>
 <script>
   (function () {
     const shell = document.querySelector('.verification-shell');
@@ -271,6 +298,8 @@
     const panelStage = document.getElementById('verification-panel-stage');
     const counter = document.getElementById('verify-panel-counter');
     const panelCount = shell.dataset.panelCount || '1';
+    const submissionOverlay = shell.querySelector('[data-verification-submit-overlay]');
+    const submissionOverlayMessage = shell.querySelector('[data-verification-submit-message]');
     let historyRefreshStarted = false;
     const activeOcrStatuses = new Set(['queued', 'processing']);
     const terminalOcrStatuses = new Set(['completed', 'completed_no_reports_detected', 'failed']);
@@ -282,6 +311,19 @@
     let ocrPollTimer = null;
     let ocrAttachmentUuid = null;
     let refreshOcrPanelOnClose = false;
+
+    function beginVerificationAction(button, message, busyLabel, showOverlay) {
+      return window.SubmissionGuard.acquire(shell, {
+        submitter: button,
+        controls: shell.querySelectorAll(
+          '[data-finalize-action], [data-exclude-encounter-set], .js-mark-reviewed, .js-not-gradable, .js-undo-not-gradable, .js-reorder, .js-edit-image'
+        ),
+        busyLabel: busyLabel || 'Saving…',
+        overlay: showOverlay ? submissionOverlay : null,
+        overlayMessage: showOverlay ? submissionOverlayMessage : null,
+        message
+      });
+    }
 
     // Back/Forward Cache can restore the pre-finalization DOM even after the
     // database status changed. Refresh once so status, controls, and messages
@@ -399,7 +441,13 @@
       const ocrForm = event.target.closest('[data-verification-ocr-form]');
       if (!ocrForm) return;
       event.preventDefault();
-      runVerificationOcr(ocrForm);
+      const submission = window.SubmissionGuard.acquire(ocrForm, {
+        submitter: event.submitter,
+        controls: ocrForm.querySelectorAll('button[type="submit"]'),
+        busyLabel: 'Queueing…'
+      });
+      if (!submission) return;
+      runVerificationOcr(ocrForm).finally(() => submission.release());
     });
 
     function clearEncounterStorage() {
@@ -642,11 +690,22 @@
         if (!confirm(confirmMessage)) return;
         const reason = prompt('Optional exclusion note:');
         if (reason === null) return;
+        const submission = beginVerificationAction(
+          excludeAction,
+          'Excluding this EncounterSet…',
+          'Excluding…',
+          true
+        );
+        if (!submission) return;
+        let navigating = false;
         postJson(excludeAction.dataset.excludeUrl, {reason: reason.trim()}).then((payload) => {
           clearAllVerificationStorage();
+          navigating = true;
           window.location.href = payload.redirect_url || "{{ url_for('verify_encounter_set.index') }}";
         }).catch((error) => {
           alert(error.message || 'Unable to exclude EncounterSet');
+        }).finally(() => {
+          if (!navigating) submission.release();
         });
         return;
       }
@@ -654,6 +713,16 @@
       const action = event.target.closest('[data-finalize-action]');
       if (!action) return;
       const form = document.getElementById(action.dataset.finalizeAction === 'next' ? 'finalize-next-form' : 'finalize-verification-form');
+      const submission = beginVerificationAction(
+        action,
+        action.dataset.finalizeAction === 'next'
+          ? 'Saving verification and loading the next EncounterSet…'
+          : 'Saving verification and returning to the browser…',
+        'Verifying…',
+        true
+      );
+      if (!submission) return;
+      let navigating = false;
       saveMetadataAsync().then(() => {
         const body = new URLSearchParams(new FormData(form));
         return fetch(form.action, {
@@ -670,6 +739,7 @@
       }).then(({response, payload}) => {
         if (response.ok && payload.success) {
           clearAllVerificationStorage();
+          navigating = true;
           window.location.href = payload.redirect_url || form.action;
           return;
         }
@@ -677,10 +747,13 @@
           alert(payload.message);
         }
         if (payload.redirect_url) {
+          navigating = true;
           window.location.href = payload.redirect_url;
         }
       }).catch((error) => {
         alert(error.message || 'Unable to verify EncounterSet');
+      }).finally(() => {
+        if (!navigating) submission.release();
       });
     });
 
@@ -705,9 +778,18 @@
       const editImage = event.target.closest('.js-edit-image');
       if (editImage) {
         event.preventDefault();
+        const submission = beginVerificationAction(editImage, '', 'Opening…', false);
+        if (!submission) return;
+        let navigating = false;
         saveMetadataAsync()
-          .then(() => { window.location.href = editImage.href; })
-          .catch((error) => { alert(error.message); });
+          .then(() => {
+            navigating = true;
+            window.location.href = editImage.href;
+          })
+          .catch((error) => { alert(error.message); })
+          .finally(() => {
+            if (!navigating) submission.release();
+          });
         return;
       }
 
@@ -769,6 +851,8 @@
         payload = {image_uuid: button.dataset.uuid, position};
       }
       const url = reorder ? "{{ url_for('verify_encounter_set.update_position') }}" : button.dataset.url;
+      const submission = beginVerificationAction(button, '', 'Saving…', false);
+      if (!submission) return;
       const requestAction = reviewed
         ? saveMetadataAsync().then(() => postJson(url, payload))
         : postJson(url, payload);
@@ -793,6 +877,8 @@
         window.location.reload();
       }).catch((error) => {
         alert(error.message);
+      }).finally(() => {
+        submission.release();
       });
     });
 

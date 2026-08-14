@@ -457,6 +457,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
+<script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v1')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>
@@ -865,19 +866,21 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   workbenchForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (submitting) return;
-    submitting = true;
-    window.clearTimeout(draftTimer);
     const action = event.submitter?.value || 'save_close';
     const clickedButton = event.submitter;
-    const originalButtonHtml = clickedButton?.innerHTML;
-    submitButtons.forEach(button => { button.disabled = true; });
-    submitOverlayMessage.textContent = action === 'save_next'
-      ? 'Saving grades and loading the next case…'
-      : 'Saving grades and closing the workbench…';
-    submitOverlay.classList.remove('d-none');
-    if (clickedButton) {
-      clickedButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
-    }
+    const submission = window.SubmissionGuard.acquire(workbenchForm, {
+      submitter: clickedButton,
+      controls: submitButtons,
+      busyLabel: 'Saving…',
+      overlay: submitOverlay,
+      overlayMessage: submitOverlayMessage,
+      message: action === 'save_next'
+        ? 'Saving grades and loading the next case…'
+        : 'Saving grades and closing the workbench…'
+    });
+    if (!submission) return;
+    submitting = true;
+    window.clearTimeout(draftTimer);
     showMessage('Saving grades…', 'info');
     clearInterval(heartbeatTimer);
     try {
@@ -905,9 +908,8 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       }
     } catch (error) {
       submitting = false;
-      submitOverlay.classList.add('d-none');
+      submission.release();
       updateSubmissionControls();
-      if (clickedButton) clickedButton.innerHTML = originalButtonHtml;
       showMessage(error.message, 'danger');
       if (error.reloadRequired) {
         reloadForConfigurationChange(error.message);

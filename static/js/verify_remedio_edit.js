@@ -126,6 +126,12 @@
         const fd = new FormData(form);
         if (submitter && submitter.name) fd.set(submitter.name, submitter.value);
         const side = (submitter && submitter.value) || fd.get('side');
+        const submission = window.SubmissionGuard.acquire(form, {
+          submitter,
+          controls: form.querySelectorAll('button[type="submit"]'),
+          busyLabel: 'Saving…'
+        });
+        if (!submission) return;
         fetch(form.action, {
           method: 'POST',
           body: fd,
@@ -140,7 +146,8 @@
             updateButtons(form, side);
             updateThumbnailIndicator(json.ef_id);
           }
-        }).catch(err => console.error('Laterality update failed', err));
+        }).catch(err => console.error('Laterality update failed', err))
+          .finally(() => submission.release());
       });
     });
     scope.querySelectorAll('.center-mark-form').forEach(form => {
@@ -150,6 +157,12 @@
         const fd = new FormData(form);
         if (submitter && submitter.name) fd.set(submitter.name, submitter.value);
         const centering = (submitter && submitter.value) || fd.get('centering');
+        const submission = window.SubmissionGuard.acquire(form, {
+          submitter,
+          controls: form.querySelectorAll('button[type="submit"]'),
+          busyLabel: 'Saving…'
+        });
+        if (!submission) return;
         fetch(form.action, {
           method: 'POST',
           body: fd,
@@ -164,7 +177,8 @@
             updateCenterButtons(form, centering);
             updateThumbnailIndicator(json.ef_id);
           }
-        }).catch(err => console.error('Centering update failed', err));
+        }).catch(err => console.error('Centering update failed', err))
+          .finally(() => submission.release());
       });
     });
   }
@@ -183,6 +197,11 @@
                             : toggle.getAttribute('data-unverify-url');
         const fd = form ? new FormData(form) : new FormData();
         if (!form && csrfToken) fd.append('csrf_token', csrfToken);
+        const submission = window.SubmissionGuard.acquire(toggle, {
+          controls: [toggle]
+        });
+        if (!submission) return;
+        let navigating = false;
         fetch(url, {
           method: 'POST',
           body: fd,
@@ -212,6 +231,7 @@
             recalcEncounterToggle();
             const autoNext = toggle.id === 'verify-toggle-encounter';
             if (autoNext && checked && json.next_url) {
+              navigating = true;
               showToast('Navigating to next unverified…', 'info');
               setTimeout(() => { window.location.href = json.next_url; }, 900);
             }
@@ -224,6 +244,8 @@
           toggle.checked = !checked;
           console.error('Verify toggle failed', err);
           showToast('Operation failed due to network error', 'danger');
+        }).finally(() => {
+          if (!navigating) submission.release();
         });
       });
     });

@@ -523,5 +523,6 @@
     {% else %}null{% endif %}
   }
 </script>
-<script src="{{ url_for('static', filename='js/review-task-detail.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-review-submit-v3"></script>
+<script src="{{ url_for('static', filename='js/submission-guard.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-submission-guard-v1"></script>
+<script src="{{ url_for('static', filename='js/review-task-detail.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-review-submit-v4"></script>
 {% endblock %}

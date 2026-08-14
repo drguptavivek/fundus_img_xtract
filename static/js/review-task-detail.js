@@ -189,33 +189,24 @@
     );
     let pendingSubmit = false;
     let pendingSubmitButton = null;
-    let writeSubmissionStarted = false;
 
     function startReviewWriteSubmission(actionValue, submitter) {
-      if (!['save', 'save_next'].includes(actionValue) || writeSubmissionStarted) {
+      if (!['save', 'save_next'].includes(actionValue)) {
         return false;
       }
 
-      writeSubmissionStarted = true;
-      if (reviewForm) {
-        reviewForm.setAttribute('aria-busy', 'true');
-      }
-      if (submitOverlayMessage) {
-        submitOverlayMessage.textContent = actionValue === 'save_next'
+      const submission = window.SubmissionGuard.acquire(reviewForm, {
+        submitter,
+        controls: writeSubmitButtons,
+        disableControls: false,
+        busyLabel: 'Saving…',
+        overlay: submitOverlay,
+        overlayMessage: submitOverlayMessage,
+        message: actionValue === 'save_next'
           ? 'Saving review and loading the next case…'
-          : 'Saving review and returning to the discrepancy list…';
-      }
-      if (submitOverlay) {
-        submitOverlay.classList.remove('d-none');
-        submitOverlay.setAttribute('aria-hidden', 'false');
-      }
-      writeSubmitButtons.forEach(button => {
-        button.setAttribute('aria-disabled', 'true');
+          : 'Saving review and returning to the discrepancy list…'
       });
-      if (submitter) {
-        submitter.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…';
-      }
-      return true;
+      return Boolean(submission);
     }
 
     function hasChangedAiAssessment() {
@@ -383,7 +374,7 @@
       });
 
       confirmOverrideBtn.addEventListener('click', function () {
-        if (writeSubmissionStarted) {
+        if (window.SubmissionGuard.isActive(reviewForm)) {
           return;
         }
         pendingSubmit = true;
@@ -403,7 +394,7 @@
         if (actionValue === 'cancel_next' || event.defaultPrevented) {
           return;
         }
-        if (writeSubmissionStarted) {
+        if (window.SubmissionGuard.isActive(reviewForm)) {
           event.preventDefault();
           return;
         }

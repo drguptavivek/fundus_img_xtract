@@ -52,6 +52,12 @@
         const fd = new FormData(form);
         if (submitter && submitter.name) fd.set(submitter.name, submitter.value);
         const side = (submitter && submitter.value) || fd.get('side');
+        const submission = window.SubmissionGuard.acquire(form, {
+          submitter,
+          controls: form.querySelectorAll('button[type="submit"]'),
+          busyLabel: 'Saving…'
+        });
+        if (!submission) return;
         fetch(form.action, {
           method: 'POST',
           body: fd,
@@ -63,7 +69,8 @@
           credentials: 'same-origin'
         }).then(res => res.json()).then(json => {
           if (json && json.ok) updateButtons(form, side);
-        }).catch(err => console.error('Laterality update failed', err));
+        }).catch(err => console.error('Laterality update failed', err))
+          .finally(() => submission.release());
       });
     });
     document.querySelectorAll('.center-mark-form').forEach(form => {
@@ -73,6 +80,12 @@
         const fd = new FormData(form);
         if (submitter && submitter.name) fd.set(submitter.name, submitter.value);
         const centering = (submitter && submitter.value) || fd.get('centering');
+        const submission = window.SubmissionGuard.acquire(form, {
+          submitter,
+          controls: form.querySelectorAll('button[type="submit"]'),
+          busyLabel: 'Saving…'
+        });
+        if (!submission) return;
         fetch(form.action, {
           method: 'POST',
           body: fd,
@@ -84,7 +97,8 @@
           credentials: 'same-origin'
         }).then(res => res.json()).then(json => {
           if (json && json.ok) updateCenterButtons(form, centering);
-        }).catch(err => console.error('Centering update failed', err));
+        }).catch(err => console.error('Centering update failed', err))
+          .finally(() => submission.release());
       });
     });
 
@@ -118,6 +132,11 @@
         const checked = verifyToggle.checked;
         const mainForm = document.getElementById('main-form');
         const fd = new FormData(mainForm);
+        const submission = window.SubmissionGuard.acquire(verifyToggle, {
+          controls: [verifyToggle]
+        });
+        if (!submission) return;
+        let navigating = false;
         const url = checked ? verifyToggle.getAttribute('data-verify-url')
                             : verifyToggle.getAttribute('data-unverify-url');
         const body = (function(){
@@ -154,6 +173,7 @@
             if (checked) {
               const nextLink = document.getElementById('next-link');
               if (nextLink && nextLink.getAttribute('href') && nextLink.getAttribute('href') !== '#' && !nextLink.classList.contains('disabled')) {
+                navigating = true;
                 try { showToast('Navigating to next…', 'info'); } catch(_) {}
                 setTimeout(() => { window.location.href = nextLink.getAttribute('href'); }, 1000);
               }
@@ -167,6 +187,8 @@
           verifyToggle.checked = !checked;
           console.error('Verify toggle failed', err);
           showToast('Operation failed due to network error', 'danger');
+        }).finally(() => {
+          if (!navigating) submission.release();
         });
       });
     }

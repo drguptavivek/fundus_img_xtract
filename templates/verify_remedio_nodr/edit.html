@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container py-4">
-  <form id="main-form" method="post" action="">
+  <form id="main-form" method="post" action="" data-submission-guard data-submission-busy-label="Saving…">
     {{ csrf_field() }}
     <div class="card shadow-sm mb-3">
       <div class="card-header">
@@ -125,5 +125,6 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="{{ url_for('static', filename='js/submission-guard.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/dr_edit.js') }}?v={{ v }}"></script>
 {% endblock %}

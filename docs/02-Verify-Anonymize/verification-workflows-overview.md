@@ -305,6 +305,18 @@ encounter_verified_at TIMESTAMP
 - **Disease lookups**: Cache disease information
 - **Static assets**: Optimize PDF and image loading
 
+### Submission Safety
+
+- Verification forms and asynchronous verification actions use the shared
+  `static/js/submission-guard.js` helper to allow only one in-flight mutation
+  per control or workspace.
+- Final EncounterSet verification displays a blocking progress overlay through
+  the save-and-redirect phase. Validation and network failures release the
+  guard so the verifier can correct the issue and retry.
+- Client-side guards improve feedback and prevent accidental repeat clicks;
+  EncounterSet finalization's transactional row lock and idempotent task
+  creation remain the authoritative protection against concurrent requests.
+
 ## Monitoring
 
 ### Key Metrics
@@ -331,6 +343,9 @@ When creating new verification workflows:
 3. **Add audit logging**: Track all user actions
 4. **Integrate with task creation**: Use `ensure_task()` function
 5. **Handle edge cases**: Proper error handling and validation
+6. **Reuse the submission guard**: Mark native write forms with
+   `data-submission-guard`; use `window.SubmissionGuard.acquire()` for AJAX
+   mutations and release the token after recoverable failures
 
 ### Testing Considerations
 

@@ -184,9 +184,9 @@
           {% endif %}
 
           {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('local_admin') or
-          current_user_has('data_manager') %}
+          current_user_has('data_manager') or current_user_has('discrepancy_reviewer') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading', 'review'] else '' }}" href="#"
               id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Grade
             </a>
@@ -200,22 +200,22 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.inter_rater_compare' else '' }}"
                   href="{{ url_for('grading.inter_rater_compare') }}">My Inter-Rater</a>
               </li>
-              {% if current_user_has('discrepancy_reviewer') %}
-              <li>
-                <a class="dropdown-item" href="{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
-              </li>
-
-              <li>
-                <a class="dropdown-item {{ 'active' if request.endpoint == 'review.my_reviews' else '' }}"
-                  href="{{ url_for('review.my_reviews') }}">
-                  My Reviews
-                </a>
-              </li>
-              {% endif %}
               <li>
                 <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}"
                   href="{{ url_for('tasks.intra_rater_dashboard') }}">
                   <span>My Intra-Rater Tasks</span>
+                </a>
+              </li>
+              {% endif %}
+              {% if current_user_has('discrepancy_reviewer') %}
+              <li>
+                <a class="dropdown-item {{ 'active' if request.endpoint == 'review.discrepancy_review' else '' }}"
+                  href="{{ url_for('review.discrepancy_review') }}">Discrepancy Review</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if request.endpoint == 'review.my_discrepancy_reviews' else '' }}"
+                  href="{{ url_for('review.my_discrepancy_reviews') }}">
+                  My Discrepancy Reviews
                 </a>
               </li>
               {% endif %}

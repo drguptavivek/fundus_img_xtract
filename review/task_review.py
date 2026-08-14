@@ -1,6 +1,5 @@
 from flask import render_template, request, flash, redirect, url_for
 from flask_login import current_user
-from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 import logging
 import json
@@ -8,16 +7,14 @@ from json import JSONDecodeError
 import re
 from urllib.parse import parse_qs, urlsplit
 
-from auth.roles import roles_or_project_grant_required, roles_required
+from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus, ImageMetadata
 
-from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_detail
 from utils.security_middleware import is_safe_url
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
-from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.review_navigation import get_next_review_tasks
 from encounter_sets.permissions import (
     CAPABILITY_DISCREPANCY_REVIEW,
@@ -35,6 +32,7 @@ from review_history import (
 from datetime import datetime, timezone
 from . import bp
 from .queues import ReviewQueueError, load_review_queue
+from .my_discrepancy_reviews import my_discrepancy_review_page
 
 # Initialize grades logger for review grade submissions
 grades_logger = logging.getLogger("grades")
@@ -888,58 +886,31 @@ def review_task_details(task_id: int):
         )
 
 
-@bp.route("/my-reviews")
-@roles_required("admin", "local_admin", "data_manager", "optometrist")
-def my_reviews():
-    """List review grades submitted by the current user."""
-    page = request.args.get("page", 1, type=int)
-    per_page = 20
-    filter_date = request.args.get("date")
-
+@bp.route("/my-discrepancy-reviews", methods=["GET"])
+@roles_or_project_grant_required("discrepancy_reviewer")
+def my_discrepancy_reviews():
+    """Render discrepancy-review history owned by the signed-in reviewer."""
+    page = max(1, request.args.get("page", 1, type=int) or 1)
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    disease_id = request.args.get("disease_id", type=int)
     with get_db_session() as db:
-        reviews, total_count = get_user_gradings_with_details(
-            db,
-            user_id=current_user.id,
-            page=page,
-            per_page=per_page,
-            role_slot="review",
-            filter_date=filter_date,
-        )
-
-        total_pages = (total_count + per_page - 1) // per_page
-        has_prev = page > 1
-        has_next = page < total_pages
+        try:
+            history = my_discrepancy_review_page(
+                db,
+                user=current_user._get_current_object(),
+                requested_date_from=date_from,
+                requested_date_to=date_to,
+                disease_id=disease_id,
+                page=page,
+                per_page=20,
+            )
+        except ValueError as exc:
+            flash(str(exc), "warning")
+            return redirect(url_for("review.my_discrepancy_reviews"))
 
         return render_template(
-            "review/my_reviews.html",
-            reviews=reviews,
-            page=page,
-            total_pages=total_pages,
-            has_prev=has_prev,
-            has_next=has_next,
-            filter_date=filter_date,
+            "review/my_discrepancy_reviews.html",
+            history=history,
+            return_to=request.full_path.rstrip("?"),
         )
-
-
-@bp.route("/my-reviews/viewer/<string:image_uuid>")
-@roles_required("admin", "local_admin", "data_manager", "optometrist")
-def my_reviews_viewer(image_uuid: str):
-    """Serve the grading viewer card for a review image UUID."""
-    with get_db_session() as db:
-        query = (
-            db.query(GradingTask)
-            .filter(
-                or_(
-                    GradingTask.encounter_file.has(uuid=image_uuid),
-                    GradingTask.direct_image.has(uuid=image_uuid),
-                ),
-            )
-            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
-        )
-        query = apply_scoping(query, GradingTask, current_user, "view")
-        task = query.first()
-        if not task:
-            return ("Not found", 404)
-
-        image_obj = task.encounter_file or task.direct_image
-        return render_template("partials/_grading_card.html", image=image_obj, image_uuid=image_uuid)

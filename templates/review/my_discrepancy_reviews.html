@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}My Discrepancy Reviews{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+    <div>
+      <h1 class="h3 mb-1">My Discrepancy Reviews</h1>
+      <p class="text-muted mb-0">Reviews you submitted, newest first.</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{{ url_for('review.discrepancy_review') }}">
+      Open discrepancy queue
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <form method="GET" class="row g-3 align-items-end">
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="review-date-from">Reviewed from</label>
+          <input class="form-control" id="review-date-from" name="date_from" type="date"
+            value="{{ history.date_from or '' }}">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="review-date-to">Reviewed to</label>
+          <input class="form-control" id="review-date-to" name="date_to" type="date"
+            value="{{ history.date_to or '' }}">
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="review-disease-filter">Disease</label>
+          <select class="form-select" id="review-disease-filter" name="disease_id">
+            <option value="">All diseases</option>
+            {% for disease in history.diseases %}
+              <option value="{{ disease.id }}" {% if history.disease_id == disease.id %}selected{% endif %}>
+                {{ disease.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3 d-flex gap-2">
+          <button class="btn btn-primary" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('review.my_discrepancy_reviews') }}">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h2 class="h6 mb-0">Submitted reviews</h2>
+        <small class="text-muted">{{ history.total_count }} review{% if history.total_count != 1 %}s{% endif %}</small>
+      </div>
+      <small class="text-muted">Page {{ history.page }} of {{ history.total_pages }}</small>
+    </div>
+
+    {% if history.items %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Disease</th>
+              <th scope="col">Review grade</th>
+              <th scope="col">Location</th>
+              <th scope="col">Reviewed</th>
+              <th scope="col" class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for review in history.items %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">#{{ review.task_id }}</div>
+                  <span class="badge text-bg-light">{{ review.task_state|replace('_', ' ')|title }}</span>
+                </td>
+                <td>{{ review.disease_name }}</td>
+                <td>
+                  <span class="badge text-bg-primary">{{ review.grade_impression }}</span>
+                  {% if review.comment %}
+                    <div class="small text-muted mt-1 text-break">{{ review.comment }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div>{{ review.lab_unit_name }}</div>
+                  <div class="small text-muted">{{ review.hospital_name }}</div>
+                </td>
+                <td class="text-nowrap">{{ review.reviewed_at|user_datetime }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary"
+                    href="{{ url_for('review.review_task_details', task_id=review.task_id, return_to=return_to) }}">
+                    View or update
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="alert alert-info mb-0">
+          No discrepancy reviews match these filters.
+        </div>
+      </div>
+    {% endif %}
+
+    {% if history.total_pages > 1 %}
+      <div class="card-footer d-flex justify-content-end">
+        <nav aria-label="My discrepancy review pages">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if not history.has_previous %}disabled{% endif %}">
+              <a class="page-link" href="{{ url_for('review.my_discrepancy_reviews', page=history.page-1, date_from=history.date_from, date_to=history.date_to, disease_id=history.disease_id) if history.has_previous else '#' }}">Previous</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link">{{ history.page }} / {{ history.total_pages }}</span></li>
+            <li class="page-item {% if not history.has_next %}disabled{% endif %}">
+              <a class="page-link" href="{{ url_for('review.my_discrepancy_reviews', page=history.page+1, date_from=history.date_from, date_to=history.date_to, disease_id=history.disease_id) if history.has_next else '#' }}">Next</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

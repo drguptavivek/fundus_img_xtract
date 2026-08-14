@@ -70,7 +70,7 @@
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
     <h3>{{ page_title or 'Discrepancy Review' }}</h3>
     <div class="d-flex align-items-center gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.my_reviews') }}">My Reviews</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.my_discrepancy_reviews') }}">My Discrepancy Reviews</a>
       {% include "components/mv_refresh_button.html" with context %}
     </div>
   </div>

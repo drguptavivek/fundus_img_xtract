@@ -1,5 +1,70 @@
 # Discrepancy Review API
 
+## List my discrepancy reviews
+
+`GET /api/review/me/discrepancy-reviews`
+
+Returns the signed-in reviewer's current human discrepancy-review grades, newest first. Results are restricted to tasks that remain inside the caller's discrepancy-review project, hospital, and lab-unit scope.
+
+- Authentication: signed-in global `discrepancy_reviewer` or a user with a matching project role grant.
+- Authorization: rows must belong to the caller and pass the shared task capability scope.
+- CSRF: not required for this read-only endpoint.
+- Query parameters:
+  - `date_from`: optional inclusive reviewer-local start date in `YYYY-MM-DD` format.
+  - `date_to`: optional inclusive reviewer-local end date in `YYYY-MM-DD` format. It must not precede `date_from`.
+  - `disease_id`: optional disease represented in the caller's own history.
+  - `page`: positive page number; defaults to `1`.
+  - `per_page`: page size from `1` to `100`; defaults to `20`.
+
+Success (`200`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [{
+      "task_id": 42,
+      "task_state": "final",
+      "disease_id": 2,
+      "disease_name": "Glaucoma",
+      "grade_impression": "Referable",
+      "comment": "Disc margin reviewed",
+      "lab_unit_name": "Retina Lab",
+      "hospital_name": "Hospital A",
+      "reviewed_at": "2026-08-14T06:30:00+00:00"
+    }],
+    "filters": {
+      "date_from": "2026-08-01",
+      "date_to": "2026-08-14",
+      "disease_id": 2,
+      "diseases": [{"id": 2, "name": "Glaucoma"}]
+    },
+    "pagination": {
+      "page": 1,
+      "per_page": 20,
+      "total_count": 1,
+      "total_pages": 1,
+      "has_previous": false,
+      "has_next": false
+    }
+  }
+}
+```
+
+Invalid date or unavailable disease (`400`):
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "invalid_review_filter",
+    "message": "Date must use YYYY-MM-DD format."
+  }
+}
+```
+
+The server-rendered companion page is `GET /review/my-discrepancy-reviews`. It uses the same service contract and provides links back into task review with the active history filters preserved.
+
 ## Get project-aware filter options
 
 `GET /api/review/filter-options?project_id=<id>`

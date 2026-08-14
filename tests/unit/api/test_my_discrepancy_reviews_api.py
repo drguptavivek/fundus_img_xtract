@@ -20,8 +20,12 @@ def _history() -> MyDiscrepancyReviewPageDTO:
             task_state="final",
             disease_id=2,
             disease_name="Glaucoma",
+            review_type="human_grade",
+            review_value="Referable",
             grade_impression="Referable",
             comment="Reviewed",
+            ai_model_name=None,
+            ai_model_version=None,
             lab_unit_name="Lab A1",
             hospital_name="Hospital A",
             reviewed_at=datetime(2026, 8, 14, 6, 30, tzinfo=timezone.utc),
@@ -92,6 +96,7 @@ def test_my_discrepancy_reviews_page_renders_canonical_surface(
 
     assert response.status_code == 200
     assert b"My Discrepancy Reviews" in response.data
+    assert b"my-review-page-user" in response.data
     assert b"View or update" in response.data
     assert b"/review/my-reviews" not in response.data
 

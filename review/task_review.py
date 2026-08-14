@@ -913,4 +913,5 @@ def my_discrepancy_reviews():
             "review/my_discrepancy_reviews.html",
             history=history,
             return_to=request.full_path.rstrip("?"),
+            ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
         )

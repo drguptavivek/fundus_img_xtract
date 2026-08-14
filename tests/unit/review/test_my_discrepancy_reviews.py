@@ -53,6 +53,49 @@ def _review_grade(db_session, *, reviewer, lab, disease, hospital, impression, r
     return task
 
 
+def _ai_feedback(
+    db_session, *, reviewer, ai_grader, lab, disease, hospital, reviewed_at
+):
+    label = (
+        db_session.query(DiseaseGrading)
+        .filter(DiseaseGrading.disease_id == disease.id)
+        .first()
+    )
+    image = ImageFactory.create_direct_upload(
+        db_session,
+        hospital_id=hospital.id,
+        lab_unit_id=lab.id,
+        user_id=reviewer.id,
+        disease_id=disease.id,
+    )
+    task = GradingTask(
+        direct_image_upload_id=image.id,
+        disease_id=disease.id,
+        lab_unit_id=lab.id,
+        state="final",
+    )
+    db_session.add(task)
+    db_session.flush()
+    db_session.add(Grade(
+        task_id=task.id,
+        grader_user_id=ai_grader.id,
+        role_slot="ai",
+        disease_grading_id=label.id,
+        grade_name=label.impression,
+        disease_name=disease.name,
+        ai_model_name="Test AI",
+        ai_model_version="v1",
+        ai_review_status="minor_miss",
+        ai_review_comment="Missed feature",
+        ai_reviewed_by_user_id=reviewer.id,
+        ai_reviewed_at=reviewed_at,
+        created_at=reviewed_at,
+        updated_at=reviewed_at,
+    ))
+    db_session.flush()
+    return task
+
+
 def test_my_discrepancy_reviews_are_owner_scoped_and_filter_by_local_date(
     db_session, core_test_data
 ):
@@ -130,6 +173,52 @@ def test_my_discrepancy_reviews_rejects_invalid_date(db_session, core_test_data)
             page=1,
             per_page=20,
         )
+
+
+def test_my_discrepancy_reviews_includes_ai_feedback_without_human_grade(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_unit"])
+    hospital = db_session.merge(core_test_data["hospital"])
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    reviewer = UserFactory.create_by_role(
+        db_session,
+        "discrepancy_reviewer",
+        username="ai-only-review-history-user",
+        lab_units=[lab],
+    )
+    ai_grader = UserFactory.create_by_role(
+        db_session,
+        "admin",
+        username="ai-review-history-model-user",
+    )
+    reviewed_at = datetime(2026, 8, 10, 9, 0, tzinfo=timezone.utc)
+    task = _ai_feedback(
+        db_session,
+        reviewer=reviewer,
+        ai_grader=ai_grader,
+        lab=lab,
+        disease=glaucoma,
+        hospital=hospital,
+        reviewed_at=reviewed_at,
+    )
+
+    result = my_discrepancy_review_page(
+        db_session,
+        user=reviewer,
+        requested_date_from="2026-08-01",
+        requested_date_to="2026-08-13",
+        disease_id=None,
+        page=1,
+        per_page=20,
+    )
+
+    assert result.total_count == 1
+    assert result.diseases == ({"id": glaucoma.id, "name": "Glaucoma"},)
+    assert result.items[0].task_id == task.id
+    assert result.items[0].review_type == "ai_feedback"
+    assert result.items[0].review_value == "minor_miss"
+    assert result.items[0].ai_model_name == "Test AI"
 
 
 def test_my_discrepancy_reviews_rejects_reversed_date_range(

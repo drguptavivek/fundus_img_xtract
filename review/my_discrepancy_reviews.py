@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func
+from sqlalchemy import String, cast, func, literal, null
 from sqlalchemy.orm import Session
 
 from encounter_sets.permissions import (
@@ -22,8 +22,12 @@ class MyDiscrepancyReviewDTO:
     task_state: str
     disease_id: int
     disease_name: str
-    grade_impression: str
+    review_type: str
+    review_value: str | None
+    grade_impression: str | None
     comment: str | None
+    ai_model_name: str | None
+    ai_model_version: str | None
     lab_unit_name: str
     hospital_name: str
     reviewed_at: datetime
@@ -96,7 +100,7 @@ def _utc_day_bounds(day: date, timezone_info: ZoneInfo) -> tuple[datetime, datet
     return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
 
 
-def _base_query(db: Session, *, user: User):
+def _human_review_query(db: Session, *, user: User):
     reviewed_at = func.coalesce(Grade.updated_at, Grade.created_at)
     query = (
         db.query(
@@ -104,12 +108,16 @@ def _base_query(db: Session, *, user: User):
             GradingTask.state.label("task_state"),
             Disease.id.label("disease_id"),
             Disease.name.label("disease_name"),
+            literal("human_grade").label("review_type"),
+            DiseaseGrading.impression.label("review_value"),
             DiseaseGrading.impression.label("grade_impression"),
             Grade.comment.label("comment"),
+            cast(null(), String).label("ai_model_name"),
+            cast(null(), String).label("ai_model_version"),
             LabUnit.name.label("lab_unit_name"),
             Hospital.name.label("hospital_name"),
             reviewed_at.label("reviewed_at"),
-            Grade.id.label("grade_id"),
+            Grade.id.label("activity_id"),
         )
         .join(GradingTask, GradingTask.id == Grade.task_id)
         .join(Disease, Disease.id == GradingTask.disease_id)
@@ -129,6 +137,49 @@ def _base_query(db: Session, *, user: User):
     )
 
 
+def _ai_feedback_query(db: Session, *, user: User):
+    query = (
+        db.query(
+            Grade.task_id.label("task_id"),
+            GradingTask.state.label("task_state"),
+            Disease.id.label("disease_id"),
+            Disease.name.label("disease_name"),
+            literal("ai_feedback").label("review_type"),
+            Grade.ai_review_status.label("review_value"),
+            DiseaseGrading.impression.label("grade_impression"),
+            Grade.ai_review_comment.label("comment"),
+            Grade.ai_model_name.label("ai_model_name"),
+            Grade.ai_model_version.label("ai_model_version"),
+            LabUnit.name.label("lab_unit_name"),
+            Hospital.name.label("hospital_name"),
+            Grade.ai_reviewed_at.label("reviewed_at"),
+            Grade.id.label("activity_id"),
+        )
+        .join(GradingTask, GradingTask.id == Grade.task_id)
+        .join(Disease, Disease.id == GradingTask.disease_id)
+        .join(DiseaseGrading, DiseaseGrading.id == Grade.disease_grading_id)
+        .join(LabUnit, LabUnit.id == GradingTask.lab_unit_id)
+        .join(Hospital, Hospital.id == LabUnit.hospital_id)
+        .filter(
+            Grade.ai_reviewed_by_user_id == user.id,
+            Grade.role_slot == "ai",
+            Grade.ai_reviewed_at.isnot(None),
+        )
+    )
+    return apply_task_capability_scope(
+        query,
+        GradingTask,
+        user,
+        CAPABILITY_DISCREPANCY_REVIEW,
+    )
+
+
+def _activity_subquery(db: Session, *, user: User):
+    return _human_review_query(db, user=user).union_all(
+        _ai_feedback_query(db, user=user)
+    ).subquery("my_discrepancy_review_activity")
+
+
 def my_discrepancy_review_page(
     db: Session,
     *,
@@ -139,7 +190,7 @@ def my_discrepancy_review_page(
     page: int,
     per_page: int,
 ) -> MyDiscrepancyReviewPageDTO:
-    """Return the caller's current review-grade history in their active scope."""
+    """Return the caller's human and AI discrepancy-review activity."""
     selected_from = _parse_date(requested_date_from)
     selected_to = _parse_date(requested_date_to)
     if selected_from and selected_to and selected_to < selected_from:
@@ -147,38 +198,40 @@ def my_discrepancy_review_page(
     page = max(1, page)
     per_page = min(100, max(1, per_page))
 
-    base_query = _base_query(db, user=user)
+    activity = _activity_subquery(db, user=user)
     disease_rows = (
-        base_query.with_entities(Disease.id, Disease.name)
+        db.query(activity.c.disease_id, activity.c.disease_name)
         .distinct()
-        .order_by(Disease.name, Disease.id)
+        .order_by(activity.c.disease_name, activity.c.disease_id)
         .all()
     )
-    diseases = tuple({"id": row.id, "name": row.name} for row in disease_rows)
+    diseases = tuple(
+        {"id": row.disease_id, "name": row.disease_name}
+        for row in disease_rows
+    )
     allowed_disease_ids = {int(item["id"]) for item in diseases}
     if disease_id is not None and disease_id not in allowed_disease_ids:
         raise ValueError("Disease is unavailable in your discrepancy-review history.")
 
-    filtered_query = base_query
+    filtered_query = db.query(activity)
     if disease_id is not None:
-        filtered_query = filtered_query.filter(GradingTask.disease_id == disease_id)
+        filtered_query = filtered_query.filter(activity.c.disease_id == disease_id)
     if selected_from is not None or selected_to is not None:
         timezone_info = _user_timezone(user)
-        reviewed_at = func.coalesce(Grade.updated_at, Grade.created_at)
         if selected_from is not None:
             start_at, _ = _utc_day_bounds(selected_from, timezone_info)
-            filtered_query = filtered_query.filter(reviewed_at >= start_at)
+            filtered_query = filtered_query.filter(activity.c.reviewed_at >= start_at)
         if selected_to is not None:
             _, end_at = _utc_day_bounds(selected_to, timezone_info)
-            filtered_query = filtered_query.filter(reviewed_at < end_at)
+            filtered_query = filtered_query.filter(activity.c.reviewed_at < end_at)
 
     total_count = filtered_query.count()
     total_pages = max(1, (total_count + per_page - 1) // per_page)
     page = min(page, total_pages)
     rows = (
         filtered_query.order_by(
-            func.coalesce(Grade.updated_at, Grade.created_at).desc(),
-            Grade.id.desc(),
+            activity.c.reviewed_at.desc(),
+            activity.c.activity_id.desc(),
         )
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -190,8 +243,12 @@ def my_discrepancy_review_page(
             task_state=row.task_state,
             disease_id=row.disease_id,
             disease_name=row.disease_name,
+            review_type=row.review_type,
+            review_value=row.review_value,
             grade_impression=row.grade_impression,
             comment=row.comment,
+            ai_model_name=row.ai_model_name,
+            ai_model_version=row.ai_model_version,
             lab_unit_name=row.lab_unit_name,
             hospital_name=row.hospital_name,
             reviewed_at=row.reviewed_at,

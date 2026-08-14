@@ -4,7 +4,7 @@
 
 `GET /api/review/me/discrepancy-reviews`
 
-Returns the signed-in reviewer's current human discrepancy-review grades, newest first. Results are restricted to tasks that remain inside the caller's discrepancy-review project, hospital, and lab-unit scope.
+Returns the signed-in reviewer's discrepancy-review activity, newest first. Activity includes human review grades and AI quality feedback, including feedback submitted without a replacement human grade. Results are restricted to tasks that remain inside the caller's discrepancy-review project, hospital, and lab-unit scope.
 
 - Authentication: signed-in global `discrepancy_reviewer` or a user with a matching project role grant.
 - Authorization: rows must belong to the caller and pass the shared task capability scope.
@@ -27,8 +27,12 @@ Success (`200`):
       "task_state": "final",
       "disease_id": 2,
       "disease_name": "Glaucoma",
+      "review_type": "ai_feedback",
+      "review_value": "minor_miss",
       "grade_impression": "Referable",
-      "comment": "Disc margin reviewed",
+      "comment": "Disc margin missed",
+      "ai_model_name": "Wadhwani",
+      "ai_model_version": "v1",
       "lab_unit_name": "Retina Lab",
       "hospital_name": "Hospital A",
       "reviewed_at": "2026-08-14T06:30:00+00:00"

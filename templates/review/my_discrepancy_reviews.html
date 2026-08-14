@@ -6,7 +6,9 @@
   <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
     <div>
       <h1 class="h3 mb-1">My Discrepancy Reviews</h1>
-      <p class="text-muted mb-0">Reviews you submitted, newest first.</p>
+      <p class="text-muted mb-0">
+        Reviews submitted by <strong>{{ current_user.username }}</strong>, newest first.
+      </p>
     </div>
     <a class="btn btn-outline-primary" href="{{ url_for('review.discrepancy_review') }}">
       Open discrepancy queue
@@ -61,7 +63,7 @@
             <tr>
               <th scope="col">Task</th>
               <th scope="col">Disease</th>
-              <th scope="col">Review grade</th>
+              <th scope="col">Review</th>
               <th scope="col">Location</th>
               <th scope="col">Reviewed</th>
               <th scope="col" class="text-end">Action</th>
@@ -76,7 +78,21 @@
                 </td>
                 <td>{{ review.disease_name }}</td>
                 <td>
-                  <span class="badge text-bg-primary">{{ review.grade_impression }}</span>
+                  {% if review.review_type == 'ai_feedback' %}
+                    <div class="small fw-semibold mb-1">AI feedback</div>
+                    <span class="badge text-bg-info">
+                      {{ ai_review_status_labels.get(review.review_value, review.review_value or 'Comment only') }}
+                    </span>
+                    <div class="small text-muted mt-1">
+                      Prediction: {{ review.grade_impression or '—' }}
+                      {% if review.ai_model_name %}
+                        · {{ review.ai_model_name }}{% if review.ai_model_version %} {{ review.ai_model_version }}{% endif %}
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <div class="small fw-semibold mb-1">Human review grade</div>
+                    <span class="badge text-bg-primary">{{ review.review_value or review.grade_impression or '—' }}</span>
+                  {% endif %}
                   {% if review.comment %}
                     <div class="small text-muted mt-1 text-break">{{ review.comment }}</div>
                   {% endif %}

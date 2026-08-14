@@ -13,7 +13,9 @@ When code and this document disagree, stop and update the policy before changing
 - Relationships say where the user may do that work.
 - Upload access is granted by upload profiles, not by admin, local-admin, data-manager, or hospital scope alone.
 - Project is part of upload authorization: the selected upload profile must allow the selected project, and accepted uploads must tag created images with that project.
-- Project is not yet the general cross-domain authorization boundary for grading, verification, analytics, datasets, jobs, media, or search.
+- Project is an active authorization boundary for patient media. Other domains
+  remain on their documented classical or staged project-scoping rules until
+  they are migrated explicitly.
 - Grading access is granted by grading slots, not by lab-unit scope alone.
 - General scoped access is granted by admin-global scope, hospital scope, or explicit lab-unit assignment.
 - Local-admin hospital scope applies only inside the user's hospital.
@@ -139,8 +141,13 @@ this document first.
 ### Media
 
 - Rule: A user may view media only when the referenced image, thumbnail, or PDF is covered by signed-token access, admin-global scope, hospital scope, or explicit lab-unit assignment.
+- Rule: Project-linked media may also be covered by an exact scoped project role, legacy project capability, collaborator relationship, grading-task eligibility, or direct-upload ownership accepted by the action policy.
 - Rule: Broad media route roles are not sufficient without object-level hospital or lab-unit validation.
-- Rule: Legacy media paths must be labeled as compatibility paths before wiring them to final ReBAC policies.
+- Rule: A direct uploader relationship is bound to the exact uploaded image UUID and does not grant project-wide media access.
+- Rule: Legacy media paths, mobile upload thumbnails, and glaucoma-AI image delivery must all pass the shared media resolver before reading storage paths or bytes.
+- Rule: Generated dataset, analytics, discrepancy-review, and EncounterSet export artifacts are authorized at their dataset/job/export service boundary. They are not raw UUID media routes and must retain their stricter owner and scope checks.
+- Rule: Trusted ingestion, OCR execution, inference, thumbnail generation, and export workers operate only on work already admitted by an authorized service boundary; they must not fabricate an interactive user context.
+- Rule: Authorization telemetry must not record cache-hit state, media UUIDs, source types, storage paths, denial reasons, tokens, or cache keys for denied requests.
 
 ### Search
 
@@ -179,9 +186,9 @@ These rules cover actions that currently have executable entries in `authz/polic
 
 ### `media.image.view`
 
-- Rule: A session user may view an image only when an accepted global role and classical scope, scoped project role, legacy project capability, collaborator relationship, or exact grading-task eligibility covers the resolved image.
+- Rule: A session user may view an image only when an accepted global role and classical scope, scoped project role, legacy project capability, collaborator relationship, exact grading-task eligibility, or exact direct-uploader relationship covers the resolved image.
 - Rule: A valid signed-media credential may view only the exact resolved image UUID and signing hospital.
-- Relationship source: classical scope, project authority, task eligibility, or signed-media token.
+- Relationship source: classical scope, project authority, task eligibility, direct uploader, or signed-media token.
 - Resource: resolved patient-media image.
 
 ### `media.thumbnail.view`

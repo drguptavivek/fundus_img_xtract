@@ -10,6 +10,7 @@ Supports both local file serving and S3 storage with:
 """
 
 import logging
+from typing import NoReturn
 from flask import request, redirect, abort
 from flask_login import current_user, login_required
 from utils.rate_limiter import rate_limit, rate_limit_with_feedback
@@ -34,6 +35,7 @@ from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import transaction_scope
 from models import DirectImageUpload, EncounterFile, EncounterFilePDF, S3Config
 from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
+from authz.telemetry import record_authorization_decision
 from media.authorization import (
     IMAGE_SOURCE_TYPES,
     MediaAccessDenied,
@@ -92,19 +94,19 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
     token = request.args.get("token")
     expires = request.args.get("expires")
     if not token or not expires:
-        abort(400, description="Invalid media URL")
+        _reject_signed_media(400, "Invalid media URL")
     try:
         expires_int = int(expires)
     except (TypeError, ValueError):
-        abort(400, description="Invalid media URL")
+        _reject_signed_media(400, "Invalid media URL")
 
     with transaction_scope() as db:
         try:
             resource = resolve_media_source(db, media_uuid=uuid_str, expected_sources=expected_sources)
         except MediaResolutionError:
-            abort(403, description="Invalid or expired media token")
+            _reject_signed_media(403, "Invalid or expired media token")
         if resource.hospital_id is None:
-            abort(403, description="Invalid or expired media token")
+            _reject_signed_media(403, "Invalid or expired media token")
         digest = token_digest(token)
         valid = get_hmac_validation(
             token_hash=digest, media_uuid=uuid_str,
@@ -118,7 +120,7 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
                     hospital_id=resource.hospital_id, expires=expires_int,
                 )
         if not valid:
-            abort(403, description="Invalid or expired media token")
+            _reject_signed_media(403, "Invalid or expired media token")
 
         action = (
             "media.pdf.view"
@@ -182,6 +184,16 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
                 return encounterImageThumbnailByUUID(uuid_str, preauthorized=resource)
             return encounterImageByUUID(uuid_str, preauthorized=resource)
         return encounterPDFByUUID(uuid_str, preauthorized=resource)
+
+
+def _reject_signed_media(status_code: int, description: str) -> NoReturn:
+    """Emit resource-blind credential telemetry, then stop signed delivery."""
+    record_authorization_decision(
+        action="media.signed.validate",
+        allowed=False,
+        actor_id=getattr(current_user, "id", None),
+    )
+    abort(status_code, description=description)
 
 
 # ============================================================================

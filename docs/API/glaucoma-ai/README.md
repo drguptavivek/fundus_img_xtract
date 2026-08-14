@@ -36,14 +36,21 @@ human grades are never copied or created by duplicate handling.
 ## `GET /api/glaucoma-ai/uploads/<image_uuid>/image`
 
 - Auth: same bearer JWT and role set as upload creation.
-- Scope: the image must have been uploaded by the token user.
+- Scope: the image must have been uploaded by the token user and must pass
+  `media.image.view`. Direct-uploader authority is bound to this exact UUID;
+  it does not grant access to other project images.
 - Response: image bytes for the final image variant, preferring edited image when present.
+- Errors: missing, workflow-ineligible, and media-unauthorized UUIDs all return
+  the same non-disclosing `404` response.
 
 ## `GET /api/glaucoma-ai/uploads/<image_uuid>/thumbnail`
 
 - Auth: same bearer JWT and role set as upload creation.
-- Scope: the image must have been uploaded by the token user.
+- Scope: the image must have been uploaded by the token user and must pass
+  `media.thumbnail.view`, which shares the full-image object decision.
 - Response: thumbnail image bytes. Existing thumbnails are served when present; otherwise the endpoint generates a thumbnail on demand from the final image variant.
+- Errors: missing, workflow-ineligible, and media-unauthorized UUIDs all return
+  the same non-disclosing `404` response.
 
 ## `GET /api/glaucoma-ai/uploads/recent`
 

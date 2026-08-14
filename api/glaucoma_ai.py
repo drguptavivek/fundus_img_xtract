@@ -11,6 +11,12 @@ from sqlalchemy.orm import selectinload
 from auth.decorators import token_auth_required
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
+from media.authorization import (
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    authorize_media_source,
+)
 from models import AIInferenceRun, DirectImageUpload, DirectImageVerify, Grade, GradingTask, Job, JobItem, User
 from services.glaucoma_ai_upload import (
     GLAUCOMA_AI_UPLOAD_MARKER_REMARKS,
@@ -247,6 +253,16 @@ def get_glaucoma_ai_upload_image(uuid_str: str):
         )
         if upload is None:
             return jsonify({"error": "Image not found"}), 404
+        try:
+            authorize_media_source(
+                db,
+                user=user,
+                media_uuid=uuid_str,
+                action="media.image.view",
+                expected_sources=IMAGE_SOURCE_TYPES,
+            )
+        except (MediaResolutionError, MediaAccessDenied):
+            return jsonify({"error": "Image not found"}), 404
         filename = upload.edited_filename or upload.filename
         kind = "edited" if upload.edited_filename else "orig"
         path = abs_from_parts(upload.folder_rel, filename, kind)
@@ -280,6 +296,16 @@ def get_glaucoma_ai_upload_thumbnail(uuid_str: str):
             .one_or_none()
         )
         if upload is None:
+            return jsonify({"error": "Image not found"}), 404
+        try:
+            authorize_media_source(
+                db,
+                user=user,
+                media_uuid=uuid_str,
+                action="media.thumbnail.view",
+                expected_sources=IMAGE_SOURCE_TYPES,
+            )
+        except (MediaResolutionError, MediaAccessDenied):
             return jsonify({"error": "Image not found"}), 404
         try:
             path = _resolve_or_create_thumbnail(upload)

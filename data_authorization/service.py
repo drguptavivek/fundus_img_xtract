@@ -1,4 +1,10 @@
-"""Deep service for project role membership and data-scope authorization."""
+"""Persisted project-role grant management and scope resolution.
+
+This deep module owns the database representation and containment rules for
+project, hospital, and lab-unit role grants. It supplies normalized role
+relationships to the pure :mod:`authz` policy engine; it is not a second policy
+decision engine and it does not serve media or handle HTTP requests.
+"""
 from __future__ import annotations
 
 from collections.abc import Iterable

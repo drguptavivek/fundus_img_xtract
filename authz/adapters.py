@@ -1,3 +1,5 @@
+"""Adapters that normalize application models into authorization value objects."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -67,6 +69,7 @@ def upload_profile_grant(profile: Any) -> RelationshipGrant:
 
 
 def upload_profile_grants(profiles: Iterable[Any]) -> list[RelationshipGrant]:
+    """Normalize a collection of upload profiles into relationship grants."""
     return [upload_profile_grant(profile) for profile in profiles]
 
 
@@ -85,4 +88,5 @@ def grading_slot_grant(slot: Any) -> RelationshipGrant:
 
 
 def grading_slot_grants(slots: Iterable[Any]) -> list[RelationshipGrant]:
+    """Normalize grading-slot records into relationship grants."""
     return [grading_slot_grant(slot) for slot in slots]

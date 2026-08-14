@@ -1,3 +1,5 @@
+"""Pure policy evaluator for actor, action, resource, and relationship grants."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -58,6 +60,8 @@ def _grant_supplies_authority(
         return bool(set(grant.attr("capabilities") or ()) & set(policy_capabilities))
     if grant.source == GrantSource.PROJECT_COLLABORATOR:
         return "collaborator" in {role.lower() for role in policy_roles}
+    if grant.source == GrantSource.MEDIA_UPLOADER:
+        return actor_role_matches
     if grant.source in {GrantSource.TASK_ELIGIBILITY, GrantSource.SIGNED_MEDIA_TOKEN}:
         return True
     return False
@@ -93,6 +97,9 @@ def _grant_matches(
 
     if grant.source == GrantSource.TASK_ELIGIBILITY:
         return grant.resource_id == resource.id or grant.attr("media_uuid") == resource.id
+
+    if grant.source == GrantSource.MEDIA_UPLOADER:
+        return grant.resource_id == resource.id
 
     if grant.source == GrantSource.SIGNED_MEDIA_TOKEN:
         return grant.resource_id == resource.id

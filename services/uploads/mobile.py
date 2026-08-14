@@ -18,6 +18,12 @@ from werkzeug.datastructures import FileStorage, MultiDict
 from werkzeug.utils import secure_filename
 
 from auth.utils import utcnow
+from media.authorization import (
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    authorize_media_source,
+)
 from job_store import db_create_job
 from models import (
     AIInferenceRun,
@@ -367,6 +373,12 @@ def _predicted_class_name_from_grade_comment(comment: str | None) -> str | None:
 
 
 def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, image_uuid: str):
+    """Serve one job-owned thumbnail after central media object authorization.
+
+    The mobile job/item check remains a stricter workflow boundary.  The media
+    resolver independently verifies persisted lineage and the actor's media
+    authority before this service reads a thumbnail or original path.
+    """
     job = _scoped_job(db, user_id, upload_token)
     allowed_uuids = {item.source_uuid for item in job.items if item.source_type == "direct_image" and item.source_uuid}
     if image_uuid not in allowed_uuids:
@@ -374,6 +386,21 @@ def get_mobile_direct_upload_thumbnail(*, db, user_id: int, upload_token: str, i
     image = db.execute(select(DirectImageUpload).where(DirectImageUpload.uuid == image_uuid)).scalar_one_or_none()
     if image is None:
         raise MobileUploadError("Upload image was not found.", code="image_not_found", status_code=404)
+    user = db.get(User, user_id)
+    try:
+        authorize_media_source(
+            db,
+            user=user,
+            media_uuid=image_uuid,
+            action="media.thumbnail.view",
+            expected_sources=IMAGE_SOURCE_TYPES,
+        )
+    except (MediaResolutionError, MediaAccessDenied):
+        raise MobileUploadError(
+            "Upload image was not found.",
+            code="image_not_found",
+            status_code=404,
+        ) from None
 
     try:
         thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(image.folder_rel, image.filename, "orig")

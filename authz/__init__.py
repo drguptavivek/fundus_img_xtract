@@ -1,4 +1,9 @@
-"""Central authorization service interfaces."""
+"""Public interface for the transport-neutral central authorization engine.
+
+Callers resolve persisted relationships in their domain module, convert them
+to these value objects, and ask the pure engine for a decision. This package
+does not query application tables or serve protected resources.
+"""
 
 from authz.adapters import (
     actor_from_user,

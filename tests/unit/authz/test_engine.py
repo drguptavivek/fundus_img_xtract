@@ -225,3 +225,41 @@ def test_signed_media_token_is_bound_to_exact_uuid() -> None:
         ResourceRef(type="encounter_file", id="other-uuid"),
         grants=[grant],
     ).allowed is False
+
+
+def test_media_uploader_grant_is_bound_to_exact_media_uuid() -> None:
+    actor = AuthzActor(id=7, roles=frozenset({"fileUploader"}))
+    resource = ResourceRef(type="direct_image_upload", id="image-1")
+
+    allowed = authorize(
+        actor,
+        "media.image.view",
+        resource,
+        grants=[RelationshipGrant(
+            source=GrantSource.MEDIA_UPLOADER,
+            resource_id="image-1",
+        )],
+    )
+    denied = authorize(
+        actor,
+        "media.image.view",
+        resource,
+        grants=[RelationshipGrant(
+            source=GrantSource.MEDIA_UPLOADER,
+            resource_id="different-image",
+        )],
+    )
+    denied_without_media_role = authorize(
+        AuthzActor(id=7),
+        "media.image.view",
+        resource,
+        grants=[RelationshipGrant(
+            source=GrantSource.MEDIA_UPLOADER,
+            resource_id="image-1",
+        )],
+    )
+
+    assert allowed.allowed is True
+    assert allowed.grant_source == GrantSource.MEDIA_UPLOADER
+    assert denied.allowed is False
+    assert denied_without_media_role.allowed is False

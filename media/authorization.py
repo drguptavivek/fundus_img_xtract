@@ -1,4 +1,10 @@
-"""Patient-media resource resolution and mandatory object authorization."""
+"""Patient-media lineage resolution and mandatory object authorization.
+
+This is the media enforcement layer.  It resolves a UUID without trusting
+route context, derives project/hospital/lab lineage, gathers relationships from
+the existing grant modules, and delegates the decision to :mod:`authz`.  It
+does not select storage paths or return media bytes.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ from authz import (
     general_scope_grants,
 )
 from authz.cache import get_cached_decision, set_cached_decision
+from authz.telemetry import record_authorization_decision
 from data_authorization.service import project_role_names_for_scope
 from encounter_sets.permissions import (
     legacy_project_capabilities_for_scope,
@@ -39,6 +46,8 @@ from models import (
 
 
 class MediaSourceType(StrEnum):
+    """Supported patient-media persistence sources normalized by this layer."""
+
     ENCOUNTER_FILE = "encounter_file"
     DIRECT_IMAGE_UPLOAD = "direct_image_upload"
     ENCOUNTER_SET_IMAGE = "encounter_set_image"
@@ -61,6 +70,8 @@ DOCUMENT_SOURCE_TYPES = frozenset({
 
 @dataclass(frozen=True)
 class AuthorizedMediaSource:
+    """Authorized, storage-independent identity and scope for one media object."""
+
     source_type: MediaSourceType
     source_id: int
     uuid: str
@@ -69,8 +80,10 @@ class AuthorizedMediaSource:
     hospital_id: int | None
     lab_unit_id: int | None
     disease_id: int | None
+    uploader_user_id: int | None = None
 
     def as_resource_ref(self) -> ResourceRef:
+        """Convert this resolved source into the central engine resource contract."""
         return ResourceRef(
             type=self.source_type.value,
             id=self.uuid,
@@ -81,6 +94,7 @@ class AuthorizedMediaSource:
                 "hospital_id": self.hospital_id,
                 "lab_unit_id": self.lab_unit_id,
                 "disease_id": self.disease_id,
+                "uploader_user_id": self.uploader_user_id,
             },
         )
 
@@ -121,6 +135,7 @@ def resolve_media_source(
             hospital_id=direct_image.hospital_id,
             lab_unit_id=direct_image.lab_unit_id,
             disease_id=direct_image.disease_id,
+            uploader_user_id=direct_image.uploader_id,
         ))
 
     set_image = db.execute(
@@ -164,17 +179,37 @@ def authorize_media_source(
     expected_sources: frozenset[MediaSourceType] | None = None,
 ) -> AuthorizedMediaSource:
     """Resolve and authorize one media object through the central authz engine."""
-    resource = resolve_media_source(
-        db,
-        media_uuid=media_uuid,
-        expected_sources=expected_sources,
-    )
+    try:
+        resource = resolve_media_source(
+            db,
+            media_uuid=media_uuid,
+            expected_sources=expected_sources,
+        )
+    except MediaResolutionError:
+        record_authorization_decision(
+            action=action,
+            allowed=False,
+            actor_id=getattr(user, "id", None),
+        )
+        raise
     if not user or not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
+        record_authorization_decision(
+            action=action,
+            allowed=False,
+            actor_id=getattr(user, "id", None),
+        )
         raise MediaAccessDenied("Media not found")
 
     resource_ref = resource.as_resource_ref()
     cached = get_cached_decision(user_id=user.id, action=action, resource=resource_ref)
     if cached is not None:
+        record_authorization_decision(
+            action=action,
+            allowed=cached.allowed,
+            actor_id=user.id,
+            grant_source=cached.grant_source,
+            cache_hit=True,
+        )
         if not cached.allowed:
             raise MediaAccessDenied("Media not found")
         return resource
@@ -187,6 +222,12 @@ def authorize_media_source(
         action=action,
         resource=resource_ref,
         decision=decision,
+    )
+    record_authorization_decision(
+        action=action,
+        allowed=decision.allowed,
+        actor_id=user.id,
+        grant_source=decision.grant_source,
     )
     if not decision.allowed:
         raise MediaAccessDenied("Media not found")
@@ -207,11 +248,18 @@ def authorize_signed_media_source(
             resource_id=resource.uuid,
         )],
     )
+    record_authorization_decision(
+        action=action,
+        allowed=decision.allowed,
+        actor_id=None,
+        grant_source=decision.grant_source,
+    )
     if not decision.allowed:
         raise MediaAccessDenied("Media not found")
 
 
 def _from_encounter_child(db: Session, source_type: MediaSourceType, row) -> AuthorizedMediaSource:
+    """Resolve inherited encounter lineage and reject conflicting child scope."""
     encounter = db.get(PatientEncounters, row.patient_encounter_id)
     if encounter is None:
         raise MediaResolutionError("Media not found")
@@ -238,12 +286,14 @@ def _from_encounter_child(db: Session, source_type: MediaSourceType, row) -> Aut
         hospital_id=child_hospital_id or derived_hospital_id,
         lab_unit_id=lab_unit_id,
         disease_id=encounter.disease_id,
+        uploader_user_id=None,
     )
 
 
 def _relationship_grants(
     db: Session, *, user, actor: AuthzActor, resource: AuthorizedMediaSource
 ) -> list[RelationshipGrant]:
+    """Gather persisted scope, compatibility, ownership, and task relationships."""
     grants: list[RelationshipGrant] = []
     if resource.project_id is None:
         grants.extend(general_scope_grants(user))
@@ -298,6 +348,11 @@ def _relationship_grants(
                     "lab_unit_id": resource.lab_unit_id,
                 },
             ))
+    if resource.uploader_user_id == user.id:
+        grants.append(RelationshipGrant(
+            source=GrantSource.MEDIA_UPLOADER,
+            resource_id=resource.uuid,
+        ))
     if resource.source_type in IMAGE_SOURCE_TYPES and _has_task_eligibility(db, user.id, resource):
         grants.append(RelationshipGrant(
             source=GrantSource.TASK_ELIGIBILITY,
@@ -307,6 +362,7 @@ def _relationship_grants(
 
 
 def _has_task_eligibility(db: Session, user_id: int, resource: AuthorizedMediaSource) -> bool:
+    """Return whether any task for this image is eligible in a grading role slot."""
     query = select(GradingTask)
     if resource.source_type == MediaSourceType.ENCOUNTER_FILE:
         query = query.where(GradingTask.encounter_file_id == resource.source_id)

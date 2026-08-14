@@ -353,9 +353,15 @@ Errors:
 
 Returns the uploaded direct-image thumbnail for the authenticated uploader. This route uses the same mobile bearer token as other mobile API calls, so native clients should send `Authorization: Bearer <token>` when rendering cached recent results.
 
+The service applies two independent checks before resolving a thumbnail or
+original path: the image UUID must belong to the caller-owned upload job, and
+the image must pass central `media.thumbnail.view` authorization. Exact
+direct-uploader authority does not grant project-wide media access.
+
 Success response: `200 OK` with an image content type.
 
-The `image_uuid` must belong to the requested `upload_token`; otherwise the API returns `404`.
+The `image_uuid` must belong to the requested `upload_token` and pass media
+authorization; missing and unauthorized images return the same `404` shape.
 
 Mobile clients should keep compact recent-result metadata for 7 days and use the `thumbnail_url` from upload status for image display. Do not rely on local picker file paths because they are not stable across Flutter Web, Android, iOS, and Windows app restarts.
 

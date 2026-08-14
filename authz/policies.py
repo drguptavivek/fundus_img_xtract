@@ -1,3 +1,5 @@
+"""Static central policies keyed by explicit application action names."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -39,6 +41,7 @@ MEDIA_PROJECT_GRANTS = frozenset({
     GrantSource.LEGACY_PROJECT_CAPABILITY,
     GrantSource.PROJECT_COLLABORATOR,
     GrantSource.TASK_ELIGIBILITY,
+    GrantSource.MEDIA_UPLOADER,
 })
 MEDIA_SESSION_GRANTS = GENERAL_SCOPE_GRANTS | MEDIA_PROJECT_GRANTS
 MEDIA_SIGNED_GRANTS = MEDIA_SESSION_GRANTS | frozenset({GrantSource.SIGNED_MEDIA_TOKEN})
@@ -124,4 +127,5 @@ POLICIES: dict[str, ActionPolicy] = {
 
 
 def get_policy(action: str) -> ActionPolicy | None:
+    """Return the registered static policy for an action, if one exists."""
     return POLICIES.get(action)

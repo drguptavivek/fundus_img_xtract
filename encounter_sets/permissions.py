@@ -1,4 +1,10 @@
-"""Project/lab authorization for PII-enabled EncounterSet workflows."""
+"""EncounterSet workflow capability scoping and legacy compatibility.
+
+This module remains the source for legacy ``ProjectEncounterSetPermission``
+capabilities and collaborator relationships. New cross-resource decisions are
+made by :mod:`authz`; media authorization imports only the narrow relationship
+resolvers below instead of duplicating capability queries or role mappings.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,6 +70,8 @@ class EncounterSetPermissionError(ValueError):
 
 @dataclass(frozen=True)
 class ProjectEncounterSetPermissionInput:
+    """Validated input contract for one legacy project capability row."""
+
     user_id: int
     lab_unit_id: int
     can_browse: bool
@@ -422,6 +430,7 @@ def list_project_permissions(
     *,
     lab_unit_ids: set[int] | None = None,
 ) -> list[ProjectEncounterSetPermission]:
+    """List project capability rows, optionally constrained to allowed labs."""
     statement = select(ProjectEncounterSetPermission).where(
         ProjectEncounterSetPermission.project_id == project_id
     )

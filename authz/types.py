@@ -1,3 +1,5 @@
+"""Transport-neutral value objects shared by authorization policy adapters."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -17,6 +19,7 @@ class GrantSource(StrEnum):
     LEGACY_PROJECT_CAPABILITY = "legacy_project_capability"
     PROJECT_COLLABORATOR = "project_collaborator"
     TASK_ELIGIBILITY = "task_eligibility"
+    MEDIA_UPLOADER = "media_uploader"
     SIGNED_MEDIA_TOKEN = "signed_media_token"
 
 
@@ -29,6 +32,7 @@ class AuthzActor:
     hospital_id: int | None = None
 
     def has_any_role(self, roles: frozenset[str]) -> bool:
+        """Return whether actor roles intersect a policy role set, case-insensitively."""
         actor_roles = {role.lower() for role in self.roles}
         return bool(actor_roles.intersection({role.lower() for role in roles}))
 
@@ -42,6 +46,7 @@ class ResourceRef:
     attributes: dict[str, Any] = field(default_factory=dict)
 
     def attr(self, name: str) -> Any:
+        """Read one optional normalized resource attribute."""
         return self.attributes.get(name)
 
 
@@ -56,6 +61,7 @@ class RelationshipGrant:
     attributes: dict[str, Any] = field(default_factory=dict)
 
     def attr(self, name: str) -> Any:
+        """Read one optional relationship attribute."""
         return self.attributes.get(name)
 
 
@@ -70,8 +76,10 @@ class AuthzDecision:
 
     @classmethod
     def allow(cls, action: str, grant_source: GrantSource) -> "AuthzDecision":
+        """Construct a successful decision with its supporting relationship."""
         return cls(True, action, "allowed", grant_source)
 
     @classmethod
     def deny(cls, action: str, reason: str) -> "AuthzDecision":
+        """Construct a denied decision for internal evaluation and tests."""
         return cls(False, action, reason)

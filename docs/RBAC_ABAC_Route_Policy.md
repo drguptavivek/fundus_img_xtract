@@ -1,7 +1,7 @@
 # RBAC/ABAC Route Policy
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-02-01  
+**Document Version:** 1.1
+**Last Updated:** 2026-08-14
 **Owner:** Security Team  
 **Classification:** Internal  
 **Related:** `docs/PII_Exposure_Control_Policy.md`
@@ -12,19 +12,42 @@
 
 Define RBAC (role-based access control) and ABAC (attribute-based access control) rules for each route group in the Fundus Image Manager. This policy is organized by workflow sequence:
 
-Uploading -> Verify/Anonymize -> Grading -> Review -> Intra-rater -> My Reviews -> AI Review -> Analytics -> Admin
+Uploading -> Verify/Anonymize -> Grading -> Review -> Intra-rater -> My Discrepancy Reviews -> AI Review -> Analytics -> Admin
 
 ---
 
-## 2. ABAC Enforcement Primitives
+## 2. Authorization Layers And Enforcement Primitives
 
-Use these standard helpers for attribute-scoping:
+Authorization is enforced at multiple trust boundaries. Passing one boundary
+does not bypass the others:
+
+1. Routes authenticate and validate transport credentials, rate limits, and
+   request shape.
+2. Data services scope queries and workflow mutations.
+3. `media.authorization` resolves patient-media lineage and independently
+   authorizes the object before storage paths, metadata, OCR, or bytes are read.
+4. The pure `authz` engine evaluates action policies against normalized
+   relationships. It does not query application tables.
+
+Use these standard relationship and scope resolvers:
 
 - **Lab Unit Scoping:** `get_user_lab_unit_ids_no_admin_override(user_id)`
 - **Hospital Scoping:** `apply_scoping(query, Model, user, operation)`
 - **Grading Eligibility:** `UserDiseaseUnitRole` + `get_user_eligibility_for_task(...)`
+- **Persisted Project Roles:** `data_authorization.service`
+- **Legacy Project Capabilities:** `encounter_sets.permissions`
+- **Patient Media:** `media.authorization.authorize_media_source(...)`
+- **Central Decision Engine:** `authz.authorize(...)`
 
-**Policy Rule:** Every route that touches patient data or images MUST apply one of the above scoping mechanisms in addition to `@roles_required(...)`.
+**Policy Rule:** Every route that touches patient data or images must apply an
+applicable object/data scoping mechanism in addition to authentication. A
+route-level `@roles_required(...)` check alone is insufficient. Route
+decorators must not prematurely reject a valid scoped project role, legacy
+capability, collaborator relationship, or exact task/media relationship.
+
+`data_authorization` is the persisted project-grant resolver. It is not a
+second policy engine. `media.authorization` is a resource enforcement layer,
+not another role store.
 
 ---
 
@@ -166,9 +189,9 @@ All routes under:
 
 | Route | Methods | Roles | ABAC | Notes |
 |------|---------|-------|------|------|
-| `/review/reviewTaskDetails/<int:task_id>` | GET, POST | admin, local_admin, data_manager, optometrist | `apply_scoping(..., operation='view')` | Task review |
-| `/review/my-reviews` | GET | admin, local_admin, data_manager, optometrist | `apply_scoping` + current_user | Personal review list |
-| `/review/my-reviews/viewer/<string:image_uuid>` | GET | admin, local_admin, data_manager, optometrist | `apply_scoping` | Viewer |
+| `/review/reviewTaskDetails/<int:task_id>` | GET, POST | discrepancy_reviewer or matching project grant | Shared task capability scope | Task review |
+| `/review/my-discrepancy-reviews` | GET | discrepancy_reviewer or matching project grant | Shared task capability scope + current user | Personal discrepancy-review history |
+| `/api/review/me/discrepancy-reviews` | GET | discrepancy_reviewer or matching project grant | Shared task capability scope + current user | JSON history contract |
 
 ---
 
@@ -185,9 +208,9 @@ All routes under:
 
 ---
 
-## 8. My Reviews
+## 8. My Discrepancy Reviews
 
-Covered in **Review / Task Review** above (`/review/my-reviews`).  
+Covered in **Review / Task Review** above (`/review/my-discrepancy-reviews`).
 Policy: must be scoped to user’s lab units and user identity.
 
 ---
@@ -220,6 +243,34 @@ AI review is exposed via Review/Discrepancy filters and Task Review filters.
 | `/analytics/encounters-simple` | admin, local_admin, data_manager, analytics_viewer | Lab unit scope | Simple listing |
 
 **Policy Rule:** analytics routes must not return patient PII unless explicitly allowed in `docs/PII_Exposure_Control_Policy.md`.
+
+### 10.1 Patient Media Used By Analytics And Workflows
+
+| Route Group | Transport Gate | Object Authorization | Notes |
+|------------|----------------|----------------------|------|
+| `/media/img/<uuid>` and legacy image variants | Authenticated session | `media.image.view` or `media.thumbnail.view` | Full, edited, final, and thumbnail variants share one resource decision |
+| `/media/<uuid>*` | HMAC credential; session auth also applies when logged in | Exact signed-media relationship plus session object authority when present | Successful HMAC validation is cached only until token expiry, capped at 15 minutes |
+| Encounter PDFs and DR/glaucoma reports | Authenticated session | `media.pdf.view` | Missing and unauthorized objects use non-disclosing responses |
+| `/api/images/<uuid>/metadata*` | Authenticated API role | `media.metadata.read` or `media.metadata.process` | Authorization occurs before path or metadata-cache access |
+| `/api/ocr/*` | Authenticated API role | `media.ocr_pii.read` or `media.ocr_pii.process` | Authorization occurs before OCR record/cache/path access |
+| Mobile upload thumbnail | Mobile bearer session plus job ownership | `media.thumbnail.view` | Both workflow ownership and media authority are required |
+| Glaucoma-AI image and thumbnail | Mobile bearer session plus uploader/workflow visibility | `media.image.view` or `media.thumbnail.view` | Direct uploader authority is exact-UUID only |
+
+Project media relationships may come from a scoped project role, legacy
+project capability, collaborator membership, exact grading-task eligibility,
+or exact direct-uploader ownership. Classical media continues to use accepted
+admin, hospital, or lab-unit relationships.
+
+Authorization decisions use Redis for 900 seconds. Image and thumbnail actions
+share the same decision key. User, project, and signing-hospital epochs are
+advanced only after a successful database commit; rollbacks discard pending
+invalidation. Redis errors fall back to persisted relationship evaluation and
+never create an allow result.
+
+Authorization telemetry is resource-blind for denials: it records action,
+outcome, and actor ID but not cache state, UUID, media source type, storage path,
+denial reason, signed token, or cache key. Successful decisions may include
+cache-hit state and grant source.
 
 ---
 
@@ -259,14 +310,20 @@ Key admin route groups:
 2. **Uploaded ZIP list**: confirm lab unit scoping is applied in queries.  
 3. **Admin route granularity**: decide which routes may be delegated to local_admin beyond current usage.  
 4. **AI review**: confirm whether AI review actions should be restricted to `data_manager` or `discrepancy_reviewer` only.  
+5. **Route inventory drift**: the route tables above are a policy inventory,
+   not a generated route manifest. Compare them with `flask routes` during each
+   authorization migration and update renamed API paths.
 
 ---
 
 ## 13. Enforcement Checklist
 
-- [ ] Every route has `@roles_required(...)`
-- [ ] Every data-access route applies lab unit or hospital scoping
+- [ ] Every protected route has an authentication or signed-credential gate
+- [ ] Route decorators permit applicable scoped project and workflow authorities
+- [ ] Every data-access route applies classical or project-aware object scoping
+- [ ] Every patient-media delivery path calls the shared media resolver before storage access
 - [ ] Grading routes use `UserDiseaseUnitRole` for role-slot eligibility
 - [ ] Analytics routes return masked PII (unless explicitly allowed)
 - [ ] Sensitive exports require re-auth + audit per `PII_Exposure_Control_Policy.md`
-
+- [ ] Redis authorization invalidation occurs after commit and is discarded on rollback
+- [ ] Denial telemetry omits resource identity, source type, path, reason, token, and cache key

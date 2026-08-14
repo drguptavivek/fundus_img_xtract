@@ -130,6 +130,12 @@ def test_discrepancy_review_ui_exposes_status_cohorts_and_csv_queue():
 
     for value in ("unreviewed", "human", "ai", "both", "any"):
         assert f'<option value="{value}"' in template
+    review_status_position = template.index('id="hasHumanReviewSelect"')
+    ai_review_status_position = template.index('id="aiReviewStatusDropdown"')
+    assert template.rfind('<div class="row g-3 mt-2 disease-dependent"', 0, review_status_position) > template.index(
+        'id="aiGradeDropdown"'
+    )
+    assert review_status_position < ai_review_status_position
     assert 'data-bs-target="#reviewQueueUploadModal"' in template
     assert 'id="reviewQueueUploadModal"' in template
     assert 'id="reviewQueueUploadForm"' in template

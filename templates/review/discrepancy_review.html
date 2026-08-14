@@ -418,25 +418,6 @@
           </div>
 
           <div class="col-md-3">
-            <label for="hasHumanReviewSelect" class="form-label d-flex align-items-center gap-2">
-              Review Status
-              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
-                title="Human evidence is a revised grade or human comment. AI evidence is an assessment status or AI review comment."
-                aria-label="Review status definition">
-                i
-              </button>
-            </label>
-            <select class="form-select" id="hasHumanReviewSelect" name="has_human_review">
-              <option value="">All Tasks</option>
-              <option value="unreviewed" {% if filters.has_human_review in ['unreviewed', 'no'] %}selected{% endif %}>Unreviewed</option>
-              <option value="human" {% if filters.has_human_review=='human' %}selected{% endif %}>Human grade reviewed</option>
-              <option value="ai" {% if filters.has_human_review=='ai' %}selected{% endif %}>AI grade reviewed</option>
-              <option value="both" {% if filters.has_human_review=='both' %}selected{% endif %}>Both reviewed</option>
-              <option value="any" {% if filters.has_human_review in ['any', 'yes'] %}selected{% endif %}>Any reviewed</option>
-            </select>
-          </div>
-
-          <div class="col-md-3">
             <label class="form-label">AI Models</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
@@ -483,6 +464,27 @@
                 {% endfor %}
               </ul>
             </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2 disease-dependent" {% if not filters.disease_id %}style="display: none;"{% endif %}>
+          <div class="col-md-3">
+            <label for="hasHumanReviewSelect" class="form-label d-flex align-items-center gap-2">
+              Review Status
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 fs-6 lh-1" data-bs-toggle="tooltip"
+                title="Human evidence is a revised grade or human comment. AI evidence is an assessment status or AI review comment."
+                aria-label="Review status definition">
+                i
+              </button>
+            </label>
+            <select class="form-select" id="hasHumanReviewSelect" name="has_human_review">
+              <option value="">All Tasks</option>
+              <option value="unreviewed" {% if filters.has_human_review in ['unreviewed', 'no'] %}selected{% endif %}>Unreviewed</option>
+              <option value="human" {% if filters.has_human_review=='human' %}selected{% endif %}>Human grade reviewed</option>
+              <option value="ai" {% if filters.has_human_review=='ai' %}selected{% endif %}>AI grade reviewed</option>
+              <option value="both" {% if filters.has_human_review=='both' %}selected{% endif %}>Both reviewed</option>
+              <option value="any" {% if filters.has_human_review in ['any', 'yes'] %}selected{% endif %}>Any reviewed</option>
+            </select>
           </div>
 
           <div class="col-md-3">

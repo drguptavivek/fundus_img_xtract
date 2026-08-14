@@ -114,7 +114,7 @@ class TestEncounterPDFRouteIsolation:
 
 @pytest.mark.integration
 class TestDRReportRouteIsolation:
-    """Test /media/encounter/img/<uuid> DR report route isolation."""
+    """Test the actual DR report route isolation."""
 
     def test_dr_report_blocks_cross_hospital_access(
         self, auth_client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session
@@ -140,8 +140,7 @@ class TestDRReportRouteIsolation:
         # Login as Hospital A user
         client = auth_client(hosp_a_data_manager)
 
-        # Try to access Hospital B DR report via legacy route
-        response = client.get(f"/media/encounter/img/{report_uuid}")
+        response = client.get(f"/reports/dr/by-uuid/{report_uuid}")
 
         # Should get 404 (file not found because scoped out)
         assert response.status_code == 404
@@ -149,7 +148,7 @@ class TestDRReportRouteIsolation:
 
 @pytest.mark.integration
 class TestGlaucomaReportRouteIsolation:
-    """Test /media/encounter/img/<uuid> Glaucoma report route isolation."""
+    """Test the actual glaucoma report route isolation."""
 
     def test_glaucoma_report_blocks_cross_hospital_access(
         self, auth_client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session
@@ -175,8 +174,7 @@ class TestGlaucomaReportRouteIsolation:
         # Login as Hospital A user
         client = auth_client(hosp_a_data_manager)
 
-        # Try to access Hospital B Glaucoma report via legacy route
-        response = client.get(f"/media/encounter/img/{report_uuid}")
+        response = client.get(f"/reports/glaucoma/by-uuid/{report_uuid}")
 
         # Should get 404 (file not found because scoped out)
         assert response.status_code == 404

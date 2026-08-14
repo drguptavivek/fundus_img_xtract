@@ -2,6 +2,7 @@
 
 from flask import redirect, url_for
 
+from flask_login import login_required
 from auth.roles import roles_required
 
 from . import bp
@@ -9,13 +10,13 @@ from utils.utilsImgServe import encounterDrReportByUUID, encounterGlaucomaReport
 
 
 @bp.route("/dr/by-uuid/<uuid>", methods=["GET"])
-@roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@login_required
 def serve_dr_pdf_by_uuid(uuid: str):
     return encounterDrReportByUUID(uuid)
 
 
 @bp.route("/glaucoma/by-uuid/<uuid>", methods=["GET"])
-@roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@login_required
 def serve_glaucoma_pdf_by_uuid(uuid: str):
     return encounterGlaucomaReportByUUID(uuid)
 

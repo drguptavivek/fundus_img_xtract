@@ -19,17 +19,48 @@ def authorize(
     if policy is None:
         return AuthzDecision.deny(action, "unknown_action")
 
-    if not actor.has_any_role(policy.roles):
-        return AuthzDecision.deny(action, "missing_role")
-
     resource = resource or ResourceRef(type="none")
+    actor_role_matches = actor.has_any_role(policy.roles)
     for grant in grants:
         if grant.source not in policy.grant_sources:
             continue
-        if _grant_matches(actor, resource, action, grant):
+        if _grant_matches(actor, resource, action, grant) and _grant_supplies_authority(
+            actor_role_matches, policy.roles, policy.capabilities, grant
+        ):
             return AuthzDecision.allow(action, grant.source)
 
-    return AuthzDecision.deny(action, "missing_relationship")
+    return AuthzDecision.deny(
+        action,
+        "missing_relationship" if actor_role_matches else "missing_role",
+    )
+
+
+def _grant_supplies_authority(
+    actor_role_matches: bool,
+    policy_roles: frozenset[str],
+    policy_capabilities: frozenset[str],
+    grant: RelationshipGrant,
+) -> bool:
+    if grant.source in {
+        GrantSource.ADMIN_GLOBAL,
+        GrantSource.HOSPITAL_SCOPE,
+        GrantSource.LAB_UNIT_ASSIGNMENT,
+        GrantSource.UPLOAD_PROFILE,
+        GrantSource.GRADING_SLOT,
+    }:
+        return actor_role_matches
+    if grant.source == GrantSource.PROJECT_ROLE:
+        return bool(
+            {str(role).lower() for role in grant.attr("role_names") or ()}
+            & {role.lower() for role in policy_roles}
+        )
+    if grant.source == GrantSource.LEGACY_PROJECT_CAPABILITY:
+        return bool(set(grant.attr("capabilities") or ()) & set(policy_capabilities))
+    if grant.source == GrantSource.PROJECT_COLLABORATOR:
+        return "collaborator" in {role.lower() for role in policy_roles}
+    if grant.source in {GrantSource.TASK_ELIGIBILITY, GrantSource.SIGNED_MEDIA_TOKEN}:
+        return True
+    return False
 
 
 def _grant_matches(
@@ -53,7 +84,34 @@ def _grant_matches(
     if grant.source == GrantSource.GRADING_SLOT:
         return _matches_grading_slot(resource, action, grant)
 
+    if grant.source in {
+        GrantSource.PROJECT_ROLE,
+        GrantSource.LEGACY_PROJECT_CAPABILITY,
+        GrantSource.PROJECT_COLLABORATOR,
+    }:
+        return _matches_project_scope(resource, grant)
+
+    if grant.source == GrantSource.TASK_ELIGIBILITY:
+        return grant.resource_id == resource.id or grant.attr("media_uuid") == resource.id
+
+    if grant.source == GrantSource.SIGNED_MEDIA_TOKEN:
+        return grant.resource_id == resource.id
+
     return False
+
+
+def _matches_project_scope(resource: ResourceRef, grant: RelationshipGrant) -> bool:
+    if resource.attr("project_id") is None:
+        return False
+    if grant.attr("project_id") != resource.attr("project_id"):
+        return False
+    grant_hospital_id = grant.attr("hospital_id")
+    grant_lab_unit_id = grant.attr("lab_unit_id")
+    if grant_lab_unit_id is not None:
+        return grant_lab_unit_id == resource.attr("lab_unit_id")
+    if grant_hospital_id is not None:
+        return grant_hospital_id == resource.attr("hospital_id")
+    return True
 
 
 def _matches_hospital_scope(actor: AuthzActor, resource: ResourceRef, grant: RelationshipGrant) -> bool:

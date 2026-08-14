@@ -5,14 +5,9 @@ from flask import send_file, abort, flash, make_response, current_app, request
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
 from models import (
-    DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR,
+    EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR,
     DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR,
-    GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage, ProjectInvestigator, UserDiseaseUnitRole, GradingTask
-)
-from data_authorization.service import (
-    project_role_grant_exists_clause,
-    user_has_any_project_role,
-    user_has_project_role,
+    GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage,
 )
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
@@ -21,13 +16,39 @@ from utils.fileUtils import (
 )
 from utils.image_processing import get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
-from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.media_cache import bump_media_cache_version
-from sqlalchemy import and_, exists, select, or_
 from db_transaction_manager import transaction_scope
-from grading_allocation.eligibility import is_user_eligible_for_task
-from encounter_sets.models import ProjectEncounterSetPermission
-from utils.linkedGradingUtils import get_primary_disease_id
+from media.authorization import (
+    AuthorizedMediaSource,
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    MediaSourceType,
+    authorize_media_source,
+)
+
+
+def _require_media_access(
+    db,
+    uuid: str,
+    action: str,
+    expected_sources: frozenset[MediaSourceType],
+    preauthorized: AuthorizedMediaSource | None = None,
+) -> AuthorizedMediaSource:
+    if preauthorized is not None:
+        if preauthorized.uuid != uuid or preauthorized.source_type not in expected_sources:
+            abort(404)
+        return preauthorized
+    try:
+        return authorize_media_source(
+            db,
+            user=current_user,
+            media_uuid=uuid,
+            action=action,
+            expected_sources=expected_sources,
+        )
+    except (MediaAccessDenied, MediaResolutionError):
+        abort(404)
 
 
 def _build_image_response(
@@ -151,169 +172,6 @@ def _serve_encounter_thumbnail(encounter_file: EncounterFile, zip_file: ZipFile,
         return _serve_encounter_image(encounter_file, zip_file, uuid)
 
 
-def _user_has_grading_slot(db, user, lab_unit_id: int | None, disease_id: int | None) -> bool:
-    """Check if the user has any grading slot for the lab unit + disease."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    if not lab_unit_id or not disease_id:
-        return False
-
-    effective_disease_id = get_primary_disease_id(db, disease_id)
-    disease_ids = {disease_id, effective_disease_id}
-    return (
-        db.query(UserDiseaseUnitRole)
-        .filter(
-            UserDiseaseUnitRole.user_id == user.id,
-            UserDiseaseUnitRole.lab_unit_id == lab_unit_id,
-            UserDiseaseUnitRole.disease_id.in_(disease_ids),
-            UserDiseaseUnitRole.active == True,
-            or_(
-                UserDiseaseUnitRole.can_grade_resident == True,
-                UserDiseaseUnitRole.can_grade_resident2 == True,
-                UserDiseaseUnitRole.can_arbitrate == True,
-            ),
-        )
-        .first()
-        is not None
-    )
-
-
-def _user_has_grading_access_to_image(db, user, uuid: str) -> bool:
-    """Check project-aware grading access across tasks linked to an image UUID."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    tasks = (
-        db.query(GradingTask)
-        .join(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
-        .filter(EncounterFile.uuid == uuid)
-        .all()
-    )
-    if not tasks:
-        tasks = (
-            db.query(GradingTask)
-            .join(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
-            .filter(DirectImageUpload.uuid == uuid)
-            .all()
-        )
-    if not tasks:
-        tasks = (
-            db.query(GradingTask)
-            .join(EncounterSetImage, GradingTask.encounter_set_image_id == EncounterSetImage.id)
-            .filter(EncounterSetImage.uuid == uuid)
-            .all()
-        )
-
-    return any(
-        is_user_eligible_for_task(
-            db,
-            user_id=user.id,
-            task=task,
-            role_slot=role_slot,
-        )
-        for task in tasks
-        for role_slot in ("resident", "resident2", "arbitrator")
-    )
-
-
-def _apply_lab_unit_scoping(query, model_class, user):
-    """Restrict query to user's lab units (non-grading access)."""
-    if not user:
-        return query
-
-    def apply_filter(q, *args):
-        if hasattr(q, "filter"):
-            return q.filter(*args)
-        return q.where(*args)
-
-    lab_unit_ids = [lu.id for lu in (user.lab_units or [])]
-    if not lab_unit_ids:
-        return apply_filter(query, model_class.id == None)
-
-    if hasattr(model_class, "lab_unit_id"):
-        return apply_filter(query, model_class.lab_unit_id.in_(lab_unit_ids))
-
-    return query
-
-
-def _apply_encounter_set_media_scoping(query, user, context: str):
-    has_project_collaborator_grant = bool(
-        user
-        and user_has_any_project_role(
-            query.session,
-            user_id=user.id,
-            role_names={"collaborator"},
-        )
-    )
-    if user and (user.has_role("collaborator") or has_project_collaborator_grant) and not user.has_role(
-        "fileUploader",
-        "optometrist",
-        "data_manager",
-        "admin",
-        "ophthalmologist",
-        "resident",
-    ):
-        legacy_membership = exists().where(
-            ProjectInvestigator.project_id == PatientEncounters.project_id,
-            ProjectInvestigator.user_id == user.id,
-            ProjectInvestigator.role == "collaborator",
-            ProjectInvestigator.active.is_(True),
-        )
-        project_grant = project_role_grant_exists_clause(
-            user_id=user.id,
-            project_id=PatientEncounters.project_id,
-            role_names={"collaborator"},
-            lab_unit_id=PatientEncounters.lab_unit_id,
-        )
-        return query.filter(or_(legacy_membership, project_grant))
-    return apply_scoping(query, PatientEncounters, user, context)
-
-
-def _user_has_encounter_set_media_access(db, user, image: EncounterSetImage) -> bool:
-    """Authorize an EncounterSet image through project workflow or grading scope."""
-    if getattr(user, "is_master_admin", False) or user.has_role("admin"):
-        return True
-
-    encounter = image.patient_encounter
-    project_id = image.project_id or (encounter.project_id if encounter else None)
-    lab_unit_id = encounter.lab_unit_id if encounter else None
-    if not project_id or not lab_unit_id:
-        return False
-
-    legacy_collaborator = user.has_role("collaborator") and db.query(ProjectInvestigator.id).filter(
-        ProjectInvestigator.project_id == project_id,
-        ProjectInvestigator.user_id == user.id,
-        ProjectInvestigator.role == "collaborator",
-        ProjectInvestigator.active.is_(True),
-    ).first()
-    project_collaborator = user_has_project_role(
-        db,
-        user_id=user.id,
-        project_id=project_id,
-        role_names={"collaborator"},
-        lab_unit_id=lab_unit_id,
-    )
-    if legacy_collaborator or project_collaborator:
-        return True
-
-    workflow_permission = db.query(ProjectEncounterSetPermission.id).filter(
-        ProjectEncounterSetPermission.project_id == project_id,
-        ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
-        ProjectEncounterSetPermission.user_id == user.id,
-        ProjectEncounterSetPermission.active.is_(True),
-        or_(
-            ProjectEncounterSetPermission.can_browse.is_(True),
-            ProjectEncounterSetPermission.can_verify.is_(True),
-            ProjectEncounterSetPermission.can_upload.is_(True),
-            ProjectEncounterSetPermission.can_review_discrepancies.is_(True),
-            ProjectEncounterSetPermission.can_export_data.is_(True),
-            ProjectEncounterSetPermission.can_view_analytics.is_(True),
-            ProjectEncounterSetPermission.can_create_datasets.is_(True),
-            ProjectEncounterSetPermission.can_adjudicate_regrades.is_(True),
-        ),
-    ).first()
-    return bool(workflow_permission or _user_has_grading_access_to_image(db, user, image.uuid))
-
-
 def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
     path_info = _direct_image_path(direct_image, kind)
     if not path_info:
@@ -331,20 +189,19 @@ def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
 
 
 
-def encounterImageByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def encounterImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
         
-    context = determine_scoping_context()
-    
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.ENCOUNTER_FILE}), preauthorized,
+        )
         query = db.query(EncounterFile, PatientEncounters, ZipFile)
         query = query.join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
         query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
         query = query.filter(EncounterFile.uuid == uuid)
-        
-        # Apply dynamic scoping
-        query = apply_scoping(query, PatientEncounters, current_user, context)
         
         result = query.first()
 
@@ -359,13 +216,15 @@ def encounterImageByUUID(uuid: str):
         
         return _serve_encounter_image(encounter_file, zip_file, uuid)
 
-def encounterDrReportByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def encounterDrReportByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
-    context = determine_scoping_context()
-
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.pdf.view",
+            frozenset({MediaSourceType.DR_REPORT}), preauthorized,
+        )
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(
@@ -380,8 +239,6 @@ def encounterDrReportByUUID(uuid: str):
                  .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
                  .filter(DiabeticRetinopathyReport.uuid == uuid))
 
-        # Apply hospital scoping for security
-        query = apply_scoping(query, PatientEncounters, current_user, context)
         result = query.first()
         if not result or not result[0].report_file_name:
             current_app.logger.warning(
@@ -433,13 +290,15 @@ def encounterDrReportByUUID(uuid: str):
         )
         return response
 
-def encounterGlaucomaReportByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def encounterGlaucomaReportByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
-    context = determine_scoping_context()
-
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.pdf.view",
+            frozenset({MediaSourceType.GLAUCOMA_REPORT}), preauthorized,
+        )
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(
@@ -454,8 +313,6 @@ def encounterGlaucomaReportByUUID(uuid: str):
                  .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
                  .filter(GlaucomaReport.uuid == uuid))
 
-        # Apply hospital scoping for security
-        query = apply_scoping(query, PatientEncounters, current_user, context)
         result = query.first()
         if not result or not result[0].report_file_name:
             current_app.logger.warning(
@@ -510,16 +367,18 @@ def encounterGlaucomaReportByUUID(uuid: str):
         )
         return response
 
-def encounterPDFByUUID(uuid: str):
+def encounterPDFByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """
     Serve the original PDF file from an encounter by UUID.
     """
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
-    context = determine_scoping_context()
-
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.pdf.view",
+            frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}), preauthorized,
+        )
         query = (
             db.query(EncounterFilePDF, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
@@ -527,8 +386,6 @@ def encounterPDFByUUID(uuid: str):
             .filter(EncounterFilePDF.uuid == uuid)
         )
 
-        # Apply hospital scoping for security
-        query = apply_scoping(query, PatientEncounters, current_user, context)
         result = query.first()
         if not result or not result[0].filename:
             flash(f"Error: Encounter PDF not found with UUID: {uuid}", "danger")
@@ -544,15 +401,16 @@ def encounterPDFByUUID(uuid: str):
         
         return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
 
-def directImgOrigByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def directImgOrigByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
     
-    context = determine_scoping_context()
-        
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
         
         if not direct_image or not direct_image.filename:
@@ -563,15 +421,16 @@ def directImgOrigByUUID(uuid: str):
         flash(f"Error: Original Image not found with UUID: {uuid}", "danger")
         abort(404)
 
-def directImgEdByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def directImgEdByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
-    context = determine_scoping_context()
-        
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
         
         if not direct_image or not direct_image.edited_filename:
@@ -583,15 +442,16 @@ def directImgEdByUUID(uuid: str):
         flash(f"Error: Edited Image not found with UUID: {uuid}", "danger")
         abort(404)
 
-def directImgFinalByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def directImgFinalByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
     
-    context = determine_scoping_context()
-        
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
         
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
@@ -604,7 +464,7 @@ def directImgFinalByUUID(uuid: str):
         abort(404)
 
 
-def imgForGradingByUUID(uuid: str):
+def imgForGradingByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """
     Serve an image for grading purposes by UUID.
     First tries to find an encounter image (from ZIP uploads),
@@ -612,11 +472,11 @@ def imgForGradingByUUID(uuid: str):
     Shows appropriate error messages using flash if issues occur.
     Only one match is returned - encounter images have priority.
     """
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
     with transaction_scope() as db:
-        allow_grading_access = _user_has_grading_access_to_image(db, current_user, uuid)
+        _require_media_access(db, uuid, "media.image.view", IMAGE_SOURCE_TYPES, preauthorized)
 
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -624,18 +484,12 @@ def imgForGradingByUUID(uuid: str):
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFile.uuid == uuid)
         )
-        if not allow_grading_access:
-            encounter_query = _apply_lab_unit_scoping(encounter_query, PatientEncounters, current_user)
         encounter_result = encounter_query.first()
 
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        if not allow_grading_access:
-            direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
         encounter_set_query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        if not allow_grading_access:
-            encounter_set_query = _apply_lab_unit_scoping(encounter_set_query, PatientEncounters, current_user)
         encounter_set_image = encounter_set_query.first()
 
         if sum(1 for item in (encounter_result, direct_image, encounter_set_image) if item) > 1:
@@ -664,21 +518,21 @@ def imgForGradingByUUID(uuid: str):
 
 # === Thumbnail Serving Functions ===
 
-def encounterImageThumbnailByUUID(uuid: str):
+def encounterImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """Serve thumbnail for encounter (ZIP upload) images."""
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-        
-    context = determine_scoping_context()
-    
+
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.thumbnail.view",
+            frozenset({MediaSourceType.ENCOUNTER_FILE}), preauthorized,
+        )
         query = (db.query(EncounterFile, PatientEncounters, ZipFile)
                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
                  .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
                  .filter(EncounterFile.uuid == uuid))
                  
-        # Apply dynamic scoping
-        query = apply_scoping(query, PatientEncounters, current_user, context)
         result = query.first()
 
         if not result or not result[0].filename:
@@ -688,16 +542,17 @@ def encounterImageThumbnailByUUID(uuid: str):
         return _serve_encounter_thumbnail(encounter_file, zip_file, uuid)
 
 
-def directImgOrigThumbnailByUUID(uuid: str):
+def directImgOrigThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """Serve thumbnail for direct upload original images."""
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-        
-    context = determine_scoping_context()
-    
+
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.thumbnail.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
         
         if not direct_image or not direct_image.filename:
@@ -754,16 +609,17 @@ def directImgOrigThumbnailByUUID(uuid: str):
         abort(404)
 
 
-def directImgEdThumbnailByUUID(uuid: str):
+def directImgEdThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """Serve thumbnail for direct upload edited images."""
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-        
-    context = determine_scoping_context()
-    
+
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.thumbnail.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
         
         if not direct_image or not direct_image.edited_filename:
@@ -919,36 +775,36 @@ def _serve_direct_final_thumbnail(db, direct_image: DirectImageUpload, uuid: str
     abort(404)
 
 
-def directImgFinalThumbnailByUUID(uuid: str):
+def directImgFinalThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """
     Serve thumbnail for direct upload images (prefers edited if available, otherwise original).
 
     This follows the same logic as directImgFinalByUUID but for thumbnails.
     """
     with transaction_scope() as db:
-        if not current_user or not current_user.is_authenticated:
+        if preauthorized is None and (not current_user or not current_user.is_authenticated):
             abort(401)
-            
-        context = determine_scoping_context()
-        
+        _require_media_access(
+            db, uuid, "media.thumbnail.view",
+            frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}), preauthorized,
+        )
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        query = apply_scoping(query, DirectImageUpload, current_user, context)
         direct_image = query.first()
 
         return _serve_direct_final_thumbnail(db, direct_image, uuid)
 
 
-def universalImageThumbnailByUUID(uuid: str):
+def universalImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """
     Universal thumbnail serving for ZIP, direct-upload, and EncounterSet images.
 
     This follows the same logic as imgForGradingByUUID but for thumbnails.
     """
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
 
     with transaction_scope() as db:
-        allow_grading_access = _user_has_grading_access_to_image(db, current_user, uuid)
+        _require_media_access(db, uuid, "media.thumbnail.view", IMAGE_SOURCE_TYPES, preauthorized)
 
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -956,18 +812,12 @@ def universalImageThumbnailByUUID(uuid: str):
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFile.uuid == uuid)
         )
-        if not allow_grading_access:
-            encounter_query = _apply_lab_unit_scoping(encounter_query, PatientEncounters, current_user)
         encounter_result = encounter_query.first()
 
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
-        if not allow_grading_access:
-            direct_query = _apply_lab_unit_scoping(direct_query, DirectImageUpload, current_user)
         direct_image = direct_query.first()
 
         encounter_set_query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        if not allow_grading_access:
-            encounter_set_query = _apply_lab_unit_scoping(encounter_set_query, PatientEncounters, current_user)
         encounter_set_image = encounter_set_query.first()
 
         if sum(1 for item in (encounter_result, direct_image, encounter_set_image) if item) > 1:
@@ -982,9 +832,7 @@ def universalImageThumbnailByUUID(uuid: str):
         if direct_image:
             return _serve_direct_final_thumbnail(db, direct_image, uuid)
 
-        if encounter_set_image and _user_has_encounter_set_media_access(
-            db, current_user, encounter_set_image
-        ):
+        if encounter_set_image:
             return _serve_encounter_set_thumbnail(encounter_set_image, uuid)
 
         abort(404)
@@ -1030,42 +878,48 @@ def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
             )
     return _serve_encounter_set_image(img, uuid)
 
-def encounterSetImageByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def encounterSetImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-    context = determine_scoping_context()
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.ENCOUNTER_SET_IMAGE}), preauthorized,
+        )
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
+        if not img:
             abort(404)
         return _serve_encounter_set_image(img, uuid)
 
-def encounterSetImageThumbnailByUUID(uuid: str):
-    if not current_user or not current_user.is_authenticated:
+def encounterSetImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-    context = determine_scoping_context()
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.thumbnail.view",
+            frozenset({MediaSourceType.ENCOUNTER_SET_IMAGE}), preauthorized,
+        )
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
+        if not img:
             abort(404)
         
         return _serve_encounter_set_thumbnail(img, uuid)
 
 
-def encounterSetImageEditedByUUID(uuid: str):
+def encounterSetImageEditedByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     """Serve edited encounter set image by UUID (if exists, else 404)."""
-    if not current_user or not current_user.is_authenticated:
+    if preauthorized is None and (not current_user or not current_user.is_authenticated):
         abort(401)
-    context = determine_scoping_context()
     with transaction_scope() as db:
+        _require_media_access(
+            db, uuid, "media.image.view",
+            frozenset({MediaSourceType.ENCOUNTER_SET_IMAGE}), preauthorized,
+        )
         query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
-        query = _apply_encounter_set_media_scoping(query, current_user, context)
         img = query.first()
-        if not img or not _user_has_encounter_set_media_access(db, current_user, img):
+        if not img:
             abort(404)
         if not img.edited_filename:
             abort(404, description="No edited version exists")

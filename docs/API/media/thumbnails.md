@@ -34,7 +34,7 @@ Query params:
 ## HMAC route contract
 
 Auth:
-- Session auth is optional, but if the user is logged in the route enforces hospital membership
+- Session auth is optional. A logged-in caller must pass both HMAC validation and the same central object authorization used by session routes.
 
 Required query params:
 - `token` HMAC token
@@ -42,29 +42,32 @@ Required query params:
 
 Common failures:
 - `400` if the token or expiry is missing or malformed
-- `403` if the token is invalid/expired or the hospital check fails
-- `404` if the UUID does not exist or the requested variant is missing
+- `403` if the credential is missing from the signing scope, invalid, or expired
+- `404` after valid credentials when object authorization fails or the requested variant is missing
 
 Response behavior:
 - `307` redirect to a presigned S3 URL when the file has active S3 metadata
 - Otherwise the route falls back to local file serving
 
 Variant rules:
-- `GET /media/<uuid_str>` serves the original image, edited image, or encounter PDF depending on the stored file type
+- `GET /media/<uuid_str>` serves the original image or encounter PDF
 - `GET /media/<uuid_str>/edited` only works for `DirectImageUpload` rows with an edited version
 - `GET /media/<uuid_str>/thumbnail` serves the best available thumbnail variant
 
-## Legacy route contract
+## Session route contract
 
 Auth:
-- `@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")`
+- Logged-in session plus central object authorization.
+- Classical rows require an accepted global role and admin, hospital, or lab relationship.
+- Project rows require a scoped project role, legacy project capability, collaborator relationship, or exact grading-task eligibility. Classical lab membership alone cannot authorize project data.
+- Client-controlled `context` and `Referer` values are not authorization inputs.
 
 Rate limits:
 - Base media/image routes have per-route hourly and per-minute limits as coded in `media/routes.py`
 - Thumbnail routes use `rate_limit_with_feedback`
 
 Response:
-- File streams or `404`/`403`/`429` depending on access, file existence, and rate limit
+- File streams or non-disclosing `404`/`429` responses.
 
 ## CSRF Rules
 

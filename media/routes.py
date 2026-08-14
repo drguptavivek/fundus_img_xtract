@@ -10,9 +10,8 @@ Supports both local file serving and S3 storage with:
 """
 
 import logging
-import os
 from flask import request, redirect, abort
-from auth.roles import roles_required
+from flask_login import current_user, login_required
 from utils.rate_limiter import rate_limit, rate_limit_with_feedback
 from utils.utilsImgServe import (
     directImgFinalByUUID,
@@ -34,6 +33,16 @@ from utils.utilsImgServe import (
 from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import transaction_scope
 from models import DirectImageUpload, EncounterFile, EncounterFilePDF, S3Config
+from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
+from media.authorization import (
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    MediaSourceType,
+    authorize_media_source,
+    authorize_signed_media_source,
+    resolve_media_source,
+)
 
 from . import bp
 
@@ -46,348 +55,177 @@ audit_logger = logging.getLogger("security.audit")
 # ============================================================================
 
 @bp.route("/<uuid_str>", methods=["GET"])
+@rate_limit("4000 per hour; 400 per minute", methods=["GET"], per_method=True)
 def serve_media_with_hmac(uuid_str: str):
-    """
-    Serve media file using HMAC-signed URL.
-
-    URL Format: /media/{uuid}?token={hmac}&expires={timestamp}
-
-    Security Flow:
-    1. Validate HMAC token (hospital-specific pepper)
-    2. Check hospital access (user's hospital = file's hospital)
-    3. Check if file has S3 metadata
-    4. If S3: Generate presigned URL and redirect
-    5. If not S3: Serve from local filesystem
-
-    This route provides:
-    - Hospital isolation (HMAC validation)
-    - Cross-hospital access blocking
-    - Direct S3 redirects (performance)
-    - Local fallback (compatibility)
-    """
-    from flask_login import current_user
-    from utils.s3_url_signing import validate_media_token
-    from utils.s3_storage_backends import get_s3_client, generate_presigned_url
-
-    # Get token and expires from query parameters
-    token = request.args.get('token')
-    expires = request.args.get('expires')
-
-    if not token or not expires:
-        # Missing HMAC parameters - return 400 (not 403 to avoid information leak)
-        logger.warning("Media request missing HMAC parameters for uuid=%s", sanitize_log_value(uuid_str))
-        abort(400, description="Invalid media URL")
-
-    try:
-        expires_int = int(expires)
-    except (ValueError, TypeError):
-        logger.warning("Media request has invalid expires parameter for uuid=%s", sanitize_log_value(uuid_str))
-        abort(400, description="Invalid media URL")
-
-    # Get file metadata and validate HMAC
-    with transaction_scope() as db:
-        # Try to find file in DirectImageUpload first
-        file_record = db.query(DirectImageUpload).filter_by(uuid=uuid_str).first()
-
-        if not file_record:
-            # Try EncounterFile
-            file_record = db.query(EncounterFile).filter_by(uuid=uuid_str).first()
-
-        if not file_record:
-            # Try EncounterFilePDF
-            file_record = db.query(EncounterFilePDF).filter_by(uuid=uuid_str).first()
-
-        if not file_record:
-            logger.warning("Media file not found for uuid=%s", sanitize_log_value(uuid_str))
-            abort(404, description="File not found")
-
-        # Get hospital_id from file record
-        hospital_id = getattr(file_record, 'hospital_id', None)
-
-        if not hospital_id:
-            logger.warning("File has no hospital_id for uuid=%s", sanitize_log_value(uuid_str))
-            abort(403, description="Access denied")
-
-        # Validate HMAC token with hospital-specific pepper
-        if not validate_media_token(uuid_str, token, expires_int, hospital_id):
-            audit_logger.warning(
-                "MEDIA_HMAC_VALIDATION_FAILED | uuid=%s | hospital_id=%s | token=%s | expires=%s",
-                sanitize_log_value(uuid_str),
-                hospital_id,
-                sanitize_log_value(token[:16] + "..."),
-                expires_int
-            )
-            abort(403, description="Invalid or expired media token")
-
-        # Check if user has access to this hospital
-        if current_user and current_user.is_authenticated:
-            user_hospitals = [u.id for u in current_user.lab_units] if current_user.lab_units else []
-            if hospital_id not in user_hospitals:
-                audit_logger.warning(
-                    "MEDIA_CROSS_HOSPITAL_BLOCKED | uuid=%s | file_hospital=%s | user_hospitals=%s",
-                    sanitize_log_value(uuid_str),
-                    hospital_id,
-                    user_hospitals
-                )
-                abort(403, description="Cross-hospital access blocked")
-
-        # Check if file has S3 metadata
-        s3_config_id = getattr(file_record, 's3_config_id', None)
-        s3_object_key = getattr(file_record, 's3_object_key', None)
-
-        if s3_config_id and s3_object_key:
-            # File is stored in S3 - generate presigned URL and redirect
-            s3_config = db.query(S3Config).get(s3_config_id)
-
-            if not s3_config or not s3_config.is_active:
-                logger.warning(
-                    "S3 config not active for s3_config_id=%d, falling back to local",
-                    s3_config_id
-                )
-            else:
-                try:
-                    # Get S3 client
-                    s3_client = get_s3_client(s3_config)
-
-                    # Get file size for TTL calculation (optional)
-                    file_size = getattr(file_record, 'file_size', None)
-
-                    # Generate presigned URL
-                    presigned_url = generate_presigned_url(
-                        s3_client,
-                        s3_config,
-                        s3_object_key,
-                        file_size_bytes=file_size
-                    )
-
-                    audit_logger.info(
-                        "MEDIA_S3_REDIRECT | uuid=%s | s3_config_id=%d | hospital_id=%d | object_key=%s",
-                        sanitize_log_value(uuid_str),
-                        s3_config_id,
-                        hospital_id,
-                        sanitize_log_value(s3_object_key)
-                    )
-
-                    # Redirect to S3 (client downloads directly from S3)
-                    return redirect(presigned_url, code=307)
-
-                except Exception as e:
-                    logger.error(
-                        "Failed to generate S3 presigned URL for uuid=%s, s3_config_id=%d: %s",
-                        sanitize_log_value(uuid_str),
-                        s3_config_id,
-                        e
-                    )
-                    # Local-first: fall back to local serving on S3 failure
-                    logger.info("S3 presigned URL generation failed, serving from local (local-first policy)")
-
-        # No S3 metadata or S3 failed with fallback="always"
-        # Serve from local filesystem
-        if isinstance(file_record, DirectImageUpload):
-            return _serve_direct_local(file_record, uuid_str)
-        elif isinstance(file_record, EncounterFile):
-            return _serve_encounter_local(file_record, uuid_str)
-        elif isinstance(file_record, EncounterFilePDF):
-            return encounterPDFByUUID(uuid_str)
-
-        abort(404, description="File not found")
+    return _serve_authorized_hmac(
+        uuid_str,
+        variant="original",
+        expected_sources=IMAGE_SOURCE_TYPES | frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}),
+    )
 
 
 @bp.route("/<uuid_str>/edited", methods=["GET"])
+@rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True)
 def serve_media_edited_with_hmac(uuid_str: str):
-    """
-    Serve edited media file using HMAC-signed URL.
-
-    URL Format: /media/{uuid}/edited?token={hmac}&expires={timestamp}
-
-    Only works for DirectImageUpload with edited versions.
-    """
-    from flask_login import current_user
-    from utils.s3_url_signing import validate_media_token
-    from utils.s3_storage_backends import get_s3_client, generate_presigned_url
-
-    token = request.args.get('token')
-    expires = request.args.get('expires')
-
-    if not token or not expires:
-        abort(400, description="Invalid media URL")
-
-    try:
-        expires_int = int(expires)
-    except (ValueError, TypeError):
-        abort(400, description="Invalid media URL")
-
-    with transaction_scope() as db:
-        file_record = db.query(DirectImageUpload).filter_by(uuid=uuid_str).first()
-
-        if not file_record or not file_record.edited_filename:
-            abort(404, description="Edited file not found")
-
-        hospital_id = file_record.hospital_id
-        if not hospital_id:
-            abort(403, description="Access denied")
-
-        # Validate HMAC token
-        if not validate_media_token(uuid_str, token, expires_int, hospital_id):
-            abort(403, description="Invalid or expired media token")
-
-        # Check hospital access
-        if current_user and current_user.is_authenticated:
-            user_hospitals = [u.id for u in current_user.lab_units] if current_user.lab_units else []
-            if hospital_id not in user_hospitals:
-                abort(403, description="Cross-hospital access blocked")
-
-        # Check for S3 metadata
-        s3_config_id = file_record.s3_config_id
-        s3_object_key = file_record.s3_object_key_edited
-
-        if s3_config_id and s3_object_key:
-            s3_config = db.query(S3Config).get(s3_config_id)
-
-            if s3_config and s3_config.is_active:
-                try:
-                    s3_client = get_s3_client(s3_config)
-                    presigned_url = generate_presigned_url(
-                        s3_client,
-                        s3_config,
-                        s3_object_key
-                    )
-                    return redirect(presigned_url, code=307)
-                except Exception as e:
-                    logger.error("Failed to generate S3 presigned URL for edited file: %s", e)
-                    # Local-first: fall back to local serving on S3 failure
-                    logger.info("S3 presigned URL generation failed for edited file, serving from local (local-first policy)")
-
-        # Fallback to local
-        return directImgEdByUUID(uuid_str)
+    return _serve_authorized_hmac(
+        uuid_str,
+        variant="edited",
+        expected_sources=frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}),
+    )
 
 
 @bp.route("/<uuid_str>/thumbnail", methods=["GET"])
+@rate_limit_with_feedback("4000 per hour; 500 per minute", methods=["GET"], per_method=True)
 def serve_media_thumbnail_with_hmac(uuid_str: str):
-    """
-    Serve thumbnail using HMAC-signed URL.
+    return _serve_authorized_hmac(
+        uuid_str,
+        variant="thumbnail",
+        expected_sources=IMAGE_SOURCE_TYPES,
+    )
 
-    URL Format: /media/{uuid}/thumbnail?token={hmac}&expires={timestamp}
-    """
-    from flask_login import current_user
+
+def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
+    """Validate a signed credential, apply session auth when present, then deliver."""
+    from utils.s3_storage_backends import generate_presigned_url, get_s3_client
     from utils.s3_url_signing import validate_media_token
-    from utils.s3_storage_backends import get_s3_client, generate_presigned_url
 
-    token = request.args.get('token')
-    expires = request.args.get('expires')
-
+    token = request.args.get("token")
+    expires = request.args.get("expires")
     if not token or not expires:
         abort(400, description="Invalid media URL")
-
     try:
         expires_int = int(expires)
-    except (ValueError, TypeError):
+    except (TypeError, ValueError):
         abort(400, description="Invalid media URL")
 
     with transaction_scope() as db:
-        # Try DirectImageUpload first
-        file_record = db.query(DirectImageUpload).filter_by(uuid=uuid_str).first()
-
-        if not file_record:
-            # Try EncounterFile
-            file_record = db.query(EncounterFile).filter_by(uuid=uuid_str).first()
-
-        if not file_record:
-            abort(404, description="File not found")
-
-        hospital_id = getattr(file_record, 'hospital_id', None)
-        if not hospital_id:
-            abort(403, description="Access denied")
-
-        # Validate HMAC token
-        if not validate_media_token(uuid_str, token, expires_int, hospital_id):
+        try:
+            resource = resolve_media_source(db, media_uuid=uuid_str, expected_sources=expected_sources)
+        except MediaResolutionError:
+            abort(403, description="Invalid or expired media token")
+        if resource.hospital_id is None:
+            abort(403, description="Invalid or expired media token")
+        digest = token_digest(token)
+        valid = get_hmac_validation(
+            token_hash=digest, media_uuid=uuid_str,
+            hospital_id=resource.hospital_id, expires=expires_int,
+        )
+        if not valid:
+            valid = validate_media_token(uuid_str, token, expires_int, resource.hospital_id)
+            if valid:
+                set_hmac_validation(
+                    token_hash=digest, media_uuid=uuid_str,
+                    hospital_id=resource.hospital_id, expires=expires_int,
+                )
+        if not valid:
             abort(403, description="Invalid or expired media token")
 
-        # Check hospital access
-        if current_user and current_user.is_authenticated:
-            user_hospitals = [u.id for u in current_user.lab_units] if current_user.lab_units else []
-            if hospital_id not in user_hospitals:
-                abort(403, description="Cross-hospital access blocked")
+        action = (
+            "media.pdf.view"
+            if resource.source_type == MediaSourceType.ENCOUNTER_FILE_PDF
+            else "media.thumbnail.view" if variant == "thumbnail"
+            else "media.image.view"
+        )
+        try:
+            authorize_signed_media_source(resource=resource, action=action)
+            if current_user.is_authenticated:
+                authorize_media_source(
+                    db, user=current_user, media_uuid=uuid_str,
+                    action=action, expected_sources=expected_sources,
+                )
+        except (MediaAccessDenied, MediaResolutionError):
+            abort(404)
 
-        # Check for S3 thumbnail metadata
-        s3_config_id = getattr(file_record, 's3_config_id', None)
-
-        # Use appropriate thumbnail key based on file type
-        if isinstance(file_record, DirectImageUpload):
-            s3_object_key = file_record.s3_object_key_edited_thumbnail or file_record.s3_object_key_thumbnail
-            if not s3_object_key and file_record.edited_filename:
-                s3_object_key = file_record.s3_object_key_edited
-            elif not s3_object_key:
-                s3_object_key = file_record.s3_object_key
+        model_by_source = {
+            MediaSourceType.DIRECT_IMAGE_UPLOAD: DirectImageUpload,
+            MediaSourceType.ENCOUNTER_FILE: EncounterFile,
+            MediaSourceType.ENCOUNTER_FILE_PDF: EncounterFilePDF,
+        }
+        row = db.get(model_by_source[resource.source_type], resource.source_id)
+        if row is None:
+            abort(404)
+        if variant == "edited":
+            object_key = getattr(row, "s3_object_key_edited", None)
+        elif variant == "thumbnail":
+            object_key = (
+                getattr(row, "s3_object_key_edited_thumbnail", None)
+                or getattr(row, "s3_object_key_thumbnail", None)
+                or getattr(row, "s3_object_key_edited", None)
+                or getattr(row, "s3_object_key", None)
+            )
         else:
-            s3_object_key = getattr(file_record, 's3_object_key_thumbnail', None)
-
-        if s3_config_id and s3_object_key:
-            s3_config = db.query(S3Config).get(s3_config_id)
-
+            object_key = getattr(row, "s3_object_key", None)
+        s3_config_id = getattr(row, "s3_config_id", None)
+        if s3_config_id and object_key:
+            s3_config = db.get(S3Config, s3_config_id)
             if s3_config and s3_config.is_active:
                 try:
-                    s3_client = get_s3_client(s3_config)
-                    presigned_url = generate_presigned_url(
-                        s3_client,
-                        s3_config,
-                        s3_object_key,
-                        expires_in=120  # Shorter TTL for thumbnails
+                    kwargs = {"expires_in": 120} if variant == "thumbnail" else {}
+                    url = generate_presigned_url(
+                        get_s3_client(s3_config), s3_config, object_key, **kwargs
                     )
-                    return redirect(presigned_url, code=307)
-                except Exception as e:
-                    logger.error("Failed to generate S3 presigned URL for thumbnail: %s", e)
-                    # Local-first: fall back to local serving on S3 failure
-                    logger.info("S3 presigned URL generation failed for thumbnail, serving from local (local-first policy)")
+                    return redirect(url, code=307)
+                except Exception as exc:
+                    logger.warning(
+                        "S3 media redirect failed uuid=%s error=%s",
+                        sanitize_log_value(uuid_str), sanitize_log_value(exc),
+                    )
 
-        # Fallback to local thumbnail serving
-        if isinstance(file_record, DirectImageUpload):
-            return directImgFinalThumbnailByUUID(uuid_str)
-        else:
-            return encounterImageThumbnailByUUID(uuid_str)
+        if resource.source_type == MediaSourceType.DIRECT_IMAGE_UPLOAD:
+            if variant == "edited":
+                return directImgEdByUUID(uuid_str, preauthorized=resource)
+            if variant == "thumbnail":
+                return directImgFinalThumbnailByUUID(uuid_str, preauthorized=resource)
+            return directImgOrigByUUID(uuid_str, preauthorized=resource)
+        if resource.source_type == MediaSourceType.ENCOUNTER_FILE:
+            if variant == "thumbnail":
+                return encounterImageThumbnailByUUID(uuid_str, preauthorized=resource)
+            return encounterImageByUUID(uuid_str, preauthorized=resource)
+        return encounterPDFByUUID(uuid_str, preauthorized=resource)
 
 
 # ============================================================================
-# Legacy Routes (RBAC-protected, kept for compatibility)
+# Legacy routes authenticate at the transport boundary; object policy is
+# enforced again inside the media layer.
 # ============================================================================
 
 @bp.route("/encounter/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterImageByUUID(uuid_str: str):
     return encounterImageByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit("2000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgOrigByUUID(uuid_str: str):
     return directImgOrigByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgEdByUUID(uuid_str: str):
     return directImgEdByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _directImgFinalByUUID(uuid_str: str):
     return directImgFinalByUUID(uuid_str)
 
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
+@login_required
 @rate_limit("1000 per hour; 300 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)
 
 
 @bp.route("/encounter/pdf/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit("4000 per hour; 400 per minute", methods=["GET"], per_method=True, error_message="PDF fetch limit exceeded. Please slow down.")
 def _encounterPDFByUUID(uuid_str: str):
     return encounterPDFByUUID(uuid_str)
@@ -396,7 +234,7 @@ def _encounterPDFByUUID(uuid_str: str):
 # === Thumbnail Serving Routes ===
 
 @bp.route("/encounter/img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -409,7 +247,7 @@ def _encounterImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -422,7 +260,7 @@ def _directImgOrigThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -435,7 +273,7 @@ def _directImgEdThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "local_admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -448,7 +286,7 @@ def _directImgFinalThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -463,7 +301,7 @@ def _universalImageThumbnailByUUID(uuid_str: str):
 # === Encounter Set Media Routes ===
 
 @bp.route("/encounter_set/img/<uuid_str>", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
+@login_required
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterSetImageByUUID(uuid_str: str):
     """Serve encounter set image by UUID."""
@@ -471,7 +309,7 @@ def _encounterSetImageByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/thumbnail", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "collaborator")
+@login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
     methods=["GET"],
@@ -484,7 +322,7 @@ def _encounterSetImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/edited", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident", "analytics_viewer", "dataset_creator", "data_exporter", "discrepancy_reviewer", "regrade_adjudicator")
+@login_required
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _encounterSetImageEditedByUUID(uuid_str: str):
     """Serve encounter set edited image by UUID (only if edited version exists)."""

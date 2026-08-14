@@ -5,18 +5,22 @@ from pathlib import Path
 from typing import Optional
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from app_cache import cache
-from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import BASE_DIR, DirectImageUpload, EncounterFile, EncounterSetImage, IMAGE_DIR, ImageMetadata, PatientEncounters, ZipFile
 from utils.fileUtils import abs_from_parts
-from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.image_metadata import extract_image_metadata, upsert_image_metadata
 from utils.log_sanitize import sanitize_log_value
 
 from . import api_bp
+from media.authorization import (
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    authorize_media_source,
+)
 
 _LOGGER = logging.getLogger("image_metadata_api")
 _METADATA_CACHE_TTL_SECONDS = 10 * 60
@@ -112,19 +116,28 @@ def _resolve_image_info(
     db,
     image_uuid: str,
     variant: Optional[str] = None,
+    *,
+    action: str = "media.metadata.read",
 ) -> tuple[Optional[str], Optional[str], Optional[int], Optional[int], Optional[EncounterSetImage]]:
-    context = determine_scoping_context()
+    try:
+        authorize_media_source(
+            db,
+            user=current_user,
+            media_uuid=image_uuid,
+            action=action,
+            expected_sources=IMAGE_SOURCE_TYPES,
+        )
+    except (MediaAccessDenied, MediaResolutionError):
+        return None, None, None, None, None
     encounter_query = (
         db.query(EncounterFile, PatientEncounters, ZipFile)
         .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
         .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
         .filter(EncounterFile.uuid == image_uuid)
     )
-    encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
     encounter_result = encounter_query.first()
 
     direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == image_uuid)
-    direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
     direct_image = direct_query.first()
 
     encounter_set_query = (
@@ -132,7 +145,6 @@ def _resolve_image_info(
         .join(PatientEncounters, EncounterSetImage.patient_encounter_id == PatientEncounters.id)
         .filter(EncounterSetImage.uuid == image_uuid)
     )
-    encounter_set_query = apply_scoping(encounter_set_query, PatientEncounters, current_user, context)
     encounter_set_image = encounter_set_query.first()
 
     if sum(1 for result in (encounter_result, direct_image, encounter_set_image) if result) > 1:
@@ -188,18 +200,7 @@ def _cache_key(image_uuid: str, variant: str, include_raw: bool) -> str:
 
 
 @api_bp.route("/image-metadata/<string:image_uuid>", methods=["GET"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def get_image_metadata(image_uuid: str):
     variant = request.args.get("variant")
     include_raw = request.args.get("include_raw", "0") in {"1", "true", "yes"}
@@ -234,18 +235,7 @@ def get_image_metadata(image_uuid: str):
 
 
 @api_bp.route("/image-metadata/<string:image_uuid>", methods=["POST"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def extract_image_metadata_api(image_uuid: str):
     payload = request.get_json(silent=True) or {}
     variant = payload.get("variant")
@@ -253,7 +243,9 @@ def extract_image_metadata_api(image_uuid: str):
     force = payload.get("force", False) in {True, "true", "1", "yes"}
 
     with get_db_session() as db:
-        image_path, resolved_variant, encounter_id, direct_id, _ = _resolve_image_info(db, image_uuid, variant)
+        image_path, resolved_variant, encounter_id, direct_id, _ = _resolve_image_info(
+            db, image_uuid, variant, action="media.metadata.process"
+        )
         if not image_path or not resolved_variant:
             return jsonify({"success": False, "error": "Image not found"}), 404
 

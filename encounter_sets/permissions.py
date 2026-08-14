@@ -346,6 +346,46 @@ def capability_lab_unit_ids(
     return lab_unit_ids
 
 
+def legacy_project_capabilities_for_scope(
+    db: Session,
+    *,
+    user_id: int,
+    project_id: int,
+    lab_unit_id: int,
+) -> frozenset[str]:
+    """Return capabilities from the legacy project-permission compatibility row."""
+    row = db.execute(select(ProjectEncounterSetPermission).where(
+        ProjectEncounterSetPermission.user_id == user_id,
+        ProjectEncounterSetPermission.project_id == project_id,
+        ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
+        ProjectEncounterSetPermission.active.is_(True),
+    )).scalar_one_or_none()
+    if row is None:
+        return frozenset()
+    return frozenset(
+        capability
+        for capability, column in CAPABILITY_COLUMNS.items()
+        if bool(getattr(row, column.key))
+    )
+
+
+def user_is_legacy_project_collaborator(
+    db: Session,
+    *,
+    user_id: int,
+    project_id: int,
+) -> bool:
+    """Preserve legacy ProjectInvestigator collaborator membership during migration."""
+    from models import ProjectInvestigator
+
+    return db.execute(select(ProjectInvestigator.id).where(
+        ProjectInvestigator.user_id == user_id,
+        ProjectInvestigator.project_id == project_id,
+        ProjectInvestigator.role == "collaborator",
+        ProjectInvestigator.active.is_(True),
+    )).scalar_one_or_none() is not None
+
+
 def apply_task_capability_scope(
     query,
     task_entity,

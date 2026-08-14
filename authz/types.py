@@ -13,6 +13,11 @@ class GrantSource(StrEnum):
     LAB_UNIT_ASSIGNMENT = "lab_unit_assignment"
     HOSPITAL_SCOPE = "hospital_scope"
     ADMIN_GLOBAL = "admin_global"
+    PROJECT_ROLE = "project_role"
+    LEGACY_PROJECT_CAPABILITY = "legacy_project_capability"
+    PROJECT_COLLABORATOR = "project_collaborator"
+    TASK_ELIGIBILITY = "task_eligibility"
+    SIGNED_MEDIA_TOKEN = "signed_media_token"
 
 
 @dataclass(frozen=True)

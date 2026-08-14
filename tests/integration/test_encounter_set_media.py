@@ -101,8 +101,8 @@ def test_access_encounter_set_image_wrong_role(client, auth_client_factory, enco
     auth_client = auth_client_factory(user)
     
     response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}")
-    # @roles_required usually returns 403 Forbidden
-    assert response.status_code == 403
+    # Object authorization intentionally hides whether the media UUID exists.
+    assert response.status_code == 404
 
 
 def test_access_encounter_set_thumbnail_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):

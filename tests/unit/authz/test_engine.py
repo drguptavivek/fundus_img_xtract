@@ -153,3 +153,75 @@ def test_verification_actions_are_general_scoped_actions() -> None:
     assert direct_decision.allowed is True
     assert remidio_decision.allowed is True
     assert pregraded_decision.allowed is True
+
+
+def test_media_project_role_is_scoped_and_does_not_become_global() -> None:
+    actor = AuthzActor(id=1, roles=frozenset())
+    resource = ResourceRef(
+        type="encounter_set_image",
+        id="image-uuid",
+        attributes={"project_id": 20, "hospital_id": 10, "lab_unit_id": 30},
+    )
+    grant = RelationshipGrant(
+        source=GrantSource.PROJECT_ROLE,
+        attributes={
+            "project_id": 20,
+            "hospital_id": 10,
+            "lab_unit_id": 30,
+            "role_names": frozenset({"collaborator"}),
+        },
+    )
+
+    allowed = authorize(actor, "media.image.view", resource, grants=[grant])
+    wrong_project = authorize(
+        actor,
+        "media.image.view",
+        ResourceRef(
+            type="encounter_set_image",
+            id="other",
+            attributes={"project_id": 21, "hospital_id": 10, "lab_unit_id": 30},
+        ),
+        grants=[grant],
+    )
+
+    assert allowed.allowed is True
+    assert allowed.grant_source == GrantSource.PROJECT_ROLE
+    assert wrong_project.allowed is False
+
+
+def test_legacy_project_capability_can_authorize_media_but_not_document_with_wrong_capability() -> None:
+    actor = AuthzActor(id=2, roles=frozenset())
+    resource = ResourceRef(
+        type="encounter_set_image",
+        id="image-uuid",
+        attributes={"project_id": 20, "hospital_id": 10, "lab_unit_id": 30},
+    )
+    grant = RelationshipGrant(
+        source=GrantSource.LEGACY_PROJECT_CAPABILITY,
+        attributes={
+            "project_id": 20,
+            "hospital_id": 10,
+            "lab_unit_id": 30,
+            "capabilities": frozenset({"analytics_view"}),
+        },
+    )
+
+    assert authorize(actor, "media.image.view", resource, grants=[grant]).allowed is True
+    assert authorize(actor, "media.pdf.view", resource, grants=[grant]).allowed is False
+
+
+def test_signed_media_token_is_bound_to_exact_uuid() -> None:
+    actor = AuthzActor(id=0)
+    resource = ResourceRef(type="encounter_file", id="image-uuid")
+    grant = RelationshipGrant(
+        source=GrantSource.SIGNED_MEDIA_TOKEN,
+        resource_id="image-uuid",
+    )
+
+    assert authorize(actor, "media.image.view", resource, grants=[grant]).allowed is True
+    assert authorize(
+        actor,
+        "media.image.view",
+        ResourceRef(type="encounter_file", id="other-uuid"),
+        grants=[grant],
+    ).allowed is False

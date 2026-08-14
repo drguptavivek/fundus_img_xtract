@@ -7,13 +7,11 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from app_cache import cache
-from auth.roles import roles_required
 from models import DirectImageUpload, EncounterFile, IMAGE_DIR, ImagePiiVerification, PatientEncounters, ZipFile
 from utils.fileUtils import abs_from_parts
-from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import get_media_cache_version
 from utils.pii_detection_queue import enqueue_pii_detection_job
@@ -21,6 +19,12 @@ from auth.utils import utcnow
 from utils.utils import with_session
 
 from . import api_bp
+from media.authorization import (
+    IMAGE_SOURCE_TYPES,
+    MediaAccessDenied,
+    MediaResolutionError,
+    authorize_media_source,
+)
 
 
 _OCR_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30
@@ -71,27 +75,39 @@ def _safe_get(record: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def _resolve_image_variant_map(image_uuids: Iterable[str]) -> Dict[str, Optional[str]]:
+def _resolve_image_variant_map(
+    image_uuids: Iterable[str], *, action: str = "media.ocr_pii.read"
+) -> Dict[str, Optional[str]]:
     uuids = [uuid for uuid in image_uuids if uuid]
     if not uuids:
         return {}
 
-    context = determine_scoping_context()
     with with_session() as db:
+        authorized_uuids = []
+        for image_uuid in uuids:
+            try:
+                authorize_media_source(
+                    db,
+                    user=current_user,
+                    media_uuid=image_uuid,
+                    action=action,
+                    expected_sources=IMAGE_SOURCE_TYPES,
+                )
+                authorized_uuids.append(image_uuid)
+            except (MediaAccessDenied, MediaResolutionError):
+                continue
         encounter_query = (
             db.query(EncounterFile.uuid)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
-            .filter(EncounterFile.uuid.in_(uuids))
+            .filter(EncounterFile.uuid.in_(authorized_uuids))
         )
-        encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
         encounter_uuids = {row[0] for row in encounter_query.all()}
 
         direct_query = (
             db.query(DirectImageUpload.uuid, DirectImageUpload.edited_filename)
-            .filter(DirectImageUpload.uuid.in_(uuids))
+            .filter(DirectImageUpload.uuid.in_(authorized_uuids))
         )
-        direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
         direct_variants = {
             uuid: ("edited" if edited_filename else "orig")
             for uuid, edited_filename in direct_query.all()
@@ -108,20 +124,29 @@ def _resolve_image_variant_map(image_uuids: Iterable[str]) -> Dict[str, Optional
     return variant_map
 
 
-def _resolve_image_path(image_uuid: str) -> tuple[Optional[str], Optional[str]]:
-    context = determine_scoping_context()
+def _resolve_image_path(
+    image_uuid: str, *, action: str = "media.ocr_pii.read"
+) -> tuple[Optional[str], Optional[str]]:
     with with_session() as db:
+        try:
+            authorize_media_source(
+                db,
+                user=current_user,
+                media_uuid=image_uuid,
+                action=action,
+                expected_sources=IMAGE_SOURCE_TYPES,
+            )
+        except (MediaAccessDenied, MediaResolutionError):
+            return None, None
         encounter_query = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFile.uuid == image_uuid)
         )
-        encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
         encounter_result = encounter_query.first()
 
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == image_uuid)
-        direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
         direct_image = direct_query.first()
 
         if encounter_result and direct_image:
@@ -203,18 +228,7 @@ def _record_pii_verification(
 
 
 @api_bp.route("/ocr/pii/batch", methods=["POST"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def api_ocr_pii_batch():
     payload = request.get_json(silent=True) or {}
     image_uuids = payload.get("image_uuids")
@@ -271,21 +285,12 @@ def api_ocr_pii_batch():
 
 
 @api_bp.route("/ocr/pii/boxes/<string:image_uuid>", methods=["GET"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def api_ocr_pii_boxes(image_uuid: str):
     start = time.perf_counter()
-    image_path, image_variant = _resolve_image_path(image_uuid)
+    image_path, image_variant = _resolve_image_path(
+        image_uuid, action="media.ocr_pii.process"
+    )
     if not image_path or not image_variant:
         return jsonify({"success": False, "error": "Image not found"}), 404
 
@@ -393,21 +398,15 @@ def api_ocr_pii_boxes(image_uuid: str):
 
 
 @api_bp.route("/ocr/pii/<string:image_uuid>", methods=["GET"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def api_ocr_pii(image_uuid: str):
     start = time.perf_counter()
     force_refresh = request.args.get("refresh", "0") in {"1", "true", "yes"}
+    image_path, image_variant = _resolve_image_path(
+        image_uuid, action="media.ocr_pii.process"
+    )
+    if not image_path or not image_variant:
+        return jsonify({"success": False, "error": "Image not found"}), 404
     cache_version = get_media_cache_version(image_uuid)
     cache_key = f"ocr:pii:{image_uuid}:{cache_version}"
     if not force_refresh:
@@ -440,10 +439,6 @@ def api_ocr_pii(image_uuid: str):
         duration_ms = int((time.perf_counter() - start) * 1000)
         cached = {**cached, "duration_ms": duration_ms}
         return jsonify({"success": True, "data": cached, "cached": True})
-
-    image_path, image_variant = _resolve_image_path(image_uuid)
-    if not image_path or not image_variant:
-        return jsonify({"success": False, "error": "Image not found"}), 404
 
     try:
         record, processed = _run_pii_detection(image_uuid, image_variant, image_path)
@@ -494,18 +489,7 @@ def api_ocr_pii(image_uuid: str):
 
 
 @api_bp.route("/ocr/pii/override", methods=["POST"])
-@roles_required(
-    "admin",
-    "local_admin",
-    "data_manager",
-    "data_exporter",
-    "dataset_creator",
-    "analytics_viewer",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-)
+@login_required
 def api_ocr_pii_override():
     payload = request.get_json(silent=True) or {}
     image_uuid = (payload.get("image_uuid") or "").strip()
@@ -515,7 +499,9 @@ def api_ocr_pii_override():
     if pii_status not in {"clear", "detected"}:
         return jsonify({"success": False, "error": "Invalid pii_status"}), 400
 
-    image_variant = _resolve_image_variant(image_uuid)
+    image_variant = _resolve_image_variant_map(
+        [image_uuid], action="media.ocr_pii.process"
+    ).get(image_uuid)
     if not image_variant:
         return jsonify({"success": False, "error": "Image not found"}), 404
 

@@ -177,6 +177,50 @@ this document first.
 
 These rules cover actions that currently have executable entries in `authz/policies.py`.
 
+### `media.image.view`
+
+- Rule: A session user may view an image only when an accepted global role and classical scope, scoped project role, legacy project capability, collaborator relationship, or exact grading-task eligibility covers the resolved image.
+- Rule: A valid signed-media credential may view only the exact resolved image UUID and signing hospital.
+- Relationship source: classical scope, project authority, task eligibility, or signed-media token.
+- Resource: resolved patient-media image.
+
+### `media.thumbnail.view`
+
+- Rule: Thumbnail access uses the same object authority as full-image access and must not widen access based on variant availability.
+- Relationship source: the same sources as `media.image.view`.
+- Resource: resolved patient-media image.
+
+### `media.pdf.view`
+
+- Rule: Source and generated report PDFs require document-capable classical or project authority; collaborator and grading-only relationships do not grant PDF access.
+- Rule: A valid signed-media credential may view only the exact resolved source PDF UUID and signing hospital.
+- Relationship source: document-capable classical scope, project authority, or signed-media token.
+- Resource: resolved patient-media document.
+
+### `media.metadata.read`
+
+- Rule: Image metadata is read only after the underlying image passes object authorization.
+- Relationship source: image-capable classical or project authority, collaborator membership, or task eligibility.
+- Resource: resolved patient-media image.
+
+### `media.metadata.process`
+
+- Rule: Metadata extraction or refresh requires the same object authority before a filesystem or storage path is resolved.
+- Relationship source: image-capable classical or project authority, collaborator membership, or task eligibility.
+- Resource: resolved patient-media image.
+
+### `media.ocr_pii.read`
+
+- Rule: PII OCR status, detections, and cached results are read only after the underlying image passes object authorization.
+- Relationship source: image-capable classical or project authority, collaborator membership, or task eligibility.
+- Resource: resolved patient-media image.
+
+### `media.ocr_pii.process`
+
+- Rule: PII OCR processing and manual overrides require object authorization before paths, prior records, or caches are accessed.
+- Relationship source: image-capable classical or project authority, collaborator membership, or task eligibility.
+- Resource: resolved patient-media image.
+
 ### `upload.direct.create`
 
 - Rule: A user may create a direct image upload only when the user has the `fileUploader` role and has an active upload profile relationship matching the selected project, lab unit, disease, camera, area, and upload kind.

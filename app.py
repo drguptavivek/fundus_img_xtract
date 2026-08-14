@@ -521,6 +521,7 @@ def _register_blueprints(app: Flask) -> None:
     from verify_remedio_nodr import bp as verify_remedio_nodr_bp
     from verify_encounter_set import bp as verify_encounter_set_bp
     from media import bp as media_bp
+    import media.routes  # noqa: F401 - registers routes after the blueprint exists
     from account import account_bp
     from audit import bp as audit_bp
     from grading import configure_blueprint

@@ -4,14 +4,15 @@ These routes expose extracted file metadata for encounter images and direct uplo
 
 Auth and CSRF:
 
-- `GET` requires a logged-in session plus the listed roles.
-- `POST` uses the same role gate and requires CSRF because it uses the browser session.
+- `GET` requires a logged-in session and the `media.metadata.read` object policy.
+- `POST` requires `media.metadata.process` for the same image and CSRF because it uses the browser session.
+- Classical role/scope, scoped project roles, legacy project capabilities, collaborator membership, and exact grading eligibility are resolved by the central authorization service. Metadata caches are read only after authorization.
 
 ## Routes
 
 | Route | Method | Auth | Request | Response | Status codes |
 | --- | --- | --- | --- | --- | --- |
-| `/api/image-metadata/<string:image_uuid>` | `GET` | Session + login + `admin`, `local_admin`, `data_manager`, `data_exporter`, `dataset_creator`, `analytics_viewer`, `fileUploader`, `optometrist`, `ophthalmologist`, `resident` | Query params `variant`, `include_raw` | `{ "success": true, "data": object, "cached": bool }` | `404` if the image or metadata cannot be resolved. `500` on unexpected error. |
+| `/api/image-metadata/<string:image_uuid>` | `GET` | Session + `media.metadata.read` | Query params `variant`, `include_raw` | `{ "success": true, "data": object, "cached": bool }` | `404` if the image is missing, unauthorized, ambiguous, or metadata cannot be resolved. `500` on unexpected error. |
 | `/api/image-metadata/<string:image_uuid>` | `POST` | Same as `GET` + CSRF | JSON body `{"variant", "include_raw", "force"}` | `{ "success": true, "data": object, "cached": false, "updated": bool }` | `404` if the image cannot be resolved. `500` if extraction fails. |
 
 ## Request details

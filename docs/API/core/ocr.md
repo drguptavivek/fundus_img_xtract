@@ -4,7 +4,8 @@ These routes manage PII OCR checks for visible images, including manual override
 
 Auth and CSRF:
 
-- All routes require a logged-in session plus the roles listed below, except that the manual override still uses the session and therefore needs CSRF.
+- All routes require a logged-in session plus `media.ocr_pii.read` or `media.ocr_pii.process` authorization for every referenced image.
+- Classical and project authority is resolved centrally, and no OCR record or cache is read before object authorization.
 - `GET` routes do not require CSRF.
 - `POST /api/ocr/pii/override` requires CSRF because it mutates session-authenticated state.
 
@@ -12,10 +13,10 @@ Auth and CSRF:
 
 | Route | Method | Auth | Request | Response | Status codes |
 | --- | --- | --- | --- | --- | --- |
-| `/api/ocr/pii/batch` | `POST` | Session + login + `admin`, `local_admin`, `data_manager`, `data_exporter`, `dataset_creator`, `analytics_viewer`, `fileUploader`, `optometrist`, `ophthalmologist`, `resident` | JSON `{ "image_uuids": [str, ...] }` | `{ "success": true, "data": { "<uuid>": object } }` | `400` if `image_uuids` is not a list. |
-| `/api/ocr/pii/boxes/<string:image_uuid>` | `GET` | Same role set as above | Path `image_uuid` | `{ "success": true, "data": object }` | `404` if the image cannot be resolved. |
-| `/api/ocr/pii/<string:image_uuid>` | `GET` | Same role set as above | Query param `refresh=1` optional | `{ "success": true, "data": object, "cached": bool }` | `404` if the image cannot be resolved. |
-| `/api/ocr/pii/override` | `POST` | Same role set as above + CSRF | JSON `{ "image_uuid": str, "pii_status": "clear" \| "detected" }` | `{ "success": true, "data": object }` | `400` for missing or invalid fields. `404` if the image cannot be resolved. |
+| `/api/ocr/pii/batch` | `POST` | Session + `media.ocr_pii.read` per UUID | JSON `{ "image_uuids": [str, ...] }` | `{ "success": true, "data": { "<uuid>": object } }` | `400` if `image_uuids` is not a list. |
+| `/api/ocr/pii/boxes/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Path `image_uuid` | `{ "success": true, "data": object }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
+| `/api/ocr/pii/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Query param `refresh=1` optional | `{ "success": true, "data": object, "cached": bool }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
+| `/api/ocr/pii/override` | `POST` | Session + `media.ocr_pii.process` + CSRF | JSON `{ "image_uuid": str, "pii_status": "clear" \| "detected" }` | `{ "success": true, "data": object }` | `400` for missing or invalid fields. `404` if the image cannot be authorized and resolved. |
 
 ## `POST /api/ocr/pii/batch`
 

@@ -370,6 +370,47 @@ def user_has_any_project_role(
     ).scalar_one_or_none() is not None
 
 
+def project_role_names_for_scope(
+    db: Session,
+    *,
+    user_id: int,
+    project_id: int,
+    hospital_id: int | None = None,
+    lab_unit_id: int | None = None,
+) -> frozenset[str]:
+    """Resolve active role names whose project scope contains one resource."""
+    scope_conditions = [ProjectRoleGrant.scope_type == PROJECT_SCOPE]
+    if hospital_id is not None:
+        scope_conditions.append(and_(
+            ProjectRoleGrant.scope_type == HOSPITAL_SCOPE,
+            ProjectRoleGrant.hospital_id == hospital_id,
+        ))
+    if lab_unit_id is not None:
+        scope_conditions.append(and_(
+            ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
+            ProjectRoleGrant.lab_unit_id == lab_unit_id,
+        ))
+        if hospital_id is None:
+            lab = aliased(LabUnit)
+            scope_conditions.append(and_(
+                ProjectRoleGrant.scope_type == HOSPITAL_SCOPE,
+                exists().where(
+                    lab.id == lab_unit_id,
+                    lab.hospital_id == ProjectRoleGrant.hospital_id,
+                ),
+            ))
+    return frozenset(db.execute(
+        select(Role.name)
+        .join(ProjectRoleGrant, ProjectRoleGrant.role_id == Role.id)
+        .where(
+            ProjectRoleGrant.user_id == user_id,
+            ProjectRoleGrant.project_id == project_id,
+            ProjectRoleGrant.active.is_(True),
+            or_(*scope_conditions),
+        )
+    ).scalars())
+
+
 def project_role_grant_exists_clause(
     *,
     user_id: int,

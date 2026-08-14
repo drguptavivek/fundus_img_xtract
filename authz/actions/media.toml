@@ -21,3 +21,35 @@ zone = "web"
 description = "View scoped encounter PDF files."
 resource_type = "encounter_file"
 requires_resource = true
+
+[[actions]]
+name = "media.metadata.read"
+domain = "media"
+zone = "api"
+description = "Read scoped image metadata."
+resource_type = "image"
+requires_resource = true
+
+[[actions]]
+name = "media.metadata.process"
+domain = "media"
+zone = "api"
+description = "Extract or refresh scoped image metadata."
+resource_type = "image"
+requires_resource = true
+
+[[actions]]
+name = "media.ocr_pii.read"
+domain = "media"
+zone = "api"
+description = "Read scoped image PII OCR status and boxes."
+resource_type = "image"
+requires_resource = true
+
+[[actions]]
+name = "media.ocr_pii.process"
+domain = "media"
+zone = "api"
+description = "Run or override scoped image PII OCR processing."
+resource_type = "image"
+requires_resource = true

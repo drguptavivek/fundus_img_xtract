@@ -646,6 +646,8 @@ def test_verified_encounter_set_browser_uses_view_label(
 
     assert response.status_code == 200
     assert b"View Verification" in response.data
+    assert b"/api/encounter-viewer/encounters/" not in response.data
+    assert b"Loading encounter evidence" not in response.data
 
 
 def test_verify_encounter_set_patient_panel(client, auth_client_factory, encounter_set_data, db_session):

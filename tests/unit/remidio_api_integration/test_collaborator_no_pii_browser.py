@@ -127,6 +127,8 @@ def test_project_only_collaborator_grant_does_not_require_global_role(db_session
     html = response.get_data(as_text=True)
     assert "MRN-PROJECT-ONLY" not in html
     assert "Project Only Patient" not in html
+    assert "/api/encounter-viewer/encounters/" not in html
+    assert "Loading encounter evidence" not in html
 
 
 def test_no_pii_browser_redacts_patient_identifiers(db_session):

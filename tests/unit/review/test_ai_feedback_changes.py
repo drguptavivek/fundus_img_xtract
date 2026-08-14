@@ -130,6 +130,9 @@ def test_discrepancy_review_ui_exposes_status_cohorts_and_csv_queue():
 
     for value in ("unreviewed", "human", "ai", "both", "any"):
         assert f'<option value="{value}"' in template
+    assert 'id="projectSelect"' in template
+    assert 'name="project_id"' in template
+    assert "fundus_api.discrepancy_review_filter_options" in template
     review_status_position = template.index('id="hasHumanReviewSelect"')
     ai_review_status_position = template.index('id="aiReviewStatusDropdown"')
     assert template.rfind('<div class="row g-3 mt-2 disease-dependent"', 0, review_status_position) > template.index(

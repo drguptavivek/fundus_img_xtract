@@ -86,6 +86,7 @@ def create_regrade_tasks():
             has_regrade = "no"
 
         filters = {
+            "project_id": request.form.get("project_id", type=int),
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
             "resident_grade": request.form.getlist("resident_grade"),

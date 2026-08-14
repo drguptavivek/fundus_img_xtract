@@ -49,6 +49,7 @@ def test_get_next_review_tasks_uses_discrepancy_filter_builder(monkeypatch):
         current_task_id=3,
         disease_id=1,
         lab_unit_ids=[3],
+        project_id=7,
         lab_unit_id=3,
         has_consensus="has_consensus",
         consensus_method="regrade",
@@ -73,6 +74,7 @@ def test_get_next_review_tasks_uses_discrepancy_filter_builder(monkeypatch):
     assert db.params["current_task_id"] == 3
     assert db.params["limit"] == 2
     assert captured_filters["lab_unit_id"] == 3
+    assert captured_filters["project_id"] == 7
     assert captured_filters["consensus_method"] == "regrade"
     assert captured_filters["has_regrade"] == "yes"
     assert captured_filters["has_arbitrator"] == "yes"

@@ -13,7 +13,6 @@ from auth.roles import roles_or_project_grant_required, roles_required
 from job_store import db_create_job
 from models import (
     AIModel,
-    Disease,
     DiseaseGrading,
     Job,
     LabUnit,
@@ -44,6 +43,11 @@ from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
 from .queues import ReviewQueueError, load_review_queue
+from .discrepancy_scope import (
+    DiscrepancyScopeError,
+    discrepancy_lab_unit_ids,
+    list_discrepancy_filter_options,
+)
 
 AI_REVIEW_STATUS_FILTER_LABELS = {
     **AI_REVIEW_STATUS_LABELS,
@@ -65,15 +69,7 @@ def _project_listing_capabilities() -> list[str]:
 
 
 def _review_lab_unit_ids(db) -> set[int]:
-    return capability_lab_unit_ids(
-        db,
-        user=current_user,
-        capability=CAPABILITY_DISCREPANCY_REVIEW,
-    ) | capability_lab_unit_ids(
-        db,
-        user=current_user,
-        capability=CAPABILITY_DATA_EXPORT,
-    )
+    return discrepancy_lab_unit_ids(db, user=current_user)
 
 
 def render_discrepancy_review(
@@ -88,19 +84,21 @@ def render_discrepancy_review(
     lab units, while data_managers will only see their assigned units.
     """
     with get_db_session() as db:
-        # Scope lab units to user's explicit associations (no admin override)
-        # Scope lab units to user's explicit associations (no admin override)
         review_lab_unit_ids = _review_lab_unit_ids(db)
-        lu_query = (
-            select(LabUnit)
-            .where(LabUnit.id.in_(review_lab_unit_ids))
-            .order_by(LabUnit.hospital_id, LabUnit.name)
-        )
-        lab_units = db.execute(lu_query).scalars().all()
+        project_id = request.args.get("project_id", type=int)
+        try:
+            filter_options = list_discrepancy_filter_options(
+                db,
+                user=current_user,
+                allowed_lab_unit_ids=review_lab_unit_ids,
+                project_id=project_id,
+            )
+        except DiscrepancyScopeError:
+            abort(404)
+        projects = filter_options.projects
+        diseases = filter_options.diseases
+        lab_units = filter_options.lab_units
         user_lab_unit_ids = {lu.id for lu in lab_units}
-        
-        # Get filter options
-        diseases = db.query(Disease).order_by(Disease.name).all()
         
         # Get grade options from DiseaseGrading
         grade_options = db.query(DiseaseGrading).distinct(DiseaseGrading.impression).all()
@@ -122,7 +120,7 @@ def render_discrepancy_review(
             regrade_adjudicators = db.execute(regrade_query).scalars().all()
         
         # Apply disease filter (mandatory)
-        from flask import flash, redirect, url_for, request, session
+        from flask import flash, redirect, url_for, session
         review_queue_token = (request.args.get("review_queue") or "").strip()
         review_queue = None
         if review_queue_token:
@@ -158,6 +156,7 @@ def render_discrepancy_review(
         if not disease_id:
             return render_template(
                 "review/discrepancy_review.html",
+                projects=projects,
                 diseases=diseases,
                 lab_units=lab_units,
                 grade_options=grade_options,
@@ -170,7 +169,7 @@ def render_discrepancy_review(
                 has_prev=False,
                 has_next=False,
                 ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
-                filters={},
+                filters={"project_id": project_id},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
                 review_route=review_route,
@@ -178,6 +177,10 @@ def render_discrepancy_review(
         
         # Apply lab unit filter
         lab_unit_id = request.args.get("lab_unit_id", type=int)
+        if disease_id not in {disease.id for disease in diseases}:
+            abort(404)
+        if lab_unit_id is not None and lab_unit_id not in user_lab_unit_ids:
+            abort(404)
         
         # Get grade filter values (as lists to support multi-select)
         resident_grades = request.args.getlist("resident_grade")
@@ -242,6 +245,7 @@ def render_discrepancy_review(
         if not allowed_lab_units:
             return render_template(
                 "review/discrepancy_review.html",
+                projects=projects,
                 diseases=diseases,
                 lab_units=[],
                 grade_options=grade_options,
@@ -254,13 +258,14 @@ def render_discrepancy_review(
                 has_prev=False,
                 has_next=False,
                 ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
-                filters={},
+                filters={"project_id": project_id},
                 page_title=page_title,
                 regrade_creator_mode=regrade_creator_mode,
                 review_route=review_route,
             )
 
         filters = {
+            "project_id": project_id,
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
             "resident_grade": resident_grades,
@@ -296,6 +301,7 @@ def render_discrepancy_review(
         if not mv_name:
             return render_template(
                 "review/discrepancy_review.html",
+                projects=projects,
                 diseases=diseases,
                 lab_units=lab_units,
                 grade_options=grade_options,
@@ -420,6 +426,7 @@ def render_discrepancy_review(
         )
         return render_template(
             template_name,
+            projects=projects,
             diseases=diseases,
             lab_units=lab_units,
             grade_options=grade_options,
@@ -433,6 +440,7 @@ def render_discrepancy_review(
             has_next=has_next,
             ai_review_status_labels=AI_REVIEW_STATUS_FILTER_LABELS,
             filters={
+                "project_id": project_id,
                 "disease_id": disease_id,
                 "lab_unit_id": lab_unit_id,
                 "resident_grade": resident_grades,
@@ -529,6 +537,7 @@ def discrepancy_export():
         skip_image_zips = request.form.get("skip_image_zips") == "1"
 
         filters = {
+            "project_id": request.form.get("project_id", type=int),
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
             "resident_grade": request.form.getlist("resident_grade"),

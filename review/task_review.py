@@ -315,6 +315,7 @@ def review_task_details(task_id: int):
         ai_model_id_filter = _arg_or_return_to("ai_model_id", return_to_query_args, type_=int)
 
         lab_unit_id_filter = _arg_or_return_to("lab_unit_id", return_to_query_args, type_=int)
+        project_id_filter = _arg_or_return_to("project_id", return_to_query_args, type_=int)
         has_consensus = _arg_or_return_to("has_consensus", return_to_query_args)
         has_review = _arg_or_return_to("has_review", return_to_query_args)
         has_ai_grade = _arg_or_return_to("has_ai_grade", return_to_query_args)
@@ -335,6 +336,7 @@ def review_task_details(task_id: int):
 
         navigation_params: dict[str, object] = {
             "disease_id": task.disease_id,
+            "project_id": project_id_filter,
             "lab_unit_id": lab_unit_id_filter,
             "has_consensus": has_consensus,
             "consensus_method": consensus_method,
@@ -368,6 +370,7 @@ def review_task_details(task_id: int):
             current_task_id=task_id,
             disease_id=task.disease_id,
             lab_unit_ids=list(user_lab_unit_ids),
+            project_id=project_id_filter,
             lab_unit_id=lab_unit_id_filter,
             has_consensus=has_consensus,
             consensus_method=consensus_method,

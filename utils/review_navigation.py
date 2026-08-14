@@ -16,6 +16,7 @@ def get_next_review_tasks(
     current_task_id: int,
     disease_id: int,
     lab_unit_ids: List[int],
+    project_id: Optional[int] = None,
     lab_unit_id: Optional[int] = None,
     has_consensus: Optional[str] = None,
     consensus_method: Optional[str] = None,
@@ -43,6 +44,7 @@ def get_next_review_tasks(
     """Return the next and next-after task ids in the discrepancy order for the given filters."""
     filters: Dict[str, Any] = {
         "disease_id": disease_id,
+        "project_id": project_id,
         "lab_unit_id": lab_unit_id,
         "allowed_lab_units": lab_unit_ids,
         "has_consensus": has_consensus,

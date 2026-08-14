@@ -183,7 +183,9 @@ def user_has_task_capability(
     elif task.encounter_set_image_id:
         image = db.get(EncounterSetImage, task.encounter_set_image_id)
         encounter = db.get(PatientEncounters, image.patient_encounter_id) if image else None
-        project_id = encounter.project_id if encounter else None
+        project_id = (image.project_id if image else None) or (
+            encounter.project_id if encounter else None
+        )
     elif task.encounter_file_id:
         image = db.get(EncounterFile, task.encounter_file_id)
         project_id = image.project_id if image else None
@@ -247,6 +249,7 @@ def _project_task_capability_clause(
     direct_image = aliased(DirectImageUpload)
     project_id = func.coalesce(
         task_encounter.project_id,
+        set_image.project_id,
         set_encounter.project_id,
         encounter_file.project_id,
         file_encounter.project_id,

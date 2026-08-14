@@ -196,6 +196,22 @@ def test_build_discrepancy_filter_query_scopes_uploaded_task_ids(monkeypatch):
     assert params["task_ids"] == [9, 4]
 
 
+def test_build_discrepancy_filter_query_scopes_source_project(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+    _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {"disease_id": 1, "project_id": 8, "allowed_lab_units": [1]},
+    )
+
+    assert "selected_project_task.id = v.task_id" in where_sql
+    assert "selected_task_encounter.project_id" in where_sql
+    assert "selected_task_set_image.project_id" in where_sql
+    assert "selected_set_image_encounter.project_id" in where_sql
+    assert "selected_task_image.project_id" in where_sql
+    assert "selected_task_direct.project_id" in where_sql
+    assert params["project_id"] == 8
+
+
 def test_build_discrepancy_filter_query_accepts_scoped_project_role_grants(monkeypatch):
     monkeypatch.setattr(
         discrepancy_filters,

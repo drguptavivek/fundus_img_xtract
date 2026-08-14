@@ -36,6 +36,7 @@ def build_discrepancy_filter_query(
     filters: Dict[str, Any],
 ) -> Tuple[str, str, Dict[str, Any], Optional[int]]:
     disease_id = filters.get("disease_id")
+    project_id = filters.get("project_id")
     lab_unit_id = filters.get("lab_unit_id")
     resident_grades = filters.get("resident_grade", [])
     resident2_grades = filters.get("resident2_grade", [])
@@ -111,6 +112,36 @@ def build_discrepancy_filter_query(
         where_clauses.append("v.task_id = ANY(:task_ids)")
         params["task_ids"] = task_ids
 
+    if project_id is not None:
+        where_clauses.append(
+            """EXISTS (
+                SELECT 1
+                FROM grading_tasks selected_project_task
+                LEFT JOIN patient_encounters selected_task_encounter
+                  ON selected_task_encounter.id = selected_project_task.patient_encounter_id
+                LEFT JOIN encounter_set_images selected_task_set_image
+                  ON selected_task_set_image.id = selected_project_task.encounter_set_image_id
+                LEFT JOIN patient_encounters selected_set_image_encounter
+                  ON selected_set_image_encounter.id = selected_task_set_image.patient_encounter_id
+                LEFT JOIN encounter_files selected_task_image
+                  ON selected_task_image.id = selected_project_task.encounter_file_id
+                LEFT JOIN patient_encounters selected_task_image_encounter
+                  ON selected_task_image_encounter.id = selected_task_image.patient_encounter_id
+                LEFT JOIN direct_image_uploads selected_task_direct
+                  ON selected_task_direct.id = selected_project_task.direct_image_upload_id
+                WHERE selected_project_task.id = v.task_id
+                  AND COALESCE(
+                    selected_task_encounter.project_id,
+                    selected_task_set_image.project_id,
+                    selected_set_image_encounter.project_id,
+                    selected_task_image.project_id,
+                    selected_task_image_encounter.project_id,
+                    selected_task_direct.project_id
+                  ) = :project_id
+            )"""
+        )
+        params["project_id"] = int(project_id)
+
     capability_columns = [
         value
         for value in filters.get("project_capability_columns", [])
@@ -133,6 +164,7 @@ def build_discrepancy_filter_query(
                       WHERE pap.user_id = :project_capability_user_id
                         AND pap.project_id = COALESCE(
                           task_encounter.project_id,
+                          task_set_image.project_id,
                           set_image_encounter.project_id,
                           task_image.project_id,
                           task_image_encounter.project_id,
@@ -152,6 +184,7 @@ def build_discrepancy_filter_query(
                       WHERE prg.user_id = :project_capability_user_id
                         AND prg.project_id = COALESCE(
                           task_encounter.project_id,
+                          task_set_image.project_id,
                           set_image_encounter.project_id,
                           task_image.project_id,
                           task_image_encounter.project_id,
@@ -181,6 +214,7 @@ def build_discrepancy_filter_query(
         classical_authorization_sql = (
             """COALESCE(
                       task_encounter.project_id,
+                      task_set_image.project_id,
                       set_image_encounter.project_id,
                       task_image.project_id,
                       task_image_encounter.project_id,

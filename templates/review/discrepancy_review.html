@@ -83,7 +83,7 @@
         {% if filters.review_queue %}
         <span class="badge text-bg-primary">Custom queue: {{ filters.task_ids|length }} tasks</span>
         <a class="btn btn-sm btn-outline-secondary"
-          href="{{ url_for('review.discrepancy_review', disease_id=filters.disease_id) }}">Clear queue</a>
+          href="{{ url_for('review.discrepancy_review', project_id=filters.project_id, disease_id=filters.disease_id) }}">Clear queue</a>
         {% endif %}
         {% if not regrade_creator_mode %}
         <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal"
@@ -97,6 +97,19 @@
       <form method="GET" id="filterForm">
         {% if filters.review_queue %}<input type="hidden" name="review_queue" value="{{ filters.review_queue }}">{% endif %}
         <div class="row g-3">
+          <div class="col-md-3">
+            <label for="projectSelect" class="form-label">Project</label>
+            <select class="form-select" id="projectSelect" name="project_id">
+              <option value="">All Projects</option>
+              {% for project in projects %}
+              <option value="{{ project.id }}" {% if filters.project_id==project.id %}selected{% endif %}>
+                {{ project.title }}{% if not project.active %} (inactive){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Restricts tasks, diseases, and lab units to the selected project.</div>
+          </div>
+
           <div class="col-md-3">
             <label for="diseaseSelect" class="form-label">Disease <span class="text-danger">*</span></label>
             <select class="form-select" id="diseaseSelect" name="disease_id" required>
@@ -114,7 +127,7 @@
               <option value="">All Lab Units</option>
               {% for lab_unit in lab_units %}
               <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id==lab_unit.id %}selected{% endif %}>{{
-                lab_unit.hospital.name }} - {{ lab_unit.name }}</option>
+                lab_unit.label }}</option>
               {% endfor %}
             </select>
           </div>
@@ -555,8 +568,9 @@
   {% else %}
   <script>
     {% endif %}
-    function clearFilters() {
+function clearFilters() {
       // Clear disease and lab unit dropdowns
+    document.getElementById('projectSelect').value = '';
     document.getElementById('diseaseSelect').value = '';
     document.getElementById('labUnitSelect').value = '';
     document.getElementById('hasAiGradeSelect').value = '';
@@ -617,6 +631,9 @@
     // Function to update grade options when disease is selected
     document.addEventListener('DOMContentLoaded', function() {
   const diseaseSelect = document.getElementById('diseaseSelect');
+    const projectSelect = document.getElementById('projectSelect');
+    const labUnitSelect = document.getElementById('labUnitSelect');
+    let activeProjectId = projectSelect.value;
     const residentGradeList = document.getElementById('residentGradeList');
     const resident2GradeList = document.getElementById('resident2GradeList');
     const arbitratorGradeList = document.getElementById('arbitratorGradeList');
@@ -640,6 +657,49 @@
     document.querySelectorAll('.disease-dependent').forEach(element => {
       element.style.display = showFilters ? '' : 'none';
     });
+  }
+
+    function replaceSelectOptions(select, placeholder, options, labelKey) {
+    select.replaceChildren();
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = placeholder;
+    select.appendChild(placeholderOption);
+    options.forEach(item => {
+      const option = document.createElement('option');
+      option.value = String(item.id);
+      option.textContent = item[labelKey];
+      select.appendChild(option);
+    });
+  }
+
+    async function updateProjectFilterOptions() {
+    const projectId = projectSelect.value;
+    projectSelect.disabled = true;
+    diseaseSelect.disabled = true;
+    labUnitSelect.disabled = true;
+    try {
+      const url = new URL('{{ url_for("fundus_api.discrepancy_review_filter_options") }}', window.location.origin);
+      if (projectId) url.searchParams.set('project_id', projectId);
+      const response = await fetch(url, {credentials: 'same-origin'});
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || 'Unable to load project filter options.');
+      }
+      replaceSelectOptions(diseaseSelect, 'Select Disease', payload.data.diseases, 'name');
+      replaceSelectOptions(labUnitSelect, 'All Lab Units', payload.data.lab_units, 'label');
+      activeProjectId = projectId;
+      updateGradeOptions();
+    } catch (error) {
+      projectSelect.value = activeProjectId;
+      if (window.showFlashToast) {
+        window.showFlashToast(error.message || 'Unable to load project filter options.', 'error');
+      }
+    } finally {
+      projectSelect.disabled = false;
+      diseaseSelect.disabled = false;
+      labUnitSelect.disabled = false;
+    }
   }
 
     // Function to update grade checkboxes based on selected disease
@@ -758,6 +818,7 @@
 
     // Update grade options when disease selection changes
     diseaseSelect.addEventListener('change', updateGradeOptions);
+    projectSelect.addEventListener('change', updateProjectFilterOptions);
 
     // Initialize grade options if a disease is already selected on page load
     if (diseaseSelect.value) {

@@ -1,4 +1,36 @@
-# Discrepancy Review Queue API
+# Discrepancy Review API
+
+## Get project-aware filter options
+
+`GET /api/review/filter-options?project_id=<id>`
+
+Returns the projects, diseases, and lab units available to the signed-in caller for discrepancy review. The options are derived from actual grading-task source lineage rather than global configuration. When `project_id` is supplied, diseases and lab units are restricted to tasks belonging to that project; lab-unit labels include their hospital.
+
+- Authentication: signed-in administrator, global `discrepancy_reviewer` or `data_exporter`, or a user with a matching project role grant.
+- Authorization: project and lab availability is restricted by the caller's discrepancy-review and data-export scope. An unavailable `project_id` returns `404`.
+- CSRF: not required for this read-only endpoint.
+
+Success (`200`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "project_id": 7,
+    "projects": [{"id": 7, "title": "Study A", "active": true}],
+    "diseases": [{"id": 2, "name": "Glaucoma"}],
+    "lab_units": [{
+      "id": 4,
+      "name": "Retina Lab",
+      "hospital_id": 3,
+      "hospital_name": "Hospital A",
+      "label": "Hospital A - Retina Lab"
+    }]
+  }
+}
+```
+
+The browser calls this endpoint whenever Project changes, clears incompatible disease/lab selections, and repopulates both dependent selectors from the response. The selected project is also enforced by listing, pagination, task review navigation, regrade creation, and discrepancy export queries.
 
 ## Create a review queue
 

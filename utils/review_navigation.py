@@ -42,6 +42,18 @@ def get_next_review_tasks(
     limit: int = 50,
 ) -> Dict[str, Optional[int]]:
     """Return the next and next-after task ids in the discrepancy order for the given filters."""
+    if ordered_task_ids:
+        try:
+            current_index = ordered_task_ids.index(current_task_id)
+        except ValueError:
+            return {"next_task_id": None, "next_after_task_id": None}
+
+        ordered_ids = ordered_task_ids[current_index + 1 : current_index + 3]
+        return {
+            "next_task_id": ordered_ids[0] if ordered_ids else None,
+            "next_after_task_id": ordered_ids[1] if len(ordered_ids) > 1 else None,
+        }
+
     filters: Dict[str, Any] = {
         "disease_id": disease_id,
         "project_id": project_id,
@@ -73,27 +85,6 @@ def get_next_review_tasks(
     mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
     if not mv_name:
         return {"next_task_id": None, "next_after_task_id": None}
-
-    if ordered_task_ids:
-        base_query = f"""
-            SELECT v.task_id
-            FROM {mv_name} v
-            WHERE {where_sql}
-        """
-        rows = db.execute(text(base_query), params).fetchall()
-        available = {row.task_id for row in rows}
-        try:
-            current_index = ordered_task_ids.index(current_task_id)
-        except ValueError:
-            return {"next_task_id": None, "next_after_task_id": None}
-        ordered_ids = [
-            task_id for task_id in ordered_task_ids[current_index + 1:]
-            if task_id in available
-        ][:2]
-        return {
-            "next_task_id": ordered_ids[0] if ordered_ids else None,
-            "next_after_task_id": ordered_ids[1] if len(ordered_ids) > 1 else None,
-        }
 
     base_query = f"""
         SELECT v.task_id

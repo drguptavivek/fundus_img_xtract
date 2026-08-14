@@ -34,8 +34,14 @@ preserved:
   a submission; comments alone do not;
 - Clear Selections and Cancel actions are navigation-only and must never cause
   writes;
-- saved diseases are debounced through Redis, their image-listing MV is
-  refreshed by Celery, and list caches are invalidated after refresh;
+- accepted forms carry a one-time UUID4 submission token; the unique history
+  request ID makes browser/network replay idempotent inside the same locked
+  submission transaction;
+- uploaded-queue navigation comes from the re-authorized stored queue order
+  and does not depend on a materialized-view refresh;
+- saved diseases are debounced through Redis with at most one queued/running
+  request, their image-listing MV is refreshed concurrently by Celery through
+  a unique task key, and list caches are invalidated after refresh;
 - discrepancy export and regrade creation reuse the filter builder;
 - the latest `review` grade wins deterministically by `updated_at`, then ID.
 

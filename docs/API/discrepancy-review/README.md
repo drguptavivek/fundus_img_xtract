@@ -142,4 +142,18 @@ curl -X POST \
   https://example.test/api/review/queues
 ```
 
-The returned page URL is reusable by the queue creator. Queue contents are re-authorized whenever they are loaded. Save & Next uses the stored CSV order and returns to the queue after the final task.
+The returned page URL is reusable by the queue creator. Queue contents are re-authorized whenever they are loaded. Save & Next uses the stored CSV order directly; it does not query the image-listing materialized view to discover the next queue item. After the final task it returns to the queue.
+
+## Review task form submission contract
+
+The server-rendered companion form is `POST /review/reviewTaskDetails/<task_id>`. It remains a Post/Redirect/Get HTML workflow and uses the same permission-scoped queue contract described above.
+
+- Authentication: signed-in global `discrepancy_reviewer` or a user with a matching project role grant.
+- Authorization: the task and any uploaded queue are re-authorized for the caller on every request.
+- CSRF: required through the rendered `csrf_token` field.
+- Idempotency: required through the rendered `review_submission_token`, a one-time UUID4 bound by the accepted history row to the task and actor. Replaying an accepted token returns the canonical redirect without writing another grade, consensus revision, AI assessment, history row, or refresh request.
+- Concurrency: review, consensus, and AI version tokens are checked after the task and mutable rows are locked. The review mutation and append-only history row commit in one transaction.
+- Navigation: `next_task_id` submitted by the browser is informational only. The server derives the target from the authorized stored queue or canonical discrepancy filters.
+- Progressive behavior: browser back/forward restoration releases the local submission guard and hides the saved-page overlay. Server idempotency remains authoritative if the old form is submitted again.
+
+Accepted writes mark the disease listing dirty after commit. Redis keeps at most one refresh request queued/running for a disease, and the populated per-disease view is refreshed concurrently using its unique `task_id` index so listing reads and review submissions are not blocked by refresh locks.

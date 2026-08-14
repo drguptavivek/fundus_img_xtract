@@ -184,6 +184,7 @@
           </div>
           <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}{% if task_detail_query_string %}?{{ task_detail_query_string }}{% endif %}" id="review-form">
             {{ csrf_field() }}
+            <input type="hidden" name="review_submission_token" value="{{ review_submission_token }}">
             <input type="hidden" name="review_grade_id" value="{{ existing_review_grade.id if existing_review_grade else '' }}">
             <input type="hidden" name="review_grade_updated_at" value="{{ existing_review_grade.updated_at.isoformat() if existing_review_grade and existing_review_grade.updated_at else '' }}">
             <input type="hidden" name="consensus_decided_at" value="{{ existing_consensus.decided_at.isoformat() if existing_consensus and existing_consensus.decided_at else '' }}">
@@ -524,5 +525,5 @@
   }
 </script>
 <script src="{{ url_for('static', filename='js/submission-guard.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-submission-guard-v1"></script>
-<script src="{{ url_for('static', filename='js/review-task-detail.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-review-submit-v4"></script>
+<script src="{{ url_for('static', filename='js/review-task-detail.js') }}?v={{ config.get('ASSETS_VERSION', '') }}-review-submit-v5"></script>
 {% endblock %}

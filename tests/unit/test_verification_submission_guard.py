@@ -11,7 +11,8 @@ def test_shared_submission_guard_blocks_reentry_and_restores_controls():
     assert "event.preventDefault();" in script
     assert "activeSubmissions.delete(target);" in script
     assert "snapshot.control.disabled = snapshot.disabled;" in script
-    assert "global.SubmissionGuard = Object.freeze({acquire, isActive});" in script
+    assert "function release(target)" in script
+    assert "global.SubmissionGuard = Object.freeze({acquire, isActive, release});" in script
 
 
 def test_encounter_set_verification_uses_shared_guard_for_mutations():

@@ -189,6 +189,7 @@
     );
     let pendingSubmit = false;
     let pendingSubmitButton = null;
+    let activeWriteSubmission = null;
 
     function startReviewWriteSubmission(actionValue, submitter) {
       if (!['save', 'save_next'].includes(actionValue)) {
@@ -206,6 +207,7 @@
           ? 'Saving review and loading the next case…'
           : 'Saving review and returning to the discrepancy list…'
       });
+      activeWriteSubmission = submission;
       return Boolean(submission);
     }
 
@@ -332,6 +334,29 @@
       input.addEventListener('change', updateReviewSubmissionState);
     });
     updateReviewSubmissionState();
+
+    window.addEventListener('pageshow', function (event) {
+      const restoredSubmittingPage = Boolean(
+        event.persisted
+        || activeWriteSubmission
+        || (reviewForm && reviewForm.getAttribute('aria-busy') === 'true')
+      );
+      if (!restoredSubmittingPage) {
+        return;
+      }
+      if (activeWriteSubmission) {
+        activeWriteSubmission.release();
+        activeWriteSubmission = null;
+      } else if (reviewForm) {
+        window.SubmissionGuard.release(reviewForm);
+      }
+      pendingSubmit = false;
+      pendingSubmitButton = null;
+      if (actionField) {
+        actionField.value = '';
+      }
+      updateReviewSubmissionState();
+    });
 
     if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
       const overrideModal = new bootstrap.Modal(overrideModalEl);

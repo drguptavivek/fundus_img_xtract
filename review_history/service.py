@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
@@ -12,6 +12,41 @@ from .models import ReviewSubmissionHistory
 
 class StaleReviewSubmissionError(RuntimeError):
     """The submitted form was based on an older database version."""
+
+
+class InvalidReviewSubmissionToken(ValueError):
+    """The one-time review submission token is invalid or reused out of scope."""
+
+
+def normalize_submission_request_id(value: str | None) -> str:
+    """Return a canonical UUID4 request id supplied by the rendered review form."""
+    try:
+        parsed = UUID(str(value or ""))
+    except (ValueError, AttributeError) as exc:
+        raise InvalidReviewSubmissionToken("Invalid review submission token.") from exc
+    if parsed.version != 4:
+        raise InvalidReviewSubmissionToken("Invalid review submission token.")
+    return str(parsed)
+
+
+def find_submission_history(
+    db: Session,
+    *,
+    request_id: str,
+    task_id: int,
+    actor_user_id: int,
+) -> ReviewSubmissionHistory | None:
+    """Find an idempotent replay, rejecting a token reused by another scope."""
+    row = (
+        db.query(ReviewSubmissionHistory)
+        .filter(ReviewSubmissionHistory.request_id == request_id)
+        .first()
+    )
+    if row is None:
+        return None
+    if row.task_id != task_id or row.actor_user_id != actor_user_id:
+        raise InvalidReviewSubmissionToken("Invalid review submission token.")
+    return row
 
 
 def version_token(value: datetime | None) -> str:
@@ -73,9 +108,14 @@ def record_submission_history(
     before: dict[str, Any],
     after: dict[str, Any],
     version_tokens: dict[str, Any],
+    request_id: str | None = None,
 ) -> ReviewSubmissionHistory:
     row = ReviewSubmissionHistory(
-        request_id=str(uuid4()),
+        request_id=(
+            normalize_submission_request_id(request_id)
+            if request_id is not None
+            else str(uuid4())
+        ),
         task_id=task_id,
         actor_user_id=actor_user_id,
         action_type=action_type,

@@ -23,13 +23,17 @@ from encounter_sets.permissions import (
     user_has_task_capability,
 )
 from review_history import (
+    InvalidReviewSubmissionToken,
     StaleReviewSubmissionError,
     assert_version_token,
+    find_submission_history,
+    normalize_submission_request_id,
     record_submission_history,
     snapshot_consensus,
     snapshot_grade,
 )
 from datetime import datetime, timezone
+from uuid import uuid4
 from . import bp
 from .queues import ReviewQueueError, load_review_queue
 from .my_discrepancy_reviews import my_discrepancy_review_page
@@ -217,6 +221,27 @@ def _arglist_or_return_to(name: str, return_to_args: dict[str, list[str]]) -> li
     if values:
         return values
     return return_to_args.get(name, [])
+
+
+def _review_action_redirect(
+    *,
+    action: str,
+    next_task_id: int | None,
+    next_redirect_params: dict[str, object],
+    return_to: str | None,
+):
+    """Build the canonical post/skip redirect without trusting form navigation fields."""
+    if action in {"save_next", "cancel_next"} and next_task_id:
+        return redirect(
+            url_for(
+                "review.review_task_details",
+                task_id=next_task_id,
+                **next_redirect_params,
+            )
+        )
+    if return_to and is_safe_url(return_to):
+        return redirect(return_to)
+    return redirect(url_for("review.discrepancy_review"))
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -445,9 +470,70 @@ def review_task_details(task_id: int):
 
         # Handle POST request for submitting review grade
         if request.method == 'POST' and can_review:
+            action = _submitted_action()
+            form_next_task_id = request.form.get('next_task_id', type=int)
+            target_next_task_id = nav_result.get("next_task_id")
+            effective_next_task_id = target_next_task_id
+            next_redirect_params: dict[str, object] = {
+                k: v for k, v in navigation_params.items() if v not in (None, "", [])
+            }
+            if ai_model_id_filter:
+                next_redirect_params["ai_model_id"] = ai_model_id_filter
+            if return_to:
+                next_redirect_params["return_to"] = return_to
+
+            grades_logger.info(
+                "Review submit navigation context",
+                extra={
+                    "action": action,
+                    "target_next_task_id": target_next_task_id,
+                    "submitted_next_task_id": form_next_task_id,
+                    "fallback_next_task_id": nav_result.get("next_task_id"),
+                    "return_to": return_to,
+                    "navigation_params": next_redirect_params,
+                },
+            )
+
+            # Cancellation is navigation only. It must not lock mutable rows,
+            # consume an idempotency token, or validate stale form values.
+            if action == "cancel_next":
+                return _review_action_redirect(
+                    action=action,
+                    next_task_id=effective_next_task_id,
+                    next_redirect_params=next_redirect_params,
+                    return_to=return_to,
+                )
+
+            try:
+                submission_request_id = normalize_submission_request_id(
+                    request.form.get("review_submission_token")
+                )
+            except InvalidReviewSubmissionToken as exc:
+                flash(str(exc), "error")
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+
             # Serialize all review submissions for this task, then lock the
             # mutable rows whose version tokens are checked below.
             db.query(GradingTask).filter(GradingTask.id == task_id).with_for_update().one()
+            try:
+                previous_submission = find_submission_history(
+                    db,
+                    request_id=submission_request_id,
+                    task_id=task_id,
+                    actor_user_id=current_user.id,
+                )
+            except InvalidReviewSubmissionToken as exc:
+                flash(str(exc), "error")
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+            if previous_submission is not None:
+                flash("This review submission was already saved.", "info")
+                return _review_action_redirect(
+                    action=action,
+                    next_task_id=effective_next_task_id,
+                    next_redirect_params=next_redirect_params,
+                    return_to=return_to,
+                )
+
             previous_consensus = (
                 db.query(Consensus)
                 .filter(Consensus.task_id == task_id)
@@ -476,53 +562,7 @@ def review_task_details(task_id: int):
             grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
             ai_influence = (request.form.get('ai_influence') or '').strip().lower()
-            action = _submitted_action()
-            form_next_task_id = request.form.get('next_task_id', type=int)
-            target_next_task_id = nav_result.get("next_task_id")
             raw_selected_features = request.form.getlist('selected_features')
-            effective_next_task_id = target_next_task_id
-            next_redirect_params: dict[str, object] = {
-                k: v for k, v in navigation_params.items() if v not in (None, "", [])
-            }
-            if ai_model_id_filter:
-                next_redirect_params["ai_model_id"] = ai_model_id_filter
-            if return_to:
-                next_redirect_params["return_to"] = return_to
-
-            grades_logger.info(
-                "Review submit navigation context",
-                extra={
-                    "action": action,
-                    "target_next_task_id": target_next_task_id,
-                    "submitted_next_task_id": form_next_task_id,
-                    "fallback_next_task_id": nav_result.get("next_task_id"),
-                    "return_to": return_to,
-                    "navigation_params": next_redirect_params,
-                },
-            )
-
-            # Cancellation is navigation only. Do not validate stale form
-            # values or interpret any selected grade/AI controls as a write.
-            if action == "cancel_next":
-                if return_to and is_safe_url(return_to) and effective_next_task_id:
-                    return redirect(
-                        url_for(
-                            'review.review_task_details',
-                            task_id=effective_next_task_id,
-                            **next_redirect_params,
-                        )
-                    )
-                if effective_next_task_id:
-                    return redirect(
-                        url_for(
-                            'review.review_task_details',
-                            task_id=effective_next_task_id,
-                            **next_redirect_params,
-                        )
-                    )
-                if return_to and is_safe_url(return_to):
-                    return redirect(return_to)
-                return redirect(url_for('review.discrepancy_review'))
 
             ai_feedback_payload, invalid_ai_status = _collect_changed_ai_feedback(
                 ai_grades,
@@ -782,31 +822,19 @@ def review_task_details(task_id: int):
                         for payload in ai_feedback_payload
                     },
                 },
+                request_id=submission_request_id,
             )
 
             db.commit()
             _queue_review_listing_refresh(task.disease_id)
             success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
             flash(success_message, 'success')
-            if return_to and is_safe_url(return_to):
-                if action in {"save_next", "cancel_next"} and effective_next_task_id:
-                    return redirect(
-                        url_for(
-                            'review.review_task_details',
-                            task_id=effective_next_task_id,
-                            **next_redirect_params,
-                        )
-                    )
-                return redirect(return_to)
-            if action in {"save_next", "cancel_next"} and effective_next_task_id:
-                return redirect(
-                    url_for(
-                        'review.review_task_details',
-                        task_id=effective_next_task_id,
-                        **next_redirect_params,
-                    )
-                )
-            return redirect(url_for('review.discrepancy_review'))
+            return _review_action_redirect(
+                action=action,
+                next_task_id=effective_next_task_id,
+                next_redirect_params=next_redirect_params,
+                return_to=return_to,
+            )
         
         # Get available grades for the disease
         available_grades = fetch_active_disease_gradings(db, task.disease_id)
@@ -883,6 +911,7 @@ def review_task_details(task_id: int):
             cancel_close_url=cancel_close_url,
             next_task_id=next_task_id,
             task_detail_query_string=request.query_string.decode("utf-8"),
+            review_submission_token=str(uuid4()),
         )
 
 

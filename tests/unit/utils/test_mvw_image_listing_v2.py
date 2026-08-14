@@ -1,4 +1,6 @@
-from utils.mvw_image_listing_v2 import _build_mv_sql
+from pathlib import Path
+
+from utils.mvw_image_listing_v2 import _build_mv_sql, _create_indexes_sql
 
 
 def test_build_mv_sql_includes_basis_specific_final_impression_columns():
@@ -33,3 +35,20 @@ def test_build_mv_sql_can_exclude_physical_encounter_set_rows_for_downgrade():
     )
 
     assert "FROM encounter_set_images esi" not in sql
+
+
+def test_image_listing_views_have_unique_task_key_and_concurrent_refresh():
+    indexes = list(
+        _create_indexes_sql(
+            "mvw_image_listing_test_1_v2",
+            include_encounter_set_images=True,
+        )
+    )
+    module_source = Path("utils/mvw_image_listing_v2.py").read_text(encoding="utf-8")
+
+    assert indexes[0] == (
+        "CREATE UNIQUE INDEX IF NOT EXISTS "
+        "mvw_image_listing_test_1_v2_task_id "
+        "ON mvw_image_listing_test_1_v2(task_id);"
+    )
+    assert "REFRESH MATERIALIZED VIEW CONCURRENTLY {mv_name}" in module_source

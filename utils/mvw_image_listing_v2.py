@@ -450,7 +450,7 @@ def _create_indexes_sql(
     mv_name: str, *, include_encounter_set_images: bool = False
 ) -> Iterable[str]:
     indexes = [
-        f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_id')} ON {mv_name}(task_id);",
+        f"CREATE UNIQUE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_id')} ON {mv_name}(task_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'task_lab_unit_id')} ON {mv_name}(task_lab_unit_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'hospital_id')} ON {mv_name}(hospital_id);",
         f"CREATE INDEX IF NOT EXISTS {_index_name(mv_name, 'camera_id')} ON {mv_name}(camera_id);",
@@ -527,7 +527,7 @@ def ensure_per_disease_image_listing_mvs(
                 elif not exists:
                     results["skipped"] += 1
                 elif refresh_existing:
-                    db.execute(text(f"REFRESH MATERIALIZED VIEW {mv_name}"))
+                    db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {mv_name}"))
                     results["refreshed"] += 1
         except Exception as exc:
             results["errors"] += 1
@@ -554,7 +554,7 @@ def refresh_image_listing_mv_for_disease(disease_id: int, *, schedule_time: str)
         ).scalar()
         if not exists:
             raise RuntimeError(f"Materialized view {mv_name} does not exist")
-        db.execute(text(f"REFRESH MATERIALIZED VIEW {mv_name}"))
+        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {mv_name}"))
     return {
         "disease_id": disease_id,
         "materialized_view": mv_name,

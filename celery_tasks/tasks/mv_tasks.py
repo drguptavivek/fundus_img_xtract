@@ -17,7 +17,7 @@ from utils.redis_connection import build_redis_url
 
 _LOGGER = logging.getLogger("materialized_view_v2")
 _LOCK_TTL_SECONDS = 600
-_DEBOUNCE_SECONDS = 2
+_DEBOUNCE_SECONDS = 30
 
 
 def _redis_client():
@@ -41,7 +41,11 @@ def queue_debounced_image_listing_refresh(disease_id: int) -> bool:
         return False
     try:
         refresh_image_listing_v2_task.apply_async(
-            kwargs={"disease_id": disease_id, "schedule_time": "review_submission"},
+            kwargs={
+                "disease_id": disease_id,
+                "schedule_time": "review_submission",
+                "scheduled_generation": generation,
+            },
             countdown=_DEBOUNCE_SECONDS,
         )
     except Exception:
@@ -60,6 +64,7 @@ def refresh_image_listing_v2_task(
     self,
     schedule_time: str | None = None,
     disease_id: int | None = None,
+    scheduled_generation: str | None = None,
 ) -> dict:
     _ = build_task_app()
     label = schedule_time or "celery_beat"
@@ -76,6 +81,18 @@ def refresh_image_listing_v2_task(
 
     client = _redis_client()
     dirty_key, lock_key = _keys(disease_id)
+    if scheduled_generation is not None and client.get(lock_key) != scheduled_generation:
+        _LOGGER.info(
+            "Skipping stale disease MV refresh disease_id=%s",
+            sanitize_log_value(disease_id),
+        )
+        return {
+            "disease_id": disease_id,
+            "schedule_time": label,
+            "refreshed": 0,
+            "skipped": 1,
+            "errors": 0,
+        }
     generation_before = client.get(dirty_key)
     try:
         results = refresh_image_listing_mv_for_disease(disease_id, schedule_time=label)

@@ -22,13 +22,6 @@ class _FakeDB:
         return _FakeResult()
 
 
-class _OrderedFakeDB(_FakeDB):
-    def execute(self, statement, params):
-        self.sql = str(statement)
-        self.params = params
-        return type("Result", (), {"fetchall": lambda self: [_FakeRow(9), _FakeRow(4), _FakeRow(2)]})()
-
-
 def test_get_next_review_tasks_uses_discrepancy_filter_builder(monkeypatch):
     db = _FakeDB()
     captured_filters = {}
@@ -106,11 +99,15 @@ def test_get_next_review_tasks_returns_none_when_no_materialized_view(monkeypatc
 
 
 def test_get_next_review_tasks_preserves_uploaded_queue_order(monkeypatch):
-    db = _OrderedFakeDB()
+    db = _FakeDB()
+
+    def fail_if_materialized_view_is_queried(*args, **kwargs):
+        raise AssertionError("ordered queue navigation must not query a materialized view")
+
     monkeypatch.setattr(
         review_navigation,
         "build_discrepancy_filter_query",
-        lambda _db, filters: ("mv_test", "v.task_id = ANY(:task_ids)", {"task_ids": filters["task_ids"]}, None),
+        fail_if_materialized_view_is_queried,
     )
 
     result = review_navigation.get_next_review_tasks(
@@ -122,5 +119,16 @@ def test_get_next_review_tasks_preserves_uploaded_queue_order(monkeypatch):
     )
 
     assert result == {"next_task_id": 2, "next_after_task_id": None}
-    assert "v.task_id < :current_task_id" not in db.sql
-    assert db.params["task_ids"] == [4, 9, 2]
+    assert db.sql == ""
+
+
+def test_get_next_review_tasks_returns_two_following_uploaded_queue_items():
+    result = review_navigation.get_next_review_tasks(
+        _FakeDB(),
+        current_task_id=4,
+        disease_id=1,
+        lab_unit_ids=[3],
+        ordered_task_ids=[4, 9, 2],
+    )
+
+    assert result == {"next_task_id": 9, "next_after_task_id": 2}

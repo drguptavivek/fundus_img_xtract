@@ -1,9 +1,11 @@
 from datetime import date
+from uuid import uuid4
 
 import pytest
 
 from models import Consensus, DiseaseGrading, Grade, GradingTask, PatientEncounters
 from review.queues import ReviewQueueDTO
+from review_history.models import ReviewSubmissionHistory
 from tests.helpers.factories import UserFactory
 
 
@@ -73,13 +75,6 @@ def test_review_save_actions_persist_and_stay_in_uploaded_queue(
     current_task = tasks[0] if next_available else tasks[1]
     current_consensus = consensuses[0] if next_available else consensuses[1]
     monkeypatch.setattr("review.task_review.load_review_queue", lambda db, user, token: queue)
-    monkeypatch.setattr(
-        "review.task_review.get_next_review_tasks",
-        lambda *args, **kwargs: {
-            "next_task_id": tasks[1].id if next_available else None,
-            "next_after_task_id": None,
-        },
-    )
     monkeypatch.setattr("review.task_review.get_task_detail", lambda db, task_id: {"id": task_id})
     queued_refreshes = []
     monkeypatch.setattr(
@@ -89,17 +84,34 @@ def test_review_save_actions_persist_and_stay_in_uploaded_queue(
     _authenticate(client, reviewer)
     return_to = f"/review/discrepancy-review?review_queue={queue.token}&disease_id={disease.id}"
 
+    submission_token = str(uuid4())
+    submission_data = {
+        "action": action,
+        "grading_id": grading.id,
+        "comment": "Study review",
+        "review_grade_updated_at": "",
+        "consensus_decided_at": current_consensus.decided_at.isoformat(),
+        "next_task_id": 999999,
+        "review_submission_token": submission_token,
+    }
+    missing_token_response = client.post(
+        f"/review/reviewTaskDetails/{current_task.id}",
+        query_string={"review_queue": queue.token, "return_to": return_to},
+        data={key: value for key, value in submission_data.items() if key != "review_submission_token"},
+    )
+
+    assert missing_token_response.status_code == 302
+    assert db_session.query(Grade).filter_by(
+        task_id=current_task.id,
+        grader_user_id=reviewer.id,
+        role_slot="review",
+    ).count() == 0
+    assert queued_refreshes == []
+
     response = client.post(
         f"/review/reviewTaskDetails/{current_task.id}",
         query_string={"review_queue": queue.token, "return_to": return_to},
-        data={
-            "action": action,
-            "grading_id": grading.id,
-            "comment": "Study review",
-            "review_grade_updated_at": "",
-            "consensus_decided_at": current_consensus.decided_at.isoformat(),
-            "next_task_id": 999999,
-        },
+        data=submission_data,
     )
 
     assert response.status_code == 302
@@ -117,3 +129,17 @@ def test_review_save_actions_persist_and_stay_in_uploaded_queue(
     assert saved.disease_grading_id == grading.id
     assert saved.comment == "Study review"
     assert queued_refreshes == [disease.id]
+
+    replay = client.post(
+        f"/review/reviewTaskDetails/{current_task.id}",
+        query_string={"review_queue": queue.token, "return_to": return_to},
+        data=submission_data,
+    )
+
+    assert replay.status_code == 302
+    assert replay.location == response.location
+    assert queued_refreshes == [disease.id]
+    history_rows = db_session.query(ReviewSubmissionHistory).filter_by(
+        request_id=submission_token,
+    ).all()
+    assert len(history_rows) == 1

@@ -88,6 +88,13 @@
     return Boolean(target && activeSubmissions.has(target));
   }
 
+  function release(target) {
+    const submission = target ? activeSubmissions.get(target) : null;
+    if (!submission) return false;
+    submission.release();
+    return true;
+  }
+
   document.addEventListener('submit', function (event) {
     const form = event.target.closest('form[data-submission-guard]');
     if (!form) return;
@@ -104,5 +111,5 @@
     });
   }, true);
 
-  global.SubmissionGuard = Object.freeze({acquire, isActive});
+  global.SubmissionGuard = Object.freeze({acquire, isActive, release});
 })(window, document);

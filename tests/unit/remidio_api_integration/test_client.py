@@ -1,3 +1,7 @@
+import logging
+
+import requests
+
 from remidio_api_integration.client import RemidioClient
 from remidio_api_integration.errors import RemidioRemoteError
 from remidio_api_integration.schemas import RemidioSecrets
@@ -22,6 +26,16 @@ class FakeSession:
     def request(self, method, url, **kwargs):
         self.calls.append({"method": method, "url": url, "kwargs": kwargs})
         return self.response
+
+    def get(self, url, **kwargs):
+        self.calls.append({"method": "GET", "url": url, "kwargs": kwargs})
+        return self.response
+
+
+class FailingDownloadSession(FakeSession):
+    def get(self, url, **kwargs):
+        nested = RuntimeError(f"connection reset while requesting {url}")
+        raise requests.ConnectionError(f"Max retries exceeded with url: {url}", nested)
 
 
 def _secrets() -> RemidioSecrets:
@@ -82,3 +96,27 @@ def test_request_error_snapshot_redacts_signed_urls_and_tokens():
         assert "[redacted-query]" in body_preview
     else:
         raise AssertionError("Expected RemidioRemoteError")
+
+
+def test_download_failure_never_renders_signed_url_in_error_outputs(caplog):
+    signed_url = (
+        "https://storage.googleapis.com/private-bucket/image.jpg"
+        "?GoogleAccessId=service@example.test&Expires=1786692609&Signature=top-secret"
+    )
+    client = RemidioClient(_secrets(), session=FailingDownloadSession())
+
+    with caplog.at_level(logging.WARNING, logger="remidio_api_integration.client"):
+        try:
+            client.download_file(signed_url)
+        except RemidioRemoteError as exc:
+            error_text = str(exc)
+            snapshot = exc.response_snapshot
+        else:
+            raise AssertionError("Expected RemidioRemoteError")
+
+    combined_output = " ".join((caplog.text, error_text, repr(snapshot)))
+    assert "top-secret" not in combined_output
+    assert "GoogleAccessId" not in combined_output
+    assert "Signature" not in combined_output
+    assert "[redacted-query]" in combined_output
+    assert "ConnectionError -> RuntimeError" in combined_output

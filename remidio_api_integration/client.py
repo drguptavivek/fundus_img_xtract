@@ -98,14 +98,15 @@ class RemidioClient:
             response = self.session.get(normalized, timeout=self.timeout_seconds, stream=True)
         except requests.RequestException as exc:
             safe_url = _redact_url_query(normalized)
+            error_summary = _request_exception_summary(exc)
             LOGGER.warning(
                 "Remidio file download failed url=%s error=%s",
                 sanitize_log_value(safe_url, max_len=500),
-                sanitize_log_value(exc, max_len=500),
+                error_summary,
             )
             raise RemidioRemoteError(
-                f"Remidio file download failed: {sanitize_log_value(exc)}",
-                response_snapshot={"url": safe_url, "error": sanitize_log_value(exc, max_len=500)},
+                f"Remidio file download failed: {error_summary}",
+                response_snapshot={"url": safe_url, "error": error_summary},
             ) from exc
 
         if response.status_code < 200 or response.status_code >= 300:
@@ -164,18 +165,19 @@ class RemidioClient:
         try:
             response = self.session.request(method, url, timeout=self.timeout_seconds, **kwargs)
         except requests.RequestException as exc:
+            error_summary = _request_exception_summary(exc)
             LOGGER.warning(
                 "Remidio API request failed method=%s path=%s error=%s",
                 sanitize_log_value(method),
                 sanitize_log_value(safe_path, max_len=500),
-                sanitize_log_value(exc, max_len=500),
+                error_summary,
             )
             raise RemidioRemoteError(
-                f"Remidio request failed: {sanitize_log_value(exc)}",
+                f"Remidio request failed: {error_summary}",
                 response_snapshot={
                     "method": method,
                     "path": safe_path,
-                    "error": sanitize_log_value(exc, max_len=500),
+                    "error": error_summary,
                 },
             ) from exc
         elapsed_ms = int((perf_counter() - started) * 1000)
@@ -304,3 +306,24 @@ def _redact_url_query(value: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.query:
         return value
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "[redacted-query]", parsed.fragment))
+
+
+def _request_exception_summary(exc: requests.RequestException) -> str:
+    """Describe a requests failure without rendering URL-bearing exception text."""
+    type_names: list[str] = []
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+
+    while pending and len(type_names) < 8:
+        current = pending.pop(0)
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        type_names.append(type(current).__name__)
+
+        for linked in (current.__cause__, current.__context__, getattr(current, "reason", None)):
+            if isinstance(linked, BaseException):
+                pending.append(linked)
+        pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
+
+    return " -> ".join(type_names) or "RequestException"

@@ -129,6 +129,9 @@
 
   <div class="col-12 col-xl-8">
     {% if detail %}
+    <div class="mb-3" hx-get="{{ url_for('fundus_api.encounter_viewer_encounter', encounter_id=detail.id) }}" hx-trigger="load" hx-swap="innerHTML">
+      <div class="card"><div class="card-body text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading encounter evidence…</div></div>
+    </div>
     <div class="card shadow-sm mb-3">
       <div class="card-header d-flex flex-column flex-lg-row justify-content-between gap-2">
         <div>

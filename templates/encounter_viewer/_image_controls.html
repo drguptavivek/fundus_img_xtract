@@ -1,0 +1,64 @@
+{% macro image_controls(dom_key, image) -%}
+<div class="card shadow-sm uev-image-card" data-uev-image-card>
+  <div class="card-header py-2">
+    <div class="d-flex flex-wrap align-items-center gap-2 imggr-top-row">
+      <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+        {% for value, label in [('none','None'),('redfree','R'),('greenboost','G'),('bluemono','B'),('gray','Y'),('contrast','H'),('enhance','E')] %}
+        <input class="btn-check" type="radio" name="imggrFilter-{{ dom_key }}" id="imggr-{{ value }}-{{ dom_key }}" value="{{ value }}"{% if loop.first %} checked{% endif %}>
+        <label class="btn btn-outline-secondary" for="imggr-{{ value }}-{{ dom_key }}">{{ label }}</label>
+        {% endfor %}
+      </div>
+      <div class="d-flex align-items-center gap-1 imggr-slider-group">
+        <label class="small" for="imggr-bright-{{ dom_key }}" title="Brightness"><i class="fa-solid fa-sun"></i></label>
+        <input id="imggr-bright-{{ dom_key }}" class="form-range imggr-bright" type="range" min="0.5" max="5" step="0.05" value="1">
+        <span class="imggr-bright-tip d-none">1.00</span>
+      </div>
+      <div class="d-flex align-items-center gap-1 imggr-slider-group">
+        <label class="small" for="imggr-contrast-{{ dom_key }}" title="Contrast"><i class="fa-solid fa-circle-half-stroke"></i></label>
+        <input id="imggr-contrast-{{ dom_key }}" class="form-range imggr-contrast" type="range" min="0.5" max="5" step="0.05" value="1">
+        <span class="imggr-contrast-tip d-none">1.00</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary imggr-reset" title="Reset">/</button>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Viewer presets">
+        {% for slot in range(1, 6) %}<button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="{{ slot }}">{{ slot }}</button>{% endfor %}
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary imggr-loupe-toggle" aria-pressed="false" title="Loupe">L</button>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Image navigation">
+        <button type="button" class="btn btn-outline-secondary" data-uev-previous-image title="Previous image"><i class="fa-solid fa-chevron-left"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-uev-next-image title="Next image"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <button type="button" class="btn btn-sm btn-primary ms-auto" data-uev-open-fullscreen><i class="fa-solid fa-expand me-1"></i>Full viewer</button>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+      <div class="btn-group btn-group-sm" role="group" aria-label="CDR and RDR tools">
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-toggle" aria-pressed="false">CDR/RDR</button>
+        <button type="button" class="btn btn-outline-secondary imggr-cdr-clear" disabled>Clear</button>
+      </div>
+      <span class="small text-muted imggr-cdr-status"></span>
+      <span class="small">CDR: <strong class="imggr-cdr-value">—</strong></span>
+      <span class="small">RDR: <strong class="imggr-rdr-value">—</strong></span>
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-cdr-done" disabled>Done</button>
+      <label class="small text-muted mb-0 ms-auto" for="imggr-zoom-{{ dom_key }}">Zoom</label>
+      <input id="imggr-zoom-{{ dom_key }}" class="form-range imggr-zoom-slider uev-zoom" type="range" min="10" max="400" step="5" value="100">
+      <button type="button" class="btn btn-sm btn-outline-secondary imggr-zoom-fit">Fit</button>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="imggr-viewer-root" data-enc-id="{{ image.uuid }}" data-imggr-lite-mode="false">
+      <div class="imggr-stage position-relative">
+        <div class="imggr-main-wrap d-flex justify-content-center">
+          <div class="imggr-main rounded position-relative bg-black">
+            <img class="imggr-main-img" src="{{ image.media_url }}" alt="Fundus image {{ image.position }}" data-index="0">
+            <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button" title="Image only fullscreen"><i class="fa-solid fa-maximize"></i></button>
+          </div>
+        </div>
+        <div class="imggr-loupe" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer py-1 d-flex justify-content-between small text-muted">
+    <span><span class="imggr-zoom-level">100%</span> zoom</span>
+    <span class="imggr-dim-info">Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span></span>
+  </div>
+</div>
+{%- endmacro %}

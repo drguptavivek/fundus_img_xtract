@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Encounter Evidence{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+    <div><h1 class="h4 mb-0">Encounter Evidence</h1><div class="small text-muted">Authorized non-PII images, metadata, and clinical results</div></div>
+    {% if back_url %}<a class="btn btn-sm btn-outline-secondary" href="{{ back_url }}">&larr; {{ back_label or 'Back' }}</a>{% endif %}
+  </div>
+  <div hx-get="{{ viewer_endpoint }}" hx-trigger="load" hx-swap="innerHTML">
+    <div class="card"><div class="card-body text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading encounter evidence…</div></div>
+  </div>
+</div>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+{% endblock %}

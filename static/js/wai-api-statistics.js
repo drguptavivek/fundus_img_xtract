@@ -228,7 +228,7 @@
           </td>
           <td class="text-end">
             ${row.retry_url ? `<button class="btn btn-sm btn-outline-warning me-1" type="button" data-wai-retry-url="${escapeHtml(row.retry_url)}" title="Retry inference"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
-            ${row.viewer_url ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></a>` : ''}
+            ${row.viewer_url ? `<button class="btn btn-sm btn-outline-primary" type="button" data-wai-viewer-url="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></button>` : ''}
           </td>
         </tr>
       `).join('');
@@ -268,7 +268,7 @@
             <td>${resultChip(row.encounter_result_type, null)}</td>
             <td><div class="d-flex flex-wrap gap-1">${chips || '<span class="text-muted small">No image rows</span>'}</div></td>
             <td class="text-end">
-              ${row.viewer_url ? `<a class="btn btn-sm btn-outline-primary" href="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></a>` : ''}
+              ${row.viewer_url ? `<button class="btn btn-sm btn-outline-primary" type="button" data-wai-viewer-url="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></button>` : ''}
             </td>
           </tr>
         `;
@@ -357,6 +357,14 @@
     reloadAll();
   });
   root.addEventListener('click', (event) => {
+    const viewerButton = event.target.closest('[data-wai-viewer-url]');
+    if (viewerButton) {
+      viewerButton.disabled = true;
+      window.loadEncounterViewer(viewerButton.dataset.waiViewerUrl, '#waiEncounterViewerHost', true)
+        .catch((error) => { els.loading.textContent = error.message || 'Viewer failed'; })
+        .finally(() => { viewerButton.disabled = false; });
+      return;
+    }
     const button = event.target.closest('[data-wai-retry-url]');
     if (!button) return;
     button.disabled = true;

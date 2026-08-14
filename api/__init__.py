@@ -12,3 +12,4 @@ from . import project_review
 from . import review_queues
 from . import discrepancy_review
 from . import my_discrepancy_reviews
+from . import encounter_viewer

@@ -61,16 +61,16 @@ def _image_urls(row: dict[str, Any]) -> dict[str, Any]:
     encounter_id = row.get("normalized_patient_encounter_id")
     if image_uuid and image_source == "direct_image":
         row["thumbnail_url"] = url_for("media._directImgFinalThumbnailByUUID", uuid_str=image_uuid)
-        row["viewer_url"] = url_for("analytics.view_direct_image", uuid_str=image_uuid)
+        row["viewer_url"] = url_for("fundus_api.encounter_viewer_image", image_uuid=image_uuid)
     elif image_uuid and image_source == "encounter_set_image":
         row["thumbnail_url"] = url_for("media._encounterSetImageThumbnailByUUID", uuid_str=image_uuid)
-        row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+        row["viewer_url"] = url_for("fundus_api.encounter_viewer_encounter", encounter_id=encounter_id) if encounter_id else None
     elif image_uuid:
         row["thumbnail_url"] = url_for("media._imgForGradingByUUID", uuid_str=image_uuid)
-        row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+        row["viewer_url"] = url_for("fundus_api.encounter_viewer_encounter", encounter_id=encounter_id) if encounter_id else None
     else:
         row["thumbnail_url"] = None
-        row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+        row["viewer_url"] = url_for("fundus_api.encounter_viewer_encounter", encounter_id=encounter_id) if encounter_id else None
     row["retry_url"] = (
         url_for("fundus_api.wai_api_statistics_retry", inference_run_id=row["inference_run_id"])
         if row.get("inference_status") == "failed"
@@ -81,7 +81,7 @@ def _image_urls(row: dict[str, Any]) -> dict[str, Any]:
 
 def _encounter_urls(row: dict[str, Any]) -> dict[str, Any]:
     encounter_id = row.get("normalized_patient_encounter_id")
-    row["viewer_url"] = url_for("analytics.view_encounter", encounter_id=encounter_id) if encounter_id else None
+    row["viewer_url"] = url_for("fundus_api.encounter_viewer_encounter", encounter_id=encounter_id) if encounter_id else None
     for item in row.get("image_results") or []:
         item["retry_url"] = (
             url_for("fundus_api.wai_api_statistics_retry", inference_run_id=item["inference_run_id"])

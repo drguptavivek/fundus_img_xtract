@@ -24,6 +24,7 @@ This index points at the route-family docs under `docs/API/`. Each page document
 - [WAI API Statistics API](wai-api-statistics/README.md)
 - [Admin APIs](admin/README.md)
 - [Media APIs](media/README.md)
+- [Encounter Evidence Viewer API](encounter-viewer/README.md)
 - [Dataset APIs](datasets/README.md)
 - [Job APIs](jobs/README.md)
 - [KPI APIs](kpis/README.md)

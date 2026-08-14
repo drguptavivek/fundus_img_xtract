@@ -189,10 +189,12 @@
         </div>
       </div>
   </div>
+  <div id="waiEncounterViewerHost"></div>
 </div>
 {% endblock %}
 
 {% block page_scripts %}
 {% set v = (config.get('ASSETS_VERSION') or '') %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
 <script src="{{ url_for('static', filename='js/wai-api-statistics.js') }}?v={{ v }}"></script>
 {% endblock %}

@@ -39,6 +39,9 @@
         </div>
     </div>
 
+    <div class="mb-3" hx-get="{{ url_for('fundus_api.encounter_viewer_encounter', encounter_id=encounter.id) }}" hx-trigger="load" hx-swap="innerHTML">
+        <div class="card"><div class="card-body text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading encounter evidence…</div></div>
+    </div>
 
 
     <!-- One row, two columns -->
@@ -301,7 +304,8 @@
 
 
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/screening-viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
+<script src="{{ url_for('static', filename='js/screening-viewer.js', v=config.get('ASSETS_VERSION','')) }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>

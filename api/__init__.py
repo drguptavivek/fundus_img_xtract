@@ -9,3 +9,4 @@ from . import routes, disease, userUtils, hospitals, labUnits, viewer_settings, 
 from . import project_annotations
 from . import project_role_grants
 from . import project_review
+from . import review_queues

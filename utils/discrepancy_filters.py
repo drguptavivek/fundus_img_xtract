@@ -19,6 +19,16 @@ PROJECT_CAPABILITY_COLUMNS = {
     "can_export_data",
     "can_create_datasets",
 }
+PROJECT_CAPABILITY_ROLE_NAMES = {
+    "admin",
+    "local_admin",
+    "data_manager",
+    "data_exporter",
+    "fileUploader",
+    "optometrist",
+    "discrepancy_reviewer",
+    "dataset_creator",
+}
 
 
 def build_discrepancy_filter_query(
@@ -35,6 +45,9 @@ def build_discrepancy_filter_query(
     final_grade_basis = normalize_final_grade_basis(filters.get("final_grade_basis"))
     has_ai_grade = filters.get("has_ai_grade")
     has_human_review = filters.get("has_human_review")
+    review_status = {"yes": "any", "no": "unreviewed"}.get(
+        has_human_review, has_human_review
+    )
     has_review = filters.get("has_review")
     has_regrade = filters.get("has_regrade")
     has_arbitrator = filters.get("has_arbitrator")
@@ -93,15 +106,89 @@ def build_discrepancy_filter_query(
         "allowed_lab_units": allowed_lab_units,
         "final_grade_basis": final_grade_basis,
     }
+    task_ids = [int(task_id) for task_id in filters.get("task_ids", []) if task_id]
+    if task_ids:
+        where_clauses.append("v.task_id = ANY(:task_ids)")
+        params["task_ids"] = task_ids
 
     capability_columns = [
         value
         for value in filters.get("project_capability_columns", [])
         if value in PROJECT_CAPABILITY_COLUMNS
     ]
+    capability_role_names = [
+        value
+        for value in filters.get("project_capability_role_names", [])
+        if value in PROJECT_CAPABILITY_ROLE_NAMES
+    ]
     project_user_id = filters.get("project_capability_user_id")
-    if capability_columns and project_user_id:
-        capability_sql = " OR ".join(f"pap.{column} = TRUE" for column in capability_columns)
+    if (capability_columns or capability_role_names) and project_user_id:
+        authorization_sql = []
+        if capability_columns:
+            capability_sql = " OR ".join(f"pap.{column} = TRUE" for column in capability_columns)
+            authorization_sql.append(
+                f"""EXISTS (
+                      SELECT 1
+                      FROM project_encounter_set_permissions pap
+                      WHERE pap.user_id = :project_capability_user_id
+                        AND pap.project_id = COALESCE(
+                          task_encounter.project_id,
+                          set_image_encounter.project_id,
+                          task_image.project_id,
+                          task_image_encounter.project_id,
+                          task_direct.project_id
+                        )
+                        AND pap.lab_unit_id = project_task.lab_unit_id
+                        AND pap.active = TRUE
+                        AND ({capability_sql})
+                    )"""
+            )
+        if capability_role_names:
+            authorization_sql.append(
+                """EXISTS (
+                      SELECT 1
+                      FROM project_role_grants prg
+                      JOIN roles project_role ON project_role.id = prg.role_id
+                      WHERE prg.user_id = :project_capability_user_id
+                        AND prg.project_id = COALESCE(
+                          task_encounter.project_id,
+                          set_image_encounter.project_id,
+                          task_image.project_id,
+                          task_image_encounter.project_id,
+                          task_direct.project_id
+                        )
+                        AND prg.active = TRUE
+                        AND project_role.name = ANY(:project_capability_role_names)
+                        AND (
+                          prg.scope_type = 'project'
+                          OR (
+                            prg.scope_type = 'lab_unit'
+                            AND prg.lab_unit_id = project_task.lab_unit_id
+                          )
+                          OR (
+                            prg.scope_type = 'hospital'
+                            AND EXISTS (
+                              SELECT 1
+                              FROM lab_units scope_lab
+                              WHERE scope_lab.id = project_task.lab_unit_id
+                                AND scope_lab.hospital_id = prg.hospital_id
+                            )
+                          )
+                        )
+                    )"""
+            )
+        project_authorization_sql = " OR ".join(authorization_sql)
+        classical_authorization_sql = (
+            """COALESCE(
+                      task_encounter.project_id,
+                      set_image_encounter.project_id,
+                      task_image.project_id,
+                      task_image_encounter.project_id,
+                      task_direct.project_id
+                    ) IS NULL OR"""
+            if filters.get("allow_classical_capability")
+            else ""
+        )
         where_clauses.append(
             f"""EXISTS (
                 SELECT 1
@@ -120,32 +207,13 @@ def build_discrepancy_filter_query(
                   ON task_direct.id = project_task.direct_image_upload_id
                 WHERE project_task.id = v.task_id
                   AND (
-                    COALESCE(
-                      task_encounter.project_id,
-                      set_image_encounter.project_id,
-                      task_image.project_id,
-                      task_image_encounter.project_id,
-                      task_direct.project_id
-                    ) IS NULL
-                    OR EXISTS (
-                      SELECT 1
-                      FROM project_encounter_set_permissions pap
-                      WHERE pap.user_id = :project_capability_user_id
-                        AND pap.project_id = COALESCE(
-                          task_encounter.project_id,
-                          set_image_encounter.project_id,
-                          task_image.project_id,
-                          task_image_encounter.project_id,
-                          task_direct.project_id
-                        )
-                        AND pap.lab_unit_id = project_task.lab_unit_id
-                        AND pap.active = TRUE
-                        AND ({capability_sql})
-                    )
+                    {classical_authorization_sql} ({project_authorization_sql})
                   )
             )"""
         )
         params["project_capability_user_id"] = int(project_user_id)
+        if capability_role_names:
+            params["project_capability_role_names"] = capability_role_names
 
     if lab_unit_id and lab_unit_id in allowed_lab_units:
         where_clauses.append("v.task_lab_unit_id = :lab_unit_id")
@@ -224,31 +292,33 @@ def build_discrepancy_filter_query(
         where_clauses.append("v.ai_models_json ? :ai_model_key")
         params["ai_model_key"] = str(selected_ai_model_id)
 
-    if has_human_review in {"yes", "no"}:
+    if review_status in {"unreviewed", "human", "ai", "both", "any"}:
+        human_evidence = (
+            "(v.has_review = TRUE OR "
+            "COALESCE(NULLIF(BTRIM(v.review_comment), ''), '') <> '')"
+        )
         if selected_ai_model_id is not None:
-            selected_status = "(v.ai_models_json -> :ai_model_key) ->> 'ai_review_status'"
-            if has_human_review == "yes":
-                where_clauses.append(
-                    "(v.has_review = TRUE OR "
-                    f"COALESCE(NULLIF({selected_status}, ''), '') <> '')"
-                )
-            else:
-                where_clauses.append(
-                    "(v.has_review = FALSE AND "
-                    f"COALESCE(NULLIF({selected_status}, ''), '') = '')"
-                )
-        elif has_human_review == "yes":
-            where_clauses.append(
-                "(v.has_review = TRUE OR EXISTS ("
-                "SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
-                "WHERE COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> ''))"
+            selected_ai = "v.ai_models_json -> :ai_model_key"
+            ai_evidence = (
+                "(COALESCE(NULLIF((" + selected_ai + ")->>'ai_review_status', ''), '') <> '' OR "
+                "COALESCE(NULLIF(BTRIM((" + selected_ai + ")->>'ai_review_comment'), ''), '') <> '')"
             )
         else:
-            where_clauses.append(
-                "(v.has_review = FALSE AND NOT EXISTS ("
-                "SELECT 1 FROM jsonb_each(v.ai_models_json) kv "
-                "WHERE COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> ''))"
+            ai_evidence = (
+                "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv WHERE "
+                "COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> '' OR "
+                "COALESCE(NULLIF(BTRIM(kv.value->>'ai_review_comment'), ''), '') <> '')"
             )
+        if review_status == "unreviewed":
+            where_clauses.append(f"(NOT {human_evidence} AND NOT {ai_evidence})")
+        elif review_status == "human":
+            where_clauses.append(f"({human_evidence} AND NOT {ai_evidence})")
+        elif review_status == "ai":
+            where_clauses.append(f"(NOT {human_evidence} AND {ai_evidence})")
+        elif review_status == "both":
+            where_clauses.append(f"({human_evidence} AND {ai_evidence})")
+        else:
+            where_clauses.append(f"({human_evidence} OR {ai_evidence})")
 
     if ai_grades:
         valid_ai_grades = [g for g in ai_grades if g]

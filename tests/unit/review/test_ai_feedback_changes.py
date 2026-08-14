@@ -116,3 +116,21 @@ def test_review_template_requires_explicit_human_grade_selection():
     assert 'href="{{ cancel_close_url }}"' in template
     assert "Cancel &amp; Close" in template
     assert "-review-submit-v2" in template
+
+
+def test_review_navigation_does_not_trust_submitted_next_task_id():
+    route = Path("review/task_review.py").read_text(encoding="utf-8")
+
+    assert 'target_next_task_id = nav_result.get("next_task_id")' in route
+    assert "target_next_task_id = form_next_task_id or next_task_id" not in route
+
+
+def test_discrepancy_review_ui_exposes_status_cohorts_and_csv_queue():
+    template = Path("templates/review/discrepancy_review.html").read_text(encoding="utf-8")
+
+    for value in ("unreviewed", "human", "ai", "both", "any"):
+        assert f'<option value="{value}"' in template
+    assert 'id="reviewQueueUploadForm"' in template
+    assert '{{ csrf_field() }}' in template
+    assert 'name="review_queue"' in template
+    assert "fundus_api.create_discrepancy_review_queue" in template

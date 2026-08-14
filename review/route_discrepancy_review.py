@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy import text
 
 from app_cache import cache
-from auth.roles import roles_required
+from auth.roles import roles_or_project_grant_required, roles_required
 from job_store import db_create_job
 from models import (
     AIModel,
@@ -26,6 +26,11 @@ from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
+from encounter_sets.permissions import (
+    CAPABILITY_DATA_EXPORT,
+    CAPABILITY_DISCREPANCY_REVIEW,
+    capability_lab_unit_ids,
+)
 from utils.discrepancy_filters import (
     AI_REVIEW_STATUS_MISSING,
     build_discrepancy_filter_query,
@@ -38,6 +43,7 @@ from utils.final_grade_basis import (
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
+from .queues import ReviewQueueError, load_review_queue
 
 AI_REVIEW_STATUS_FILTER_LABELS = {
     **AI_REVIEW_STATUS_LABELS,
@@ -58,6 +64,18 @@ def _project_listing_capabilities() -> list[str]:
     return columns
 
 
+def _review_lab_unit_ids(db) -> set[int]:
+    return capability_lab_unit_ids(
+        db,
+        user=current_user,
+        capability=CAPABILITY_DISCREPANCY_REVIEW,
+    ) | capability_lab_unit_ids(
+        db,
+        user=current_user,
+        capability=CAPABILITY_DATA_EXPORT,
+    )
+
+
 def render_discrepancy_review(
     page_title: str | None = None,
     enforced_filters: Dict[str, str] | None = None,
@@ -72,8 +90,12 @@ def render_discrepancy_review(
     with get_db_session() as db:
         # Scope lab units to user's explicit associations (no admin override)
         # Scope lab units to user's explicit associations (no admin override)
-        lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        review_lab_unit_ids = _review_lab_unit_ids(db)
+        lu_query = (
+            select(LabUnit)
+            .where(LabUnit.id.in_(review_lab_unit_ids))
+            .order_by(LabUnit.hospital_id, LabUnit.name)
+        )
         lab_units = db.execute(lu_query).scalars().all()
         user_lab_unit_ids = {lu.id for lu in lab_units}
         
@@ -101,7 +123,20 @@ def render_discrepancy_review(
         
         # Apply disease filter (mandatory)
         from flask import flash, redirect, url_for, request, session
-        disease_id = request.args.get("disease_id", type=int)
+        review_queue_token = (request.args.get("review_queue") or "").strip()
+        review_queue = None
+        if review_queue_token:
+            try:
+                review_queue = load_review_queue(
+                    db, user=current_user, token=review_queue_token
+                )
+            except ReviewQueueError:
+                abort(404)
+        disease_id = (
+            review_queue.disease_id
+            if review_queue is not None
+            else request.args.get("disease_id", type=int)
+        )
         
         regrade_creator_mode = bool(enforced_filters)
         review_route = "review.regrade_task_creator" if regrade_creator_mode else "review.discrepancy_review"
@@ -248,7 +283,13 @@ def render_discrepancy_review(
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": allowed_lab_units,
             "project_capability_columns": _project_listing_capabilities(),
+            "project_capability_role_names": ["discrepancy_reviewer", "data_exporter"],
             "project_capability_user_id": current_user.id,
+            "allow_classical_capability": current_user.has_role(
+                "discrepancy_reviewer", "data_exporter"
+            ),
+            "task_ids": list(review_queue.task_ids) if review_queue else [],
+            "review_queue": review_queue_token or None,
         }
 
         mv_name, where_sql, params, selected_ai_model_id = build_discrepancy_filter_query(db, filters)
@@ -287,6 +328,11 @@ def render_discrepancy_review(
         per_page = 50
         offset = (page - 1) * per_page
 
+        order_sql = (
+            "array_position(:task_ids, v.task_id)"
+            if review_queue is not None
+            else "v.task_id DESC"
+        )
         data_sql = f"""
             SELECT
                 v.task_id,
@@ -319,7 +365,7 @@ def render_discrepancy_review(
                 v.regrade_adj_selected_features_json,
                 v.ai_models_json
             {base_query}
-            ORDER BY v.task_id DESC
+            ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset
         """
         params.update({"limit": per_page, "offset": offset})
@@ -407,6 +453,8 @@ def render_discrepancy_review(
                 "ai_grade": ai_grades,
                 "ai_review_status": ai_review_statuses,
                 "final_grade_basis": final_grade_basis,
+                "task_ids": list(review_queue.task_ids) if review_queue else [],
+                "review_queue": review_queue_token or None,
             },
             page_title=page_title,
             regrade_creator_mode=regrade_creator_mode,
@@ -415,7 +463,7 @@ def render_discrepancy_review(
 
 
 @bp.route("/discrepancy-review", methods=["GET"])
-@roles_required("admin",  "discrepancy_reviewer", "data_exporter")
+@roles_or_project_grant_required("admin", "discrepancy_reviewer", "data_exporter")
 @cache.cached(
     timeout=600,
     key_prefix=lambda: (
@@ -431,14 +479,23 @@ def discrepancy_review():
 
 
 @bp.route("/discrepancy-export", methods=["POST"])
-@roles_required("admin", "data_manager",  "data_exporter")
+@roles_or_project_grant_required("admin", "data_manager", "data_exporter")
 def discrepancy_export():
     with get_db_session() as db:
-        # Scope lab units to user's explicit associations for export
-        lu_query = sa.select(LabUnit)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
-        allowed_lab_units = db.execute(lu_query).scalars().all()
-        allowed_lab_unit_ids = {lu.id for lu in allowed_lab_units}
+        review_queue = None
+        review_queue_token = (request.form.get("review_queue") or "").strip()
+        if review_queue_token:
+            try:
+                review_queue = load_review_queue(
+                    db, user=current_user, token=review_queue_token
+                )
+            except ReviewQueueError:
+                abort(404)
+        allowed_lab_unit_ids = capability_lab_unit_ids(
+            db,
+            user=current_user,
+            capability=CAPABILITY_DATA_EXPORT,
+        )
 
         if not allowed_lab_unit_ids:
             from flask import flash, redirect, url_for
@@ -498,7 +555,12 @@ def discrepancy_export():
                 if current_user.has_role("admin") or current_user.is_master_admin
                 else ["can_export_data"]
             ),
+            "project_capability_role_names": ["data_manager", "data_exporter"],
             "project_capability_user_id": current_user.id,
+            "task_ids": list(review_queue.task_ids) if review_queue else [],
+            "allow_classical_capability": current_user.has_role(
+                "data_manager", "data_exporter"
+            ),
             "include_original_filename": include_original_filename,
             "skip_image_zips": skip_image_zips,
         }
@@ -530,7 +592,7 @@ def discrepancy_export():
         return redirect(url_for("jobs.job_status_page", job_token=job_token))
 
 @bp.route("/discrepancy-export/<job_token>/<path:filename>", methods=["GET"])
-@roles_required("admin",  "data_manager", "data_exporter")
+@roles_or_project_grant_required("admin", "data_manager", "data_exporter")
 def discrepancy_export_download(job_token: str, filename: str):
     """Serve generated export artifacts (Excel or zip) for authorized users."""
     with Session() as db:

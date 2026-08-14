@@ -3,11 +3,14 @@ from datetime import date
 from encounter_sets.permissions import (
     CAPABILITY_BROWSE,
     CAPABILITY_DATA_EXPORT,
+    CAPABILITY_DISCREPANCY_REVIEW,
     CAPABILITY_REGRADE_ADJUDICATION,
     CAPABILITY_VERIFY,
     ProjectEncounterSetPermissionInput,
     apply_classical_or_project_permission_scope,
     apply_project_permission_scope,
+    apply_task_capability_scope,
+    capability_lab_unit_ids,
     project_task_capability_clause,
     set_project_permission,
 )
@@ -92,6 +95,76 @@ def test_project_resources_require_explicit_project_allow_list(db_session, core_
     ).all()
     assert first_encounter.id in {row.id for row in verify_rows}
     assert second_encounter.id not in {row.id for row in verify_rows}
+
+
+def test_project_only_reviewer_gets_only_granted_project_tasks(
+    db_session,
+    core_test_data,
+):
+    lab = db_session.merge(core_test_data["lab_unit"])
+    disease = db_session.merge(core_test_data["dr"])
+    reviewer = User(
+        username="project_only_discrepancy_reviewer",
+        password_hash="not-used",
+        is_active=True,
+    )
+    role = db_session.query(Role).filter_by(name="discrepancy_reviewer").one()
+    allowed_project = Project(title="Review Allowed", code="REVIEW_ALLOWED", active=True)
+    denied_project = Project(title="Review Denied", code="REVIEW_DENIED", active=True)
+    db_session.add_all([reviewer, allowed_project, denied_project])
+    db_session.flush()
+    allowed_encounter = _encounter(
+        db_session,
+        project=allowed_project,
+        lab_unit=lab,
+        suffix="REVIEW-ALLOWED",
+    )
+    denied_encounter = _encounter(
+        db_session,
+        project=denied_project,
+        lab_unit=lab,
+        suffix="REVIEW-DENIED",
+    )
+    classical_encounter = _encounter(
+        db_session,
+        project=allowed_project,
+        lab_unit=lab,
+        suffix="REVIEW-CLASSICAL",
+    )
+    classical_encounter.project_id = None
+    tasks = [
+        GradingTask(
+            patient_encounter_id=encounter.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            state="final",
+        )
+        for encounter in (allowed_encounter, denied_encounter, classical_encounter)
+    ]
+    db_session.add_all(tasks)
+    db_session.add(ProjectRoleGrant(
+        project_id=allowed_project.id,
+        user_id=reviewer.id,
+        role_id=role.id,
+        scope_type="lab_unit",
+        lab_unit_id=lab.id,
+        active=True,
+    ))
+    db_session.flush()
+
+    scoped = apply_task_capability_scope(
+        db_session.query(GradingTask),
+        GradingTask,
+        reviewer,
+        CAPABILITY_DISCREPANCY_REVIEW,
+    ).all()
+
+    assert capability_lab_unit_ids(
+        db_session,
+        user=reviewer,
+        capability=CAPABILITY_DISCREPANCY_REVIEW,
+    ) == {lab.id}
+    assert {task.id for task in scoped} == {tasks[0].id}
 
 
 def test_removing_last_permission_does_not_restore_legacy_access(db_session, core_test_data):

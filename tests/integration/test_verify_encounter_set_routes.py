@@ -11,7 +11,10 @@ from models import (
     GradingTask,
     Project,
     ProjectReferralDisease,
+    Role,
+    User,
 )
+from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
@@ -1819,6 +1822,76 @@ def test_verify_encounter_set_finalize(client, auth_client_factory, encounter_se
     # Note: Due to the mock session wrapper's behavior (commit() only flushes),
     # we can't reliably check the DB state in tests. The route works correctly
     # in production - the session.commit() properly persists changes.
+
+
+def _project_only_verifier(db_session, encounter_set_data, *, username):
+    from auth.security import hash_password
+
+    role = db_session.query(Role).filter_by(name="optometrist").one()
+    user = User(
+        username=username,
+        password_hash=hash_password("Test@2026"),
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(ProjectRoleGrant(
+        project_id=encounter_set_data["project"].id,
+        user_id=user.id,
+        role_id=role.id,
+        scope_type=LAB_UNIT_SCOPE,
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        active=True,
+    ))
+    db_session.flush()
+    return user
+
+
+def test_project_only_verifier_can_finalize_scoped_encounter(
+    auth_client_factory,
+    encounter_set_data,
+    db_session,
+    csrf_token,
+):
+    user = _project_only_verifier(
+        db_session,
+        encounter_set_data,
+        username="project_only_finalize_verifier",
+    )
+    encounter_set_data["image"].is_reviewed = True
+    db_session.flush()
+
+    response = auth_client_factory(user).post(
+        f"/verify_encounter_set/finalize/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "verified"
+
+
+def test_project_only_verifier_can_exclude_scoped_encounter(
+    auth_client_factory,
+    encounter_set_data,
+    db_session,
+    csrf_token,
+):
+    user = _project_only_verifier(
+        db_session,
+        encounter_set_data,
+        username="project_only_exclude_verifier",
+    )
+
+    response = auth_client_factory(user).post(
+        f"/verify_encounter_set/exclude/{encounter_set_data['encounter'].uuid}",
+        json={"reason": "Study exclusion"},
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "excluded"
 
 
 def test_verified_encounter_set_rejects_repeat_finalization(

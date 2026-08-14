@@ -2,7 +2,7 @@ from flask import after_this_request, render_template, abort, current_app, flash
 from flask_login import login_required, current_user
 from auth.roles import roles_or_project_grant_required
 from auth.utils import utcnow
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from models import (
@@ -16,11 +16,14 @@ from models import (
     GradingTask,
     PatientEncounters,
     EncounterSetImage,
+    user_lab_units,
 )
 from encounter_sets.models import EncounterSetAttachment
 from encounter_sets.permissions import (
+    CAPABILITY_ROLES,
     CAPABILITY_VERIFY,
     apply_classical_or_project_permission_scope,
+    is_project_permission_admin,
 )
 from encounter_sets.grading_policy import (
     EncounterSetPackagePolicyDTO,
@@ -59,6 +62,19 @@ def _apply_verification_scope(query):
         CAPABILITY_VERIFY,
         classical_operation="upload",
     )
+
+
+def _apply_verification_mutation_scope(query):
+    """Preserve established lab access while adding project-only grants."""
+    if is_project_permission_admin(current_user):
+        return query
+    if current_user.has_role(*CAPABILITY_ROLES[CAPABILITY_VERIFY]):
+        return query.filter(PatientEncounters.lab_unit_id.in_(
+            select(user_lab_units.c.lab_unit_id).where(
+                user_lab_units.c.user_id == current_user.id
+            )
+        ))
+    return _apply_verification_scope(query)
 
 
 # =========================================================================
@@ -773,29 +789,16 @@ def update_position():
 def exclude_encounter_set(uuid):
     """Exclude an EncounterSet from verification and downstream task creation."""
     from auth.utils import utcnow
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
     with transaction_scope() as db:
-        encounter = (
+        encounter_query = (
             db.query(PatientEncounters)
-            .filter_by(uuid=uuid)
+            .filter_by(uuid=uuid, is_set_based=True)
             .with_for_update()
-            .first()
         )
-        if not encounter or not encounter.is_set_based:
+        encounter = _apply_verification_mutation_scope(encounter_query).first()
+        if not encounter:
             abort(404)
-
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            message = "You don't have permission to exclude this encounter set."
-            if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
-                return jsonify({
-                    "success": False,
-                    "message": message,
-                    "redirect_url": url_for("verify_encounter_set.index"),
-                }), 403
-            flash(message, "danger")
-            return redirect(url_for("verify_encounter_set.index"))
 
         if encounter.encounter_verified_status == "verified":
             return _already_verified_response(encounter)
@@ -833,32 +836,21 @@ def exclude_encounter_set(uuid):
 def finalize_verification(uuid):
     """Mark an encounter set as verified and trigger task creation."""
     from auth.utils import utcnow
-    from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
     # Potential task creation import
     # from tasks.taskCreationServices import create_grading_task_for_encounter_set
 
     with transaction_scope() as db:
         # P0.5: Use row-level locking for atomic finalization
         # Lock the encounter for update (prevents concurrent modifications)
-        encounter = db.query(PatientEncounters)\
-            .filter_by(uuid=uuid)\
-            .with_for_update()\
-            .first()
+        encounter_query = (
+            db.query(PatientEncounters)
+            .filter_by(uuid=uuid, is_set_based=True)
+            .with_for_update()
+        )
+        encounter = _apply_verification_mutation_scope(encounter_query).first()
 
         if not encounter:
             abort(404)
-
-        # Check user has access to this encounter's lab unit
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_unit_ids:
-            if request.headers.get("X-EncounterSet-Async") == "1":
-                return jsonify({
-                    "success": False,
-                    "message": "You don't have permission to verify this encounter set.",
-                    "redirect_url": url_for("verify_encounter_set.index"),
-                }), 403
-            flash("You don't have permission to verify this encounter set.", "danger")
-            return redirect(url_for("verify_encounter_set.index"))
 
         if encounter.encounter_verified_status == "verified":
             return _already_verified_response(encounter)

@@ -27,6 +27,22 @@ class StaleEncounterSetPackageError(EncounterSetGradingError):
     pass
 
 
+def can_view_package_record(db, package: EncounterSetGradingPackage, *, user_id: int) -> bool:
+    """Require a current grading allocation for at least one frozen target."""
+    from grading_allocation.eligibility import is_user_eligible_for_task
+
+    return any(
+        is_user_eligible_for_task(
+            db,
+            user_id=user_id,
+            task=task,
+            role_slot=role_slot,
+        )
+        for task in package.tasks
+        for role_slot in HUMAN_ROLE_SLOTS
+    )
+
+
 def ordered_package_tasks(tasks: list[GradingTask]) -> list[GradingTask]:
     """Stable package pager order: scope, images by eye/position, encounter."""
     return sorted(

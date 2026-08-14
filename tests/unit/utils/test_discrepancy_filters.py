@@ -109,7 +109,9 @@ def test_build_discrepancy_filter_query_filters_selected_model_human_review(monk
     assert selected_ai_model_id == 7
     assert params["ai_model_key"] == "7"
     assert "v.has_review = TRUE OR" in where_sql
-    assert "COALESCE(NULLIF((v.ai_models_json -> :ai_model_key) ->> 'ai_review_status', ''), '') <> ''" in where_sql
+    assert "ai_review_status" in where_sql
+    assert "ai_review_comment" in where_sql
+    assert "BTRIM(v.review_comment)" in where_sql
 
 
 def test_build_discrepancy_filter_query_filters_selected_model_not_human_reviewed(monkeypatch):
@@ -126,8 +128,9 @@ def test_build_discrepancy_filter_query_filters_selected_model_not_human_reviewe
         },
     )
 
-    assert "v.has_review = FALSE AND" in where_sql
-    assert "COALESCE(NULLIF((v.ai_models_json -> :ai_model_key) ->> 'ai_review_status', ''), '') = ''" in where_sql
+    assert "NOT (v.has_review = TRUE OR" in where_sql
+    assert "ai_review_status" in where_sql
+    assert "ai_review_comment" in where_sql
 
 
 def test_build_discrepancy_filter_query_filters_any_model_human_review(monkeypatch):
@@ -146,6 +149,7 @@ def test_build_discrepancy_filter_query_filters_any_model_human_review(monkeypat
     assert selected_ai_model_id is None
     assert "EXISTS (SELECT 1 FROM jsonb_each(v.ai_models_json) kv" in where_sql
     assert "COALESCE(NULLIF(kv.value->>'ai_review_status', ''), '') <> ''" in where_sql
+    assert "kv.value->>'ai_review_comment'" in where_sql
 
 
 def test_build_discrepancy_filter_query_includes_review_grade_without_ai_filter(monkeypatch):
@@ -160,5 +164,60 @@ def test_build_discrepancy_filter_query_includes_review_grade_without_ai_filter(
         },
     )
 
-    assert "v.has_review = TRUE OR EXISTS" in where_sql
+    assert "v.has_review = TRUE OR" in where_sql
     assert "kv.value->>'ai_review_status'" in where_sql
+
+
+def test_build_discrepancy_filter_query_supports_review_status_cohorts(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+
+    clauses = {}
+    for status in ("unreviewed", "human", "ai", "both", "any"):
+        _mv, clauses[status], _params, _model = discrepancy_filters.build_discrepancy_filter_query(
+            _FakeDB(),
+            {"disease_id": 1, "allowed_lab_units": [1], "has_human_review": status},
+        )
+
+    assert "NOT (v.has_review = TRUE OR" in clauses["unreviewed"]
+    assert "AND NOT EXISTS" in clauses["human"]
+    assert "NOT (v.has_review = TRUE OR" in clauses["ai"]
+    assert "AND EXISTS" in clauses["both"]
+    assert "OR EXISTS" in clauses["any"]
+
+
+def test_build_discrepancy_filter_query_scopes_uploaded_task_ids(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+    _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {"disease_id": 1, "allowed_lab_units": [1], "task_ids": [9, 4]},
+    )
+
+    assert "v.task_id = ANY(:task_ids)" in where_sql
+    assert params["task_ids"] == [9, 4]
+
+
+def test_build_discrepancy_filter_query_accepts_scoped_project_role_grants(monkeypatch):
+    monkeypatch.setattr(
+        discrepancy_filters,
+        "get_mv_name_for_disease",
+        lambda db, disease_id: "mv_test",
+    )
+
+    _mv_name, where_sql, params, _selected_ai_model_id = (
+        discrepancy_filters.build_discrepancy_filter_query(
+            _FakeDB(),
+            {
+                "disease_id": 1,
+                "allowed_lab_units": [4],
+                "project_capability_user_id": 22,
+                "project_capability_role_names": ["discrepancy_reviewer"],
+            },
+        )
+    )
+
+    assert "FROM project_role_grants prg" in where_sql
+    assert "prg.scope_type = 'project'" in where_sql
+    assert "prg.lab_unit_id = project_task.lab_unit_id" in where_sql
+    assert "scope_lab.hospital_id = prg.hospital_id" in where_sql
+    assert params["project_capability_user_id"] == 22
+    assert params["project_capability_role_names"] == ["discrepancy_reviewer"]

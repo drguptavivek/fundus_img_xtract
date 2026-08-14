@@ -3,11 +3,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import exists, func, or_, select, true
+from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from data_authorization.service import project_role_grant_exists_clause, user_has_project_role
-from models import LabUnit, Project, User, user_lab_units
+from data_authorization.models import (
+    HOSPITAL_SCOPE,
+    LAB_UNIT_SCOPE,
+    PROJECT_SCOPE,
+    ProjectRoleGrant,
+)
+from models import LabUnit, Project, Role, User, user_lab_units
 
 from .models import ProjectEncounterSetPermission
 
@@ -38,7 +44,9 @@ CAPABILITY_ROLES = {
     CAPABILITY_UPLOAD: frozenset({"admin", "local_admin", "data_manager", "fileUploader"}),
     CAPABILITY_DISCREPANCY_REVIEW: frozenset({"discrepancy_reviewer"}),
     # This capability currently protects the sole PII EMR reconciliation export.
-    CAPABILITY_DATA_EXPORT: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
+    CAPABILITY_DATA_EXPORT: frozenset({
+        "admin", "local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"
+    }),
     CAPABILITY_ANALYTICS_VIEW: frozenset({"admin", "local_admin", "data_manager", "analytics_viewer"}),
     CAPABILITY_DATASET_CREATION: frozenset({"admin", "dataset_creator"}),
     CAPABILITY_REGRADE_ADJUDICATION: frozenset({"regrade_adjudicator"}),
@@ -207,6 +215,22 @@ def user_has_task_capability(
 
 def project_task_capability_clause(task_id_column, user: User, capability: str):
     """Build a SQL clause for project authorization of polymorphic grading tasks."""
+    return _project_task_capability_clause(
+        task_id_column,
+        user,
+        capability,
+        allow_classical=True,
+    )
+
+
+def _project_task_capability_clause(
+    task_id_column,
+    user: User,
+    capability: str,
+    *,
+    allow_classical: bool,
+):
+    """Build project capability SQL with an explicit classical-data boundary."""
     if capability not in CAPABILITY_COLUMNS:
         raise ValueError(f"Unknown project capability: {capability}")
     if is_project_permission_admin(user):
@@ -254,10 +278,99 @@ def project_task_capability_clause(task_id_column, user: User, capability: str):
     ).outerjoin(
         direct_image, direct_image.id == task.direct_image_upload_id
     )
-    return task_scope.where(
-        task.id == task_id_column,
-        or_(project_id.is_(None), role_grant_exists, permission_exists),
-    ).exists()
+    authorization = or_(role_grant_exists, permission_exists)
+    if allow_classical:
+        authorization = or_(project_id.is_(None), authorization)
+    else:
+        authorization = and_(project_id.isnot(None), authorization)
+    return task_scope.where(task.id == task_id_column, authorization).exists()
+
+
+def capability_lab_unit_ids(
+    db: Session,
+    *,
+    user: User,
+    capability: str,
+) -> set[int]:
+    """Return classical and project-scoped labs available for a capability."""
+    if capability not in CAPABILITY_COLUMNS:
+        raise ValueError(f"Unknown project capability: {capability}")
+    if is_project_permission_admin(user):
+        return set(db.execute(select(LabUnit.id)).scalars())
+
+    lab_unit_ids: set[int] = set()
+    if user.has_role(*CAPABILITY_ROLES[capability]):
+        lab_unit_ids.update(db.execute(
+            select(user_lab_units.c.lab_unit_id).where(
+                user_lab_units.c.user_id == user.id
+            )
+        ).scalars())
+
+    legacy_labs = db.execute(
+        select(ProjectEncounterSetPermission.lab_unit_id).where(
+            ProjectEncounterSetPermission.user_id == user.id,
+            ProjectEncounterSetPermission.active.is_(True),
+            CAPABILITY_COLUMNS[capability].is_(True),
+        )
+    ).scalars()
+    lab_unit_ids.update(legacy_labs)
+
+    grants = db.execute(
+        select(ProjectRoleGrant)
+        .join(Role, Role.id == ProjectRoleGrant.role_id)
+        .where(
+            ProjectRoleGrant.user_id == user.id,
+            ProjectRoleGrant.active.is_(True),
+            Role.name.in_(CAPABILITY_ROLES[capability]),
+        )
+    ).scalars().all()
+    if any(grant.scope_type == PROJECT_SCOPE for grant in grants):
+        lab_unit_ids.update(db.execute(select(LabUnit.id)).scalars())
+    hospital_ids = {
+        grant.hospital_id
+        for grant in grants
+        if grant.scope_type == HOSPITAL_SCOPE and grant.hospital_id is not None
+    }
+    if hospital_ids:
+        lab_unit_ids.update(db.execute(
+            select(LabUnit.id).where(LabUnit.hospital_id.in_(hospital_ids))
+        ).scalars())
+    lab_unit_ids.update(
+        grant.lab_unit_id
+        for grant in grants
+        if grant.scope_type == LAB_UNIT_SCOPE and grant.lab_unit_id is not None
+    )
+    return lab_unit_ids
+
+
+def apply_task_capability_scope(
+    query,
+    task_entity,
+    user: User,
+    capability: str,
+):
+    """Scope a polymorphic task query across classical and project authority."""
+    if is_project_permission_admin(user):
+        return query
+    if not hasattr(query, "session") or query.session is None:
+        raise TypeError("Task capability scoping requires an ORM Query.")
+    allowed_lab_ids = capability_lab_unit_ids(
+        query.session,
+        user=user,
+        capability=capability,
+    )
+    if not allowed_lab_ids:
+        return query.filter(task_entity.id.is_(None))
+    allow_classical = user.has_role(*CAPABILITY_ROLES[capability])
+    return query.filter(
+        task_entity.lab_unit_id.in_(allowed_lab_ids),
+        _project_task_capability_clause(
+            task_entity.id,
+            user,
+            capability,
+            allow_classical=allow_classical,
+        ),
+    )
 
 
 def list_project_permissions(

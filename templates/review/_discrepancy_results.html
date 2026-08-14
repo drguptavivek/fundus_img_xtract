@@ -14,6 +14,7 @@
       <form method="POST" action="{{ url_for('review.discrepancy_export') }}" class="d-flex flex-wrap gap-2">
         {{ csrf_field() }}
         <input type="hidden" name="disease_id" value="{{ filters.disease_id }}">
+        {% if filters.review_queue %}<input type="hidden" name="review_queue" value="{{ filters.review_queue }}">{% endif %}
         {% if filters.lab_unit_id %}<input type="hidden" name="lab_unit_id" value="{{ filters.lab_unit_id }}">{% endif
         %}
         {% for g in filters.resident_grade or [] %}<input type="hidden" name="resident_grade" value="{{ g }}">{%
@@ -112,6 +113,7 @@
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item {% if not has_prev %}disabled{% endif %}">
             <a class="page-link" href="{{ url_for(review_route,
+                review_queue=filters.review_queue,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                 resident_grade=filters.resident_grade or [],
@@ -132,6 +134,7 @@
                 ai_review_status=filters.ai_review_status or [],
                 page=page-1) if has_prev else '#' }}"
               {% if has_prev %}hx-get="{{ url_for(review_route,
+                review_queue=filters.review_queue,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                 resident_grade=filters.resident_grade or [],
@@ -161,6 +164,7 @@
             {% for p in range(1, total_pages + 1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
               <a class="page-link" href="{{ url_for(review_route,
+                    review_queue=filters.review_queue,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -181,6 +185,7 @@
                     ai_review_status=filters.ai_review_status or [],
                 page=p) }}"
                 hx-get="{{ url_for(review_route,
+                    review_queue=filters.review_queue,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -214,6 +219,7 @@
 
               <li class="page-item {% if 1 == page %}active{% endif %}">
                 <a class="page-link" href="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -236,6 +242,7 @@
                   ai_review_status=filters.ai_review_status or [],
                 page=1) }}"
                   hx-get="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -271,6 +278,7 @@
               {% for p in range(start_page, end_page + 1) %}
               <li class="page-item {% if p == page %}active{% endif %}">
                 <a class="page-link" href="{{ url_for(review_route,
+                    review_queue=filters.review_queue,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -291,6 +299,7 @@
                     ai_review_status=filters.ai_review_status or [],
                 page=p) }}"
                   hx-get="{{ url_for(review_route,
+                    review_queue=filters.review_queue,
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -323,6 +332,7 @@
 
                 <li class="page-item {% if total_pages == page %}active{% endif %}">
                   <a class="page-link" href="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -345,6 +355,7 @@
                   ai_review_status=filters.ai_review_status or [],
                 page=total_pages) }}"
                     hx-get="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -374,6 +385,7 @@
 
                 <li class="page-item {% if not has_next %}disabled{% endif %}">
                   <a class="page-link" href="{{ url_for(review_route,
+                review_queue=filters.review_queue,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -394,6 +406,7 @@
                 ai_review_status=filters.ai_review_status or [],
                 page=page+1) if has_next else '#' }}"
                     {% if has_next %}hx-get="{{ url_for(review_route,
+                review_queue=filters.review_queue,
                 disease_id=filters.disease_id,
                 lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -535,6 +548,7 @@
                   task_id=task.id,
                   ai_model_id=ai_param,
                   return_to=request.full_path,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   has_consensus=filters.has_consensus,
@@ -585,6 +599,7 @@
         <ul class="pagination pagination-sm justify-content-center">
           <li class="page-item {% if not has_prev %}disabled{% endif %}">
             <a class="page-link" href="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -607,6 +622,7 @@
                   ai_review_status=filters.ai_review_status or [],
                 page=page-1) if has_prev else '#' }}"
               {% if has_prev %}hx-get="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -637,6 +653,7 @@
             {% for p in range(start_page_mobile, end_page_mobile + 1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
               <a class="page-link" href="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -657,6 +674,7 @@
                   ai_review_status=filters.ai_review_status or [],
                 page=p) }}"
                 hx-get="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -683,6 +701,7 @@
             {% endfor %}
             <li class="page-item {% if not has_next %}disabled{% endif %}">
               <a class="page-link" href="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -703,6 +722,7 @@
                   ai_review_status=filters.ai_review_status or [],
                 page=page+1) if has_next else '#' }}"
                 {% if has_next %}hx-get="{{ url_for(review_route,
+                  review_queue=filters.review_queue,
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],

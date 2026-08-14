@@ -34,6 +34,10 @@ def get_next_review_tasks(
     regrade_grades: Optional[List[str]] = None,
     review_grades: Optional[List[str]] = None,
     final_grades: Optional[List[str]] = None,
+    project_capability_user_id: Optional[int] = None,
+    project_capability_role_names: Optional[List[str]] = None,
+    allow_classical_capability: bool = False,
+    ordered_task_ids: Optional[List[int]] = None,
     limit: int = 50,
 ) -> Dict[str, Optional[int]]:
     """Return the next and next-after task ids in the discrepancy order for the given filters."""
@@ -58,11 +62,36 @@ def get_next_review_tasks(
         "regrade_grade": regrade_grades or [],
         "review_grade": review_grades or [],
         "final_grade": final_grades or [],
+        "project_capability_user_id": project_capability_user_id,
+        "project_capability_role_names": project_capability_role_names or [],
+        "allow_classical_capability": allow_classical_capability,
+        "task_ids": ordered_task_ids or [],
     }
 
     mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
     if not mv_name:
         return {"next_task_id": None, "next_after_task_id": None}
+
+    if ordered_task_ids:
+        base_query = f"""
+            SELECT v.task_id
+            FROM {mv_name} v
+            WHERE {where_sql}
+        """
+        rows = db.execute(text(base_query), params).fetchall()
+        available = {row.task_id for row in rows}
+        try:
+            current_index = ordered_task_ids.index(current_task_id)
+        except ValueError:
+            return {"next_task_id": None, "next_after_task_id": None}
+        ordered_ids = [
+            task_id for task_id in ordered_task_ids[current_index + 1:]
+            if task_id in available
+        ][:2]
+        return {
+            "next_task_id": ordered_ids[0] if ordered_ids else None,
+            "next_after_task_id": ordered_ids[1] if len(ordered_ids) > 1 else None,
+        }
 
     base_query = f"""
         SELECT v.task_id

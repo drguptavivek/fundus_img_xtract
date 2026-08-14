@@ -226,6 +226,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Deep Discrepancy Review Module Plan](docs/15-DEVELOPMENT/discrepancy_review_deep_module_plan.md) - Cohesive review queues, canonical filters, leases/resume, AI assessment, workbench-backed human review, audit, refresh, export, and test plan
 - [Comprehensive Clinical Search Deep-Module Plan](docs/15-DEVELOPMENT/clinical_search_deep_module_plan.md) - Shared task-boundary search, canonical grading and signal semantics, project-configured referral diseases, immutable selections, discrepancy integration, and test plan
 - [Grading Workbench API](docs/API/grading-workbench/README.md) - Durable acquisition, resumption, normalized workbench DTO, annotation, submission, and rapid next-work contracts
+- [Discrepancy Review Queue API](docs/API/discrepancy-review/README.md) - Permission-scoped study CSV queues and deterministic Save & Next ordering
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping
 - [EncounterSet Grading Package Policy](docs/04-Grade/encounter_set_grading_package_policy.md) - Frozen package identity, complete-set submissions, 12-hour revision waiting, and disease-scope arbitration

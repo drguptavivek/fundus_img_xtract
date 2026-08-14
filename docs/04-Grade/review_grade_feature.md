@@ -7,6 +7,8 @@ This document describes the implementation of the Review Grade feature for the F
 
 ### 1. Discrepancy Review Page Enhancements (/review/discrepancy-review)
 
+The Review Status filter distinguishes unreviewed, human-only, AI-only, both, and any-reviewed tasks. Human evidence is a revised review grade or human review comment; AI evidence is an assessment status or AI review comment. A study CSV containing a `task_id` column can create an owner- and permission-scoped queue whose source order controls Save & Next navigation.
+
 #### AI Grade Filter
 - Added a "Has AI Grade" dropdown filter with options:
   - All Tasks (default)

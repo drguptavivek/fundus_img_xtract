@@ -8,7 +8,7 @@ from json import JSONDecodeError
 import re
 from urllib.parse import parse_qs, urlsplit
 
-from auth.roles import roles_required
+from auth.roles import roles_or_project_grant_required, roles_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus, ImageMetadata
 
@@ -22,6 +22,8 @@ from utils.review_navigation import get_next_review_tasks
 from utils.cache_invalidation import invalidate_discrepancy_review_cache
 from encounter_sets.permissions import (
     CAPABILITY_DISCREPANCY_REVIEW,
+    apply_task_capability_scope,
+    capability_lab_unit_ids,
     user_has_task_capability,
 )
 from review_history import (
@@ -33,6 +35,7 @@ from review_history import (
 )
 from datetime import datetime, timezone
 from . import bp
+from .queues import ReviewQueueError, load_review_queue
 
 # Initialize grades logger for review grade submissions
 grades_logger = logging.getLogger("grades")
@@ -220,7 +223,7 @@ def _arglist_or_return_to(name: str, return_to_args: dict[str, list[str]]) -> li
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
-@roles_required("discrepancy_reviewer")
+@roles_or_project_grant_required("discrepancy_reviewer")
 def review_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
@@ -235,8 +238,12 @@ def review_task_details(task_id: int):
                 joinedload(GradingTask.direct_image)
             )
         )
-        # Apply hospital scoping to ensure task is within user's access
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = apply_task_capability_scope(
+            query,
+            GradingTask,
+            current_user,
+            CAPABILITY_DISCREPANCY_REVIEW,
+        )
         task = query.first()
         
         if not task:
@@ -261,14 +268,17 @@ def review_task_details(task_id: int):
         allowed_methods = {"match", "adjudication", "regrade", "task_review"}
         existing_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         # Allow review only for discrepancy reviewers and eligible consensus methods
-        can_review = current_user.has_role("discrepancy_reviewer") and (
-            existing_consensus is not None and existing_consensus.method in allowed_methods
+        can_review = (
+            existing_consensus is not None
+            and existing_consensus.method in allowed_methods
         )
         
         # Get allowed lab units for navigation
-        lu_query = db.query(LabUnit)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
-        user_lab_unit_ids = [lu.id for lu in lu_query.all()]
+        user_lab_unit_ids = sorted(capability_lab_unit_ids(
+            db,
+            user=current_user,
+            capability=CAPABILITY_DISCREPANCY_REVIEW,
+        ))
         
         # The grades table permits one review row per task/user. Use the
         # current user's row for edits so we do not insert a duplicate.
@@ -289,6 +299,19 @@ def review_task_details(task_id: int):
 
         return_to = request.args.get("return_to")
         return_to_query_args = _return_to_args(return_to)
+        review_queue_token = _arg_or_return_to("review_queue", return_to_query_args)
+        review_queue = None
+        if review_queue_token:
+            try:
+                review_queue = load_review_queue(
+                    db, user=current_user, token=review_queue_token
+                )
+            except ReviewQueueError:
+                from flask import abort
+                abort(404, description="Review queue not found")
+            if task_id not in review_queue.task_ids:
+                from flask import abort
+                abort(404, description="Task is not in this review queue")
         ai_model_id_filter = _arg_or_return_to("ai_model_id", return_to_query_args, type_=int)
 
         lab_unit_id_filter = _arg_or_return_to("lab_unit_id", return_to_query_args, type_=int)
@@ -325,6 +348,8 @@ def review_task_details(task_id: int):
         }
         if ai_model_id_filter:
             navigation_params["ai_model_id"] = ai_model_id_filter
+        if review_queue_token:
+            navigation_params["review_queue"] = review_queue_token
         for key, values in {
             "resident_grade": resident_grades,
             "resident2_grade": resident2_grades,
@@ -361,6 +386,10 @@ def review_task_details(task_id: int):
             regrade_grades=regrade_grades or None,
             review_grades=review_grades or None,
             final_grades=final_grades or None,
+            project_capability_user_id=current_user.id,
+            project_capability_role_names=["discrepancy_reviewer"],
+            allow_classical_capability=current_user.has_role("discrepancy_reviewer"),
+            ordered_task_ids=list(review_queue.task_ids) if review_queue else None,
             limit=50,
         )
         next_task_id = nav_result.get("next_task_id")
@@ -449,9 +478,9 @@ def review_task_details(task_id: int):
             ai_influence = (request.form.get('ai_influence') or '').strip().lower()
             action = _submitted_action()
             form_next_task_id = request.form.get('next_task_id', type=int)
-            target_next_task_id = form_next_task_id or next_task_id
+            target_next_task_id = nav_result.get("next_task_id")
             raw_selected_features = request.form.getlist('selected_features')
-            effective_next_task_id = target_next_task_id or nav_result.get("next_task_id")
+            effective_next_task_id = target_next_task_id
             next_redirect_params: dict[str, object] = {
                 k: v for k, v in navigation_params.items() if v not in (None, "", [])
             }
@@ -465,6 +494,7 @@ def review_task_details(task_id: int):
                 extra={
                     "action": action,
                     "target_next_task_id": target_next_task_id,
+                    "submitted_next_task_id": form_next_task_id,
                     "fallback_next_task_id": nav_result.get("next_task_id"),
                     "return_to": return_to,
                     "navigation_params": next_redirect_params,

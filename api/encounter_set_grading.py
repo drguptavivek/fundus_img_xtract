@@ -8,7 +8,11 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from encounter_sets.grading_policy import effective_project_policy_dto
-from grading.workbench.package_workflow import package_record_dto, reconcile_package_state
+from grading.workbench.package_workflow import (
+    can_view_package_record,
+    package_record_dto,
+    reconcile_package_state,
+)
 from grading_allocation import service as grading_allocation_service
 from grading_allocation.exceptions import GradingAllocationError
 from models import (
@@ -20,8 +24,6 @@ from models import (
     GradingTask,
     PatientEncounters,
 )
-from utils.hospital_scoping import apply_scoping
-
 from . import api_bp
 
 
@@ -61,12 +63,10 @@ def get_effective_encounter_set_grading_plan(project_id: int):
 def get_encounter_set_grading_records(encounter_uuid: str):
     """Return frozen package, scope, submission, image-grade, and consensus history."""
     with transaction_scope() as db:
-        query = db.query(PatientEncounters).filter(
+        encounter = db.query(PatientEncounters).filter(
             PatientEncounters.uuid == encounter_uuid,
             PatientEncounters.is_set_based.is_(True),
-        )
-        query = apply_scoping(query, PatientEncounters, current_user, "grading")
-        encounter = query.first()
+        ).first()
         if encounter is None:
             return jsonify({"success": False, "error": "EncounterSet not found."}), 404
         packages = (
@@ -90,6 +90,13 @@ def get_encounter_set_grading_records(encounter_uuid: str):
             .with_for_update()
             .all()
         )
+        packages = [
+            package
+            for package in packages
+            if can_view_package_record(db, package, user_id=current_user.id)
+        ]
+        if not packages:
+            return jsonify({"success": False, "error": "EncounterSet not found."}), 404
         for package in packages:
             reconcile_package_state(db, package)
         return jsonify({

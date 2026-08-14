@@ -130,7 +130,12 @@ def test_discrepancy_review_ui_exposes_status_cohorts_and_csv_queue():
 
     for value in ("unreviewed", "human", "ai", "both", "any"):
         assert f'<option value="{value}"' in template
+    assert 'data-bs-target="#reviewQueueUploadModal"' in template
+    assert 'id="reviewQueueUploadModal"' in template
     assert 'id="reviewQueueUploadForm"' in template
+    assert template.index('id="reviewQueueUploadModal"') < template.index(
+        'id="reviewQueueUploadForm"'
+    )
     assert '{{ csrf_field() }}' in template
     assert 'name="review_queue"' in template
     assert "fundus_api.create_discrepancy_review_queue" in template

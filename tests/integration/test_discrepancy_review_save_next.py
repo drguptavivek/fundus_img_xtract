@@ -81,8 +81,11 @@ def test_review_save_actions_persist_and_stay_in_uploaded_queue(
         },
     )
     monkeypatch.setattr("review.task_review.get_task_detail", lambda db, task_id: {"id": task_id})
-    monkeypatch.setattr("review.task_review.invalidate_discrepancy_review_cache", lambda: None)
-    monkeypatch.setattr("review.task_review._queue_review_listing_refresh", lambda disease_id: None)
+    queued_refreshes = []
+    monkeypatch.setattr(
+        "review.task_review._queue_review_listing_refresh",
+        lambda disease_id: queued_refreshes.append(disease_id),
+    )
     _authenticate(client, reviewer)
     return_to = f"/review/discrepancy-review?review_queue={queue.token}&disease_id={disease.id}"
 
@@ -113,3 +116,4 @@ def test_review_save_actions_persist_and_stay_in_uploaded_queue(
     ).one()
     assert saved.disease_grading_id == grading.id
     assert saved.comment == "Study review"
+    assert queued_refreshes == [disease.id]

@@ -20,7 +20,6 @@ from utils.materialized_view_scheduler import (
     refresh_image_listing_views,
 )
 from flask_login import login_required, current_user
-from utils.cache_invalidation import invalidate_discrepancy_review_cache
 from utils.log_sanitize import sanitize_log_value
 
 
@@ -238,8 +237,6 @@ def manual_refresh():
             }
         else:
             result = manual_refresh_now(current_app)
-        if result.get("success"):
-            invalidate_discrepancy_review_cache()
         duration_seconds = perf_counter() - started_at
         current_app.logger.info(
             "Materialized view refresh request completed scope=%s disease_id=%s success=%s duration_seconds=%.3f",

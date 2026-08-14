@@ -19,7 +19,6 @@ from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.review_navigation import get_next_review_tasks
-from utils.cache_invalidation import invalidate_discrepancy_review_cache
 from encounter_sets.permissions import (
     CAPABILITY_DISCREPANCY_REVIEW,
     apply_task_capability_scope,
@@ -788,7 +787,6 @@ def review_task_details(task_id: int):
             )
 
             db.commit()
-            invalidate_discrepancy_review_cache()
             _queue_review_listing_refresh(task.disease_id)
             success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
             flash(success_message, 'success')

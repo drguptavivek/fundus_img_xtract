@@ -9,7 +9,6 @@ from celery.exceptions import MaxRetriesExceededError, Retry
 from celery_app import celery_app
 from utils.celery_context import build_task_app
 from utils.log_sanitize import sanitize_log_value
-from utils.cache_invalidation import invalidate_discrepancy_review_cache_from_worker
 from utils.mvw_image_listing_v2 import (
     ensure_per_disease_image_listing_mvs,
     refresh_image_listing_mv_for_disease,
@@ -72,7 +71,6 @@ def refresh_image_listing_v2_task(
         )
         if results.get("errors"):
             raise self.retry(exc=RuntimeError(f"MV refresh errors: {results}"), countdown=30)
-        invalidate_discrepancy_review_cache_from_worker()
         _LOGGER.info("mvw_image_listing_v2 refresh results: %s", sanitize_log_value(results))
         return results
 
@@ -81,8 +79,6 @@ def refresh_image_listing_v2_task(
     generation_before = client.get(dirty_key)
     try:
         results = refresh_image_listing_mv_for_disease(disease_id, schedule_time=label)
-        invalidated = invalidate_discrepancy_review_cache_from_worker()
-        results["cache_entries_invalidated"] = invalidated
         generation_after = client.get(dirty_key)
         if generation_after != generation_before:
             raise self.retry(countdown=_DEBOUNCE_SECONDS)

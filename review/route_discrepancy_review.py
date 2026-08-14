@@ -8,7 +8,6 @@ from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy import text
 
-from app_cache import cache
 from auth.roles import roles_or_project_grant_required, roles_required
 from job_store import db_create_job
 from models import (
@@ -472,17 +471,13 @@ def render_discrepancy_review(
 
 @bp.route("/discrepancy-review", methods=["GET"])
 @roles_or_project_grant_required("admin", "discrepancy_reviewer", "data_exporter")
-@cache.cached(
-    timeout=600,
-    key_prefix=lambda: (
-        "discrepancy-review:v3:"
-        f"{current_user.id}:"
-        f"{request.query_string.decode('utf-8')}:"
-        f"hx={request.headers.get('HX-Request', 'false')}"
-    ),
-    unless=lambda: request.args.get("disease_id", type=int) is None,
-)
 def discrepancy_review():
+    """Render the live discrepancy queue from the current MV snapshot.
+
+    This is intentionally not response-cached. Reviewers mutate task review
+    state through Save & Close / Save & Next, and a rendered response cache can
+    outlive the disease materialized-view snapshot that produced it.
+    """
     return render_discrepancy_review()
 
 

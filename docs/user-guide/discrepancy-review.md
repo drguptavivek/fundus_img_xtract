@@ -91,7 +91,9 @@ The system offers several filters to refine the displayed tasks:
   review wins, but a reviewer working from an older page must reload before
   replacing a newer review, consensus, or AI-feedback assessment.
 - The discrepancy list is refreshed in the background for the affected disease;
-  a saved detail page is authoritative while that short refresh completes.
+  a saved detail page is authoritative while that short refresh completes. List
+  and HTMX responses are not response-cached, so Save & Close and Save & Next
+  never reuse rendered review data from an earlier materialized-view snapshot.
 
 #### AI Model Filter
 - Select specific AI models to filter by

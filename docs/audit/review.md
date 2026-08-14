@@ -69,5 +69,8 @@ the most recently updated review wins. Disease listing MVs order review rows by
 `updated_at DESC, id DESC` to implement that contract deterministically.
 
 Review saves mark only the affected disease MV dirty. Redis coalesces bursts into
-one trailing refresh. The worker retries refresh errors and invalidates all
-discrepancy-review page caches only after the refreshed snapshot is available.
+one trailing refresh, and the worker retries refresh errors. Discrepancy-review
+list and HTMX responses are intentionally not response-cached: Save & Close and
+Save & Next form a just-in-time workflow, so each request reads the current
+materialized-view snapshot while task detail, grade, consensus, and stale-write
+validation continue to read the authoritative tables.

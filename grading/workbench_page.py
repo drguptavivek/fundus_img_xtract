@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from flask import flash, redirect, render_template, session as flask_session, url_for
 from flask_login import current_user
 
@@ -138,6 +140,7 @@ def workbench_page(session_uuid: str):
             "grading/workbench.html",
             workbench=workbench.to_dict(),
             session_token=token,
+            submission_idempotency_key=str(uuid4()),
         )
         return response, 200, {"Cache-Control": "no-store, private"}
     except WorkbenchError as exc:

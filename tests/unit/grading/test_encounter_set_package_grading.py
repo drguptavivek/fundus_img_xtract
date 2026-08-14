@@ -41,6 +41,10 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
         Path(package_transport.__file__).parents[1]
         / "templates/grading/workbench.html"
     ).read_text()
+    submission_guard = (
+        Path(package_transport.__file__).parents[1]
+        / "static/js/submission-guard.js"
+    ).read_text()
 
     assert "workbench.panels" in template
     assert "panel.fields.label" in template
@@ -129,15 +133,15 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "panel.querySelector('[data-feature-geometry-field]').value = ''" in template
     assert "feature-geometry-editor.js" in template
     assert "/api/grading/workbench/sessions/${sessionUuid}/submit" in template
-    assert "spinner-border spinner-border-sm" in template
+    assert "spinner-border spinner-border-sm" in submission_guard
     assert "data-workbench-submit-overlay" in template
     assert "gwb-loader-logo" in template
     assert "retina_svg_logo.svg" in template
     assert "gwb-loader-counter-spin" in template
     assert "rotate(-360deg)" in template
     assert "Saving grades and loading the next case" in template
-    assert "submitOverlay.classList.remove('d-none')" in template
-    assert "submitOverlay.classList.add('d-none')" in template
+    assert "overlay.classList.remove('d-none');" in submission_guard
+    assert "overlay.classList.toggle('d-none', Boolean(overlayWasHidden));" in submission_guard
     assert "Saving grades" in template
     assert "Grades saved. Opening the next case" in template
     assert "clearInterval(heartbeatTimer)" in template
@@ -162,6 +166,16 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "error.code = redirectedToLogin ? 'authentication_required' : 'non_json_response'" in template
     assert "if (retryDraft) scheduleDraft(2000)" in template
     assert "Your unsaved draft will retry" in template
+    assert "const submissionIdempotencyKey = {{ submission_idempotency_key|tojson }};" in template
+    assert "idempotency_key: submissionIdempotencyKey" in template
+    assert "idempotency_key: crypto.randomUUID()" not in template
+    assert "window.SubmissionGuard.reloadOnHistoryRestore();" in template
+    assert "global.addEventListener('pageshow'" in submission_guard
+    assert "navigation?.type === 'back_forward'" in submission_guard
+    assert "global.location.reload();" in submission_guard
+    assert "document.documentElement.style.visibility = 'hidden';" in submission_guard
+    assert "submissionOutcomeUnknown = true;" in template
+    assert "this form will not submit again automatically" in template
 
 
 def test_cdr_overlay_css_is_a_complete_rule():

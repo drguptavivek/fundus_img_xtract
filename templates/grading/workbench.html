@@ -457,7 +457,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2')) }}" defer></script>
 {% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
-<script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v1')) }}"></script>
+<script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-editor.js', v=annotation_assets_version) }}"></script>
@@ -465,6 +465,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 (function () {
   const root = document.getElementById('grading-workbench');
   const token = {{ session_token|tojson }};
+  const submissionIdempotencyKey = {{ submission_idempotency_key|tojson }};
   const fingerprint = {{ workbench.configuration_fingerprint|tojson }};
   const sessionUuid = root.dataset.sessionUuid;
   const generation = root.dataset.tokenGeneration;
@@ -541,6 +542,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   }
 
   let submitting = false;
+  let submissionOutcomeUnknown = false;
   let activePanelIndex = panels.findIndex(panel => panel.classList.contains('active'));
   let draftDirty = false;
   let draftTimer = null;
@@ -628,7 +630,9 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       group.classList.toggle('d-none', !showActions || group.closest('[data-task-uuid]') !== activePanel);
     });
     submitButtons.forEach(button => {
-      button.disabled = submitting || (contextualSubmission && !allImagesGraded);
+      button.disabled = submissionOutcomeUnknown
+        || submitting
+        || (contextualSubmission && !allImagesGraded);
     });
   }
 
@@ -636,6 +640,22 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     messageBox.textContent = message;
     messageBox.className = `alert alert-${level} py-2`;
   }
+
+  function showSubmissionOutcomeUnknown() {
+    messageBox.className = 'alert alert-warning py-2';
+    const message = document.createElement('span');
+    message.textContent = 'Submission status is unknown. Reload to read the saved server state; this form will not submit again automatically. ';
+    const reloadButton = document.createElement('button');
+    reloadButton.type = 'button';
+    reloadButton.className = 'btn btn-sm btn-outline-dark ms-2';
+    reloadButton.textContent = 'Reload status';
+    reloadButton.addEventListener('click', () => window.location.reload());
+    messageBox.replaceChildren(message, reloadButton);
+  }
+
+  // A history-restored form is stale. Hide its cached overlay and read current
+  // state with GET; never leave the old form available for another POST.
+  window.SubmissionGuard.reloadOnHistoryRestore();
 
   function updateProgress() {
     const graded = editablePanels.filter(panel => Boolean(selectedGrade(panel))).length;
@@ -886,7 +906,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     try {
       const body = {
         action,
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: submissionIdempotencyKey,
         configuration_fingerprint: fingerprint,
         package_revision: {{ workbench.workflow_config.get('package_revision')|tojson }},
         observations: collectObservations()
@@ -909,6 +929,12 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
     } catch (error) {
       submitting = false;
       submission.release();
+      if (error.transient || error.code === 'network_error') {
+        submissionOutcomeUnknown = true;
+        updateSubmissionControls();
+        showSubmissionOutcomeUnknown();
+        return;
+      }
       updateSubmissionControls();
       showMessage(error.message, 'danger');
       if (error.reloadRequired) {

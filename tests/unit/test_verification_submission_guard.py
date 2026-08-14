@@ -12,7 +12,12 @@ def test_shared_submission_guard_blocks_reentry_and_restores_controls():
     assert "activeSubmissions.delete(target);" in script
     assert "snapshot.control.disabled = snapshot.disabled;" in script
     assert "function release(target)" in script
-    assert "global.SubmissionGuard = Object.freeze({acquire, isActive, release});" in script
+    assert "function reloadOnHistoryRestore()" in script
+    assert "global.addEventListener('pagehide'" in script
+    assert "global.addEventListener('pageshow'" in script
+    assert "document.documentElement.style.visibility = 'hidden';" in script
+    assert "global.location.reload();" in script
+    assert "reloadOnHistoryRestore" in script
 
 
 def test_encounter_set_verification_uses_shared_guard_for_mutations():
@@ -27,6 +32,9 @@ def test_encounter_set_verification_uses_shared_guard_for_mutations():
     assert "Saving verification and loading the next EncounterSet…" in template
     assert "if (!submission) return;" in template
     assert "if (!navigating) submission.release();" in template
+    assert '{% from "_forms.html" import csrf_field %}' in template
+    assert template.count("{{ csrf_field() }}") >= 3
+    assert "window.SubmissionGuard.reloadOnHistoryRestore();" in template
     assert ".with_for_update()" in routes
 
 
@@ -36,6 +44,9 @@ def test_grading_workbench_reuses_shared_submission_guard():
     assert "filename='js/submission-guard.js'" in template
     assert "window.SubmissionGuard.acquire(workbenchForm" in template
     assert "submission.release();" in template
+    assert "idempotency_key: submissionIdempotencyKey" in template
+    assert "idempotency_key: crypto.randomUUID()" not in template
+    assert "window.SubmissionGuard.reloadOnHistoryRestore();" in template
     assert template.index("filename='js/submission-guard.js'") < template.index(
         "window.SubmissionGuard.acquire(workbenchForm"
     )

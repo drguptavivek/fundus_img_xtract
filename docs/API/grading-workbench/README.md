@@ -52,6 +52,14 @@ Network, HTTP 429, and HTTP 5xx draft-save failures retain the dirty draft and
 retry after two seconds; validation and authentication errors require user
 action and are not retried indefinitely.
 
+Final grade submissions are never retried automatically. A rendered workbench
+uses one idempotency key for its single submission attempt. If the transport
+fails after the request is sent, write controls remain disabled and the browser
+asks the grader to reload with GET to read authoritative server state. Browser
+Back/Forward restoration also reloads with GET; it never restores a submitted
+form for another POST. The server-side idempotency record remains a duplicate-
+delivery safety boundary, not a client retry mechanism.
+
 Each image panel includes the CDR/RDR measurement controls in the viewer
 toolbar. The grader marks the disc diameter and cup segment on the active
 image; the viewer calculates cup-to-disc and rim-to-disc ratios. **Done** adds

@@ -2,6 +2,7 @@
   'use strict';
 
   const activeSubmissions = new WeakMap();
+  let historyReloadRegistered = false;
 
   function asElements(value) {
     if (!value) return [];
@@ -95,6 +96,26 @@
     return true;
   }
 
+  function reloadOnHistoryRestore() {
+    if (historyReloadRegistered) return;
+    historyReloadRegistered = true;
+    let refreshStarted = false;
+
+    // Keep a BFCache snapshot from repainting an old submission overlay. The
+    // restored document remains hidden only until pageshow triggers a fresh GET.
+    global.addEventListener('pagehide', function (event) {
+      if (event.persisted) document.documentElement.style.visibility = 'hidden';
+    });
+    global.addEventListener('pageshow', function (event) {
+      const navigation = global.performance?.getEntriesByType?.('navigation')?.[0];
+      const restoredFromHistory = event.persisted || navigation?.type === 'back_forward';
+      if (!restoredFromHistory || refreshStarted) return;
+      refreshStarted = true;
+      document.documentElement.style.visibility = 'hidden';
+      global.location.reload();
+    });
+  }
+
   document.addEventListener('submit', function (event) {
     const form = event.target.closest('form[data-submission-guard]');
     if (!form) return;
@@ -111,5 +132,10 @@
     });
   }, true);
 
-  global.SubmissionGuard = Object.freeze({acquire, isActive, release});
+  global.SubmissionGuard = Object.freeze({
+    acquire,
+    isActive,
+    release,
+    reloadOnHistoryRestore
+  });
 })(window, document);

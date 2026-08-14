@@ -116,7 +116,7 @@ def test_review_template_requires_explicit_human_grade_selection():
     assert "change a Quality Assessment selection. A comment alone is not sufficient." in template
     assert 'href="{{ cancel_close_url }}"' in template
     assert "Cancel &amp; Close" in template
-    assert "-review-submit-v5" in template
+    assert "-review-submit-v6" in template
 
 
 def test_review_writes_use_grading_style_submission_overlay():
@@ -131,9 +131,8 @@ def test_review_writes_use_grading_style_submission_overlay():
     assert "actionValue === 'cancel_next' || event.defaultPrevented" in script
     assert "startReviewWriteSubmission(actionField ? actionField.value : 'save', pendingSubmitButton);" in script
     assert "window.SubmissionGuard.acquire(reviewForm" in script
-    assert "window.addEventListener('pageshow'" in script
-    assert "event.persisted" in script
-    assert "activeWriteSubmission.release();" in script
+    assert "window.SubmissionGuard.reloadOnHistoryRestore();" in script
+    assert "activeWriteSubmission" not in script
     assert "filename='js/submission-guard.js'" in template
     assert template.index("filename='js/submission-guard.js'") < template.index(
         "filename='js/review-task-detail.js'"

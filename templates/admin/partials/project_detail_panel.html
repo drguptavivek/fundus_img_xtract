@@ -77,6 +77,50 @@
       </div>
 
       <div class="col-12">
+        {% set dr_dme = dr_dme_encounter_workflow %}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">MadhuNetrAI DR + DME</h3>
+          <span class="badge {% if dr_dme.capable %}text-bg-success{% else %}text-bg-warning{% endif %}">
+            {% if dr_dme.capable %}Available{% else %}Configuration required{% endif %}
+          </span>
+        </div>
+        <form class="border rounded p-3 mb-3"
+              method="post"
+              action="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <p class="small text-muted">One encounter-level screening sends macula-focused images (maximum 10 per eye) and creates both DR and DME AI grades.</p>
+          {% if dr_dme.automatic_blocking_reasons %}
+          <div class="alert alert-warning py-2">
+            <ul class="mb-0">{% for reason in dr_dme.automatic_blocking_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3 form-check ms-2">
+              <input class="form-check-input" type="checkbox" name="manual_enabled" id="dr_dme_manual_enabled" {% if dr_dme.manual_enabled %}checked{% endif %} {% if not dr_dme.manual_capable %}disabled{% endif %}>
+              <label class="form-check-label" for="dr_dme_manual_enabled">Enable manual runs</label>
+            </div>
+            <div class="col-md-3 form-check ms-2">
+              <input class="form-check-input" type="checkbox" name="automatic_enabled" id="dr_dme_automatic_enabled" {% if dr_dme.automatic_enabled %}checked{% endif %} {% if not dr_dme.automatic_capable %}disabled{% endif %}>
+              <label class="form-check-label" for="dr_dme_automatic_enabled">Enable automatic runs</label>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="dr_dme_automatic_eligibility">Automatic eligibility</label>
+              <select class="form-select form-select-sm" name="automatic_eligibility" id="dr_dme_automatic_eligibility" {% if not dr_dme.automatic_capable %}disabled{% endif %}>
+                <option value="always" {% if dr_dme.automatic_eligibility == 'always' %}selected{% endif %}>Always run after supported API ingestion</option>
+                <option value="if_dr_ocr_report_present" {% if dr_dme.automatic_eligibility == 'if_dr_ocr_report_present' %}selected{% endif %}>Only with OCR-confirmed DR report</option>
+              </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit" {% if not dr_dme.manual_capable and not dr_dme.automatic_capable %}disabled{% endif %}>Save</button></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <div>
             <h3 class="h6 mb-0">Project Access</h3>

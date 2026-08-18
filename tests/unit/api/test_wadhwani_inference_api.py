@@ -1,4 +1,5 @@
 from services.wadhwani_glaucoma_inference import WadhwaniInferenceResult
+from upload_profiles.admin_service import MutationResult
 
 
 def test_wadhwani_inference_api_returns_service_payload(client, login_user, monkeypatch):
@@ -30,3 +31,27 @@ def test_wadhwani_inference_api_returns_service_payload(client, login_user, monk
     assert payload["task_id"] == 123
     assert payload["ai_model_id"] == 7
     assert payload["grade_impression"] == "Glaucoma"
+
+
+def test_madhunetra_integration_api_never_echoes_token(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    def save(payload):
+        captured.update(payload)
+        return MutationResult(True, "Updated.")
+
+    monkeypatch.setattr("api.ai_models.encounter_service.save_integration", save)
+    response = client.patch(
+        "/api/ai-models/madhunetra-dr-dme/integration",
+        json={
+            "api_base_url": "https://wai.example",
+            "environment": "staging",
+            "access_token": "plain-secret",
+            "is_enabled": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["access_token"] == "plain-secret"
+    assert "plain-secret" not in response.get_data(as_text=True)

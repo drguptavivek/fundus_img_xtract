@@ -7,7 +7,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Project
-from remote_inference import automated_service, job_service, manual_service
+from remote_inference import automated_service, encounter_service, job_service, manual_service
 from upload_profiles.service import get_user_lab_unit_ids, manager_lab_unit_ids
 
 from . import api_bp
@@ -165,3 +165,70 @@ def resume_interrupted_wadhwani_encounter_set_job(job_token: str):
     return _json_result(
         job_service.resume_interrupted_wadhwani_job(job_token=job_token, user_id=current_user.id)
     )
+
+
+@api_bp.route("/remote-inference/projects/<int:project_id>/encounter-workflows/dr-dme", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager")
+def get_project_dr_dme_encounter_workflow(project_id: int):
+    """Return capability and independent automatic/manual DR-DME controls."""
+    if not manager_lab_unit_ids(current_user.id):
+        return jsonify(success=False, error="You are not assigned to any lab units for remote inference management."), 403
+    with get_db_session() as db:
+        if db.get(Project, project_id) is None:
+            return jsonify(success=False, error="Project not found."), 404
+        payload = encounter_service.workflow_context(db, project_id)
+    return jsonify(success=True, project_id=project_id, workflow=payload)
+
+
+@api_bp.route("/remote-inference/projects/<int:project_id>/encounter-workflows/dr-dme", methods=["POST", "PATCH"])
+@roles_required("admin", "local_admin", "data_manager")
+def save_project_dr_dme_encounter_workflow(project_id: int):
+    """Save independent automatic/manual controls for the encounter workflow."""
+    body = request.get_json(silent=True) if request.is_json else request.form.to_dict()
+    body = body or {}
+    if not request.is_json:
+        body["automatic_enabled"] = request.form.get("automatic_enabled") in {"1", "true", "on"}
+        body["manual_enabled"] = request.form.get("manual_enabled") in {"1", "true", "on"}
+    return _json_result(encounter_service.save_workflow(current_user.id, project_id, body))
+
+
+@api_bp.route("/remote-inference/encounter-set-candidates", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "fileUploader")
+def get_encounter_remote_inference_candidates():
+    """List authorized, verified EncounterSets with DR-DME eligibility details."""
+    try:
+        project_id = int(request.args.get("project_id", ""))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error="project_id is required."), 400
+    workflow = request.args.get("workflow") or "dr_dme"
+    if workflow != "dr_dme":
+        return jsonify(success=False, error="Unsupported encounter workflow."), 400
+    with get_db_session() as db:
+        if db.get(Project, project_id) is None:
+            return jsonify(success=False, error="Project not found."), 404
+        rows = encounter_service.list_candidates(db, project_id=project_id, user=current_user)
+    return jsonify(success=True, project_id=project_id, workflow_key=workflow, candidates=rows)
+
+
+@api_bp.route("/remote-inference/encounter-set-jobs", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager", "fileUploader")
+def create_encounter_remote_inference_job():
+    """Queue up to 25 authorized EncounterSets, with one job item per encounter."""
+    body = request.get_json(silent=True) if request.is_json else request.form
+    body = body or {}
+    if str(body.get("workflow") or "dr_dme") != "dr_dme":
+        return jsonify(success=False, error="Unsupported encounter workflow."), 400
+    try:
+        project_id = int(body.get("project_id"))
+        encounter_ids = body.get("encounter_ids") if request.is_json else request.form.getlist("encounter_ids")
+        encounter_ids = [int(value) for value in (encounter_ids or [])]
+    except (TypeError, ValueError):
+        return jsonify(success=False, error="project_id and integer encounter_ids are required."), 400
+    result = encounter_service.create_manual_job(
+        encounter_ids=encounter_ids,
+        project_id=project_id,
+        user=current_user,
+        remote_addr=request.remote_addr,
+    )
+    payload = dict(result.payload or {})
+    return jsonify(success=result.success, message=result.message, **payload), result.status_code

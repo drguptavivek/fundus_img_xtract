@@ -32,6 +32,7 @@ from models import (
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remote_inference.automated_service import project_automated_workflow_context
 from remote_inference.manual_service import project_manual_workflow_context
+from remote_inference.encounter_service import workflow_context as encounter_workflow_context
 from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
 from services.project_referral_diseases import list_configured_project_referral_disease_ids
@@ -371,6 +372,7 @@ def upload_project_workspace(project_id: int):
         ))
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))
+        context["dr_dme_encounter_workflow"] = encounter_workflow_context(db, project_id)
         context.update(iitk_service.project_connection_context(db, project_id))
         context["grading_allocation_state"] = grading_allocation_service.get_project_allocation_state(
             current_user.id,

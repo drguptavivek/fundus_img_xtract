@@ -1484,6 +1484,10 @@ class AIModelIntegration(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False)
     bearer_token: Mapped[str] = mapped_column(Text, nullable=False)
+    api_base_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    environment: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    config_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -1496,10 +1500,24 @@ class AIModelIntegration(Base):
     __table_args__ = (
         UniqueConstraint("provider", name="uq_ai_model_integrations_provider"),
         CheckConstraint(
-            "provider IN ('wadhwani_glaucoma')",
+            "provider IN ('wadhwani_glaucoma','wai_dr_dme')",
             name="ck_ai_model_integration_provider_valid",
         ),
     )
+
+    def set_access_token(self, token: str) -> None:
+        """Encrypt a provider token before persistence."""
+        from utils.encryption import encrypt_password
+
+        self.access_token_encrypted = encrypt_password(token)
+
+    def get_access_token(self) -> str:
+        """Decrypt the provider token only at the execution boundary."""
+        from utils.encryption import decrypt_password
+
+        if not self.access_token_encrypted:
+            raise ValueError("Remote inference access token is not configured.")
+        return decrypt_password(self.access_token_encrypted)
 
 
 class GradingTask(Base):
@@ -3110,7 +3128,12 @@ from remidio_api_integration.models import (  # noqa: E402,F401
 )
 from remote_inference.models import (  # noqa: E402,F401
     DiseaseReportLinkage,
+    EncounterAIImageResult,
+    EncounterAIInferenceRun,
+    EncounterAIOutputTarget,
+    EncounterAITargetResult,
     ProjectAutomatedRemoteInferenceRule,
+    ProjectEncounterAIWorkflow,
     ProjectManualRemoteInferenceWorkflow,
 )
 from grading_allocation.models import (  # noqa: E402,F401

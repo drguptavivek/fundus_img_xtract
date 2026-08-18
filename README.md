@@ -224,6 +224,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSetTypes API](docs/API/encounter-set-types/README.md) - Reusable encounter-set type CRUD and metadata-schema contract
 - [Upload Metadata Field Definitions API](docs/API/upload-metadata/README.md) - Standalone metadata field masters reusable across upload workflows
 - [Grading Schemes API](docs/API/grading-schemes/README.md) - Disease-backed grading scheme dashboard and metadata API
+- [MadhuNetrAI DR-DME Encounter APIs](docs/API/madhunetra-dr-dme/README.md) - Encrypted provider configuration, project controls, eligible EncounterSet candidates, and encounter-scoped manual jobs
 - [Consolidated Grading Workbench Module Plan](docs/15-DEVELOPMENT/grading_workbench_consolidation_plan.md) - Plan to fold ordinary and EncounterSet package grading into one session, lease, annotation, submission, history, and next-work module
 - [Deep Discrepancy Review Module Plan](docs/15-DEVELOPMENT/discrepancy_review_deep_module_plan.md) - Cohesive review queues, canonical filters, leases/resume, AI assessment, workbench-backed human review, audit, refresh, export, and test plan
 - [Comprehensive Clinical Search Deep-Module Plan](docs/15-DEVELOPMENT/clinical_search_deep_module_plan.md) - Shared task-boundary search, canonical grading and signal semantics, project-configured referral diseases, immutable selections, discrepancy integration, and test plan

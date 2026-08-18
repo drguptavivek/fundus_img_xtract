@@ -1783,17 +1783,22 @@ def _queue_encounter_set_ai_inference(result: dict[str, Any], *, user_id: int | 
             encounter_ids_from_ingest_result,
             enqueue_wadhwani_for_encounter_ids,
         )
+        from remote_inference.encounter_service import enqueue_automatic_encounters
 
         encounter_ids = encounter_ids_from_ingest_result(result)
         if not encounter_ids:
             return {"wadhwani_tasks_queued": 0}
         ai_result = enqueue_wadhwani_for_encounter_ids(encounter_ids, trigger_timing="on_image_received", user_id=user_id)
+        dr_dme_result = enqueue_automatic_encounters(encounter_ids, user_id=user_id)
         LOGGER.info(
             "Queued EncounterSet Wadhwani inference from Remidio API encounter_count=%s task_count=%s",
             sanitize_log_value(len(encounter_ids)),
             sanitize_log_value(ai_result.get("wadhwani_tasks_queued", 0)),
         )
-        return {"wadhwani_tasks_queued": int(ai_result.get("wadhwani_tasks_queued", 0) or 0)}
+        return {
+            "wadhwani_tasks_queued": int(ai_result.get("wadhwani_tasks_queued", 0) or 0),
+            "madhunetra_encounters_queued": int(dr_dme_result.get("madhunetra_encounters_queued", 0) or 0),
+        }
     except Exception as exc:  # noqa: BLE001
         LOGGER.warning(
             "Failed to queue EncounterSet Wadhwani inference from Remidio API error=%s",

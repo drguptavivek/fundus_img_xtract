@@ -6,6 +6,7 @@ from models import AIModel
 from auth.roles import roles_required
 from utils.utils import get_db_session
 from services.wadhwani_glaucoma_inference import run_task_inference
+from remote_inference import encounter_service
 from . import api_bp
 
 
@@ -69,3 +70,23 @@ def infer_wadhwani_glaucoma_task(task_id: int):
     }
     status_code = 200 if body["success"] else 400
     return jsonify(body), status_code
+
+
+@api_bp.route("/ai-models/madhunetra-dr-dme/integration", methods=["GET"])
+@roles_required("admin")
+def get_madhunetra_dr_dme_integration():
+    """Return non-secret MadhuNetrAI integration configuration."""
+    with get_db_session() as db:
+        payload = encounter_service.integration_context(db)
+    if payload is None:
+        return jsonify(success=False, error="MadhuNetrAI integration is not installed."), 404
+    return jsonify(success=True, integration=payload)
+
+
+@api_bp.route("/ai-models/madhunetra-dr-dme/integration", methods=["PATCH", "POST"])
+@roles_required("admin")
+def save_madhunetra_dr_dme_integration():
+    """Store endpoint/environment and an encrypted access token."""
+    payload = request.get_json(silent=True) or {}
+    result = encounter_service.save_integration(payload)
+    return jsonify(success=result.success, message=result.message, error=None if result.success else result.message), result.status_code

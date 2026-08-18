@@ -87,3 +87,42 @@ def test_resume_interrupted_wadhwani_job_api(client, login_user, monkeypatch):
     assert response.status_code == 200
     assert response.get_json()["resumed_task_count"] == 2
     assert captured["job_token"] == "batch-token"
+
+
+def test_create_dr_dme_encounter_job_api_uses_encounter_contract(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    def create_manual_job(**kwargs):
+        captured.update(kwargs)
+        return MutationResult(True, "Queued.", payload={"job_token": "job-1"}, status_code=202)
+
+    monkeypatch.setattr(routes.encounter_service, "create_manual_job", create_manual_job)
+    response = client.post(
+        "/api/remote-inference/encounter-set-jobs",
+        json={"project_id": 2, "workflow": "dr_dme", "encounter_ids": [11, 12]},
+    )
+
+    assert response.status_code == 202
+    assert response.get_json()["job_token"] == "job-1"
+    assert captured["project_id"] == 2
+    assert captured["encounter_ids"] == [11, 12]
+
+
+def test_save_dr_dme_project_workflow_api_keeps_controls_independent(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    def save(user_id, project_id, payload):
+        captured.update(user_id=user_id, project_id=project_id, payload=payload)
+        return MutationResult(True, "Updated.")
+
+    monkeypatch.setattr(routes.encounter_service, "save_workflow", save)
+    response = client.patch(
+        "/api/remote-inference/projects/2/encounter-workflows/dr-dme",
+        json={"manual_enabled": True, "automatic_enabled": False, "automatic_eligibility": "always"},
+    )
+
+    assert response.status_code == 200
+    assert captured["payload"]["manual_enabled"] is True
+    assert captured["payload"]["automatic_enabled"] is False

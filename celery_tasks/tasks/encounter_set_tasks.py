@@ -230,6 +230,22 @@ def process_encounter_set_attachment_pdf_ocr_task(
                     exc_info=True,
                 )
 
+        madhunetra_result = {"madhunetra_encounters_queued": 0, "madhunetra_job_tokens": []}
+        try:
+            from remote_inference.encounter_service import enqueue_automatic_encounters
+
+            madhunetra_result = enqueue_automatic_encounters(
+                [record.patient_encounter_id],
+                user_id=user_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "EncounterSet attachment PDF OCR could not queue MadhuNetrAI inference id=%s error=%s",
+                sanitize_log_value(attachment_id),
+                sanitize_log_value(exc),
+                exc_info=True,
+            )
+
         logger.info(
             "EncounterSet attachment PDF OCR complete id=%s filename=%s user=%s status=%s",
             sanitize_log_value(attachment_id),
@@ -243,6 +259,7 @@ def process_encounter_set_attachment_pdf_ocr_task(
             "ocr": ocr_result,
             "wadhwani_tasks_queued": len(wadhwani_task_ids) if wadhwani_job_token else 0,
             "wadhwani_job_token": wadhwani_job_token,
+            **madhunetra_result,
         }
     except Exception as exc:  # noqa: BLE001
         session.rollback()

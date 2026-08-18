@@ -41,10 +41,11 @@ To stop new provider calls, clear **Link to and enable MadhuNetrAI DR + DME API*
 Provider configuration and project authorization are separate controls:
 
 1. Open **Admin → Projects** and select the project.
-2. Find the DR-DME Encounter Remote AI Workflow settings.
-3. Enable **Manual** to allow authorized operators to queue verified EncounterSets.
-4. Enable **Automatic** only when eligible prospective ingestion should trigger screening automatically.
-5. Resolve any displayed blockers. The project needs an active profile capable of producing image-level DR and DME EncounterSet tasks. Automatic execution additionally requires a supported active Remidio API binding.
+2. Under **Manual Remote AI Workflows**, enable **MadhuNetrAI DR + DME — EncounterSet screening** to allow authorized operators to queue verified EncounterSets.
+3. Under **Automated Remote AI Inference**, enable the **DR + DME** row only when eligible prospective ingestion should trigger screening automatically.
+4. Select the automatic eligibility rule in that row: **Always** or **OCR-confirmed DR report**.
+5. Save each section independently. Saving either section preserves the setting in the other section.
+6. Resolve any displayed blockers. The project needs an active profile capable of producing image-level DR and DME EncounterSet tasks. Automatic execution additionally requires a supported active Remidio API binding.
 
 ## Run a manual screening
 

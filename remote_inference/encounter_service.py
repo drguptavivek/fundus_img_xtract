@@ -15,7 +15,7 @@ from remote_inference.dr_dme_service import PROVIDER, WORKFLOW_KEY, evaluate_enc
 from remote_inference.models import EncounterAIInferenceRun, EncounterAIOutputTarget, ProjectEncounterAIWorkflow
 from remote_inference.automated_service import _project_capabilities
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding
-from upload_profiles.models import ProjectUploadProfile
+from upload_profiles.models import ProjectUploadProfile, UploadProfile
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.service import manager_lab_unit_ids
 from utils.celery_helpers import enqueue_task
@@ -58,6 +58,11 @@ def workflow_context(db, project_id: int) -> dict[str, Any]:
         capabilities.get((target.disease_id, "encounter_set"), set()) for target in targets
     ]
     common_profiles = set.intersection(*supporting_profile_sets) if supporting_profile_sets else set()
+    supporting_profile_names = list(
+        db.execute(
+            select(UploadProfile.name).where(UploadProfile.id.in_(common_profiles)).order_by(UploadProfile.name)
+        ).scalars()
+    ) if common_profiles else []
     if len(targets) == 2 and not common_profiles:
         blockers.append("One active project profile must support image-level DR and DME EncounterSet tasks.")
     automatic_blockers = list(blockers)
@@ -77,6 +82,8 @@ def workflow_context(db, project_id: int) -> dict[str, Any]:
         "execution_scope": "encounter",
         "provider": PROVIDER,
         "ai_model_id": integration.ai_model_id if integration else None,
+        "ai_model_name": integration.ai_model.name if integration and integration.ai_model else None,
+        "ai_model_version": integration.ai_model.version if integration and integration.ai_model else None,
         "automatic_enabled": bool(workflow and workflow.active and workflow.automatic_enabled),
         "manual_enabled": bool(workflow and workflow.active and workflow.manual_enabled),
         "automatic_eligibility": workflow.automatic_eligibility if workflow else "always",
@@ -84,6 +91,7 @@ def workflow_context(db, project_id: int) -> dict[str, Any]:
         "maximum_images_per_eye": 10,
         "output_targets": [row.target_key for row in targets],
         "supporting_profiles": sorted(common_profiles),
+        "supporting_profile_names": supporting_profile_names,
         "manual_capable": not blockers,
         "automatic_capable": not automatic_blockers,
         "capable": not blockers,

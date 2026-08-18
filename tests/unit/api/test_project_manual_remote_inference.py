@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 from api import remote_inference as routes
@@ -126,3 +127,41 @@ def test_save_dr_dme_project_workflow_api_keeps_controls_independent(client, log
     assert response.status_code == 200
     assert captured["payload"]["manual_enabled"] is True
     assert captured["payload"]["automatic_enabled"] is False
+
+
+def test_save_dr_dme_project_workflow_form_preserves_both_section_controls(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    def save(user_id, project_id, payload):
+        captured.update(user_id=user_id, project_id=project_id, payload=payload)
+        return MutationResult(True, "Updated.")
+
+    monkeypatch.setattr(routes.encounter_service, "save_workflow", save)
+    response = client.post(
+        "/api/remote-inference/projects/2/encounter-workflows/dr-dme",
+        data={
+            "manual_enabled": "on",
+            "automatic_enabled": "on",
+            "automatic_eligibility": "if_dr_ocr_report_present",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["payload"]["manual_enabled"] is True
+    assert captured["payload"]["automatic_enabled"] is True
+    assert captured["payload"]["automatic_eligibility"] == "if_dr_ocr_report_present"
+
+
+def test_project_template_places_dr_dme_controls_in_manual_and_automated_sections():
+    template = (
+        Path(__file__).resolve().parents[3]
+        / "templates/admin/partials/project_detail_panel.html"
+    ).read_text(encoding="utf-8")
+    manual = template.split("Manual Remote AI Workflows", 1)[1].split("Automated Remote AI Inference", 1)[0]
+    automated = template.split("Automated Remote AI Inference", 1)[1]
+
+    assert "dr_dme_manual_enabled" in manual
+    assert "dr_dme_automatic_enabled" not in manual
+    assert 'form="drDmeAutomaticForm" name="automatic_enabled"' in automated
+    assert "dr_dme_manual_enabled" not in automated

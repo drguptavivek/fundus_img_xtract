@@ -5,6 +5,7 @@
   <div class="card-body text-center text-muted py-5">Project not found in your scope.</div>
 </div>
 {% else %}
+{% set dr_dme = dr_dme_encounter_workflow %}
 <div class="card shadow-sm" id="project-detail-panel">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div>
@@ -73,50 +74,6 @@
             {% endfor %}
           </div>
           <button class="btn btn-primary" type="submit">Save Referral Diseases</button>
-        </form>
-      </div>
-
-      <div class="col-12">
-        {% set dr_dme = dr_dme_encounter_workflow %}
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-          <h3 class="h6 mb-0">MadhuNetrAI DR + DME</h3>
-          <span class="badge {% if dr_dme.capable %}text-bg-success{% else %}text-bg-warning{% endif %}">
-            {% if dr_dme.capable %}Available{% else %}Configuration required{% endif %}
-          </span>
-        </div>
-        <form class="border rounded p-3 mb-3"
-              method="post"
-              action="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
-              hx-post="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
-              hx-swap="none"
-              data-json-api-htmx
-              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
-              data-json-api-reload-target="#project-detail-workspace">
-          {{ csrf_field() }}
-          <p class="small text-muted">One encounter-level screening sends macula-focused images (maximum 10 per eye) and creates both DR and DME AI grades.</p>
-          {% if dr_dme.automatic_blocking_reasons %}
-          <div class="alert alert-warning py-2">
-            <ul class="mb-0">{% for reason in dr_dme.automatic_blocking_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
-          </div>
-          {% endif %}
-          <div class="row g-3 align-items-end">
-            <div class="col-md-3 form-check ms-2">
-              <input class="form-check-input" type="checkbox" name="manual_enabled" id="dr_dme_manual_enabled" {% if dr_dme.manual_enabled %}checked{% endif %} {% if not dr_dme.manual_capable %}disabled{% endif %}>
-              <label class="form-check-label" for="dr_dme_manual_enabled">Enable manual runs</label>
-            </div>
-            <div class="col-md-3 form-check ms-2">
-              <input class="form-check-input" type="checkbox" name="automatic_enabled" id="dr_dme_automatic_enabled" {% if dr_dme.automatic_enabled %}checked{% endif %} {% if not dr_dme.automatic_capable %}disabled{% endif %}>
-              <label class="form-check-label" for="dr_dme_automatic_enabled">Enable automatic runs</label>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" for="dr_dme_automatic_eligibility">Automatic eligibility</label>
-              <select class="form-select form-select-sm" name="automatic_eligibility" id="dr_dme_automatic_eligibility" {% if not dr_dme.automatic_capable %}disabled{% endif %}>
-                <option value="always" {% if dr_dme.automatic_eligibility == 'always' %}selected{% endif %}>Always run after supported API ingestion</option>
-                <option value="if_dr_ocr_report_present" {% if dr_dme.automatic_eligibility == 'if_dr_ocr_report_present' %}selected{% endif %}>Only with OCR-confirmed DR report</option>
-              </select>
-            </div>
-            <div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit" {% if not dr_dme.manual_capable and not dr_dme.automatic_capable %}disabled{% endif %}>Save</button></div>
-          </div>
         </form>
       </div>
 
@@ -531,7 +488,7 @@
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <h3 class="h6 mb-0">Manual Remote AI Workflows</h3>
-          {% if manual_remote_inference_enabled %}
+          {% if manual_remote_inference_enabled or dr_dme.manual_enabled %}
           <span class="badge text-bg-success">Enabled</span>
           {% else %}
           <span class="badge text-bg-secondary">Disabled</span>
@@ -572,12 +529,38 @@
             Save Manual Workflows
           </button>
         </form>
+        <form class="border rounded p-3 mt-3"
+              method="post"
+              action="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          {% if dr_dme.automatic_enabled %}<input type="hidden" name="automatic_enabled" value="on">{% endif %}
+          <input type="hidden" name="automatic_eligibility" value="{{ dr_dme.automatic_eligibility }}">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="manual_enabled" id="dr_dme_manual_enabled" {% if dr_dme.manual_enabled %}checked{% endif %} {% if not dr_dme.manual_capable %}disabled{% endif %}>
+              <label class="form-check-label" for="dr_dme_manual_enabled">
+                <span class="fw-semibold">MadhuNetrAI DR + DME</span>
+                <span class="text-muted">— EncounterSet screening</span>
+                <span class="d-block small text-muted">{{ dr_dme.ai_model_name }} {{ dr_dme.ai_model_version }} · all eligible macula images</span>
+              </label>
+            </div>
+            <button class="btn btn-outline-primary" type="submit" {% if not dr_dme.manual_capable %}disabled{% endif %}>Save DR + DME Manual Workflow</button>
+          </div>
+          {% if dr_dme.blocking_reasons %}
+          <div class="alert alert-warning py-2 mt-3 mb-0"><ul class="mb-0">{% for reason in dr_dme.blocking_reasons %}<li>{{ reason }}</li>{% endfor %}</ul></div>
+          {% endif %}
+        </form>
       </div>
 
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <h3 class="h6 mb-0">Automated Remote AI Inference</h3>
-          {% if automated_remote_inference_enabled %}
+          {% if automated_remote_inference_enabled or dr_dme.automatic_enabled %}
           <span class="badge text-bg-success">Configured</span>
           {% else %}
           <span class="badge text-bg-secondary">Not configured</span>
@@ -597,7 +580,7 @@
           </p>
           <div class="table-responsive">
             <table class="table table-sm align-middle">
-              <thead><tr><th>Enable</th><th>Disease / model</th><th>Upload path</th><th>Supporting profiles</th><th>Eligibility</th><th>Images</th></tr></thead>
+              <thead><tr><th>Enable</th><th>Disease / model</th><th>Upload path</th><th>Supporting profiles</th><th>Eligibility</th><th>Images</th><th></th></tr></thead>
               <tbody>
                 {% for workflow in automated_remote_inference_workflows %}
                 {% set workflow_key = workflow.disease_id|string ~ ':' ~ workflow.ai_model_id|string ~ ':' ~ workflow.upload_kind %}
@@ -634,15 +617,45 @@
                     <span class="small text-muted">All eligible</span>
                     {% endif %}
                   </td>
+                  <td></td>
                 </tr>
-                {% else %}
-                <tr><td colspan="6" class="text-muted text-center py-3">No enabled model matches the disease and upload paths configured by this project's active profiles.</td></tr>
                 {% endfor %}
+                <tr>
+                  <td><input class="form-check-input" type="checkbox" form="drDmeAutomaticForm" name="automatic_enabled" value="on" aria-label="Enable DR and DME encounter inference" {% if dr_dme.automatic_enabled %}checked{% endif %} {% if not dr_dme.automatic_capable %}disabled{% endif %}></td>
+                  <td><span class="fw-semibold">DR + DME</span><span class="d-block small text-muted">{{ dr_dme.ai_model_name }} {{ dr_dme.ai_model_version }}</span></td>
+                  <td>Encounter Set</td>
+                  <td class="small">{{ dr_dme.supporting_profile_names|join(', ') or '—' }}</td>
+                  <td>
+                    <select class="form-select form-select-sm" form="drDmeAutomaticForm" name="automatic_eligibility" {% if not dr_dme.automatic_capable %}disabled{% endif %}>
+                      <option value="always" {% if dr_dme.automatic_eligibility == 'always' %}selected{% endif %}>Always</option>
+                      <option value="if_dr_ocr_report_present" {% if dr_dme.automatic_eligibility == 'if_dr_ocr_report_present' %}selected{% endif %}>OCR-confirmed DR report</option>
+                    </select>
+                  </td>
+                  <td><span class="small text-muted">Macula focused · max 10/eye</span></td>
+                  <td><button class="btn btn-sm btn-outline-primary" type="submit" form="drDmeAutomaticForm" {% if not dr_dme.automatic_capable %}disabled{% endif %}>Save</button></td>
+                </tr>
+                {% if not automated_remote_inference_workflows and not dr_dme.automatic_capable %}
+                <tr><td colspan="7" class="text-muted text-center py-3">No enabled model matches the disease and upload paths configured by this project's active profiles.</td></tr>
+                {% endif %}
               </tbody>
             </table>
           </div>
           <button class="btn btn-outline-primary" type="submit" {% if not automated_remote_inference_workflows %}disabled{% endif %}>Save Automated Workflows</button>
         </form>
+        <form id="drDmeAutomaticForm"
+              method="post"
+              action="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.save_project_dr_dme_encounter_workflow', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          {% if dr_dme.manual_enabled %}<input type="hidden" name="manual_enabled" value="on">{% endif %}
+        </form>
+        {% if dr_dme.automatic_blocking_reasons %}
+        <div class="alert alert-warning py-2 mt-3 mb-0"><ul class="mb-0">{% for reason in dr_dme.automatic_blocking_reasons %}<li>{{ reason }}</li>{% endfor %}</ul></div>
+        {% endif %}
       </div>
     </div>
   </div>

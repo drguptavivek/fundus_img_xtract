@@ -37,6 +37,8 @@ JSON request:
 
 `automatic_eligibility` is `always` or `if_dr_ocr_report_present`. The latter requires completed server-side OCR with normalized `ocr.dr_report`; an upstream/PDF report alone is insufficient. Mutations require the normal session CSRF token (`X-CSRFToken` for JSON/HTMX).
 
+In Project Settings, the manual control is presented under **Manual Remote AI Workflows** and the automatic control is presented as a DR + DME row under **Automated Remote AI Inference**. The two forms submit to this same project workflow API and preserve the other form's current value.
+
 ## Operator UI
 
 The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. The default view remains the existing image-level Glaucoma workflow.

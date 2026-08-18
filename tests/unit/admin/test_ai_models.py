@@ -122,3 +122,43 @@ def test_ai_model_health_rejects_unlinked_model(client, login_user, db_session):
     payload = response.get_json()
     assert payload["success"] is False
     assert "not linked" in payload["message"]
+
+
+def test_madhunetra_configuration_is_on_owning_model_edit_and_survives_metadata_save(
+    client,
+    login_user,
+    db_session,
+):
+    login_user("test_admin", "Test@2026")
+    integration = db_session.query(AIModelIntegration).filter_by(provider="wai_dr_dme").one()
+    model = db_session.query(AIModel).filter_by(id=integration.ai_model_id).one()
+    diseases = [link.disease for link in model.disease_links if link.active]
+
+    listing = client.get("/admin/ai-models")
+    edit = client.get(f"/admin/ai-models/{model.id}/edit")
+
+    assert listing.status_code == 200
+    assert b"Save DR + DME API configuration" not in listing.data
+    assert edit.status_code == 200
+    assert b"MadhuNetrAI DR + DME API" in edit.data
+    assert b"Save DR + DME API configuration" in edit.data
+    assert b"Link to Wadhwani Glaucoma API" not in edit.data
+    assert b"js-madhunetra-toggle" in edit.data
+    assert b"madhunetra_api_base_url" in edit.data and b"disabled" in edit.data
+
+    response = client.post(
+        f"/admin/ai-models/{model.id}/edit",
+        data={
+            "name": model.name,
+            "version": model.version,
+            "description": "updated combined model",
+            "disease_ids": [str(disease.id) for disease in diseases],
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    preserved = db_session.query(AIModelIntegration).filter_by(ai_model_id=model.id).one()
+    assert preserved.provider == "wai_dr_dme"
+    assert preserved.environment == "staging"

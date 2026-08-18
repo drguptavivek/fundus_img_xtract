@@ -17,6 +17,7 @@
 13. [Dataset Sharing](/help/dataset-sharing)
 14. [Dataset Download](/help/dataset-download)
 15. [S3 Storage Setup](/help/s3-storage-setup)
+16. [Managing the WAI DR-DME AI Model](wai-dr-dme-model-management.md)
 
 ## About This System
 

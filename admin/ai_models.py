@@ -10,7 +10,6 @@ from auth.security import hash_password
 from models import AIModel, AIModelDisease, AIModelIntegration, Disease, Grade, User
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.log_sanitize import sanitize_log_value
-from remote_inference import encounter_service
 
 AI_MODEL_LIST_ROUTE = "admin.list_and_create_ai_model"
 WADHWANI_PROVIDER = "wadhwani_glaucoma"
@@ -85,6 +84,13 @@ def _validate_wadhwani_binding(
     if not link_enabled:
         return None
 
+    if item_id is not None:
+        model_integration = db_session.execute(
+            select(AIModelIntegration).where(AIModelIntegration.ai_model_id == item_id)
+        ).scalar_one_or_none()
+        if model_integration and model_integration.provider != WADHWANI_PROVIDER:
+            return "This AI Model is already linked to another API provider."
+
     if not client_id or not bearer_token:
         return "Client ID and Bearer Token are required when linking to the Wadhwani Glaucoma API."
 
@@ -135,7 +141,7 @@ def _sync_wadhwani_integration(
     ).scalar_one_or_none()
 
     if not link_enabled:
-        if integration:
+        if integration and integration.provider == WADHWANI_PROVIDER:
             db_session.delete(integration)
         return
 
@@ -228,13 +234,11 @@ def list_and_create_ai_model():
         )
         items = db.scalars(stmt).all()
         diseases = db.scalars(select(Disease).order_by(Disease.name)).all()
-        madhunetra_integration = encounter_service.integration_context(db)
-        
+
         return render_template(
             "admin/ai_model_list.html",
             items=items,
             diseases=diseases,
-            madhunetra_integration=madhunetra_integration,
             title="AI Models",
         )
 

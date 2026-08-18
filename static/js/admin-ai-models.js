@@ -107,15 +107,30 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   document.querySelectorAll('.js-madhunetra-integration-form').forEach(function (form) {
+    const toggle = form.querySelector('.js-madhunetra-toggle');
+    const fields = form.querySelectorAll('.js-madhunetra-fields input, .js-madhunetra-fields select');
+    const syncFields = function () {
+      fields.forEach(function (field) {
+        field.disabled = !toggle?.checked;
+      });
+    };
+    if (toggle) toggle.addEventListener('change', syncFields);
+    syncFields();
+
     form.addEventListener('submit', async function (event) {
       event.preventDefault();
       const button = form.querySelector('button[type="submit"]');
       if (button) button.disabled = true;
       try {
+        // Disabled controls are omitted by FormData. Include their retained
+        // values when saving the disabled state.
+        fields.forEach(function (field) { field.disabled = false; });
+        const body = new FormData(form);
+        syncFields();
         const response = await fetch(form.action, {
           method: 'POST',
           headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''},
-          body: new FormData(form),
+          body: body,
         });
         const payload = await response.json();
         notify(payload.message || payload.error || 'Provider configuration updated.', payload.success ? 'success' : 'error');
@@ -123,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } catch (error) {
         notify(`Provider configuration failed: ${error}`, 'error');
       } finally {
+        syncFields();
         if (button) button.disabled = false;
       }
     });

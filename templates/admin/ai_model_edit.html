@@ -39,6 +39,7 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% if not integration or integration.provider == 'wadhwani_glaucoma' %}
                 <div class="mb-3">
                     <div class="form-check">
                         <input
@@ -93,11 +94,50 @@
                     </div>
                 </div>
                 {% endif %}
+                {% endif %}
                 <button type="submit" class="btn btn-primary">Save Changes</button>
                 <a href="{{ url_for('admin.list_and_create_ai_model') }}" class="btn btn-secondary">Cancel</a>
             </form>
         </div>
     </div>
+
+    {% if integration and integration.provider == 'wai_dr_dme' %}
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>MadhuNetrAI DR + DME API</span>
+            <span class="badge text-bg-{{ 'success' if integration.is_enabled else 'secondary' }}">{{ 'Linked and enabled' if integration.is_enabled else 'Linked but disabled' }}</span>
+        </div>
+        <div class="card-body">
+            <form class="js-madhunetra-integration-form" action="{{ url_for('fundus_api.save_madhunetra_dr_dme_integration') }}" method="post">
+                {{ csrf_field() }}
+                <div class="form-check mb-1">
+                    <input class="form-check-input js-madhunetra-toggle" id="madhunetra_enabled" name="is_enabled" type="checkbox" value="on" {% if integration.is_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="madhunetra_enabled">Link to and enable MadhuNetrAI DR + DME API</label>
+                </div>
+                <div class="small text-muted mb-3">Only this DR/DME AI Model owns the integration. The encrypted token is never displayed.</div>
+                <div class="row g-3 js-madhunetra-fields">
+                    <div class="col-md-6">
+                        <label class="form-label" for="madhunetra_api_base_url">API base URL</label>
+                        <input class="form-control" id="madhunetra_api_base_url" name="api_base_url" type="url" required value="{{ integration.api_base_url or '' }}" placeholder="https://provider.example.org" {% if not integration.is_enabled %}disabled{% endif %}>
+                        <div class="form-text">Enter the HTTPS server root; the inference paths are added automatically.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="madhunetra_environment">Environment</label>
+                        <select class="form-select" id="madhunetra_environment" name="environment" {% if not integration.is_enabled %}disabled{% endif %}>
+                            <option value="staging" {% if integration.environment == 'staging' %}selected{% endif %}>Staging</option>
+                            <option value="production" {% if integration.environment == 'production' %}selected{% endif %}>Production</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="madhunetra_access_token">Access token</label>
+                        <input class="form-control" id="madhunetra_access_token" name="access_token" type="password" autocomplete="new-password" placeholder="{{ 'Configured; leave blank to retain' if integration.access_token_encrypted else 'Required before enabling' }}" {% if not integration.is_enabled %}disabled{% endif %}>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" type="submit">Save DR + DME API configuration</button></div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

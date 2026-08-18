@@ -41,7 +41,7 @@ JSON request:
 
 The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. The default view remains the existing image-level Glaucoma workflow.
 
-Provider endpoint, environment, enablement, and token rotation are available to administrators under **Admin → AI Models**. The token field is always blank on render; leaving it blank retains the encrypted stored token.
+Provider endpoint, environment, enablement, and token rotation are available on the linked DR/DME model's **Edit AI Model** page under **Admin → AI Models**. The provider settings are not global and are not shown on the AI Models list. The token field is always blank on render; leaving it blank retains the encrypted stored token. See the [WAI DR-DME AI Model User Guide](../../user-guide/wai-dr-dme-model-management.md).
 
 ## Manual candidates
 

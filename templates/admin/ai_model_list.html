@@ -6,47 +6,6 @@
 <div class="container mt-4">
     <h2>Manage {{ title }}</h2>
 
-    {% if madhunetra_integration %}
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span>MadhuNetrAI Vision Centre Screening</span>
-            <span class="badge text-bg-{{ 'success' if madhunetra_integration.is_enabled else 'secondary' }}">{{ 'Enabled' if madhunetra_integration.is_enabled else 'Disabled' }}</span>
-        </div>
-        <div class="card-body">
-            <form class="js-madhunetra-integration-form" action="{{ url_for('fundus_api.save_madhunetra_dr_dme_integration') }}" method="post">
-                {{ csrf_field() }}
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" for="madhunetra_api_base_url">HTTPS API base URL</label>
-                        <input class="form-control" id="madhunetra_api_base_url" name="api_base_url" type="url" required value="{{ madhunetra_integration.api_base_url or '' }}" placeholder="https://provider.example/api">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label" for="madhunetra_environment">Environment</label>
-                        <select class="form-select" id="madhunetra_environment" name="environment">
-                            <option value="staging" {% if madhunetra_integration.environment == 'staging' %}selected{% endif %}>Staging</option>
-                            <option value="production" {% if madhunetra_integration.environment == 'production' %}selected{% endif %}>Production</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label" for="madhunetra_access_token">Access token</label>
-                        <input class="form-control" id="madhunetra_access_token" name="access_token" type="password" autocomplete="new-password" placeholder="{{ 'Configured; leave blank to retain' if madhunetra_integration.has_access_token else 'Required before enabling' }}">
-                    </div>
-                    <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-3">
-                        <div>
-                            <div class="form-check">
-                                <input class="form-check-input" id="madhunetra_enabled" name="is_enabled" type="checkbox" value="on" {% if madhunetra_integration.is_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="madhunetra_enabled">Enable provider requests</label>
-                            </div>
-                            <div class="small text-muted">The saved token is encrypted and is never returned to this page.</div>
-                        </div>
-                        <button class="btn btn-primary" type="submit">Save provider configuration</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-    {% endif %}
-
     <div class="card mb-4">
         <div class="card-header">Add New AI Model</div>
         <div class="card-body">
@@ -154,6 +113,10 @@
                                     </div>
                                     <small class="text-muted js-ai-health-text">Queued for health check...</small>
                                 </div>
+                            {% elif item.integration and item.integration.provider == 'wai_dr_dme' %}
+                                <span class="badge text-bg-{{ 'success' if item.integration.is_enabled else 'secondary' }}">
+                                    MadhuNetrAI DR + DME API · {{ 'enabled' if item.integration.is_enabled else 'disabled' }}
+                                </span>
                             {% else %}
                                 <span class="text-muted">None</span>
                             {% endif %}

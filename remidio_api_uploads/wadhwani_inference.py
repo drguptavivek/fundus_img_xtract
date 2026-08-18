@@ -16,6 +16,7 @@ from db_transaction_manager import get_db_session, transaction_scope
 from encounter_sets.models import EncounterSetAttachment
 from models import AIInferenceRun, Camera, EncounterSetImage, Grade, GradingTask, Job, JobItem, PatientEncounters
 from remote_inference.manual_service import list_manual_wadhwani_projects, project_allows_manual_wadhwani
+from remote_inference import encounter_service
 from remote_inference.job_service import is_job_resumable
 from services.encounter_set_ai_inference import enqueue_wadhwani_for_task_ids
 from utils.hospital_scoping import apply_scoping
@@ -48,6 +49,8 @@ class InferenceFilters:
 @bp.route("/uploads/encountersets/wadhwani_inference", methods=["GET"])
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference():
+    if request.args.get("workflow") == "dr_dme":
+        return _madhunetra_page(include_encounters=False)
     filters = _filters_from_request(request.args)
     with get_db_session() as db:
         integration = get_linked_wadhwani_integration(db)
@@ -60,6 +63,8 @@ def encounter_set_wadhwani_inference():
 @bp.route("/uploads/encountersets/wadhwani_inference/workspace", methods=["GET"])
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_workspace():
+    if request.args.get("workflow") == "dr_dme":
+        return _madhunetra_page(include_encounters=True, partial=True)
     filters = _filters_from_request(request.args)
     with get_db_session() as db:
         integration = get_linked_wadhwani_integration(db)
@@ -72,6 +77,23 @@ def encounter_set_wadhwani_inference_workspace():
 @bp.route("/uploads/encountersets/wadhwani_inference/run", methods=["POST"])
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_run():
+    if request.form.get("workflow") == "dr_dme":
+        project_id = _optional_int(request.form.get("project_id"))
+        encounter_ids = [value for value in (_optional_int(raw) for raw in request.form.getlist("selected_encounter_ids")) if value]
+        if not project_id:
+            flash("Select a project before queueing DR-DME screening.", "warning")
+            return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference", workflow="dr_dme"))
+        xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        result = encounter_service.create_manual_job(
+            encounter_ids=encounter_ids,
+            project_id=project_id,
+            user=current_user,
+            remote_addr=xff or (request.remote_addr or "-"),
+        )
+        if not result.success:
+            flash(result.message, "warning" if result.status_code < 500 else "danger")
+            return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference", workflow="dr_dme", project_id=project_id))
+        return redirect(url_for("remidio_api_uploads.encounter_set_wadhwani_inference_job", job_token=result.payload["job_token"], workflow="dr_dme"))
     project_id = _optional_int(request.form.get("project_id"))
     image_ids = _selected_image_ids_from_request()
     if not project_id:
@@ -120,10 +142,12 @@ def encounter_set_wadhwani_inference_run():
 @bp.route("/uploads/encountersets/wadhwani_inference/jobs/<job_token>", methods=["GET"])
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_job(job_token: str):
+    workflow = request.args.get("workflow", "glaucoma")
     return render_template(
         "remidio_api_uploads/wadhwani_inference_job.html",
         job_token=job_token,
-        page_title="EncounterSet Wadhwani Inference Status",
+        page_title="Encounter DR-DME Screening Status" if workflow == "dr_dme" else "EncounterSet Wadhwani Inference Status",
+        workflow=workflow,
     )
 
 
@@ -131,6 +155,14 @@ def encounter_set_wadhwani_inference_job(job_token: str):
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_job_status(job_token: str):
     with get_db_session() as db:
+        if request.args.get("workflow") == "dr_dme":
+            payload = encounter_service.load_job_payload(db, job_token)
+            if payload is None:
+                abort(404)
+            return (
+                render_template("remidio_api_uploads/_madhunetra_job_status.html", job=payload),
+                286 if payload["done"] else 200,
+            )
         payload = _load_job_payload(db, job_token)
         if payload is None:
             abort(404)
@@ -138,6 +170,30 @@ def encounter_set_wadhwani_inference_job_status(job_token: str):
         render_template("remidio_api_uploads/_wadhwani_inference_job_status.html", job=payload),
         286 if payload["done"] else 200,
     )
+
+
+def _madhunetra_page(*, include_encounters: bool, partial: bool = False):
+    project_id = _optional_int(request.args.get("project_id"))
+    with get_db_session() as db:
+        projects = encounter_service.list_manual_projects(db, current_user)
+        if project_id is None or not any(row["id"] == project_id for row in projects):
+            project_id = projects[0]["id"] if projects else None
+        integration = encounter_service.integration_context(db)
+        encounters = (
+            encounter_service.list_candidates(db, project_id=project_id, user=current_user)
+            if include_encounters and project_id else []
+        )
+    context = {
+        "page_title": "Encounter DR-DME Screening",
+        "workflow": "dr_dme",
+        "projects": projects,
+        "project_id": project_id,
+        "linked_integration": integration if integration and integration["is_enabled"] else None,
+        "encounters": encounters,
+        "max_encounter_sets_per_batch": encounter_service.MAX_MANUAL_ENCOUNTERS,
+    }
+    template = "remidio_api_uploads/_madhunetra_workspace.html" if partial else "remidio_api_uploads/madhunetra_inference.html"
+    return render_template(template, **context)
 
 
 def _page_context(

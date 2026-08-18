@@ -1,6 +1,7 @@
 """Configuration, candidate listing, and jobs for encounter-scoped inference."""
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
@@ -221,6 +222,77 @@ def list_candidates(db, *, project_id: int, user: Any) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def list_manual_projects(db, user: Any) -> list[dict[str, Any]]:
+    """Return scoped projects whose encounter DR-DME manual workflow is enabled."""
+    query = (
+        db.query(Project)
+        .join(ProjectEncounterAIWorkflow, ProjectEncounterAIWorkflow.project_id == Project.id)
+        .join(PatientEncounters, PatientEncounters.project_id == Project.id)
+        .filter(
+            ProjectEncounterAIWorkflow.workflow_key == WORKFLOW_KEY,
+            ProjectEncounterAIWorkflow.active.is_(True),
+            ProjectEncounterAIWorkflow.manual_enabled.is_(True),
+        )
+        .distinct()
+        .order_by(Project.title, Project.id)
+    )
+    query = apply_scoping(query, PatientEncounters, user, "upload")
+    return [{"id": row.id, "title": row.title, "code": row.code} for row in query.all()]
+
+
+def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
+    """Build a non-secret encounter-level status payload for the operator UI."""
+    job = db.execute(
+        select(Job).where(Job.token == job_token, Job.upload_type == JOB_TYPE)
+    ).scalar_one_or_none()
+    if job is None:
+        return None
+    items = db.execute(
+        select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)
+    ).scalars().all()
+    encounter_ids = [item.source_id for item in items if item.source_type == "patient_encounter" and item.source_id]
+    encounters = db.execute(
+        select(PatientEncounters).where(PatientEncounters.id.in_(encounter_ids))
+    ).scalars().all() if encounter_ids else []
+    encounters_by_id = {row.id: row for row in encounters}
+    summary = {"queued": 0, "processing": 0, "ok": 0, "error": 0}
+    rows = []
+    for item in items:
+        state = (item.state or "queued").lower()
+        summary[state if state in summary else "queued"] += 1
+        try:
+            detail = json.loads(item.detail or "{}")
+        except (TypeError, ValueError):
+            detail = {}
+        encounter = encounters_by_id.get(item.source_id)
+        rows.append(
+            {
+                "encounter_id": item.source_id,
+                "encounter_uuid": item.source_uuid or (encounter.uuid if encounter else None),
+                "patient_id": encounter.patient_id if encounter else None,
+                "capture_date": encounter.capture_date_dt or encounter.capture_date if encounter else None,
+                "state": state,
+                "message": detail.get("message"),
+                "error_code": detail.get("error_code"),
+                "request_id": detail.get("request_id"),
+                "report_id": detail.get("report_id"),
+                "run_id": detail.get("run_id"),
+                "screening_status": detail.get("status"),
+                "reused": bool(detail.get("reused")),
+            }
+        )
+    return {
+        "token": job.token,
+        "status": job.status,
+        "error": job.error,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+        "items": rows,
+        "summary": summary,
+        "done": str(job.status or "").lower() in {"done", "error", "partial"},
+    }
 
 
 def create_manual_job(

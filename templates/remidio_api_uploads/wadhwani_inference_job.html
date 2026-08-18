@@ -13,12 +13,12 @@
       <a class="btn btn-outline-primary" href="{{ url_for('analytics.wai_api_statistics') }}">
         <i class="fa-solid fa-chart-line me-1"></i>Recent WAI Results
       </a>
-      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Back to Wadhwani Browser</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow=workflow if workflow == 'dr_dme' else None) }}">Back to inference browser</a>
     </div>
   </div>
 
   <div id="wadhwaniEncounterSetJobStatus"
-       hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_job_status', job_token=job_token) }}"
+       hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_job_status', job_token=job_token, workflow=workflow if workflow == 'dr_dme' else None) }}"
        hx-trigger="load, every 5s"
        hx-swap="innerHTML">
     <div class="card shadow-sm"><div class="card-body text-muted">Loading job status…</div></div>

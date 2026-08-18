@@ -87,6 +87,10 @@ def get_madhunetra_dr_dme_integration():
 @roles_required("admin")
 def save_madhunetra_dr_dme_integration():
     """Store endpoint/environment and an encrypted access token."""
-    payload = request.get_json(silent=True) or {}
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+    else:
+        payload = request.form.to_dict()
+        payload["is_enabled"] = request.form.get("is_enabled") in {"1", "true", "on"}
     result = encounter_service.save_integration(payload)
     return jsonify(success=result.success, message=result.message, error=None if result.success else result.message), result.status_code

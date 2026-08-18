@@ -5,6 +5,7 @@ from datetime import date
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import contextmanager
 from uuid import uuid4
 
 from encounter_sets.models import EncounterSetAttachment
@@ -151,6 +152,82 @@ def test_existing_image_filters_remain_conjunctive():
 def test_encounter_set_page_and_batch_limits_are_25():
     assert ENCOUNTER_SETS_PER_PAGE == 25
     assert MAX_ENCOUNTER_SETS_PER_BATCH == 25
+
+
+def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+
+    @contextmanager
+    def fake_session():
+        yield object()
+
+    monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
+    monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference.encounter_service.list_manual_projects",
+        lambda db, user: [{"id": 7, "title": "Vision Centre", "code": "VC"}],
+    )
+    monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference.encounter_service.integration_context",
+        lambda db: {"is_enabled": True},
+    )
+    monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference.encounter_service.list_candidates",
+        lambda db, **kwargs: [{
+            "encounter_id": 17,
+            "encounter_uuid": "encounter-ui-test",
+            "patient_id": "patient-ui-test",
+            "capture_date": "2026-08-18",
+            "eligible": True,
+            "eligibility_issues": [],
+            "eye_counts": {"right": 2, "left": 3},
+            "run_status": "not_requested",
+            "report_id": None,
+        }],
+    )
+
+    page = client.get("/uploads/encountersets/wadhwani_inference?workflow=dr_dme")
+    workspace = client.get("/uploads/encountersets/wadhwani_inference/workspace?workflow=dr_dme&project_id=7")
+
+    assert page.status_code == 200
+    assert b"Encounter DR-DME Screening" in page.data
+    assert b"Glaucoma" in page.data and b"DR + DME" in page.data
+    assert workspace.status_code == 200
+    assert b"encounter-ui-test" in workspace.data
+    assert b"OD macula" in workspace.data and b'fs-4">2<' in workspace.data
+    assert b'name="selected_encounter_ids"' in workspace.data
+
+
+def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+
+    @contextmanager
+    def fake_session():
+        yield object()
+
+    monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
+    monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference.encounter_service.load_job_payload",
+        lambda db, token: {
+            "token": token,
+            "status": "done",
+            "error": None,
+            "updated_at": utcnow(),
+            "done": True,
+            "summary": {"queued": 0, "processing": 0, "ok": 1, "error": 0},
+            "items": [{
+                "encounter_id": 17, "encounter_uuid": "encounter-ui-test",
+                "patient_id": "patient-ui-test", "capture_date": "2026-08-18",
+                "state": "ok", "message": "Screening complete", "error_code": None,
+                "request_id": "request-17", "report_id": "report-17", "reused": False,
+            }],
+        },
+    )
+
+    response = client.get("/uploads/encountersets/wadhwani_inference/jobs/token-17/status?workflow=dr_dme")
+
+    assert response.status_code == 286
+    assert b"encounter-ui-test" in response.data
+    assert b"request-17" in response.data and b"report-17" in response.data
 
 
 def test_recent_jobs_button_has_only_the_project_aware_javascript_loader():

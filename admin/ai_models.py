@@ -10,6 +10,7 @@ from auth.security import hash_password
 from models import AIModel, AIModelDisease, AIModelIntegration, Disease, Grade, User
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.log_sanitize import sanitize_log_value
+from remote_inference import encounter_service
 
 AI_MODEL_LIST_ROUTE = "admin.list_and_create_ai_model"
 WADHWANI_PROVIDER = "wadhwani_glaucoma"
@@ -227,11 +228,13 @@ def list_and_create_ai_model():
         )
         items = db.scalars(stmt).all()
         diseases = db.scalars(select(Disease).order_by(Disease.name)).all()
+        madhunetra_integration = encounter_service.integration_context(db)
         
         return render_template(
             "admin/ai_model_list.html",
             items=items,
             diseases=diseases,
+            madhunetra_integration=madhunetra_integration,
             title="AI Models",
         )
 

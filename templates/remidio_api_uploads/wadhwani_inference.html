@@ -10,6 +10,10 @@
       <p class="text-muted mb-0">Queue remote glaucoma inference and visually review EncounterSet-level OCR against image-level Wadhwani results.</p>
     </div>
     <div class="d-flex gap-2">
+      <div class="btn-group" role="group" aria-label="Remote inference workflow">
+        <a class="btn btn-primary" aria-current="page" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Glaucoma</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme') }}">DR + DME</a>
+      </div>
       <a class="btn btn-outline-primary" href="{{ url_for('grading.wadhwani_glaucoma_inference_page') }}">
         Image-based Inference
       </a>

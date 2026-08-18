@@ -1,0 +1,25 @@
+<div class="card shadow-sm" data-job-done="{{ 'true' if job.done else 'false' }}">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div><h2 class="h5 mb-0">DR-DME batch status</h2><div class="small text-muted">Updated {{ job.updated_at|user_datetime if job.updated_at else '-' }}</div></div>
+    <span class="badge text-bg-{{ 'success' if job.status == 'done' else 'danger' if job.status == 'error' else 'warning' }}">{{ job.status }}</span>
+  </div>
+  <div class="card-body">
+    {% if job.error %}<div class="alert alert-danger">{{ job.error }}</div>{% endif %}
+    <div class="row row-cols-2 row-cols-md-4 g-3 mb-3">
+      {% for key, label in [('queued','Queued'),('processing','Processing'),('ok','Complete'),('error','Failed')] %}
+      <div class="col"><div class="border rounded p-3"><div class="small text-muted">{{ label }}</div><div class="fs-4">{{ job.summary[key] }}</div></div></div>
+      {% endfor %}
+    </div>
+    <div class="list-group">
+      {% for item in job['items'] %}
+      <div class="list-group-item">
+        <div class="d-flex justify-content-between gap-2"><div class="fw-semibold">EncounterSet {{ item.encounter_uuid or item.encounter_id }}</div><span class="badge text-bg-{{ 'success' if item.state == 'ok' else 'danger' if item.state == 'error' else 'warning' }}">{{ item.state }}</span></div>
+        <div class="small text-muted">Patient {{ item.patient_id or '-' }} · {{ item.capture_date or '-' }}</div>
+        <div class="small mt-2">{{ item.message or '-' }}{% if item.reused %} · reused existing result{% endif %}</div>
+        {% if item.request_id or item.report_id %}<div class="small text-muted">Request {{ item.request_id or '-' }} · Report {{ item.report_id or '-' }}</div>{% endif %}
+        {% if item.error_code %}<div class="small text-danger">{{ item.error_code }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

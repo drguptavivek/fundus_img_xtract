@@ -105,4 +105,26 @@ document.addEventListener('DOMContentLoaded', function () {
       await runHealthCheck(container, { notifyOnFailure: true, notifyOnSuccess: true });
     });
   });
+
+  document.querySelectorAll('.js-madhunetra-integration-form').forEach(function (form) {
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''},
+          body: new FormData(form),
+        });
+        const payload = await response.json();
+        notify(payload.message || payload.error || 'Provider configuration updated.', payload.success ? 'success' : 'error');
+        if (payload.success) window.location.reload();
+      } catch (error) {
+        notify(`Provider configuration failed: ${error}`, 'error');
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  });
 });

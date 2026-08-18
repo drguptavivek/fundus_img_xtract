@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ page_title }}</h1>
+      <p class="text-muted mb-0">Submit every eligible macula image in an EncounterSet as one combined DR and DME screening.</p>
+    </div>
+    <div class="btn-group" role="group" aria-label="Remote inference workflow">
+      <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Glaucoma</a>
+      <a class="btn btn-primary" aria-current="page" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme') }}">DR + DME</a>
+    </div>
+  </div>
+
+  {% if not linked_integration %}
+  <div class="alert alert-warning">MadhuNetrAI is not enabled or has incomplete provider configuration. An administrator can configure it under AI Models.</div>
+  {% endif %}
+  {% if not projects %}
+  <div class="alert alert-info">No projects in your scope are enabled for manual DR-DME encounter screening. Enable it under Admin → Projects → Remote AI Workflows.</div>
+  {% endif %}
+
+  <form id="madhunetraFilters" class="card shadow-sm mb-3"
+        hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+        hx-target="#madhunetraWorkspace" hx-trigger="submit" hx-swap="innerHTML">
+    <input type="hidden" name="workflow" value="dr_dme">
+    <div class="card-body row g-3 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label" for="project_id">Project</label>
+        <select class="form-select" id="project_id" name="project_id">
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if project.id == project_id %}selected{% endif %}>{{ project.title }}{% if project.code %} · {{ project.code }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">Load candidates</button></div>
+    </div>
+  </form>
+
+  <div id="madhunetraWorkspace"
+       hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace', workflow='dr_dme', project_id=project_id or '') }}"
+       hx-trigger="load" hx-swap="innerHTML">
+    <div class="card shadow-sm"><div class="card-body text-muted">Loading DR-DME candidates…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+{% endblock %}

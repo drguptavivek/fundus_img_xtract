@@ -55,3 +55,28 @@ def test_madhunetra_integration_api_never_echoes_token(client, login_user, monke
     assert response.status_code == 200
     assert captured["access_token"] == "plain-secret"
     assert "plain-secret" not in response.get_data(as_text=True)
+
+
+def test_madhunetra_integration_api_accepts_admin_form(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    def save(payload):
+        captured.update(payload)
+        return MutationResult(True, "Updated.")
+
+    monkeypatch.setattr("api.ai_models.encounter_service.save_integration", save)
+    response = client.post(
+        "/api/ai-models/madhunetra-dr-dme/integration",
+        data={
+            "api_base_url": "https://wai.example",
+            "environment": "production",
+            "access_token": "form-secret",
+            "is_enabled": "on",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["is_enabled"] is True
+    assert captured["access_token"] == "form-secret"
+    assert "form-secret" not in response.get_data(as_text=True)

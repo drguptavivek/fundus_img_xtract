@@ -4,7 +4,7 @@ The `dr_dme` workflow submits one verified EncounterSet as one synchronous Madhu
 
 ## Integration configuration
 
-`GET /api/ai-models/madhunetra-dr-dme/integration` and `PATCH /api/ai-models/madhunetra-dr-dme/integration` are restricted to `admin`. The GET response reports only whether a token exists. It never returns the token.
+`GET /api/ai-models/madhunetra-dr-dme/integration` and `PATCH|POST /api/ai-models/madhunetra-dr-dme/integration` are restricted to `admin`. The GET response reports only whether a token exists. It never returns the token. JSON and form-encoded mutations are supported; unchecked form checkboxes disable the integration.
 
 ```json
 {
@@ -36,6 +36,12 @@ JSON request:
 ```
 
 `automatic_eligibility` is `always` or `if_dr_ocr_report_present`. The latter requires completed server-side OCR with normalized `ocr.dr_report`; an upstream/PDF report alone is insufficient. Mutations require the normal session CSRF token (`X-CSRFToken` for JSON/HTMX).
+
+## Operator UI
+
+The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. The default view remains the existing image-level Glaucoma workflow.
+
+Provider endpoint, environment, enablement, and token rotation are available to administrators under **Admin → AI Models**. The token field is always blank on render; leaving it blank retains the encrypted stored token.
 
 ## Manual candidates
 

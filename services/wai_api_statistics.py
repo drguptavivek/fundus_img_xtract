@@ -1,4 +1,4 @@
-"""Query helpers for WAI API statistics backed by ai_inference_runs_mv."""
+"""Query helpers for unified WAI Glaucoma and MadhuNetrAI DR/DME analytics."""
 
 from __future__ import annotations
 
@@ -16,9 +16,10 @@ from utils.celery_helpers import enqueue_task
 
 
 RESULT_TYPES = ("positive", "negative", "inconclusive")
-INFERENCE_STATUSES = ("success", "failed", "running", "queued")
+INFERENCE_STATUSES = ("success", "partial", "failed", "running", "queued")
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
+STATS_SOURCE = "wai_api_statistics_rows_v"
 
 
 @dataclass(frozen=True)
@@ -174,7 +175,7 @@ def get_filter_options(db: Session, user: Any) -> dict[str, Any]:
                 FILTER (WHERE ai_model_id IS NOT NULL),
                 '[]'::jsonb
             ) AS models
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
     """
     row = db.execute(_statement(sql, params), params).mappings().one()
@@ -196,9 +197,9 @@ def get_summary(db: Session, user: Any, filters: WaiStatsFilters) -> dict[str, A
             COUNT(DISTINCT normalized_patient_encounter_id) FILTER (WHERE normalized_patient_encounter_id IS NOT NULL) AS encounters,
             COUNT(DISTINCT image_uuid) FILTER (WHERE result_type = 'positive' AND image_source <> 'encounter' AND image_uuid IS NOT NULL) AS positive_images,
             COUNT(DISTINCT normalized_patient_encounter_id) FILTER (WHERE result_type = 'positive' AND normalized_patient_encounter_id IS NOT NULL) AS positive_encounters,
-            COUNT(*) FILTER (WHERE inference_status = 'failed') AS failed_runs,
+            COUNT(DISTINCT inference_run_key) FILTER (WHERE inference_status = 'failed') AS failed_runs,
             COUNT(*) FILTER (WHERE result_type = 'inconclusive') AS inconclusive_runs
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
     """
     row = db.execute(_statement(sql, params), params).mappings().one()
@@ -212,7 +213,7 @@ def get_summary(db: Session, user: Any, filters: WaiStatsFilters) -> dict[str, A
             COUNT(*) FILTER (WHERE result_type = 'negative') AS negative,
             COUNT(*) FILTER (WHERE result_type = 'inconclusive') AS inconclusive,
             COUNT(*) FILTER (WHERE inference_status = 'failed') AS failed
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
         GROUP BY DATE_TRUNC('month', inference_created_at)
         ORDER BY month DESC
@@ -246,12 +247,13 @@ def get_image_results(db: Session, user: Any, filters: WaiStatsFilters, *, page:
     where_sql = f"{where_sql} AND image_source <> 'encounter' AND image_uuid IS NOT NULL"
 
     total = db.execute(
-        _statement(f"SELECT COUNT(*) FROM ai_inference_runs_mv WHERE {where_sql}", params),
+        _statement(f"SELECT COUNT(*) FROM {STATS_SOURCE} WHERE {where_sql}", params),
         params,
     ).scalar_one()
     sql = f"""
         SELECT
             inference_run_id,
+            inference_kind,
             task_id,
             task_uuid,
             disease_name,
@@ -277,7 +279,7 @@ def get_image_results(db: Session, user: Any, filters: WaiStatsFilters, *, page:
             http_status,
             error_code,
             error_message
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
         ORDER BY inference_created_at DESC, inference_run_id DESC
         LIMIT :limit OFFSET :offset
@@ -303,8 +305,8 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
             MAX(normalized_capture_date) AS normalized_capture_date,
             MAX(inference_created_at) AS latest_inference_at,
             COUNT(DISTINCT image_uuid) FILTER (WHERE image_source <> 'encounter' AND image_uuid IS NOT NULL) AS image_count,
-            COUNT(*) AS run_count,
-            COUNT(*) FILTER (WHERE inference_status = 'failed') AS failed_count,
+            COUNT(DISTINCT inference_run_key) AS run_count,
+            COUNT(DISTINCT inference_run_key) FILTER (WHERE inference_status = 'failed') AS failed_count,
             COUNT(*) FILTER (WHERE result_type = 'positive') AS positive_count,
             COUNT(*) FILTER (WHERE result_type = 'negative') AS negative_count,
             COUNT(*) FILTER (WHERE result_type = 'inconclusive') AS inconclusive_count,
@@ -319,6 +321,7 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
                 JSONB_BUILD_OBJECT(
                     'image_uuid', image_uuid,
                     'inference_run_id', inference_run_id,
+                    'inference_kind', inference_kind,
                     'image_filename', image_filename,
                     'disease_name', disease_name,
                     'model', ai_model_name || ' ' || ai_model_version,
@@ -330,9 +333,9 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
                     'error_code', error_code,
                     'error_message', error_message
                 )
-                ORDER BY inference_created_at DESC, inference_run_id DESC
+                ORDER BY inference_created_at DESC, inference_run_id DESC, disease_name, image_uuid
             ) FILTER (WHERE image_uuid IS NOT NULL) AS image_results
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
         GROUP BY normalized_patient_encounter_id
     """
@@ -361,6 +364,7 @@ def retry_failed_inference_run(
             "inference_run_id = :inference_run_id",
             "is_latest_for_task_model IS TRUE",
             "inference_status = 'failed'",
+            "inference_kind = 'glaucoma_task'",
             *_scope_clause(db, user, params),
         ]
     )
@@ -372,7 +376,7 @@ def retry_failed_inference_run(
             image_filename,
             image_uuid,
             error_code
-        FROM ai_inference_runs_mv
+        FROM {STATS_SOURCE}
         WHERE {where_sql}
         LIMIT 1
     """

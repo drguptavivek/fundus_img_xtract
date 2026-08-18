@@ -112,6 +112,31 @@ def _metadata_value(metadata: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+DEFAULT_PATIENT_METADATA_MAPPING = {
+    "patient_id": "__encounter_patient_id__",
+    "age": "patient_age_yrs",
+    "sex": "sex",
+    "is_monocular": "is_monocular",
+}
+
+
+def _patient_metadata_mapping(encounter: PatientEncounters) -> dict[str, str]:
+    return DEFAULT_PATIENT_METADATA_MAPPING
+
+
+def _patient_value(encounter: PatientEncounters, role: str, *fallback_keys: str) -> Any:
+    metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
+    field_key = _patient_metadata_mapping(encounter).get(role)
+    if role == "patient_id" and field_key == "__encounter_patient_id__":
+        if encounter.patient_id not in (None, ""):
+            return encounter.patient_id
+    if field_key:
+        value = _metadata_value(metadata, field_key)
+        if value not in (None, ""):
+            return value
+    return _metadata_value(metadata, *fallback_keys)
+
+
 def _content_type(filename: str) -> str | None:
     suffix = Path(filename).suffix.lower()
     if suffix in {".jpg", ".jpeg"}:
@@ -125,16 +150,18 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
     issues: list[str] = []
     if require_verified and str(encounter.encounter_verified_status or "").lower() != "verified":
         issues.append("EncounterSet is not verified.")
-    patient_id = str(encounter.patient_id or "")
+    patient_id = str(_patient_value(encounter, "patient_id", "hospital_UHID", "mrn", "uhid") or "")
     if not patient_id or len(patient_id) > 30:
         issues.append("Patient identifier must contain 1 to 30 characters.")
-    metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
     try:
-        age = int(_metadata_value(metadata, "age", "patient_age"))
+        age = int(_patient_value(encounter, "age", "patient_age_yrs", "age", "patient_age", "age_yrs"))
     except (TypeError, ValueError):
         age = -1
     if age < 0 or age > 120:
         issues.append("Patient age must be between 0 and 120.")
+    sex = str(_patient_value(encounter, "sex", "sex", "gender") or "").strip().lower()
+    if sex not in {"male", "female", "other"}:
+        issues.append("Patient sex must be male, female, or other.")
 
     selected: list[EligibleImage] = []
     for image in sorted(encounter.encounter_set_images, key=lambda row: (row.spatial_position, row.id)):
@@ -158,8 +185,11 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
         selected.append(EligibleImage(image.id, image.uuid, filename, eye, content_type))
     if not selected:
         issues.append("No macula-focused image has unambiguous laterality.")
+    eye_counts = {eye: sum(row.eye == eye for row in selected) for eye in ("left", "right")}
+    if selected and 0 in eye_counts.values() and _patient_value(encounter, "is_monocular", "is_monocular") is not True:
+        issues.append("Both eyes require a macula image unless the patient is marked monocular.")
     for eye in ("left", "right"):
-        if sum(row.eye == eye for row in selected) > 10:
+        if eye_counts[eye] > 10:
             issues.append(f"More than 10 {eye}-eye images are present; the encounter cannot be split or truncated.")
     return EncounterEligibility(not issues, tuple(issues), tuple(selected))
 
@@ -183,17 +213,59 @@ def workflow_allows_automatic(workflow: ProjectEncounterAIWorkflow, encounter: P
 
 
 def _patient_payload(encounter: PatientEncounters) -> dict[str, Any]:
-    metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
     payload: dict[str, Any] = {
-        "patient_id": str(encounter.patient_id),
-        "age": int(_metadata_value(metadata, "age", "patient_age")),
+        "patient_id": str(_patient_value(encounter, "patient_id", "hospital_UHID", "mrn", "uhid")),
+        "age": int(_patient_value(encounter, "age", "patient_age_yrs", "age", "patient_age", "age_yrs")),
     }
-    sex = str(_metadata_value(metadata, "sex", "gender") or "").strip().lower()
+    sex = str(_patient_value(encounter, "sex", "sex", "gender") or "").strip().lower()
     if sex in {"male", "female", "other"}:
         payload["sex"] = sex
-    if _metadata_value(metadata, "is_monocular") is True:
+    if _patient_value(encounter, "is_monocular", "is_monocular") is True:
         payload["is_monocular"] = True
     return payload
+
+
+def _find_local_grading(db, disease_id: int, mapped: str) -> DiseaseGrading | None:
+    grading = db.execute(
+        select(DiseaseGrading).where(
+            DiseaseGrading.disease_id == disease_id,
+            func.lower(DiseaseGrading.impression) == mapped.lower(),
+            DiseaseGrading.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if grading is None and mapped == "Not Gradable":
+        grading = db.execute(
+            select(DiseaseGrading).where(
+                DiseaseGrading.disease_id == disease_id,
+                DiseaseGrading.is_ungradable.is_(True),
+                DiseaseGrading.is_active.is_(True),
+            )
+        ).scalars().first()
+    return grading
+
+
+def _validate_output_mappings(db, ai_model_id: int) -> None:
+    """Fail before contacting the provider when a local grade mapping is stale."""
+    targets = db.execute(
+        select(EncounterAIOutputTarget).where(
+            EncounterAIOutputTarget.ai_model_id == ai_model_id,
+            EncounterAIOutputTarget.active.is_(True),
+        )
+    ).scalars().all()
+    if {target.target_key for target in targets} != {"dr", "dme"}:
+        raise EncounterInferenceError("target_mapping_invalid", "Active DR and DME output mappings are required.")
+    for target in targets:
+        for mapped in set((target.label_mapping_json or {}).values()):
+            if not isinstance(mapped, str) or not mapped.strip():
+                raise EncounterInferenceError(
+                    "grade_mapping_invalid",
+                    f"The {target.target_key.upper()} output mapping contains an empty local grade.",
+                )
+            if _find_local_grading(db, target.disease_id, mapped) is None:
+                raise EncounterInferenceError(
+                    "grade_mapping_invalid",
+                    f"Configured local grade {mapped!r} does not exist.",
+                )
 
 
 def _read_image_bytes(image: EncounterSetImage, filename: str) -> bytes:
@@ -263,14 +335,30 @@ def run_encounter_inference(
         if not eligibility.eligible:
             raise EncounterInferenceError("ineligible_encounter", "; ".join(eligibility.issues))
         existing = db.execute(
-            select(EncounterAIInferenceRun).where(
+            select(EncounterAIInferenceRun)
+            .options(selectinload(EncounterAIInferenceRun.image_results))
+            .where(
                 EncounterAIInferenceRun.patient_encounter_id == encounter.id,
                 EncounterAIInferenceRun.ai_model_id == integration.ai_model_id,
             )
         ).scalar_one_or_none()
         if existing and existing.status in {"success", "partial"}:
             return EncounterInferenceResult(existing.id, existing.request_id, existing.report_id, existing.status, True)
+        _validate_output_mappings(db, integration.ai_model_id)
         config = {**DEFAULT_CONFIG, **(integration.config_json or {})}
+        retrying_failed_run = existing is not None and existing.status == "failed"
+        if retrying_failed_run:
+            # Keep the durable run/request identity, but discard attempt-scoped
+            # evidence so changed image selections cannot collide with stale rows.
+            existing.image_results.clear()
+            db.flush()
+            existing.report_id = None
+            existing.http_status = None
+            existing.presign_response_json = None
+            existing.submit_response_json = None
+            existing.error_code = None
+            existing.error_message = None
+            existing.finished_at = None
         run = existing or EncounterAIInferenceRun(
             patient_encounter_id=encounter.id,
             ai_model_id=integration.ai_model_id,
@@ -279,8 +367,11 @@ def run_encounter_inference(
             source=source,
             request_id=encounter.uuid,
         )
+        run.integration_id = integration.id
+        run.requested_by_user_id = requested_by_user_id
+        run.source = source
         run.status = "presigning"
-        run.started_at = run.started_at or utcnow()
+        run.started_at = utcnow() if retrying_failed_run else (run.started_at or utcnow())
         run.config_snapshot_json = config
         manifest = [
             {"image_id": row.image_id, "image_uuid": row.image_uuid, "original_filename": row.filename, "eye": row.eye, "content_type": row.content_type}
@@ -290,8 +381,11 @@ def run_encounter_inference(
         if existing is None:
             db.add(run)
             db.flush()
+        if existing is None or retrying_failed_run:
             for row in eligibility.images:
-                db.add(EncounterAIImageResult(run_id=run.id, encounter_set_image_id=row.image_id, submitted_eye=row.eye))
+                run.image_results.append(
+                    EncounterAIImageResult(encounter_set_image_id=row.image_id, submitted_eye=row.eye)
+                )
         db.flush()
         run_id = run.id
         request_id = run.request_id
@@ -457,21 +551,7 @@ def _upsert_grade(db, run, image_result, target, mapped, raw_label, raw_score) -
         )
         db.add(task)
         db.flush()
-    grading = db.execute(
-        select(DiseaseGrading).where(
-            DiseaseGrading.disease_id == target.disease_id,
-            func.lower(DiseaseGrading.impression) == mapped.lower(),
-            DiseaseGrading.is_active.is_(True),
-        )
-    ).scalar_one_or_none()
-    if grading is None and mapped == "Not Gradable":
-        grading = db.execute(
-            select(DiseaseGrading).where(
-                DiseaseGrading.disease_id == target.disease_id,
-                DiseaseGrading.is_ungradable.is_(True),
-                DiseaseGrading.is_active.is_(True),
-            )
-        ).scalars().first()
+    grading = _find_local_grading(db, target.disease_id, mapped)
     if grading is None:
         raise EncounterInferenceError("grade_mapping_invalid", f"Configured local grade {mapped!r} does not exist.")
     ai_system = db.execute(select(User).where(User.username == "ai_system")).scalar_one_or_none()

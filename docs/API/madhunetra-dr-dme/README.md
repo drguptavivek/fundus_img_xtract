@@ -1,6 +1,8 @@
 # MadhuNetrAI DR-DME Encounter APIs
 
-The `dr_dme` workflow submits one verified EncounterSet as one synchronous MadhuNetrAI screening. It selects only JPEG/PNG macula-focused images with unambiguous laterality, permits at most 10 images per eye, and persists image-level DR and DME grades plus the complete provider output.
+The `dr_dme` workflow submits one completed EncounterSet as one synchronous MadhuNetrAI screening. Manual submissions require verification. It selects only JPEG/PNG macula-focused images with unambiguous laterality, permits at most 10 images per eye, and persists image-level DR and DME grades plus the complete provider output.
+
+The local submission contract requires a stable MRN/UHID, integer patient age from 0 through 120, and sex (`male`, `female`, or `other`). Binocular patients require at least one macula image for OD and OS. A single-eye submission is accepted only when canonical patient metadata contains boolean `is_monocular=true`. EncounterSet Types supply these standard patient fields (`hospital_UHID`, `patient_age_yrs`, `sex`, and `is_monocular`); every Upload Profile selecting that type inherits the contract. The values are not tied to Remidio ingestion.
 
 ## Integration configuration
 
@@ -41,7 +43,7 @@ In Project Settings, the manual control is presented under **Manual Remote AI Wo
 
 ## Operator UI
 
-The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. The default view remains the existing image-level Glaucoma workflow.
+The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. Completed rows show the screening status plus per-image OD/OS DR grade, DME grade, quality state, and primary-image marker. The default view remains the existing image-level Glaucoma workflow.
 
 Provider endpoint, environment, enablement, and token rotation are available on the linked DR/DME model's **Edit AI Model** page under **Admin → AI Models**. The provider settings are not global and are not shown on the AI Models list. The token field is always blank on render; leaving it blank retains the encrypted stored token. See the [WAI DR-DME AI Model User Guide](../../user-guide/wai-dr-dme-model-management.md).
 
@@ -67,7 +69,9 @@ The request accepts 1–25 authorized, eligible EncounterSets and returns HTTP `
 
 ## Persistence and retries
 
-The EncounterSet UUID is the provider `request_id` and is persisted before Presign. Retries and manual recovery reuse it; the unique encounter/model run prevents duplicate screenings. Signed upload URLs and API tokens are never persisted. The provider report ID, sanitized Presign evidence, complete Submit response, remote keys, primary-image flags, laterality mismatch, similarity score, raw DR/DME values, mapped grades, and local `Grade` lineage are retained.
+The EncounterSet UUID is the provider `request_id` and is persisted before Presign. Retries and manual recovery reuse it; the unique encounter/model run prevents duplicate screenings. Before retrying a failed run, attempt-scoped Presign/Submit/error fields and stale image-result rows are cleared and rebuilt from the current eligible image selection. The durable run and request identity remain unchanged, and the earlier batch remains available as job history. Signed upload URLs and API tokens are never persisted. The provider report ID, sanitized Presign evidence, complete Submit response, remote keys, primary-image flags, laterality mismatch, similarity score, raw DR/DME values, mapped grades, and local `Grade` lineage are retained.
+
+Completed DR and DME target results are also exposed in `/analytics/wai-api-statistics` alongside Glaucoma. Analytics rows and chips always include the disease name so identical positive/negative result types remain distinguishable.
 
 Provider upload failures are retried per image after 3 and 5 seconds. A 403 refreshes Presign with the same request ID and keys. Submit uses a 180-second timeout. Similarity scores of 80 or higher and image-level provider grading errors map both targets to the canonical ungradable grade while preserving raw evidence.
 

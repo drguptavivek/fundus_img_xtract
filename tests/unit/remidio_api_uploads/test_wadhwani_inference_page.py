@@ -219,6 +219,11 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
                 "patient_id": "patient-ui-test", "capture_date": "2026-08-18",
                 "state": "ok", "message": "Screening complete", "error_code": None,
                 "request_id": "request-17", "report_id": "report-17", "reused": False,
+                "screening_status": "success",
+                "outputs": [{
+                    "eye": "right", "is_primary": True, "quality_state": "gradable",
+                    "dr_grade": "Mild DR", "dme_grade": "No DME",
+                }],
             }],
         },
     )
@@ -228,6 +233,9 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
     assert response.status_code == 286
     assert b"encounter-ui-test" in response.data
     assert b"request-17" in response.data and b"report-17" in response.data
+    assert b"Screening status" in response.data and b"success" in response.data
+    assert b"DR: Mild DR" in response.data and b"DME: No DME" in response.data
+    assert b"OD" in response.data and b"Primary" in response.data
 
 
 def test_recent_jobs_button_has_only_the_project_aware_javascript_loader():

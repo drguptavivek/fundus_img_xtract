@@ -73,7 +73,7 @@ def _image_urls(row: dict[str, Any]) -> dict[str, Any]:
         row["viewer_url"] = url_for("fundus_api.encounter_viewer_encounter", encounter_id=encounter_id) if encounter_id else None
     row["retry_url"] = (
         url_for("fundus_api.wai_api_statistics_retry", inference_run_id=row["inference_run_id"])
-        if row.get("inference_status") == "failed"
+        if row.get("inference_status") == "failed" and row.get("inference_kind") == "glaucoma_task"
         else None
     )
     return row
@@ -85,7 +85,11 @@ def _encounter_urls(row: dict[str, Any]) -> dict[str, Any]:
     for item in row.get("image_results") or []:
         item["retry_url"] = (
             url_for("fundus_api.wai_api_statistics_retry", inference_run_id=item["inference_run_id"])
-            if item.get("status") == "failed" and item.get("inference_run_id")
+            if (
+                item.get("status") == "failed"
+                and item.get("inference_kind") == "glaucoma_task"
+                and item.get("inference_run_id")
+            )
             else None
         )
     return row

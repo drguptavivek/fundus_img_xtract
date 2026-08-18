@@ -19,7 +19,7 @@ Supported query parameters:
 - `project_id`: repeatable integer
 - `ai_model_id`: repeatable integer
 - `result_type`: repeatable, one of `positive`, `negative`, `inconclusive`
-- `inference_status`: repeatable, one of `success`, `failed`, `running`, `queued`
+- `inference_status`: repeatable, one of `success`, `partial`, `failed`, `running`, `queued`
 - `capture_start`: `YYYY-MM-DD`
 - `capture_end`: `YYYY-MM-DD`
 - `inference_start`: `YYYY-MM-DD`
@@ -27,7 +27,7 @@ Supported query parameters:
 - `page`: integer, result endpoints only
 - `page_size`: integer, result endpoints only, maximum `100`
 
-All data is read from `ai_inference_runs_mv` with `is_latest_for_task_model = true`.
+Data is read from `wai_api_statistics_rows_v` with `is_latest_for_task_model = true`. The view combines task-scoped Wadhwani Glaucoma runs from `ai_inference_runs_mv` with encounter-scoped MadhuNetrAI DR and DME target results. Each returned result identifies its `disease_name`; DR/DME rows also identify `inference_kind=encounter_dr_dme`.
 
 ## Options
 
@@ -37,11 +37,11 @@ Returns filter choices available within the caller's scope.
 
 ```json
 {
-  "diseases": [{"id": 2, "label": "Glaucoma"}],
+  "diseases": [{"id": 2, "label": "Glaucoma"}, {"id": 3, "label": "DR"}, {"id": 4, "label": "DME"}],
   "projects": [{"id": 2, "label": "ICMR-VG"}],
   "models": [{"id": 1, "label": "wai_glaucoma_ver1 1"}],
   "result_types": ["positive", "negative", "inconclusive"],
-  "inference_statuses": ["success", "failed", "running", "queued"]
+  "inference_statuses": ["success", "partial", "failed", "running", "queued"]
 }
 ```
 
@@ -86,6 +86,7 @@ Returns paginated image-wise latest inference rows.
   "rows": [
     {
       "inference_run_id": 564,
+      "inference_kind": "glaucoma_task",
       "task_id": 123,
       "disease_name": "Glaucoma",
       "project_title": "ICMR-VG",
@@ -128,7 +129,16 @@ Returns paginated encounter-wise groups. Encounter result is positive if any ima
       "run_count": 2,
       "failed_count": 0,
       "encounter_result_type": "negative",
-      "image_results": [],
+      "image_results": [
+        {
+          "inference_kind": "encounter_dr_dme",
+          "disease_name": "DR",
+          "status": "success",
+          "result_type": "negative",
+          "ai_grade_name": "No DR",
+          "image_uuid": "uuid"
+        }
+      ],
       "viewer_url": "/analytics/encounter/view/123"
     }
   ],
@@ -153,11 +163,13 @@ Queues a retry for the selected latest failed inference run. Requires one of:
 
 The request must include the standard `X-CSRFToken` header.
 
-The endpoint only retries rows that are:
+The endpoint only retries task-scoped Glaucoma rows that are:
 
 - visible within the caller's analytics scope
 - the latest run for that task/model
 - currently `failed`
+
+Failed encounter-scoped DR/DME runs are retried from the Encounter DR-DME screening workflow, where the durable request ID is reused and stale attempt image state is cleared first.
 
 Response:
 

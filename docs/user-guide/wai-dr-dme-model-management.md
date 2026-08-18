@@ -45,7 +45,7 @@ Provider configuration and project authorization are separate controls:
 3. Under **Automated Remote AI Inference**, enable the **DR + DME** row only when eligible prospective ingestion should trigger screening automatically.
 4. Select the automatic eligibility rule in that row: **Always** or **OCR-confirmed DR report**.
 5. Save each section independently. Saving either section preserves the setting in the other section.
-6. Resolve any displayed blockers. The project needs an active profile capable of producing image-level DR and DME EncounterSet tasks. Automatic execution additionally requires a supported active Remidio API binding.
+6. Resolve any displayed blockers. The project needs an active Upload Profile capable of producing image-level DR EncounterSet tasks. DME is a linked output of the same model execution; it is not a separate Upload Profile capability requirement. Automatic execution is independent of Remidio provenance and runs only from a supported EncounterSet completion trigger.
 
 ## Run a manual screening
 
@@ -64,7 +64,8 @@ Each EncounterSet is one provider request. All selected eligible macula images a
 | Integration disabled or incomplete | Save an HTTPS base URL and token on the linked DR/DME model, then enable it. |
 | Authentication failed or HTTP 401 | Confirm the raw token is current. Do not include `Token ` in the saved field. |
 | No projects are listed | Enable the project's manual DR-DME workflow and confirm the user has upload scope for an EncounterSet in that project. |
-| Project capability blocker | Confirm both DR and DME disease mappings and one active EncounterSet profile supporting both targets. |
+| Project capability blocker | Confirm the project has an active EncounterSet Upload Profile with an image-level DR grading target. |
+| Patient metadata blocker | Ensure the selected EncounterSet Type includes `hospital_UHID`, `patient_age_yrs`, and `sex`. For a genuine single-eye patient, also supply boolean `is_monocular=true`. |
 | EncounterSet cannot be selected | Complete verification and correct missing/ambiguous laterality, focus, file type, patient identifier, or per-eye image-count issues. |
 | Provider request fails after URL change | Confirm the saved URL is only the HTTPS server root and does not already include the inference path. |
 

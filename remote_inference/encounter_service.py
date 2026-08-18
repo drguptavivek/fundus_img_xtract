@@ -12,10 +12,14 @@ from db_transaction_manager import transaction_scope
 from job_store import db_create_job
 from models import AIModelIntegration, Job, JobItem, PatientEncounters, Project
 from remote_inference.dr_dme_service import PROVIDER, WORKFLOW_KEY, evaluate_encounter, workflow_allows_automatic
-from remote_inference.models import EncounterAIInferenceRun, EncounterAIOutputTarget, ProjectEncounterAIWorkflow
+from remote_inference.models import (
+    EncounterAIImageResult,
+    EncounterAIInferenceRun,
+    EncounterAIOutputTarget,
+    EncounterAITargetResult,
+    ProjectEncounterAIWorkflow,
+)
 from remote_inference.automated_service import _project_capabilities
-from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding
-from upload_profiles.models import ProjectUploadProfile, UploadProfile
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.service import manager_lab_unit_ids
 from utils.celery_helpers import enqueue_task
@@ -54,29 +58,11 @@ def workflow_context(db, project_id: int) -> dict[str, Any]:
     if {row.target_key for row in targets} != {"dr", "dme"}:
         blockers.append("Active DR and DME output mappings are required.")
     capabilities = _project_capabilities(db, project_id)
-    supporting_profile_sets = [
-        capabilities.get((target.disease_id, "encounter_set"), set()) for target in targets
-    ]
-    common_profiles = set.intersection(*supporting_profile_sets) if supporting_profile_sets else set()
-    supporting_profile_names = list(
-        db.execute(
-            select(UploadProfile.name).where(UploadProfile.id.in_(common_profiles)).order_by(UploadProfile.name)
-        ).scalars()
-    ) if common_profiles else []
-    if len(targets) == 2 and not common_profiles:
-        blockers.append("One active project profile must support image-level DR and DME EncounterSet tasks.")
+    dr_target = next((target for target in targets if target.target_key == "dr"), None)
+    supporting_profiles = capabilities.get((dr_target.disease_id, "encounter_set"), set()) if dr_target else set()
+    if dr_target is not None and not supporting_profiles:
+        blockers.append("One active project profile must support image-level DR EncounterSet tasks.")
     automatic_blockers = list(blockers)
-    has_remidio_binding = db.execute(
-        select(ProjectUploadProfileRemidioApiBinding.id)
-        .join(ProjectUploadProfile, ProjectUploadProfile.id == ProjectUploadProfileRemidioApiBinding.project_upload_profile_id)
-        .where(
-            ProjectUploadProfile.project_id == project_id,
-            ProjectUploadProfile.active.is_(True),
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
-        )
-    ).first() is not None
-    if not has_remidio_binding:
-        automatic_blockers.append("Automatic execution requires an active prospective Remidio API binding.")
     return {
         "workflow_key": WORKFLOW_KEY,
         "execution_scope": "encounter",
@@ -90,8 +76,8 @@ def workflow_context(db, project_id: int) -> dict[str, Any]:
         "image_selection": "macula_focused_images",
         "maximum_images_per_eye": 10,
         "output_targets": [row.target_key for row in targets],
-        "supporting_profiles": sorted(common_profiles),
-        "supporting_profile_names": supporting_profile_names,
+        "supporting_profiles": sorted(supporting_profiles),
+        "supporting_profile_names": sorted(supporting_profiles),
         "manual_capable": not blockers,
         "automatic_capable": not automatic_blockers,
         "capable": not blockers,
@@ -260,21 +246,61 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
     items = db.execute(
         select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)
     ).scalars().all()
+    details_by_item_id: dict[int, dict[str, Any]] = {}
+    for item in items:
+        try:
+            details_by_item_id[item.id] = json.loads(item.detail or "{}")
+        except (TypeError, ValueError):
+            details_by_item_id[item.id] = {}
     encounter_ids = [item.source_id for item in items if item.source_type == "patient_encounter" and item.source_id]
     encounters = db.execute(
         select(PatientEncounters).where(PatientEncounters.id.in_(encounter_ids))
     ).scalars().all() if encounter_ids else []
     encounters_by_id = {row.id: row for row in encounters}
+    run_ids = {
+        detail.get("run_id")
+        for detail in details_by_item_id.values()
+        if isinstance(detail.get("run_id"), int)
+    }
+    runs = db.execute(
+        select(EncounterAIInferenceRun)
+        .options(
+            selectinload(EncounterAIInferenceRun.image_results)
+            .selectinload(EncounterAIImageResult.target_results)
+            .selectinload(EncounterAITargetResult.output_target)
+        )
+        .where(EncounterAIInferenceRun.id.in_(run_ids))
+    ).scalars().all() if run_ids else []
+    runs_by_id = {run.id: run for run in runs}
     summary = {"queued": 0, "processing": 0, "ok": 0, "error": 0}
     rows = []
     for item in items:
         state = (item.state or "queued").lower()
         summary[state if state in summary else "queued"] += 1
-        try:
-            detail = json.loads(item.detail or "{}")
-        except (TypeError, ValueError):
-            detail = {}
+        detail = details_by_item_id[item.id]
         encounter = encounters_by_id.get(item.source_id)
+        run = runs_by_id.get(detail.get("run_id"))
+        outputs = []
+        if run is not None:
+            for image_result in sorted(
+                run.image_results,
+                key=lambda row: (row.submitted_eye, not row.is_primary, row.id),
+            ):
+                grades = {
+                    result.output_target.target_key: result.mapped_grade
+                    for result in image_result.target_results
+                    if result.output_target is not None
+                }
+                if grades:
+                    outputs.append(
+                        {
+                            "eye": image_result.submitted_eye,
+                            "is_primary": image_result.is_primary,
+                            "quality_state": image_result.quality_state,
+                            "dr_grade": grades.get("dr"),
+                            "dme_grade": grades.get("dme"),
+                        }
+                    )
         rows.append(
             {
                 "encounter_id": item.source_id,
@@ -289,6 +315,7 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                 "run_id": detail.get("run_id"),
                 "screening_status": detail.get("status"),
                 "reused": bool(detail.get("reused")),
+                "outputs": outputs,
             }
         )
     return {
@@ -326,6 +353,7 @@ def create_manual_job(
         ).scalars().all()
         lab_ids = {row.lab_unit_id for row in encounters}
         lab_unit_id = next(iter(lab_ids)) if len(lab_ids) == 1 else None
+        encounter_uuid_by_id = {row.id: row.uuid for row in encounters}
     token = db_create_job(
         [f"encounter:{encounter_id}" for encounter_id in selected_ids],
         [],
@@ -339,11 +367,10 @@ def create_manual_job(
     )
     with transaction_scope() as db:
         job = db.execute(select(Job).options(selectinload(Job.items)).where(Job.token == token)).scalar_one()
-        by_id = {row.id: row for row in encounters}
         for item, encounter_id in zip(job.items, selected_ids, strict=True):
             item.source_type = "patient_encounter"
             item.source_id = encounter_id
-            item.source_uuid = by_id[encounter_id].uuid
+            item.source_uuid = encounter_uuid_by_id[encounter_id]
             item.task_id = None
     enqueue_task(
         "celery_tasks.tasks.wadhwani_tasks.run_madhunetra_dr_dme_batch_task",

@@ -216,6 +216,7 @@
             <div class="small text-muted">Encounter ${escapeHtml(row.patient_identifier || row.encounter_name || '-')}</div>
           </td>
           <td>
+            <div class="small fw-semibold mb-1">${escapeHtml(row.disease_name || 'Unknown disease')}</div>
             <div class="mb-1">${resultChip(row.result_type, row.inference_status)}</div>
             <div class="small">${escapeHtml(row.ai_model_name || '-')} ${escapeHtml(row.ai_model_version || '')}</div>
             <div class="small text-muted">${escapeHtml(formatDateTime(row.inference_created_at))}</div>
@@ -245,14 +246,20 @@
       els.encounterRows.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-4">No encounters</td></tr>';
     } else {
       els.encounterRows.innerHTML = rows.map((row) => {
-        const chips = (row.image_results || []).slice(0, 6).map((item) => `
+        const imageResults = row.image_results || [];
+        const chips = imageResults.slice(0, 12).map((item) => `
           <span class="wai-image-chip" title="${escapeHtml(item.error_message || item.error_code || '')}">
+            <span class="fw-semibold">${escapeHtml(item.disease_name || 'Unknown disease')}:</span>
             ${resultChip(item.result_type, item.status)}
+            <span>${escapeHtml(item.ai_grade_name || '-')}</span>
             <span class="text-truncate">${escapeHtml(item.image_filename || item.image_uuid || '-')}</span>
             ${item.error_code ? `<span class="text-danger">${escapeHtml(item.error_code)}</span>` : ''}
             ${item.retry_url ? `<button class="btn btn-link btn-sm p-0 text-warning" type="button" data-wai-retry-url="${escapeHtml(item.retry_url)}" title="Retry inference"><i class="fa-solid fa-rotate-right"></i></button>` : ''}
           </span>
         `).join('');
+        const overflow = imageResults.length > 12
+          ? `<span class="small text-muted align-self-center">+${formatNumber(imageResults.length - 12)} more</span>`
+          : '';
         return `
           <tr>
             <td style="min-width: 180px;">
@@ -266,7 +273,7 @@
               <div class="small text-muted">${escapeHtml(formatDateTime(row.latest_inference_at))}</div>
             </td>
             <td>${resultChip(row.encounter_result_type, null)}</td>
-            <td><div class="d-flex flex-wrap gap-1">${chips || '<span class="text-muted small">No image rows</span>'}</div></td>
+            <td><div class="d-flex flex-wrap gap-1">${chips || '<span class="text-muted small">No image rows</span>'}${overflow}</div></td>
             <td class="text-end">
               ${row.viewer_url ? `<button class="btn btn-sm btn-outline-primary" type="button" data-wai-viewer-url="${escapeHtml(row.viewer_url)}"><i class="fa-solid fa-eye"></i></button>` : ''}
             </td>

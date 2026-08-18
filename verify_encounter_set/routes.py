@@ -954,6 +954,7 @@ def finalize_verification(uuid):
                 project_id=encounter.project_id,
                 upload_profile_id=encounter.upload_profile_id,
             )
+        _enqueue_madhunetra_after_commit(encounter.id, user_id=current_user.id)
         close_url = _encounter_set_browser_url(encounter)
         next_uuid = _next_pending_encounter_uuid(db, encounter=encounter)
 
@@ -1460,6 +1461,19 @@ def _enqueue_wadhwani_after_commit(
             )
         except Exception as exc:
             current_app.logger.exception("Failed to enqueue EncounterSet Wadhwani inference: %s", exc)
+        return response
+
+
+def _enqueue_madhunetra_after_commit(encounter_id: int, *, user_id: int) -> None:
+    """Evaluate the completed EncounterSet after its verification commit."""
+    @after_this_request
+    def _enqueue(response):
+        try:
+            from remote_inference.encounter_service import enqueue_automatic_encounters
+
+            enqueue_automatic_encounters([encounter_id], user_id=user_id)
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.exception("Failed to enqueue EncounterSet MadhuNetrAI inference: %s", exc)
         return response
 
 

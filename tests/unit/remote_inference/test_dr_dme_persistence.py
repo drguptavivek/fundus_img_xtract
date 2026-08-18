@@ -4,12 +4,19 @@ from datetime import date
 from contextlib import contextmanager
 from uuid import uuid4
 
+import pytest
 from PIL import Image
 from sqlalchemy import select
 
 from models import AIModelIntegration, EncounterSetImage, Grade, GradingTask, PatientEncounters, Project
 from remote_inference import dr_dme_service
-from remote_inference.models import EncounterAIImageResult, EncounterAIInferenceRun, EncounterAITargetResult
+from remote_inference.models import (
+    EncounterAIImageResult,
+    EncounterAIInferenceRun,
+    EncounterAIOutputTarget,
+    EncounterAITargetResult,
+)
+from services.wai_api_statistics import build_filters, get_encounter_results, get_image_results
 
 
 class Client:
@@ -67,6 +74,32 @@ class Client:
         }
 
 
+class AdminUser:
+    @staticmethod
+    def has_role(role_name):
+        return role_name == "admin"
+
+
+def test_output_mapping_validation_rejects_missing_local_grade(db_session):
+    integration = db_session.execute(
+        select(AIModelIntegration).where(AIModelIntegration.provider == "wai_dr_dme")
+    ).scalar_one()
+    dr_dme_service._validate_output_mappings(db_session, integration.ai_model_id)
+
+    dme_target = db_session.execute(
+        select(EncounterAIOutputTarget).where(
+            EncounterAIOutputTarget.ai_model_id == integration.ai_model_id,
+            EncounterAIOutputTarget.target_key == "dme",
+        )
+    ).scalar_one()
+    dme_target.label_mapping_json = {**dme_target.label_mapping_json, "No DME": "Missing local grade"}
+    db_session.flush()
+
+    with pytest.raises(dr_dme_service.EncounterInferenceError, match="Missing local grade") as exc_info:
+        dr_dme_service._validate_output_mappings(db_session, integration.ai_model_id)
+    assert exc_info.value.code == "grade_mapping_invalid"
+
+
 def test_encounter_response_persists_two_target_grades_and_reuses_report(
     db_session, core_test_data, tmp_path, monkeypatch
 ):
@@ -86,7 +119,7 @@ def test_encounter_response_persists_two_target_grades_and_reuses_report(
         lab_unit_id=core_test_data["lab_unit"].id,
         project_id=project.id,
         encounter_verified_status="verified",
-        metadata_json={"age": 58, "sex": "female"},
+        metadata_json={"patient": {"patient_age_yrs": 58, "sex": "female", "is_monocular": True}},
     )
     db_session.add(encounter)
     db_session.flush()
@@ -107,6 +140,29 @@ def test_encounter_response_persists_two_target_grades_and_reuses_report(
     )
     db_session.add(image)
     db_session.flush()
+    failed_run = EncounterAIInferenceRun(
+        patient_encounter_id=encounter.id,
+        ai_model_id=integration.ai_model_id,
+        integration_id=integration.id,
+        source="manual",
+        request_id=encounter.uuid,
+        status="failed",
+        error_code="provider_error",
+        error_message="Previous attempt failed.",
+        presign_response_json={"request_id": encounter.uuid, "uploads": [{"key": "stale-key"}]},
+    )
+    db_session.add(failed_run)
+    db_session.flush()
+    stale_image_result = EncounterAIImageResult(
+        run_id=failed_run.id,
+        encounter_set_image_id=image.id,
+        submitted_eye="right",
+        remote_key="stale-key",
+        upload_attempts=2,
+    )
+    db_session.add(stale_image_result)
+    db_session.flush()
+    stale_image_result_id = stale_image_result.id
     monkeypatch.setattr(dr_dme_service, "BASE_DIR", tmp_path)
 
     @contextmanager
@@ -130,10 +186,14 @@ def test_encounter_response_persists_two_target_grades_and_reuses_report(
     )
 
     assert result.status == "success"
+    assert result.run_id == failed_run.id
     assert result.report_id == "report-1"
     assert reused.reused is True
     assert client.submit_calls == 1
+    assert db_session.get(EncounterAIImageResult, stale_image_result_id) is None
     run = db_session.get(EncounterAIInferenceRun, result.run_id)
+    assert run.error_code is None
+    assert run.error_message is None
     assert "upload_url" not in str(run.presign_response_json)
     assert "signature" not in str(run.presign_response_json)
     image_result = db_session.execute(
@@ -152,3 +212,11 @@ def test_encounter_response_persists_two_target_grades_and_reuses_report(
     grades = db_session.execute(select(Grade).where(Grade.task_id.in_([task.id for task in tasks]))).scalars().all()
     assert {grade.grade_name for grade in grades} == {"Mild DR", "M0 No DME"}
     assert all(grade.ai_model_id == integration.ai_model_id for grade in grades)
+
+    filters = build_filters(project_ids=[project.id], ai_model_ids=[integration.ai_model_id])
+    image_payload = get_image_results(db_session, AdminUser(), filters, page=1, page_size=25)
+    assert {row["disease_name"] for row in image_payload["rows"]} == {"DR", "DME"}
+    assert {row["inference_kind"] for row in image_payload["rows"]} == {"encounter_dr_dme"}
+    encounter_payload = get_encounter_results(db_session, AdminUser(), filters, page=1, page_size=25)
+    assert encounter_payload["rows"][0]["run_count"] == 1
+    assert {row["disease_name"] for row in encounter_payload["rows"][0]["image_results"]} == {"DR", "DME"}

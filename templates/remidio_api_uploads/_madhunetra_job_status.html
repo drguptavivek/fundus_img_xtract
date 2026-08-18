@@ -16,7 +16,21 @@
         <div class="d-flex justify-content-between gap-2"><div class="fw-semibold">EncounterSet {{ item.encounter_uuid or item.encounter_id }}</div><span class="badge text-bg-{{ 'success' if item.state == 'ok' else 'danger' if item.state == 'error' else 'warning' }}">{{ item.state }}</span></div>
         <div class="small text-muted">Patient {{ item.patient_id or '-' }} · {{ item.capture_date or '-' }}</div>
         <div class="small mt-2">{{ item.message or '-' }}{% if item.reused %} · reused existing result{% endif %}</div>
+        {% if item.screening_status %}<div class="small">Screening status: <span class="fw-semibold">{{ item.screening_status }}</span></div>{% endif %}
         {% if item.request_id or item.report_id %}<div class="small text-muted">Request {{ item.request_id or '-' }} · Report {{ item.report_id or '-' }}</div>{% endif %}
+        {% if item.outputs %}
+        <div class="mt-2 d-grid gap-1">
+          {% for output in item.outputs %}
+          <div class="small border rounded px-2 py-1">
+            <span class="fw-semibold">{{ 'OD' if output.eye == 'right' else 'OS' }}</span>
+            {% if output.is_primary %}<span class="badge text-bg-light border ms-1">Primary</span>{% endif %}
+            <span class="ms-2">DR: {{ output.dr_grade or '-' }}</span>
+            <span class="ms-2">DME: {{ output.dme_grade or '-' }}</span>
+            <span class="text-muted ms-2">Quality: {{ output.quality_state|replace('_', ' ') }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
         {% if item.error_code %}<div class="small text-danger">{{ item.error_code }}</div>{% endif %}
       </div>
       {% endfor %}

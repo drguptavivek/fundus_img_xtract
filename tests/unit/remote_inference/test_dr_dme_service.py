@@ -61,6 +61,8 @@ def test_candidate_selects_only_macula_with_unambiguous_eye():
     assert result.eligible is True
     assert [row.image_id for row in result.images] == [1, 2]
     assert result.eye_counts == {"right": 1, "left": 1}
+    assert result.age == 55
+    assert result.sex == "female"
 
 
 def test_candidate_never_truncates_more_than_ten_images_per_eye():
@@ -85,6 +87,8 @@ def test_manual_candidate_requires_verification_and_patient_contract():
 
     assert result.eligible is False
     assert len(result.issues) == 4
+    assert result.age is None
+    assert result.sex is None
 
 
 def test_candidate_requires_both_eyes_unless_canonical_monocular_flag_is_true():

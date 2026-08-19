@@ -204,14 +204,30 @@
     }
   }
 
+  function syncFiltersBeforeRequest(event) {
+    var target = event?.detail?.target;
+    var source = event?.detail?.elt;
+    var form = filterForm();
+    if (!form || !target || target.id !== 'wadhwaniEncounterSetWorkspace') return;
+    // Initial workspace hydration replaces the current history entry; an
+    // explicit filter request gets a navigable history entry.
+    syncUrl(source?.id === 'wadhwaniEncounterSetWorkspace');
+  }
+
   document.addEventListener('click', handleSelectionClick);
   document.addEventListener('change', handleFilterChange);
   document.addEventListener('input', handleFilterChange);
   document.addEventListener('submit', handleFilterSubmit);
   window.addEventListener('popstate', reloadWorkspaceFromUrl);
   document.addEventListener('DOMContentLoaded', function () {
-    syncUrl(true);
+    // This script also runs on the shared job-status page. Do not rewrite that
+    // page URL: its workflow query distinguishes encounter DR/DME jobs from
+    // task-scoped Glaucoma jobs.
+    if (filterForm()) {
+      syncUrl(true);
+    }
     updateSelectedCounts();
   });
   document.body.addEventListener('htmx:afterSwap', stopCompletedJobPolling);
+  document.body.addEventListener('htmx:beforeRequest', syncFiltersBeforeRequest);
 })();

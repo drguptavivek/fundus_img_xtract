@@ -68,6 +68,8 @@ class EncounterEligibility:
     images: tuple[EligibleImage, ...]
     is_verified: bool
     is_monocular: bool
+    age: int | None
+    sex: str | None
 
     @property
     def eye_counts(self) -> dict[str, int]:
@@ -158,13 +160,15 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
     if not patient_id or len(patient_id) > 30:
         issues.append("Patient identifier must contain 1 to 30 characters.")
     try:
-        age = int(_patient_value(encounter, "age", "patient_age_yrs", "age", "patient_age", "age_yrs"))
+        parsed_age = int(_patient_value(encounter, "age", "patient_age_yrs", "age", "patient_age", "age_yrs"))
     except (TypeError, ValueError):
-        age = -1
-    if age < 0 or age > 120:
+        parsed_age = -1
+    age = parsed_age if 0 <= parsed_age <= 120 else None
+    if age is None:
         issues.append("Patient age must be between 0 and 120.")
-    sex = str(_patient_value(encounter, "sex", "sex", "gender") or "").strip().lower()
-    if sex not in {"male", "female", "other"}:
+    parsed_sex = str(_patient_value(encounter, "sex", "sex", "gender") or "").strip().lower()
+    sex = parsed_sex if parsed_sex in {"male", "female", "other"} else None
+    if sex is None:
         issues.append("Patient sex must be male, female, or other.")
 
     selected: list[EligibleImage] = []
@@ -201,6 +205,8 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
         images=tuple(selected),
         is_verified=is_verified,
         is_monocular=is_monocular,
+        age=age,
+        sex=sex,
     )
 
 

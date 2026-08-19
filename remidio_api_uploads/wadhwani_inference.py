@@ -145,7 +145,8 @@ def encounter_set_wadhwani_inference_run():
 @bp.route("/uploads/encountersets/wadhwani_inference/jobs/<job_token>", methods=["GET"])
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_job(job_token: str):
-    workflow = request.args.get("workflow", "glaucoma")
+    with get_db_session() as db:
+        workflow = _job_workflow(db, job_token, request.args.get("workflow"))
     return render_template(
         "remidio_api_uploads/wadhwani_inference_job.html",
         job_token=job_token,
@@ -158,7 +159,8 @@ def encounter_set_wadhwani_inference_job(job_token: str):
 @roles_required(*PAGE_ROLES)
 def encounter_set_wadhwani_inference_job_status(job_token: str):
     with get_db_session() as db:
-        if request.args.get("workflow") == "dr_dme":
+        workflow = _job_workflow(db, job_token, request.args.get("workflow"))
+        if workflow == "dr_dme":
             payload = encounter_service.load_job_payload(db, job_token)
             if payload is None:
                 abort(404)
@@ -173,6 +175,15 @@ def encounter_set_wadhwani_inference_job_status(job_token: str):
         render_template("remidio_api_uploads/_wadhwani_inference_job_status.html", job=payload),
         286 if payload["done"] else 200,
     )
+
+
+def _job_workflow(db, job_token: str, requested_workflow: str | None) -> str:
+    if requested_workflow == "dr_dme":
+        return "dr_dme"
+    upload_type = db.execute(
+        select(Job.upload_type).where(Job.token == job_token)
+    ).scalar_one_or_none()
+    return "dr_dme" if upload_type == encounter_service.JOB_TYPE else "glaucoma"
 
 
 def _madhunetra_page(*, include_encounters: bool, partial: bool = False):

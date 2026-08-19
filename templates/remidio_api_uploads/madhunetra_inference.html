@@ -23,6 +23,7 @@
   {% endif %}
 
   <form id="madhunetraFilters" class="card shadow-sm mb-3"
+        data-page-url="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}"
         hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
         hx-target="#madhunetraWorkspace" hx-trigger="submit" hx-swap="innerHTML">
     <input type="hidden" name="workflow" value="dr_dme">
@@ -96,12 +97,12 @@
 {% block page_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
-<script src="{{ url_for('static', filename='js/madhunetra-inference.js') }}?v={{ config.get('ASSETS_VERSION','') ~ '-select-visible-v1' }}" defer></script>
+<script src="{{ url_for('static', filename='js/madhunetra-inference.js') }}?v={{ config.get('ASSETS_VERSION','') ~ '-filters-v2' }}" defer></script>
 {% endblock %}
 
 {% block extra_styles %}
 {{ super() }}
 <style>
-  .encounter-dr-dme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem; }
+  .encounter-dr-dme-eye-grid { display: grid; grid-template-columns: repeat(auto-fill, 150px); gap: .75rem; align-items: start; }
 </style>
 {% endblock %}

@@ -17,6 +17,7 @@ from remidio_api_uploads.wadhwani_inference import (
     InferenceFilters,
     _glaucoma_ocr_summary,
     _image_matches_filters,
+    _job_workflow,
     _wadhwani_status_by_image,
 )
 from remote_inference.dr_dme import CandidatePage, MAX_MANUAL_ENCOUNTERS
@@ -179,6 +180,9 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
             "encounter_id": 17,
             "encounter_uuid": "encounter-ui-test",
             "patient_id": "patient-ui-test",
+            "patient_age": 61,
+            "patient_sex": "female",
+            "is_monocular": False,
             "capture_date": "2026-08-18",
             "lab_unit_name": "Vision Lab",
             "eligible": True,
@@ -187,6 +191,9 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
             "images": [{
                 "id": 71, "uuid": "11111111-1111-1111-1111-111111111111",
                 "position": 1, "eye": "right", "camera_name": "Remidio",
+            }, {
+                "id": 72, "uuid": "22222222-2222-2222-2222-222222222222",
+                "position": 2, "eye": "left", "camera_name": "Remidio",
             }],
             "dr_report": {"status": "completed", "result": "Mild DR", "attachment_filename": "dr.pdf"},
             "run_status": "not_requested",
@@ -205,7 +212,11 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     assert b'Non-monocular: one eye only' in page.data
     assert workspace.status_code == 200
     assert b"encounter-ui-test" in workspace.data
-    assert b"OD macula" in workspace.data and b'fs-4">2<' in workspace.data
+    assert b"OD macula" in workspace.data and b">2</span>" in workspace.data
+    assert b"Age 61" in workspace.data and b"Sex Female" in workspace.data
+    assert b"Monocular No" in workspace.data
+    assert b'aria-label="OD macula images"' in workspace.data
+    assert b'aria-label="OS macula images"' in workspace.data
     assert b"Mild DR" in workspace.data and b"Remidio" in workspace.data
     assert b"50 EncounterSets per page" in workspace.data
     assert b'name="selected_encounter_ids"' in workspace.data
@@ -215,6 +226,9 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
         in workspace.data
     )
     assert b'target="_blank" rel="noopener noreferrer"' in workspace.data
+    assert b">View</a>" in workspace.data
+    assert b'aria-label="Queue EncounterSet encounter-ui-test"' in workspace.data
+    assert b"Queue this EncounterSet</label>" not in workspace.data
 
 
 def test_both_inference_workspaces_link_encounters_and_support_select_all_visible():
@@ -228,14 +242,22 @@ def test_both_inference_workspaces_link_encounters_and_support_select_all_visibl
     dr_dme_script = (
         project_root / "static/js/madhunetra-inference.js"
     ).read_text(encoding="utf-8")
+    dr_dme_page = (
+        project_root / "templates/remidio_api_uploads/madhunetra_inference.html"
+    ).read_text(encoding="utf-8")
 
     for template in (glaucoma, dr_dme):
         assert "encounter_set_browser" in template
         assert "month=encounter_date[:7]" in template
         assert "date=encounter_date[:10]" in template
         assert 'target="_blank" rel="noopener noreferrer"' in template
+        assert ">View</a>" in template
         assert "Select all visible" in template
     assert 'input[name="selected_encounter_ids"]:not(:disabled)' in dr_dme_script
+    assert "encounter-dr-dme-eye-grid" in dr_dme
+    assert "grid-template-columns: repeat(auto-fill, 150px)" in dr_dme_page
+    assert "htmx:beforeRequest" in dr_dme_script
+    assert "syncUrl(source?.id === 'madhunetraWorkspace')" in dr_dme_script
 
 
 def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatch):
@@ -254,7 +276,10 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
             "error": None,
             "updated_at": utcnow(),
             "done": True,
-            "summary": {"queued": 0, "processing": 0, "ok": 1, "error": 0},
+            "summary": {
+                "queued": 0, "processing": 0, "ok": 1, "error": 0,
+                "positive_encounters": 1, "positive_images": 1,
+            },
             "items": [{
                 "encounter_id": 17, "encounter_uuid": "encounter-ui-test",
                 "patient_id": "patient-ui-test", "capture_date": "2026-08-18",
@@ -277,6 +302,45 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
     assert b"Screening status" in response.data and b"success" in response.data
     assert b"DR: Mild DR" in response.data and b"DME: No DME" in response.data
     assert b"OD" in response.data and b"Primary" in response.data
+    assert b"Positive encounters" in response.data and b"Positive images" in response.data
+
+
+def test_dr_dme_positive_output_classification():
+    from remote_inference.encounter_service import _is_positive_output
+
+    assert _is_positive_output("dr", "Mild DR") is True
+    assert _is_positive_output("dme", "DME Present") is True
+    assert _is_positive_output("dme", "M1 Referable Diabetic Maculopathy") is True
+    assert _is_positive_output("dr", "No DR") is False
+    assert _is_positive_output("dme", "No DME") is False
+    assert _is_positive_output("dme", "M0 No DME") is False
+    assert _is_positive_output("dr", "Not Gradable") is False
+
+
+def test_dr_dme_job_page_recovers_workflow_from_job_token(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+
+    class ScalarResult:
+        def scalar_one_or_none(self):
+            return "encounter_set_madhunetra_dr_dme"
+
+    @contextmanager
+    def fake_session():
+        yield SimpleNamespace(execute=lambda _statement: ScalarResult())
+
+    monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
+
+    response = client.get("/uploads/encountersets/wadhwani_inference/jobs/direct-dr-dme-token")
+
+    assert response.status_code == 200
+    assert b"Encounter DR-DME Screening Status" in response.data
+    assert b"/status?workflow=dr_dme" in response.data
+
+
+def test_job_workflow_prefers_explicit_dr_dme_without_database_lookup():
+    db = SimpleNamespace(execute=lambda _statement: (_ for _ in ()).throw(AssertionError("unexpected query")))
+
+    assert _job_workflow(db, "token", "dr_dme") == "dr_dme"
 
 
 def test_recent_jobs_button_has_only_the_project_aware_javascript_loader():
@@ -291,6 +355,9 @@ def test_recent_jobs_button_has_only_the_project_aware_javascript_loader():
 
     assert "hx-get=" not in button
     assert "refreshRecentJobs(projectSelect ? projectSelect.value : '')" in script
+    assert "if (filterForm())" in script
+    assert "htmx:beforeRequest" in script
+    assert "syncUrl(source?.id === 'wadhwaniEncounterSetWorkspace')" in script
 
 
 def test_encounter_set_job_status_shows_positive_inference_count(

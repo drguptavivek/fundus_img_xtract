@@ -30,6 +30,18 @@ from utils.hospital_scoping import apply_scoping
 JOB_TYPE = "encounter_set_madhunetra_dr_dme"
 
 
+def _is_positive_output(target_key: str, mapped_grade: str | None) -> bool:
+    """Return whether a mapped DR/DME grade represents detected disease."""
+    grade = " ".join(str(mapped_grade or "").strip().lower().split())
+    if not grade or grade in {"not gradable", "ungradable"}:
+        return False
+    if target_key == "dr":
+        return grade != "no dr"
+    if target_key == "dme":
+        return grade not in {"no dme", "m0 no dme"}
+    return False
+
+
 def workflow_context(db, project_id: int) -> dict[str, Any]:
     integration = db.execute(
         select(AIModelIntegration).where(AIModelIntegration.provider == PROVIDER)
@@ -222,7 +234,14 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
         .where(EncounterAIInferenceRun.id.in_(run_ids))
     ).scalars().all() if run_ids else []
     runs_by_id = {run.id: run for run in runs}
-    summary = {"queued": 0, "processing": 0, "ok": 0, "error": 0}
+    summary = {
+        "queued": 0,
+        "processing": 0,
+        "ok": 0,
+        "error": 0,
+        "positive_encounters": 0,
+        "positive_images": 0,
+    }
     rows = []
     for item in items:
         state = (item.state or "queued").lower()
@@ -242,6 +261,10 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                     if result.output_target is not None
                 }
                 if grades:
+                    is_positive = any(
+                        _is_positive_output(target_key, mapped_grade)
+                        for target_key, mapped_grade in grades.items()
+                    )
                     outputs.append(
                         {
                             "eye": image_result.submitted_eye,
@@ -249,8 +272,13 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                             "quality_state": image_result.quality_state,
                             "dr_grade": grades.get("dr"),
                             "dme_grade": grades.get("dme"),
+                            "is_positive": is_positive,
                         }
                     )
+        positive_images = sum(output["is_positive"] for output in outputs)
+        summary["positive_images"] += positive_images
+        if positive_images:
+            summary["positive_encounters"] += 1
         rows.append(
             {
                 "encounter_id": item.source_id,

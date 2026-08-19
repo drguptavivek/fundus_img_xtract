@@ -27,6 +27,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
+from auth.roles import roles_or_project_grant_required
 from utils.hospital_scoping import apply_scoping
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
@@ -34,6 +35,28 @@ from upload_profiles.service import (
     encounter_set_grading_scheme_ids,
     validate_profile_upload_scope,
 )
+from encounter_sets.monocular_status import update_monocular_status
+
+
+@api_bp.route("/encounter-sets/<uuid>/monocular-status", methods=["PATCH"])
+@roles_or_project_grant_required("admin", "optometrist", "data_manager")
+def patch_encounter_set_monocular_status(uuid):
+    """Correct canonical monocular status before or after verification."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload.get("is_monocular"), bool):
+        return jsonify(success=False, error="is_monocular must be a boolean."), 400
+    result = update_monocular_status(
+        encounter_uuid=uuid,
+        is_monocular=payload["is_monocular"],
+        user=current_user,
+    )
+    return jsonify(
+        success=result.success,
+        message=result.message,
+        error=None if result.success else result.message,
+        encounter_uuid=result.encounter_uuid,
+        is_monocular=result.is_monocular,
+    ), result.status_code
 
 # ============================================================================
 # FILE VALIDATION CONFIGURATION

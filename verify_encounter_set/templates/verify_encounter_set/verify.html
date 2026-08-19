@@ -637,6 +637,37 @@
       event.detail.headers['X-CSRFToken'] = csrfToken;
     });
 
+    document.addEventListener('submit', async function (event) {
+      const form = event.target.closest('[data-monocular-status-form]');
+      if (!form) return;
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      const message = form.querySelector('[data-monocular-status-message]');
+      button.disabled = true;
+      message.className = 'small mt-2 text-muted';
+      message.textContent = 'Updating…';
+      try {
+        const response = await fetch(form.dataset.apiUrl, {
+          method: 'PATCH',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({is_monocular: form.elements.is_monocular.value === 'true'})
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) throw new Error(payload.error || 'Unable to update monocular status.');
+        message.className = 'small mt-2 text-success';
+        message.textContent = payload.message;
+      } catch (error) {
+        message.className = 'small mt-2 text-danger';
+        message.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
     document.body.addEventListener('htmx:afterSwap', function (event) {
       if (event.detail.target !== panelStage) return;
       restorePanelInputs();

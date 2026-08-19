@@ -12,6 +12,7 @@
       <button class="btn btn-primary" type="submit" {% if not linked_integration %}disabled{% endif %}>Queue selected encounters</button>
     </div>
   </div>
+  <div class="small text-muted text-end mb-2" role="status" aria-live="polite" data-visible-selection-status></div>
 
   {% if not encounters %}<div class="card shadow-sm"><div class="card-body text-muted">No EncounterSets are available for this workflow.</div></div>{% endif %}
   <div class="vstack gap-3">
@@ -54,6 +55,25 @@
           <ul class="small text-warning-emphasis ps-3 mb-3">{% for issue in encounter.eligibility_issues %}<li>{{ issue }}</li>{% endfor %}</ul>
           {% else %}<div class="small text-success mb-3">Verified and eligible for combined screening.</div>{% endif %}
           {% if encounter.report_id %}<div class="small text-muted mb-2">Report {{ encounter.report_id }}</div>{% endif %}
+          {% if encounter.human_ungradable_images %}
+          <section class="border border-danger-subtle rounded p-2 mb-3" aria-label="Human verification ungradable images">
+            <h3 class="h6 text-danger-emphasis mb-2">Human verification: ungradable <span class="badge text-bg-danger">{{ encounter.human_ungradable_images|length }}</span></h3>
+            <div class="d-flex flex-wrap gap-2">
+              {% for image in encounter.human_ungradable_images %}
+              <div class="d-flex align-items-center gap-2 border rounded p-1 pe-2 bg-body">
+                <img width="54" height="54" class="rounded object-fit-cover" loading="lazy" decoding="async"
+                     src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
+                     alt="Human-ungradable image {{ image.position }}">
+                <div class="small">
+                  <div class="fw-semibold">Image {{ image.position }} · {{ 'OD' if image.eye == 'right' else 'OS' if image.eye == 'left' else 'Eye unknown' }}</div>
+                  <div class="text-muted">{{ image.focus|upper if image.focus else 'Type unknown' }}{% if image.reason %} · {{ image.reason }}{% endif %}</div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text">A macula image here remains eligible for WAI; other image types are shown for context but are not submitted.</div>
+          </section>
+          {% endif %}
           <div class="row g-3 mb-3">
             {% for eye, eye_label in [('right', 'OD'), ('left', 'OS')] %}
             <section class="col-12 col-lg-6" aria-label="{{ eye_label }} macula images">

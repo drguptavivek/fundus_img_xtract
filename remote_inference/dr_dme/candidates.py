@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from models import EncounterSetImage, PatientEncounters
-from remote_inference.dr_dme_service import evaluate_encounter
+from remote_inference.dr_dme_service import evaluate_encounter, normalize_eye, normalize_focus
 from remote_inference.models import EncounterAIInferenceRun, ProjectEncounterAIWorkflow
 from utils.hospital_scoping import apply_scoping
 
@@ -175,11 +175,21 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
             continue
         eligible_ids = {row.image_id: row for row in eligibility.images}
         images = []
+        human_ungradable_images = []
         for image in sorted(encounter.encounter_set_images or [], key=lambda row: (row.spatial_position, row.id)):
+            metadata = image.metadata_json if isinstance(image.metadata_json, dict) else {}
+            if image.is_not_gradable:
+                human_ungradable_images.append({
+                    "id": image.id,
+                    "uuid": image.uuid,
+                    "position": image.spatial_position,
+                    "eye": normalize_eye(metadata.get("laterality") or metadata.get("eye") or metadata.get("eye_side")),
+                    "focus": normalize_focus(metadata.get("focus") or metadata.get("centering") or metadata.get("fundus_field")),
+                    "reason": image.not_gradable_reason,
+                })
             eligible = eligible_ids.get(image.id)
             if eligible is None:
                 continue
-            metadata = image.metadata_json if isinstance(image.metadata_json, dict) else {}
             images.append({
                 "id": image.id,
                 "uuid": image.uuid,
@@ -207,6 +217,7 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
             "eligibility_issues": list(eligibility.issues),
             "eye_counts": eligibility.eye_counts,
             "images": images,
+            "human_ungradable_images": human_ungradable_images,
             "dr_report": report,
             "run_status": run.status if run else "not_requested",
             "report_id": run.report_id if run else None,

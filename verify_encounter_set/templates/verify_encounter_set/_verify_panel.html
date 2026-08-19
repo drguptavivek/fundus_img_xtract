@@ -202,6 +202,23 @@
     </div>
   </div>
   {{ editable_fields(patient_fields, patient_metadata, 'metadata__patient') }}
+  {% if verification_read_only %}
+  <form class="border rounded p-3 mt-4" data-monocular-status-form
+        data-api-url="{{ url_for('fundus_api.patch_encounter_set_monocular_status', uuid=encounter.uuid) }}">
+    <div class="d-flex flex-column flex-md-row align-items-md-end gap-3">
+      <div class="flex-grow-1">
+        <label class="form-label" for="verified-is-monocular">Monocular status</label>
+        <select class="form-select" id="verified-is-monocular" name="is_monocular">
+          <option value="false" {% if patient_metadata.get('is_monocular') is not sameas true %}selected{% endif %}>No</option>
+          <option value="true" {% if patient_metadata.get('is_monocular') is sameas true %}selected{% endif %}>Yes</option>
+        </select>
+        <div class="form-text">This clinical correction is allowed after verification and does not reopen image verification.</div>
+      </div>
+      <button class="btn btn-primary" type="submit">Update monocular status</button>
+    </div>
+    <div class="small mt-2" role="status" data-monocular-status-message></div>
+  </form>
+  {% endif %}
 </div>
 {% elif panel == 'image' and selected_image %}
 {% set image_metadata = selected_image.metadata_json or {} %}

@@ -176,3 +176,17 @@ Implementation notes from the code:
 - New images are saved under a generated UUID filename ending in `.jpg`.
 - The route always sets `is_set_based=True` for new encounters.
 - Thumbnail generation is scheduled after the database commit, but a thumbnail scheduling failure does not fail the upload response.
+
+## `PATCH /api/encounter-sets/<encounter_uuid>/monocular-status`
+
+Updates canonical `metadata_json.patient.is_monocular` without reopening or repeating EncounterSet verification. The correction is allowed before or after final verification and is audited. It immediately affects DR-DME inference eye eligibility.
+
+Roles: `admin`, `optometrist`, or `data_manager`, including applicable project verification grants. Access is restricted by the existing EncounterSet verification lab/project scope. Browser requests require `X-CSRFToken`.
+
+Request:
+
+```json
+{"is_monocular": true}
+```
+
+Success returns HTTP 200 with `success`, `message`, `encounter_uuid`, and `is_monocular`. Invalid or missing booleans return HTTP 400; inaccessible or unknown EncounterSets return HTTP 404.

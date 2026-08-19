@@ -258,6 +258,9 @@ def test_both_inference_workspaces_link_encounters_and_support_select_all_visibl
     assert "grid-template-columns: repeat(auto-fill, 150px)" in dr_dme_page
     assert "htmx:beforeRequest" in dr_dme_script
     assert "syncUrl(source?.id === 'madhunetraWorkspace')" in dr_dme_script
+    assert "No eligible encounters are visible on this page." in dr_dme_script
+    assert "Human verification: ungradable" in dr_dme
+    assert "human_ungradable_images" in dr_dme
 
 
 def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatch):

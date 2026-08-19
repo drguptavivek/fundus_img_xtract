@@ -841,6 +841,53 @@ def test_verified_encounter_set_rejects_metadata_changes(
     assert encounter.metadata_json == original_metadata
 
 
+def test_verified_encounter_set_allows_monocular_status_correction(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="admin_monocular_correction")
+    auth_client = auth_client_factory(user)
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    encounter.metadata_json = {
+        **(encounter.metadata_json or {}),
+        "patient": {**((encounter.metadata_json or {}).get("patient") or {}), "is_monocular": False},
+    }
+    db_session.flush()
+
+    response = auth_client.patch(
+        f"/api/encounter-sets/{encounter.uuid}/monocular-status",
+        json={"is_monocular": True},
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json["success"] is True
+    assert response.json["is_monocular"] is True
+    db_session.refresh(encounter)
+    assert encounter.metadata_json["patient"]["is_monocular"] is True
+
+    panel = auth_client.get(f"/verify_encounter_set/verify/{encounter.uuid}/panel/patient")
+    assert panel.status_code == 200
+    assert b"Update monocular status" in panel.data
+    assert b'data-monocular-status-form' in panel.data
+
+
+def test_monocular_status_api_requires_boolean(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    user = UserFactory.create_admin(db_session, username="admin_monocular_validation")
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.patch(
+        f"/api/encounter-sets/{encounter_set_data['encounter'].uuid}/monocular-status",
+        json={"is_monocular": "true"},
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert response.status_code == 400
+    assert response.json["success"] is False
+
+
 def test_verified_encounter_set_rejects_image_verification_changes(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):

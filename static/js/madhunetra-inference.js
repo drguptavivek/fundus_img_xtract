@@ -55,9 +55,14 @@
     var button = event.target.closest('[data-select-all-visible-encounters]');
     if (button) {
       var workspace = button.closest('#madhunetraWorkspace') || document;
-      workspace.querySelectorAll('input[name="selected_encounter_ids"]:not(:disabled)').forEach(function (input) {
+      var selectable = workspace.querySelectorAll('input[name="selected_encounter_ids"]:not(:disabled)');
+      selectable.forEach(function (input) {
         input.checked = true;
       });
+      var status = workspace.querySelector('[data-visible-selection-status]');
+      if (status) status.textContent = selectable.length
+        ? selectable.length + ' eligible encounter' + (selectable.length === 1 ? '' : 's') + ' selected.'
+        : 'No eligible encounters are visible on this page.';
       return;
     }
 

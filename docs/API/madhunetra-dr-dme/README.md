@@ -47,6 +47,8 @@ The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_
 
 The verification `is_not_gradable` image flag controls human grading eligibility only. It does not exclude an otherwise valid macula image from DR-DME WAI submission or from satisfying the required-eye check; WAI performs and persists its own image-quality assessment.
 
+Candidate cards separately list every image marked ungradable during human verification. Human-ungradable macula images remain in the OD/OS WAI submission grid; non-macula images are shown only in the explanatory row. Select-all reports how many eligible visible encounters were selected, including an explicit message when a diagnostic filter contains no selectable encounters.
+
 The DR/DME search contract and query composition live in the deep `remote_inference/dr_dme` feature package. The page and JSON API consume the same typed filter, candidate, image, and pagination contract.
 
 Provider endpoint, environment, enablement, and token rotation are available on the linked DR/DME model's **Edit AI Model** page under **Admin → AI Models**. The provider settings are not global and are not shown on the AI Models list. The token field is always blank on render; leaving it blank retains the encrypted stored token. See the [WAI DR-DME AI Model User Guide](../../user-guide/wai-dr-dme-model-management.md).

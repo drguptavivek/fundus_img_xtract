@@ -12,6 +12,7 @@ from db_transaction_manager import transaction_scope
 from job_store import db_create_job
 from models import AIModelIntegration, Job, JobItem, PatientEncounters, Project
 from remote_inference.dr_dme_service import PROVIDER, WORKFLOW_KEY, evaluate_encounter, workflow_allows_automatic
+from remote_inference.dr_dme import CandidateFilters, MAX_MANUAL_ENCOUNTERS, list_candidates, validate_selection_count
 from remote_inference.models import (
     EncounterAIImageResult,
     EncounterAIInferenceRun,
@@ -26,7 +27,6 @@ from utils.celery_helpers import enqueue_task
 from utils.hospital_scoping import apply_scoping
 
 
-MAX_MANUAL_ENCOUNTERS = 25
 JOB_TYPE = "encounter_set_madhunetra_dr_dme"
 
 
@@ -168,56 +168,6 @@ def save_integration(payload: dict[str, Any]) -> MutationResult:
     return MutationResult(True, "MadhuNetrAI integration configuration updated.")
 
 
-def list_candidates(db, *, project_id: int, user: Any) -> list[dict[str, Any]]:
-    workflow = db.execute(
-        select(ProjectEncounterAIWorkflow).where(
-            ProjectEncounterAIWorkflow.project_id == project_id,
-            ProjectEncounterAIWorkflow.workflow_key == WORKFLOW_KEY,
-            ProjectEncounterAIWorkflow.active.is_(True),
-            ProjectEncounterAIWorkflow.manual_enabled.is_(True),
-        )
-    ).scalar_one_or_none()
-    if workflow is None:
-        return []
-    query = (
-        db.query(PatientEncounters)
-        .options(selectinload(PatientEncounters.encounter_set_images))
-        .filter(
-            PatientEncounters.project_id == project_id,
-            PatientEncounters.is_set_based.is_(True),
-        )
-        .order_by(PatientEncounters.capture_date_dt.desc(), PatientEncounters.id.desc())
-    )
-    encounters = apply_scoping(query, PatientEncounters, user, "upload").limit(100).all()
-    run_by_encounter = {
-        row.patient_encounter_id: row
-        for row in db.execute(
-            select(EncounterAIInferenceRun).where(
-                EncounterAIInferenceRun.patient_encounter_id.in_([encounter.id for encounter in encounters]),
-                EncounterAIInferenceRun.ai_model_id == workflow.ai_model_id,
-            )
-        ).scalars().all()
-    } if encounters else {}
-    rows = []
-    for encounter in encounters:
-        eligibility = evaluate_encounter(encounter, require_verified=True)
-        run = run_by_encounter.get(encounter.id)
-        rows.append(
-            {
-                "encounter_id": encounter.id,
-                "encounter_uuid": encounter.uuid,
-                "patient_id": encounter.patient_id,
-                "capture_date": encounter.capture_date_dt.isoformat() if encounter.capture_date_dt else encounter.capture_date,
-                "eligible": eligibility.eligible,
-                "eligibility_issues": list(eligibility.issues),
-                "eye_counts": eligibility.eye_counts,
-                "run_status": run.status if run else "not_requested",
-                "report_id": run.report_id if run else None,
-            }
-        )
-    return rows
-
-
 def list_manual_projects(db, user: Any) -> list[dict[str, Any]]:
     """Return scoped projects whose encounter DR-DME manual workflow is enabled."""
     query = (
@@ -338,10 +288,21 @@ def create_manual_job(
     remote_addr: str | None,
 ) -> MutationResult:
     selected_ids = list(dict.fromkeys(int(value) for value in encounter_ids))
-    if not selected_ids or len(selected_ids) > MAX_MANUAL_ENCOUNTERS:
-        return MutationResult(False, "Select between 1 and 25 EncounterSets.", 400)
+    count_error = validate_selection_count(len(selected_ids))
+    if count_error:
+        return MutationResult(False, count_error, 400)
     with transaction_scope() as db:
-        candidates = {row["encounter_id"]: row for row in list_candidates(db, project_id=project_id, user=user)}
+        candidate_page = list_candidates(
+            db,
+            filters=CandidateFilters(
+                project_id=project_id,
+                encounter_ids=tuple(selected_ids),
+                include_prior=True,
+                page_size=MAX_MANUAL_ENCOUNTERS,
+            ),
+            user=user,
+        )
+        candidates = {row["encounter_id"]: row for row in candidate_page.rows}
         selected = [candidates.get(encounter_id) for encounter_id in selected_ids]
         if any(row is None for row in selected):
             return MutationResult(False, "One or more EncounterSets are outside your authorized project/lab scope.", 403)

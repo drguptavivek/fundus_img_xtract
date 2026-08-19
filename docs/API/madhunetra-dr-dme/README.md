@@ -43,15 +43,17 @@ In Project Settings, the manual control is presented under **Manual Remote AI Wo
 
 ## Operator UI
 
-The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` now has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled, encounter-level candidate cards, OD/OS macula counts, eligibility blockers, prior run/report state, queue controls, and a polling batch-status page. Completed rows show the screening status plus per-image OD/OS DR grade, DME grade, quality state, and primary-image marker. The default view remains the existing image-level Glaucoma workflow.
+The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled. Its search supports capture-date range, camera, DR OCR report availability, exclusion or inclusion of prior DR/DME runs, and page sizes of 25, 50, 75, or 100 EncounterSets. Candidate cards show every eligible macula image with OD/OS, camera, capture date, report summary, eligibility blockers, and prior run/report state. Selecting an EncounterSet still queues all its eligible macula images as one combined screening request; filters never split the encounter submission.
+
+The DR/DME search contract and query composition live in the deep `remote_inference/dr_dme` feature package. The page and JSON API consume the same typed filter, candidate, image, and pagination contract.
 
 Provider endpoint, environment, enablement, and token rotation are available on the linked DR/DME model's **Edit AI Model** page under **Admin → AI Models**. The provider settings are not global and are not shown on the AI Models list. The token field is always blank on render; leaving it blank retains the encrypted stored token. See the [WAI DR-DME AI Model User Guide](../../user-guide/wai-dr-dme-model-management.md).
 
 ## Manual candidates
 
-`GET /api/remote-inference/encounter-set-candidates?project_id=2&workflow=dr_dme`
+`GET /api/remote-inference/encounter-set-candidates?project_id=2&workflow=dr_dme&capture_date_from=2026-08-01&capture_date_to=2026-08-19&camera_id=7&dr_report=present&include_prior=0&page=1&page_size=50`
 
-Roles: `admin`, `local_admin`, `data_manager`, or `fileUploader`. Results are restricted to the caller's upload lab/project scope. Each row includes EncounterSet UUID, masked workflow identifiers, OD/OS counts, eligibility issues, run state, and provider report ID. Manual candidates must be verified.
+Roles: `admin`, `local_admin`, `data_manager`, or `fileUploader`. Results are restricted to the caller's upload lab/project scope. `dr_report` accepts `present`, `absent`, or an empty value for either. `include_prior` defaults to false. `page_size` is normalized to 25 unless it is 25, 50, 75, or 100. Each row includes EncounterSet UUID, capture date, lab, eligible macula-image DTOs, OD/OS counts, DR report summary, eligibility issues, run state, and provider report ID. The response also includes filtered encounter/image totals and pagination state. Manual candidates must be verified.
 
 ## Create a manual job
 
@@ -65,7 +67,7 @@ Roles: `admin`, `local_admin`, `data_manager`, or `fileUploader`. Results are re
 }
 ```
 
-The request accepts 1–25 authorized, eligible EncounterSets and returns HTTP `202` with `job_token`. It creates one `JobItem` per encounter using `source_type=patient_encounter`; a task ID is intentionally absent because execution is encounter-scoped. Mutations require CSRF.
+The request accepts 1–100 authorized, eligible EncounterSets and returns HTTP `202` with `job_token`. It creates one `JobItem` per encounter using `source_type=patient_encounter`; a task ID is intentionally absent because execution is encounter-scoped. Mutations require CSRF.
 
 ## Persistence and retries
 

@@ -17,6 +17,9 @@ from encounter_sets.models import EncounterSetAttachment
 from models import AIInferenceRun, Camera, EncounterSetImage, Grade, GradingTask, Job, JobItem, PatientEncounters
 from remote_inference.manual_service import list_manual_wadhwani_projects, project_allows_manual_wadhwani
 from remote_inference import encounter_service
+from remote_inference.dr_dme import ALLOWED_PAGE_SIZES, CandidateFilters as DrDmeCandidateFilters
+from remote_inference.dr_dme import MAX_MANUAL_ENCOUNTERS as MAX_DR_DME_ENCOUNTERS
+from remote_inference.dr_dme import list_candidates as list_dr_dme_candidates
 from remote_inference.job_service import is_job_resumable
 from services.encounter_set_ai_inference import enqueue_wadhwani_for_task_ids
 from utils.hospital_scoping import apply_scoping
@@ -179,9 +182,11 @@ def _madhunetra_page(*, include_encounters: bool, partial: bool = False):
         if project_id is None or not any(row["id"] == project_id for row in projects):
             project_id = projects[0]["id"] if projects else None
         integration = encounter_service.integration_context(db)
-        encounters = (
-            encounter_service.list_candidates(db, project_id=project_id, user=current_user)
-            if include_encounters and project_id else []
+        cameras = _cameras(db)
+        filters = _dr_dme_filters_from_request(project_id)
+        candidate_page = (
+            list_dr_dme_candidates(db, filters=filters, user=current_user)
+            if include_encounters and project_id else None
         )
     context = {
         "page_title": "Encounter DR-DME Screening",
@@ -189,11 +194,32 @@ def _madhunetra_page(*, include_encounters: bool, partial: bool = False):
         "projects": projects,
         "project_id": project_id,
         "linked_integration": integration if integration and integration["is_enabled"] else None,
-        "encounters": encounters,
-        "max_encounter_sets_per_batch": encounter_service.MAX_MANUAL_ENCOUNTERS,
+        "filters": filters,
+        "cameras": cameras,
+        "encounters": candidate_page.rows if candidate_page else (),
+        "pagination": candidate_page,
+        "filter_stats": {
+            "encounter_count": candidate_page.encounter_count if candidate_page else 0,
+            "image_count": candidate_page.image_count if candidate_page else 0,
+        },
+        "allowed_page_sizes": ALLOWED_PAGE_SIZES,
+        "max_encounter_sets_per_batch": MAX_DR_DME_ENCOUNTERS,
     }
     template = "remidio_api_uploads/_madhunetra_workspace.html" if partial else "remidio_api_uploads/madhunetra_inference.html"
     return render_template(template, **context)
+
+
+def _dr_dme_filters_from_request(project_id: int | None) -> DrDmeCandidateFilters:
+    return DrDmeCandidateFilters(
+        project_id=project_id or 0,
+        capture_date_from=str(request.args.get("capture_date_from") or ""),
+        capture_date_to=str(request.args.get("capture_date_to") or ""),
+        camera_id=str(request.args.get("camera_id") or ""),
+        dr_report=str(request.args.get("dr_report") or ""),
+        include_prior=request.args.get("include_prior") in {"1", "true", "on", "yes"},
+        page=_optional_int(request.args.get("page")) or 1,
+        page_size=_optional_int(request.args.get("page_size")) or ALLOWED_PAGE_SIZES[0],
+    ).normalized()
 
 
 def _page_context(

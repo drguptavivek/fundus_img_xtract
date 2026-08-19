@@ -19,6 +19,7 @@ from remidio_api_uploads.wadhwani_inference import (
     _image_matches_filters,
     _wadhwani_status_by_image,
 )
+from remote_inference.dr_dme import CandidatePage, MAX_MANUAL_ENCOUNTERS
 
 
 def test_wadhwani_status_uses_only_the_glaucoma_task(db_session, core_test_data):
@@ -152,6 +153,7 @@ def test_existing_image_filters_remain_conjunctive():
 def test_encounter_set_page_and_batch_limits_are_25():
     assert ENCOUNTER_SETS_PER_PAGE == 25
     assert MAX_ENCOUNTER_SETS_PER_BATCH == 25
+    assert MAX_MANUAL_ENCOUNTERS == 100
 
 
 def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkeypatch):
@@ -170,23 +172,30 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
         "remidio_api_uploads.wadhwani_inference.encounter_service.integration_context",
         lambda db: {"is_enabled": True},
     )
+    monkeypatch.setattr("remidio_api_uploads.wadhwani_inference._cameras", lambda db: [{"id": 3, "name": "Remidio"}])
     monkeypatch.setattr(
-        "remidio_api_uploads.wadhwani_inference.encounter_service.list_candidates",
-        lambda db, **kwargs: [{
+        "remidio_api_uploads.wadhwani_inference.list_dr_dme_candidates",
+        lambda db, **kwargs: CandidatePage(rows=({
             "encounter_id": 17,
             "encounter_uuid": "encounter-ui-test",
             "patient_id": "patient-ui-test",
             "capture_date": "2026-08-18",
+            "lab_unit_name": "Vision Lab",
             "eligible": True,
             "eligibility_issues": [],
             "eye_counts": {"right": 2, "left": 3},
+            "images": [{
+                "id": 71, "uuid": "11111111-1111-1111-1111-111111111111",
+                "position": 1, "eye": "right", "camera_name": "Remidio",
+            }],
+            "dr_report": {"status": "completed", "result": "Mild DR", "attachment_filename": "dr.pdf"},
             "run_status": "not_requested",
             "report_id": None,
-        }],
+        },), encounter_count=1, image_count=5, page=1, page_size=50, has_prev=False, has_next=False),
     )
 
     page = client.get("/uploads/encountersets/wadhwani_inference?workflow=dr_dme")
-    workspace = client.get("/uploads/encountersets/wadhwani_inference/workspace?workflow=dr_dme&project_id=7")
+    workspace = client.get("/uploads/encountersets/wadhwani_inference/workspace?workflow=dr_dme&project_id=7&page_size=50&dr_report=present")
 
     assert page.status_code == 200
     assert b"Encounter DR-DME Screening" in page.data
@@ -194,6 +203,8 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     assert workspace.status_code == 200
     assert b"encounter-ui-test" in workspace.data
     assert b"OD macula" in workspace.data and b'fs-4">2<' in workspace.data
+    assert b"Mild DR" in workspace.data and b"Remidio" in workspace.data
+    assert b"50 EncounterSets per page" in workspace.data
     assert b'name="selected_encounter_ids"' in workspace.data
 
 

@@ -8,6 +8,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Project
 from remote_inference import automated_service, encounter_service, job_service, manual_service
+from remote_inference.dr_dme import ALLOWED_PAGE_SIZES, CandidateFilters, list_candidates as list_dr_dme_candidates
 from upload_profiles.service import get_user_lab_unit_ids, manager_lab_unit_ids
 
 from . import api_bp
@@ -203,17 +204,60 @@ def get_encounter_remote_inference_candidates():
     workflow = request.args.get("workflow") or "dr_dme"
     if workflow != "dr_dme":
         return jsonify(success=False, error="Unsupported encounter workflow."), 400
+
+    def optional_int(name: str, default: int) -> int:
+        try:
+            return int(request.args.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    filters = CandidateFilters(
+        project_id=project_id,
+        capture_date_from=str(request.args.get("capture_date_from") or ""),
+        capture_date_to=str(request.args.get("capture_date_to") or ""),
+        camera_id=str(request.args.get("camera_id") or ""),
+        dr_report=str(request.args.get("dr_report") or ""),
+        include_prior=request.args.get("include_prior") in {"1", "true", "on", "yes"},
+        page=optional_int("page", 1),
+        page_size=optional_int("page_size", ALLOWED_PAGE_SIZES[0]),
+    ).normalized()
     with get_db_session() as db:
         if db.get(Project, project_id) is None:
             return jsonify(success=False, error="Project not found."), 404
-        rows = encounter_service.list_candidates(db, project_id=project_id, user=current_user)
-    return jsonify(success=True, project_id=project_id, workflow_key=workflow, candidates=rows)
+        result = list_dr_dme_candidates(db, filters=filters, user=current_user)
+    rows = []
+    for row in result.rows:
+        serialized = dict(row)
+        capture_date = serialized.get("capture_date")
+        serialized["capture_date"] = capture_date.isoformat() if hasattr(capture_date, "isoformat") else capture_date
+        rows.append(serialized)
+    return jsonify(
+        success=True,
+        project_id=project_id,
+        workflow_key=workflow,
+        candidates=rows,
+        filters={
+            "capture_date_from": filters.capture_date_from,
+            "capture_date_to": filters.capture_date_to,
+            "camera_id": filters.camera_id,
+            "dr_report": filters.dr_report,
+            "include_prior": filters.include_prior,
+        },
+        pagination={
+            "page": result.page,
+            "page_size": result.page_size,
+            "encounter_count": result.encounter_count,
+            "image_count": result.image_count,
+            "has_prev": result.has_prev,
+            "has_next": result.has_next,
+        },
+    )
 
 
 @api_bp.route("/remote-inference/encounter-set-jobs", methods=["POST"])
 @roles_required("admin", "local_admin", "data_manager", "fileUploader")
 def create_encounter_remote_inference_job():
-    """Queue up to 25 authorized EncounterSets, with one job item per encounter."""
+    """Queue up to 100 authorized EncounterSets, with one job item per encounter."""
     body = request.get_json(silent=True) if request.is_json else request.form
     body = body or {}
     if str(body.get("workflow") or "dr_dme") != "dr_dme":

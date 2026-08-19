@@ -54,7 +54,7 @@ def test_manual_job_uses_scalar_encounter_snapshot_after_session_closes(monkeypa
     monkeypatch.setattr(
         encounter_service,
         "list_candidates",
-        lambda *_args, **_kwargs: [{"encounter_id": 42, "eligible": True}],
+        lambda *_args, **_kwargs: SimpleNamespace(rows=({"encounter_id": 42, "eligible": True},)),
     )
     monkeypatch.setattr(encounter_service, "db_create_job", lambda *_args, **_kwargs: "job-token")
     queued = []

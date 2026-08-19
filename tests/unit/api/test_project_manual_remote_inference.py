@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from api import remote_inference as routes
+from remote_inference.dr_dme import CandidatePage
 from upload_profiles.admin_service import MutationResult
 
 
@@ -108,6 +109,52 @@ def test_create_dr_dme_encounter_job_api_uses_encounter_contract(client, login_u
     assert response.get_json()["job_token"] == "job-1"
     assert captured["project_id"] == 2
     assert captured["encounter_ids"] == [11, 12]
+
+
+def test_dr_dme_candidate_api_exposes_filters_images_and_pagination(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+    captured = {}
+
+    @contextmanager
+    def fake_session():
+        yield SimpleNamespace(get=lambda _model, _project_id: object())
+
+    def candidates(_db, *, filters, user):
+        captured["filters"] = filters
+        return CandidatePage(
+            rows=({
+                "encounter_id": 11,
+                "encounter_uuid": "enc-11",
+                "capture_date": "2026-08-18",
+                "images": [{"id": 91, "uuid": "image-91", "eye": "right"}],
+            },),
+            encounter_count=73,
+            image_count=146,
+            page=2,
+            page_size=50,
+            has_prev=True,
+            has_next=False,
+        )
+
+    monkeypatch.setattr(routes, "get_db_session", fake_session)
+    monkeypatch.setattr(routes, "list_dr_dme_candidates", candidates)
+
+    response = client.get(
+        "/api/remote-inference/encounter-set-candidates"
+        "?project_id=2&workflow=dr_dme&capture_date_from=2026-08-01"
+        "&capture_date_to=2026-08-19&camera_id=7&dr_report=present"
+        "&include_prior=1&page=2&page_size=50"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["candidates"][0]["images"][0]["eye"] == "right"
+    assert payload["pagination"] == {
+        "page": 2, "page_size": 50, "encounter_count": 73,
+        "image_count": 146, "has_prev": True, "has_next": False,
+    }
+    assert captured["filters"].dr_report == "present"
+    assert captured["filters"].include_prior is True
 
 
 def test_save_dr_dme_project_workflow_api_keeps_controls_independent(client, login_user, monkeypatch):

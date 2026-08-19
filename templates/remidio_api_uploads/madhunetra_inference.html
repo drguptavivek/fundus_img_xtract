@@ -27,7 +27,7 @@
         hx-target="#madhunetraWorkspace" hx-trigger="submit" hx-swap="innerHTML">
     <input type="hidden" name="workflow" value="dr_dme">
     <div class="card-body row g-3 align-items-end">
-      <div class="col-md-6">
+      <div class="col-md-3">
         <label class="form-label" for="project_id">Project</label>
         <select class="form-select" id="project_id" name="project_id">
           {% for project in projects %}
@@ -35,12 +35,49 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">Load candidates</button></div>
+      <div class="col-md-2">
+        <label class="form-label" for="capture_date_from">From</label>
+        <input class="form-control" id="capture_date_from" name="capture_date_from" type="date" value="{{ filters.capture_date_from }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="capture_date_to">To</label>
+        <input class="form-control" id="capture_date_to" name="capture_date_to" type="date" value="{{ filters.capture_date_to }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="camera_id">Camera</label>
+        <select class="form-select" id="camera_id" name="camera_id">
+          <option value="">All</option>
+          {% for camera in cameras %}<option value="{{ camera.id }}" {% if filters.camera_id == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="dr_report">DR OCR report</label>
+        <select class="form-select" id="dr_report" name="dr_report">
+          <option value="">Any</option>
+          <option value="present" {% if filters.dr_report == 'present' %}selected{% endif %}>Present</option>
+          <option value="absent" {% if filters.dr_report == 'absent' %}selected{% endif %}>Absent</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label" for="page_size">Show</label>
+        <select class="form-select" id="page_size" name="page_size">
+          {% for size in allowed_page_sizes %}<option value="{{ size }}" {% if filters.page_size == size %}selected{% endif %}>{{ size }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="include_prior" name="include_prior" value="1" {% if filters.include_prior %}checked{% endif %}>
+          <label class="form-check-label" for="include_prior">Include EncounterSets with prior DR/DME inference</label>
+        </div>
+      </div>
+      <input type="hidden" name="page" value="1">
+      <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Apply</button></div>
     </div>
   </form>
 
   <div id="madhunetraWorkspace"
        hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace', workflow='dr_dme', project_id=project_id or '') }}"
+       hx-include="#madhunetraFilters"
        hx-trigger="load" hx-swap="innerHTML">
     <div class="card shadow-sm"><div class="card-body text-muted">Loading DR-DME candidates…</div></div>
   </div>
@@ -50,4 +87,11 @@
 {% block page_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+{% endblock %}
+
+{% block extra_styles %}
+{{ super() }}
+<style>
+  .encounter-dr-dme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem; }
+</style>
 {% endblock %}

@@ -5,7 +5,7 @@
   <input type="hidden" name="workflow" value="dr_dme">
   <input type="hidden" name="project_id" value="{{ project_id or '' }}">
   <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-    <div class="small text-muted">{{ encounters|length }} recent EncounterSets · only verified, eligible rows can be selected.</div>
+    <div class="small text-muted">{{ filter_stats.encounter_count }} EncounterSets · {{ filter_stats.image_count }} eligible macula images match{% if not filters.include_prior %} and have no prior DR/DME inference{% endif %}.</div>
     <div class="d-flex gap-2 align-items-center">
       <span class="badge text-bg-light border">Max {{ max_encounter_sets_per_batch }}</span>
       <button class="btn btn-primary" type="submit" {% if not linked_integration %}disabled{% endif %}>Queue selected encounters</button>
@@ -13,18 +13,27 @@
   </div>
 
   {% if not encounters %}<div class="card shadow-sm"><div class="card-body text-muted">No EncounterSets are available for this workflow.</div></div>{% endif %}
-  <div class="row g-3">
+  <div class="vstack gap-3">
     {% for encounter in encounters %}
-    <div class="col-md-6 col-xl-4">
-      <section class="card shadow-sm h-100 {% if not encounter.eligible %}border-warning{% endif %}">
+      <section class="card shadow-sm {% if not encounter.eligible %}border-warning{% endif %}">
         <div class="card-header d-flex justify-content-between gap-2">
           <div>
             <div class="fw-semibold">EncounterSet {{ encounter.encounter_uuid }}</div>
-            <div class="small text-muted">Patient {{ encounter.patient_id or '-' }} · {{ encounter.capture_date or '-' }}</div>
+            <div class="small text-muted">Patient {{ encounter.patient_id or '-' }} · {{ encounter.capture_date or '-' }} · {{ encounter.lab_unit_name or '-' }}</div>
           </div>
           <span class="badge text-bg-{{ 'success' if encounter.run_status == 'success' else 'warning' if encounter.run_status in ['queued','presigning','uploading','submitting'] else 'danger' if encounter.run_status in ['failed','partial'] else 'secondary' }}">{{ encounter.run_status|replace('_', ' ') }}</span>
         </div>
         <div class="card-body">
+          <div class="mb-3">
+            {% if encounter.dr_report %}
+            <div class="border rounded p-2 bg-body-tertiary small">
+              <span class="fw-semibold">Remidio DR OCR</span>
+              <span class="badge text-bg-light border">{{ encounter.dr_report.status }}</span>
+              {% if encounter.dr_report.attachment_filename %}<span class="text-muted ms-1">{{ encounter.dr_report.attachment_filename }}</span>{% endif %}
+              {% if encounter.dr_report.result %}<div class="mt-1">{{ encounter.dr_report.result }}</div>{% endif %}
+            </div>
+            {% else %}<div class="small text-muted">No DR OCR report detected for this EncounterSet.</div>{% endif %}
+          </div>
           <div class="row g-2 text-center mb-3">
             <div class="col"><div class="border rounded p-2"><div class="small text-muted">OD macula</div><div class="fs-4">{{ encounter.eye_counts.right }}</div></div></div>
             <div class="col"><div class="border rounded p-2"><div class="small text-muted">OS macula</div><div class="fs-4">{{ encounter.eye_counts.left }}</div></div></div>
@@ -33,13 +42,41 @@
           <ul class="small text-warning-emphasis ps-3 mb-3">{% for issue in encounter.eligibility_issues %}<li>{{ issue }}</li>{% endfor %}</ul>
           {% else %}<div class="small text-success mb-3">Verified and eligible for combined screening.</div>{% endif %}
           {% if encounter.report_id %}<div class="small text-muted mb-2">Report {{ encounter.report_id }}</div>{% endif %}
+          <div class="encounter-dr-dme-grid mb-3">
+            {% for image in encounter.images %}
+            <div class="border rounded overflow-hidden">
+              <div class="ratio ratio-1x1 bg-body-tertiary">
+                <img class="w-100 h-100 object-fit-cover" loading="lazy" decoding="async"
+                     src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=image.uuid) }}"
+                     alt="{{ image.eye|upper }} macula image {{ image.position }}">
+              </div>
+              <div class="p-2 small">
+                <div class="fw-semibold">{{ 'OD' if image.eye == 'right' else 'OS' }} · Image {{ image.position }}</div>
+                <div class="text-muted text-truncate">{{ image.camera_name or 'Camera unknown' }} · macula</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="selected_encounter_ids" value="{{ encounter.encounter_id }}" id="madhunetra_encounter_{{ encounter.encounter_id }}" {% if not encounter.eligible or encounter.run_status in ['queued','presigning','uploading','submitting'] %}disabled{% endif %}>
             <label class="form-check-label" for="madhunetra_encounter_{{ encounter.encounter_id }}">Queue this EncounterSet</label>
           </div>
         </div>
       </section>
-    </div>
     {% endfor %}
   </div>
+
+  {% if pagination %}
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <button class="btn btn-outline-secondary" type="button" {% if not pagination.has_prev %}disabled{% endif %}
+            hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+            hx-include="#madhunetraFilters" hx-vals='{"workflow":"dr_dme","page":"{{ pagination.prev_page }}"}'
+            hx-target="#madhunetraWorkspace" hx-swap="innerHTML">Previous</button>
+    <span class="small text-muted">Page {{ pagination.page }} · {{ pagination.page_size }} EncounterSets per page</span>
+    <button class="btn btn-outline-secondary" type="button" {% if not pagination.has_next %}disabled{% endif %}
+            hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
+            hx-include="#madhunetraFilters" hx-vals='{"workflow":"dr_dme","page":"{{ pagination.next_page }}"}'
+            hx-target="#madhunetraWorkspace" hx-swap="innerHTML">Next</button>
+  </div>
+  {% endif %}
 </form>

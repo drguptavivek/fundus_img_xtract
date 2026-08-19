@@ -193,8 +193,16 @@ def enqueue_wadhwani_for_encounter_ids(
 
 
 def encounter_ids_from_ingest_result(result: dict[str, Any]) -> list[int]:
+    """Extract affected encounters from direct and project-sync ingest shapes."""
     encounter_ids: set[int] = set()
-    for exam in result.get("exams") or []:
+    exam_groups = [result.get("exams") or []]
+    for group in result.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        ingest = group.get("ingest") if isinstance(group.get("ingest"), dict) else {}
+        exam_groups.append(ingest.get("exams") or [])
+
+    for exam in (exam for exams in exam_groups for exam in exams):
         if not isinstance(exam, dict):
             continue
         encounter_id = exam.get("patient_encounter_id")

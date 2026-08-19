@@ -278,3 +278,16 @@ Proposed idempotency keys:
 This save service should create or update local EncounterSet rows without
 creating duplicate patients, encounters, images, documents, reports, or grading
 tasks.
+
+## Automated inference completion hook
+
+After either a direct routing-profile sync or a grouped project sync persists its
+assets, post-processing extracts every affected `patient_encounter_id` and
+re-evaluates project-owned automatic inference. Grouped project results use the
+`groups[].ingest.exams[]` shape; direct syncs use top-level `exams[]`. Both shapes
+must be supported.
+
+This re-evaluation is intentional for reused encounters and recovered downloads:
+an incomplete encounter is skipped, then becomes queueable when a later sync
+completes its required image inventory. Existing inference-run and queued-job
+checks make the hook duplicate-safe.

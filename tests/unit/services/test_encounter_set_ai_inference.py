@@ -17,11 +17,49 @@ from models import (
 from remote_inference.models import DiseaseReportLinkage, ProjectAutomatedRemoteInferenceRule
 from services.encounter_set_ai_inference import (
     create_wadhwani_task_ids_for_encounter,
+    encounter_ids_from_ingest_result,
     encounter_set_report_evidence,
 )
 from services.wadhwani_glaucoma_inference import WADHWANI_PROVIDER
 from upload_profiles.models import UploadProfile, UploadProfileKind
 from upload_profiles.service import UPLOAD_KIND_ENCOUNTER_SET
+
+
+def test_encounter_ids_from_project_sync_ingest_groups_are_requeued_after_recovery():
+    result = {
+        "groups": [
+            {
+                "ingest": {
+                    "exams": [
+                        {
+                            "patient_encounter_id": 3988,
+                            "images": [
+                                {"patient_encounter_id": 3988, "status": "downloaded"},
+                                {"patient_encounter_id": 3993, "status": "downloaded"},
+                            ],
+                        }
+                    ]
+                }
+            },
+            {"ingest": {"exams": [{"patient_encounter_id": 3993, "images": []}]}},
+        ]
+    }
+
+    assert encounter_ids_from_ingest_result(result) == [3988, 3993]
+
+
+def test_encounter_ids_from_ingest_result_preserves_direct_sync_shape():
+    result = {
+        "exams": [
+            {
+                "patient_encounter_id": 17,
+                "images": [{"patient_encounter_id": 17}],
+                "reports": [{"patient_encounter_id": 18}],
+            }
+        ]
+    }
+
+    assert encounter_ids_from_ingest_result(result) == [17, 18]
 
 
 def _encounter_set_wadhwani_profile(db_session, glaucoma):

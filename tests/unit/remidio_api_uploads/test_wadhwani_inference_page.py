@@ -200,6 +200,9 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     assert page.status_code == 200
     assert b"Encounter DR-DME Screening" in page.data
     assert b"Glaucoma" in page.data and b"DR + DME" in page.data
+    assert b'name="eligibility"' in page.data
+    assert b'<option value="eligible" selected>Eligible</option>' in page.data
+    assert b'Non-monocular: one eye only' in page.data
     assert workspace.status_code == 200
     assert b"encounter-ui-test" in workspace.data
     assert b"OD macula" in workspace.data and b'fs-4">2<' in workspace.data

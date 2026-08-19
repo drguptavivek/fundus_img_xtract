@@ -94,6 +94,8 @@ def test_candidate_requires_both_eyes_unless_canonical_monocular_flag_is_true():
     assert binocular.eligible is False
     assert "Both eyes require a macula image unless the patient is marked monocular." in binocular.issues
     assert monocular.eligible is True
+    assert binocular.is_monocular is False
+    assert monocular.is_monocular is True
 
 
 def test_candidate_requires_canonical_age_and_sex():

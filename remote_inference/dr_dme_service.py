@@ -66,6 +66,8 @@ class EncounterEligibility:
     eligible: bool
     issues: tuple[str, ...]
     images: tuple[EligibleImage, ...]
+    is_verified: bool
+    is_monocular: bool
 
     @property
     def eye_counts(self) -> dict[str, int]:
@@ -148,7 +150,9 @@ def _content_type(filename: str) -> str | None:
 
 def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool = False) -> EncounterEligibility:
     issues: list[str] = []
-    if require_verified and str(encounter.encounter_verified_status or "").lower() != "verified":
+    is_verified = str(encounter.encounter_verified_status or "").lower() == "verified"
+    is_monocular = _patient_value(encounter, "is_monocular", "is_monocular") is True
+    if require_verified and not is_verified:
         issues.append("EncounterSet is not verified.")
     patient_id = str(_patient_value(encounter, "patient_id", "hospital_UHID", "mrn", "uhid") or "")
     if not patient_id or len(patient_id) > 30:
@@ -186,12 +190,18 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
     if not selected:
         issues.append("No macula-focused image has unambiguous laterality.")
     eye_counts = {eye: sum(row.eye == eye for row in selected) for eye in ("left", "right")}
-    if selected and 0 in eye_counts.values() and _patient_value(encounter, "is_monocular", "is_monocular") is not True:
+    if selected and 0 in eye_counts.values() and not is_monocular:
         issues.append("Both eyes require a macula image unless the patient is marked monocular.")
     for eye in ("left", "right"):
         if eye_counts[eye] > 10:
             issues.append(f"More than 10 {eye}-eye images are present; the encounter cannot be split or truncated.")
-    return EncounterEligibility(not issues, tuple(issues), tuple(selected))
+    return EncounterEligibility(
+        eligible=not issues,
+        issues=tuple(issues),
+        images=tuple(selected),
+        is_verified=is_verified,
+        is_monocular=is_monocular,
+    )
 
 
 def has_completed_dr_ocr(encounter: PatientEncounters) -> bool:

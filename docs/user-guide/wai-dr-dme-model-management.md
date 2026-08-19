@@ -50,6 +50,7 @@ Provider configuration and project authorization are separate controls:
 ## Run a manual screening
 
 1. Open `/uploads/encountersets/wadhwani_inference?workflow=dr_dme`.
+   The browser initially shows only eligible EncounterSets. Use the Eligibility filter to inspect all candidates, unverified EncounterSets, or non-monocular encounters that have macula images for only one eye.
 2. Select the project and load candidates.
 3. Review the OD and OS macula-image counts and eligibility messages.
 4. Select one or more eligible, verified EncounterSets and queue them.

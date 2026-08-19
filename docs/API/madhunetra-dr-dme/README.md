@@ -43,7 +43,7 @@ In Project Settings, the manual control is presented under **Manual Remote AI Wo
 
 ## Operator UI
 
-The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled. Its search supports capture-date range, camera, DR OCR report availability, exclusion or inclusion of prior DR/DME runs, and page sizes of 25, 50, 75, or 100 EncounterSets. Candidate cards show every eligible macula image with OD/OS, camera, capture date, report summary, eligibility blockers, and prior run/report state. Selecting an EncounterSet still queues all its eligible macula images as one combined screening request; filters never split the encounter submission.
+The existing EncounterSet inference browser at `/uploads/encountersets/wadhwani_inference` has a workflow selector. `?workflow=dr_dme` shows only scoped projects with manual DR-DME enabled and defaults to fully eligible encounters. Its search supports eligibility (`eligible`, `any`, `not_verified`, or `binocular_one_eye` for non-monocular encounters with macula images from only one eye), capture-date range, camera, DR OCR report availability, exclusion or inclusion of prior DR/DME runs, and page sizes of 25, 50, 75, or 100 EncounterSets. Candidate cards show every eligible macula image with OD/OS, camera, capture date, report summary, eligibility blockers, and prior run/report state. Selecting an EncounterSet still queues all its eligible macula images as one combined screening request; filters never split the encounter submission.
 
 The DR/DME search contract and query composition live in the deep `remote_inference/dr_dme` feature package. The page and JSON API consume the same typed filter, candidate, image, and pagination contract.
 
@@ -51,9 +51,9 @@ Provider endpoint, environment, enablement, and token rotation are available on 
 
 ## Manual candidates
 
-`GET /api/remote-inference/encounter-set-candidates?project_id=2&workflow=dr_dme&capture_date_from=2026-08-01&capture_date_to=2026-08-19&camera_id=7&dr_report=present&include_prior=0&page=1&page_size=50`
+`GET /api/remote-inference/encounter-set-candidates?project_id=2&workflow=dr_dme&eligibility=eligible&capture_date_from=2026-08-01&capture_date_to=2026-08-19&camera_id=7&dr_report=present&include_prior=0&page=1&page_size=50`
 
-Roles: `admin`, `local_admin`, `data_manager`, or `fileUploader`. Results are restricted to the caller's upload lab/project scope. `dr_report` accepts `present`, `absent`, or an empty value for either. `include_prior` defaults to false. `page_size` is normalized to 25 unless it is 25, 50, 75, or 100. Each row includes EncounterSet UUID, capture date, lab, eligible macula-image DTOs, OD/OS counts, DR report summary, eligibility issues, run state, and provider report ID. The response also includes filtered encounter/image totals and pagination state. Manual candidates must be verified.
+Roles: `admin`, `local_admin`, `data_manager`, or `fileUploader`. Results are restricted to the caller's upload lab/project scope. `eligibility` defaults to `eligible`; invalid values also normalize to `eligible`. `dr_report` accepts `present`, `absent`, or an empty value for either. `include_prior` defaults to false. `page_size` is normalized to 25 unless it is 25, 50, 75, or 100. Each row includes EncounterSet UUID, capture date, lab, eligible macula-image DTOs, OD/OS counts, DR report summary, eligibility issues, run state, and provider report ID. The response also includes filtered encounter/image totals and pagination state. Diagnostic filters may return unverified or otherwise blocked encounters, but only fully eligible and verified candidates can be queued.
 
 ## Create a manual job
 

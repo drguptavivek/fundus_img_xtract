@@ -216,6 +216,7 @@ def _dr_dme_filters_from_request(project_id: int | None) -> DrDmeCandidateFilter
         capture_date_to=str(request.args.get("capture_date_to") or ""),
         camera_id=str(request.args.get("camera_id") or ""),
         dr_report=str(request.args.get("dr_report") or ""),
+        eligibility=str(request.args.get("eligibility") or "eligible"),
         include_prior=request.args.get("include_prior") in {"1", "true", "on", "yes"},
         page=_optional_int(request.args.get("page")) or 1,
         page_size=_optional_int(request.args.get("page_size")) or ALLOWED_PAGE_SIZES[0],

@@ -196,7 +196,7 @@ def save_project_dr_dme_encounter_workflow(project_id: int):
 @api_bp.route("/remote-inference/encounter-set-candidates", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "fileUploader")
 def get_encounter_remote_inference_candidates():
-    """List authorized, verified EncounterSets with DR-DME eligibility details."""
+    """List authorized EncounterSets using the requested DR-DME eligibility view."""
     try:
         project_id = int(request.args.get("project_id", ""))
     except (TypeError, ValueError):
@@ -217,6 +217,7 @@ def get_encounter_remote_inference_candidates():
         capture_date_to=str(request.args.get("capture_date_to") or ""),
         camera_id=str(request.args.get("camera_id") or ""),
         dr_report=str(request.args.get("dr_report") or ""),
+        eligibility=str(request.args.get("eligibility") or "eligible"),
         include_prior=request.args.get("include_prior") in {"1", "true", "on", "yes"},
         page=optional_int("page", 1),
         page_size=optional_int("page_size", ALLOWED_PAGE_SIZES[0]),
@@ -241,6 +242,7 @@ def get_encounter_remote_inference_candidates():
             "capture_date_to": filters.capture_date_to,
             "camera_id": filters.camera_id,
             "dr_report": filters.dr_report,
+            "eligibility": filters.eligibility,
             "include_prior": filters.include_prior,
         },
         pagination={

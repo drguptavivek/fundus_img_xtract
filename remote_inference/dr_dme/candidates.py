@@ -16,6 +16,7 @@ from utils.hospital_scoping import apply_scoping
 
 ALLOWED_PAGE_SIZES = (25, 50, 75, 100)
 MAX_MANUAL_ENCOUNTERS = 100
+ELIGIBILITY_FILTERS = {"any", "eligible", "not_verified", "binocular_one_eye"}
 
 
 def validate_selection_count(count: int) -> str | None:
@@ -32,6 +33,7 @@ class CandidateFilters:
     capture_date_to: str = ""
     camera_id: str = ""
     dr_report: str = ""
+    eligibility: str = "eligible"
     include_prior: bool = False
     page: int = 1
     page_size: int = 25
@@ -44,6 +46,7 @@ class CandidateFilters:
             capture_date_to=self.capture_date_to,
             camera_id=self.camera_id,
             dr_report=self.dr_report if self.dr_report in {"", "present", "absent"} else "",
+            eligibility=self.eligibility if self.eligibility in ELIGIBILITY_FILTERS else "eligible",
             include_prior=self.include_prior,
             page=max(self.page, 1),
             page_size=self.page_size if self.page_size in ALLOWED_PAGE_SIZES else ALLOWED_PAGE_SIZES[0],
@@ -96,6 +99,19 @@ def _dr_report_summary(encounter: PatientEncounters) -> dict[str, Any] | None:
             "attachment_filename": attachment.original_filename,
         }
     return None
+
+
+def _matches_eligibility_filter(eligibility: Any, value: str) -> bool:
+    if value == "eligible":
+        return bool(eligibility.eligible)
+    if value == "not_verified":
+        return not eligibility.is_verified
+    if value == "binocular_one_eye":
+        return (
+            not eligibility.is_monocular
+            and sum(count > 0 for count in eligibility.eye_counts.values()) == 1
+        )
+    return True
 
 
 def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePage:
@@ -155,6 +171,8 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
         if filters.dr_report == "absent" and report is not None:
             continue
         eligibility = evaluate_encounter(encounter, require_verified=True)
+        if not _matches_eligibility_filter(eligibility, filters.eligibility):
+            continue
         eligible_ids = {row.image_id: row for row in eligibility.images}
         images = []
         for image in sorted(encounter.encounter_set_images or [], key=lambda row: (row.spatial_position, row.id)):

@@ -51,6 +51,15 @@
         </select>
       </div>
       <div class="col-md-2">
+        <label class="form-label" for="eligibility">Eligibility</label>
+        <select class="form-select" id="eligibility" name="eligibility">
+          <option value="eligible" {% if filters.eligibility == 'eligible' %}selected{% endif %}>Eligible</option>
+          <option value="any" {% if filters.eligibility == 'any' %}selected{% endif %}>Any</option>
+          <option value="not_verified" {% if filters.eligibility == 'not_verified' %}selected{% endif %}>Not verified</option>
+          <option value="binocular_one_eye" {% if filters.eligibility == 'binocular_one_eye' %}selected{% endif %}>Non-monocular: one eye only</option>
+        </select>
+      </div>
+      <div class="col-md-2">
         <label class="form-label" for="dr_report">DR OCR report</label>
         <select class="form-select" id="dr_report" name="dr_report">
           <option value="">Any</option>

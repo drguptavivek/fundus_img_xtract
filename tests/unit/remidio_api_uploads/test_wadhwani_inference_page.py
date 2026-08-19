@@ -209,6 +209,33 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     assert b"Mild DR" in workspace.data and b"Remidio" in workspace.data
     assert b"50 EncounterSets per page" in workspace.data
     assert b'name="selected_encounter_ids"' in workspace.data
+    assert b"Select all visible" in workspace.data
+    assert (
+        b'/uploads/encountersets/browse?project_id=7&amp;month=2026-08&amp;date=2026-08-18&amp;encounter_id=17'
+        in workspace.data
+    )
+    assert b'target="_blank" rel="noopener noreferrer"' in workspace.data
+
+
+def test_both_inference_workspaces_link_encounters_and_support_select_all_visible():
+    project_root = Path(__file__).resolve().parents[3]
+    glaucoma = (
+        project_root / "templates/remidio_api_uploads/_wadhwani_inference_workspace.html"
+    ).read_text(encoding="utf-8")
+    dr_dme = (
+        project_root / "templates/remidio_api_uploads/_madhunetra_workspace.html"
+    ).read_text(encoding="utf-8")
+    dr_dme_script = (
+        project_root / "static/js/madhunetra-inference.js"
+    ).read_text(encoding="utf-8")
+
+    for template in (glaucoma, dr_dme):
+        assert "encounter_set_browser" in template
+        assert "month=encounter_date[:7]" in template
+        assert "date=encounter_date[:10]" in template
+        assert 'target="_blank" rel="noopener noreferrer"' in template
+        assert "Select all visible" in template
+    assert 'input[name="selected_encounter_ids"]:not(:disabled)' in dr_dme_script
 
 
 def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatch):

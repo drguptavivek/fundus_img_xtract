@@ -31,17 +31,20 @@
 
   <div class="vstack gap-3">
     {% for encounter in encounters %}
+    {% set encounter_date = encounter.capture_date|string %}
     <section class="card shadow-sm">
       <div class="card-header d-flex flex-column flex-xl-row justify-content-between gap-2">
         <div>
-          <div class="fw-semibold">EncounterSet {{ encounter.uuid }}</div>
+          <div class="fw-semibold">
+            <a href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id, month=encounter_date[:7], date=encounter_date[:10], encounter_id=encounter.id) }}"
+               target="_blank" rel="noopener noreferrer">EncounterSet {{ encounter.uuid }}</a>
+          </div>
           <div class="small text-muted">
             Patient {{ encounter.patient_id or '-' }} · {{ encounter.capture_date or '-' }} · {{ encounter.lab_unit_name or '-' }}
           </div>
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-outline-primary" type="button" data-select-encounter-images> Select all visible images</button>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id, encounter_id=encounter.id) }}">Open in Browser</a>
         </div>
       </div>
       <div class="card-body">

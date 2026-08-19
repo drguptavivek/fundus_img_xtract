@@ -35,7 +35,9 @@
     contexts: new Map(),
     activeContextKey: null,
     activeFeatureId: null,
-    mode: MODES.ROI,
+    // Preserve the viewer's documented left-drag gesture until the grader
+    // explicitly selects an annotation tool.
+    mode: document.getElementById("grading-workbench") ? MODES.PAN : MODES.ROI,
     tempPan: false,
     drawing: null,
     pointDrag: null,

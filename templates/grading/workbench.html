@@ -88,7 +88,7 @@
       <span class="small text-muted mt-1">Please wait while the next screen loads.</span>
     </div>
   </div>
-  <form class="gwb-form" data-workbench-form data-grading-form="true">
+  <form class="gwb-form" data-workbench-form data-grading-form="true" novalidate>
     {{ csrf_field() }}
     <div id="workbench-panels"
          class="carousel slide gwb-carousel{% if workbench.lease.workflow == 'linked' %} linked-grading-carousel{% endif %}"
@@ -355,17 +355,12 @@
                     </h2>
                     {% if panel.target_level == 'image' and set_context.enabled %}
                     <div class="btn-group btn-group-sm" role="group" aria-label="Image navigation">
-                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="prev" title="Previous image"{% if image_nav.index == 1 %} disabled{% endif %}>
+                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="prev" title="Previous grading target"{% if loop.first %} disabled{% endif %}>
                         <i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span class="visually-hidden">Previous image</span>
                       </button>
-                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="next" title="Next image"{% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length %} disabled{% endif %}>
+                      <button class="btn btn-outline-secondary" type="button" data-image-navigate="next" title="Next grading target"{% if loop.last %} disabled{% endif %}>
                         <i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span class="visually-hidden">Next image</span>
                       </button>
-                      {% if image_nav.index == workbench.panels|selectattr('target_level', 'equalto', 'image')|list|length and encounter_panels %}
-                      <button class="btn btn-outline-primary" type="button" data-encounter-navigate title="Continue to set grading">
-                        Grade set <i class="fa-solid fa-chevron-right ms-1" aria-hidden="true"></i>
-                      </button>
-                      {% endif %}
                     </div>
                     {% endif %}
                   </div>
@@ -379,7 +374,7 @@
                         <input class="btn-check" type="radio"
                                id="grade-{{ panel.task_uuid }}-{{ grade.id }}"
                                name="{{ panel.fields.label }}" value="{{ grade.id }}"
-                               data-grade-option required autocomplete="off"
+                               data-grade-option autocomplete="off"
                                {% if saved_observation and saved_observation.disease_grading_id == grade.id %}checked{% endif %}
                                {% if not panel.editable %}disabled{% endif %}>
                         <label class="btn btn-outline-primary w-100 h-100 d-flex align-items-center justify-content-center"
@@ -456,7 +451,7 @@ window.currentUserId = {{ current_user.id|tojson }};
 window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/grading-viewer.js', v=(config.get('ASSETS_VERSION','') ~ '-preset-modal-v2-serial-image-load-v1-cdr-v2')) }}" defer></script>
-{% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2' %}
+{% set annotation_assets_version = config.get('ASSETS_VERSION','') ~ '-annotation-tools-v2-pan-v1' %}
 <script src="{{ url_for('static', filename='js/submission-guard.js', v=(config.get('ASSETS_VERSION','') ~ '-submission-guard-v2')) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-colors.js', v=annotation_assets_version) }}"></script>
 <script src="{{ url_for('static', filename='js/feature-geometry-draft.js', v=annotation_assets_version) }}"></script>
@@ -474,8 +469,8 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const imagePanels = panels.filter(panel => panel.dataset.targetLevel === 'image');
   const editablePanels = panels.filter(panel => panel.dataset.readOnly !== 'true');
   const editableImagePanels = editablePanels.filter(panel => panel.dataset.targetLevel === 'image');
-  const encounterPanel = panels.find(panel => panel.dataset.targetLevel === 'encounter');
-  const contextualSubmission = Boolean(encounterPanel && imagePanels.length);
+  const encounterPanels = panels.filter(panel => panel.dataset.targetLevel === 'encounter');
+  const contextualSubmission = Boolean(encounterPanels.length && imagePanels.length);
   const submitActionGroups = Array.from(root.querySelectorAll('[data-workbench-submit-actions]'));
   const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
   const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
@@ -624,15 +619,15 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   function updateSubmissionControls() {
     const activePanel = panels[activePanelIndex];
     const showActions = activePanel?.dataset.readOnly !== 'true'
-      && (!contextualSubmission || activePanel === encounterPanel);
-    const allImagesGraded = editableImagePanels.every(panel => Boolean(selectedGrade(panel)));
+      && (!contextualSubmission || activePanel?.dataset.targetLevel === 'encounter');
+    const allTargetsGraded = editablePanels.every(panel => Boolean(selectedGrade(panel)));
     submitActionGroups.forEach(group => {
       group.classList.toggle('d-none', !showActions || group.closest('[data-task-uuid]') !== activePanel);
     });
     submitButtons.forEach(button => {
       button.disabled = submissionOutcomeUnknown
         || submitting
-        || (contextualSubmission && !allImagesGraded);
+        || !allTargetsGraded;
     });
   }
 
@@ -799,15 +794,9 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   root.querySelectorAll('[data-image-navigate]').forEach(button => {
     button.addEventListener('click', () => {
       const currentPanel = button.closest('[data-task-uuid]');
-      const imageIndex = imagePanels.indexOf(currentPanel);
-      const nextImageIndex = imageIndex + (button.dataset.imageNavigate === 'prev' ? -1 : 1);
-      const nextPanel = imagePanels[nextImageIndex];
-      if (nextPanel) carousel?.to(panels.indexOf(nextPanel));
-    });
-  });
-  root.querySelectorAll('[data-encounter-navigate]').forEach(button => {
-    button.addEventListener('click', () => {
-      if (encounterPanel) carousel?.to(panels.indexOf(encounterPanel));
+      const panelIndex = panels.indexOf(currentPanel);
+      const nextPanelIndex = panelIndex + (button.dataset.imageNavigate === 'prev' ? -1 : 1);
+      if (panels[nextPanelIndex]) carousel?.to(nextPanelIndex);
     });
   });
   root.querySelectorAll('[data-encounter-image-navigate]').forEach(button => {
@@ -886,6 +875,13 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   workbenchForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (submitting) return;
+    const firstIncompletePanel = editablePanels.find(panel => !selectedGrade(panel));
+    if (firstIncompletePanel) {
+      carousel?.to(panels.indexOf(firstIncompletePanel));
+      const targetName = firstIncompletePanel.querySelector('.gwb-grade-card h2')?.textContent.trim();
+      showMessage(`Select a grade for ${targetName || 'every target'} before submitting.`, 'warning');
+      return;
+    }
     const action = event.submitter?.value || 'save_close';
     const clickedButton = event.submitter;
     const submission = window.SubmissionGuard.acquire(workbenchForm, {

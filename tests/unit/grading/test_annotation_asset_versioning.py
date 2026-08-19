@@ -48,3 +48,9 @@ def test_linked_grader_editor_falls_back_to_shared_viewer() -> None:
     assert 'panel?.querySelector(".imggr-viewer-root")' in editor
     assert '|| document.querySelector(".imggr-viewer-root")' in editor
     assert 'candidate.canvas.style.display = candidate === ctx ? "block" : "none"' in editor
+
+
+def test_package_workbench_starts_annotation_editor_in_pan_mode() -> None:
+    editor = (STATIC_JS_DIR / "feature-geometry-editor.js").read_text()
+
+    assert 'document.getElementById("grading-workbench") ? MODES.PAN : MODES.ROI' in editor

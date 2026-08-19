@@ -56,7 +56,8 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'class="col-6"' in template
     assert "panel.fields.geometry" in template
     assert "data-geometry-sidebar-host" in template
-    assert 'data-grading-form="true"' in template
+    assert 'data-grading-form="true" novalidate' in template
+    assert "data-grade-option required" not in template
     assert "data-features-section" in template
     assert "data-features-container" in template
     assert "gwb-shell is-expanded" in template
@@ -66,13 +67,13 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "{% if workbench.panels|length > 1 %}" in template
     assert "data-image-navigate=\"prev\"" in template
     assert "data-image-navigate=\"next\"" in template
-    assert "data-encounter-navigate" in template
-    assert "Grade set" in template
+    assert "data-encounter-navigate" not in template
+    assert "Grade set" not in template
     assert "{{ 'Image' if panel.target_level == 'image' else 'Set' }}:" in template
     assert '<legend class="visually-hidden">Select grade</legend>' in template
     assert template.index('text-uppercase fw-semibold mb-1">Grade') < template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:")
     assert template.index("{{ 'Image' if panel.target_level == 'image' else 'Set' }}:") < template.index('data-image-navigate="prev"')
-    assert "carousel?.to(panels.indexOf(encounterPanel))" in template
+    assert "const encounterPanels = panels.filter" in template
     assert "document.addEventListener('DOMContentLoaded', initializeCarousel" in template
     assert "carousel = window.bootstrap.Carousel.getOrCreateInstance" in template
     assert "data-workbench-progress" in template
@@ -81,8 +82,9 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "submitActionGroups" in template
     assert "group.closest('[data-task-uuid]') !== activePanel" in template
     assert "contextualSubmission" in template
-    assert "allImagesGraded" in template
-    assert "activePanel === encounterPanel" in template
+    assert "const allTargetsGraded = editablePanels.every" in template
+    assert "activePanel?.dataset.targetLevel === 'encounter'" in template
+    assert "const firstIncompletePanel = editablePanels.find" in template
     assert "data-encounter-image-grade" in template
     assert "gwb-encounter-thumbnail" in template
     assert "data-encounter-image-navigate" in template
@@ -92,6 +94,8 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert "No image targets" in template
     assert 'data-workbench-navigate="prev"' in template
     assert 'data-workbench-navigate="next"' in template
+    assert "const nextPanelIndex = panelIndex +" in template
+    assert "annotation-tools-v2-pan-v1" in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template
     assert "imggr-cdr-toggle" in template

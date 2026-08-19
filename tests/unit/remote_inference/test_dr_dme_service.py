@@ -5,14 +5,14 @@ from types import SimpleNamespace
 from remote_inference.dr_dme_service import evaluate_encounter, has_completed_dr_ocr, normalize_eye, normalize_focus
 
 
-def image(image_id, *, eye="OD", focus="MACULA", filename="image.jpg"):
+def image(image_id, *, eye="OD", focus="MACULA", filename="image.jpg", is_not_gradable=False):
     return SimpleNamespace(
         id=image_id,
         uuid=f"image-{image_id}",
         spatial_position=image_id,
         asset_kind="clinical_image",
         creates_task=True,
-        is_not_gradable=False,
+        is_not_gradable=is_not_gradable,
         original_filename=filename,
         edited_filename=None,
         metadata_json={"laterality": eye, "focus": focus},
@@ -63,6 +63,17 @@ def test_candidate_selects_only_macula_with_unambiguous_eye():
     assert result.eye_counts == {"right": 1, "left": 1}
     assert result.age == 55
     assert result.sex == "female"
+
+
+def test_human_ungradable_mark_does_not_exclude_wai_candidate_image():
+    result = evaluate_encounter(
+        encounter([image(1), image(2, eye="OS", is_not_gradable=True)]),
+        require_verified=True,
+    )
+
+    assert result.eligible is True
+    assert [row.image_id for row in result.images] == [1, 2]
+    assert result.eye_counts == {"right": 1, "left": 1}
 
 
 def test_candidate_never_truncates_more_than_ten_images_per_eye():

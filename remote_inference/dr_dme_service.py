@@ -177,7 +177,6 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
             image.asset_kind != "clinical_image"
             or not image.creates_task
             or not getattr(image, "visible_to_grader", True)
-            or image.is_not_gradable
         ):
             continue
         image_metadata = image.metadata_json if isinstance(image.metadata_json, dict) else {}

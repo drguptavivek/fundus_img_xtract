@@ -587,6 +587,47 @@ def test_verify_encounter_set_detail(client, auth_client_factory, encounter_set_
     assert b"Close and refresh report" in response.data
 
 
+def test_verify_encounter_set_nav_shows_laterality_and_focus(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    """Each image in the left nav rail is labelled with its eye and focus."""
+    user = UserFactory.create_admin(db_session, username="admin_verify_descriptor")
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}")
+    assert response.status_code == 200
+    # Fixture image carries laterality="right" and fundus_field="macula".
+    assert f'data-image-descriptor="{encounter_set_data["image"].id}"'.encode() in response.data
+    assert "OD · Macula".encode() in response.data
+
+
+@pytest.mark.parametrize(
+    "metadata, expected",
+    [
+        ({"laterality": "right", "fundus_field": "macula"}, {"laterality": "OD", "focus": "Macula", "label": "OD · Macula"}),
+        ({"laterality": "OS", "image_segment": "optic disc"}, {"laterality": "OS", "focus": "Disc", "label": "OS · Disc"}),
+        ({"laterality": "both", "fundus_image_view": "peripheral"}, {"laterality": "OU", "focus": "Other", "label": "OU · Other"}),
+        ({"laterality": "OD"}, {"laterality": "OD", "focus": None, "label": "OD"}),
+        # Unknown must stay unknown rather than defaulting to a plausible-looking value.
+        ({"laterality": "unknown"}, {"laterality": None, "focus": None, "label": "—"}),
+        ({}, {"laterality": None, "focus": None, "label": "—"}),
+        (None, {"laterality": None, "focus": None, "label": "—"}),
+    ],
+)
+def test_image_descriptor_resolution(metadata, expected):
+    """Laterality/focus resolve across every ingestion vocabulary, without guessing."""
+    from verify_encounter_set.routes import _image_descriptor
+
+    image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        spatial_position=1,
+        original_filename="descriptor.jpg",
+        folder_rel="files/test_sets",
+        metadata_json=metadata,
+    )
+    assert _image_descriptor(image) == expected
+
+
 def test_verified_encounter_set_detail_is_read_only(
     client, auth_client_factory, encounter_set_data, db_session
 ):

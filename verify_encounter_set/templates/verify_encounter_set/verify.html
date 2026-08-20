@@ -47,6 +47,16 @@
     object-fit: cover;
     background: #111827;
   }
+  .verify-nav-descriptor {
+    font-size: .75rem;
+    line-height: 1;
+    padding: .15rem .4rem;
+    border-radius: 4px;
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
   .verify-status-dot {
     width: .7rem;
     height: .7rem;
@@ -191,6 +201,10 @@
               <div class="d-flex align-items-center gap-2">
                 <span class="verify-status-dot {{ 'is-ungradable' if image.is_not_gradable else 'is-reviewed' if image.is_reviewed else '' }}" aria-hidden="true"></span>
                 <span class="fw-semibold">Image {{ loop.index }}</span>
+                {% set descriptor = image_descriptors.get(image.uuid) %}
+                <span class="verify-nav-descriptor"
+                      data-image-descriptor="{{ image.id }}"
+                      title="Eye and focus">{{ descriptor.label if descriptor else '—' }}</span>
               </div>
               <div class="small text-muted">{{ 'Ungradable' if image.is_not_gradable else 'Verified' if image.is_reviewed else 'Needs verification' }}</div>
             </div>
@@ -614,6 +628,43 @@
       return form;
     }
 
+    // Vocabulary comes from the server so the nav labels and the rendered page agree
+    // on how a raw metadata value maps to OD/OS/OU and Macula/Disc/Other.
+    const descriptorVocabulary = {{ image_descriptor_vocabulary | tojson }};
+
+    function normalizeDescriptorValue(value) {
+      return String(value == null ? '' : value).trim().toLowerCase().replace(/_/g, ' ');
+    }
+
+    // Mirrors _image_descriptor() in verify_encounter_set/routes.py: first non-empty key
+    // wins, unrecognised-but-present focus becomes "Other", nothing at all stays an em dash.
+    function buildDescriptorLabel(imageId) {
+      function valueForKeys(keys) {
+        for (const key of keys) {
+          const field = document.querySelector(`[name="metadata__image__${imageId}__${key}"]`);
+          if (field && field.value !== '' && field.value != null) return field.value;
+        }
+        return null;
+      }
+      const laterality = descriptorVocabulary.laterality_labels[
+        normalizeDescriptorValue(valueForKeys(descriptorVocabulary.laterality_keys))
+      ] || null;
+      const normalizedFocus = normalizeDescriptorValue(valueForKeys(descriptorVocabulary.focus_keys));
+      let focus = descriptorVocabulary.focus_labels[normalizedFocus] || null;
+      if (!focus && normalizedFocus) focus = descriptorVocabulary.other_label;
+      return [laterality, focus].filter(Boolean).join(' · ') || '—';
+    }
+
+    function refreshImageDescriptor(input) {
+      const match = /^metadata__image__(\d+)__(.+)$/.exec(input.name || '');
+      if (!match) return;
+      const [, imageId, fieldKey] = match;
+      const tracked = descriptorVocabulary.laterality_keys.concat(descriptorVocabulary.focus_keys);
+      if (!tracked.includes(fieldKey)) return;
+      const target = document.querySelector(`[data-image-descriptor="${imageId}"]`);
+      if (target) target.textContent = buildDescriptorLabel(imageId);
+    }
+
     function saveMetadataAsync() {
       if (readOnly) return Promise.resolve({success: true, read_only: true});
       const form = buildMetadataForm();
@@ -676,13 +727,17 @@
 
     document.addEventListener('input', function (event) {
       const input = event.target.closest('[name^="metadata__"]');
-      if (input) saveInput(input);
+      if (input) {
+        saveInput(input);
+        refreshImageDescriptor(input);
+      }
     });
 
     document.addEventListener('change', function (event) {
       const input = event.target.closest('[name^="metadata__"]');
       if (input) {
         saveInput(input);
+        refreshImageDescriptor(input);
         if (input.name === 'metadata__encounter__referral_suggestion') {
           savePositiveDiseaseGroup();
         }

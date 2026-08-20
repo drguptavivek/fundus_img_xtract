@@ -231,8 +231,10 @@
       <h2 class="h5 mb-0 flex-shrink-0">EncounterSet Image {{ image_index }}</h2>
       <div class="text-muted small image-title-filename">{{ selected_image.original_filename }}</div>
     </div>
+    {% set image_descriptor = image_descriptors.get(selected_image.uuid) if image_descriptors else none %}
     <div class="image-fact-strip">
-      <div class="image-fact-chip"><span>Laterality</span> {{ image_laterality or '-' }}</div>
+      <div class="image-fact-chip"><span>Laterality</span> {{ (image_descriptor.laterality if image_descriptor else none) or image_laterality or '-' }}</div>
+      <div class="image-fact-chip"><span>Focus</span> {{ (image_descriptor.focus if image_descriptor else none) or '-' }}</div>
       <div class="image-fact-chip"><span>Type</span> {{ image_type or '-' }}</div>
     </div>
   </div>

@@ -460,6 +460,75 @@ def _verification_context(db, uuid: str) -> dict:
         "verification_profile": _encounter_set_verification_profile(db, encounter),
         "verification_read_only": encounter.encounter_verified_status == "verified",
         "back_url": _encounter_set_browser_url(encounter),
+        "image_descriptors": {image.uuid: _image_descriptor(image) for image in images},
+        "image_descriptor_vocabulary": IMAGE_DESCRIPTOR_VOCABULARY,
+    }
+
+
+# Laterality/focus live in EncounterSetImage.metadata_json, and the key used depends on the
+# ingestion path: Remidio writes fundus_field/image_segment (remidio_api_integration/mapper.py)
+# while the seeded verification schema uses fundus_image_view. Read every known spelling.
+IMAGE_LATERALITY_KEYS = ("laterality", "eye", "eye_side")
+IMAGE_FOCUS_KEYS = ("focus", "fundus_image_view", "fundus_field", "field", "image_segment", "centering")
+
+IMAGE_LATERALITY_LABELS = {
+    "od": "OD", "right": "OD", "r": "OD", "re": "OD", "right eye": "OD",
+    "os": "OS", "left": "OS", "l": "OS", "le": "OS", "left eye": "OS",
+    "ou": "OU", "both": "OU", "bilateral": "OU",
+}
+
+IMAGE_FOCUS_LABELS = {
+    "macula": "Macula", "macular": "Macula", "macula centred": "Macula",
+    "macula centered": "Macula", "macula centred image": "Macula",
+    "posterior pole": "Macula", "posterior": "Macula",
+    "disc": "Disc", "disk": "Disc", "onh": "Disc", "optic disc": "Disc",
+    "optic nerve head": "Disc", "disc centered": "Disc", "disc centred": "Disc",
+}
+
+# Shared with the browser so nav labels can be recomputed after an inline metadata edit
+# without duplicating the vocabulary in JavaScript.
+IMAGE_DESCRIPTOR_VOCABULARY = {
+    "laterality_keys": list(IMAGE_LATERALITY_KEYS),
+    "focus_keys": list(IMAGE_FOCUS_KEYS),
+    "laterality_labels": IMAGE_LATERALITY_LABELS,
+    "focus_labels": IMAGE_FOCUS_LABELS,
+    "other_label": "Other",
+}
+
+
+def _normalize_descriptor_value(value) -> str:
+    return str(value or "").strip().lower().replace("_", " ")
+
+
+def _first_metadata_value(metadata: dict, keys: tuple[str, ...]):
+    for key in keys:
+        value = metadata.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _image_descriptor(image: EncounterSetImage) -> dict:
+    """Resolve display-only laterality (OD/OS/OU) and focus (Macula/Disc/Other) for an image.
+
+    Unknown values stay unknown: a verification screen must not present a guess as
+    recorded fact, so anything unrecognised renders as an em dash rather than a default.
+    """
+    metadata = image.metadata_json if isinstance(image.metadata_json, dict) else {}
+
+    laterality_raw = _first_metadata_value(metadata, IMAGE_LATERALITY_KEYS)
+    laterality = IMAGE_LATERALITY_LABELS.get(_normalize_descriptor_value(laterality_raw))
+
+    focus_raw = _first_metadata_value(metadata, IMAGE_FOCUS_KEYS)
+    normalized_focus = _normalize_descriptor_value(focus_raw)
+    focus = IMAGE_FOCUS_LABELS.get(normalized_focus)
+    if focus is None and normalized_focus:
+        focus = "Other"
+
+    return {
+        "laterality": laterality,
+        "focus": focus,
+        "label": " · ".join(part for part in (laterality, focus) if part) or "—",
     }
 
 

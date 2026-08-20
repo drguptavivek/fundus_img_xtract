@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from remote_inference.dr_dme_service import evaluate_encounter, has_completed_dr_ocr, normalize_eye, normalize_focus
+from remote_inference.dr_dme_service import (
+    _patient_payload,
+    evaluate_encounter,
+    has_completed_dr_ocr,
+    normalize_eye,
+    normalize_focus,
+)
 
 
 def image(image_id, *, eye="OD", focus="MACULA", filename="image.jpg", is_not_gradable=False):
@@ -102,15 +108,18 @@ def test_manual_candidate_requires_verification_and_patient_contract():
     assert result.sex is None
 
 
-def test_candidate_requires_both_eyes_unless_canonical_monocular_flag_is_true():
-    binocular = evaluate_encounter(encounter([image(1)]))
-    monocular = evaluate_encounter(encounter([image(1)], is_monocular=True))
+def test_single_eye_macula_image_is_eligible_and_is_monocular_reflects_only_the_patient_flag():
+    """A single-eye macula image is usually a missing/poor-quality second-eye
+    capture, not a monocular patient - it must not block submission, and
+    is_monocular must never be inferred from eye_counts, only from patient data."""
+    single_eye_not_monocular = evaluate_encounter(encounter([image(1)]))
+    single_eye_monocular_patient = evaluate_encounter(encounter([image(1)], is_monocular=True))
 
-    assert binocular.eligible is False
-    assert "Both eyes require a macula image unless the patient is marked monocular." in binocular.issues
-    assert monocular.eligible is True
-    assert binocular.is_monocular is False
-    assert monocular.is_monocular is True
+    assert single_eye_not_monocular.eligible is True
+    assert not any("Both eyes require" in issue for issue in single_eye_not_monocular.issues)
+    assert single_eye_not_monocular.is_monocular is False
+    assert single_eye_monocular_patient.eligible is True
+    assert single_eye_monocular_patient.is_monocular is True
 
 
 def test_candidate_requires_canonical_age_and_sex():
@@ -129,3 +138,13 @@ def test_ocr_eligibility_requires_completed_normalized_dr_report():
 
     assert has_completed_dr_ocr(encounter([image(1)], attachments=[upstream_only])) is False
     assert has_completed_dr_ocr(encounter([image(1)], attachments=[local])) is True
+
+
+def test_patient_payload_always_sends_is_monocular_key():
+    """The upstream API must always receive an explicit is_monocular boolean, not an
+    omitted key it would have to interpret as a default."""
+    not_monocular = _patient_payload(encounter([image(1)], is_monocular=False))
+    monocular = _patient_payload(encounter([image(1)], is_monocular=True))
+
+    assert not_monocular["is_monocular"] is False
+    assert monocular["is_monocular"] is True

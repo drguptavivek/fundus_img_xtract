@@ -193,8 +193,12 @@ def evaluate_encounter(encounter: PatientEncounters, *, require_verified: bool =
     if not selected:
         issues.append("No macula-focused image has unambiguous laterality.")
     eye_counts = {eye: sum(row.eye == eye for row in selected) for eye in ("left", "right")}
-    if selected and 0 in eye_counts.values() and not is_monocular:
-        issues.append("Both eyes require a macula image unless the patient is marked monocular.")
+    # A single-eye macula image does not block submission: most single-eye cases here
+    # are a missing/poor-quality second-eye capture, not a monocular patient, and the
+    # API is submitted per-eye anyway. is_monocular is never inferred from eye_counts -
+    # it stays exactly what upstream/local patient metadata supplies, defaulting to
+    # False, so a single eye is correctly sent as is_monocular=false unless the
+    # patient's own record says otherwise.
     for eye in ("left", "right"):
         if eye_counts[eye] > 10:
             issues.append(f"More than 10 {eye}-eye images are present; the encounter cannot be split or truncated.")
@@ -228,15 +232,18 @@ def workflow_allows_automatic(workflow: ProjectEncounterAIWorkflow, encounter: P
 
 
 def _patient_payload(encounter: PatientEncounters) -> dict[str, Any]:
+    # is_monocular is always sent, explicitly True or False - never omitted. A single
+    # macula image (missing/poor-quality second eye) is a data-completeness gap, not a
+    # monocular patient, so it must be sent as False unless the patient's own record
+    # says True; the upstream API should never have to guess from a missing key.
     payload: dict[str, Any] = {
         "patient_id": str(_patient_value(encounter, "patient_id", "hospital_UHID", "mrn", "uhid")),
         "age": int(_patient_value(encounter, "age", "patient_age_yrs", "age", "patient_age", "age_yrs")),
+        "is_monocular": _patient_value(encounter, "is_monocular", "is_monocular") is True,
     }
     sex = str(_patient_value(encounter, "sex", "sex", "gender") or "").strip().lower()
     if sex in {"male", "female", "other"}:
         payload["sex"] = sex
-    if _patient_value(encounter, "is_monocular", "is_monocular") is True:
-        payload["is_monocular"] = True
     return payload
 
 
@@ -346,7 +353,8 @@ def run_encounter_inference(
         ).scalar_one_or_none()
         if encounter is None:
             raise EncounterInferenceError("encounter_not_found", "EncounterSet was not found.")
-        eligibility = evaluate_encounter(encounter, require_verified=source == "manual")
+        # Verification is not a prerequisite for WAI inference, manual or automatic.
+        eligibility = evaluate_encounter(encounter, require_verified=False)
         if not eligibility.eligible:
             raise EncounterInferenceError("ineligible_encounter", "; ".join(eligibility.issues))
         existing = db.execute(

@@ -170,7 +170,9 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
             continue
         if filters.dr_report == "absent" and report is not None:
             continue
-        eligibility = evaluate_encounter(encounter, require_verified=True)
+        # Verification is not a prerequisite for WAI inference - matches the automatic
+        # pipeline (remote_inference/encounter_service.py), which never required it.
+        eligibility = evaluate_encounter(encounter, require_verified=False)
         if not _matches_eligibility_filter(eligibility, filters.eligibility):
             continue
         eligible_ids = {row.image_id: row for row in eligibility.images}

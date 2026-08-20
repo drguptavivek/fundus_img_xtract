@@ -164,15 +164,25 @@
 
   <div class="container-fluid py-4">
     {% if verification_read_only %}
-    <div class="alert alert-success d-flex align-items-start gap-2" role="status">
-      <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
-      <div>
-        <div class="fw-semibold">This EncounterSet is already verified and is read-only.</div>
-        <div class="small">
-          Verified{% if encounter.encounter_verified_by %} by {{ encounter.encounter_verified_by }}{% endif %}
-          {% if encounter.encounter_verified_at %} on {{ encounter.encounter_verified_at | user_datetime }}{% endif %}.
+    <div class="alert alert-success d-flex align-items-start justify-content-between gap-2" role="status">
+      <div class="d-flex align-items-start gap-2">
+        <i class="bi bi-check-circle-fill mt-1" aria-hidden="true"></i>
+        <div>
+          <div class="fw-semibold">This EncounterSet is already verified and is read-only.</div>
+          <div class="small">
+            Verified{% if encounter.encounter_verified_by %} by {{ encounter.encounter_verified_by }}{% endif %}
+            {% if encounter.encounter_verified_at %} on {{ encounter.encounter_verified_at | user_datetime }}{% endif %}.
+          </div>
         </div>
       </div>
+      {% if can_reopen %}
+      <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0"
+              data-reopen-encounter-set
+              data-reopen-url="{{ url_for('verify_encounter_set.reopen_verification', uuid=encounter.uuid) }}"
+              data-confirm-message="Reopen this verified EncounterSet? Existing grading tasks will be deleted and only recreated once you re-finalize. This cannot be undone automatically.">
+        Reopen for Correction
+      </button>
+      {% endif %}
     </div>
     {% endif %}
     <div class="verify-layout">
@@ -548,6 +558,21 @@
       if (option) saveInput(option);
     }
 
+    // Checking a positive disease is itself a referral-positive decision. Without this,
+    // an encounter with no OCR report or prior AI assessment can be marked with a
+    // positive disease while Referral Suggestion silently stays "Missing" - the server
+    // now corrects this on save, but doing it here too keeps what the verifier sees in
+    // sync with what gets persisted, instead of a silent server-side correction.
+    function syncReferralSuggestionToPositiveDiseases() {
+      const anyChecked = panelStage.querySelector('[data-positive-disease-option]:checked');
+      if (!anyChecked) return;
+      const select = panelStage.querySelector('[name="metadata__encounter__referral_suggestion"]');
+      if (select && select.value !== 'yes') {
+        select.value = 'yes';
+        saveInput(select);
+      }
+    }
+
     function updateSummaryChanges() {
       const table = document.getElementById('verification-changes-table');
       const manifest = document.getElementById('verification-change-manifest');
@@ -740,6 +765,8 @@
         refreshImageDescriptor(input);
         if (input.name === 'metadata__encounter__referral_suggestion') {
           savePositiveDiseaseGroup();
+        } else if (input.matches('[data-positive-disease-option]') && input.checked) {
+          syncReferralSuggestionToPositiveDiseases();
         }
       }
     });
@@ -783,6 +810,32 @@
           window.location.href = payload.redirect_url || "{{ url_for('verify_encounter_set.index') }}";
         }).catch((error) => {
           alert(error.message || 'Unable to exclude EncounterSet');
+        }).finally(() => {
+          if (!navigating) submission.release();
+        });
+        return;
+      }
+
+      const reopenAction = event.target.closest('[data-reopen-encounter-set]');
+      if (reopenAction) {
+        const confirmMessage = reopenAction.dataset.confirmMessage || 'Reopen this verified EncounterSet for correction?';
+        if (!confirm(confirmMessage)) return;
+        const reason = prompt('Optional note for the audit log (why is this being reopened?):');
+        if (reason === null) return;
+        const submission = beginVerificationAction(
+          reopenAction,
+          'Reopening this EncounterSet…',
+          'Reopening…',
+          true
+        );
+        if (!submission) return;
+        let navigating = false;
+        postJson(reopenAction.dataset.reopenUrl, {reason: reason.trim()}).then((payload) => {
+          clearAllVerificationStorage();
+          navigating = true;
+          window.location.href = payload.redirect_url || window.location.href;
+        }).catch((error) => {
+          alert(error.message || 'Unable to reopen EncounterSet');
         }).finally(() => {
           if (!navigating) submission.release();
         });

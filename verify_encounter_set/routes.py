@@ -5,6 +5,8 @@ from auth.utils import utcnow
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
+from verify_encounter_set.models import EncounterVerificationHistory  # noqa: F401 - registers table with Base.metadata
+
 from models import (
     AMDReport,
     DiabeticRetinopathyReport,
@@ -16,6 +18,7 @@ from models import (
     GradingTask,
     PatientEncounters,
     EncounterSetImage,
+    User,
     user_lab_units,
 )
 from encounter_sets.models import EncounterSetAttachment
@@ -244,6 +247,15 @@ def update_metadata(uuid):
         if encounter.encounter_verified_status == "verified":
             return _already_verified_response(encounter)
 
+        was_reopened_for_correction = bool(
+            (encounter.metadata_json or {}).get("verification", {}).get("reopened")
+        )
+        correction_before = None
+        if was_reopened_for_correction:
+            from verify_encounter_set.reopen_service import snapshot_encounter
+
+            correction_before = snapshot_encounter(db, encounter)
+
         profile = _encounter_set_verification_profile(db, encounter)
         editable_fields = {
             (field["scope"], field["key"]): field
@@ -274,6 +286,14 @@ def update_metadata(uuid):
                     encounter_uuid=encounter.uuid,
                 )
             manual_referral_positive_diseases = list(canonical_diseases)
+
+        # A manual positive-disease selection is itself a referral-positive decision.
+        # Without this, checking a disease while the Referral Suggestion dropdown is
+        # left untouched (e.g. because there is no OCR report or prior AI assessment
+        # to imply a value) silently fails to persist as a referral and never reaches
+        # the "yes" branch below that drives task creation.
+        if manual_referral_positive_diseases and manual_referral_suggestion is None:
+            manual_referral_suggestion = "yes"
 
         effective_referral_suggestion = manual_referral_suggestion or encounter.referral_suggestion
         effective_positive_diseases = (
@@ -330,6 +350,20 @@ def update_metadata(uuid):
                 image.referral_needed_or_positive_image = normalize_referral_suggestion(request.form.get(image_referral_alias_name))
                 image.referral_needed_or_positive_image_updated_at = utcnow()
             metadata = dict(image.metadata_json or {})
+            image_laterality_form_name = f"metadata__image__{image_id}__laterality"
+            if _metadata_form_field_present(request.form, image_laterality_form_name):
+                laterality_value = request.form.get(image_laterality_form_name) or None
+                if laterality_value:
+                    metadata["laterality"] = laterality_value
+                else:
+                    metadata.pop("laterality", None)
+            image_focus_form_name = f"metadata__image__{image_id}__focus"
+            if _metadata_form_field_present(request.form, image_focus_form_name):
+                focus_value = request.form.get(image_focus_form_name) or None
+                if focus_value:
+                    metadata["focus"] = focus_value
+                else:
+                    metadata.pop("focus", None)
             for field in image_fields:
                 form_name = f"metadata__image__{image_id}__{field['key']}"
                 if not _metadata_form_field_present(request.form, form_name):
@@ -380,6 +414,19 @@ def update_metadata(uuid):
             encounter.referral_positive_diseases_json = []
         elif manual_referral_suggestion == "yes":
             encounter.referral_positive_diseases_json = effective_positive_diseases
+
+        if was_reopened_for_correction:
+            from verify_encounter_set.models import EncounterVerificationHistory
+            from verify_encounter_set.reopen_service import snapshot_encounter
+
+            db.flush()
+            db.add(EncounterVerificationHistory(
+                patient_encounter_id=encounter.id,
+                action_type="metadata_corrected",
+                actor_user_id=current_user.id,
+                before_json=correction_before,
+                after_json=snapshot_encounter(db, encounter),
+            ))
 
         flash("Verification metadata updated.", "success")
         if request.headers.get("X-EncounterSet-Async") == "1":
@@ -452,6 +499,7 @@ def _verification_context(db, uuid: str) -> dict:
         encounter.encounter_set_attachments or [],
         key=lambda item: (item.asset_kind or "", item.original_filename or "", item.id),
     )
+    image_descriptors = {image.uuid: _image_descriptor(image) for image in images}
     return {
         "encounter": encounter,
         "images": images,
@@ -460,9 +508,43 @@ def _verification_context(db, uuid: str) -> dict:
         "verification_profile": _encounter_set_verification_profile(db, encounter),
         "verification_read_only": encounter.encounter_verified_status == "verified",
         "back_url": _encounter_set_browser_url(encounter),
-        "image_descriptors": {image.uuid: _image_descriptor(image) for image in images},
+        "image_descriptors": image_descriptors,
         "image_descriptor_vocabulary": IMAGE_DESCRIPTOR_VOCABULARY,
+        "summary_eye_groups": _summary_eye_groups(images, image_descriptors),
+        "can_reopen": _can_reopen_verification(db),
+        "verification_history": _recent_verification_history(db, encounter),
     }
+
+
+def _can_reopen_verification(db) -> bool:
+    """Mirror reopen_verification's own @roles_or_project_grant_required('admin') gate."""
+    if current_user.has_role("admin"):
+        return True
+    from data_authorization.service import user_has_any_project_role
+
+    return user_has_any_project_role(db, user_id=current_user.id, role_names=("admin",))
+
+
+def _recent_verification_history(db, encounter: PatientEncounters, limit: int = 5) -> list[dict]:
+    from verify_encounter_set.models import EncounterVerificationHistory
+
+    rows = (
+        db.query(EncounterVerificationHistory, User.username)
+        .outerjoin(User, User.id == EncounterVerificationHistory.actor_user_id)
+        .filter(EncounterVerificationHistory.patient_encounter_id == encounter.id)
+        .order_by(EncounterVerificationHistory.occurred_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "action_type": entry.action_type,
+            "actor_username": username,
+            "occurred_at": entry.occurred_at,
+            "note": entry.note,
+        }
+        for entry, username in rows
+    ]
 
 
 # Laterality/focus live in EncounterSetImage.metadata_json, and the key used depends on the
@@ -530,6 +612,34 @@ def _image_descriptor(image: EncounterSetImage) -> dict:
         "focus": focus,
         "label": " · ".join(part for part in (laterality, focus) if part) or "—",
     }
+
+
+# Macula shots are graded first in most workflows, so they sort ahead of disc shots;
+# anything unrecognised (or unset) sorts last within its eye.
+_FOCUS_SORT_ORDER = {"Macula": 0, "Disc": 1}
+
+
+def _summary_eye_groups(
+    images: list[EncounterSetImage], image_descriptors: dict[str, dict]
+) -> dict[str, list]:
+    """Group gradable images by eye (OD/OS/Other) for the summary panel, macula-then-disc."""
+    groups: dict[str, list] = {"OD": [], "OS": [], "other": []}
+    for position, image in enumerate(images):
+        if image.is_not_gradable:
+            continue
+        descriptor = image_descriptors.get(image.uuid) or {}
+        eye = descriptor.get("laterality")
+        bucket = eye if eye in ("OD", "OS") else "other"
+        groups[bucket].append((position, image, descriptor))
+    for bucket in groups:
+        groups[bucket].sort(
+            key=lambda row: (_FOCUS_SORT_ORDER.get(row[2].get("focus"), 2), row[0])
+        )
+        groups[bucket] = [
+            {"image": image, "descriptor": descriptor, "display_index": position + 1}
+            for position, image, descriptor in groups[bucket]
+        ]
+    return groups
 
 
 def _encounter_set_ocr_summaries(attachments: list[EncounterSetAttachment]) -> list[dict]:
@@ -899,6 +1009,137 @@ def exclude_encounter_set(uuid):
         return redirect(redirect_url)
 
 
+@bp.route("/reopen/<uuid>", methods=["POST"])
+@login_required
+@roles_or_project_grant_required("admin")
+def reopen_verification(uuid):
+    """Reopen a verified EncounterSet for correction, if no grading has started."""
+    from verify_encounter_set.models import EncounterVerificationHistory
+    from verify_encounter_set.reopen_service import check_reopen_guard, snapshot_encounter
+
+    with transaction_scope() as db:
+        encounter_query = (
+            db.query(PatientEncounters)
+            .filter_by(uuid=uuid, is_set_based=True)
+            .with_for_update()
+        )
+        encounter = _apply_verification_mutation_scope(encounter_query).first()
+        if not encounter:
+            abort(404)
+
+        if encounter.encounter_verified_status != "verified":
+            message = "Only a verified EncounterSet can be reopened."
+            if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+                return jsonify({"success": False, "message": message}), 409
+            flash(message, "warning")
+            return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
+
+        blockers = check_reopen_guard(db, encounter)
+        if blockers:
+            message = (
+                f"Cannot reopen: {len(blockers)} grading task(s) already have grader "
+                "progress. Reopening would destroy in-progress or completed grading work."
+            )
+            payload = {"success": False, "message": message, "blocking_tasks": blockers}
+            if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+                return jsonify(payload), 409
+            flash(message, "danger")
+            return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
+
+        before = snapshot_encounter(db, encounter)
+        payload = request.get_json(silent=True) or {}
+        reason = (payload.get("reason") or request.form.get("reason") or "").strip()
+
+        # The guard above already proved zero *human* grading progress exists anywhere
+        # on this encounter (state transitions and Grade rows with a human role_slot
+        # are both human-only signals - see HUMAN_GRADE_ROLE_SLOTS), so it is safe to
+        # delete every task/package and let a subsequent finalize rebuild from scratch.
+        # _get_or_create_package_task is purely additive (it never removes a task for a
+        # disease no longer selected) and _restore_frozen_runtime_config replays the
+        # *original* frozen policy snapshot rather than recomputing from the corrected
+        # selection - partial reconciliation would leave stale/orphaned tasks if the
+        # correction changes which diseases are positive. Deleting AI inference results
+        # and any 'ai'-role Grade rows for these tasks (via ON DELETE CASCADE on
+        # AIInferenceRun.task_id and Grade.task_id) is intentional: AI grading is
+        # automated and cheap to re-run, unlike human grader work.
+        stale_tasks = db.query(GradingTask).filter(
+            or_(
+                GradingTask.patient_encounter_id == encounter.id,
+                GradingTask.encounter_set_image_id.in_(
+                    select(EncounterSetImage.id).where(
+                        EncounterSetImage.patient_encounter_id == encounter.id
+                    )
+                ),
+            )
+        ).all()
+        for task in stale_tasks:
+            db.delete(task)
+        packages = (
+            db.query(EncounterSetGradingPackage)
+            .filter_by(patient_encounter_id=encounter.id)
+            .all()
+        )
+        for package in packages:
+            db.delete(package)
+
+        # enqueue_automatic_encounters() (remote_inference/encounter_service.py) treats
+        # any EncounterAIInferenceRun in these statuses as "already handled" and skips
+        # re-queuing. That row is a durable request/response record, not deleted like
+        # the per-task rows above, but its now-orphaned success/queued status would
+        # silently prevent re-finalize from ever regenerating the AI grading this
+        # reopen just deleted. 'failed' is the existing retry-eligible status
+        # (dr_dme_service.py already retries a run in this state) and satisfies the
+        # ck_encounter_ai_run_source status CheckConstraint.
+        from remote_inference.models import EncounterAIInferenceRun
+
+        stale_ai_runs = db.query(EncounterAIInferenceRun).filter(
+            EncounterAIInferenceRun.patient_encounter_id == encounter.id,
+            EncounterAIInferenceRun.status.in_(
+                ("queued", "presigning", "uploading", "submitting", "success", "partial")
+            ),
+        ).all()
+        for ai_run in stale_ai_runs:
+            ai_run.status = "failed"
+            ai_run.error_code = "reopened_for_correction"
+            ai_run.error_message = (
+                f"Superseded: EncounterSet reopened for correction by {current_user.username} "
+                f"on {utcnow().isoformat()}; grading tasks were deleted and will be regenerated "
+                "on re-finalize."
+            )
+
+        metadata = dict(encounter.metadata_json or {})
+        verification_metadata = dict(metadata.get("verification") or {})
+        verification_metadata["reopened"] = True
+        verification_metadata["reopened_by"] = current_user.username
+        verification_metadata["reopened_at"] = utcnow().isoformat()
+        metadata["verification"] = verification_metadata
+        encounter.metadata_json = metadata
+        encounter.encounter_verified_status = "pending"
+        encounter.encounter_verified_by = None
+        encounter.encounter_verified_at = None
+        db.flush()
+
+        after = snapshot_encounter(db, encounter)
+        db.add(EncounterVerificationHistory(
+            patient_encounter_id=encounter.id,
+            action_type="reopened",
+            actor_user_id=current_user.id,
+            before_json=before,
+            after_json=after,
+            note=reason or None,
+        ))
+
+        assignees = before.get("grading_package_assignees") or []
+        redirect_url = url_for("verify_encounter_set.verify_encounter", uuid=uuid)
+        message = f"Encounter set {encounter.name} reopened for correction."
+        if assignees:
+            message += f" Grader assignment(s) cleared and need reassignment: {', '.join(assignees)}."
+        flash(message, "warning")
+        if request.headers.get("X-EncounterSet-Async") == "1" or request.is_json:
+            return jsonify({"success": True, "redirect_url": redirect_url})
+        return redirect(redirect_url)
+
+
 @bp.route("/finalize/<uuid>", methods=["POST"])
 @login_required
 @roles_or_project_grant_required("admin", "optometrist", "data_manager")
@@ -1006,10 +1247,37 @@ def finalize_verification(uuid):
         elif encounter.referral_suggestion == "no":
             encounter.referral_positive_diseases_json = []
 
+        was_reopened_for_correction = bool(
+            (encounter.metadata_json or {}).get("verification", {}).get("reopened")
+        )
+        reverify_before = None
+        if was_reopened_for_correction:
+            from verify_encounter_set.reopen_service import snapshot_encounter
+
+            reverify_before = snapshot_encounter(db, encounter)
+
         # Finalize (atomic - encounter and images locked until commit)
         encounter.encounter_verified_status = 'verified'
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = utcnow()
+
+        if was_reopened_for_correction:
+            from verify_encounter_set.models import EncounterVerificationHistory
+            from verify_encounter_set.reopen_service import snapshot_encounter
+
+            metadata = dict(encounter.metadata_json or {})
+            verification_metadata = dict(metadata.get("verification") or {})
+            verification_metadata["reopened"] = False
+            metadata["verification"] = verification_metadata
+            encounter.metadata_json = metadata
+            db.flush()
+            db.add(EncounterVerificationHistory(
+                patient_encounter_id=encounter.id,
+                action_type="reverified",
+                actor_user_id=current_user.id,
+                before_json=reverify_before,
+                after_json=snapshot_encounter(db, encounter),
+            ))
 
         created_tasks = _create_verified_encounter_set_tasks(db, encounter)
         wadhwani_task_ids = create_wadhwani_task_ids_for_encounter(db, encounter, trigger_timing="after_verification")
@@ -1161,11 +1429,9 @@ def _create_verified_encounter_set_tasks(
             for disease_id, policy in package_config["image_scheme_policies"].items()
             if policy == "positive_plus_negative_controls"
         }
-        if (
-            package_config["grading_mode"] == "disease_specific"
-            and package_config.get("root_scope_disease_id") in sampling_scheme_ids
-        ):
-            sampling_scheme_ids = {package_config["root_scope_disease_id"]}
+        # Check every sampling-gated disease's own positivity independently - a linked
+        # child (for example DME) must be able to trigger task creation on its own, not
+        # only when the root (DR) is separately marked positive.
         positive_control_scheme_ids = sorted(
             disease_id
             for disease_id in sampling_scheme_ids
@@ -1180,13 +1446,12 @@ def _create_verified_encounter_set_tasks(
         ) + positive_control_scheme_ids
         image_scheme_ids = sorted(set(image_scheme_ids))
         root_scope_disease_id = package_config.get("root_scope_disease_id")
-        if (
-            package_config["grading_mode"] == "disease_specific"
-            and root_scope_disease_id in image_scheme_ids
+        if package_config["grading_mode"] == "disease_specific" and (
+            root_scope_disease_id in image_scheme_ids or positive_control_scheme_ids
         ):
-            # Linked scopes are one allocation unit. If the root (for example
-            # DR) applies, every linked image scheme (for example DME) is
-            # created for the same constituent images.
+            # Linked scopes are one allocation unit. If any disease in the package
+            # applies - the root (DR) or a linked child (DME) - every linked image
+            # scheme is created for the same constituent images.
             image_scheme_ids = sorted({
                 disease_id
                 for scope in package_config["scopes"]

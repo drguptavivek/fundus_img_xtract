@@ -448,6 +448,86 @@ def test_linked_disease_package_creates_root_then_linked_image_and_set_scopes(
     assert all(task.encounter_set_scope_id for task in tasks)
 
 
+def test_linked_disease_package_child_positivity_creates_root_and_child_tasks(
+    encounter_set_data, db_session, core_test_data
+):
+    """Marking only the linked child disease (DME) positive - without the root (DR) -
+    must still create both DR and DME tasks. A linked scope is one allocation unit;
+    checking a subordinate disease should not silently do nothing."""
+    dr = db_session.merge(core_test_data["dr"])
+    dme = db_session.merge(core_test_data["dme"])
+    dr_set = Disease(name=f"DR Set {uuid.uuid4().hex[:8]}", grading_scope="encounter")
+    dme_set = Disease(name=f"DME Set {uuid.uuid4().hex[:8]}", grading_scope="encounter")
+    db_session.add_all([dr_set, dme_set])
+    db_session.flush()
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.grading_packages.append(
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="DR with DME (sampled)",
+            code="dr_with_dme_sampled",
+            grading_mode="disease_specific",
+            policy_revision=1,
+            scope_config_json={
+                "schema_version": 1,
+                "root_image_grading_scheme_id": dr.id,
+                "scopes": [
+                    {
+                        "scope_disease_id": dr.id,
+                        "image_grading_scheme_ids": [dr.id],
+                        "encounter_grading_scheme_id": dr_set.id,
+                        "parent_scope_disease_id": None,
+                        "link_role": "root",
+                    },
+                    {
+                        "scope_disease_id": dme.id,
+                        "image_grading_scheme_ids": [dme.id],
+                        "encounter_grading_scheme_id": dme_set.id,
+                        "parent_scope_disease_id": dr.id,
+                        "link_role": "linked",
+                    },
+                ],
+            },
+            default_image_grading_scheme=dr,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dr, is_default=True, auto_create_policy="positive_plus_negative_controls",
+                    negative_controls_per_positive=1, display_order=1,
+                ),
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dme, is_default=False, auto_create_policy="positive_plus_negative_controls",
+                    negative_controls_per_positive=1, display_order=2,
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=dr_set, display_order=1),
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=dme_set, display_order=2),
+            ],
+        )
+    )
+    encounter_set_data["image"].is_reviewed = True
+    # Only the child disease (DME) is marked positive - the root (DR) is not.
+    encounter_set_data["encounter"].referral_suggestion = "yes"
+    encounter_set_data["encounter"].referral_positive_diseases_json = ["DME"]
+    db_session.flush()
+
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    _create_verified_encounter_set_tasks(db_session, encounter_set_data["encounter"], create_negative_controls=False)
+    db_session.flush()
+    package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        code="dr_with_dme_sampled",
+    ).one()
+    tasks = db_session.query(GradingTask).filter_by(encounter_set_package_id=package.id).all()
+
+    assert {(task.disease_id, task.grading_target_level) for task in tasks} == {
+        (dr.id, "image"),
+        (dr_set.id, "encounter"),
+        (dme.id, "image"),
+        (dme_set.id, "encounter"),
+    }
+
+
 def _configure_laterality_task_routing(encounter_set_data, db_session):
     config = encounter_set_data["upload_profile"].encounter_set_types[0]
     disease = config.default_image_grading_scheme
@@ -1076,6 +1156,31 @@ def test_verify_encounter_set_finalize_allows_project_referral_only_ocr_disease(
     assert encounter_set_data["encounter"].encounter_verified_status == "verified"
     assert encounter_set_data["encounter"].referral_suggestion == "yes"
     assert encounter_set_data["encounter"].referral_positive_diseases_json == ["AMD Referral Only", "DR"]
+
+
+def test_verify_encounter_set_positive_disease_without_referral_field_implies_yes(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Checking a positive disease alone (Referral Suggestion untouched) must still
+    persist as a referral-positive decision, since nothing else in the UI sets it -
+    especially for encounters with no OCR report to imply a value from."""
+    user = UserFactory.create_admin(db_session, username="admin_verify_disease_implies_yes")
+    auth_client = auth_client_factory(user)
+    assert encounter_set_data["encounter"].referral_suggestion in (None, "missing")
+
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={
+            "__present__metadata__encounter__referral_positive_diseases": "1",
+            "metadata__encounter__referral_positive_diseases": "Glaucoma",
+        },
+        headers={'X-CSRFToken': csrf_token, 'X-EncounterSet-Async': '1'},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    db_session.refresh(encounter_set_data['encounter'])
+    assert encounter_set_data['encounter'].referral_suggestion == "yes"
+    assert encounter_set_data['encounter'].referral_positive_diseases_json == ["Glaucoma"]
 
 
 def test_verify_encounter_set_manual_referral_suggestion_update(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
@@ -2085,3 +2190,444 @@ def test_package_task_identity_does_not_reuse_another_package(
     assert {task.encounter_set_package_id for task in tasks} == {
         package.id for package in packages
     }
+
+
+def _verify_and_create_tasks(encounter_set_data, db_session):
+    """Finalize the base encounter_set_data fixture into a verified encounter with
+    one real grading package/task, mirroring test_rebuild_set_packages_preserves_only_ai_grades."""
+    from verify_encounter_set.routes import _create_verified_encounter_set_tasks
+
+    encounter = encounter_set_data["encounter"]
+    encounter.encounter_verified_status = "verified"
+    encounter.encounter_verified_by = "prior_verifier"
+    encounter.encounter_verified_at = datetime.now()
+    encounter_set_data["image"].is_reviewed = True
+    _create_verified_encounter_set_tasks(db_session, encounter)
+    db_session.flush()
+    package = db_session.query(EncounterSetGradingPackage).filter_by(
+        patient_encounter_id=encounter.id
+    ).one()
+    tasks = db_session.query(GradingTask).filter_by(encounter_set_package_id=package.id).all()
+    return package, tasks
+
+
+def test_reopen_verification_success(client, auth_client_factory, encounter_set_data, db_session, csrf_token):
+    """Reopening a verified EncounterSet with no grading progress deletes its tasks
+    and packages, resets status to pending, and writes an audit row."""
+    from verify_encounter_set.models import EncounterVerificationHistory
+
+    package, tasks = _verify_and_create_tasks(encounter_set_data, db_session)
+    assert len(tasks) > 0
+    task_ids = [task.id for task in tasks]
+
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_success")
+    auth_client = auth_client_factory(admin)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["success"] is True
+
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "pending"
+    assert encounter_set_data["encounter"].encounter_verified_by is None
+    assert encounter_set_data["encounter"].encounter_verified_at is None
+    assert encounter_set_data["encounter"].metadata_json["verification"]["reopened"] is True
+
+    assert db_session.query(EncounterSetGradingPackage).filter_by(id=package.id).first() is None
+    assert db_session.query(GradingTask).filter(GradingTask.id.in_(task_ids)).count() == 0
+
+    history = db_session.query(EncounterVerificationHistory).filter_by(
+        patient_encounter_id=encounter_set_data["encounter"].id
+    ).one()
+    assert history.action_type == "reopened"
+    assert history.actor_user_id == admin.id
+    assert history.before_json["encounter_verified_status"] == "verified"
+    assert history.after_json["encounter_verified_status"] == "pending"
+
+
+def test_reopen_verification_blocked_by_task_progress(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """A task that has moved beyond 'pending' blocks reopen entirely - no data is touched."""
+    from verify_encounter_set.models import EncounterVerificationHistory
+
+    package, tasks = _verify_and_create_tasks(encounter_set_data, db_session)
+    tasks[0].state = "resident_done"
+    db_session.flush()
+
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_blocked_state")
+    auth_client = auth_client_factory(admin)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 409
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert len(payload["blocking_tasks"]) == 1
+
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "verified"
+    assert db_session.query(EncounterSetGradingPackage).filter_by(id=package.id).first() is not None
+    assert db_session.query(EncounterVerificationHistory).count() == 0
+
+
+def test_reopen_verification_blocked_by_existing_grade(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """A Grade row blocks reopen even if the task's state column still shows pending -
+    the belt-and-suspenders check the two divergent state-sync implementations require."""
+    package, tasks = _verify_and_create_tasks(encounter_set_data, db_session)
+    image_task = next(task for task in tasks if task.grading_target_level == "image")
+    assert image_task.state == "pending"
+
+    label = db_session.query(DiseaseGrading).filter_by(disease_id=image_task.disease_id).first()
+    grader = UserFactory.create_by_role(
+        db_session, "resident", username="reopen_blocked_grade_grader",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    db_session.add(Grade(
+        task=image_task, grader_user_id=grader.id, role_slot="resident", disease_grading_id=label.id,
+    ))
+    db_session.flush()
+
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_blocked_grade")
+    auth_client = auth_client_factory(admin)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 409
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "verified"
+
+
+def test_reopen_verification_requires_verified_status(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """An encounter that was never verified cannot be 'reopened'."""
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_not_verified")
+    auth_client = auth_client_factory(admin)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 409
+    assert "Only a verified" in response.get_json()["message"]
+
+
+def test_reopen_verification_requires_admin_role(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Optometrist/data_manager can verify but not reopen - reopening is admin-only."""
+    _verify_and_create_tasks(encounter_set_data, db_session)
+    optometrist = UserFactory.create_by_role(
+        db_session, "optometrist", username="reopen_role_denied",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    auth_client = auth_client_factory(optometrist)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_update_metadata_after_reopen_creates_audit_row(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Editing metadata on a reopened encounter is audit-logged; the same edit on a
+    never-verified encounter (the common case) is not."""
+    from verify_encounter_set.models import EncounterVerificationHistory
+
+    _verify_and_create_tasks(encounter_set_data, db_session)
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_metadata_audit")
+    auth_client = auth_client_factory(admin)
+
+    reopen_response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert reopen_response.status_code == 200
+
+    response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter_set_data['encounter'].uuid}",
+        data={
+            "__present__metadata__encounter__referral_suggestion": "1",
+            "metadata__encounter__referral_suggestion": "yes",
+            "__present__metadata__encounter__referral_positive_diseases": "1",
+            "metadata__encounter__referral_positive_diseases": "Glaucoma",
+        },
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert response.status_code == 200, response.get_json()
+
+    corrections = db_session.query(EncounterVerificationHistory).filter_by(
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        action_type="metadata_corrected",
+    ).all()
+    assert len(corrections) == 1
+    assert corrections[0].after_json["referral_suggestion"] == "yes"
+
+
+def test_finalize_after_reopen_creates_previously_missing_tasks(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """Regression test for the actual incident: an encounter verified with no
+    referral data (so its DR/DME tasks were never created) gets reopened, corrected,
+    and re-finalized - the missing tasks now exist, and a reverified row is written."""
+    from verify_encounter_set.models import EncounterVerificationHistory
+
+    dr = db_session.merge(_core_test_data_placeholder_lookup(db_session, "DR"))
+    dme = db_session.merge(_core_test_data_placeholder_lookup(db_session, "DME"))
+    dr_set = Disease(name=f"DR Set {uuid.uuid4().hex[:8]}", grading_scope="encounter")
+    dme_set = Disease(name=f"DME Set {uuid.uuid4().hex[:8]}", grading_scope="encounter")
+    db_session.add_all([dr_set, dme_set])
+    db_session.flush()
+    profile_config = encounter_set_data["upload_profile"].encounter_set_types[0]
+    profile_config.grading_packages.append(
+        UploadProfileEncounterSetTypeGradingPackage(
+            name="DR with DME (reopen regression)",
+            code="dr_with_dme_reopen_regression",
+            grading_mode="disease_specific",
+            policy_revision=1,
+            scope_config_json={
+                "schema_version": 1,
+                "root_image_grading_scheme_id": dr.id,
+                "scopes": [
+                    {"scope_disease_id": dr.id, "image_grading_scheme_ids": [dr.id],
+                     "encounter_grading_scheme_id": dr_set.id, "parent_scope_disease_id": None,
+                     "link_role": "root"},
+                    {"scope_disease_id": dme.id, "image_grading_scheme_ids": [dme.id],
+                     "encounter_grading_scheme_id": dme_set.id, "parent_scope_disease_id": dr.id,
+                     "link_role": "linked"},
+                ],
+            },
+            default_image_grading_scheme=dr,
+            image_grading_schemes=[
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dr, is_default=True, auto_create_policy="positive_plus_negative_controls",
+                    negative_controls_per_positive=1, display_order=1,
+                ),
+                UploadProfileEncounterSetTypePackageImageScheme(
+                    disease=dme, is_default=False, auto_create_policy="positive_plus_negative_controls",
+                    negative_controls_per_positive=1, display_order=2,
+                ),
+            ],
+            encounter_grading_schemes=[
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=dr_set, display_order=1),
+                UploadProfileEncounterSetTypePackageEncounterScheme(disease=dme_set, display_order=2),
+            ],
+        )
+    )
+    encounter = encounter_set_data["encounter"]
+    encounter_set_data["image"].is_reviewed = True
+    # The original incident: verified with no referral data - DR/DME tasks never created.
+    encounter.encounter_verified_status = "verified"
+    encounter.encounter_verified_by = "original_verifier"
+    encounter.encounter_verified_at = datetime.now()
+    encounter.referral_suggestion = "missing"
+    encounter.referral_positive_diseases_json = []
+    db_session.flush()
+
+    assert db_session.query(GradingTask).filter_by(disease_id=dr.id).count() == 0
+    assert db_session.query(GradingTask).filter_by(disease_id=dme.id).count() == 0
+
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_regression")
+    auth_client = auth_client_factory(admin)
+
+    reopen_response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter.uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert reopen_response.status_code == 200, reopen_response.get_json()
+
+    metadata_response = auth_client.post(
+        f"/verify_encounter_set/metadata/{encounter.uuid}",
+        data={
+            "__present__metadata__encounter__referral_positive_diseases": "1",
+            "metadata__encounter__referral_positive_diseases": "DR",
+        },
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert metadata_response.status_code == 200, metadata_response.get_json()
+    db_session.refresh(encounter)
+    assert encounter.referral_suggestion == "yes"
+
+    finalize_response = auth_client.post(
+        f"/verify_encounter_set/finalize/{encounter.uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+    assert finalize_response.status_code == 200, finalize_response.get_json()
+
+    db_session.refresh(encounter)
+    assert encounter.encounter_verified_status == "verified"
+    assert db_session.query(GradingTask).filter_by(disease_id=dr.id).count() > 0
+    assert db_session.query(GradingTask).filter_by(disease_id=dme.id).count() > 0
+
+    reverified = db_session.query(EncounterVerificationHistory).filter_by(
+        patient_encounter_id=encounter.id, action_type="reverified",
+    ).one()
+    assert reverified.after_json["encounter_verified_status"] == "verified"
+    assert encounter.metadata_json["verification"]["reopened"] is False
+
+
+def _core_test_data_placeholder_lookup(db_session, name):
+    return db_session.query(Disease).filter_by(name=name).one()
+
+
+def test_reopen_verification_allowed_with_only_ai_grade(
+    client, auth_client_factory, encounter_set_data, db_session, csrf_token
+):
+    """An 'ai'-role Grade must NOT block reopen - only human grading (resident,
+    resident2, arbitrator, review) represents work that reopen could destroy. AI
+    grading is automated and cheap to regenerate."""
+    from models import AIModel
+    from remote_inference.models import EncounterAIInferenceRun
+
+    package, tasks = _verify_and_create_tasks(encounter_set_data, db_session)
+    image_task = next(task for task in tasks if task.grading_target_level == "image")
+    assert image_task.state == "pending"
+
+    label = db_session.query(DiseaseGrading).filter_by(disease_id=image_task.disease_id).first()
+    ai_service_user = UserFactory.create_admin(db_session, username="ai_service_account")
+    db_session.add(Grade(
+        task=image_task, grader_user_id=ai_service_user.id, role_slot="ai", disease_grading_id=label.id,
+    ))
+
+    ai_model = AIModel(name="MadhuNetrAI DR/DME", version="1.0")
+    db_session.add(ai_model)
+    db_session.flush()
+    ai_run = EncounterAIInferenceRun(
+        patient_encounter_id=encounter_set_data["encounter"].id,
+        ai_model_id=ai_model.id,
+        source="automatic",
+        request_id=f"req-{uuid.uuid4().hex}",
+        status="success",
+    )
+    db_session.add(ai_run)
+    db_session.flush()
+
+    admin = UserFactory.create_admin(db_session, username="admin_reopen_ai_only")
+    auth_client = auth_client_factory(admin)
+
+    response = auth_client.post(
+        f"/verify_encounter_set/reopen/{encounter_set_data['encounter'].uuid}",
+        headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    db_session.refresh(encounter_set_data["encounter"])
+    assert encounter_set_data["encounter"].encounter_verified_status == "pending"
+    # Task (and its AI grade, via cascade) is gone - AI grading is regenerable.
+    assert db_session.query(GradingTask).filter_by(id=image_task.id).first() is None
+    # The durable AI-run record is kept (not deleted) but flipped to 'failed' so
+    # enqueue_automatic_encounters() no longer treats it as already-handled and will
+    # re-queue AI grading on the next finalize.
+    db_session.refresh(ai_run)
+    assert ai_run.status == "failed"
+    assert ai_run.error_code == "reopened_for_correction"
+
+
+def test_encounter_set_wai_inference_by_image_ignores_human_grades(
+    encounter_set_data, db_session, core_test_data
+):
+    """WAI pills come only from Grade rows with role_slot='ai'. A human grade of the
+    same disease on the same image must not surface a pill."""
+    from models import AIModel
+    from remidio_api_integration.service import _encounter_set_wai_inference_by_image
+
+    dr = db_session.merge(core_test_data["dr"])
+    disease_grading = db_session.query(DiseaseGrading).filter_by(disease_id=dr.id).first()
+
+    ai_model = AIModel(name="MadhuNetrAI DR-DME", version="2.1")
+    db_session.add(ai_model)
+    db_session.flush()
+
+    # One image+disease has exactly one unscoped GradingTask (uq_task_encounter_set_
+    # image_disease_unscoped) - a human grading an AI-pre-graded image adds a second
+    # Grade to the SAME task, it doesn't create a second task.
+    image = encounter_set_data["image"]
+    task = GradingTask(
+        encounter_set_image_id=image.id,
+        disease_id=dr.id,
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        state="resident_done",
+        grading_target_level="image",
+        task_source="madhunetra_dr_dme",
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    grader = UserFactory.create_by_role(
+        db_session, "resident", username=f"wai_pill_test_{uuid.uuid4().hex[:8]}",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    db_session.add(Grade(
+        task=task, grader_user_id=grader.id, role_slot="ai",
+        disease_grading_id=disease_grading.id, ai_model_id=ai_model.id,
+    ))
+    db_session.add(Grade(
+        task=task, grader_user_id=grader.id, role_slot="resident",
+        disease_grading_id=disease_grading.id,
+    ))
+    db_session.flush()
+
+    result = _encounter_set_wai_inference_by_image(db_session, encounter_set_data["encounter"].id)
+
+    assert result[image.id] == {"dr": "MadhuNetrAI DR-DME v2.1"}
+
+
+def test_encounter_set_browser_detail_includes_wai_pills(
+    encounter_set_data, db_session, core_test_data
+):
+    """The real service function used by the browse route surfaces wai_pills on both
+    the encounter-level detail and its individual images."""
+    from models import AIModel
+    from remidio_api_integration.service import _encounter_set_browser_detail
+
+    dr = db_session.merge(core_test_data["dr"])
+    disease_grading = db_session.query(DiseaseGrading).filter_by(disease_id=dr.id).first()
+    ai_model = AIModel(name="MadhuNetrAI DR-DME", version="2.1")
+    db_session.add(ai_model)
+    db_session.flush()
+
+    image = encounter_set_data["image"]
+    ai_task = GradingTask(
+        encounter_set_image_id=image.id,
+        disease_id=dr.id,
+        lab_unit_id=encounter_set_data["lab_unit"].id,
+        state="pending",
+        grading_target_level="image",
+        task_source="madhunetra_dr_dme",
+    )
+    db_session.add(ai_task)
+    db_session.flush()
+    grader = UserFactory.create_by_role(
+        db_session, "resident", username=f"wai_pill_detail_{uuid.uuid4().hex[:8]}",
+        lab_units=[encounter_set_data["lab_unit"]],
+    )
+    db_session.add(Grade(
+        task=ai_task, grader_user_id=grader.id, role_slot="ai",
+        disease_grading_id=disease_grading.id, ai_model_id=ai_model.id,
+    ))
+    db_session.flush()
+
+    admin = UserFactory.create_admin(db_session, username=f"wai_pill_browser_{uuid.uuid4().hex[:8]}")
+    detail = _encounter_set_browser_detail(db_session, admin, encounter_set_data["encounter"].id)
+
+    assert detail["wai_pills"] == [{"label": "WAI-DR", "title": "MadhuNetrAI DR-DME v2.1"}]
+    image_row = next(row for row in detail["images"] if row["id"] == image.id)
+    assert image_row["wai_pills"] == [{"label": "WAI-DR", "title": "MadhuNetrAI DR-DME v2.1"}]

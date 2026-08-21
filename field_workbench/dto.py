@@ -127,6 +127,7 @@ class FieldEncounterRowDTO:
     lab_unit: str | None
     image_count: int
     verified_status: str | None
+    site: str | None = None
     ai: tuple[AIStatusDTO, ...] = ()
     report: RemidioReportDTO | None = None
 
@@ -140,6 +141,7 @@ class FieldEncounterRowDTO:
             "lab_unit": self.lab_unit,
             "image_count": self.image_count,
             "verified_status": self.verified_status,
+            "site": self.site,
             "ai": [item.to_dict() for item in self.ai],
             "report": self.report.to_dict() if self.report else None,
         }
@@ -158,6 +160,7 @@ class FieldEncounterDetailDTO:
     lab_unit: str | None
     verified_status: str | None
     referral_suggestion: str | None
+    site: str | None = None
     images: tuple[FieldImageDTO, ...] = ()
     ai: tuple[AIStatusDTO, ...] = ()
     report: RemidioReportDTO | None = None
@@ -176,6 +179,7 @@ class FieldEncounterDetailDTO:
             "lab_unit": self.lab_unit,
             "verified_status": self.verified_status,
             "referral_suggestion": self.referral_suggestion,
+            "site": self.site,
             "images": [image.to_dict() for image in self.images],
             "ai": [item.to_dict() for item in self.ai],
             "report": self.report.to_dict() if self.report else None,

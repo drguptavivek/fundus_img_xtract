@@ -225,12 +225,15 @@ def glaucoma_status(db, encounter: PatientEncounters, *, workflow_enabled: bool)
     if not rows:
         run_status = "not_requested"
     else:
+        # The glaucoma pipeline also writes "skipped" rows (image not
+        # eligible), so a completed encounter is any mix of success and
+        # skipped — never require an all-success set.
         statuses = {row[0].status for row in rows}
         if "failed" in statuses:
             run_status = "failed"
         elif statuses & {"queued", "running"}:
             run_status = "running" if "running" in statuses else "queued"
-        elif statuses == {"success"}:
+        elif "success" in statuses:
             run_status = "success"
         else:
             run_status = "not_requested"

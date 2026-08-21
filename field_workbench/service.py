@@ -183,7 +183,8 @@ def list_daily_encounters(db, *, user, project_id: int, date_value: str) -> list
                 uuid=encounter.uuid,
                 source=source,
                 patient_id=encounter.patient_id,
-                patient_name=encounter.name,
+                patient_name=_patient_display_name(encounter),
+                site=_site_identifier(encounter),
                 capture_date=encounter.capture_date_dt.isoformat() if encounter.capture_date_dt else None,
                 lab_unit=encounter.lab_unit.name if encounter.lab_unit else None,
                 image_count=len(encounter.encounter_set_images or []),
@@ -233,6 +234,26 @@ def load_encounter(db, *, user, encounter_uuid: str):
     return encounter, scope
 
 
+def _patient_meta(encounter) -> dict:
+    metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
+    patient = metadata.get("patient")
+    return patient if isinstance(patient, dict) else {}
+
+
+def _patient_display_name(encounter) -> str | None:
+    """Prefer the real patient name from ingest metadata; the encounter's
+    own ``name`` column is a "Remidio Patient <id>" placeholder when the
+    upstream exam carried no name at ingest time."""
+    name = str(_patient_meta(encounter).get("patient_name") or "").strip()
+    return name or encounter.name
+
+
+def _site_identifier(encounter) -> str | None:
+    value = _patient_meta(encounter).get("remidio_site_custom_identifier")
+    text = str(value).strip() if value not in {None, ""} else ""
+    return text or None
+
+
 def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
     encounter, scope = load_encounter(db, user=user, encounter_uuid=encounter_uuid)
     cache_key = field_cache.detail_cache_key(
@@ -280,7 +301,8 @@ def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
         source=source,
         project_id=encounter.project_id,
         patient_id=encounter.patient_id,
-        patient_name=encounter.name,
+        patient_name=_patient_display_name(encounter),
+        site=_site_identifier(encounter),
         patient_age=str(patient.get("patient_age_yrs")) if patient.get("patient_age_yrs") else None,
         patient_sex=patient.get("sex"),
         capture_date=encounter.capture_date_dt.isoformat() if encounter.capture_date_dt else None,

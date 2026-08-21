@@ -11,6 +11,10 @@ import requests
 PRESIGN_TIMEOUT_SECONDS = 30
 UPLOAD_TIMEOUT_SECONDS = 60
 SUBMIT_TIMEOUT_SECONDS = 180
+# Presign is cheap and idempotent - it reserves upload URLs against a request_id
+# that is already durable - so one short retry absorbs a dropped connection
+# without risking a duplicate screening.
+PRESIGN_RETRY_DELAYS_SECONDS = (3,)
 UPLOAD_RETRY_DELAYS_SECONDS = (3, 5)
 SUBMIT_RETRY_DELAYS_SECONDS = (2, 10, 30)
 TRANSIENT_UPLOAD_STATUSES = {408, 429, 500, 502, 503, 504}
@@ -75,18 +79,42 @@ class MadhuNetrAIClient:
         self._sleep = sleep
 
     def presign(self, *, request_id: str, images: list[dict[str, str]]) -> dict[str, Any]:
-        try:
-            response = self._session.post(
-                f"{self.base_url}/api/inference/presign/",
-                headers=_api_headers(self._token),
-                json={"request_id": request_id, "images": images},
-                timeout=PRESIGN_TIMEOUT_SECONDS,
-            )
-        except requests.RequestException as exc:
-            raise MadhuNetrAIError("presign", "network_error", "MadhuNetrAI presign request failed", retryable=True) from exc
-        if not response.ok:
+        """Reserve one upload URL per image, retrying only transient failures.
+
+        Uploads and submit already retry; presign being the sole unprotected step
+        meant one dropped connection failed a whole encounter before anything had
+        been sent.
+
+        A 4xx still fails immediately - only transport errors and the transient
+        statuses are worth a second attempt.
+        """
+        attempts = 0
+        delays = (0, *PRESIGN_RETRY_DELAYS_SECONDS)
+        for delay in delays:
+            if delay:
+                self._sleep(delay)
+            attempts += 1
+            try:
+                response = self._session.post(
+                    f"{self.base_url}/api/inference/presign/",
+                    headers=_api_headers(self._token),
+                    json={"request_id": request_id, "images": images},
+                    timeout=PRESIGN_TIMEOUT_SECONDS,
+                )
+            except requests.RequestException as exc:
+                if attempts < len(delays):
+                    continue
+                raise MadhuNetrAIError(
+                    "presign", "network_error", "MadhuNetrAI presign request failed", retryable=True
+                ) from exc
+            if response.ok:
+                return _response_payload(response)
+            if response.status_code in TRANSIENT_UPLOAD_STATUSES and attempts < len(delays):
+                continue
             _raise_api_error("presign", response)
-        return _response_payload(response)
+        raise MadhuNetrAIError(
+            "presign", "network_error", "MadhuNetrAI presign request failed", retryable=True
+        )
 
     def upload(self, *, upload_url: str, content_type: str, image_bytes: bytes) -> int:
         """Upload one image, retrying only its transient failures after 3s and 5s."""

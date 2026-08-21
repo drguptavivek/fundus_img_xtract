@@ -125,3 +125,89 @@ def test_integration_encrypts_access_token_at_rest(app):
         integration.set_access_token("plain-secret")
         assert integration.access_token_encrypted != "plain-secret"
         assert integration.get_access_token() == "plain-secret"
+
+
+def test_presign_retries_a_dropped_connection():
+    """Two production encounters failed on a single dropped presign connection.
+
+    Uploads and submit already retried; presign was the only unprotected step.
+    """
+    slept = []
+    session = Session(posts=[
+        requests.ConnectionError("connection reset"),
+        Response(payload={"request_id": "abc", "uploads": []}),
+    ])
+    client = MadhuNetrAIClient(
+        base_url="https://wai.example", token="secret", session=session, sleep=slept.append
+    )
+
+    result = client.presign(request_id="abc", images=[])
+
+    assert result["request_id"] == "abc"
+    assert len(session.calls) == 2
+    assert slept == [3]
+
+
+def test_presign_gives_up_after_one_retry():
+    session = Session(posts=[
+        requests.ConnectionError("reset"),
+        requests.ConnectionError("reset again"),
+    ])
+    client = MadhuNetrAIClient(
+        base_url="https://wai.example", token="secret", session=session, sleep=lambda _: None
+    )
+
+    try:
+        client.presign(request_id="abc", images=[])
+    except MadhuNetrAIError as exc:
+        assert exc.code == "network_error"
+        assert exc.retryable is True
+    else:
+        raise AssertionError("expected MadhuNetrAIError")
+    assert len(session.calls) == 2
+
+
+def test_presign_retries_a_transient_status():
+    session = Session(posts=[
+        Response(status=503),
+        Response(payload={"request_id": "abc", "uploads": []}),
+    ])
+    client = MadhuNetrAIClient(
+        base_url="https://wai.example", token="secret", session=session, sleep=lambda _: None
+    )
+
+    assert client.presign(request_id="abc", images=[])["request_id"] == "abc"
+    assert len(session.calls) == 2
+
+
+def test_presign_does_not_retry_a_client_error():
+    """A 400 or 404 is a real answer - retrying only delays the failure."""
+    session = Session(posts=[Response(status=400, payload={"error": "invalid_request"})])
+    client = MadhuNetrAIClient(
+        base_url="https://wai.example", token="secret", session=session, sleep=lambda _: None
+    )
+
+    try:
+        client.presign(request_id="abc", images=[])
+    except MadhuNetrAIError as exc:
+        assert exc.code == "invalid_request"
+        assert exc.status_code == 400
+    else:
+        raise AssertionError("expected MadhuNetrAIError")
+    assert len(session.calls) == 1, "a 4xx must fail on the first attempt"
+
+
+def test_presign_does_not_retry_a_doubled_url_404():
+    """The base-URL bug that 404'd every call must still fail immediately."""
+    session = Session(posts=[Response(status=404, payload={})])
+    client = MadhuNetrAIClient(
+        base_url="https://wai.example", token="secret", session=session, sleep=lambda _: None
+    )
+
+    try:
+        client.presign(request_id="abc", images=[])
+    except MadhuNetrAIError as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("expected MadhuNetrAIError")
+    assert len(session.calls) == 1

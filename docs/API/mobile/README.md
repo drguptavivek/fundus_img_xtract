@@ -6,6 +6,7 @@ These endpoints are consumed by mobile clients. They are JSON-only and use beare
 
 ## Index
 
+- **[Client integration guide](integration-guide.md)** - start here if you are building a client
 - [Auth and device enrolment](auth.md)
 - [Context and upload options](context.md)
 - [EIM uploads](uploads.md)

@@ -53,6 +53,7 @@ Field staff:
 
 The canonical, maintained contracts live under `docs/API/mobile/`:
 
+- **[Client integration guide](../API/mobile/integration-guide.md)** - flows, state machines, and pitfalls for client authors
 - [Auth and device enrolment](../API/mobile/auth.md)
 - [Context and upload options](../API/mobile/context.md)
 - [EIM uploads](../API/mobile/uploads.md)

@@ -249,4 +249,7 @@ without it a revoked grant would keep serving cached patient data until the entr
 expired.
 
 TTLs (60s queue, 30s detail) are only a backstop for a missed bump. Image and PDF bytes
-are not cached in Redis; they are served with HTTP caching instead.
+are not cached in Redis. Thumbnails carry `Cache-Control: private, max-age=300`;
+full-resolution images are served `no-cache, no-store, must-revalidate` because they are
+identifiable patient images, and report PDFs go through `send_file`, which sets an
+`ETag`.

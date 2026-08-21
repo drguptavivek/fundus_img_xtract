@@ -21,6 +21,7 @@ from models import BASE_DIR, Camera, EncounterSetImage, Hospital, LabUnit, Patie
 from upload_profiles.models import ProjectUploadProfile, UploadProfile, UploadProfileEncounterSetType
 from upload_profiles.service import manager_lab_unit_ids
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
+from encounter_sets.post_processing import queue_image_post_processing
 from utils.image_processing import generate_thumbnail, get_thumbnail_filename, strip_exif_data
 from utils.log_sanitize import sanitize_log_value
 
@@ -398,6 +399,7 @@ def _sync_session(client: IITKClient, runtime: RuntimeConfig, session_dto: IITKS
 def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: IITKImageInventory, downloaded: dict[str, bytes]) -> dict[str, int]:
     counts = {"encounters_created": 0, "encounters_updated": 0, "images_created": 0, "images_updated": 0, "images_unchanged": 0, "images_failed": 0}
     now = utcnow()
+    stored_images: list[EncounterSetImage] = []
     with get_db_session() as db:
         link = db.query(IITKApiSessionLink).filter_by(config_id=runtime.id, source_session_id=source.session_id).with_for_update().one_or_none()
         encounter = db.get(PatientEncounters, link.patient_encounter_id) if link else None
@@ -463,6 +465,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             else:
                 counts["images_unchanged"] += 1
             if content is not None:
+                stored_images.append(image)
                 safe_content = strip_exif_data(content)
                 target = BASE_DIR / image.folder_rel / image.original_filename
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -497,6 +500,13 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             config.updated_at = now
         db.add_all([encounter, link])
         db.commit()
+        stored_image_ids = [image.id for image in stored_images if image.id is not None]
+
+    # Queue after the commit so the worker cannot read rows that are not yet
+    # visible. Without this, IITK images were written to disk but never had
+    # their metadata extracted or their pixels scanned for burned-in PII - the
+    # Remidio path has always done both.
+    counts["images_post_processing_queued"] = queue_image_post_processing(stored_image_ids)
     return counts
 
 

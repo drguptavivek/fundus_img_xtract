@@ -414,3 +414,54 @@ def test_image_failure_still_imports_partial_session_metadata(db_session, core_t
     assert encounter.metadata_json["encounter"]["capture_status"] == "partial"
     assert link.local_image_count == 0
     assert "private remote failure" in link.last_error
+
+
+def test_downloaded_images_are_queued_for_metadata_and_pii_processing(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    """IITK images used to be written to disk and never scanned.
+
+    Thumbnails and EXIF stripping happen inline here, but metadata extraction
+    and burned-in-PII detection run through Celery afterwards - the Remidio path
+    has always queued them, and this one did not.
+    """
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+
+    queued: list[int] = []
+    monkeypatch.setattr(
+        "iitk_api_integration.service.queue_image_post_processing",
+        lambda image_ids, **kwargs: queued.extend(image_ids) or len(list(image_ids)),
+    )
+
+    result = _persist_session(
+        runtime, source("partial", 2, ("primary", "up")), inventory("primary", "up"),
+        {"primary": jpeg(), "up": jpeg("green")},
+    )
+
+    images = db_session.query(EncounterSetImage).all()
+    assert len(images) == 2
+    assert sorted(queued) == sorted(image.id for image in images)
+    assert result["images_post_processing_queued"] == 2
+
+
+def test_images_without_new_bytes_are_not_requeued(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    """A re-sync that downloads nothing must not re-scan unchanged images."""
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    _persist_session(runtime, source("partial", 1, ("primary",)), inventory("primary"), {"primary": jpeg()})
+
+    queued: list[int] = []
+    monkeypatch.setattr(
+        "iitk_api_integration.service.queue_image_post_processing",
+        lambda image_ids, **kwargs: queued.extend(image_ids) or len(list(image_ids)),
+    )
+
+    result = _persist_session(runtime, source("partial", 1, ("primary",)), inventory("primary"), {})
+
+    assert queued == []
+    assert result["images_post_processing_queued"] == 0

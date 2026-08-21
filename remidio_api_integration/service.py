@@ -1809,49 +1809,11 @@ def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_i
     image_ids = _downloaded_encounter_set_image_ids(result)
     if not image_ids:
         return {"images_queued": 0}
+    # Shared with the IITK ingester so both paths run the same metadata and
+    # burned-in-PII scan; a second copy here would be free to drift.
+    from encounter_sets.post_processing import queue_image_post_processing
 
-    try:
-        from celery import chain
-        from utils.celery_helpers import celery_enabled
-        from celery_tasks.tasks.encounter_set_tasks import (
-            process_encounter_set_image_data_combined_task,
-            process_encounter_set_image_thumbnail_task,
-        )
-
-        queued = 0
-        if celery_enabled():
-            for image_id in image_ids:
-                chain(
-                    process_encounter_set_image_thumbnail_task.s(image_id, user_id=user_id),
-                    process_encounter_set_image_data_combined_task.s(),
-                ).apply_async()
-                queued += 1
-        else:
-            for image_id in image_ids:
-                visual_result = process_encounter_set_image_thumbnail_task.run(image_id, user_id=user_id)
-                process_encounter_set_image_data_combined_task.run(visual_result)
-                queued += 1
-        LOGGER.info(
-            "Queued EncounterSet post-processing for Remidio API images count=%s",
-            sanitize_log_value(queued),
-        )
-        return {"images_queued": queued}
-    except Exception as exc:  # noqa: BLE001
-        LOGGER.warning(
-            "Failed to queue EncounterSet post-processing for Remidio API images count=%s error=%s",
-            sanitize_log_value(len(image_ids)),
-            sanitize_log_value(exc),
-            exc_info=True,
-        )
-        return {"images_queued": 0, "queue_errors": len(image_ids)}
-
-
-def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
-    image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
-    pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
-    ai_result = _queue_encounter_set_ai_inference(result, user_id=user_id)
-    _bump_field_cache_for_ingest(result)
-    return {**image_result, **pdf_result, **ai_result}
+    return {"images_queued": queue_image_post_processing(image_ids, user_id=user_id)}
 
 
 def _bump_field_cache_for_ingest(result: dict[str, Any]) -> None:

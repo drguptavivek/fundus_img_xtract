@@ -649,6 +649,7 @@ def _load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                 "grade_id": parsed.get("grade_id"),
                 "inference_run_id": parsed.get("inference_run_id"),
                 "error_code": parsed.get("error_code"),
+                "error_detail": parsed.get("detail"),
                 "grade_name": grade.grade_name if grade else None,
                 "probability": _grade_probability(grade),
                 "prediction": result_row.get("prediction"),

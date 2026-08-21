@@ -156,15 +156,53 @@ def integration_context(db) -> dict[str, Any] | None:
     }
 
 
+def resolve_enabled(payload: dict[str, Any], current: bool) -> bool:
+    """Decide the new is_enabled from a possibly partial payload.
+
+    An absent key means "not specified" and keeps the current value. Collapsing
+    absence to False - the previous behaviour - meant a partial update that only
+    changed the base URL silently disabled a working integration.
+
+    The route's form branch always sends an explicit boolean, so an unchecked
+    checkbox still disables.
+    """
+    if "is_enabled" not in payload:
+        return bool(current)
+    return payload["is_enabled"] is True
+
+
+def resolve_environment(payload: dict[str, Any]) -> str:
+    """Normalize a requested environment, or empty string when unspecified.
+
+    Never defaults to staging: doing so let a partial update flip a production
+    integration to staging without anyone asking for it.
+    """
+    return str(payload.get("environment") or "").strip().lower()
+
+
+def _path_segments(path: str) -> list[str]:
+    return [segment for segment in (path or "").split("/") if segment]
+
+
 def save_integration(payload: dict[str, Any]) -> MutationResult:
     """Update endpoint/token without ever returning or logging the secret."""
     api_base_url = str(payload.get("api_base_url") or "").strip().rstrip("/")
-    environment = str(payload.get("environment") or "staging").strip().lower()
-    if environment not in {"staging", "production"}:
+    environment = resolve_environment(payload)
+    if environment and environment not in {"staging", "production"}:
         return MutationResult(False, "Environment must be staging or production.", 400)
     parsed = urlparse(api_base_url)
     if not api_base_url or parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         return MutationResult(False, "A credential-free HTTPS API base URL is required.", 400)
+    # The client appends /api/inference/... itself, so a base URL that already
+    # carries that prefix produces /api/api/inference/ and every call 404s at
+    # presign with no hint that the URL was doubled. Reject it at save time.
+    segments = _path_segments(parsed.path)
+    if segments and segments[0].lower() == "api":
+        return MutationResult(
+            False,
+            "Enter the host only, without a /api suffix - request paths are appended automatically.",
+            400,
+        )
     access_token = str(payload.get("access_token") or "").strip()
     with transaction_scope() as db:
         integration = db.execute(
@@ -172,11 +210,12 @@ def save_integration(payload: dict[str, Any]) -> MutationResult:
         ).scalar_one_or_none()
         if integration is None:
             return MutationResult(False, "MadhuNetrAI integration is not installed.", 404)
-        requested_enabled = payload.get("is_enabled") is True
+        requested_enabled = resolve_enabled(payload, integration.is_enabled)
         if requested_enabled and not (access_token or integration.access_token_encrypted):
             return MutationResult(False, "An access token is required before enabling the integration.", 400)
         integration.api_base_url = api_base_url
-        integration.environment = environment
+        if environment:
+            integration.environment = environment
         if access_token:
             integration.set_access_token(access_token)
         integration.is_enabled = requested_enabled
@@ -292,6 +331,7 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                 "state": state,
                 "message": detail.get("message"),
                 "error_code": detail.get("error_code"),
+                "error_detail": detail.get("detail"),
                 "request_id": detail.get("request_id"),
                 "report_id": detail.get("report_id"),
                 "run_id": detail.get("run_id"),

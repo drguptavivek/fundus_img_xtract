@@ -224,6 +224,10 @@ def run_madhunetra_dr_dme_batch_task(
                     {
                         "message": "MadhuNetrAI screening failed.",
                         "error_code": getattr(exc, "code", "unexpected_error"),
+                        # Without the detail, an ineligible_encounter or http_error
+                        # says nothing about which rule failed or which URL 404'd,
+                        # and the job page cannot explain itself.
+                        "detail": str(sanitize_log_value(exc))[:500],
                     }
                 ),
             )

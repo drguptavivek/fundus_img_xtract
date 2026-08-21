@@ -32,6 +32,7 @@
         </div>
         {% endif %}
         {% if item.error_code %}<div class="small text-danger">{{ item.error_code }}</div>{% endif %}
+        {% if item.error_detail %}<div class="small text-muted">{{ item.error_detail }}</div>{% endif %}
       </div>
       {% endfor %}
     </div>

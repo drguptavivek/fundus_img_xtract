@@ -309,15 +309,15 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
 
 
 def test_dr_dme_positive_output_classification():
-    from remote_inference.encounter_service import _is_positive_output
+    from remote_inference.encounter_service import is_positive_output
 
-    assert _is_positive_output("dr", "Mild DR") is True
-    assert _is_positive_output("dme", "DME Present") is True
-    assert _is_positive_output("dme", "M1 Referable Diabetic Maculopathy") is True
-    assert _is_positive_output("dr", "No DR") is False
-    assert _is_positive_output("dme", "No DME") is False
-    assert _is_positive_output("dme", "M0 No DME") is False
-    assert _is_positive_output("dr", "Not Gradable") is False
+    assert is_positive_output("dr", "Mild DR") is True
+    assert is_positive_output("dme", "DME Present") is True
+    assert is_positive_output("dme", "M1 Referable Diabetic Maculopathy") is True
+    assert is_positive_output("dr", "No DR") is False
+    assert is_positive_output("dme", "No DME") is False
+    assert is_positive_output("dme", "M0 No DME") is False
+    assert is_positive_output("dr", "Not Gradable") is False
 
 
 def test_dr_dme_job_page_recovers_workflow_from_job_token(client, login_user, monkeypatch):

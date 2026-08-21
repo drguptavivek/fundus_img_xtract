@@ -727,9 +727,11 @@ def _begin_sync(config_id: int) -> RuntimeConfig | None:
 
 
 def _finish_sync(config_id: int, *, result: dict | None = None, error: Exception | None = None) -> None:
+    project_id = None
     with get_db_session() as db:
         row = db.get(IITKApiProjectConfig, config_id)
         if row:
+            project_id = row.project_id
             row.sync_started_at = None
             if error is None:
                 row.last_success_at = utcnow()
@@ -739,6 +741,22 @@ def _finish_sync(config_id: int, *, result: dict | None = None, error: Exception
             row.updated_at = utcnow()
             db.add(row)
             db.commit()
+    # Flip any cached field queue off "running" as soon as the sync ends, on the
+    # failure path too - otherwise the app shows a fetch in progress forever.
+    _bump_field_cache(project_id)
+
+
+def _bump_field_cache(project_id: int | None) -> None:
+    if project_id is None:
+        return
+    try:
+        from app_cache import init_cache
+        from field_workbench.cache import bump_project
+
+        init_cache()
+        bump_project(project_id)
+    except Exception as exc:  # noqa: BLE001 - cache invalidation must not fail a sync
+        LOGGER.warning("Field cache invalidation failed: %s", sanitize_log_value(exc))
 
 
 def _touch_sync_heartbeat(config_id: int) -> None:

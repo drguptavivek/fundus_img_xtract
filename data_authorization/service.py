@@ -54,6 +54,26 @@ PROJECT_ASSIGNABLE_ROLE_NAMES = frozenset({
 _LOGGER = logging.getLogger("project_authorization")
 
 
+def _invalidate_field_cache(project_id: int | None) -> None:
+    """Drop cached field reads whenever a project grant changes.
+
+    Field responses are cached per user and stamped with a fingerprint of the
+    caller's grants, but the stamp only changes once the new grants are read.
+    Bumping here means a revoked grant stops serving cached patient data on the
+    very next request instead of when the entry happens to expire.
+    """
+    if project_id is None:
+        return
+    try:
+        from app_cache import init_cache
+        from field_workbench.cache import bump_project
+
+        init_cache()
+        bump_project(project_id)
+    except Exception:  # noqa: BLE001 - cache state must not fail a grant change
+        _LOGGER.warning("Field cache invalidation failed after project grant change")
+
+
 def upsert_project_role_grant(
     db: Session,
     *,
@@ -99,6 +119,7 @@ def upsert_project_role_grant(
     db.flush()
     _log_grant_edit(actor=actor, row=row, change=change)
     db.refresh(row, attribute_names=["project", "user", "role", "hospital", "lab_unit"])
+    _invalidate_field_cache(row.project_id)
     return grant_to_dto(row)
 
 
@@ -215,6 +236,7 @@ def replace_project_role_grants(
             ),
         )
     db.flush()
+    _invalidate_field_cache(project_id)
     return tuple(
         grant_to_dto(row)
         for row in db.execute(
@@ -273,6 +295,7 @@ def deactivate_project_role_grant(
         row.active = False
         _log_grant_edit(actor=actor, row=row, change="removed")
         db.flush()
+    _invalidate_field_cache(row.project_id)
     return grant_to_dto(row)
 
 

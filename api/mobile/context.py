@@ -6,6 +6,7 @@ from sqlalchemy import select
 from auth.decorators import token_auth_required
 from auth.mobile_tokens import build_mobile_scope
 from db_transaction_manager import transaction_scope
+from field_workbench.service import list_projects as list_field_projects
 from models import User
 
 from . import mobile_api_bp
@@ -24,8 +25,13 @@ def get_mobile_context():
         if user is None or not user.is_active:
             return jsonify({"error": "User is inactive"}), 403
         scope = build_mobile_scope(db, user)
+        # Projects carry the field dimension the base scope has never had: which
+        # projects this user may work in and which AI workflows each enables, so
+        # the client can hide an action rather than discover a 409 by pressing it.
+        projects = list_field_projects(db, user=user)
         return jsonify(
             {
+                "projects": [project.to_dict() for project in projects],
                 "user": {
                     "id": user.id,
                     "username": user.username,

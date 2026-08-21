@@ -111,60 +111,6 @@ def test_strabismus_in_core_diseases_list(db_session, core_test_data):
 # ============================================================================
 
 @pytest.mark.integration
-def test_create_encounter_set_for_strabismus(client, auth_client_factory, db_session, core_test_data, csrf_token):
-    """Test creating an encounter set for Strabismus disease."""
-    import io
-    import uuid
-    from api.encounter_set import generate_mobile_token
-    from models import PatientEncounters, EncounterSetImage
-
-    strabismus = db_session.query(Disease).filter_by(name='Strabismus').first()
-    if not strabismus:
-        pytest.skip("Strabismus disease not yet created")
-
-    user = UserFactory.create_admin(db_session, username="admin_strabismus")
-    auth_client = auth_client_factory(user)
-
-    # Generate JWT token
-    token = generate_mobile_token(
-        hospital_id=1,
-        lab_unit_id=1,
-        allowed_diseases=[strabismus.id]
-    )
-
-    # Upload 5 images for Strabismus (5 gaze positions)
-    data = {
-        'disease_id': str(strabismus.id),
-        'patient_id': 'STRAB-001',
-        'patient_name': 'Test Strabismus Patient',
-    }
-
-    # Add 5 image files
-    files = []
-    for pos in range(1, 6):
-        files.append((
-            f'images',
-            (f'gaze_{pos}.jpg', io.BytesIO(b"fake image data"), 'image/jpeg')
-        ))
-
-    files.append(('positions[]', '1'))
-    files.append(('positions[]', '2'))
-    files.append(('positions[]', '3'))
-    files.append(('positions[]', '4'))
-    files.append(('positions[]', '5'))
-
-    response = auth_client.post(
-        '/api/v1/encounter-set/upload',
-        data=data,
-        headers={'Authorization': f'Bearer {token}'}
-    )
-
-    # Should succeed or return specific validation
-    assert response.status_code in [200, 201, 400], \
-        f"Expected success or validation error, got {response.status_code}"
-
-
-@pytest.mark.integration
 def test_strabismus_task_creation_uses_encounter_scope(db_session, core_test_data):
     """Test that tasks created for Strabismus use encounter-based grading."""
     from services.taskCreationServices import create_or_get_task

@@ -1808,6 +1808,20 @@ def _enqueue_madhunetra_after_commit(encounter_id: int, *, user_id: int) -> None
             enqueue_automatic_encounters([encounter_id], user_id=user_id)
         except Exception as exc:  # noqa: BLE001
             current_app.logger.exception("Failed to enqueue EncounterSet MadhuNetrAI inference: %s", exc)
+        # Verification and reopen both change what the field surface reports, so
+        # the cached copy must not outlive the commit.
+        try:
+            from app_cache import init_cache
+            from db_transaction_manager import get_db_session
+            from field_workbench.cache import bump_encounter
+            from models import PatientEncounters as _PatientEncounters
+
+            init_cache()
+            with get_db_session() as db:
+                encounter = db.get(_PatientEncounters, encounter_id)
+                bump_encounter(encounter_id, encounter.project_id if encounter else None)
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.warning("Field cache invalidation failed after verification: %s", exc)
         return response
 
 

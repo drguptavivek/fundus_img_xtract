@@ -30,8 +30,12 @@ from utils.hospital_scoping import apply_scoping
 JOB_TYPE = "encounter_set_madhunetra_dr_dme"
 
 
-def _is_positive_output(target_key: str, mapped_grade: str | None) -> bool:
-    """Return whether a mapped DR/DME grade represents detected disease."""
+def is_positive_output(target_key: str, mapped_grade: str | None) -> bool:
+    """Return whether a mapped DR/DME grade represents detected disease.
+
+    Public because the field surface rolls the same grades up to patient level;
+    a second copy of this rule would drift from the referral logic below.
+    """
     grade = " ".join(str(mapped_grade or "").strip().lower().split())
     if not grade or grade in {"not gradable", "ungradable"}:
         return False
@@ -262,7 +266,7 @@ def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
                 }
                 if grades:
                     is_positive = any(
-                        _is_positive_output(target_key, mapped_grade)
+                        is_positive_output(target_key, mapped_grade)
                         for target_key, mapped_grade in grades.items()
                     )
                     outputs.append(

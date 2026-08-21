@@ -376,3 +376,27 @@ partial` or `IITK complete` badge. Its metadata card keeps canonical fields
 visible and opens **Full metadata** in a full-screen modal containing only the
 pretty-printed upstream session object and `listImages` response. The no-PII
 browser does not receive or render this payload.
+
+
+## Field staff fetch surface
+
+Field clients do not call these admin routes. `POST /api/mobile/v1/field/projects/<id>/fetch`
+with `source=iitk` queues the same `sync_config` run through
+`field_workbench/sources/iitk.py`, which additionally:
+
+- reads the `sync_started_at` lease **before** dispatching, so a caller gets the running
+  status instead of a task id for a run that would immediately no-op as
+  `sync_already_running`;
+- reports state from the config row and `IITKApiSessionLink` counts rather than a Celery
+  task id, which is not queryable application state;
+- targets retry at sessions where `source_status = 'partial'` or
+  `local_image_count < source_image_count`, instead of re-running a window blindly;
+- enforces its own lab-unit check against `IITKApiProjectConfig.lab_unit_id`, because the
+  field surface authorizes through `ProjectRoleGrant` rather than the `IITK_ROLES` /
+  `manager_lab_unit_ids` gate these admin routes use;
+- never proxies `browse_sessions` to field clients - that call hits the IITK API on every
+  request, and a pull-to-refresh loop against it would breach the provider's ~60
+  requests/minute guidance.
+
+IITK-ingested encounters have no AI models configured, so they carry no inference or
+report block on the field surface. See `docs/API/mobile/field.md`.

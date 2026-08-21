@@ -11,7 +11,6 @@ Protected Routes:
 - POST /grading/encounter_set/submit
 
 Exempt Routes (JWT auth):
-- POST /v1/encounter-set/upload (uses @token_auth_required)
 """
 
 import pytest
@@ -332,39 +331,11 @@ class TestCSRFProtectionGrading:
         assert response.status_code == 403, "grade submission should require CSRF token"
 
 
-class TestCSRFExemptJWTRoutes:
-    """Test that JWT-authenticated routes do NOT require CSRF tokens"""
-
-    @pytest.fixture
-    def valid_jwt_token(self):
-        """Generate valid JWT token"""
-        from api.encounter_set import generate_mobile_token
-        return generate_mobile_token(hospital_id=1, lab_unit_id=1, allowed_diseases=[1])
-
-    @pytest.fixture
-    def test_client(self, app):
-        return app.test_client()
-
-    def test_encounter_set_upload_does_not_require_csrf(self, test_client, valid_jwt_token):
-        """Test that /v1/encounter-set/upload (JWT auth) doesn't need CSRF token"""
-        # JWT-authenticated routes don't need CSRF protection
-        # (token auth is inherently CSRF-resistant)
-
-        response = test_client.post(
-            '/api/v1/encounter-set/upload',
-            headers={'Authorization': f'Bearer {valid_jwt_token}'},
-            data={
-                'patient_id': 'TEST',
-                'patient_name': 'Test',
-                'spatial_position': '5',
-                'file': ('test.jpg', b'\xFF\xD8\xFF\xE0' + b'\x00' * 100, 'image/jpeg')
-            }
-        )
-
-        # Should NOT reject due to CSRF
-        # (May fail for other reasons like validation, but not CSRF)
-        assert response.status_code != 403, \
-            "JWT-authenticated routes should not require CSRF token"
+# Token-authenticated routes are CSRF-exempt. That behaviour now lives entirely on
+# the mobile blueprint (app.py csrf.exempt(mobile_api_bp)); the legacy
+# /v1/encounter-set/upload route this class used to exercise has been removed as
+# dead code. Coverage is in
+# tests/unit/api/test_mobile_auth.py::test_mobile_login_is_exempt_from_browser_csrf.
 
 
 class TestCSRFErrorHandling:

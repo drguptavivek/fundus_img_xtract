@@ -1850,7 +1850,31 @@ def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int |
     image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
     pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
     ai_result = _queue_encounter_set_ai_inference(result, user_id=user_id)
+    _bump_field_cache_for_ingest(result)
     return {**image_result, **pdf_result, **ai_result}
+
+
+def _bump_field_cache_for_ingest(result: dict[str, Any]) -> None:
+    """Invalidate cached field queues once newly fetched encounters land."""
+    try:
+        from app_cache import init_cache
+        from field_workbench.cache import bump_encounter
+        from services.encounter_set_ai_inference import encounter_ids_from_ingest_result
+
+        encounter_ids = encounter_ids_from_ingest_result(result)
+        if not encounter_ids:
+            return
+        init_cache()
+        with get_db_session() as db:
+            rows = (
+                db.query(PatientEncounters.id, PatientEncounters.project_id)
+                .filter(PatientEncounters.id.in_(list(encounter_ids)))
+                .all()
+            )
+        for encounter_id, project_id in rows:
+            bump_encounter(encounter_id, project_id)
+    except Exception as exc:  # noqa: BLE001 - cache state must not break ingestion
+        LOGGER.warning("Field cache invalidation failed: %s", sanitize_log_value(exc))
 
 
 def _queue_encounter_set_ai_inference(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:

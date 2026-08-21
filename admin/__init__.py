@@ -1,7 +1,10 @@
 from flask import Blueprint
 
 # Import all route handlers
-from .users import users_list, user_detail, add_user, edit_user, users_update, user_created, revoke_mobile_session
+from .users import (
+    users_list, user_detail, add_user, edit_user, users_update, user_created,
+    revoke_mobile_session, issue_device_enrolment_code, update_mobile_device_status,
+)
 from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups.hospital import list_hospitals, edit_hospital, delete_hospital
 from .lookups.lab_unit import list_lab_units, edit_lab_unit, delete_lab_unit
@@ -129,6 +132,8 @@ admin_bp.add_url_rule("/users/<int:user_id>", view_func=user_detail, methods=["G
 admin_bp.add_url_rule("/users/<int:user_id>/edit", view_func=edit_user, methods=["GET", "POST"])
 admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, methods=["POST"])
 admin_bp.add_url_rule("/users/<int:user_id>/mobile-sessions/<string:session_id>/revoke", view_func=revoke_mobile_session, methods=["POST"])
+admin_bp.add_url_rule("/users/<int:user_id>/mobile-devices/enrolment-code", view_func=issue_device_enrolment_code, methods=["POST"])
+admin_bp.add_url_rule("/users/<int:user_id>/mobile-devices/<string:device_id>/status", view_func=update_mobile_device_status, methods=["POST"])
 admin_bp.add_url_rule("/upload-profiles", view_func=upload_profiles_admin, methods=["GET"])
 admin_bp.add_url_rule("/encounter-set-types", view_func=encounter_set_types_admin, methods=["GET"])
 admin_bp.add_url_rule("/encounter-set-types/list", view_func=encounter_set_types_list, methods=["GET"])

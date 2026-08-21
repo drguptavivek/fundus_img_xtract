@@ -46,7 +46,7 @@ from upload_profiles.service import (
     UPLOAD_KIND_PREGRADED,
     UPLOAD_KIND_REMIDIO,
 )
-from tests.helpers.factories import UserFactory
+from tests.helpers.factories import UserFactory, approve_mobile_device
 from utils.fileUtils import abs_from_parts, get_thumbnail_path_direct
 
 
@@ -120,6 +120,9 @@ def mobile_upload_data(db_session, core_test_data):
         )
     )
     db_session.flush()
+
+    # Every login in this module goes through the device enrolment gate.
+    approve_mobile_device(db_session, uploader.id, f"device-{uploader.username}")
 
     return {
         "uploader": uploader,

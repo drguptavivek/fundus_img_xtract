@@ -16,7 +16,7 @@ from services.mobile.auth_sessions import (
     logout_mobile_session,
     refresh_mobile_tokens,
 )
-from utils.rate_limiter import auth_rate_limit, rate_limit
+from utils.rate_limiter import auth_rate_limit, get_login_rate_limit_key, rate_limit
 
 from . import mobile_api_bp
 
@@ -24,13 +24,15 @@ logger = logging.getLogger("api.mobile.auth")
 
 
 @mobile_api_bp.route("/auth/login", methods=["POST"])
-@auth_rate_limit("10 per minute")
+@auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
 def login():
     payload = request.get_json(silent=True) or {}
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
     device_id = (payload.get("device_id") or "").strip()
     device_name = (payload.get("device_name") or "").strip()
+    enrolment_code = (payload.get("enrolment_code") or "").strip()
+    platform = (payload.get("platform") or "").strip() or None
 
     if not username or not password or not device_id or not device_name:
         return jsonify({"error": "username, password, device_id, and device_name are required"}), 400
@@ -46,6 +48,8 @@ def login():
                         device_id=device_id,
                         device_name=device_name,
                         ip_address=get_client_ip(),
+                        enrolment_code=enrolment_code,
+                        platform=platform,
                     ),
                 )
             )

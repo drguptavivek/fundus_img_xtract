@@ -15,7 +15,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE, UPLOAD_KIND_PREGRADED, UPLOAD_KIND_REMIDIO
-from tests.helpers.factories import UserFactory
+from tests.helpers.factories import UserFactory, approve_mobile_device
 
 
 JWT_SECRET = "test-mobile-upload-options-secret"
@@ -79,6 +79,10 @@ def upload_options_data(db_session, core_test_data):
     _add_profile(db_session, elevated_uploader_without_lab.id, lab_a.id, project_a.id, glaucoma.id, camera_a.id, area_a.id)
     db_session.flush()
 
+    # Every login in this module goes through the device enrolment gate.
+    for member in (uploader, no_upload_role_user, admin_without_lab, elevated_uploader_without_lab):
+        approve_mobile_device(db_session, member.id, f"device-{member.username}")
+
     return {
         "uploader": uploader,
         "no_upload_role_user": no_upload_role_user,
@@ -120,6 +124,7 @@ def test_mobile_upload_options_returns_empty_arrays_without_valid_profiles(clien
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user = UserFactory.create_by_role(db_session, "fileUploader", username="mobile_options_empty")
     db_session.flush()
+    approve_mobile_device(db_session, user.id, f"device-{user.username}")
     token = _mobile_access_token(client, user.username)
 
     response = client.get("/api/mobile/v1/upload-options", headers={"Authorization": f"Bearer {token}"})

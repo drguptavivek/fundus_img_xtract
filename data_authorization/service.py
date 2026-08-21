@@ -47,6 +47,8 @@ PROJECT_ASSIGNABLE_ROLE_NAMES = frozenset({
     "regrade_adjudicator",
     "dataset_creator",
     "analytics_viewer",
+    "field_optometrist",
+    "field_ophthalmologist",
 })
 
 _LOGGER = logging.getLogger("project_authorization")

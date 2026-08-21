@@ -45,8 +45,14 @@ CAPABILITY_COLUMNS = {
 }
 
 CAPABILITY_ROLES = {
-    CAPABILITY_BROWSE: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
-    CAPABILITY_VERIFY: frozenset({"admin", "local_admin", "data_manager", "fileUploader", "optometrist"}),
+    CAPABILITY_BROWSE: frozenset({
+        "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
+        "field_optometrist", "field_ophthalmologist",
+    }),
+    CAPABILITY_VERIFY: frozenset({
+        "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
+        "field_optometrist", "field_ophthalmologist",
+    }),
     CAPABILITY_UPLOAD: frozenset({"admin", "local_admin", "data_manager", "fileUploader"}),
     CAPABILITY_DISCREPANCY_REVIEW: frozenset({"discrepancy_reviewer"}),
     # This capability currently protects the sole PII EMR reconciliation export.

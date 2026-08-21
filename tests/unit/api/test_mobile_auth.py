@@ -5,7 +5,7 @@ import jwt
 from auth.mobile_tokens import hash_refresh_token
 from models import Disease, Hospital, LabUnit, MobileAuthSession
 from services.mobile import auth_sessions
-from tests.helpers.factories import UserFactory
+from tests.helpers.factories import UserFactory, approve_mobile_device
 
 
 JWT_SECRET = "test-mobile-jwt-secret-32-chars-long"
@@ -44,6 +44,7 @@ def _seed_mobile_user(db_session):
 def test_mobile_login_returns_token_shapes(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, hospital, lab_unit = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-123")
 
     response = client.post(
         "/api/mobile/v1/auth/login",
@@ -59,7 +60,9 @@ def test_mobile_login_returns_token_shapes(client, db_session, monkeypatch):
     payload = response.get_json()
     assert payload["token_type"] == "Bearer"
     assert payload["expires_in"] == 900
-    assert payload["refresh_expires_in"] == 2592000
+    # Derived from the session's real expiry, which now varies by device kind,
+    # so allow for the elapsed time of the request itself.
+    assert abs(payload["refresh_expires_in"] - 2592000) <= 5
     assert payload["_links"]["sessions"]["href"] == "/api/mobile/v1/sessions"
     assert payload["_links"]["upload_profiles"]["href"] == "/api/mobile/v1/upload-options"
     assert payload["context"]["hospital"] == {"id": hospital.id, "name": hospital.name}
@@ -89,6 +92,7 @@ def test_mobile_login_is_exempt_from_browser_csrf(client, db_session, monkeypatc
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     client.application.config["WTF_CSRF_ENABLED"] = True
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-no-csrf")
 
     response = client.post(
         "/api/mobile/v1/auth/login",
@@ -109,6 +113,7 @@ def test_mobile_login_is_exempt_from_browser_csrf(client, db_session, monkeypatc
 def test_mobile_login_returns_json_when_jwt_secret_missing(client, db_session, monkeypatch):
     monkeypatch.delenv("JWT_SECRET", raising=False)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-missing-secret")
 
     response = client.post(
         "/api/mobile/v1/auth/login",
@@ -132,6 +137,7 @@ def test_mobile_login_returns_json_when_jwt_secret_missing(client, db_session, m
 def test_mobile_context_returns_user_hospital_and_token_shape(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, hospital, lab_unit = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-ctx")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -161,6 +167,7 @@ def test_mobile_context_returns_user_hospital_and_token_shape(client, db_session
 def test_mobile_refresh_rotates_refresh_token(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-refresh")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -197,6 +204,7 @@ def test_mobile_refresh_rotates_refresh_token(client, db_session, monkeypatch):
 def test_mobile_logout_revokes_access(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-logout")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -226,6 +234,7 @@ def test_mobile_logout_records_access_jti_in_revoked_store(client, db_session, m
     revoked_jtis = set()
     monkeypatch.setattr(auth_sessions, "revoke_access_jti", lambda jti, expires_at: revoked_jtis.add(jti))
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-logout-jti")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -251,6 +260,7 @@ def test_mobile_logout_records_access_jti_in_revoked_store(client, db_session, m
 def test_mobile_token_auth_rejects_redis_revoked_jti(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-revoked-jti")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -276,6 +286,7 @@ def test_mobile_token_auth_rejects_redis_revoked_jti(client, db_session, monkeyp
 def test_mobile_sessions_endpoint_lists_current_device(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-list")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -320,6 +331,7 @@ def test_mobile_sessions_endpoint_lists_current_device(client, db_session, monke
 def test_legacy_mobile_auth_sessions_route_is_removed(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    approve_mobile_device(db_session, user.id, "device-hard-cutover")
     login_response = client.post(
         "/api/mobile/v1/auth/login",
         json={
@@ -342,6 +354,8 @@ def test_legacy_mobile_auth_sessions_route_is_removed(client, db_session, monkey
 def test_mobile_login_revokes_oldest_session_when_more_than_two_active(client, db_session, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", JWT_SECRET)
     user, _, _ = _seed_mobile_user(db_session)
+    for index in range(3):
+        approve_mobile_device(db_session, user.id, f"device-concurrent-{index}")
 
     for index in range(3):
         response = client.post(

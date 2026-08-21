@@ -31,6 +31,15 @@ from auth.routes import (
 )
 from auth.security import verify_password
 from auth.utils import utcnow
+from mobile_devices.exceptions import DeviceBlocked, MobileDeviceError
+from mobile_devices.service import (
+    is_field_user,
+    max_active_sessions_for,
+    redeem_enrolment_code,
+    refresh_lifetime_for,
+    require_approved_device,
+    touch_device,
+)
 from models import MobileAuthSession, User
 from utils.log_sanitize import sanitize_log_value
 from utils.redis_connection import build_redis_url
@@ -49,6 +58,10 @@ class MobileLoginRequest:
     device_id: str
     device_name: str
     ip_address: str
+    # Supplied only on a device's first sign-in. Redeeming the code during login
+    # keeps enrolment to one screen and verifies the password exactly once.
+    enrolment_code: str = ""
+    platform: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,20 +124,92 @@ def login_mobile_user(db, login_request: MobileLoginRequest) -> dict:
             _lock_ip(db, ip)
         raise MobileAuthError("Invalid username or password", code="invalid_credentials", status_code=401)
 
+    # Enrol before gating, so a first sign-in with a valid code succeeds in one
+    # request. A bad code fails here rather than falling through to the gate.
+    if login_request.enrolment_code:
+        try:
+            redeem_enrolment_code(
+                db,
+                user_id=user.id,
+                code=login_request.enrolment_code,
+                device_id=login_request.device_id,
+                label=login_request.device_name,
+                platform=login_request.platform,
+            )
+        except MobileDeviceError as exc:
+            raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
+
+    # The device gate runs only after credentials verify, so an unenrolled-device
+    # response can never be used to probe for valid usernames.
+    #
+    # A device refusal deliberately does NOT count as a failed attempt: the
+    # password was correct, and counting it would let a field user lock their own
+    # account by retrying while they wait for an administrator to approve the
+    # device. Volume is already bounded by the login rate limit.
+    try:
+        device = require_approved_device(db, user_id=user.id, device_id=login_request.device_id)
+    except MobileDeviceError as exc:
+        logger.warning(
+            "Mobile login refused for unapproved device user=%s reason=%s",
+            sanitize_log_value(user.username),
+            sanitize_log_value(exc.code),
+        )
+        raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
+
+    _require_revocation_store_for_field_user(user)
+
     _record_attempt(db, username, ip, success=True)
     mobile_session, access_token, refresh_token, scope = create_token_session(
         db,
         user,
         device_id=login_request.device_id,
         device_name=login_request.device_name,
+        refresh_lifetime=refresh_lifetime_for(device, user=user),
     )
-    enforce_mobile_session_limit(db, user_id=user.id, current_session_id=mobile_session.id)
+    touch_device(db, user_id=user.id, device_id=login_request.device_id)
+    enforce_mobile_session_limit(
+        db,
+        user_id=user.id,
+        current_session_id=mobile_session.id,
+        max_active_sessions=max_active_sessions_for(user),
+    )
     logger.info(
         "Mobile login successful user=%s device_id=%s",
         sanitize_log_value(user.username),
         sanitize_log_value(login_request.device_id),
     )
-    return mobile_auth_response(user, access_token, refresh_token, scope)
+    return mobile_auth_response(user, access_token, refresh_token, scope, mobile_session)
+
+
+def _require_revocation_store_for_field_user(user) -> None:
+    """Refuse a new field session when the token denylist is unreachable.
+
+    Field sessions reach patient data, so losing the ability to revoke an issued
+    access token before it expires is not an acceptable degradation. Existing
+    sessions still validate against the database, which remains authoritative;
+    only minting a *new* field session is blocked.
+    """
+    if not is_field_user(user):
+        return
+    client = _get_redis_client()
+    if client is None:
+        raise MobileAuthError(
+            "Sign-in is temporarily unavailable. Please try again shortly.",
+            code="revocation_store_unavailable",
+            status_code=503,
+        )
+    try:
+        client.ping()
+    except redis.RedisError as exc:
+        logger.error(
+            "Refusing field mobile session because Redis is unavailable: %s",
+            sanitize_log_value(exc),
+        )
+        raise MobileAuthError(
+            "Sign-in is temporarily unavailable. Please try again shortly.",
+            code="revocation_store_unavailable",
+            status_code=503,
+        ) from exc
 
 
 def refresh_mobile_tokens(db, refresh_request: RefreshTokenRequest) -> dict:
@@ -140,8 +225,16 @@ def refresh_mobile_tokens(db, refresh_request: RefreshTokenRequest) -> dict:
         revoke_mobile_session(db, mobile_session)
         raise MobileAuthError("User is inactive", code="inactive_user", status_code=403)
 
-    access_token, new_refresh_token, scope = rotate_refresh_token(db, mobile_session, user)
-    return mobile_auth_response(user, access_token, new_refresh_token, scope)
+    try:
+        device = require_approved_device(db, user_id=user.id, device_id=mobile_session.device_id)
+    except MobileDeviceError as exc:
+        revoke_mobile_session(db, mobile_session)
+        raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
+
+    access_token, new_refresh_token, scope = rotate_refresh_token(
+        db, mobile_session, user, refresh_lifetime=refresh_lifetime_for(device, user=user)
+    )
+    return mobile_auth_response(user, access_token, new_refresh_token, scope, mobile_session)
 
 
 def logout_mobile_session(db, *, refresh_token: str, access_claims: dict | None = None) -> None:
@@ -241,7 +334,7 @@ def enforce_mobile_session_limit(
     for session in active_sessions:
         if session.id in keep_ids:
             continue
-        revoke_mobile_session(db, session)
+        revoke_mobile_session(db, session, reason="session_superseded")
         revoked += 1
     return revoked
 
@@ -258,7 +351,15 @@ def validate_access_session(db, claims: dict) -> AccessTokenContext:
     mobile_session = db.execute(
         select(MobileAuthSession).where(MobileAuthSession.id == mobile_session_id)
     ).scalar_one_or_none()
-    if mobile_session is None or mobile_session.is_revoked:
+    if mobile_session is None:
+        raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
+    if mobile_session.is_revoked:
+        if mobile_session.revoked_reason == "session_superseded":
+            raise MobileAuthError(
+                "Signed in on another device. Only one active session is allowed.",
+                code="session_superseded",
+                status_code=401,
+            )
         raise MobileAuthError("Mobile session is invalid", code="invalid_mobile_session", status_code=401)
     if mobile_session.refresh_token_expires_at <= utcnow():
         raise MobileAuthError("Mobile session expired", code="mobile_session_expired", status_code=401)
@@ -266,6 +367,13 @@ def validate_access_session(db, claims: dict) -> AccessTokenContext:
     user = db.get(User, mobile_session.user_id)
     if user is None or not user.is_active:
         raise MobileAuthError("User is inactive", code="inactive_user", status_code=403)
+
+    # Re-check the device on every request: blocking a device must take effect at
+    # the next call rather than when its access token happens to expire.
+    try:
+        require_approved_device(db, user_id=user.id, device_id=mobile_session.device_id)
+    except MobileDeviceError as exc:
+        raise MobileAuthError(exc.message, code=exc.code, status_code=exc.status_code) from exc
 
     mobile_session.last_used_at = utcnow()
     mobile_session.last_used_ip = request.remote_addr

@@ -24,6 +24,11 @@ from auth.security import (
     generate_strong_password,
 )
 from utils.emails import send_email_sync
+from mobile_devices.service import (
+    issue_enrolment_code,
+    list_user_devices,
+    set_device_status,
+)
 from utils.log_sanitize import sanitize_log_value
 from models import (
     User,
@@ -144,6 +149,7 @@ def _build_user_detail_context(db, user_id: int) -> dict | None:
         key=lambda item: item.created_at,
         reverse=True,
     )
+    mobile_devices = list_user_devices(db, user_id=user.id)
 
     return {
         "user": user,
@@ -155,6 +161,7 @@ def _build_user_detail_context(db, user_id: int) -> dict | None:
         "upload_profile_rows": upload_profile_rows,
         "login_attempts": login_attempts,
         "mobile_sessions": mobile_sessions,
+        "mobile_devices": mobile_devices,
     }
 
 
@@ -760,4 +767,84 @@ def revoke_mobile_session(user_id: int, session_id: str):
                 return redirect(url_for("admin.users_list"))
             return render_template("admin/partials/user_hub_shell.html", **context)
 
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+def issue_device_enrolment_code(user_id: int):
+    """Issue a single-use enrolment code so one device may sign in.
+
+    The plaintext code is shown once via flash and never persisted, so an
+    administrator who loses it issues a new one rather than recovering this one.
+    """
+    device_kind = (request.form.get("device_kind") or "personal").strip()
+    label = (request.form.get("label") or "").strip() or None
+
+    with transaction_scope() as db:
+        user = db.get(User, user_id)
+        if not user or not _can_access_user_detail(user):
+            flash("User not found or not accessible.", "danger")
+            return redirect(url_for("admin.users_list"))
+        try:
+            issued = issue_enrolment_code(
+                db,
+                user_id=user_id,
+                issued_by_user_id=current_user.id,
+                device_kind=device_kind,
+                label=label,
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin.user_detail", user_id=user_id))
+
+    flash(
+        f"Enrolment code {issued.code} - valid once, expires "
+        f"{issued.expires_at.strftime('%H:%M UTC')}. It will not be shown again.",
+        "success",
+    )
+    return _device_admin_response(user_id)
+
+
+def update_mobile_device_status(user_id: int, device_id: str):
+    """Approve, block, or reset a device from the admin user hub."""
+    status = (request.form.get("status") or "").strip()
+    with transaction_scope() as db:
+        user = db.get(User, user_id)
+        if not user or not _can_access_user_detail(user):
+            flash("User not found or not accessible.", "danger")
+            return redirect(url_for("admin.users_list"))
+        try:
+            device = set_device_status(db, user_id=user_id, device_id=device_id, status=status)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin.user_detail", user_id=user_id))
+        if device is None:
+            flash("Device not found.", "warning")
+            return redirect(url_for("admin.user_detail", user_id=user_id))
+
+        # Blocking must take effect immediately, not at token expiry. The live
+        # sessions are revoked here so the device loses access on its next call.
+        if status == "blocked":
+            for mobile_session in db.execute(
+                select(MobileAuthSession)
+                .where(MobileAuthSession.user_id == user_id)
+                .where(MobileAuthSession.device_id == device_id)
+                .where(MobileAuthSession.is_revoked == False)  # noqa: E712
+            ).scalars():
+                mobile_session.is_revoked = True
+                mobile_session.revoked_at = utcnow()
+                mobile_session.revoked_reason = "device_blocked"
+                db.add(mobile_session)
+
+    flash(f"Device {status}.", "success")
+    return _device_admin_response(user_id)
+
+
+def _device_admin_response(user_id: int):
+    if request.headers.get("HX-Request") or request.args.get("format") == "shell":
+        with get_db_session() as db:
+            context = _build_user_detail_context(db, user_id)
+            if context is None:
+                flash("User not found or not accessible.", "danger")
+                return redirect(url_for("admin.users_list"))
+            return _render_user_hub_section(context, "sessions")
     return redirect(url_for("admin.user_detail", user_id=user_id))

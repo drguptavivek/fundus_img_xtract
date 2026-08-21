@@ -22,6 +22,13 @@ ROLE_REGRADE_ADJUDICATOR = "regrade_adjudicator"
 ROLE_COLLABORATOR = "collaborator"
 ROLE_PROJECT_PI = "project_pi"
 ROLE_SITE_PI = "site_pi"
+ROLE_FIELD_OPTOMETRIST = "field_optometrist"
+ROLE_FIELD_OPHTHALMOLOGIST = "field_ophthalmologist"
+
+# Field staff operate cameras in the field and read the mobile/desktop field
+# surface. They are distinct from clinic-based optometrist/ophthalmologist
+# roles because the device and session policy applied to them is stricter.
+FIELD_ROLE_NAMES = (ROLE_FIELD_OPTOMETRIST, ROLE_FIELD_OPHTHALMOLOGIST)
 
 DEFAULT_ROLES = [
     "admin",
@@ -40,6 +47,8 @@ DEFAULT_ROLES = [
     ROLE_COLLABORATOR,
     ROLE_PROJECT_PI,
     ROLE_SITE_PI,
+    ROLE_FIELD_OPTOMETRIST,
+    ROLE_FIELD_OPHTHALMOLOGIST,
     "principal_investigator",
     "co_investigator",
     "coordinator",

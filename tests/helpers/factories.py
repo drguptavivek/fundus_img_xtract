@@ -454,3 +454,35 @@ class ImageFactory:
         db_session.add(image)
         db_session.flush()
         return image
+
+
+def approve_mobile_device(db_session, user_id: int, device_id: str, *, device_kind: str = "personal"):
+    """Enrol a device so login's device gate lets this user in.
+
+    Tests that only care about token or upload behaviour still have to get past
+    the enrolment gate, so they call this instead of restating device setup.
+    """
+    from mobile_devices.models import MobileDevice
+    from auth.utils import utcnow
+
+    existing = (
+        db_session.query(MobileDevice)
+        .filter(MobileDevice.user_id == user_id, MobileDevice.device_id == device_id)
+        .one_or_none()
+    )
+    if existing is not None:
+        existing.status = "approved"
+        existing.device_kind = device_kind
+        db_session.flush()
+        return existing
+
+    device = MobileDevice(
+        user_id=user_id,
+        device_id=device_id,
+        status="approved",
+        device_kind=device_kind,
+        enrolled_at=utcnow(),
+    )
+    db_session.add(device)
+    db_session.flush()
+    return device

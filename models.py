@@ -2395,6 +2395,7 @@ class MobileAuthSession(Base):
     allowed_disease_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     replaced_by_session_id: Mapped[str | None] = mapped_column(
         ForeignKey("mobile_auth_sessions.id", ondelete="SET NULL"),
         nullable=True,

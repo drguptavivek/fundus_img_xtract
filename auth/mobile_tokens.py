@@ -156,9 +156,16 @@ def _encode_access_token(user: User, mobile_session: MobileAuthSession, scope: d
     return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
 
 
-def create_mobile_session(db, user: User, device_id: str, device_name: str) -> tuple[MobileAuthSession, str, str, dict[str, Any]]:
+def create_mobile_session(
+    db,
+    user: User,
+    device_id: str,
+    device_name: str,
+    refresh_lifetime: timedelta | None = None,
+) -> tuple[MobileAuthSession, str, str, dict[str, Any]]:
     scope = build_mobile_scope(db, user)
     now = utcnow()
+    lifetime = refresh_lifetime or REFRESH_TOKEN_LIFETIME
     refresh_token = generate_refresh_token()
     refresh_hash = hash_refresh_token(refresh_token)
 
@@ -174,7 +181,7 @@ def create_mobile_session(db, user: User, device_id: str, device_name: str) -> t
             device_id=device_id,
             device_name=device_name,
             refresh_token_hash=refresh_hash,
-            refresh_token_expires_at=now + REFRESH_TOKEN_LIFETIME,
+            refresh_token_expires_at=now + lifetime,
             last_used_at=now,
             last_refreshed_at=now,
             last_used_ip=request.remote_addr,
@@ -190,7 +197,7 @@ def create_mobile_session(db, user: User, device_id: str, device_name: str) -> t
     else:
         mobile_session.device_name = device_name
         mobile_session.refresh_token_hash = refresh_hash
-        mobile_session.refresh_token_expires_at = now + REFRESH_TOKEN_LIFETIME
+        mobile_session.refresh_token_expires_at = now + lifetime
         mobile_session.last_used_at = now
         mobile_session.last_refreshed_at = now
         mobile_session.last_used_ip = request.remote_addr
@@ -206,12 +213,17 @@ def create_mobile_session(db, user: User, device_id: str, device_name: str) -> t
     return mobile_session, access_token, refresh_token, scope
 
 
-def rotate_refresh_token(db, mobile_session: MobileAuthSession, user: User) -> tuple[str, str, dict[str, Any]]:
+def rotate_refresh_token(
+    db,
+    mobile_session: MobileAuthSession,
+    user: User,
+    refresh_lifetime: timedelta | None = None,
+) -> tuple[str, str, dict[str, Any]]:
     scope = build_mobile_scope(db, user)
     now = utcnow()
     new_refresh_token = generate_refresh_token()
     mobile_session.refresh_token_hash = hash_refresh_token(new_refresh_token)
-    mobile_session.refresh_token_expires_at = now + REFRESH_TOKEN_LIFETIME
+    mobile_session.refresh_token_expires_at = now + (refresh_lifetime or REFRESH_TOKEN_LIFETIME)
     mobile_session.last_refreshed_at = now
     mobile_session.last_used_at = now
     mobile_session.last_used_ip = request.remote_addr
@@ -259,19 +271,35 @@ def validate_mobile_session(mobile_session: MobileAuthSession | None) -> bool:
     return True
 
 
-def revoke_mobile_session(db, mobile_session: MobileAuthSession) -> None:
+def revoke_mobile_session(db, mobile_session: MobileAuthSession, reason: str | None = None) -> None:
     mobile_session.is_revoked = True
     mobile_session.revoked_at = utcnow()
+    # The reason is read back on the displaced device's next request so it can
+    # explain what happened instead of showing a bare authentication failure.
+    mobile_session.revoked_reason = reason
     db.flush()
 
 
-def mobile_auth_response(user: User, access_token: str, refresh_token: str, scope: dict[str, Any]) -> dict[str, Any]:
+def mobile_auth_response(
+    user: User,
+    access_token: str,
+    refresh_token: str,
+    scope: dict[str, Any],
+    mobile_session: MobileAuthSession | None = None,
+) -> dict[str, Any]:
+    # Refresh lifetime now varies by device kind, so report the session's real
+    # expiry. Reporting the 30-day default would make a shared device schedule
+    # its refresh long after the token had already expired.
+    if mobile_session is not None:
+        refresh_expires_in = max(0, round((mobile_session.refresh_token_expires_at - utcnow()).total_seconds()))
+    else:
+        refresh_expires_in = int(REFRESH_TOKEN_LIFETIME.total_seconds())
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "Bearer",
         "expires_in": int(ACCESS_TOKEN_LIFETIME.total_seconds()),
-        "refresh_expires_in": int(REFRESH_TOKEN_LIFETIME.total_seconds()),
+        "refresh_expires_in": refresh_expires_in,
         "user": {
             "id": user.id,
             "username": user.username,

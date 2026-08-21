@@ -34,18 +34,49 @@ rate_limit_logger = logging.getLogger("rate_limit")
 
 # Initialize Flask-Limiter with custom key function
 def get_rate_limit_key() -> str:
-    """
-    Custom key function for rate limiting.
-    Uses user ID if authenticated, otherwise IP address.
+    """Bucket rate limits per identity, falling back to IP.
+
+    Token-authenticated mobile and desktop clients have no Flask-Login
+    ``current_user``, so they must be identified from ``request.mobile_auth``
+    instead. Without that branch every bearer-token caller collapses onto their
+    source IP, which means a clinic behind one NAT rate-limits its own staff
+    while an attacker rotating IPs is barely constrained.
     """
     from flask_login import current_user
-    
-    # Try to get user ID first for authenticated users
+
+    mobile_auth = getattr(request, "mobile_auth", None)
+    if isinstance(mobile_auth, dict):
+        mobile_user_id = mobile_auth.get("user_id")
+        if mobile_user_id:
+            return f"user:{mobile_user_id}"
+
     if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
         return f"user:{current_user.id}"
-    
-    # Fall back to IP address
+
     return f"ip:{get_remote_address()}"
+
+
+def get_login_rate_limit_key() -> str:
+    """Bucket login attempts per submitted username as well as per IP.
+
+    ``get_rate_limit_key`` cannot help on ``/auth/login``: nobody is
+    authenticated yet, so every attempt keys to the IP. Including the claimed
+    username means credential-stuffing one account is throttled even when the
+    source IP changes.
+    """
+    username = ""
+    try:
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+            username = str(payload.get("username") or "")
+        else:
+            username = str(request.form.get("username") or "")
+    except Exception:  # noqa: BLE001 - a malformed body must not break limiting
+        username = ""
+    username = username.strip().lower()[:150]
+    if username:
+        return f"login:{username}|ip:{get_remote_address()}"
+    return f"login:ip:{get_remote_address()}"
 
 # Initialize limiter (will be configured in init_rate_limiting)
 limiter = None
@@ -170,10 +201,13 @@ def rate_limit(
     
     return decorator
 
-def auth_rate_limit(limit: str = "5 per minute") -> Callable:
+def auth_rate_limit(limit: str = "5 per minute", key_func: Optional[Callable] = None) -> Callable:
     """
     Specialized rate limit for authentication endpoints.
     More restrictive than general rate limits.
+
+    Pass ``key_func=get_login_rate_limit_key`` on login routes so attempts are
+    bucketed per claimed username as well as per IP.
     """
     def decorator(f: Callable) -> Callable:
         @wraps(f)
@@ -195,13 +229,15 @@ def auth_rate_limit(limit: str = "5 per minute") -> Callable:
                 return f(*args, **kwargs)
             
             # Apply the limiter dynamically
-            return current_limiter.limit(
-                limit,
-                per_method=True,
-                methods=["POST"],
-                error_message="Too many authentication attempts. Please try again later.",
-                override_defaults=True
-            )(f)(*args, **kwargs)
+            limit_kwargs = {
+                "per_method": True,
+                "methods": ["POST"],
+                "error_message": "Too many authentication attempts. Please try again later.",
+                "override_defaults": True,
+            }
+            if key_func is not None:
+                limit_kwargs["key_func"] = key_func
+            return current_limiter.limit(limit, **limit_kwargs)(f)(*args, **kwargs)
         
         return wrapped
     

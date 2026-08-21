@@ -16,7 +16,11 @@ These routes live in `api/mobile/auth.py`, `api/mobile/sessions.py`, and `servic
 - `token_auth_required` returns JSON errors with a `message` key.
 - Route-level validation returns JSON errors with an `error` key.
 - Access JWTs include `jti` and are checked against Redis-backed revocation keys on every token-authenticated mobile API call.
-- Mobile sessions are DB-backed and capped at two active sessions per user. Creating a new session revokes the oldest active session beyond that limit.
+- Mobile sessions are DB-backed. The active-session cap is **1 for users holding a field role**
+  (`field_optometrist`, `field_ophthalmologist`) and **2** for everyone else. Creating a new session
+  revokes the oldest active session beyond that limit; the displaced device's next request fails with
+  `session_superseded` (401) rather than a generic session error, so the app can explain what happened.
+- **Every client device must be enrolled before it can sign in.** See *Device enrolment* below.
 
 ## `POST /auth/login`
 
@@ -29,7 +33,9 @@ Request body:
   "username": "mobile_user",
   "password": "secret",
   "device_id": "device-uuid",
-  "device_name": "Pixel 9"
+  "device_name": "Pixel 9",
+  "enrolment_code": "ABCD-2345",
+  "platform": "android"
 }
 ```
 
@@ -38,6 +44,16 @@ Required top-level keys:
 - `password`
 - `device_id`
 - `device_name`
+
+Optional top-level keys:
+- `enrolment_code` - supplied only on a device's **first** sign-in, to redeem an
+  administrator-issued enrolment code. Enrolment happens inside login so the password is
+  entered and verified once.
+- `platform` - one of `android`, `ios`, `windows`, `macos`, `web`. Recorded against the
+  device for administrator visibility.
+
+Rate limiting is bucketed per **claimed username as well as source IP**, so repeated attempts
+against one account are throttled even when the caller rotates IP addresses.
 
 Success response: `200 OK`
 
@@ -297,3 +313,63 @@ Stateful checks:
 - The token `jti` must not exist in the Redis revoked-token list.
 - The `mobile_session_id` must point to a non-revoked, non-expired `MobileAuthSession`.
 - The session user must still be active.
+
+## Device enrolment
+
+`device_id` is chosen by the client, so on its own it proves nothing. A device becomes
+usable only when an administrator enrols it, which is what stops leaked credentials alone
+from reaching the API from an arbitrary handset.
+
+The name "mobile" is historical: Windows and macOS desktop builds are first-class clients
+of this same bearer-token API and enrol through the same gate.
+
+### Flow
+
+1. An administrator opens the user's hub (`/admin/users/<user_id>`, **Sessions** tab) and
+   issues an enrolment code, choosing `personal` or `shared` as the device kind.
+2. The code is shown **once**. It is single-use, expires after 30 minutes, is bound to that
+   one user, and is stored hashed. A lost code is replaced by issuing a new one.
+3. The field user signs in normally, additionally supplying `enrolment_code`. On success the
+   device is recorded as `approved` and tokens are issued in that same response.
+4. Later sign-ins from that device need no code.
+
+### Administrator controls
+
+- **Block** a device to end its access. Blocking revokes its live sessions immediately and
+  `validate_access_session` re-checks device status on every request, so access stops at the
+  next call rather than at token expiry.
+- **Approve** a blocked device to restore it.
+- Every existing device was auto-approved by migration `b1c2d3e4f5a6`, so users who were
+  already signed in before this change were not interrupted.
+
+### Refresh-token lifetime by device kind
+
+`refresh_expires_in` reports the session's **real** remaining lifetime, which now varies:
+
+| Device | Lifetime |
+| --- | --- |
+| `shared` | 24 hours |
+| `personal`, user holds a field role | 7 days |
+| Everything else (existing uploaders) | 30 days |
+
+Clients must schedule refreshes from `refresh_expires_in` rather than assuming 30 days.
+
+### Error codes
+
+| Code | HTTP | Meaning |
+| --- | --- | --- |
+| `device_not_enrolled` | 403 | Credentials were correct, but this `device_id` has no device record. Supply an `enrolment_code`. |
+| `device_pending_approval` | 403 | The device exists but is not yet approved. |
+| `device_blocked` | 403 | An administrator blocked this device. Also returned by `/auth/refresh`, which revokes the session. |
+| `enrolment_code_invalid` | 400 | The code is unknown, expired, already used, or belongs to another user. |
+| `session_superseded` | 401 | This session was displaced by a newer sign-in under the active-session cap. |
+| `revocation_store_unavailable` | 503 | Redis is unreachable, so a **new field session** cannot be issued. Existing sessions are unaffected, and non-field sign-ins still succeed. |
+
+A device refusal deliberately does **not** count toward the account lockout counter: the
+password was correct, and counting it would let a user lock their own account by retrying
+while waiting for approval. Request volume is still bounded by the login rate limit.
+
+### Client obligation
+
+The server cannot control what a client stores. Field clients must not persist patient data
+or images at rest, and must clear any cached data on logout and on session revocation.

@@ -1,6 +1,96 @@
 {% from "_forms.html" import csrf_field %}
 <div class="card shadow-sm mb-4">
   <div class="card-header d-flex justify-content-between align-items-center">
+    <h2 class="h5 mb-0">Enrolled Devices</h2>
+    <span class="small text-muted">A device must be approved before it can sign in</span>
+  </div>
+  <div class="card-body">
+    <form method="post"
+          action="{{ url_for('admin.issue_device_enrolment_code', user_id=user.id) }}"
+          class="row g-2 align-items-end mb-3"
+          hx-post="{{ url_for('admin.issue_device_enrolment_code', user_id=user.id) }}"
+          hx-target="#admin-users-workspace" hx-swap="outerHTML">
+      {{ csrf_field() }}
+      <div class="col-sm-3">
+        <label class="form-label small mb-1" for="device_kind">Device kind</label>
+        <select class="form-select form-select-sm" id="device_kind" name="device_kind">
+          <option value="personal">Personal</option>
+          <option value="shared">Shared</option>
+        </select>
+      </div>
+      <div class="col-sm-5">
+        <label class="form-label small mb-1" for="device_label">Label (optional)</label>
+        <input type="text" class="form-control form-control-sm" id="device_label" name="label"
+               placeholder="e.g. Camp tablet 3" maxlength="255">
+      </div>
+      <div class="col-sm-4">
+        <button type="submit" class="btn btn-sm btn-primary">Issue enrolment code</button>
+        <div class="form-text">Shown once, single use, expires in 30 minutes.</div>
+      </div>
+    </form>
+
+    {% if mobile_devices %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Kind</th>
+              <th>Platform</th>
+              <th>Last seen</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in mobile_devices %}
+              <tr>
+                <td>
+                  <div>{{ device.label or 'Unlabelled device' }}</div>
+                  <div class="text-muted small">{{ device.device_id }}</div>
+                </td>
+                <td class="small">{{ device.device_kind }}</td>
+                <td class="small">{{ device.platform or '-' }}</td>
+                <td>{% if device.last_seen_at %}{{ device.last_seen_at | user_datetime }}{% else %}<span class="text-muted small">Never</span>{% endif %}</td>
+                <td>
+                  {% if device.status == 'approved' %}
+                    <span class="badge text-bg-success">Approved</span>
+                  {% elif device.status == 'blocked' %}
+                    <span class="badge text-bg-danger">Blocked</span>
+                  {% else %}
+                    <span class="badge text-bg-warning">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% set next_status = 'approved' if device.status == 'blocked' else 'blocked' %}
+                  <form method="post"
+                        action="{{ url_for('admin.update_mobile_device_status', user_id=user.id, device_id=device.device_id) }}"
+                        class="d-inline"
+                        hx-post="{{ url_for('admin.update_mobile_device_status', user_id=user.id, device_id=device.device_id) }}"
+                        hx-target="#admin-users-workspace" hx-swap="outerHTML">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="status" value="{{ next_status }}">
+                    {% if next_status == 'blocked' %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger"
+                              onclick="return confirm('Block this device and end its sessions?')">Block</button>
+                    {% else %}
+                      <button type="submit" class="btn btn-sm btn-outline-success"
+                              onclick="return confirm('Approve this device?')">Approve</button>
+                    {% endif %}
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No devices enrolled. Issue a code so this user can sign in.</div>
+    {% endif %}
+  </div>
+</div>
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
     <h2 class="h5 mb-0">Mobile Sessions</h2>
     <span class="small text-muted">Device-scoped auth sessions</span>
   </div>

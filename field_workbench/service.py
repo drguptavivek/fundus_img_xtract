@@ -516,3 +516,91 @@ def retry_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
     payload = status.to_dict()
     payload["_post_commit"] = status.deferred_dispatch
     return payload
+
+
+def refetch_patient(db, *, user, project_id: int, mrn: str, source: str = SOURCE_REMIDIO,
+                    site_custom_identifier: str | None = None, remote_addr: str | None = None) -> dict:
+    """Re-pull one patient from the upstream source and ingest what comes back."""
+    _, scope = resolve_project_scope(db, user=user, project_id=project_id)
+    if not can_trigger_fetch(scope):
+        raise FieldConflict("You may not refetch in this project.", code="forbidden")
+    if source != SOURCE_REMIDIO:
+        raise FieldConflict(
+            "Per-patient refetch is only available for Remidio sources.",
+            code="unsupported_source",
+        )
+
+    from .sources import remidio as remidio_adapter
+
+    result = remidio_adapter.refetch_patient(
+        db,
+        project_id=project_id,
+        user=user,
+        scope=scope,
+        mrn=mrn,
+        site_custom_identifier=site_custom_identifier,
+    )
+    field_cache.bump_project(project_id)
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_PATIENT_REFETCH,
+        request_details={"project_id": project_id, "source": source},
+        result_details={"matched": bool(result.get("mrn_matched"))},
+    )
+    logger.info(
+        "Field patient refetch project_id=%s user_id=%s matched=%s",
+        sanitize_log_value(project_id),
+        sanitize_log_value(user.id),
+        sanitize_log_value(result.get("mrn_matched")),
+    )
+    return result
+
+
+def refresh_encounter_from_source(db, *, user, encounter_uuid: str, remote_addr: str | None = None) -> dict:
+    """Re-query the upstream source for one encounter's assets.
+
+    Dispatches on the encounter's own source, so the details panel offers one
+    action regardless of where the encounter came from.
+    """
+    encounter, scope = load_encounter(db, user=user, encounter_uuid=encounter_uuid)
+    if not can_trigger_fetch(scope):
+        raise FieldConflict("You may not refresh in this project.", code="forbidden")
+
+    source = _source_of(encounter)
+    before = len(encounter.encounter_set_images or [])
+
+    if source == SOURCE_IITK:
+        from .sources import iitk as iitk_adapter
+
+        outcome = iitk_adapter.refresh_encounter(db, encounter=encounter, user=user, scope=scope)
+    else:
+        from .sources import remidio as remidio_adapter
+
+        if not encounter.patient_id:
+            raise FieldConflict("This encounter has no patient identifier.", code="no_patient_id")
+        outcome = remidio_adapter.refetch_patient(
+            db, project_id=encounter.project_id, user=user, scope=scope, mrn=encounter.patient_id,
+        )
+
+    db.refresh(encounter)
+    after = len(encounter.encounter_set_images or [])
+
+    field_cache.bump_encounter(encounter.id, encounter.project_id)
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_ENCOUNTER_REFRESH,
+        request_details={"encounter_uuid": encounter.uuid, "source": source},
+        result_details={"images_before": before, "images_after": after},
+    )
+    return {
+        "encounter_uuid": encounter.uuid,
+        "source": source,
+        "images_before": before,
+        "images_after": after,
+        "images_added": max(0, after - before),
+        # Phrased as a statement about the source, not about what was captured -
+        # an empty result may simply mean the images have not been uploaded yet.
+        "source_reported": outcome,
+    }

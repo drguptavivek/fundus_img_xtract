@@ -1166,6 +1166,130 @@ def _site_custom_identifier_for(db: Session, connection_id: int, site_identifier
     return site.site_custom_identifier if site else None
 
 
+def refetch_patient_for_project(
+    db: Session,
+    *,
+    project_id: int,
+    mrn: str,
+    site_custom_identifier: str | None = None,
+    requested_by_user_id: int | None = None,
+) -> dict[str, Any]:
+    """Re-pull one patient's latest exam for a project, then ingest it.
+
+    Field staff know which patient looks wrong - they are standing in front of
+    them - so re-pulling one MRN costs the provider a single call instead of
+    re-scanning a whole day.
+
+    Resolves the project's own connection and site rather than taking either
+    from the caller, so a field client cannot pull a patient from a site the
+    project has no route for.
+    """
+    mrn = (mrn or "").strip()
+    if not mrn:
+        raise RemidioConfigError("mrn is required.")
+
+    rules = (
+        db.query(RemidioApiSourceRule)
+        .join(
+            ProjectUploadProfileRemidioApiBinding,
+            ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == RemidioApiSourceRule.id,
+        )
+        .join(
+            RemidioApiRoutingProfile,
+            RemidioApiRoutingProfile.id == ProjectUploadProfileRemidioApiBinding.routing_profile_id,
+        )
+        .filter(
+            RemidioApiRoutingProfile.project_id == project_id,
+            RemidioApiRoutingProfile.active.is_(True),
+            ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            RemidioApiSourceRule.active.is_(True),
+        )
+        .all()
+    )
+    if not rules:
+        raise RemidioConfigError("No active Remidio API routes are available for this project.")
+
+    if site_custom_identifier:
+        wanted = site_custom_identifier.strip()
+        rules = [rule for rule in rules if rule.site_custom_identifier == wanted]
+        if not rules:
+            raise RemidioConfigError("That site is not routed to this project.")
+
+    # One patient may only exist at one of the project's sites, and the endpoint
+    # 404s for the others, so try each until one resolves.
+    attempted: list[str] = []
+    for rule in _unique_rules(rules):
+        site = db.get(RemidioSite, rule.remidio_site_id) if rule.remidio_site_id else None
+        # getPatientWithLastExam requires the numeric site id; the custom
+        # identifier is rejected despite the documented parameter name.
+        lookup = (site.remidio_site_id if site else None) or rule.site_custom_identifier
+        attempted.append(rule.site_custom_identifier)
+        try:
+            pulled = pull_latest_patient_exam(
+                db,
+                rule.remidio_connection_id,
+                {"site_identifier": lookup, "mrn": mrn, "dry_run": False},
+            )
+        except RemidioRemoteError as exc:
+            if exc.remote_status_code == 404:
+                # Patient is not at this site; try the project's other sites.
+                continue
+            raise
+
+        ingested = ingest_connection_files(
+            db,
+            rule.remidio_connection_id,
+            {"pending_only": True, "remidio_exam_ids": _pulled_exam_ids(db, rule.remidio_connection_id, mrn)},
+        )
+        return {
+            "project_id": project_id,
+            "mrn_matched": True,
+            "site_custom_identifier": rule.site_custom_identifier,
+            "pull": pulled.get("summary"),
+            "ingest": _refetch_ingest_summary(ingested),
+        }
+
+    sites = ", ".join(sorted(set(attempted)))
+    raise RemidioConfigError(f"No exam was found for that patient at: {sites}.")
+
+
+def _unique_rules(rules: list[RemidioApiSourceRule]) -> list[RemidioApiSourceRule]:
+    """One rule per (connection, site) - device variants would repeat the call."""
+    seen: set[tuple[int, str]] = set()
+    out = []
+    for rule in rules:
+        key = (rule.remidio_connection_id, rule.site_custom_identifier)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rule)
+    return out
+
+
+def _pulled_exam_ids(db: Session, connection_id: int, mrn: str) -> list[str]:
+    return [
+        row.remidio_exam_id
+        for row in db.query(RemidioExam)
+        .filter(
+            RemidioExam.remidio_connection_id == connection_id,
+            RemidioExam.remidio_patient_mrn == mrn,
+        )
+        .order_by(RemidioExam.exam_date.desc().nullslast())
+        .limit(1)
+        .all()
+    ]
+
+
+def _refetch_ingest_summary(ingested: dict[str, Any]) -> dict[str, Any]:
+    """Counts only - the raw ingest result carries staging detail field clients do not need."""
+    keys = (
+        "encounters_created", "encounters_reused",
+        "images_downloaded", "images_skipped", "images_failed",
+        "reports_downloaded", "reports_skipped", "reports_failed",
+    )
+    return {key: ingested.get(key) for key in keys if key in ingested}
+
+
 def ingest_connection_files(
     db: Session,
     connection_id: int,

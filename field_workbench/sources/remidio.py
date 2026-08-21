@@ -169,3 +169,27 @@ def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
         remidio_service.enqueue_project_sync_job(job_id, user_id=user_id)
     )
     return status
+
+
+def refetch_patient(db, *, project_id: int, user, scope, mrn: str, site_custom_identifier: str | None = None) -> dict:
+    """Re-pull one patient's latest exam and ingest it.
+
+    Cheaper on the provider than a window re-sync and far more precise: field
+    staff already know which patient looks wrong.
+    """
+    if not is_configured(db, project_id=project_id):
+        raise FieldConflict(
+            "No Remidio API routes are configured for this project.",
+            code="source_not_configured",
+        )
+    try:
+        return remidio_service.refetch_patient_for_project(
+            db,
+            project_id=project_id,
+            mrn=mrn,
+            site_custom_identifier=site_custom_identifier,
+            requested_by_user_id=user.id,
+        )
+    except RemidioIntegrationError as exc:
+        # A patient absent upstream is an ordinary outcome, not a failure.
+        raise FieldConflict(str(exc), code="patient_not_found") from exc

@@ -34,6 +34,9 @@ from .models import IITKApiProjectConfig, IITKApiSessionLink
 LOGGER = logging.getLogger("iitk_api_integration.service")
 POSITION_ORDER = {"primary": 1, "up_left": 2, "up": 3, "up_right": 4, "right": 5, "down_right": 6, "down": 7, "down_left": 8, "left": 9, "composite": 10}
 SYNC_STALE_AFTER = timedelta(minutes=15)
+# Sessions the source marks partial never complete, so a retry must not keep
+# rescanning them back to the beginning of time.
+RESYNC_MAX_LOOKBACK_DAYS = 14
 IST = timezone(timedelta(hours=5, minutes=30))
 SITE_MAPPING_PATH = Path(__file__).with_name("site_mappings.json")
 
@@ -236,7 +239,13 @@ def browse_sessions(config_id: int, *, manager_user_id: int, filters: dict[str, 
     return {"sessions": [_session_api_payload(row) for row in page.sessions], "nextPageToken": page.next_page_token}
 
 
-def sync_config(config_id: int, *, full: bool = False) -> dict[str, Any]:
+def sync_config(config_id: int, *, full: bool = False, since_date: date | None = None) -> dict[str, Any]:
+    """Run one screening sync.
+
+    ``since_date`` overrides the incremental window. The default window only
+    reaches back one day from the last success, so sessions whose images are
+    uploaded later than that would otherwise never be re-listed.
+    """
     runtime = _begin_sync(config_id)
     if runtime is None:
         return {"config_id": config_id, "status": "skipped", "reason": "sync_already_running"}
@@ -245,7 +254,7 @@ def sync_config(config_id: int, *, full: bool = False) -> dict[str, Any]:
               "images_failed": 0, "failed": 0}
     try:
         client = IITKClient(runtime.token, base_url=runtime.base_url)
-        sessions = _collect_sessions(client, runtime, full=full)
+        sessions = _collect_sessions(client, runtime, full=full, since_date=since_date)
         result["sessions_seen"] = len(sessions)
         for session_dto in sessions.values():
             try:
@@ -261,6 +270,123 @@ def sync_config(config_id: int, *, full: bool = False) -> dict[str, Any]:
                     _opaque(session_dto.session_id), sanitize_log_value(exc), exc_info=True)
         if result["failed"]:
             result["status"] = "partial_error"
+        _finish_sync(config_id, result=result)
+        return result
+    except Exception as exc:
+        _finish_sync(config_id, error=exc)
+        raise
+
+
+def inventory_image_count(link: IITKApiSessionLink) -> int | None:
+    """How many images /listImages actually returned for this session.
+
+    ``source_image_count`` comes from the session's own ``imageCount``, which
+    counts auxiliary artifacts such as ``consent`` that ``/listImages`` never
+    returns. Comparing local storage against it reports almost every complete
+    session as short by one, so completeness must be judged against the
+    inventory instead.
+    """
+    metadata = link.source_metadata_json if isinstance(link.source_metadata_json, dict) else {}
+    inventory = metadata.get("upstream_image_inventory_payload")
+    if not isinstance(inventory, dict):
+        return None
+    images = inventory.get("images")
+    if not isinstance(images, list):
+        return None
+    return sum(1 for item in images if isinstance(item, dict) and item.get("position") in POSITION_ORDER)
+
+
+def session_is_incomplete(link: IITKApiSessionLink) -> bool:
+    """Whether this session still has images we have not stored."""
+    if (link.source_status or "").lower() == "partial":
+        return True
+    expected = inventory_image_count(link)
+    if expected is None:
+        # No inventory snapshot to judge against; do not guess it is incomplete.
+        return False
+    return (link.local_image_count or 0) < expected
+
+
+def list_incomplete_sessions(db, config_id: int) -> list[IITKApiSessionLink]:
+    return [
+        link
+        for link in db.query(IITKApiSessionLink).filter(IITKApiSessionLink.config_id == config_id).all()
+        if session_is_incomplete(link)
+    ]
+
+
+def incomplete_session_count(db, config_id: int) -> int:
+    return len(list_incomplete_sessions(db, config_id))
+
+
+def resync_incomplete_sessions(config_id: int, *, max_lookback_days: int = RESYNC_MAX_LOOKBACK_DAYS) -> dict[str, Any]:
+    """Re-sync sessions whose images are still missing locally.
+
+    Sites upload images after the session closes, sometimes later than the
+    incremental window reaches back, so this widens the window rather than
+    trusting ``last_success_at``.
+
+    The lookback is capped. A session the source itself marks ``partial`` -
+    capture abandoned midway - stays partial forever, so keying the window off
+    the single oldest one would rescan weeks of history on every retry and spend
+    the provider's request budget re-listing sessions that will never change.
+    """
+    today = utcnow().date()
+    floor_date = today - timedelta(days=max_lookback_days)
+    with get_db_session() as db:
+        incomplete = list_incomplete_sessions(db, config_id)
+        recent = [
+            link for link in incomplete
+            if link.first_seen_at and link.first_seen_at.date() >= floor_date
+        ]
+        if not recent:
+            return {
+                "config_id": config_id,
+                "status": "skipped",
+                "reason": "nothing_incomplete" if not incomplete else "nothing_recent_enough",
+                "incomplete_sessions_total": len(incomplete),
+                "incomplete_sessions_targeted": 0,
+            }
+        oldest = min(link.first_seen_at.date() for link in recent)
+        pending, total = len(recent), len(incomplete)
+
+    result = sync_config(config_id, since_date=oldest)
+    result["incomplete_sessions_targeted"] = pending
+    result["incomplete_sessions_total"] = total
+    result["resync_from_date"] = oldest.isoformat()
+    return result
+
+
+def resync_session(config_id: int, source_session_id: str) -> dict[str, Any]:
+    """Re-fetch one session's images immediately, bypassing the date window.
+
+    Used by the per-encounter refresh: the operator is looking at one patient,
+    so re-listing a whole window would be wasteful and slower to answer.
+
+    The returned counts describe what the source offered on this call. Zero
+    images means the source has none available yet - not that none exist.
+    """
+    runtime = _begin_sync(config_id)
+    if runtime is None:
+        return {"config_id": config_id, "status": "skipped", "reason": "sync_already_running"}
+    try:
+        client = IITKClient(runtime.token, base_url=runtime.base_url)
+        sessions = _collect_sessions(client, runtime, full=True)
+        session_dto = sessions.get(source_session_id)
+        if session_dto is None:
+            _finish_sync(config_id, result={})
+            return {
+                "config_id": config_id,
+                "status": "skipped",
+                "reason": "session_not_listed_upstream",
+            }
+        result = _sync_session(client, runtime, session_dto)
+        result.update({
+            "config_id": config_id,
+            "status": "completed",
+            "source_status": session_dto.status,
+            "source_image_count": session_dto.image_count,
+        })
         _finish_sync(config_id, result=result)
         return result
     except Exception as exc:
@@ -340,9 +466,16 @@ def admin_context(db: Session, *, manager_user_id: int) -> dict[str, Any]:
     }
 
 
-def _collect_sessions(client: IITKClient, runtime: RuntimeConfig, *, full: bool) -> dict[str, IITKSessionDTO]:
+def _collect_sessions(
+    client: IITKClient, runtime: RuntimeConfig, *, full: bool, since_date: date | None = None
+) -> dict[str, IITKSessionDTO]:
     result: dict[str, IITKSessionDTO] = {}
-    if full or runtime.last_success_at is None:
+    if since_date is not None and not full:
+        earliest = since_date
+        if runtime.sync_from_date and earliest < runtime.sync_from_date:
+            earliest = runtime.sync_from_date
+        filters = [{"from_date": earliest.isoformat()}]
+    elif full or runtime.last_success_at is None:
         filters = [{"from_date": runtime.sync_from_date.isoformat() if runtime.sync_from_date else None}]
     else:
         recent = (runtime.last_success_at.astimezone(timezone.utc).date() - timedelta(days=1))

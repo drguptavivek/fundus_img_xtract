@@ -19,6 +19,8 @@ OPERATION_QUEUE_READ = "field_encounter_queue_read"
 OPERATION_DETAIL_READ = "field_encounter_detail_read"
 OPERATION_INFERENCE_REQUEST = "field_inference_request"
 OPERATION_FETCH_REQUEST = "field_upstream_fetch_request"
+OPERATION_PATIENT_REFETCH = "field_patient_refetch"
+OPERATION_ENCOUNTER_REFRESH = "field_encounter_refresh"
 
 
 def record(

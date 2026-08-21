@@ -418,3 +418,38 @@ The downloader only fetches absolute signed `http(s)` links from Remidio `path`/
 ## Current Limits
 
 Queue acknowledgement is not implemented yet. `itemSuccessfullyHandled` should only be added after queue-item metadata and files are durably stored.
+
+## Get Latest Patient Exam — verified behaviour
+
+`GET /api/gateway/getPatientWithLastExam/{siteId}/{mrn}`
+
+**This endpoint requires the numeric Remidio site id, not the site custom identifier**,
+despite the vendor mail and the Postman path variable both naming it `siteCustomId`.
+Confirmed against the live API twice, on 2026-04-30 and 2026-08-21:
+
+| Value passed | Result |
+| --- | --- |
+| Site name (`AIIMS-Delhi`) | `500` |
+| Site custom identifier (`comoph_4834`) | `404` |
+| Numeric site id (`5733647311175680`) | `200`, exam returned |
+
+`getExamsByDate` behaves the opposite way and requires the custom identifier, so the two
+endpoints are not interchangeable in this respect.
+
+The response body carries **no** site custom identifier, so
+`pull_latest_patient_exam` resolves it locally from `RemidioSite` before staging. It
+accepts either form and translates. Passing `None` through instead used to blank the
+identifier on any exam a date pull had already staged — see
+`_site_custom_identifier_for` and the guard in `persistence.py`.
+
+### Per-patient re-fetch
+
+`service.refetch_patient_for_project(db, project_id=..., mrn=..., site_custom_identifier=None)`
+resolves the project's own routing profile to a connection and site, pulls that patient's
+latest exam, and ingests it in one operation. Without an explicit site it tries every
+site routed to the project, since a patient exists at only one and the endpoint returns
+`404` for the others.
+
+Exposed to field staff as `POST /api/mobile/v1/field/projects/{id}/patients/refetch`
+(see `docs/API/mobile/field.md`). Prefer it over a window re-sync when a specific
+patient's data looks wrong: one upstream call instead of a day's scan.

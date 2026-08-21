@@ -339,6 +339,16 @@ Observed behavior on 2026-04-30:
 
 This differs from `getExamsByDate`, where numeric `siteId` was rejected as an invalid Site Custom ID. For latest-patient lookup, numeric `siteId` appears to be accepted by the API even though the path variable is named `siteCustomId` in the Postman collection.
 
+Re-confirmed on 2026-08-21 through the application's own stored connection credentials
+(connection `Comoph`, site `comoph_4834` / `5733647311175680`):
+
+- Site custom identifier `comoph_4834`: HTTP `404`.
+- Numeric site id `5733647311175680`: HTTP `200`, 1 exam / 4 images / 3 reports.
+
+Two confirmations four months apart, so this is stable behaviour rather than a
+transient. `pull_latest_patient_exam` therefore passes the numeric id and resolves the
+custom identifier locally for storage.
+
 Observed successful response shape:
 
 ```json

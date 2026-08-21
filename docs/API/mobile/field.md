@@ -54,6 +54,7 @@ not an error - the client renders the encounter without an AI section.
 | `/field/projects/<project_id>/fetch` | GET | Fetch status per source |
 | `/field/projects/<project_id>/fetch` | POST | Queue a fetch |
 | `/field/projects/<project_id>/fetch/retry` | POST | Retry an incomplete fetch |
+| `/field/projects/<project_id>/patients/refetch` | POST | Re-pull one patient (Remidio) |
 
 `/context/me` additionally now returns a `projects[]` array with the same shape as
 `GET /field/projects`.
@@ -187,9 +188,43 @@ actually bounds load on the upstream provider - many field users tapping at once
 produce one fetch, not many.
 
 `POST .../fetch/retry` resumes incomplete work. For Remidio that resumes a failed or
-paused job (safe, because ingestion only re-downloads what is still missing). For IITK
-it targets sessions where `source_status = 'partial'` or fewer images landed locally
-than the source reported; if nothing is incomplete it returns `409 nothing_to_retry`.
+paused job (safe, because ingestion only re-downloads what is still missing).
+
+For IITK it re-syncs sessions that still owe images. Two points matter:
+
+- **Incompleteness is judged against the image inventory**, not the session's own
+  `imageCount`. That count includes auxiliary artifacts such as `consent` which
+  `/listImages` never returns, so comparing against it reports nearly every complete
+  session as short by one.
+- **The retry widens the date window.** A normal sync only looks back one day from the
+  last success, so sessions whose images are uploaded later than that would never be
+  re-listed. The retry reaches back to the oldest still-incomplete session, capped at
+  14 days — a session the source itself marks `partial` never completes, and keying the
+  window off it would rescan weeks of history on every attempt.
+
+If nothing is incomplete, `409 nothing_to_retry`.
+
+## Re-fetching one patient
+
+```
+POST /field/projects/{id}/patients/refetch
+{ "mrn": "62-26-000422", "site_custom_identifier": "comoph_4834" }
+```
+
+Re-pulls that patient's latest exam from Remidio and ingests it. Use this when a
+specific patient's data looks wrong or incomplete — it costs the provider one call
+instead of re-scanning a whole day, and field staff already know which patient is
+affected.
+
+`site_custom_identifier` is optional; without it, every site routed to the project is
+tried until the patient resolves. The project's own connection and site routes are
+used, so a client cannot pull from a site the project has no route for.
+
+**Remidio only.** IITK has no per-patient endpoint, so `source: "iitk"` returns
+`409 unsupported_source`.
+
+Shares the fetch rate limits and the 30-second spacing guard. Errors:
+`400 mrn_required`, `409 patient_not_found`, `409 source_not_configured`.
 
 ### Rate limits
 

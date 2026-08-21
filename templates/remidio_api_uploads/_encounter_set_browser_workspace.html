@@ -150,7 +150,15 @@
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('verify_encounter_set.verify_encounter', uuid=detail.uuid) }}">
             {{ 'View Verification' if detail.verified_status == 'verified' else 'Verify' }}
           </a>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  id="refresh-source-btn-{{ detail.id }}"
+                  data-refresh-url="{{ url_for('fundus_api.refresh_encounter_source', uuid=detail.uuid) }}"
+                  data-encounter-id="{{ detail.id }}"
+                  title="Ask the upstream source for this encounter's images again">
+            Refresh from source
+          </button>
         </div>
+        <div id="refresh-source-status-{{ detail.id }}" class="small text-muted mt-2 w-100"></div>
       </div>
       <div class="card-body">
         {% set media_gallery_id = 'encounter-set-media-gallery-' ~ detail.id %}
@@ -477,3 +485,54 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  // Re-queries the upstream source for this one encounter. Wording deliberately
+  // reports what the source returned rather than concluding anything about what
+  // was captured - images may simply not have been uploaded yet.
+  document.querySelectorAll('[data-refresh-url]').forEach(function (btn) {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function () {
+      var id = btn.dataset.encounterId;
+      var status = document.getElementById('refresh-source-status-' + id);
+      var token = document.querySelector('meta[name="csrf-token"]');
+      btn.disabled = true;
+      if (status) { status.className = 'small text-muted mt-2 w-100'; status.textContent = 'Asking the source...'; }
+      fetch(btn.dataset.refreshUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': token ? token.getAttribute('content') : ''
+        }
+      }).then(function (res) {
+        return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
+      }).then(function (r) {
+        if (!status) return;
+        if (r.ok && r.body.data) {
+          var added = r.body.data.images_added || 0;
+          if (added > 0) {
+            status.className = 'small text-success mt-2 w-100';
+            status.textContent = 'Added ' + added + ' image(s). Reload to see them.';
+          } else {
+            status.className = 'small text-muted mt-2 w-100';
+            status.textContent = 'The source has no further images for this encounter yet. Try again later.';
+          }
+        } else {
+          status.className = 'small text-warning mt-2 w-100';
+          status.textContent = (r.body && r.body.message) ? r.body.message : 'Refresh failed.';
+        }
+      }).catch(function () {
+        if (status) {
+          status.className = 'small text-danger mt-2 w-100';
+          status.textContent = 'Could not reach the server.';
+        }
+      }).finally(function () {
+        // Always re-enabled: images may arrive upstream at any time.
+        btn.disabled = false;
+      });
+    });
+  });
+})();
+</script>

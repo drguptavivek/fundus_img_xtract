@@ -16,6 +16,7 @@ import logging
 from sqlalchemy import func, or_, select
 
 from iitk_api_integration.models import IITKApiProjectConfig, IITKApiSessionLink
+from iitk_api_integration.service import incomplete_session_count
 from utils.log_sanitize import sanitize_log_value
 
 from ..dto import SOURCE_IITK, FetchStatusDTO
@@ -51,18 +52,14 @@ def _require_lab_scope(config: IITKApiProjectConfig, scope) -> None:
 
 
 def _incomplete_count(db, config_id: int) -> int:
-    return int(
-        db.execute(
-            select(func.count(IITKApiSessionLink.id)).where(
-                IITKApiSessionLink.config_id == config_id,
-                or_(
-                    IITKApiSessionLink.source_status == "partial",
-                    IITKApiSessionLink.local_image_count < IITKApiSessionLink.source_image_count,
-                ),
-            )
-        ).scalar_one()
-        or 0
-    )
+    """Sessions still missing images, judged against the image inventory.
+
+    Deliberately not a `local_image_count < source_image_count` comparison: the
+    source count includes auxiliary artifacts such as `consent` that /listImages
+    never returns, so that test reports nearly every complete session as short by
+    one. The shared service owns the correct rule.
+    """
+    return incomplete_session_count(db, config_id)
 
 
 def _status(db, config: IITKApiProjectConfig | None) -> FetchStatusDTO:
@@ -116,6 +113,12 @@ def _dispatch(config_id: int, *, full: bool) -> None:
     run_iitk_config_sync_task.delay(config_id, full)
 
 
+def _dispatch_resync(config_id: int) -> None:
+    from celery_tasks.tasks.iitk_tasks import resync_incomplete_iitk_sessions_task
+
+    resync_incomplete_iitk_sessions_task.delay(config_id)
+
+
 def queue_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) -> FetchStatusDTO:
     config = _config(db, project_id)
     if config is None:
@@ -159,8 +162,37 @@ def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
             code="nothing_to_retry",
         )
 
-    # A re-sync only re-downloads what is still missing, so targeting the
-    # incomplete sessions costs the provider nothing extra.
+    # Target the incomplete sessions specifically. A plain incremental sync only
+    # looks back one day from the last success, so sessions whose images were
+    # uploaded later than that would never be re-listed.
     status = _status(db, config)
-    status.deferred_dispatch = lambda config_id=config.id: _dispatch(config_id, full=False)
+    status.deferred_dispatch = lambda config_id=config.id: _dispatch_resync(config_id)
     return status
+
+
+def refresh_encounter(db, *, encounter, user, scope) -> dict:
+    """Re-query the source for one session's images.
+
+    Reports only what the source currently says. An empty inventory means the
+    images are not available upstream *yet* - the site may still upload them -
+    so this never concludes that nothing was captured.
+    """
+    config = _config(db, encounter.project_id)
+    if config is None:
+        raise FieldConflict(
+            "No IITK configuration exists for this project.", code="source_not_configured"
+        )
+    _require_lab_scope(config, scope)
+
+    link = db.execute(
+        select(IITKApiSessionLink).where(
+            IITKApiSessionLink.config_id == config.id,
+            IITKApiSessionLink.patient_encounter_id == encounter.id,
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise FieldConflict("This encounter has no IITK session link.", code="not_linked")
+
+    from iitk_api_integration.service import resync_session
+
+    return resync_session(config.id, link.source_session_id)

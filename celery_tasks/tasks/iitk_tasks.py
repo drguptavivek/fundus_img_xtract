@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 from celery_app import celery_app
-from iitk_api_integration.service import queue_active_config_syncs, recover_stale_config_syncs, sync_config
+from iitk_api_integration.service import (
+    queue_active_config_syncs,
+    recover_stale_config_syncs,
+    resync_incomplete_sessions,
+    sync_config,
+)
 
 
 @celery_app.task(
@@ -36,3 +41,14 @@ def queue_active_iitk_syncs_task(self) -> dict:
 def recover_stale_iitk_syncs_task(self) -> dict:
     _ = self
     return recover_stale_config_syncs()
+
+
+@celery_app.task(
+    name="celery_tasks.tasks.iitk_tasks.resync_incomplete_iitk_sessions_task",
+    bind=True,
+    acks_late=True,
+)
+def resync_incomplete_iitk_sessions_task(self, config_id: int) -> dict:
+    """Re-fetch sessions whose images were uploaded after the session closed."""
+    _ = self
+    return resync_incomplete_sessions(config_id)

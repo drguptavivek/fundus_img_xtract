@@ -322,3 +322,58 @@ def _attachment_path(attachment):
     if not folder or not filename:
         return None
     return Path(BASE_DIR) / "encounter_sets" / folder / filename
+
+
+@mobile_api_bp.route("/field/projects/<int:project_id>/patients/refetch", methods=["POST"])
+@token_auth_required
+@rate_limit(FETCH_RATE_LIMITS, methods=["POST"])
+def field_refetch_patient(project_id: int):
+    """Re-pull one patient from the upstream source.
+
+    Shares the fetch rate limits and spacing guard: this is still an upstream
+    call, just a far cheaper and more precise one than a window re-sync.
+    """
+    payload = request.get_json(silent=True) or {}
+    mrn = (payload.get("mrn") or "").strip()
+    if not mrn:
+        return jsonify({"error": "mrn_required", "message": "An mrn is required."}), 400
+    source = (payload.get("source") or "remidio").strip()
+    site = (payload.get("site_custom_identifier") or "").strip() or None
+
+    with transaction_scope() as db:
+        user = _actor(db)
+        if user is None:
+            return _unauthenticated()
+        try:
+            enforce_fetch_spacing(user.id)
+            result = field_service.refetch_patient(
+                db,
+                user=user,
+                project_id=project_id,
+                mrn=mrn,
+                source=source,
+                site_custom_identifier=site,
+                remote_addr=request.remote_addr,
+            )
+        except FieldError as exc:
+            return _error(exc)
+    return jsonify(result), 200
+
+
+@mobile_api_bp.route("/field/encounters/<encounter_uuid>/refresh", methods=["POST"])
+@token_auth_required
+@rate_limit(FETCH_RATE_LIMITS, methods=["POST"])
+def field_refresh_encounter(encounter_uuid: str):
+    """Re-query the upstream source for this one encounter's assets."""
+    with transaction_scope() as db:
+        user = _actor(db)
+        if user is None:
+            return _unauthenticated()
+        try:
+            enforce_fetch_spacing(user.id)
+            result = field_service.refresh_encounter_from_source(
+                db, user=user, encounter_uuid=encounter_uuid, remote_addr=request.remote_addr
+            )
+        except FieldError as exc:
+            return _error(exc)
+    return jsonify(result), 200

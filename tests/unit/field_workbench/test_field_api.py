@@ -241,3 +241,42 @@ def test_legacy_encounter_set_upload_route_is_gone(app):
     import api.encounter_set as legacy
 
     assert not hasattr(legacy, "generate_mobile_token")
+
+
+def test_patient_refetch_requires_an_mrn(client, auth_headers, field_data):
+    response = client.post(
+        f"/api/mobile/v1/field/projects/{field_data['project'].id}/patients/refetch",
+        json={},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "mrn_required"
+
+
+def test_patient_refetch_is_remidio_only(client, auth_headers, field_data):
+    """IITK has no per-patient endpoint; say so rather than failing obscurely."""
+    from field_workbench.throttle import reset_fetch_spacing
+
+    reset_fetch_spacing(field_data["user"].id)
+    response = client.post(
+        f"/api/mobile/v1/field/projects/{field_data['project'].id}/patients/refetch",
+        json={"mrn": "MRN-1", "source": "iitk"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "unsupported_source"
+    reset_fetch_spacing(field_data["user"].id)
+
+
+def test_patient_refetch_reports_an_unconfigured_project(client, auth_headers, field_data):
+    from field_workbench.throttle import reset_fetch_spacing
+
+    reset_fetch_spacing(field_data["user"].id)
+    response = client.post(
+        f"/api/mobile/v1/field/projects/{field_data['project'].id}/patients/refetch",
+        json={"mrn": "MRN-1"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "source_not_configured"
+    reset_fetch_spacing(field_data["user"].id)

@@ -16,6 +16,7 @@ from remote_inference.models import ProjectEncounterAIWorkflow
 from services.encounter_set_ai_inference import enqueue_wadhwani_for_task_ids
 from utils.log_sanitize import sanitize_log_value
 
+from . import audit as field_audit
 from . import cache as field_cache
 from .dto import (
     SOURCE_IITK,
@@ -196,10 +197,17 @@ def list_daily_encounters(db, *, user, project_id: int, date_value: str) -> list
 
     payload = [row.to_dict() for row in rows]
     field_cache.set_cached(cache_key, payload, field_cache.QUEUE_TTL_SECONDS)
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_QUEUE_READ,
+        request_details={"project_id": project_id, "date": parsed.isoformat()},
+        result_details={"encounter_count": len(payload)},
+    )
     return payload
 
 
-def _load_encounter(db, *, user, encounter_uuid: str):
+def load_encounter(db, *, user, encounter_uuid: str):
     encounter = db.execute(
         select(PatientEncounters)
         .options(
@@ -226,7 +234,7 @@ def _load_encounter(db, *, user, encounter_uuid: str):
 
 
 def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
-    encounter, scope = _load_encounter(db, user=user, encounter_uuid=encounter_uuid)
+    encounter, scope = load_encounter(db, user=user, encounter_uuid=encounter_uuid)
     cache_key = field_cache.detail_cache_key(
         encounter_id=encounter.id,
         project_id=encounter.project_id,
@@ -287,12 +295,18 @@ def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
     )
     payload = detail.to_dict()
     field_cache.set_cached(cache_key, payload, field_cache.DETAIL_TTL_SECONDS)
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_DETAIL_READ,
+        request_details={"encounter_uuid": encounter.uuid, "project_id": encounter.project_id},
+    )
     return payload
 
 
 def request_inference(db, *, user, encounter_uuid: str, workflows: list[str], remote_addr: str | None) -> dict:
     """Request WAI inference, gated by project policy and idempotent by design."""
-    encounter, scope = _load_encounter(db, user=user, encounter_uuid=encounter_uuid)
+    encounter, scope = load_encounter(db, user=user, encounter_uuid=encounter_uuid)
     if not can_request_inference(scope):
         raise FieldConflict("You may not request inference in this project.", code="forbidden")
 
@@ -319,7 +333,26 @@ def request_inference(db, *, user, encounter_uuid: str, workflows: list[str], re
     # Flip the client's next poll to the new state immediately rather than
     # waiting out the cache TTL.
     field_cache.bump_encounter(encounter.id, project_id)
-    return {"encounter_uuid": encounter.uuid, "workflows": results}
+    post_commit = [
+        result.pop("_post_commit")
+        for result in results.values()
+        if result.get("_post_commit")
+    ]
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_INFERENCE_REQUEST,
+        request_details={"encounter_uuid": encounter.uuid, "workflows": requested},
+        result_details={
+            workflow: {"queued": bool(outcome.get("queued")), "reason": outcome.get("reason")}
+            for workflow, outcome in results.items()
+        },
+    )
+    return {
+        "encounter_uuid": encounter.uuid,
+        "workflows": results,
+        "_post_commit": post_commit,
+    }
 
 
 def _request_dr_dme(db, encounter: PatientEncounters, *, user, remote_addr: str | None) -> dict:
@@ -359,16 +392,20 @@ def _request_glaucoma(db, encounter: PatientEncounters, *, user, remote_addr: st
     if not task_ids:
         return {"queued": False, "reason": "no_eligible_images"}
 
-    job_token = enqueue_wadhwani_for_task_ids(
-        task_ids,
-        user_id=user.id,
-        username=user.username,
-        remote_addr=remote_addr,
-        lab_unit_id=encounter.lab_unit_id,
-        project_id=encounter.project_id,
-        upload_profile_id=encounter.upload_profile_id,
-    )
-    return {"queued": True, "job_token": job_token, "task_count": len(task_ids)}
+    def _dispatch():
+        # Enqueued after the caller commits: the worker reads these tasks by id,
+        # so it must not start before they are visible.
+        return enqueue_wadhwani_for_task_ids(
+            task_ids,
+            user_id=user.id,
+            username=user.username,
+            remote_addr=remote_addr,
+            lab_unit_id=encounter.lab_unit_id,
+            project_id=encounter.project_id,
+            upload_profile_id=encounter.upload_profile_id,
+        )
+
+    return {"queued": True, "task_count": len(task_ids), "_post_commit": _dispatch}
 
 
 def _create_or_reuse_glaucoma_tasks(db, encounter: PatientEncounters, *, disease_id: int) -> list[int]:
@@ -431,6 +468,7 @@ def queue_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
     except KeyError as exc:
         raise FieldConflict(f"Unknown source '{source}'.", code="unknown_source") from exc
 
+    action_name = "queue"
     status = adapter.queue_fetch(
         db, project_id=project_id, user=user, scope=scope, remote_addr=remote_addr
     )
@@ -442,7 +480,16 @@ def queue_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
         sanitize_log_value(user.id),
         sanitize_log_value(status.running),
     )
-    return status.to_dict()
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_FETCH_REQUEST,
+        request_details={"project_id": project_id, "source": source, "action": action_name},
+        result_details={"running": status.running, "state": status.state},
+    )
+    payload = status.to_dict()
+    payload["_post_commit"] = status.deferred_dispatch
+    return payload
 
 
 def retry_fetch(db, *, user, project_id: int, source: str, remote_addr: str | None) -> dict:
@@ -454,8 +501,18 @@ def retry_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
     except KeyError as exc:
         raise FieldConflict(f"Unknown source '{source}'.", code="unknown_source") from exc
 
+    action_name = "retry"
     status = adapter.retry_fetch(
         db, project_id=project_id, user=user, scope=scope, remote_addr=remote_addr
     )
     field_cache.bump_project(project_id)
-    return status.to_dict()
+    field_audit.record(
+        db,
+        user_id=user.id,
+        operation_type=field_audit.OPERATION_FETCH_REQUEST,
+        request_details={"project_id": project_id, "source": source, "action": action_name},
+        result_details={"running": status.running, "state": status.state},
+    )
+    payload = status.to_dict()
+    payload["_post_commit"] = status.deferred_dispatch
+    return payload

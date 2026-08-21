@@ -135,11 +135,15 @@ def queue_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
     except RemidioIntegrationError as exc:
         raise FieldConflict(str(exc), code="fetch_rejected") from exc
 
-    if result.get("items_created"):
-        remidio_service.enqueue_project_sync_job(result["job_id"], user_id=user.id)
-
     job = db.get(Job, result["job_id"])
-    return _status_from_job(job, configured=True)
+    status = _status_from_job(job, configured=True)
+    if result.get("items_created"):
+        # Dispatch only after the caller commits. Handing the worker a job id
+        # from an uncommitted session lets it start before the rows are visible.
+        status.deferred_dispatch = lambda job_id=result["job_id"], user_id=user.id: (
+            remidio_service.enqueue_project_sync_job(job_id, user_id=user_id)
+        )
+    return status
 
 
 def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) -> FetchStatusDTO:
@@ -158,7 +162,10 @@ def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
         remidio_service.resume_project_sync_job(db, job.id)
     except RemidioIntegrationError as exc:
         raise FieldConflict(str(exc), code="retry_rejected") from exc
-    remidio_service.enqueue_project_sync_job(job.id, user_id=user.id)
 
     db.refresh(job)
-    return _status_from_job(job, configured=True)
+    status = _status_from_job(job, configured=True)
+    status.deferred_dispatch = lambda job_id=job.id, user_id=user.id: (
+        remidio_service.enqueue_project_sync_job(job_id, user_id=user_id)
+    )
+    return status

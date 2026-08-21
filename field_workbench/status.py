@@ -325,6 +325,11 @@ def remidio_report(encounter: PatientEncounters, *, pdf_url: str | None) -> Remi
             else:
                 ocr_result = str(report)
             report_datetime = ocr.get("source_report_datetime") or ocr.get("completed_at")
+        elif ocr_status == "completed":
+            # A real encounter carries several attachments. Once one has produced
+            # a report, a later still-queued attachment must not drag the status
+            # back to pending while the result from the first one is still shown.
+            continue
         elif status in {"failed", "error"}:
             ocr_status = "failed"
         elif status:

@@ -198,7 +198,8 @@ Per **user**, not per project or per source:
 - `2 per minute` and `20 per hour` (rate limiter)
 - a **30-second minimum gap** between one user's consecutive requests, enforced
   separately because a rate limit expresses volume, not spacing. Exceeding it returns
-  `429` with a `Retry-After` header.
+  `429` with a `Retry-After` header. The header carries the rate limiter's own window,
+  which is the longer of the two waits, so a client that honours it is always safe.
 
 IITK's provider asks for roughly 60 requests/minute or fewer, and one fetch fans out to
 many upstream calls, so the coalescing guard matters more than the per-user limits.
@@ -209,6 +210,23 @@ many upstream calls, so the coalescing guard matters more than the per-user limi
 bearer-token client. Field scope is checked first, then the central media authorizer
 resolves and authorizes the object; media authorization is not forked for this surface.
 Out-of-scope or unknown images return `404`.
+
+## Audit trail
+
+This surface lets a bearer-token client enumerate patients and spend money on upstream
+inference and provider calls, so both reads and actions are recorded to
+`sensitive_operations_audit`: queue reads, encounter detail reads, inference requests
+(including refused ones, with the reason), and fetch queue/retry requests.
+
+An audit write that fails is logged and swallowed - refusing a clinical read because the
+audit table was unavailable would be the worse outcome.
+
+## Worker dispatch happens after commit
+
+Requests that reach a Celery worker (fetch, and the Glaucoma inference path) create their
+rows inside the request transaction but dispatch **after** it commits. Handing a worker a
+job or task id from an uncommitted session lets it start before the rows it needs are
+visible. The `_post_commit` field is internal transport and never appears in a response.
 
 ## What is deliberately not returned
 

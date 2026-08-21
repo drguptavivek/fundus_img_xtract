@@ -192,7 +192,7 @@ class FieldEncounterDateDTO:
         return asdict(self)
 
 
-@dataclass(frozen=True)
+@dataclass
 class FetchStatusDTO:
     """State of one upstream source's fetch for one project.
 
@@ -209,6 +209,12 @@ class FetchStatusDTO:
     detail: dict[str, Any] = field(default_factory=dict)
     incomplete_count: int = 0
     can_retry: bool = False
+    # Set by an adapter that must reach a Celery worker. The route runs it only
+    # after its transaction commits, so the worker never races the rows it needs.
+    # Deliberately excluded from to_dict - it is transport, not payload.
+    deferred_dispatch: Any = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data.pop("deferred_dispatch", None)
+        return data

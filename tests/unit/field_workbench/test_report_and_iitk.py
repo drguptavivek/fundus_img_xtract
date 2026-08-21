@@ -107,3 +107,22 @@ def test_requesting_inference_on_an_iitk_encounter_is_a_typed_conflict(
 
     assert response.status_code == 409
     assert response.get_json()["error"] == "no_ai_configured"
+
+
+def test_a_later_pending_attachment_does_not_undo_a_completed_report(db_session, field_data):
+    """Encounters carry several attachments; one still queued must not mask a result."""
+    encounter = field_data["encounter"]
+    db_session.add(
+        _attachment(
+            encounter.id,
+            metadata={"ocr": {"status": "completed", "dr_report": {"result": "Mild DR"}}},
+        )
+    )
+    db_session.add(_attachment(encounter.id, metadata={"ocr": {"status": "queued"}}))
+    db_session.flush()
+    db_session.refresh(encounter)
+
+    report = remidio_report(encounter, pdf_url="/pdf")
+
+    assert report.ocr_status == "completed"
+    assert report.ocr_result == "Mild DR"

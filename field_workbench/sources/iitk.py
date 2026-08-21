@@ -130,13 +130,14 @@ def queue_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
     if config.sync_started_at is not None:
         return _status(db, config)
 
-    _dispatch(config.id, full=False)
     logger.info(
         "Field IITK fetch queued project_id=%s user_id=%s",
         sanitize_log_value(project_id),
         sanitize_log_value(user.id),
     )
-    return _status(db, config)
+    status = _status(db, config)
+    status.deferred_dispatch = lambda config_id=config.id: _dispatch(config_id, full=False)
+    return status
 
 
 def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) -> FetchStatusDTO:
@@ -160,5 +161,6 @@ def retry_fetch(db, *, project_id: int, user, scope, remote_addr: str | None) ->
 
     # A re-sync only re-downloads what is still missing, so targeting the
     # incomplete sessions costs the provider nothing extra.
-    _dispatch(config.id, full=False)
-    return _status(db, config)
+    status = _status(db, config)
+    status.deferred_dispatch = lambda config_id=config.id: _dispatch(config_id, full=False)
+    return status

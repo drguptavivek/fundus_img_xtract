@@ -58,8 +58,11 @@ def enforce_fetch_spacing(user_id: int, *, interval_seconds: int = FETCH_MIN_INT
         retry_after = int(client.ttl(key) or interval_seconds)
     except redis.RedisError:
         retry_after = interval_seconds
+    # The message deliberately states no number: the response's Retry-After
+    # header is set by the rate limiter's own window, which is longer than this
+    # gap, and a body promising 30s beside a header saying 60s reads as a bug.
     raise FieldThrottled(
-        f"Please wait {max(retry_after, 1)}s before requesting another fetch.",
+        "Please wait before requesting another fetch.",
         retry_after=max(retry_after, 1),
     )
 

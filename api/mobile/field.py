@@ -52,6 +52,19 @@ def _error(exc: FieldError):
     return response
 
 
+def _run_post_commit(post_commit) -> None:
+    """Run work that must not start until the request's transaction commits."""
+    if not post_commit:
+        return
+    for action in post_commit if isinstance(post_commit, list) else [post_commit]:
+        if action is None:
+            continue
+        try:
+            action()
+        except Exception as exc:  # noqa: BLE001 - the DB work already committed
+            logger.error("Field post-commit dispatch failed: %s", exc, exc_info=True)
+
+
 def _unauthenticated():
     return jsonify({"error": "invalid_token", "message": "Invalid access token"}), 401
 
@@ -136,8 +149,10 @@ def field_request_inference(encounter_uuid: str):
             )
         except FieldError as exc:
             return _error(exc)
+        post_commit = result.pop("_post_commit", None)
         queued = any(item.get("queued") for item in result["workflows"].values())
-        return jsonify(result), 202 if queued else 200
+    _run_post_commit(post_commit)
+    return jsonify(result), 202 if queued else 200
 
 
 @mobile_api_bp.route("/field/projects/<int:project_id>/fetch", methods=["GET"])
@@ -191,7 +206,9 @@ def _fetch_action(project_id: int, *, retry: bool):
             )
         except FieldError as exc:
             return _error(exc)
-        return jsonify(status), 202
+        post_commit = status.pop("_post_commit", None)
+    _run_post_commit(post_commit)
+    return jsonify(status), 202
 
 
 @mobile_api_bp.route(
@@ -228,7 +245,7 @@ def _serve_encounter_image(encounter_uuid: str, image_uuid: str, *, thumbnail: b
         if user is None:
             return _unauthenticated()
         try:
-            encounter, _ = field_service._load_encounter(db, user=user, encounter_uuid=encounter_uuid)
+            encounter, _ = field_service.load_encounter(db, user=user, encounter_uuid=encounter_uuid)
         except FieldError as exc:
             return _error(exc)
 
@@ -275,7 +292,7 @@ def field_encounter_report(encounter_uuid: str):
         if user is None:
             return _unauthenticated()
         try:
-            encounter, _ = field_service._load_encounter(db, user=user, encounter_uuid=encounter_uuid)
+            encounter, _ = field_service.load_encounter(db, user=user, encounter_uuid=encounter_uuid)
         except FieldError as exc:
             return _error(exc)
 

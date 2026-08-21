@@ -1125,7 +1125,14 @@ def pull_latest_patient_exam(db: Session, connection_id: int, payload: dict[str,
     exam_items = [data] if isinstance(data, dict) else data
     if not isinstance(exam_items, list):
         raise RemidioConfigError("Remidio latest-patient response did not contain an exam.")
-    exam_payloads = extract_exam_payloads(exam_items, site_custom_identifier=None, pull_source="getPatientWithLastExam")
+    # The response body carries no site custom identifier, so resolve it locally.
+    # Passing None here would leave freshly staged exams without one, and routing
+    # would then depend entirely on the numeric-site fallback.
+    exam_payloads = extract_exam_payloads(
+        exam_items,
+        site_custom_identifier=_site_custom_identifier_for(db, connection.id, site_identifier),
+        pull_source="getPatientWithLastExam",
+    )
     summary = _dry_run_summary(exam_payloads) if dry_run else upsert_exam_payloads(db, connection_id=connection_id, payloads=exam_payloads)
     return {
         "connection_id": connection_id,
@@ -1133,6 +1140,30 @@ def pull_latest_patient_exam(db: Session, connection_id: int, payload: dict[str,
         "site_identifier": site_identifier,
         "summary": summary.as_dict(),
     }
+
+
+def _site_custom_identifier_for(db: Session, connection_id: int, site_identifier: str) -> str | None:
+    """Resolve a site's custom identifier from whichever identifier the caller used.
+
+    ``getPatientWithLastExam`` is called with the numeric Remidio site id (the
+    custom identifier is rejected by that endpoint, despite its documented name),
+    so the caller's value usually needs translating before it can be stored.
+    """
+    value = (site_identifier or "").strip()
+    if not value:
+        return None
+    site = (
+        db.query(RemidioSite)
+        .filter(
+            RemidioSite.remidio_connection_id == connection_id,
+            or_(
+                RemidioSite.remidio_site_id == value,
+                RemidioSite.site_custom_identifier == value,
+            ),
+        )
+        .first()
+    )
+    return site.site_custom_identifier if site else None
 
 
 def ingest_connection_files(

@@ -61,8 +61,14 @@ def upsert_exam_payloads(db: Session, *, connection_id: int, payloads: list[Remi
             summary.exams_updated += 1
 
         exam.remidio_site_id = _resolve_site_id(site_cache, payload)
-        exam.site_custom_identifier = payload.site_custom_identifier
-        exam.remidio_numeric_site_id = payload.remidio_numeric_site_id
+        # Never blank a populated identifier. Not every pull source carries one -
+        # getPatientWithLastExam responses omit it entirely - and an unconditional
+        # assignment lets a single-patient re-pull erase what a date pull had
+        # already established.
+        if payload.site_custom_identifier:
+            exam.site_custom_identifier = payload.site_custom_identifier
+        if payload.remidio_numeric_site_id:
+            exam.remidio_numeric_site_id = payload.remidio_numeric_site_id
         exam.remidio_patient_id = payload.remidio_patient_id
         exam.remidio_patient_mrn = payload.remidio_patient_mrn
         exam.exam_local_id = payload.exam_local_id

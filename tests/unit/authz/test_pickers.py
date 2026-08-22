@@ -51,6 +51,22 @@ def _grant(db, user, project, role, *, scope=PROJECT_SCOPE, lab=None, hospital=N
     db.flush()
 
 
+def _new_lab(db, hospital_id, prefix):
+    """Create a LabUnit with an explicit id.
+
+    lab_units.id has no autoincrement default in this schema, and the seeded
+    fixtures assign ids by hand, so a test that lets the ORM pick one collides
+    with another test file's rows when the suite runs together.
+    """
+    from sqlalchemy import func as _func
+
+    next_id = (db.execute(select(_func.max(LabUnit.id))).scalar() or 0) + 1
+    lab = LabUnit(id=next_id, name=f"{prefix}_{uuid4().hex[:6]}", hospital_id=hospital_id)
+    db.add(lab)
+    db.flush()
+    return lab
+
+
 @pytest.fixture
 def world(db_session, core_test_data):
     db = db_session
@@ -58,9 +74,9 @@ def world(db_session, core_test_data):
     h2 = Hospital(name=f"pk_h2_{uuid4().hex[:6]}")
     db.add(h2); db.flush()
     l1a = db.merge(core_test_data["lab_unit"])
-    l1b = LabUnit(name=f"pk_l1b_{uuid4().hex[:6]}", hospital_id=h1.id)
-    l2a = LabUnit(name=f"pk_l2a_{uuid4().hex[:6]}", hospital_id=h2.id)
-    unconfigured = LabUnit(name=f"pk_unconf_{uuid4().hex[:6]}", hospital_id=h1.id)
+    l1b = _new_lab(db, h1.id, "pk_l1b")
+    l2a = _new_lab(db, h2.id, "pk_l2a")
+    unconfigured = _new_lab(db, h1.id, "pk_unconf")
     db.add_all([l1b, l2a, unconfigured]); db.flush()
 
     proj = Project(title="pk", code=f"PK_{uuid4().hex[:6]}", active=True)
@@ -195,3 +211,51 @@ def test_hospitals_follow_the_reachable_labs(db_session, world):
         scope_hospitals(select(Hospital.id), db_session, resolved, ACTION)
     ).scalars())
     assert ids == {w["h2"].id}
+
+
+# --- the scope() facade -----------------------------------------------------
+# These exercise the single entry point the 113 migrated call sites use.
+# Without them a broken import inside scope() is invisible, because the
+# other tests call scope_query and scope_lab_units directly.
+
+
+def test_scope_facade_dispatches_lab_units_to_the_picker(db_session, world):
+    w = world
+    user = _user(db_session, "ophthalmologist", hospital=w["h1"], labs=[w["l1a"]])
+    from authz import scope
+
+    ids = set(db_session.execute(
+        scope(db_session, select(LabUnit.id), LabUnit, user, ACTION)
+    ).scalars())
+    assert ids == {w["l1a"].id}
+
+
+def test_scope_facade_dispatches_hospitals_to_the_picker(db_session, world):
+    w = world
+    user = _user(db_session, "ophthalmologist", hospital=w["h1"], labs=[w["l1a"]])
+    from authz import scope
+
+    ids = set(db_session.execute(
+        scope(db_session, select(Hospital.id), Hospital, user, ACTION)
+    ).scalars())
+    assert ids == {w["h1"].id}
+
+
+def test_scope_facade_dispatches_resources_to_the_predicate(db_session, world):
+    """A model with a project_id goes through the resource rule, not the picker."""
+    from models import DirectImageUpload
+    from authz import scope
+
+    user = _user(db_session, "ophthalmologist")
+    stmt = scope(db_session, select(DirectImageUpload.id), DirectImageUpload, user, ACTION)
+    assert db_session.execute(stmt).scalars().all() == []
+
+
+def test_scope_facade_accepts_a_legacy_query_object(db_session, world):
+    """apply_scoping callers pass ORM Query objects; scope() must accept them."""
+    w = world
+    user = _user(db_session, "ophthalmologist", hospital=w["h1"], labs=[w["l1a"]])
+    from authz import scope
+
+    q = scope(db_session, db_session.query(LabUnit), LabUnit, user, ACTION)
+    assert {r.id for r in q.all()} == {w["l1a"].id}

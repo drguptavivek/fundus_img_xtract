@@ -18,7 +18,7 @@ from models import (
     GradingTask,
 )
 from db_transaction_manager import get_db_session
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 
@@ -46,7 +46,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
         query = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id)
         
         # Apply hospital scoping
-        query = apply_scoping(query, PatientEncounters, user, 'analytics')
+        query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
         
         encounter = (
             query
@@ -95,7 +95,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
             task_query = db.query(GradingTask).filter(or_(*clauses))
             
             # Apply hospital scoping to tasks as well
-            task_query = apply_scoping(task_query, GradingTask, user, 'analytics')
+            task_query = scope(db, task_query, GradingTask, user, 'analytics.encounters.view')
             
             tasks = (
                 task_query
@@ -254,7 +254,7 @@ def get_encounters_summary_list(user: User, filters=None):
     with get_db_session() as db:
         query = db.query(PatientEncounters)
         # Apply hospital scoping
-        query = apply_scoping(query, PatientEncounters, user, 'analytics')
+        query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
         
         # Apply filters if provided
         if filters:
@@ -326,7 +326,7 @@ def get_encounters_with_non_pending_tasks(user: User):
         )
         
         # Apply hospital scoping
-        query = apply_scoping(query, GradingTask, user, 'analytics')
+        query = scope(db, query, GradingTask, user, 'analytics.encounters.view')
         
         non_pending_tasks = query.all()
         
@@ -377,7 +377,7 @@ def get_direct_image_summary(uuid_str: str, user: User):
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid_str)
         
         # Apply hospital scoping
-        query = apply_scoping(query, DirectImageUpload, user, 'analytics')
+        query = scope(db, query, DirectImageUpload, user, 'analytics.encounters.view')
         
         direct_image = query.first()
         
@@ -388,7 +388,7 @@ def get_direct_image_summary(uuid_str: str, user: User):
         task_query = db.query(GradingTask).filter(GradingTask.direct_image_upload_id == direct_image.id)
         
         # Apply hospital scoping to tasks
-        task_query = apply_scoping(task_query, GradingTask, user, 'analytics')
+        task_query = scope(db, task_query, GradingTask, user, 'analytics.encounters.view')
         
         tasks = (
             task_query

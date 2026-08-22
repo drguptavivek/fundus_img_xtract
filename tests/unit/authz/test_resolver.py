@@ -8,6 +8,8 @@ and checks both that the grant is emitted and that it authorizes correctly.
 
 from uuid import uuid4
 
+from sqlalchemy import select
+
 from authz import ResourceRef, authorize
 from authz.resolver import resolve_grants
 from authz.types import GrantSource
@@ -64,6 +66,22 @@ def _image(project_id, hospital_id, lab_unit_id) -> ResourceRef:
     return ResourceRef(type="image", id=uuid4().hex, attributes={
         "project_id": project_id, "hospital_id": hospital_id, "lab_unit_id": lab_unit_id,
     })
+
+
+def _new_lab(db, hospital_id, prefix):
+    """Create a LabUnit with an explicit id.
+
+    lab_units.id has no autoincrement default in this schema, and the seeded
+    fixtures assign ids by hand, so a test that lets the ORM pick one collides
+    with another test file's rows when the suite runs together.
+    """
+    from sqlalchemy import func as _func
+
+    next_id = (db.execute(select(_func.max(LabUnit.id))).scalar() or 0) + 1
+    lab = LabUnit(id=next_id, name=f"{prefix}_{uuid4().hex[:6]}", hospital_id=hospital_id)
+    db.add(lab)
+    db.flush()
+    return lab
 
 
 # --- always-present grants -------------------------------------------------
@@ -131,9 +149,7 @@ def test_project_role_grant_authorizes_only_its_project(db_session, core_test_da
 
 def test_lab_scoped_project_grant_does_not_reach_other_labs(db_session, core_test_data):
     lab = db_session.merge(core_test_data["lab_unit"])
-    other_lab = LabUnit(name=f"rs_lab_{uuid4().hex[:6]}", hospital_id=lab.hospital_id)
-    db_session.add(other_lab)
-    db_session.flush()
+    other_lab = _new_lab(db_session, lab.hospital_id, "rs_lab")
     project = _project(db_session)
     _configure_lab(db_session, project, lab, )
     _configure_lab(db_session, project, other_lab)

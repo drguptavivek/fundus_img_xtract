@@ -14,7 +14,7 @@ from models import (
     LabUnit, Hospital, User, GradingTask, Grade, Consensus, Job, JobItem
 )
 from db_transaction_manager import get_db_session
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
@@ -48,7 +48,7 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
     
     # Apply hospital scoping if user provided
     if user:
-        query = apply_scoping(query, PatientEncounters, user, 'analytics')
+        query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
         
     query = query.options(
         joinedload(PatientEncounters.zip_file),

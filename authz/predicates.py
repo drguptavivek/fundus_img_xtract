@@ -30,7 +30,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement
 
 from authz.policies import ActionPolicy, get_policy
-from authz.resolver import ResolvedGrants
+from authz.resolver import ResolvedGrants, resolve_grants
 from authz.types import GrantSource
 
 
@@ -60,13 +60,52 @@ def register_scope(model: type, builder: ScopeBuilder) -> None:
     _SCOPE_BUILDERS[model] = builder
 
 
-def scope_columns_for(model: type) -> ScopeColumns:
+def scope_columns_for(model) -> ScopeColumns:
+    """Resolve a model's scope, following SQLAlchemy aliases to their base.
+
+    An ``aliased(Model)`` is a distinct object from ``Model``, so a query
+    built on an alias must be scoped through the alias's own columns; using
+    the base table's columns would filter the wrong FROM entry and silently
+    return the wrong rows.
+    """
     builder = _SCOPE_BUILDERS.get(model)
-    if builder is None:
-        raise LookupError(
-            f"{model.__name__} has no registered authz scope; add it to authz.predicates"
-        )
-    return builder()
+    if builder is not None:
+        return builder()
+
+    from sqlalchemy import inspect as sa_inspect
+
+    try:
+        info = sa_inspect(model)
+    except Exception:
+        info = None
+    base = getattr(getattr(info, "mapper", None), "class_", None)
+    if base is not None and base is not model and base in _SCOPE_BUILDERS:
+        columns = _SCOPE_BUILDERS[base]()
+        if columns.correlate_from:
+            raise LookupError(
+                f"{base.__name__} has a derived scope and cannot be scoped through an "
+                "alias; scope the base model, or register the alias explicitly"
+            )
+        return _adapt_to(columns, base, model)
+
+    name = getattr(model, "__name__", repr(model))
+    raise LookupError(f"{name} has no registered authz scope; add it to authz.predicates")
+
+
+def _adapt_to(columns: ScopeColumns, base: type, alias) -> ScopeColumns:
+    """Re-point a base model's plain scope columns at one of its aliases."""
+    def same(col):
+        if col is None:
+            return None
+        key = getattr(col, "key", None)
+        return getattr(alias, key) if key and hasattr(alias, key) else col
+
+    return ScopeColumns(
+        project_id=same(columns.project_id),
+        hospital_id=same(columns.hospital_id),
+        lab_unit_id=same(columns.lab_unit_id),
+        row_id=same(columns.row_id),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +246,25 @@ def _project_scope_match(scope: ScopeColumns, grant) -> ColumnElement:
     elif hosp is not None:
         parts.append(scope.hospital_id == hosp if scope.hospital_id is not None else false())
     return and_(*parts)
+
+
+def scope(db, query, model: type, user, action: str):
+    """Scope one query for one user and action. The single entry point.
+
+    Dispatches to the picker helpers for the organizational models and to the
+    resource predicate for everything else, so callers do not have to know
+    which kind of model they are holding. This is the replacement for
+    ``utils.hospital_scoping.apply_scoping``.
+    """
+    from models import Hospital, LabUnit
+
+    resolved = resolve_grants(db, user)
+    if model is LabUnit:
+        return scope_lab_units(query, db, resolved, action)
+    if model is Hospital:
+        return scope_hospitals(query, db, resolved, action)
+    return scope_query(query, resolved, action, model)
+
 
 
 # ---------------------------------------------------------------------------

@@ -25,3 +25,17 @@ These endpoints are consumed by mobile clients. They are JSON-only and use beare
 - Refresh-token lifetime varies by device kind (shared 24h, personal field device 7 days, otherwise 30 days). Clients must schedule refreshes from `refresh_expires_in`, not a hardcoded window.
 - CSRF is not used on this surface. The code does not expect `csrf_token` form fields or `X-CSRFToken` headers.
 - Mobile auth errors are JSON. The unauthenticated token decorator returns `{"message": ...}`; the login/logout endpoints return `{"error": ...}`.
+
+## Hosted PWA
+
+The Flutter client's web build is served by this backend at `GET /mobile/` (public,
+SPA fallback, `no-cache` on `index.html`, `flutter_bootstrap.js`,
+`flutter_service_worker.js`, and `version.json`) from the build committed at
+`static/mobile-pwa/`. Serving it from the API's own origin is what keeps every call
+same-origin — this surface sends no CORS headers and needs none. **Deploying a new
+client build is a `git pull` on the server**; installed PWAs pick it up on their next
+launch. iPhone users install it from Safari via Share → Add to Home Screen. Build and
+release steps live in the client repo at
+[`apps/fundus_glaucoma_mobile/docs/pwa.md`](../../../apps/fundus_glaucoma_mobile/docs/pwa.md).
+`MOBILE_PWA_ROOT` overrides the build directory; `/mobile/download/android` redirects
+to the latest Android release (`MOBILE_ANDROID_RELEASE_URL`).

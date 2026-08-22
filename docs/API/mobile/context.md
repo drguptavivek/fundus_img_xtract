@@ -60,6 +60,9 @@ Top-level response keys:
 - `lab_units`
 - `allowed_disease_ids`
 - `roles`
+- `projects` — the field projects the caller may work in, identical in shape to
+  `GET /field/projects` (see [field.md](field.md)). This is the one-call bootstrap a
+  client uses to decide which modules to show: an empty array means no field access.
 - `token_shape`
 
 `user` keys:

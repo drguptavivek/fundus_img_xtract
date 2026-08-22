@@ -840,11 +840,15 @@ def update_mobile_device_status(user_id: int, device_id: str):
 
 
 def _device_admin_response(user_id: int):
+    # Render the full workspace shell, not just the sessions section: the
+    # device forms target #admin-users-workspace, which only the shell
+    # carries, and the shell is what renders flashed messages — including
+    # the one-time enrolment code, which would otherwise never be shown.
     if request.headers.get("HX-Request") or request.args.get("format") == "shell":
         with get_db_session() as db:
             context = _build_user_detail_context(db, user_id)
             if context is None:
                 flash("User not found or not accessible.", "danger")
                 return redirect(url_for("admin.users_list"))
-            return _render_user_hub_section(context, "sessions")
+            return render_template("admin/partials/user_hub_shell.html", **context)
     return redirect(url_for("admin.user_detail", user_id=user_id))

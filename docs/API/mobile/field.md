@@ -55,6 +55,7 @@ not an error - the client renders the encounter without an AI section.
 | `/field/projects/<project_id>/fetch` | POST | Queue a fetch |
 | `/field/projects/<project_id>/fetch/retry` | POST | Retry an incomplete fetch |
 | `/field/projects/<project_id>/patients/refetch` | POST | Re-pull one patient (Remidio) |
+| `/field/encounters/<uuid>/refresh` | POST | Re-query the source for one encounter's assets |
 
 `/context/me` additionally now returns a `projects[]` array with the same shape as
 `GET /field/projects`.
@@ -74,6 +75,7 @@ matches what the user considers "today".
       "source": "remidio",
       "patient_id": "FIELD-1",
       "patient_name": "Field Patient One",
+      "site": "comoph_4834",
       "capture_date": "2026-08-20",
       "lab_unit": "Field Lab",
       "image_count": 2,
@@ -108,6 +110,12 @@ matches what the user considers "today".
 
 Errors: `400 date_required`, `409 invalid_date`, `404 not_found`.
 
+`patient_name` is the real patient name from ingest metadata when the upstream exam
+carried one; the encounter's own name column is only a `Remidio Patient <id>`
+placeholder and is used solely as the fallback. `site` is the Remidio site custom
+identifier (null for IITK encounters or when the site was never configured). Both
+fields appear identically on the encounter detail.
+
 ## AI status
 
 Answers are reported **at patient level**, with per-eye detail underneath. DR and DME
@@ -125,8 +133,10 @@ Rollup rules:
 - DR/DME per-eye grading is read from the single `is_primary` image for that eye, per
   the MadhuNetrAI contract - never from image order.
 - Glaucoma has no encounter-level run and no `is_primary`, so it is aggregated: any
-  failed run → `failed`; else any queued/running → `running`; else all success →
-  `success`. An eye is positive if any of its images graded positive.
+  failed run → `failed`; else any queued/running → `running`; else **any** success →
+  `success`. The pipeline also writes `skipped` rows for ineligible images, so a
+  completed encounter is a mix of success and skipped — an all-success set must not be
+  required. An eye is positive if any of its images graded positive.
 
 `requestable` tells the client whether the request button should be live, and `reason`
 says why not (`workflow_disabled`, `already_present`).
@@ -226,6 +236,42 @@ used, so a client cannot pull from a site the project has no route for.
 Shares the fetch rate limits and the 30-second spacing guard. Errors:
 `400 mrn_required`, `409 patient_not_found`, `409 source_not_configured`.
 
+## Refreshing one encounter
+
+```
+POST /field/encounters/{uuid}/refresh
+```
+
+No body. Re-queries the encounter's own upstream source for its assets and ingests
+anything new — the encounter-scoped sibling of the per-patient refetch, for when one
+encounter's images or report look incomplete. Works for **both** sources: a Remidio
+encounter dispatches a per-patient refetch using its own `patient_id` as the MRN; an
+IITK encounter resyncs its linked session.
+
+Returns `200`:
+
+```json
+{
+  "encounter_uuid": "…",
+  "source": "remidio",
+  "images_before": 2,
+  "images_after": 4,
+  "images_added": 2,
+  "source_reported": { "…": "source-dependent" }
+}
+```
+
+`source_reported` is the raw upstream result and is **polymorphic by source** — for
+Remidio it is the same `{project_id, mrn_matched, site_custom_identifier, pull,
+ingest}` object the per-patient refetch returns; for IITK it is the resync result
+(`encounters_created`, `images_created`, … or a `{status: "skipped", reason: …}`
+object). Treat it as an untyped map.
+
+Shares the fetch rate limits and the 30-second spacing guard. Errors:
+`409 no_patient_id` (Remidio encounter without a patient identifier),
+`409 not_linked` (IITK encounter with no session link), `409 patient_not_found`,
+`409 source_not_configured`, `404 not_found`.
+
 ### Rate limits
 
 Per **user**, not per project or per source:
@@ -235,6 +281,9 @@ Per **user**, not per project or per source:
   separately because a rate limit expresses volume, not spacing. Exceeding it returns
   `429` with a `Retry-After` header. The header carries the rate limiter's own window,
   which is the longer of the two waits, so a client that honours it is always safe.
+
+The gap is shared across the whole fetch family — queue, retry, per-patient refetch,
+and per-encounter refresh — so alternating between them does not bypass it.
 
 IITK's provider asks for roughly 60 requests/minute or fewer, and one fetch fans out to
 many upstream calls, so the coalescing guard matters more than the per-user limits.

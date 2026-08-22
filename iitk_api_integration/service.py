@@ -575,6 +575,10 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
             image_meta["source_present"] = existing.spatial_position in present_positions
             existing.metadata_json = image_meta
             existing.hospital_id = destination.hospital_id
+            # IITK inventory images are clinical grading inputs. Older imports
+            # explicitly disabled task creation, so repair that stale routing
+            # flag whenever their source session is synchronized again.
+            existing.creates_task = True
         folder_rel = f"files/encounter_sets/{now.strftime('%Y_%m_%d')}/{encounter.id}"
         image_dir = BASE_DIR / folder_rel
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -587,7 +591,7 @@ def _persist_session(runtime: RuntimeConfig, source: IITKSessionDTO, inventory: 
                     continue
                 stored_filename = f"{uuid4()}.jpg"
                 image = EncounterSetImage(uuid=str(uuid4()), patient_encounter_id=encounter.id, spatial_position=position,
-                    original_filename=stored_filename, folder_rel=folder_rel, asset_kind="clinical_image", creates_task=False,
+                    original_filename=stored_filename, folder_rel=folder_rel, asset_kind="clinical_image", creates_task=True,
                     is_pii=False, visible_to_grader=True, project_id=runtime.project_id, hospital_id=destination.hospital_id,
                     camera_id=runtime.camera_id, created_at=now)
                 db.add(image)

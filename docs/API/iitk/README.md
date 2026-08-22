@@ -346,8 +346,10 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
   local file is recovered on the next sync.
 - Images absent from a later inventory remain stored for history and receive
   `source_present: false`.
-- All imported images have `creates_task=false`. Synchronization does not run
-  verification or create grading tasks.
+- Imported clinical images have `creates_task=true`, including legacy IITK
+  image rows reconciled by a later synchronization. Synchronization itself
+  does not run verification or create grading tasks; verification applies the
+  selected upload profile's package policy and creates the eligible tasks.
 - A failed image does not prevent the session metadata or other images from
   being saved. Each individual network request or HTTP `429`/`5xx` response is
   retried once after 5 seconds. Configuration, contract, authentication,
@@ -358,6 +360,22 @@ intake lab and receives `upload.site_mapping_status` of `unmapped` or
   overlap and do not repeat a second unbounded scan of every historical partial
   session. A manual `full=true` sync remains available when older sessions need
   reconciliation.
+
+Existing IITK rows imported before task eligibility was enabled can be repaired
+per project with a preview-first command. The apply mode accepts only the exact
+state-derived token printed by the latest preview and changes only IITK clinical
+images whose `creates_task` value is still false:
+
+```bash
+uv run python scripts/backfill_iitk_image_task_eligibility.py --project-id 5
+uv run python scripts/backfill_iitk_image_task_eligibility.py --project-id 5 \
+  --apply --confirm-token IITK-TASKS-5-...
+```
+
+The repair does not rebuild packages or alter tasks or grades. Pending
+EncounterSets receive image tasks through normal verification. Already verified
+EncounterSets must use the audited reopen/reverify workflow if their frozen
+package is missing image tasks.
 
 The database-backed Celery Beat schedule runs at minute `30`, UTC hours
 `1-12`, which is exactly hourly from 07:00 through 18:00 IST. It dispatches

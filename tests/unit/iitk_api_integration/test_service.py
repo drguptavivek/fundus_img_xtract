@@ -95,7 +95,7 @@ def test_partial_session_is_created_then_updated_in_place(db_session, core_test_
     assert db_session.query(PatientEncounters).filter_by(project_id=runtime.project_id).count() == 1
     assert link.source_status == "complete"
     assert [image.spatial_position for image in images] == [1, 3]
-    assert all(image.creates_task is False for image in images)
+    assert all(image.creates_task is True for image in images)
     assert encounter.metadata_json["patient"]["hospital_UHID"] == "MRN-1"
     assert encounter.metadata_json["encounter"]["capture_status"] == "complete"
     assert encounter.metadata_json["upload"]["source_kind"] == "iitk_api"
@@ -125,6 +125,24 @@ def test_inventory_sync_backfills_exact_source_filename_without_redownload(
     assert result["images_unchanged"] == 1
     assert image.original_filename == local_filename
     assert image.metadata_json["source_filename"] == "private-primary.jpg"
+
+
+def test_inventory_sync_repairs_legacy_image_task_eligibility(
+    db_session, core_test_data, app, monkeypatch, tmp_path
+):
+    runtime = setup_config(db_session, core_test_data)
+    monkeypatch.setattr("iitk_api_integration.service.BASE_DIR", tmp_path)
+    monkeypatch.setattr("iitk_api_integration.service.generate_thumbnail", lambda *args: False)
+    current_inventory = inventory("primary")
+    _persist_session(runtime, source("partial", 1, ("primary",)), current_inventory, {"primary": jpeg()})
+    image = db_session.query(EncounterSetImage).one()
+    image.creates_task = False
+    db_session.flush()
+
+    _persist_session(runtime, source("partial", 1, ("primary",)), current_inventory, {})
+    db_session.refresh(image)
+
+    assert image.creates_task is True
 
 
 def test_complete_upstream_session_and_inventory_payloads_are_preserved_for_audit(

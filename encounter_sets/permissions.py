@@ -427,6 +427,21 @@ def user_is_legacy_project_collaborator(
     )).scalar_one_or_none() is not None
 
 
+def legacy_collaborator_project_ids(db: Session, *, user_id: int) -> frozenset[int]:
+    """Every project where the user holds legacy ProjectInvestigator collaborator membership.
+
+    The set form of ``user_is_legacy_project_collaborator``, for callers that
+    resolve all of a user's relationships at once.
+    """
+    from models import ProjectInvestigator
+
+    return frozenset(db.execute(select(ProjectInvestigator.project_id).where(
+        ProjectInvestigator.user_id == user_id,
+        ProjectInvestigator.role == "collaborator",
+        ProjectInvestigator.active.is_(True),
+    )).scalars())
+
+
 def apply_task_capability_scope(
     query,
     task_entity,

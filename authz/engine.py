@@ -83,11 +83,14 @@ def _grant_matches(
     if grant.source == GrantSource.ADMIN_GLOBAL:
         return "admin" in {role.lower() for role in actor.roles}
 
+    # Classical scope is the non-project rule. A resource that belongs to a
+    # project is reachable only through an explicit project relationship;
+    # hospital membership or a lab-unit assignment never reaches it.
     if grant.source == GrantSource.HOSPITAL_SCOPE:
-        return _matches_hospital_scope(actor, resource, grant)
+        return _is_classical(resource) and _matches_hospital_scope(actor, resource, grant)
 
     if grant.source == GrantSource.LAB_UNIT_ASSIGNMENT:
-        return _matches_lab_unit(resource, grant)
+        return _is_classical(resource) and _matches_lab_unit(resource, grant)
 
     if grant.source == GrantSource.UPLOAD_PROFILE:
         return _matches_upload_profile(resource, grant)
@@ -133,6 +136,11 @@ def _matches_project_scope(resource: ResourceRef, grant: RelationshipGrant) -> b
     if grant_hospital_id is not None:
         return grant_hospital_id == resource.attr("hospital_id")
     return True
+
+
+def _is_classical(resource: ResourceRef) -> bool:
+    """Whether a resource lies outside every project (``project_id IS NULL``)."""
+    return resource.attr("project_id") is None
 
 
 def _matches_hospital_scope(actor: AuthzActor, resource: ResourceRef, grant: RelationshipGrant) -> bool:

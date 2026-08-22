@@ -21,6 +21,9 @@ def authorize(
     if policy is None:
         return AuthzDecision.deny(action, "unknown_action")
 
+    if policy.public:
+        return AuthzDecision.allow(action, GrantSource.PUBLIC)
+
     resource = resource or ResourceRef(type="none")
     actor_role_matches = actor.has_any_role(policy.roles)
     for grant in grants:
@@ -62,7 +65,11 @@ def _grant_supplies_authority(
         return "collaborator" in {role.lower() for role in policy_roles}
     if grant.source == GrantSource.MEDIA_UPLOADER:
         return actor_role_matches
-    if grant.source in {GrantSource.TASK_ELIGIBILITY, GrantSource.SIGNED_MEDIA_TOKEN}:
+    if grant.source in {
+        GrantSource.TASK_ELIGIBILITY,
+        GrantSource.SIGNED_MEDIA_TOKEN,
+        GrantSource.SELF,
+    }:
         return True
     return False
 
@@ -103,6 +110,13 @@ def _grant_matches(
 
     if grant.source == GrantSource.SIGNED_MEDIA_TOKEN:
         return grant.resource_id == resource.id
+
+    if grant.source == GrantSource.SELF:
+        # Actions that name no resource are implicitly about the actor's own
+        # record; actions that name one must name the actor's own record.
+        if resource.id is None:
+            return True
+        return str(resource.id) == str(grant.resource_id)
 
     return False
 

@@ -13,6 +13,7 @@ from authz.adapters import (
     grading_slot_grants,
     hospital_scope_grant,
     lab_unit_assignment_grants,
+    self_grant,
     upload_profile_grant,
     upload_profile_grants,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "hospital_scope_grant",
     "lab_unit_assignment_grants",
     "load_action_registry",
+    "self_grant",
     "upload_profile_grant",
     "upload_profile_grants",
 ]

@@ -21,6 +21,8 @@ class GrantSource(StrEnum):
     TASK_ELIGIBILITY = "task_eligibility"
     MEDIA_UPLOADER = "media_uploader"
     SIGNED_MEDIA_TOKEN = "signed_media_token"
+    SELF = "self"
+    PUBLIC = "public"
 
 
 @dataclass(frozen=True)

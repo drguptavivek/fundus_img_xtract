@@ -293,3 +293,636 @@ Before wiring a route to ReBAC:
 - Add or confirm the executable policy in `authz/policies.py`.
 - Add tests for role failure and relationship failure.
 - Then wire the route or service to the action.
+
+# Registered Action Rules
+
+Every action in `authz/actions/*.toml` has an executable policy in `authz/policies.py` and a rule below. The registry test enforces that correspondence in both directions.
+
+## Domain: account
+
+### `account.password.change`
+
+- Rule: A user may change the authenticated user's password only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: user (required).
+
+### `account.profile.update`
+
+- Rule: A user may update the authenticated user's account profile only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: user (required).
+
+### `account.profile.view`
+
+- Rule: A user may view the authenticated user's account profile only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: user (not required).
+
+
+## Domain: ad_hoc_tasks
+
+### `ad_hoc_task.create`
+
+- Rule: A user may create ad hoc grading tasks from scoped image search results when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: ad_hoc_task_batch (required).
+
+### `ad_hoc_task.delete`
+
+- Rule: A user may delete or cancel ad hoc task batches when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: ad_hoc_task_batch (required).
+
+### `ad_hoc_task.view`
+
+- Rule: A user may view ad hoc task creator pages and created batches when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: ad_hoc_task_batch (not required).
+
+
+## Domain: admin
+
+### `admin.dashboard.view`
+
+- Rule: A user may view administrative dashboards and status pages when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: admin_dashboard (not required).
+
+### `admin.grading_eligibility.manage`
+
+- Rule: A user may manage user grading eligibility and slot assignments when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_slot (not required).
+
+### `admin.lookup.manage`
+
+- Rule: A user may manage lookup tables such as hospitals, lab units, diseases, cameras, and areas when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: lookup (not required).
+
+### `admin.s3.manage`
+
+- Rule: A user may manage S3 configuration and S3 sync administration when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: s3_config (not required).
+
+### `admin.security.view`
+
+- Rule: A user may view security, audit, CVE, log, and sensitive-operation administration pages when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: security_event (not required).
+
+### `admin.system.manage`
+
+- Rule: A user may manage system operations including database, Celery, packages, thumbnails, disk usage, and rate limits when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: system_operation (not required).
+
+### `admin.upload_profiles.manage`
+
+- Rule: A user may manage upload projects, profiles, assignments, and profile activation when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: upload_profile (not required).
+
+### `admin.users.manage`
+
+- Rule: A user may create, edit, activate, or deactivate users within administrative scope when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: user (required).
+
+### `admin.users.view`
+
+- Rule: A user may view users within the actor's administrative scope when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: user (not required).
+
+
+## Domain: api
+
+### `api.lookups.manage`
+
+- Rule: A user may mutate API-managed lookup or configuration resources when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: lookup (required).
+
+### `api.lookups.view`
+
+- Rule: A user may read API lookup data such as hospitals, lab units, diseases, grades, AI models, and scoping context when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: lookup (not required).
+
+### `api.mobile.session.manage`
+
+- Rule: A user may manage mobile authentication sessions for the authenticated account when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: mobile_session (not required).
+
+### `api.ocr.manage`
+
+- Rule: A user may read, override, or batch-process OCR/PII metadata when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: image (not required).
+
+### `api.viewer_settings.manage`
+
+- Rule: A user may read and mutate authenticated viewer settings and presets only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: viewer_settings (not required).
+
+
+## Domain: audit
+
+### `audit.data_quality.view`
+
+- Rule: A user may view data-quality audit reports such as encounters missing a capture date when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: encounter (not required).
+
+
+## Domain: auth
+
+### `auth.login`
+
+- Rule: This action is deliberately public: Public login and session creation action. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: session (not required).
+
+### `auth.logout`
+
+- Rule: This action is deliberately public: End an authenticated web session. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: session (not required).
+
+### `auth.password_reset`
+
+- Rule: This action is deliberately public: Public password reset request and completion flow. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: user (not required).
+
+### `auth.reauth`
+
+- Rule: A user may confirm password before a sensitive authenticated operation only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: session (not required).
+
+
+## Domain: dashboard
+
+### `dashboard.home.view`
+
+- Rule: A user may view the authenticated landing page when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: none (not required).
+
+### `dashboard.view`
+
+- Rule: A user may view the hospital dashboard and its image listings when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: hospital (not required).
+
+
+## Domain: datasets
+
+### `dataset.curation.update`
+
+- Rule: A user may update curated dataset membership, screening state, and metadata when the user has one of `admin`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (required).
+
+### `dataset.curation.view`
+
+- Rule: A user may view curated datasets, dataset candidates, galleries, and dataset details when the user has one of `admin`, `analytics_viewer`, `data_exporter`, `data_manager`, `dataset_creator`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (not required).
+
+### `dataset.delete`
+
+- Rule: A user may delete a curated dataset when the user has one of `admin`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (required).
+
+### `dataset.export.create`
+
+- Rule: A user may create a dataset export job when the user has one of `admin`, `data_exporter`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (required).
+
+### `dataset.export.download`
+
+- Rule: A user may download a generated dataset export file when the user has one of `admin`, `data_exporter`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset_export (required).
+
+### `dataset.finalize`
+
+- Rule: A user may finalize or unfinalize a curated dataset when the user has one of `admin`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (required).
+
+### `dataset.public_download`
+
+- Rule: This action is deliberately public: Public token-based dataset download flow. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: dataset_share (required).
+
+### `dataset.share.manage`
+
+- Rule: A user may create, toggle, regenerate, or administer dataset shares when the user has one of `admin`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset_share (required).
+
+
+## Domain: discrepancy_review
+
+### `review.discrepancy.export`
+
+- Rule: A user may create or download discrepancy review exports when the user has one of `admin`, `data_exporter`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: discrepancy_export (not required).
+
+### `review.discrepancy.view`
+
+- Rule: A user may view discrepancy review queues and task comparison data when the user has one of `admin`, `data_exporter`, `data_manager`, `discrepancy_reviewer` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_task (not required).
+
+### `review.regrade_creator.manage`
+
+- Rule: A user may create regrade tasks from discrepancy review workflows when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_task (not required).
+
+### `review.task.submit`
+
+- Rule: A user may submit discrepancy review decisions for a grading task when the user has one of `admin`, `discrepancy_reviewer` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_task (required).
+
+### `review.task.view`
+
+- Rule: A user may view task review detail pages and review viewer images when the user has one of `admin`, `data_exporter`, `data_manager`, `discrepancy_reviewer` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_task (required).
+
+
+## Domain: docs
+
+### `docs.api.view`
+
+- Rule: This action is deliberately public: View generated API documentation and OpenAPI/Swagger assets. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: documentation (not required).
+
+
+## Domain: glaucoma_ai
+
+### `glaucoma_ai.result.view`
+
+- Rule: A user may view Glaucoma AI inference result, image, or thumbnail when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: glaucoma_ai_upload (required).
+
+### `glaucoma_ai.upload.create`
+
+- Rule: A user may create a Glaucoma AI upload and inference job when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: upload_selection (required).
+
+### `glaucoma_ai.workspace.view`
+
+- Rule: A user may view Glaucoma AI upload workspace and recent inference results when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: glaucoma_ai_upload (not required).
+
+
+## Domain: help
+
+### `help.view`
+
+- Rule: This action is deliberately public: View in-app help documentation. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: documentation (not required).
+
+
+## Domain: intra_rater
+
+### `intra_rater.batch.create`
+
+- Rule: A user may create intra-rater batches when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: intra_rater_batch (required).
+
+### `intra_rater.batch.view`
+
+- Rule: A user may view intra-rater batches and admin dashboards when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: intra_rater_batch (not required).
+
+### `intra_rater.kpi.view`
+
+- Rule: A user may view intra-rater KPI data when the user has one of `admin`, `data_manager`, `ophthalmologist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: intra_rater_task (not required).
+
+### `intra_rater.task.submit`
+
+- Rule: A user may submit an intra-rater grade when the user has one of `admin`, `ophthalmologist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: intra_rater_task (required).
+
+### `intra_rater.task.view`
+
+- Rule: A user may view assigned intra-rater tasks and image viewer when the user has one of `admin`, `data_manager`, `ophthalmologist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: intra_rater_task (not required).
+
+
+## Domain: jobs
+
+### `jobs.regenerate`
+
+- Rule: A user may regenerate job-derived artifacts when the user has one of `admin`, `data_exporter`, `data_manager`, `dataset_creator`, `discrepancy_reviewer`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: job (required).
+
+### `jobs.result.view`
+
+- Rule: A user may view job result details and processing pages when the user has one of `admin`, `data_exporter`, `data_manager`, `dataset_creator`, `discrepancy_reviewer`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: job (required).
+
+### `jobs.view`
+
+- Rule: A user may view upload and processing jobs within scope when the user has one of `admin`, `data_exporter`, `data_manager`, `dataset_creator`, `discrepancy_reviewer`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: job (not required).
+
+
+## Domain: mobile
+
+### `mobile.context.view`
+
+- Rule: A user may read the authenticated mobile actor's own context and permissions only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: user (not required).
+
+### `mobile.field.encounter.capture`
+
+- Rule: A user may refresh, fetch, or re-fetch field encounter data for an assigned project only when the user has one of `admin`, `field_ophthalmologist`, `field_optometrist`, `ophthalmologist`, `optometrist` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `mobile.field.encounter.view`
+
+- Rule: A user may read field encounters, images, and reports within an assigned project only when the user has one of `admin`, `field_ophthalmologist`, `field_optometrist`, `ophthalmologist`, `optometrist` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: encounter (required).
+
+### `mobile.field.inference.run`
+
+- Rule: A user may trigger or retry inference for a field encounter only when the user has one of `admin`, `field_ophthalmologist`, `field_optometrist`, `ophthalmologist`, `optometrist` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: encounter (required).
+
+### `mobile.field.project.view`
+
+- Rule: A user may list field projects the actor is assigned to only when the user has one of `admin`, `field_ophthalmologist`, `field_optometrist`, `ophthalmologist`, `optometrist` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (not required).
+
+### `mobile.session.revoke`
+
+- Rule: A user may revoke one of the actor's own mobile sessions only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: mobile_session (required).
+
+### `mobile.session.view`
+
+- Rule: A user may list or read the actor's own mobile sessions only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: mobile_session (not required).
+
+### `mobile.upload.create`
+
+- Rule: A user may create a mobile upload and read its status only when the user has one of `admin`, `field_ophthalmologist`, `field_optometrist`, `ophthalmologist`, `optometrist` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: upload_selection (required).
+
+
+## Domain: notifications
+
+### `notifications.update`
+
+- Rule: A user may mark or update notifications for the authenticated user only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: notification (required).
+
+### `notifications.view`
+
+- Rule: A user may view notifications for the authenticated user only for their own record.
+- Relationship source: the actor owning the record.
+- Resource: notification (not required).
+
+
+## Domain: preprocess
+
+### `preprocess.dashboard.view`
+
+- Rule: A user may view preprocessing and anonymization dashboards when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: image (not required).
+
+### `preprocess.image.update`
+
+- Rule: A user may anonymize, restore, or override PII on scoped images when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: image (required).
+
+
+## Domain: projects
+
+### `project.access.manage`
+
+- Rule: A user may grant or revoke project role assignments for other users only when the user has one of `project_admin` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.encountersets.browse`
+
+- Rule: A user may browse EncounterSets belonging to a project, without patient identifiers only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: encounter_set (required).
+
+### `project.encountersets.browse_pii`
+
+- Rule: A user may browse project EncounterSets including patient identifiers only when the user has one of `analytics_viewer`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: encounter_set (required).
+
+### `project.upload.direct_image`
+
+- Rule: A user may upload direct images into a project only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.upload.encounter_set`
+
+- Rule: A user may upload EncounterSet packages into a project only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.upload.pregraded`
+
+- Rule: A user may upload pre-graded image sets into a project only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.upload.remidio`
+
+- Rule: A user may upload Remidio ZIP packages into a project only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.upload.remidio_api_sync`
+
+- Rule: A user may run Remidio API synchronisation for a project only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row or an assigned upload profile that allows that project for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.uploaders.manage`
+
+- Rule: A user may assign upload profiles and uploader access within a project only when the user has one of `project_admin` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.view`
+
+- Rule: A user may view a project overview and its configuration summary only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.wai.results`
+
+- Rule: A user may view Wadhwani AI inference results for a project only when the user has one of `optometrist`, `project_admin`, `project_pi`, `site_pi` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+### `project.wai.run`
+
+- Rule: A user may trigger Wadhwani AI inference for project encounters only when the user has one of `optometrist`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
+- Relationship source: project authority.
+- Resource: project (required).
+
+
+## Domain: public
+
+### `public.view`
+
+- Rule: This action is deliberately public: Public application pages that do not require authentication. No authentication is required.
+- Relationship source: none; the action is deliberately public.
+- Resource: public_page (not required).
+
+
+## Domain: reports
+
+### `reports.view`
+
+- Rule: A user may view scoped DR and glaucoma report data by UUID when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: report (required).
+
+
+## Domain: screenings
+
+### `screenings.delete`
+
+- Rule: A user may delete screening records or reports when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: encounter (required).
+
+### `screenings.reprocess`
+
+- Rule: A user may reprocess screening PDF data when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: encounter (required).
+
+### `screenings.view`
+
+- Rule: A user may view screening records and details when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: encounter (not required).
+
+
+## Domain: search
+
+### `search.view`
+
+- Rule: A user may search scoped tasks, images, and image details when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: search_result (not required).
+
+
+## Domain: tasks
+
+### `tasks.view`
+
+- Rule: A user may view task dashboards, pending tasks, all tasks, and task details when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: grading_task (not required).
+
+### `tasks.viewer.view`
+
+- Rule: A user may view task image viewer assets when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `ophthalmologist`, `optometrist`, `resident` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: image (required).
+
+
+## Domain: upload
+
+### `upload.direct.edit_image`
+
+- Rule: A user may edit, anonymise, or restore a direct image upload when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: direct_image_upload (required).
+
+### `upload.direct.view`
+
+- Rule: A user may view the direct upload dashboard and upload job status when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: direct_image_upload (not required).
+
+### `upload.pregraded.create`
+
+- Rule: A user may upload a pre-graded image set and its grades only when the user has one of `fileUploader`, `pregarded_uploader` and the selected upload profile is active, assigned to the user, and matches the selected project, lab unit, and upload kind.
+- Relationship source: upload profile assignment.
+- Resource: upload_selection (required).
+
+### `upload.zip.create`
+
+- Rule: A user may upload a Remidio or EncounterSet ZIP package only when the user has one of `fileUploader` and the selected upload profile is active, assigned to the user, and matches the selected project, lab unit, and upload kind.
+- Relationship source: upload profile assignment.
+- Resource: upload_selection (required).
+
+### `upload.zip.view`
+
+- Rule: A user may list previously uploaded ZIP packages when the user has one of `admin`, `data_manager`, `fileUploader`, `local_admin`, `optometrist` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: uploaded_zip (not required).
+

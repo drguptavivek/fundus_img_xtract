@@ -7,6 +7,7 @@ from auth.roles import roles_required
 from models import BASE_DIR, Session
 
 
+@roles_required("admin")
 def malicious_uploads():
     """Show recent malicious upload incidents parsed from the log file with KPIs."""
     log_path = BASE_DIR / os.getenv("MALICIOUS_UPLOAD_LOG", "logs/malicious_uploads.log")

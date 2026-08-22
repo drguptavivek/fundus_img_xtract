@@ -47,7 +47,30 @@ from upload_profiles.models import (
 )
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
-from utils.utilsImgServe import _user_has_grading_access_to_image
+from media.authorization import (
+    MediaAccessDenied,
+    MediaSourceType,
+    authorize_media_source,
+)
+
+
+def _can_view_media(db, user, media_uuid: str) -> bool:
+    """Whether a user may view one image through the central media authorizer.
+
+    Replaces utils.utilsImgServe._user_has_grading_access_to_image, removed in
+    35f04df3 when media authorization moved behind media.authorization.
+    """
+    try:
+        authorize_media_source(
+            db,
+            user=user,
+            media_uuid=media_uuid,
+            action="media.image.view",
+            expected_sources=frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}),
+        )
+    except MediaAccessDenied:
+        return False
+    return True
 
 
 class _DictCache:
@@ -829,7 +852,7 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
     db_session.flush()
 
     assert resident.lab_units == []
-    assert _user_has_grading_access_to_image(
+    assert _can_view_media(
         db_session,
         resident,
         db_session.get(DirectImageUpload, task.direct_image_upload_id).uuid,

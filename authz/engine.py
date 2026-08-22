@@ -21,6 +21,9 @@ def authorize(
     if policy is None:
         return AuthzDecision.deny(action, "unknown_action")
 
+    if policy.public:
+        return AuthzDecision.allow(action, GrantSource.PUBLIC)
+
     resource = resource or ResourceRef(type="none")
     actor_role_matches = actor.has_any_role(policy.roles)
     for grant in grants:
@@ -62,7 +65,11 @@ def _grant_supplies_authority(
         return "collaborator" in {role.lower() for role in policy_roles}
     if grant.source == GrantSource.MEDIA_UPLOADER:
         return actor_role_matches
-    if grant.source in {GrantSource.TASK_ELIGIBILITY, GrantSource.SIGNED_MEDIA_TOKEN}:
+    if grant.source in {
+        GrantSource.TASK_ELIGIBILITY,
+        GrantSource.SIGNED_MEDIA_TOKEN,
+        GrantSource.SELF,
+    }:
         return True
     return False
 
@@ -76,11 +83,14 @@ def _grant_matches(
     if grant.source == GrantSource.ADMIN_GLOBAL:
         return "admin" in {role.lower() for role in actor.roles}
 
+    # Classical scope is the non-project rule. A resource that belongs to a
+    # project is reachable only through an explicit project relationship;
+    # hospital membership or a lab-unit assignment never reaches it.
     if grant.source == GrantSource.HOSPITAL_SCOPE:
-        return _matches_hospital_scope(actor, resource, grant)
+        return _is_classical(resource) and _matches_hospital_scope(actor, resource, grant)
 
     if grant.source == GrantSource.LAB_UNIT_ASSIGNMENT:
-        return _matches_lab_unit(resource, grant)
+        return _is_classical(resource) and _matches_lab_unit(resource, grant)
 
     if grant.source == GrantSource.UPLOAD_PROFILE:
         return _matches_upload_profile(resource, grant)
@@ -104,6 +114,13 @@ def _grant_matches(
     if grant.source == GrantSource.SIGNED_MEDIA_TOKEN:
         return grant.resource_id == resource.id
 
+    if grant.source == GrantSource.SELF:
+        # Actions that name no resource are implicitly about the actor's own
+        # record; actions that name one must name the actor's own record.
+        if resource.id is None:
+            return True
+        return str(resource.id) == str(grant.resource_id)
+
     return False
 
 
@@ -119,6 +136,11 @@ def _matches_project_scope(resource: ResourceRef, grant: RelationshipGrant) -> b
     if grant_hospital_id is not None:
         return grant_hospital_id == resource.attr("hospital_id")
     return True
+
+
+def _is_classical(resource: ResourceRef) -> bool:
+    """Whether a resource lies outside every project (``project_id IS NULL``)."""
+    return resource.attr("project_id") is None
 
 
 def _matches_hospital_scope(actor: AuthzActor, resource: ResourceRef, grant: RelationshipGrant) -> bool:

@@ -1,0 +1,106 @@
+# Project-scoped actions.
+#
+# These names already exist as the ACTION_* constants in
+# data_authorization/policy.py and are enforced by user_can_project_action().
+# Registering them here brings that parallel namespace under the central
+# action registry so every project route resolves to a registered action.
+#
+# Every action below is authorized by an explicit project relationship
+# (ProjectRoleGrant, or the legacy ProjectEncounterSetPermission compatibility
+# row). Hospital or lab-unit membership alone never grants project access.
+
+[[actions]]
+name = "project.view"
+domain = "projects"
+zone = "web"
+description = "View a project overview and its configuration summary."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.encountersets.browse"
+domain = "projects"
+zone = "web"
+description = "Browse EncounterSets belonging to a project, without patient identifiers."
+resource_type = "encounter_set"
+requires_resource = true
+
+[[actions]]
+name = "project.encountersets.browse_pii"
+domain = "projects"
+zone = "web"
+description = "Browse project EncounterSets including patient identifiers."
+resource_type = "encounter_set"
+requires_resource = true
+
+[[actions]]
+name = "project.access.manage"
+domain = "projects"
+zone = "web"
+description = "Grant or revoke project role assignments for other users."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.uploaders.manage"
+domain = "projects"
+zone = "web"
+description = "Assign upload profiles and uploader access within a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.wai.run"
+domain = "projects"
+zone = "web"
+description = "Trigger Wadhwani AI inference for project encounters."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.wai.results"
+domain = "projects"
+zone = "web"
+description = "View Wadhwani AI inference results for a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.upload.direct_image"
+domain = "projects"
+zone = "web"
+description = "Upload direct images into a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.upload.pregraded"
+domain = "projects"
+zone = "web"
+description = "Upload pre-graded image sets into a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.upload.remidio"
+domain = "projects"
+zone = "web"
+description = "Upload Remidio ZIP packages into a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.upload.encounter_set"
+domain = "projects"
+zone = "web"
+description = "Upload EncounterSet packages into a project."
+resource_type = "project"
+requires_resource = true
+
+[[actions]]
+name = "project.upload.remidio_api_sync"
+domain = "projects"
+zone = "web"
+description = "Run Remidio API synchronisation for a project."
+resource_type = "project"
+requires_resource = true

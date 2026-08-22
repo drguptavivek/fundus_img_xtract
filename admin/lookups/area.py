@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 
 from db_transaction_manager import transaction_scope, get_db_session
 from models import Area
+from auth.roles import roles_required
 
 MODEL_NAME = "area"
 TITLE = "Area"
@@ -12,6 +13,7 @@ EDIT_ENDPOINT = "admin.edit_area"
 DELETE_ENDPOINT = "admin.delete_area"
 
 
+@roles_required("admin")
 def list_areas() -> ResponseReturnValue:
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -45,6 +47,7 @@ def list_areas() -> ResponseReturnValue:
         )
 
 
+@roles_required("admin")
 def edit_area(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(Area, item_id)
@@ -80,6 +83,7 @@ def edit_area(item_id: int) -> ResponseReturnValue:
             return redirect(url_for(LIST_ENDPOINT))
 
 
+@roles_required("admin")
 def delete_area(item_id: int) -> ResponseReturnValue:
     with transaction_scope() as db:
         item = db.get(Area, item_id)

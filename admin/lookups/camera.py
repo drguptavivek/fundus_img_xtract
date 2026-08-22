@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 
 from db_transaction_manager import transaction_scope, get_db_session
 from models import Camera
+from auth.roles import roles_required
 
 MODEL_NAME = "camera"
 TITLE = "Camera"
@@ -12,6 +13,7 @@ EDIT_ENDPOINT = "admin.edit_camera"
 DELETE_ENDPOINT = "admin.delete_camera"
 
 
+@roles_required("admin")
 def list_cameras() -> ResponseReturnValue:
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -47,6 +49,7 @@ def list_cameras() -> ResponseReturnValue:
         )
 
 
+@roles_required("admin")
 def edit_camera(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(Camera, item_id)
@@ -85,6 +88,7 @@ def edit_camera(item_id: int) -> ResponseReturnValue:
             return redirect(url_for(LIST_ENDPOINT))
 
 
+@roles_required("admin")
 def delete_camera(item_id: int) -> ResponseReturnValue:
     with transaction_scope() as db:
         item = db.get(Camera, item_id)

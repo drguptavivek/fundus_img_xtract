@@ -1,0 +1,7 @@
+[[actions]]
+name = "audit.data_quality.view"
+domain = "audit"
+zone = "web"
+description = "View data-quality audit reports such as encounters missing a capture date."
+resource_type = "encounter"
+requires_resource = false

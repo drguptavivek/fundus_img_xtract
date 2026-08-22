@@ -12,6 +12,7 @@ from db_transaction_manager import transaction_scope, get_db_session
 from utils.log_sanitize import sanitize_log_value
 
 
+@roles_required("admin")
 def change_password():
     """
     Admin can change any user's password by username (case-insensitive).
@@ -133,6 +134,7 @@ def change_password():
     return render_password_form(user_id, username, email)
 
 
+@roles_required("admin")
 def manage_roles():
     """
     Show all roles.

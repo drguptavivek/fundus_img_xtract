@@ -90,3 +90,8 @@ def grading_slot_grant(slot: Any) -> RelationshipGrant:
 def grading_slot_grants(slots: Iterable[Any]) -> list[RelationshipGrant]:
     """Normalize grading-slot records into relationship grants."""
     return [grading_slot_grant(slot) for slot in slots]
+
+
+def self_grant(user_id: int) -> RelationshipGrant:
+    """Grant an actor authority over their own account-scoped records."""
+    return RelationshipGrant(source=GrantSource.SELF, resource_id=user_id)

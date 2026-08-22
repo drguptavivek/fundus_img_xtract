@@ -71,8 +71,10 @@ marshmallow==4.3.0
     # via fundus-img-xtract
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.1.2
-    # via cachecontrol
+msgpack==1.2.1
+    # via
+    #   cachecontrol
+    #   fundus-img-xtract
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
 packaging==26.2
@@ -80,11 +82,11 @@ packaging==26.2
     #   kombu
     #   pip-audit
     #   pip-requirements-parser
-pip==26.1
+pip==26.2.1
     # via pip-api
 pip-api==0.0.34
     # via pip-audit
-pip-audit==2.10.0
+pip-audit==2.10.1
     # via fundus-img-xtract
 pip-requirements-parser==32.0.1
     # via pip-audit

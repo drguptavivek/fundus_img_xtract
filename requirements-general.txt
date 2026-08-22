@@ -37,7 +37,7 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
-cryptography==47.0.0
+cryptography==50.0.0
     # via fundus-img-xtract
 cyclonedx-python-lib==11.7.0
     # via pip-audit
@@ -79,9 +79,11 @@ marshmallow==4.3.0
     # via fundus-img-xtract
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.1.2
-    # via cachecontrol
-numpy==2.4.4
+msgpack==1.2.1
+    # via
+    #   cachecontrol
+    #   fundus-img-xtract
+numpy==2.5.2
     # via
     #   fundus-img-xtract
     #   pandas
@@ -96,13 +98,13 @@ packaging==26.2
     #   pip-requirements-parser
 pandas==3.0.2
     # via fundus-img-xtract
-pillow==12.2.0
+pillow==12.3.0
     # via fundus-img-xtract
-pip==26.1
+pip==26.2.1
     # via pip-api
 pip-api==0.0.34
     # via pip-audit
-pip-audit==2.10.0
+pip-audit==2.10.1
     # via fundus-img-xtract
 pip-requirements-parser==32.0.1
     # via pip-audit
@@ -118,7 +120,7 @@ pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementatio
     # via cffi
 pygments==2.20.0
     # via rich
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via fundus-img-xtract
 pynacl==1.6.2
     # via fundus-img-xtract

@@ -78,9 +78,11 @@ matplotlib==3.10.9
     # via fundus-img-xtract
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.1.2
-    # via cachecontrol
-numpy==2.4.4
+msgpack==1.2.1
+    # via
+    #   cachecontrol
+    #   fundus-img-xtract
+numpy==2.5.2
     # via
     #   contourpy
     #   fundus-img-xtract
@@ -97,16 +99,16 @@ packaging==26.2
     #   pip-audit
     #   pip-requirements-parser
     #   pytesseract
-pillow==12.2.0
+pillow==12.3.0
     # via
     #   fundus-img-xtract
     #   matplotlib
     #   pytesseract
-pip==26.1
+pip==26.2.1
     # via pip-api
 pip-api==0.0.34
     # via pip-audit
-pip-audit==2.10.0
+pip-audit==2.10.1
     # via fundus-img-xtract
 pip-requirements-parser==32.0.1
     # via pip-audit

@@ -40,6 +40,8 @@ markupsafe==3.0.3
     #   werkzeug
 marshmallow==4.3.0
     # via fundus-img-xtract
+msgpack==1.2.1
+    # via fundus-img-xtract
 packaging==26.2
     # via kombu
 prompt-toolkit==3.0.52

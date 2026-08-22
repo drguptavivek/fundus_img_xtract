@@ -28,7 +28,7 @@
 
       </div>
     <div class="card-body">
-      <form method="post" action="{{ url_for('direct_uploads.pregraded_upload') }}" enctype="multipart/form-data" novalidate data-upload-profile-form>
+      <form method="post" action="{{ url_for('direct_uploads.pregraded_upload') }}" enctype="multipart/form-data" novalidate data-upload-profile-form data-required-upload-kind="pregraded">
         {{ csrf_field() }}
         <div data-upload-profiles='{{ upload_profiles | tojson }}'></div>
 

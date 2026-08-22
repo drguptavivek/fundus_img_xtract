@@ -4,6 +4,7 @@
       enctype="multipart/form-data"
       class="card"
       data-upload-profile-form
+      data-required-upload-kind="direct_image"
       data-upload-defaults-storage-key="fundus.directUpload.web.defaults.v1"
       hx-post="{{ url_for('fundus_api.create_direct_upload_web') }}"
       hx-target="#direct-upload-workspace"

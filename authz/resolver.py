@@ -45,6 +45,8 @@ class ResolvedGrants:
 
     actor: AuthzActor
     grants: tuple[RelationshipGrant, ...] = field(default_factory=tuple)
+    project_lab_ids: dict[int, frozenset[int]] = field(default_factory=dict)
+    """Active lab units configured on each project the actor has a grant for."""
 
     def of(self, source: GrantSource) -> tuple[RelationshipGrant, ...]:
         """Return only the grants from one relationship source."""
@@ -99,15 +101,18 @@ def _resolve_uncached(db: Session, user) -> ResolvedGrants:
             grants.append(grant)
     grants.extend(lab_unit_assignment_grants(user))
 
-    grants.extend(_project_role_grants(db, actor.id))
+    project_grants, project_lab_ids = _project_role_grants(db, actor.id)
+    grants.extend(project_grants)
     grants.extend(_legacy_capability_grants(db, actor.id))
     grants.extend(_legacy_collaborator_grants(db, actor.id))
     grants.extend(_grading_slot_grants(db, actor.id))
 
-    return ResolvedGrants(actor=actor, grants=tuple(grants))
+    return ResolvedGrants(
+        actor=actor, grants=tuple(grants), project_lab_ids=project_lab_ids
+    )
 
 
-def _project_role_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
+def _project_role_grants(db: Session, user_id: int) -> tuple[list[RelationshipGrant], dict[int, frozenset[int]]]:
     """One grant per active ProjectRoleGrant row, carrying its own scope.
 
     Rows whose lab unit is no longer configured on the project are dropped,
@@ -124,7 +129,7 @@ def _project_role_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
         .where(ProjectRoleGrant.user_id == user_id, ProjectRoleGrant.active.is_(True))
     ).scalars().all()
     if not rows:
-        return []
+        return [], {}
 
     project_ids = {row.project_id for row in rows}
     configured = db.execute(
@@ -149,6 +154,9 @@ def _project_role_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
         key = (row.project_id, row.hospital_id, row.lab_unit_id)
         merged.setdefault(key, set()).add(row.role.name)
 
+    configured_by_project = {
+        project_id: frozenset(lab_ids) for project_id, lab_ids in labs_by_project.items()
+    }
     return [
         RelationshipGrant(
             source=GrantSource.PROJECT_ROLE,
@@ -162,7 +170,7 @@ def _project_role_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
             },
         )
         for (project_id, hospital_id, lab_unit_id), role_names in merged.items()
-    ]
+    ], configured_by_project
 
 
 def _legacy_capability_grants(db: Session, user_id: int) -> list[RelationshipGrant]:

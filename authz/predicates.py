@@ -210,6 +210,150 @@ def _project_scope_match(scope: ScopeColumns, grant) -> ColumnElement:
 
 
 # ---------------------------------------------------------------------------
+# Organizational pickers
+#
+# LabUnit, Hospital and User carry no project_id: they are the scope
+# dimensions themselves, not resources inside a scope. "Which labs may I
+# choose from?" is therefore a different question from "which images may I
+# see?", and answering it with the resource predicate above would be a
+# category error. These helpers answer it directly.
+#
+# Action-keyed equivalent of encounter_sets.permissions.capability_lab_unit_ids.
+# ---------------------------------------------------------------------------
+
+
+def reachable_lab_unit_ids(db, resolved: ResolvedGrants, action: str) -> frozenset[int] | None:
+    """Lab units the actor may operate in for one action.
+
+    Returns ``None`` when the actor is unrestricted (admin-global on a policy
+    that accepts it), which callers must treat as "apply no filter" rather
+    than "no labs".
+    """
+    policy = get_policy(action)
+    if policy is None:
+        return frozenset()
+    if policy.public:
+        return None
+
+    actor = resolved.actor
+    role_ok = actor.has_any_role(policy.roles)
+    sources = policy.grant_sources
+
+    if role_ok and GrantSource.ADMIN_GLOBAL in sources and resolved.of(GrantSource.ADMIN_GLOBAL):
+        return None
+
+    lab_ids: set[int] = set()
+
+    # Classical: explicit lab assignments, and every lab of a scoped hospital.
+    if role_ok:
+        if GrantSource.LAB_UNIT_ASSIGNMENT in sources:
+            lab_ids.update(
+                g.lab_unit_id for g in resolved.of(GrantSource.LAB_UNIT_ASSIGNMENT)
+                if g.lab_unit_id is not None
+            )
+        if GrantSource.HOSPITAL_SCOPE in sources:
+            hospital_ids = {
+                g.hospital_id for g in resolved.of(GrantSource.HOSPITAL_SCOPE)
+                if g.hospital_id is not None and g.hospital_id == actor.hospital_id
+            }
+            if hospital_ids:
+                from models import LabUnit
+
+                lab_ids.update(db.execute(
+                    select(LabUnit.id).where(LabUnit.hospital_id.in_(sorted(hospital_ids)))
+                ).scalars())
+
+    # Project: labs configured on projects the actor holds a qualifying grant for.
+    policy_roles = {r.lower() for r in policy.roles}
+    if GrantSource.PROJECT_ROLE in sources:
+        for grant in resolved.of(GrantSource.PROJECT_ROLE):
+            granted = {str(r).lower() for r in grant.attr("role_names") or ()}
+            if not granted & policy_roles:
+                continue
+            lab_ids.update(_grant_lab_ids(db, resolved, grant))
+
+    if GrantSource.LEGACY_PROJECT_CAPABILITY in sources and policy.capabilities:
+        for grant in resolved.of(GrantSource.LEGACY_PROJECT_CAPABILITY):
+            if not set(grant.attr("capabilities") or ()) & set(policy.capabilities):
+                continue
+            if grant.lab_unit_id is not None:
+                lab_ids.add(grant.lab_unit_id)
+
+    if GrantSource.PROJECT_COLLABORATOR in sources and "collaborator" in policy_roles:
+        for grant in resolved.of(GrantSource.PROJECT_COLLABORATOR):
+            lab_ids.update(_grant_lab_ids(db, resolved, grant))
+
+    return frozenset(lab_ids)
+
+
+def _grant_lab_ids(db, resolved: ResolvedGrants, grant) -> set[int]:
+    """Labs a project grant reaches, always intersected with project configuration."""
+    project_id = grant.attr("project_id")
+    configured = resolved.project_lab_ids.get(project_id)
+    if configured is None:
+        from project_configuration.models import ProjectLabUnit
+
+        configured = frozenset(db.execute(
+            select(ProjectLabUnit.lab_unit_id).where(
+                ProjectLabUnit.project_id == project_id,
+                ProjectLabUnit.active.is_(True),
+            )
+        ).scalars())
+    lab = grant.attr("lab_unit_id")
+    if lab is not None:
+        return {lab} & set(configured)
+    hospital = grant.attr("hospital_id")
+    if hospital is not None:
+        from models import LabUnit
+
+        in_hospital = set(db.execute(
+            select(LabUnit.id).where(
+                LabUnit.id.in_(sorted(configured)), LabUnit.hospital_id == hospital
+            )
+        ).scalars()) if configured else set()
+        return in_hospital
+    return set(configured)
+
+
+def reachable_hospital_ids(db, resolved: ResolvedGrants, action: str) -> frozenset[int] | None:
+    """Hospitals the actor may operate in, derived from its reachable labs."""
+    labs = reachable_lab_unit_ids(db, resolved, action)
+    if labs is None:
+        return None
+    from models import LabUnit
+
+    hospital_ids = set(db.execute(
+        select(LabUnit.hospital_id).where(LabUnit.id.in_(sorted(labs)))
+    ).scalars()) if labs else set()
+    if resolved.actor.hospital_id is not None and labs:
+        hospital_ids.add(resolved.actor.hospital_id)
+    return frozenset(hospital_ids)
+
+
+def scope_lab_units(query, db, resolved: ResolvedGrants, action: str):
+    """Restrict a LabUnit query to the labs this actor may operate in."""
+    from models import LabUnit
+
+    allowed = reachable_lab_unit_ids(db, resolved, action)
+    if allowed is None:
+        return query
+    clause = LabUnit.id.in_(sorted(allowed)) if allowed else false()
+    return query.filter(clause) if hasattr(query, "filter") else query.where(clause)
+
+
+def scope_hospitals(query, db, resolved: ResolvedGrants, action: str):
+    """Restrict a Hospital query to the hospitals this actor may operate in."""
+    from models import Hospital
+
+    allowed = reachable_hospital_ids(db, resolved, action)
+    if allowed is None:
+        return query
+    clause = Hospital.id.in_(sorted(allowed)) if allowed else false()
+    return query.filter(clause) if hasattr(query, "filter") else query.where(clause)
+
+
+
+# ---------------------------------------------------------------------------
 # Scope registrations for the core models
 # ---------------------------------------------------------------------------
 

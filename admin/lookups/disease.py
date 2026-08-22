@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 
 from db_transaction_manager import transaction_scope, get_db_session
 from models import Disease, DiseaseGrading
+from auth.roles import roles_required
 
 MODEL_NAME = "disease"
 TITLE = "Disease"
@@ -17,6 +18,7 @@ def _is_core_disease(item_id: int) -> bool:
     return item_id in CORE_DISEASE_IDS
 
 
+@roles_required("admin")
 def list_diseases() -> ResponseReturnValue:
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -51,6 +53,7 @@ def list_diseases() -> ResponseReturnValue:
         )
 
 
+@roles_required("admin")
 def edit_disease(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(Disease, item_id)
@@ -94,6 +97,7 @@ def edit_disease(item_id: int) -> ResponseReturnValue:
             return redirect(url_for(LIST_ENDPOINT))
 
 
+@roles_required("admin")
 def delete_disease(item_id: int) -> ResponseReturnValue:
     from models import (
         DirectImageUpload,

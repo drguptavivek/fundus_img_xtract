@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import transaction_scope, get_db_session
 from models import Hospital, LabUnit
+from auth.roles import roles_required
 
 MODEL_NAME = "lab_unit"
 TITLE = "Lab Unit"
@@ -13,6 +14,7 @@ EDIT_ENDPOINT = "admin.edit_lab_unit"
 DELETE_ENDPOINT = "admin.delete_lab_unit"
 
 
+@roles_required("admin")
 def list_lab_units() -> ResponseReturnValue:
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -55,6 +57,7 @@ def list_lab_units() -> ResponseReturnValue:
         )
 
 
+@roles_required("admin")
 def edit_lab_unit(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(LabUnit, item_id)
@@ -96,6 +99,7 @@ def edit_lab_unit(item_id: int) -> ResponseReturnValue:
             return redirect(url_for(LIST_ENDPOINT))
 
 
+@roles_required("admin")
 def delete_lab_unit(item_id: int) -> ResponseReturnValue:
     from models import (
         DirectImageUpload,

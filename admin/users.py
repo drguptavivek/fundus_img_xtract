@@ -224,6 +224,7 @@ def _render_user_hub_section(context: dict, tab: str):
     return render_template("admin/partials/user_hub_section.html", tab=normalized_tab, **render_context)
 
 
+@roles_required("admin", "local_admin")
 def users_list():
     """List all users with roles, hospitals, and lab units."""
 
@@ -244,6 +245,7 @@ def users_list():
         return render_template(template_name, users=users)
 
 
+@roles_required("admin", "local_admin")
 def user_detail(user_id: int):
     """Canonical admin user hub with all assignments and activity in one place."""
     with get_db_session() as db:
@@ -268,6 +270,7 @@ def _default_last_date_of_service(created_on: date) -> date:
     except ValueError:
         return created_on.replace(month=2, day=28, year=created_on.year + 2)
 
+@roles_required("admin", "local_admin")
 def add_user():
     pre_username = (request.form.get("username") or request.args.get("username") or "").strip()
     pre_active = bool(request.form.get("active")) if request.method == "POST" else True
@@ -478,6 +481,7 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
                                default_timezone=default_tz)
 
 
+@roles_required("admin", "local_admin")
 def user_created():
     info = session.pop("user_created_info", None)
     if not info:
@@ -493,6 +497,7 @@ def user_created():
     return render_template("admin/user_created.html", info=info)
 
 
+@roles_required("admin", "local_admin")
 def edit_user(user_id: int):
     # Handle GET request (display the form)
     with get_db_session() as db:
@@ -718,6 +723,7 @@ def edit_user(user_id: int):
             return redirect(url_for("admin.users_list"))
 
 
+@roles_required("admin", "local_admin")
 def users_update(user_id: int):
     """
     Update a user's active flag from the users list.
@@ -770,6 +776,7 @@ def users_update(user_id: int):
     return redirect(url_for("admin.users_list"))
 
 
+@roles_required("admin", "local_admin")
 def revoke_mobile_session(user_id: int, session_id: str):
     """Revoke a mobile session from the admin user hub."""
     with transaction_scope() as db:
@@ -804,6 +811,7 @@ def revoke_mobile_session(user_id: int, session_id: str):
     return redirect(url_for("admin.user_detail", user_id=user_id))
 
 
+@roles_required("admin", "local_admin")
 def issue_device_enrolment_code(user_id: int):
     """Issue a single-use enrolment code so one device may sign in.
 
@@ -838,6 +846,7 @@ def issue_device_enrolment_code(user_id: int):
     return _device_admin_response(user_id)
 
 
+@roles_required("admin", "local_admin")
 def update_mobile_device_status(user_id: int, device_id: str):
     """Approve, block, or reset a device from the admin user hub."""
     status = (request.form.get("status") or "").strip()

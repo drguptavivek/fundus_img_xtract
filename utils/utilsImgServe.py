@@ -866,7 +866,16 @@ def _serve_encounter_set_final_image(img: EncounterSetImage, uuid: str):
 
 
 def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
-    if img.thumbnail_filename:
+    # A single DB column stores the current thumbnail. When an edit exists, do
+    # not serve an older original thumbnail under the edited image UUID.
+    expected_edited_thumbnail = (
+        get_thumbnail_filename(img.edited_filename) if img.edited_filename else None
+    )
+    thumbnail_matches_variant = (
+        not img.edited_filename
+        or img.thumbnail_filename == expected_edited_thumbnail
+    )
+    if img.thumbnail_filename and thumbnail_matches_variant:
         thumb_path = BASE_DIR / img.folder_rel / "thumbnails" / img.thumbnail_filename
         if thumb_path.exists():
             return _build_image_response(
@@ -876,7 +885,7 @@ def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
                 cache_control="private, max-age=300",
                 extra_headers={"X-Thumbnail": "true"},
             )
-    return _serve_encounter_set_image(img, uuid)
+    return _serve_encounter_set_final_image(img, uuid)
 
 def encounterSetImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     if preauthorized is None and (not current_user or not current_user.is_authenticated):
@@ -890,7 +899,7 @@ def encounterSetImageByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource |
         img = query.first()
         if not img:
             abort(404)
-        return _serve_encounter_set_image(img, uuid)
+        return _serve_encounter_set_final_image(img, uuid)
 
 def encounterSetImageThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSource | None = None):
     if preauthorized is None and (not current_user or not current_user.is_authenticated):

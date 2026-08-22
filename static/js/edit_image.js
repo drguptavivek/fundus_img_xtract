@@ -31,16 +31,18 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastX = 0;
     let lastY = 0;
 
-    // Cropping state (single ellipse)
+    // Cropping state (one non-destructive rectangular selection)
     let isCropping = false;         // actively interacting (down → move → up)
-    let crop = null;                // { cx, cy, rx, ry } OR null
-    let cropBase = null;            // offscreen snapshot for overlay
+    let crop = null;                // { x, y, width, height } OR null
+    let cropBase = null;            // clean pixels beneath the temporary overlay
     let cropMode = null;            // 'creating' | 'moving' | 'resizing'
-    let activeHandle = null;        // 'N' | 'S' | 'E' | 'W' | null
-    let dragDX = 0, dragDY = 0;     // for moving (pointer offset from center)
+    let activeHandle = null;        // 'NW' | 'NE' | 'SE' | 'SW' | null
+    let cropAnchorX = 0, cropAnchorY = 0;
+    let resizeAnchorX = 0, resizeAnchorY = 0;
+    let dragDX = 0, dragDY = 0;     // for moving (pointer offset from top-left)
 
     const HANDLE_SIZE = 10;         // px
-    const MIN_RADIUS = 8;           // minimum rx/ry
+    const MIN_CROP_SIZE = 16;
     let antsOffset = 0;             // marching ants
     let antsRAF = null;
 
@@ -98,14 +100,17 @@ document.addEventListener('DOMContentLoaded', function() {
             if (currentTool !== 'crop') {
                 stopAnts();
                 applyCropBtn.style.display = 'none';
-                // Clear overlay by restoring base snapshot if present
                 if (cropBase) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(cropBase, 0, 0);
                 }
                 cropBase = null;
+                crop = null;
+                cropMode = null;
+                activeHandle = null;
             } else {
-                applyCropBtn.style.display = crop ? 'block' : 'none';
+                captureCropBase();
+                applyCropBtn.style.display = 'none';
             }
             updateCursor();
         });
@@ -353,21 +358,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- CROP HELPERS ---
-    function pointInEllipse(x, y, cx, cy, rx, ry) {
-        if (rx <= 0 || ry <= 0) return false;
-        const dx = (x - cx) / rx;
-        const dy = (y - cy) / ry;
-        return (dx*dx + dy*dy) <= 1;
+    function captureCropBase() {
+        cropBase = document.createElement('canvas');
+        cropBase.width = canvas.width;
+        cropBase.height = canvas.height;
+        cropBase.getContext('2d').drawImage(canvas, 0, 0);
+    }
+
+    function pointInCrop(x, y, c) {
+        return !!c && x >= c.x && x <= c.x + c.width && y >= c.y && y <= c.y + c.height;
     }
 
     function handlePositions(c) {
         if (!c) return [];
-        const { cx, cy, rx, ry } = c;
         return [
-            { id: 'E', x: cx + rx, y: cy     },
-            { id: 'W', x: cx - rx, y: cy     },
-            { id: 'N', x: cx,      y: cy - ry},
-            { id: 'S', x: cx,      y: cy + ry},
+            { id: 'NW', x: c.x,           y: c.y },
+            { id: 'NE', x: c.x + c.width, y: c.y },
+            { id: 'SE', x: c.x + c.width, y: c.y + c.height },
+            { id: 'SW', x: c.x,           y: c.y + c.height },
         ];
     }
 
@@ -384,20 +392,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function setCropCursor(x, y) {
         if (!crop) { canvas.style.cursor = 'crosshair'; return; }
         const h = hitTestHandle(x, y, crop);
-        if (h === 'E' || h === 'W') { canvas.style.cursor = 'ew-resize'; return; }
-        if (h === 'N' || h === 'S') { canvas.style.cursor = 'ns-resize'; return; }
-        if (pointInEllipse(x, y, crop.cx, crop.cy, crop.rx, crop.ry)) {
+        if (h === 'NW' || h === 'SE') { canvas.style.cursor = 'nwse-resize'; return; }
+        if (h === 'NE' || h === 'SW') { canvas.style.cursor = 'nesw-resize'; return; }
+        if (pointInCrop(x, y, crop)) {
             canvas.style.cursor = 'move'; return;
         }
         canvas.style.cursor = 'crosshair';
     }
 
     function clampCropInBounds(c) {
-        // Keep crop radii and center within canvas bounds
-        c.rx = Math.max(MIN_RADIUS, Math.min(c.rx, canvas.width  / 2));
-        c.ry = Math.max(MIN_RADIUS, Math.min(c.ry, canvas.height / 2));
-        c.cx = Math.max(c.rx, Math.min(canvas.width  - c.rx, c.cx));
-        c.cy = Math.max(c.ry, Math.min(canvas.height - c.ry, c.cy));
+        c.width = Math.max(MIN_CROP_SIZE, Math.min(c.width, canvas.width));
+        c.height = Math.max(MIN_CROP_SIZE, Math.min(c.height, canvas.height));
+        c.x = Math.max(0, Math.min(canvas.width - c.width, c.x));
+        c.y = Math.max(0, Math.min(canvas.height - c.height, c.y));
     }
 
     // --- OVERLAY DRAW ---
@@ -405,43 +412,41 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!cropBase) return;
 
         // Base
+        ctx.globalCompositeOperation = 'source-over';
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(cropBase, 0, 0);
 
         if (!crop) return;
-        const { cx, cy, rx, ry } = crop;
+        const { x, y, width, height } = crop;
 
         // Dim outside (spotlight)
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
         ctx.beginPath();
         ctx.rect(0, 0, canvas.width, canvas.height);
-        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.rect(x, y, width, height);
         ctx.fill('evenodd');
         ctx.restore();
 
         // Double border (white + marching ants)
         ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(255,255,255,0.95)';
         ctx.setLineDash([]);
-        ctx.stroke();
+        ctx.strokeRect(x, y, width, height);
 
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#000';
         ctx.setLineDash([8, 6]);
         ctx.lineDashOffset = antsOffset;
-        ctx.stroke();
+        ctx.strokeRect(x, y, width, height);
         ctx.restore();
 
         // Handles
         for (const h of handlePositions(crop)) drawHandle(h.x, h.y);
 
         // Size label
-        drawLabel(`${Math.round(rx*2)} × ${Math.round(ry*2)} px`, cx, cy - ry - 14);
+        drawLabel(`${Math.round(width)} × ${Math.round(height)} px`, x + width / 2, y - 14);
     }
 
     function drawHandle(x, y) {
@@ -486,12 +491,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (currentTool === 'crop') {
             isCropping = true;
-
-            // Snapshot base once per interaction
-            cropBase = document.createElement('canvas');
-            cropBase.width = canvas.width;
-            cropBase.height = canvas.height;
-            cropBase.getContext('2d').drawImage(canvas, 0, 0);
+            if (!cropBase) captureCropBase();
 
             // Decide interaction mode
             if (crop) {
@@ -499,25 +499,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (h) {
                     cropMode = 'resizing';
                     activeHandle = h;
+                    resizeAnchorX = h.includes('W') ? crop.x + crop.width : crop.x;
+                    resizeAnchorY = h.includes('N') ? crop.y + crop.height : crop.y;
                     startAnts();
                     redrawWithCropOverlay();
                     return;
                 }
-                if (pointInEllipse(x, y, crop.cx, crop.cy, crop.rx, crop.ry)) {
+                if (pointInCrop(x, y, crop)) {
                     cropMode = 'moving';
                     activeHandle = null;
-                    dragDX = x - crop.cx;
-                    dragDY = y - crop.cy;
+                    dragDX = x - crop.x;
+                    dragDY = y - crop.y;
                     startAnts();
                     redrawWithCropOverlay();
                     return;
                 }
             }
 
-            // Else: start creating a NEW single ellipse (replaces any existing)
+            // Start one new rectangle, replacing the previous selection only.
             cropMode = 'creating';
             activeHandle = null;
-            crop = { cx: x, cy: y, rx: 0, ry: 0 };
+            cropAnchorX = x;
+            cropAnchorY = y;
+            crop = { x, y, width: MIN_CROP_SIZE, height: MIN_CROP_SIZE };
             startAnts();
             redrawWithCropOverlay();
             return;
@@ -541,17 +545,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const { x, y } = pt;
             if (cropMode === 'creating') {
-                crop.rx = Math.max(MIN_RADIUS, Math.abs(x - crop.cx));
-                crop.ry = Math.max(MIN_RADIUS, Math.abs(y - crop.cy));
+                crop.x = Math.min(cropAnchorX, x);
+                crop.y = Math.min(cropAnchorY, y);
+                crop.width = Math.max(MIN_CROP_SIZE, Math.abs(x - cropAnchorX));
+                crop.height = Math.max(MIN_CROP_SIZE, Math.abs(y - cropAnchorY));
             } else if (cropMode === 'moving') {
-                crop.cx = x - dragDX;
-                crop.cy = y - dragDY;
+                crop.x = x - dragDX;
+                crop.y = y - dragDY;
             } else if (cropMode === 'resizing') {
-                if (activeHandle === 'E' || activeHandle === 'W') {
-                    crop.rx = Math.max(MIN_RADIUS, Math.abs(x - crop.cx));
-                } else if (activeHandle === 'N' || activeHandle === 'S') {
-                    crop.ry = Math.max(MIN_RADIUS, Math.abs(y - crop.cy));
-                }
+                crop.x = Math.min(x, resizeAnchorX);
+                crop.y = Math.min(y, resizeAnchorY);
+                crop.width = Math.max(MIN_CROP_SIZE, Math.abs(x - resizeAnchorX));
+                crop.height = Math.max(MIN_CROP_SIZE, Math.abs(y - resizeAnchorY));
             }
             clampCropInBounds(crop);
             redrawWithCropOverlay();
@@ -596,32 +601,36 @@ document.addEventListener('DOMContentLoaded', function() {
     function applyCrop() {
         if (!crop) return;
 
-        const { cx, cy, rx, ry } = crop;
+        const { x, y, width, height } = crop;
+        const cropped = document.createElement('canvas');
+        cropped.width = Math.round(width);
+        cropped.height = Math.round(height);
+        cropped.getContext('2d').drawImage(
+            cropBase,
+            Math.round(x), Math.round(y), Math.round(width), Math.round(height),
+            0, 0, Math.round(width), Math.round(height)
+        );
 
-        const currentImage = new Image();
-        currentImage.onload = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        stopAnts();
+        canvas.width = cropped.width;
+        canvas.height = cropped.height;
+        ctx.drawImage(cropped, 0, 0);
+        if (overlayCanvas) {
+            overlayCanvas.width = canvas.width;
+            overlayCanvas.height = canvas.height;
+            clearOcrOverlay();
+        }
+        ocrOverlayEnabled = false;
+        if (toggleOcrBtn) toggleOcrBtn.classList.remove('active');
+        saveState();
 
-            ctx.save();
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-            ctx.clip();
-
-            ctx.drawImage(currentImage, 0, 0);
-            ctx.restore();
-
-            saveState();
-
-            // Reset to single clean state
-            crop = null;
-            cropBase = null;
-            cropMode = null;
-            activeHandle = null;
-            applyCropBtn.style.display = 'none';
-            const brushRadio = document.getElementById('brush-tool');
-            if (brushRadio) brushRadio.click();
-        };
-        currentImage.src = history[historyIndex];
+        crop = null;
+        cropBase = null;
+        cropMode = null;
+        activeHandle = null;
+        applyCropBtn.style.display = 'none';
+        const brushRadio = document.getElementById('brush-tool');
+        if (brushRadio) brushRadio.click();
     }
 
     // --- EVENT LISTENERS ---
@@ -648,12 +657,21 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
             body: JSON.stringify({ image_data: imageData, allow_graded_edit: allowGradedEdit })
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) { alert('Error saving image: ' + data.error); }
-            else { alert('Image saved successfully!'); window.location.reload(); }
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.error || data.success === false) {
+                throw new Error(data.error || data.message || `Save failed (${response.status})`);
+            }
+            return data;
         })
-        .catch(error => { console.error('Error:', error); alert('An error occurred while saving the image.'); });
+        .then(() => {
+            alert('Image saved successfully!');
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error saving image: ' + error.message);
+        });
     });
 
     if (restoreBtn) {

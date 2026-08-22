@@ -18,6 +18,8 @@ from models import (
     GradingTask,
     PatientEncounters,
     EncounterSetImage,
+    ImageMetadata,
+    ImagePiiVerification,
     User,
     user_lab_units,
 )
@@ -96,6 +98,9 @@ class SaveEditRequestSchema(Schema):
     """Validate save_edit request data"""
     crop = fields.Nested(CropCoordinatesSchema, required=False)
     image_data = fields.String(required=False)
+    # Shared with the Direct Upload editor. EncounterSet authorization does
+    # not use this override, but a valid shared payload must not be rejected.
+    allow_graded_edit = fields.Boolean(required=False, load_default=False)
 
 
 # =========================================================================
@@ -2232,9 +2237,9 @@ def edit_image(uuid):
 @roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def save_edit(uuid):
     """Save edited image data (crop/mask coordinates applied)."""
-    import base64
     from pathlib import Path
     from models import BASE_DIR
+    from utils.image_edit_payload import InvalidImageEditPayload, decode_image_edit_payload
     from utils.image_processing import generate_thumbnail, get_thumbnail_filename
     from utils.media_cache import bump_media_cache_version
 
@@ -2283,12 +2288,10 @@ def save_edit(uuid):
         image_data = data.get("image_data")
         if not image_data:
             return jsonify({"success": False, "message": "No image data provided."}), 400
-        if image_data.startswith("data:image"):
-            image_data = image_data.split(",", 1)[1]
-
         try:
-            image_bytes = base64.b64decode(image_data)
-        except Exception:
+            decoded_image = decode_image_edit_payload(image_data)
+            image_bytes = decoded_image.content
+        except InvalidImageEditPayload:
             return jsonify({"success": False, "message": "Invalid image data provided."}), 400
 
         folder = (BASE_DIR / img.folder_rel).resolve()
@@ -2298,9 +2301,54 @@ def save_edit(uuid):
         except ValueError:
             return jsonify({"success": False, "message": "Invalid image storage path."}), 400
 
-        edited_basename = f"edited_{Path(img.original_filename).name}"
+        previous_edited_filename = img.edited_filename
+        previous_thumbnail_filename = img.thumbnail_filename if img.edited_filename else None
+        edited_basename = f"edited_{Path(img.original_filename).stem}{decoded_image.extension}"
         edited_path = folder / edited_basename
         edited_path.write_bytes(image_bytes)
+        if previous_edited_filename and previous_edited_filename != edited_basename:
+            (folder / Path(previous_edited_filename).name).unlink(missing_ok=True)
+
+        try:
+            from utils.image_metadata import extract_image_metadata, upsert_image_metadata
+
+            upsert_image_metadata(
+                db,
+                image_uuid=str(img.uuid),
+                image_variant="edited",
+                metadata=extract_image_metadata(
+                    image_bytes=image_bytes,
+                    file_size_bytes=len(image_bytes),
+                ),
+            )
+        except Exception as exc:
+            current_app.logger.warning(
+                "Failed to store edited EncounterSet metadata for %s: %s",
+                img.uuid,
+                exc,
+            )
+
+        # Any OCR/manual decision belongs to the previous edited bytes.
+        db.query(ImagePiiVerification).filter(
+            ImagePiiVerification.image_uuid == str(img.uuid),
+            ImagePiiVerification.image_variant == "edited",
+        ).delete(synchronize_session=False)
+        try:
+            from utils.pii_detection_queue import enqueue_pii_detection_job
+
+            enqueue_pii_detection_job(
+                db,
+                image_uuid=str(img.uuid),
+                image_variant="edited",
+                image_path=str(edited_path),
+                source="auto",
+            )
+        except Exception as exc:
+            current_app.logger.warning(
+                "Failed to enqueue edited EncounterSet OCR for %s: %s",
+                img.uuid,
+                exc,
+            )
 
         thumbnail_filename = None
         thumbnails_dir = folder / "thumbnails"
@@ -2312,9 +2360,12 @@ def save_edit(uuid):
         except Exception as exc:
             current_app.logger.warning("Failed to generate EncounterSet edited thumbnail for %s: %s", img.uuid, exc)
 
+        if previous_thumbnail_filename and previous_thumbnail_filename != thumbnail_filename:
+            (thumbnails_dir / Path(previous_thumbnail_filename).name).unlink(missing_ok=True)
+
         img.edited_filename = edited_basename
-        if thumbnail_filename:
-            img.thumbnail_filename = thumbnail_filename
+        # Never leave an original/stale thumbnail attached to a newly edited image.
+        img.thumbnail_filename = thumbnail_filename
         img.is_reviewed = True
         bump_media_cache_version(str(img.uuid))
 
@@ -2403,7 +2454,9 @@ def mark_all_anonymized(uuid):
 @roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def restore_original(uuid):
     """Restore the original image (remove edited version)."""
-    from utils.fileUtils import abs_from_parts
+    from pathlib import Path
+    from models import BASE_DIR
+    from utils.image_processing import generate_thumbnail, get_thumbnail_filename
     from utils.media_cache import bump_media_cache_version
     from models import GradingTask
     from sqlalchemy import select
@@ -2434,15 +2487,58 @@ def restore_original(uuid):
         if not img.edited_filename:
             return jsonify({"success": True, "message": "No edited version to restore."}), 200
 
-        # Delete the edited file
-        edited_path = abs_from_parts(img.folder_rel, img.edited_filename, kind="edited")
+        base_root = BASE_DIR.resolve()
+        folder = (base_root / img.folder_rel).resolve()
         try:
-            from pathlib import Path
-            Path(edited_path).unlink(missing_ok=True)
+            folder.relative_to(base_root)
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid image storage path."}), 400
+
+        original_path = (folder / Path(img.original_filename).name).resolve()
+        try:
+            original_path.relative_to(folder)
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid original image path."}), 400
+        if not original_path.is_file():
+            return jsonify({
+                "success": False,
+                "message": "The stored original image is unavailable; the current image was not changed.",
+            }), 409
+
+        edited_path = (folder / Path(img.edited_filename).name).resolve()
+        old_thumbnail = img.thumbnail_filename
+        try:
+            edited_path.relative_to(folder)
+            edited_path.unlink(missing_ok=True)
+            if old_thumbnail:
+                (folder / "thumbnails" / Path(old_thumbnail).name).unlink(missing_ok=True)
         except Exception as e:
-            current_app.logger.warning("Failed to delete edited file %s: %s", edited_path, e)
+            current_app.logger.warning("Failed to delete EncounterSet edited assets for %s: %s", img.uuid, e)
 
         img.edited_filename = None
+        db.query(ImageMetadata).filter(
+            ImageMetadata.image_uuid == str(img.uuid),
+            ImageMetadata.image_variant == "edited",
+        ).delete(synchronize_session=False)
+        db.query(ImagePiiVerification).filter(
+            ImagePiiVerification.image_uuid == str(img.uuid),
+            ImagePiiVerification.image_variant == "edited",
+        ).delete(synchronize_session=False)
+        original_thumbnail = get_thumbnail_filename(original_path.name)
+        thumbnails_dir = folder / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            if generate_thumbnail(original_path, thumbnails_dir / original_thumbnail):
+                img.thumbnail_filename = original_thumbnail
+            else:
+                img.thumbnail_filename = None
+        except Exception as exc:
+            img.thumbnail_filename = None
+            current_app.logger.warning(
+                "Failed to regenerate original EncounterSet thumbnail for %s: %s",
+                img.uuid,
+                exc,
+            )
         bump_media_cache_version(str(img.uuid))
 
         return jsonify({"success": True, "message": "Original image restored."})

@@ -203,9 +203,20 @@ def restore_original(upload_id: int):
                 editing_logger.info("Deleted edited file: %s", edited_path)
             except FileNotFoundError:
                 editing_logger.warning("Edited file not found at %s, but proceeding to clear from DB.", edited_path)
+
+            if upload.edited_thumbnail_filename:
+                try:
+                    edited_path.with_name(upload.edited_thumbnail_filename).unlink(missing_ok=True)
+                except OSError as exc:
+                    editing_logger.warning(
+                        "Failed to delete edited thumbnail for upload %s: %s",
+                        sanitize_log_value(upload_id),
+                        sanitize_log_value(exc),
+                    )
             
             # Update the database
             upload.edited_filename = None
+            upload.edited_thumbnail_filename = None
             db.commit()
             bump_media_cache_version(str(upload.uuid))
 

@@ -141,9 +141,9 @@ if task_state_rows:
 
 **Features**:
 - **Canvas-based editing**: HTML5 Canvas for image manipulation
-- **Multiple tools**: Brush, eraser, and elliptical crop tools
+- **Multiple tools**: Brush, eraser, and rectangular crop tools
 - **Brush customization**: Adjustable size (1-50px) and color picker
-- **Elliptical cropping**: Precise circular/elliptical selection with handles
+- **Rectangular cropping**: One movable/resizable selection backed by clean image pixels
 - **Undo/Redo functionality**: Full history management with navigation
 - **Real-time preview**: Live preview of edits with marching ants for crop
 - **Touch support**: Basic touch event handling for tablet devices
@@ -163,16 +163,16 @@ let isDrawing = false;
 let lastX = 0;
 let lastY = 0;
 
-// Cropping state (single ellipse)
+// Cropping state (single rectangle)
 let isCropping = false;         // actively interacting (down → move → up)
-let crop = null;                // { cx, cy, rx, ry } OR null
-let cropBase = null;            // offscreen snapshot for overlay
+let crop = null;                // { x, y, width, height } OR null
+let cropBase = null;            // clean pixels beneath the temporary overlay
 let cropMode = null;            // 'creating' | 'moving' | 'resizing'
-let activeHandle = null;        // 'N' | 'S' | 'E' | 'W' | null
-let dragDX = 0, dragDY = 0;     // for moving (pointer offset from center)
+let activeHandle = null;        // 'NW' | 'NE' | 'SE' | 'SW' | null
+let dragDX = 0, dragDY = 0;     // for moving (pointer offset from top-left)
 
 const HANDLE_SIZE = 10;         // px
-const MIN_RADIUS = 8;           // minimum rx/ry
+const MIN_CROP_SIZE = 16;
 let antsOffset = 0;             // marching ants
 let antsRAF = null;
 ```
@@ -185,8 +185,8 @@ let antsRAF = null;
 **Process**:
 1. Validate user permissions
 2. Check for blocking grading tasks
-3. Decode base64 image data
-4. Generate edited filename
+3. Decode and validate the image data
+4. Derive the edited filename extension from the actual JPEG/PNG/WebP bytes
 5. Save to file system
 6. Update database record
 7. Log the action
@@ -194,7 +194,8 @@ let antsRAF = null;
 **Key Code**:
 ```python
 # Generate edited filename
-edited_basename = f"edited_{upload.filename}"
+decoded_image = decode_image_edit_payload(image_data)
+edited_basename = f"edited_{Path(upload.filename).stem}{decoded_image.extension}"
 edited_path = abs_from_parts(upload.folder_rel, edited_basename, kind="edited")
 
 # Ensure the destination directory exists
@@ -375,7 +376,7 @@ def _is_verified_for_disease(db, kind: str, image_id: int, disease_id: int) -> b
 ### JavaScript Interactions
 
 - **Canvas Drawing**: Mouse and touch support for drawing
-- **Crop Tool**: Elliptical crop with handles and resizing
+- **Crop Tool**: Single rectangular crop with corner handles and canvas resizing
 - **History Management**: Undo/redo with state persistence
 - **AJAX Communication**: Save and restore without page reload
 - **Real-time Feedback**: Visual feedback for all actions

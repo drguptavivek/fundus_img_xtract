@@ -33,7 +33,7 @@ from utils.utilsImgServe import (
 )
 from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import transaction_scope
-from models import DirectImageUpload, EncounterFile, EncounterFilePDF, S3Config
+from models import DirectImageUpload, EncounterFile, EncounterFilePDF, EncounterSetImage, S3Config
 from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
 from authz.telemetry import record_authorization_decision
 from media.authorization import (
@@ -72,7 +72,10 @@ def serve_media_edited_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
         uuid_str,
         variant="edited",
-        expected_sources=frozenset({MediaSourceType.DIRECT_IMAGE_UPLOAD}),
+        expected_sources=frozenset({
+            MediaSourceType.DIRECT_IMAGE_UPLOAD,
+            MediaSourceType.ENCOUNTER_SET_IMAGE,
+        }),
     )
 
 
@@ -142,6 +145,7 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
             MediaSourceType.DIRECT_IMAGE_UPLOAD: DirectImageUpload,
             MediaSourceType.ENCOUNTER_FILE: EncounterFile,
             MediaSourceType.ENCOUNTER_FILE_PDF: EncounterFilePDF,
+            MediaSourceType.ENCOUNTER_SET_IMAGE: EncounterSetImage,
         }
         row = db.get(model_by_source[resource.source_type], resource.source_id)
         if row is None:
@@ -183,6 +187,12 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
             if variant == "thumbnail":
                 return encounterImageThumbnailByUUID(uuid_str, preauthorized=resource)
             return encounterImageByUUID(uuid_str, preauthorized=resource)
+        if resource.source_type == MediaSourceType.ENCOUNTER_SET_IMAGE:
+            if variant == "edited":
+                return encounterSetImageEditedByUUID(uuid_str, preauthorized=resource)
+            if variant == "thumbnail":
+                return encounterSetImageThumbnailByUUID(uuid_str, preauthorized=resource)
+            return encounterSetImageByUUID(uuid_str, preauthorized=resource)
         return encounterPDFByUUID(uuid_str, preauthorized=resource)
 
 

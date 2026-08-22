@@ -42,11 +42,12 @@ def resolve_task_source(db, task: GradingTask) -> ResolvedTaskSource:
         inherited = encounter.upload_profile_id if encounter else None
         profile_id, profile_lineage = _lineage(profile_id, inherited)
         project_id = item.project_id or (encounter.project_id if encounter else None)
-        media = _media(db, "encounter_file", item.uuid, item.eye_side)
+        media = _media(db, "encounter_file", item.uuid, item.eye_side, "orig")
     elif task.direct_image is not None:
         item = task.direct_image
         project_id = item.project_id
-        media = _media(db, "direct_image_upload", item.uuid, None)
+        variant = "edited" if item.edited_filename else "orig"
+        media = _media(db, "direct_image_upload", item.uuid, None, variant)
     elif task.encounter_set_image is not None:
         item = task.encounter_set_image
         encounter = item.patient_encounter
@@ -54,7 +55,8 @@ def resolve_task_source(db, task: GradingTask) -> ResolvedTaskSource:
         profile_id, profile_lineage = _lineage(profile_id, inherited)
         project_id = item.project_id or (encounter.project_id if encounter else None)
         laterality = _metadata_laterality(item.metadata_json)
-        media = _media(db, "encounter_set_image", item.uuid, laterality)
+        variant = "edited" if item.edited_filename else "orig"
+        media = _media(db, "encounter_set_image", item.uuid, laterality, variant)
     else:
         encounter = task.patient_encounter
         inherited = encounter.upload_profile_id if encounter else None
@@ -97,7 +99,7 @@ def resolve_encounter_evidence(db, task: GradingTask) -> tuple[WorkbenchMediaDTO
         .all()
     )
     evidence = [
-        _media(db, "encounter_file", item.uuid, item.eye_side)
+        _media(db, "encounter_file", item.uuid, item.eye_side, "orig")
         for item in encounter_files
         if item.uuid
     ]
@@ -107,6 +109,7 @@ def resolve_encounter_evidence(db, task: GradingTask) -> tuple[WorkbenchMediaDTO
             "encounter_set_image",
             item.uuid,
             _metadata_laterality(item.metadata_json),
+            "edited" if item.edited_filename else "orig",
         )
         for item in encounter_set_images
         if item.uuid
@@ -124,12 +127,18 @@ def _lineage(explicit: int | None, inherited: int | None) -> tuple[int | None, s
     return None, "legacy_unprofiled"
 
 
-def _media(db, source_type: str, image_uuid: str | None, laterality: str | None) -> WorkbenchMediaDTO:
+def _media(
+    db,
+    source_type: str,
+    image_uuid: str | None,
+    laterality: str | None,
+    variant: str,
+) -> WorkbenchMediaDTO:
     if not image_uuid:
         raise InvalidTaskSource("The task source does not have an image UUID.")
     metadata = (
         db.query(ImageMetadata)
-        .filter(ImageMetadata.image_uuid == image_uuid, ImageMetadata.image_variant == "orig")
+        .filter(ImageMetadata.image_uuid == image_uuid, ImageMetadata.image_variant == variant)
         .first()
     )
     return WorkbenchMediaDTO(

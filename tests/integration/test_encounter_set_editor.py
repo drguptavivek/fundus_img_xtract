@@ -15,8 +15,19 @@ Tests cover:
 import pytest
 import uuid
 import io
+import base64
 from pathlib import Path
-from models import PatientEncounters, EncounterSetImage, LabUnit, GradingTask, Disease
+from PIL import Image
+from models import (
+    ImageMetadata,
+    ImagePiiVerification,
+    PatientEncounters,
+    EncounterSetImage,
+    LabUnit,
+    GradingTask,
+    Disease,
+    PiiDetectionJob,
+)
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
 
@@ -95,6 +106,102 @@ def test_edit_encounter_set_image_get_route(client, auth_client_factory, encount
     assert response.status_code == 200
     assert image.uuid.encode() in response.data
     assert b"Edit Image" in response.data
+
+
+def test_ocr_pii_status_resolves_encounter_set_image(
+    auth_client_factory,
+    encounter_set_with_images,
+    db_session,
+    monkeypatch,
+):
+    """The editor UUID must resolve through the OCR API instead of returning 404."""
+    user = UserFactory.create_by_role(
+        db_session,
+        "optometrist",
+        username="opt_ocr_set_image",
+        lab_units=[encounter_set_with_images["lab_unit"]],
+    )
+    auth_client = auth_client_factory(user)
+    image = encounter_set_with_images["images"][0]
+
+    monkeypatch.setattr("api.ocr.BASE_DIR", encounter_set_with_images["tmp_path"])
+
+    response = auth_client.get(f"/api/ocr/pii/{image.uuid}")
+
+    assert response.status_code == 200
+    assert response.json["success"] is True
+    assert response.json["data"]["status"] == "pending"
+
+
+def test_save_and_restore_encounter_set_edit_uses_effective_paths(
+    auth_client_factory,
+    encounter_set_with_images,
+    db_session,
+    csrf_token,
+    monkeypatch,
+):
+    user = UserFactory.create_admin(db_session, username="admin_effective_set_edit")
+    auth_client = auth_client_factory(user)
+    image = encounter_set_with_images["images"][0]
+    root = encounter_set_with_images["tmp_path"]
+    folder = root / image.folder_rel
+    original_path = folder / image.original_filename
+    Image.new("RGB", (80, 60), "white").save(original_path, format="JPEG")
+    edited_buffer = io.BytesIO()
+    Image.new("RGB", (32, 24), "black").save(edited_buffer, format="JPEG")
+    encoded = base64.b64encode(edited_buffer.getvalue()).decode("ascii")
+    monkeypatch.setattr("models.BASE_DIR", root)
+
+    save_response = auth_client.post(
+        f"/verify_encounter_set/save_edit/{image.uuid}",
+        json={
+            "image_data": f"data:image/jpeg;base64,{encoded}",
+            "allow_graded_edit": False,
+        },
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert save_response.status_code == 200
+    db_session.refresh(image)
+    edited_path = folder / image.edited_filename
+    edited_thumbnail = folder / "thumbnails" / image.thumbnail_filename
+    assert edited_path.is_file()
+    assert edited_thumbnail.is_file()
+    assert db_session.query(ImageMetadata).filter_by(
+        image_uuid=image.uuid, image_variant="edited"
+    ).one().width == 32
+    assert db_session.query(PiiDetectionJob).filter_by(
+        image_uuid=image.uuid, image_variant="edited", status="queued"
+    ).count() == 1
+
+    db_session.add(ImagePiiVerification(
+        image_uuid=image.uuid,
+        image_variant="edited",
+        pii_status="clear",
+        source="auto",
+        checked_at=datetime.now(),
+    ))
+    db_session.commit()
+
+    restore_response = auth_client.post(
+        f"/verify_encounter_set/restore_original/{image.uuid}",
+        headers={"X-CSRFToken": csrf_token},
+    )
+
+    assert restore_response.status_code == 200
+    db_session.refresh(image)
+    assert image.edited_filename is None
+    assert not edited_path.exists()
+    assert not edited_thumbnail.exists()
+    assert original_path.is_file()
+    assert image.thumbnail_filename == f"thm_{image.original_filename}"
+    assert (folder / "thumbnails" / image.thumbnail_filename).is_file()
+    assert db_session.query(ImageMetadata).filter_by(
+        image_uuid=image.uuid, image_variant="edited"
+    ).count() == 0
+    assert db_session.query(ImagePiiVerification).filter_by(
+        image_uuid=image.uuid, image_variant="edited"
+    ).count() == 0
 
 
 def test_edit_encounter_set_image_wrong_role(client, auth_client_factory, encounter_set_with_images, db_session):

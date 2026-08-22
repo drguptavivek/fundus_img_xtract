@@ -14,8 +14,8 @@ Auth and CSRF:
 | Route | Method | Auth | Request | Response | Status codes |
 | --- | --- | --- | --- | --- | --- |
 | `/api/ocr/pii/batch` | `POST` | Session + `media.ocr_pii.read` per UUID | JSON `{ "image_uuids": [str, ...] }` | `{ "success": true, "data": { "<uuid>": object } }` | `400` if `image_uuids` is not a list. |
-| `/api/ocr/pii/boxes/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Path `image_uuid` | `{ "success": true, "data": object }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
-| `/api/ocr/pii/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Query param `refresh=1` optional | `{ "success": true, "data": object, "cached": bool }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
+| `/api/ocr/pii/boxes/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Path `image_uuid` for an EncounterFile, DirectImageUpload, or locally stored EncounterSetImage | `{ "success": true, "data": object }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
+| `/api/ocr/pii/<string:image_uuid>` | `GET` | Session + `media.ocr_pii.process` | Query param `refresh=1` optional; supports EncounterFile, DirectImageUpload, and locally stored EncounterSetImage UUIDs | `{ "success": true, "data": object, "cached": bool }` | Non-disclosing `404` if the image cannot be authorized and resolved. |
 | `/api/ocr/pii/override` | `POST` | Session + `media.ocr_pii.process` + CSRF | JSON `{ "image_uuid": str, "pii_status": "clear" \| "detected" }` | `{ "success": true, "data": object }` | `400` for missing or invalid fields. `404` if the image cannot be authorized and resolved. |
 
 ## `POST /api/ocr/pii/batch`

@@ -4,6 +4,7 @@ from models import PatientEncounters, EncounterSetImage, Project, ProjectInvesti
 from encounter_sets.models import ProjectEncounterSetPermission
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
+from utils.utilsImgServe import _serve_encounter_set_final_image
 
 
 def _grant_media_access(db_session, encounter_set_data, user, **capabilities):
@@ -79,6 +80,29 @@ def test_access_encounter_set_image_authenticated(client, auth_client_factory, e
     # Expect 404 because file doesn't exist on disk, but access is allowed
     response = auth_client.get(f"/media/encounter_set/img/{encounter_set_data['image'].uuid}")
     assert response.status_code == 404
+
+
+def test_encounter_set_image_endpoint_prefers_edited_image(
+    app, monkeypatch, tmp_path
+):
+    image = EncounterSetImage(
+        uuid=str(uuid.uuid4()),
+        folder_rel="files/test_sets",
+        original_filename="test_pos_1.jpg",
+        edited_filename="edited_test_pos_1.png",
+    )
+    media_dir = tmp_path / image.folder_rel
+    media_dir.mkdir(parents=True)
+    (media_dir / image.original_filename).write_bytes(b"original bytes")
+    (media_dir / image.edited_filename).write_bytes(b"edited bytes")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+
+    with app.test_request_context():
+        response = _serve_encounter_set_final_image(image, image.uuid)
+
+    assert response.status_code == 200
+    response.direct_passthrough = False
+    assert response.get_data() == b"edited bytes"
 
 def test_access_encounter_set_image_anonymous(client, encounter_set_data):
     """Test accessing without login should redirect or 401."""
@@ -234,6 +258,39 @@ def test_universal_thumbnail_serves_encounter_set_image(
     assert response.status_code == 200
     assert response.headers["X-Thumbnail"] == "true"
     assert response.data == b"thumbnail bytes"
+
+
+def test_universal_thumbnail_never_serves_stale_original_for_edited_set_image(
+    auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path
+):
+    user = UserFactory.create_by_role(
+        db_session, "collaborator", username="edited_set_thumbnail_viewer"
+    )
+    db_session.add(ProjectInvestigator(
+        project_id=encounter_set_data["project"].id,
+        user_id=user.id,
+        role="collaborator",
+        active=True,
+    ))
+    image = encounter_set_data["image"]
+    image.edited_filename = "edited_test_pos_1.jpg"
+    image.thumbnail_filename = "thm_test_pos_1.jpg"
+    db_session.commit()
+
+    media_dir = tmp_path / "files" / "test_sets"
+    thumbnail_dir = media_dir / "thumbnails"
+    thumbnail_dir.mkdir(parents=True)
+    (media_dir / image.original_filename).write_bytes(b"original bytes")
+    (media_dir / image.edited_filename).write_bytes(b"edited bytes")
+    (thumbnail_dir / image.thumbnail_filename).write_bytes(b"stale original thumbnail")
+    monkeypatch.setattr("utils.utilsImgServe.BASE_DIR", tmp_path)
+    auth_client = auth_client_factory(user)
+
+    response = auth_client.get(f"/media/img/{image.uuid}/thumbnail")
+
+    assert response.status_code == 200
+    assert response.data == b"edited bytes"
+    assert response.headers.get("X-Thumbnail") is None
 
 
 def test_encounter_set_media_denies_lab_role_without_project_capability(

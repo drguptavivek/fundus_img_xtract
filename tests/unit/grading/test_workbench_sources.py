@@ -17,7 +17,7 @@ class _NoMetadataSession:
 
 
 def test_workbench_media_uses_scoped_universal_grading_routes():
-    media = _media(_NoMetadataSession(), "direct_image_upload", "image-uuid", None)
+    media = _media(_NoMetadataSession(), "direct_image_upload", "image-uuid", None, "orig")
 
     assert media.media_url == "/media/img/image-uuid"
     assert media.thumbnail_url == "/media/img/image-uuid/thumbnail"

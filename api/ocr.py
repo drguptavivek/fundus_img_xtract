@@ -10,7 +10,16 @@ from flask import jsonify, request
 from flask_login import current_user, login_required
 
 from app_cache import cache
-from models import DirectImageUpload, EncounterFile, IMAGE_DIR, ImagePiiVerification, PatientEncounters, ZipFile
+from models import (
+    BASE_DIR,
+    DirectImageUpload,
+    EncounterFile,
+    EncounterSetImage,
+    IMAGE_DIR,
+    ImagePiiVerification,
+    PatientEncounters,
+    ZipFile,
+)
 from utils.fileUtils import abs_from_parts
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import get_media_cache_version
@@ -113,10 +122,21 @@ def _resolve_image_variant_map(
             for uuid, edited_filename in direct_query.all()
         }
 
+        encounter_set_query = (
+            db.query(EncounterSetImage.uuid, EncounterSetImage.edited_filename)
+            .filter(EncounterSetImage.uuid.in_(authorized_uuids))
+        )
+        encounter_set_variants = {
+            uuid: ("edited" if edited_filename else "orig")
+            for uuid, edited_filename in encounter_set_query.all()
+        }
+
     variant_map: Dict[str, Optional[str]] = {}
     for uuid in uuids:
         if uuid in direct_variants:
             variant_map[uuid] = direct_variants[uuid]
+        elif uuid in encounter_set_variants:
+            variant_map[uuid] = encounter_set_variants[uuid]
         elif uuid in encounter_uuids:
             variant_map[uuid] = "orig"
         else:
@@ -149,7 +169,13 @@ def _resolve_image_path(
         direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == image_uuid)
         direct_image = direct_query.first()
 
-        if encounter_result and direct_image:
+        encounter_set_query = (
+            db.query(EncounterSetImage)
+            .filter(EncounterSetImage.uuid == image_uuid)
+        )
+        encounter_set_image = encounter_set_query.first()
+
+        if sum(bool(result) for result in (encounter_result, direct_image, encounter_set_image)) > 1:
             return None, None
 
         if encounter_result:
@@ -171,6 +197,24 @@ def _resolve_image_path(
                 return str(abs_from_parts(direct_image.folder_rel, filename, kind)), kind
             except (OSError, ValueError):
                 return None, None
+
+        if encounter_set_image:
+            if encounter_set_image.s3_config_id or encounter_set_image.s3_object_key:
+                return None, None
+            filename = (
+                encounter_set_image.edited_filename
+                or encounter_set_image.original_filename
+            )
+            if not filename:
+                return None, None
+            kind = "edited" if encounter_set_image.edited_filename else "orig"
+            base_root = BASE_DIR.resolve()
+            image_path = (base_root / encounter_set_image.folder_rel / filename).resolve()
+            try:
+                image_path.relative_to(base_root)
+            except ValueError:
+                return None, None
+            return str(image_path), kind
 
     return None, None
 

@@ -1,4 +1,4 @@
-import base64, traceback
+import traceback
 import logging
 from pathlib import Path
 from flask import request, jsonify, current_app, session
@@ -7,12 +7,13 @@ from sqlalchemy import select
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
-from models import DirectImageUpload, BASE_DIR, GradingTask
+from models import DirectImageUpload, BASE_DIR, GradingTask, ImagePiiVerification
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
 from utils.sensitive_operations import _log_sensitive_operation
 from utils.media_cache import bump_media_cache_version
+from utils.image_edit_payload import InvalidImageEditPayload, decode_image_edit_payload
 
 
 editing_logger = logging.getLogger("editing")
@@ -95,21 +96,21 @@ def save_edited_image(upload_id: int):
                 )
                 return jsonify({"error": "No image data provided."}), 400
 
-            if image_data.startswith('data:image'):
-                image_data = image_data.split(',')[1]
-
             try:
-                image_bytes = base64.b64decode(image_data)
-            except Exception as e:
+                decoded_image = decode_image_edit_payload(image_data)
+                image_bytes = decoded_image.content
+            except InvalidImageEditPayload as e:
                 editing_logger.error(
-                    "Base64 decode error for upload %s: %s",
+                    "Invalid edited image payload for upload %s: %s",
                     sanitize_log_value(upload_id),
                     sanitize_log_value(e),
                 )
                 return jsonify({"error": "Invalid image data provided."}), 400
 
             # Correctly determine the path for the new edited file
-            edited_basename = f"edited_{upload.filename}"
+            previous_edited_filename = upload.edited_filename
+            previous_thumbnail_filename = upload.edited_thumbnail_filename
+            edited_basename = f"edited_{Path(upload.filename).stem}{decoded_image.extension}"
             edited_path = abs_from_parts(upload.folder_rel, edited_basename, kind="edited")
             
             # Ensure the destination directory exists
@@ -117,6 +118,12 @@ def save_edited_image(upload_id: int):
             
             # Save the new edited image
             edited_path.write_bytes(image_bytes)
+            if previous_edited_filename and previous_edited_filename != edited_basename:
+                abs_from_parts(
+                    upload.folder_rel,
+                    previous_edited_filename,
+                    kind="edited",
+                ).unlink(missing_ok=True)
 
             # Generate thumbnail for the edited image
             edited_thumbnail_filename = None
@@ -144,9 +151,16 @@ def save_edited_image(upload_id: int):
                     sanitize_log_value(e),
                 )
 
+            if previous_thumbnail_filename and previous_thumbnail_filename != edited_thumbnail_filename:
+                edited_path.with_name(previous_thumbnail_filename).unlink(missing_ok=True)
+
             # Update the database with the basename of the edited file and its thumbnail
             upload.edited_filename = edited_basename
             upload.edited_thumbnail_filename = edited_thumbnail_filename
+            db.query(ImagePiiVerification).filter(
+                ImagePiiVerification.image_uuid == str(upload.uuid),
+                ImagePiiVerification.image_variant == "edited",
+            ).delete(synchronize_session=False)
             try:
                 from utils.image_metadata import extract_image_metadata, upsert_image_metadata
                 metadata_result = extract_image_metadata(

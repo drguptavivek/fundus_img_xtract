@@ -108,15 +108,16 @@ POST /verify_encounter_set/save_edit/<uuid>
 Content-Type: application/json
 
 {
-  "crop_coords": { "x": 10, "y": 10, "width": 800, "height": 600 },
-  "mask_regions": [...]
+  "image_data": "data:image/png;base64,..."
 }
 ```
 
 **Backend actions:**
-1. Creates `<uuid>_edited.jpg` using PIL
-2. Updates `edited_filename` in database
-3. Sets `is_anonymized=True`, `is_reviewed=True`
+1. Validates the decoded JPEG, PNG, or WebP bytes and stores an `edited_*` file with the matching extension
+2. Generates the edited thumbnail and metadata, invalidates prior edited OCR status, and queues OCR for the new bytes
+3. Updates `edited_filename` and sets `is_reviewed=True`
+
+All final media, grading, WAI inference, and no-PII export paths prefer the edited image while it exists. Restoring the original removes edited media/metadata/OCR state and regenerates the original thumbnail.
 
 ### Mark Anonymized (No Editing Required)
 

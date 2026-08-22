@@ -505,26 +505,30 @@ def _encounter_set_export_image_metadata(image: EncounterSetImage) -> dict[str, 
 
 
 def _encounter_set_export_image_bytes(db: Session, image: EncounterSetImage) -> tuple[str, bytes] | None:
-    if image.s3_config_id and image.s3_object_key:
+    effective_filename = image.edited_filename or image.original_filename
+    effective_s3_key = (
+        image.s3_object_key_edited if image.edited_filename else image.s3_object_key
+    )
+    if image.s3_config_id and effective_s3_key:
         s3_config = db.get(S3Config, image.s3_config_id)
         if s3_config and s3_config.is_active:
             try:
                 from utils.storage_backends import S3StorageBackend
 
-                stream = S3StorageBackend(s3_config).get(image.s3_object_key)
-                return _safe_image_extension(image.s3_object_key), stream.read()
+                stream = S3StorageBackend(s3_config).get(effective_s3_key)
+                return _safe_image_extension(effective_filename), stream.read()
             except Exception as exc:
                 LOGGER.warning(
                     "EncounterSet no-PII ZIP skipped S3 image id=%s key=%s error=%s",
                     image.id,
-                    sanitize_log_value(image.s3_object_key),
+                    sanitize_log_value(effective_s3_key),
                     sanitize_log_value(exc),
                 )
                 return None
 
-    if not image.folder_rel or not image.original_filename:
+    if not image.folder_rel or not effective_filename:
         return None
-    image_path = (BASE_DIR / Path(image.folder_rel) / image.original_filename).resolve()
+    image_path = (BASE_DIR / Path(image.folder_rel) / effective_filename).resolve()
     try:
         image_path.relative_to(BASE_DIR.resolve())
     except ValueError:
@@ -532,7 +536,7 @@ def _encounter_set_export_image_bytes(db: Session, image: EncounterSetImage) -> 
         return None
     if not image_path.exists() or not image_path.is_file():
         return None
-    return _safe_image_extension(image.original_filename), image_path.read_bytes()
+    return _safe_image_extension(effective_filename), image_path.read_bytes()
 
 
 def _encounter_set_export_image_archive_name(encounter_id: int, image: EncounterSetImage, extension: str) -> str:

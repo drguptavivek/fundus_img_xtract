@@ -95,6 +95,13 @@ def test_shared_jinja_workbench_uses_dto_and_task_qualified_submission():
     assert 'data-workbench-navigate="prev"' in template
     assert 'data-workbench-navigate="next"' in template
     assert "const nextPanelIndex = panelIndex +" in template
+    assert 'data-disease-name="{{ panel.disease_name }}"' in template
+    assert "data-next-disease" in template
+    assert "activePanel.dataset.scopeId !== nextPanel.dataset.scopeId" in template
+    assert "button.textContent = `Next Disease: ${nextPanel.dataset.diseaseName}`" in template
+    assert "!selectedGrade(activePanel)" in template
+    assert "await flushDraft()" in template
+    assert "if (!draftDirty) carousel?.to(panelIndex + 1)" in template
     assert "annotation-tools-v2-pan-v1" in template
     assert "This target intentionally has no primary image" not in template
     assert "imggr-zoom-slider" in template

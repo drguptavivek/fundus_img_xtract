@@ -108,6 +108,7 @@
         <section class="carousel-item {% if loop.first %}active{% endif %} linked-grading-panel"
                  data-task-uuid="{{ panel.task_uuid }}"
                  data-scope-id="{{ panel.scope_id or '' }}"
+                 data-disease-name="{{ panel.disease_name }}"
                  data-target-level="{{ panel.target_level }}"
                  data-image-index="{{ image_nav.index if panel.target_level == 'image' else '' }}"
                  data-read-only="{{ 'false' if panel.editable else 'true' }}">
@@ -399,6 +400,7 @@
                             name="{{ panel.fields.comment }}" rows="4"
                             {% if not panel.editable %}disabled{% endif %}>{{ saved_observation.comment if saved_observation else '' }}</textarea>
                   <div class="d-flex gap-2 justify-content-end mt-3 d-none" data-workbench-submit-actions>
+                    <button class="btn btn-primary d-none" type="button" data-next-disease disabled>Next Disease</button>
                     <button class="btn btn-primary" type="submit" name="action" value="save_close" data-submit-workbench disabled>Save &amp; Close</button>
                     <button class="btn btn-success" type="submit" name="action" value="save_next" data-submit-workbench disabled>Save &amp; Next</button>
                   </div>
@@ -473,6 +475,7 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
   const contextualSubmission = Boolean(encounterPanels.length && imagePanels.length);
   const submitActionGroups = Array.from(root.querySelectorAll('[data-workbench-submit-actions]'));
   const submitButtons = Array.from(root.querySelectorAll('[data-submit-workbench]'));
+  const nextDiseaseButtons = Array.from(root.querySelectorAll('[data-next-disease]'));
   const submitOverlay = root.querySelector('[data-workbench-submit-overlay]');
   const submitOverlayMessage = root.querySelector('[data-workbench-submit-overlay-message]');
   const draftStatus = root.querySelector('[data-draft-status]');
@@ -618,6 +621,11 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
 
   function updateSubmissionControls() {
     const activePanel = panels[activePanelIndex];
+    const nextPanel = panels[activePanelIndex + 1];
+    const hasNextDisease = activePanel?.dataset.targetLevel === 'encounter'
+      && Boolean(activePanel.dataset.scopeId)
+      && Boolean(nextPanel?.dataset.scopeId)
+      && activePanel.dataset.scopeId !== nextPanel.dataset.scopeId;
     const showActions = activePanel?.dataset.readOnly !== 'true'
       && (!contextualSubmission || activePanel?.dataset.targetLevel === 'encounter');
     const allTargetsGraded = editablePanels.every(panel => Boolean(selectedGrade(panel)));
@@ -628,6 +636,18 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
       button.disabled = submissionOutcomeUnknown
         || submitting
         || !allTargetsGraded;
+    });
+    nextDiseaseButtons.forEach(button => {
+      const isActiveTransition = hasNextDisease
+        && button.closest('[data-task-uuid]') === activePanel;
+      button.classList.toggle('d-none', !isActiveTransition);
+      button.disabled = submissionOutcomeUnknown
+        || submitting
+        || !isActiveTransition
+        || !selectedGrade(activePanel);
+      if (isActiveTransition) {
+        button.textContent = `Next Disease: ${nextPanel.dataset.diseaseName}`;
+      }
     });
   }
 
@@ -805,6 +825,21 @@ window.currentSlot = {{ workbench.lease.role_slot|tojson }};
         panel => panel.dataset.taskUuid === button.dataset.encounterImageNavigate
       );
       if (imagePanel) carousel?.to(panels.indexOf(imagePanel));
+    });
+  });
+  nextDiseaseButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      const currentPanel = button.closest('[data-task-uuid]');
+      const panelIndex = panels.indexOf(currentPanel);
+      const nextPanel = panels[panelIndex + 1];
+      if (
+        currentPanel?.dataset.targetLevel !== 'encounter'
+        || !currentPanel.dataset.scopeId
+        || !nextPanel?.dataset.scopeId
+        || currentPanel.dataset.scopeId === nextPanel.dataset.scopeId
+      ) return;
+      await flushDraft();
+      if (!draftDirty) carousel?.to(panelIndex + 1);
     });
   });
 

@@ -14,7 +14,7 @@ Each Upload Profile EncounterSetType mapping defines one or more explicit Encoun
 
 The package, not an individual image, is the queue-visible unit of work for package-based EncounterSet grading. A grader opens one package and completes all required targets for that package in one grading session. Selecting a grade reveals that grade's configured feature checkboxes. Image targets also expose the standard feature-geometry annotation tools, with an independent annotation payload for each constituent image.
 
-The right grading panel identifies the active target directly below its `Grade` heading as `IMAGE: <disease>` or `SET: <set-level disease>`. Previous/next controls beside that label follow the authoritative package target order, including each disease scope's encounter-status target before moving to the next linked disease. Save controls appear on encounter targets and become available only after every editable package target has a grade.
+The right grading panel identifies the active target directly below its `Grade` heading as `IMAGE: <disease>` or `SET: <set-level disease>`. Previous/next controls beside that label follow the authoritative package target order, including each disease scope's encounter-status target before moving to the next linked disease. On an intermediate encounter target, `Next Disease: <disease>` becomes available after that encounter target is graded; it saves the draft before opening the first target in the next disease scope. Final Save controls appear on encounter targets and become available only after every editable package target has a grade.
 
 ## Package Configuration
 

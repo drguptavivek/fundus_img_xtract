@@ -364,6 +364,13 @@ def update_metadata(uuid):
                     metadata["focus"] = focus_value
                 else:
                     metadata.pop("focus", None)
+            image_gaze_form_name = f"metadata__image__{image_id}__gaze_position"
+            if _metadata_form_field_present(request.form, image_gaze_form_name):
+                gaze_value = request.form.get(image_gaze_form_name) or None
+                if gaze_value:
+                    metadata["gaze_position"] = gaze_value
+                else:
+                    metadata.pop("gaze_position", None)
             for field in image_fields:
                 form_name = f"metadata__image__{image_id}__{field['key']}"
                 if not _metadata_form_field_present(request.form, form_name):
@@ -552,6 +559,7 @@ def _recent_verification_history(db, encounter: PatientEncounters, limit: int = 
 # while the seeded verification schema uses fundus_image_view. Read every known spelling.
 IMAGE_LATERALITY_KEYS = ("laterality", "eye", "eye_side")
 IMAGE_FOCUS_KEYS = ("focus", "fundus_image_view", "fundus_field", "field", "image_segment", "centering")
+IMAGE_GAZE_KEYS = ("gaze_position", "strabismus_gaze_position", "gaze")
 
 IMAGE_LATERALITY_LABELS = {
     "od": "OD", "right": "OD", "r": "OD", "re": "OD", "right eye": "OD",
@@ -567,13 +575,28 @@ IMAGE_FOCUS_LABELS = {
     "optic nerve head": "Disc", "disc centered": "Disc", "disc centred": "Disc",
 }
 
+IMAGE_GAZE_LABELS = {
+    "primary": "Primary",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "up left": "Up Left",
+    "up right": "Up Right",
+    "down left": "Down Left",
+    "down right": "Down Right",
+    "composite": "Composite",
+}
+
 # Shared with the browser so nav labels can be recomputed after an inline metadata edit
 # without duplicating the vocabulary in JavaScript.
 IMAGE_DESCRIPTOR_VOCABULARY = {
     "laterality_keys": list(IMAGE_LATERALITY_KEYS),
     "focus_keys": list(IMAGE_FOCUS_KEYS),
+    "gaze_keys": list(IMAGE_GAZE_KEYS),
     "laterality_labels": IMAGE_LATERALITY_LABELS,
     "focus_labels": IMAGE_FOCUS_LABELS,
+    "gaze_labels": IMAGE_GAZE_LABELS,
     "other_label": "Other",
 }
 
@@ -591,7 +614,7 @@ def _first_metadata_value(metadata: dict, keys: tuple[str, ...]):
 
 
 def _image_descriptor(image: EncounterSetImage) -> dict:
-    """Resolve display-only laterality (OD/OS/OU) and focus (Macula/Disc/Other) for an image.
+    """Resolve display-only laterality, retinal focus, and gaze for an image.
 
     Unknown values stay unknown: a verification screen must not present a guess as
     recorded fact, so anything unrecognised renders as an em dash rather than a default.
@@ -607,10 +630,14 @@ def _image_descriptor(image: EncounterSetImage) -> dict:
     if focus is None and normalized_focus:
         focus = "Other"
 
+    gaze_raw = _first_metadata_value(metadata, IMAGE_GAZE_KEYS)
+    gaze = IMAGE_GAZE_LABELS.get(_normalize_descriptor_value(gaze_raw))
+
     return {
         "laterality": laterality,
         "focus": focus,
-        "label": " · ".join(part for part in (laterality, focus) if part) or "—",
+        "gaze": gaze,
+        "label": " · ".join(part for part in (laterality, focus, gaze) if part) or "—",
     }
 
 

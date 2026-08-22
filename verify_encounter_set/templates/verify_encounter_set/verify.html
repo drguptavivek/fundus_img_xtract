@@ -654,7 +654,7 @@
     }
 
     // Vocabulary comes from the server so the nav labels and the rendered page agree
-    // on how a raw metadata value maps to OD/OS/OU and Macula/Disc/Other.
+    // on how raw metadata values map to laterality, retinal focus, and gaze.
     const descriptorVocabulary = {{ image_descriptor_vocabulary | tojson }};
 
     function normalizeDescriptorValue(value) {
@@ -677,14 +677,18 @@
       const normalizedFocus = normalizeDescriptorValue(valueForKeys(descriptorVocabulary.focus_keys));
       let focus = descriptorVocabulary.focus_labels[normalizedFocus] || null;
       if (!focus && normalizedFocus) focus = descriptorVocabulary.other_label;
-      return [laterality, focus].filter(Boolean).join(' · ') || '—';
+      const gaze = descriptorVocabulary.gaze_labels[
+        normalizeDescriptorValue(valueForKeys(descriptorVocabulary.gaze_keys))
+      ] || null;
+      return [laterality, focus, gaze].filter(Boolean).join(' · ') || '—';
     }
 
     function refreshImageDescriptor(input) {
       const match = /^metadata__image__(\d+)__(.+)$/.exec(input.name || '');
       if (!match) return;
       const [, imageId, fieldKey] = match;
-      const tracked = descriptorVocabulary.laterality_keys.concat(descriptorVocabulary.focus_keys);
+      const tracked = descriptorVocabulary.laterality_keys
+        .concat(descriptorVocabulary.focus_keys, descriptorVocabulary.gaze_keys);
       if (!tracked.includes(fieldKey)) return;
       const target = document.querySelector(`[data-image-descriptor="${imageId}"]`);
       if (target) target.textContent = buildDescriptorLabel(imageId);

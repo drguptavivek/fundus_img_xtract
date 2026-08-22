@@ -681,17 +681,41 @@ def test_verify_encounter_set_nav_shows_laterality_and_focus(
     assert "OD · Macula".encode() in response.data
 
 
+def test_verify_iitk_image_shows_editable_gaze_and_nav_descriptor(
+    client, auth_client_factory, encounter_set_data, db_session
+):
+    user = UserFactory.create_admin(db_session, username="admin_verify_iitk_gaze")
+    auth_client = auth_client_factory(user)
+    image = encounter_set_data["image"]
+    image.metadata_json = {
+        **(image.metadata_json or {}),
+        "source_kind": "iitk_api",
+        "gaze_position": "up_left",
+    }
+    db_session.flush()
+
+    response = auth_client.get(
+        f"/verify_encounter_set/verify/{encounter_set_data['encounter'].uuid}"
+    )
+
+    assert response.status_code == 200
+    assert "OD · Macula · Up Left".encode() in response.data
+    assert f'name="metadata__image__{image.id}__gaze_position"'.encode() in response.data
+    assert b'<option value="up_left" selected>Up Left</option>' in response.data
+
+
 @pytest.mark.parametrize(
     "metadata, expected",
     [
-        ({"laterality": "right", "fundus_field": "macula"}, {"laterality": "OD", "focus": "Macula", "label": "OD · Macula"}),
-        ({"laterality": "OS", "image_segment": "optic disc"}, {"laterality": "OS", "focus": "Disc", "label": "OS · Disc"}),
-        ({"laterality": "both", "fundus_image_view": "peripheral"}, {"laterality": "OU", "focus": "Other", "label": "OU · Other"}),
-        ({"laterality": "OD"}, {"laterality": "OD", "focus": None, "label": "OD"}),
+        ({"laterality": "right", "fundus_field": "macula"}, {"laterality": "OD", "focus": "Macula", "gaze": None, "label": "OD · Macula"}),
+        ({"laterality": "OS", "image_segment": "optic disc"}, {"laterality": "OS", "focus": "Disc", "gaze": None, "label": "OS · Disc"}),
+        ({"laterality": "both", "fundus_image_view": "peripheral"}, {"laterality": "OU", "focus": "Other", "gaze": None, "label": "OU · Other"}),
+        ({"laterality": "ou", "gaze_position": "up_left"}, {"laterality": "OU", "focus": None, "gaze": "Up Left", "label": "OU · Up Left"}),
+        ({"laterality": "OD"}, {"laterality": "OD", "focus": None, "gaze": None, "label": "OD"}),
         # Unknown must stay unknown rather than defaulting to a plausible-looking value.
-        ({"laterality": "unknown"}, {"laterality": None, "focus": None, "label": "—"}),
-        ({}, {"laterality": None, "focus": None, "label": "—"}),
-        (None, {"laterality": None, "focus": None, "label": "—"}),
+        ({"laterality": "unknown"}, {"laterality": None, "focus": None, "gaze": None, "label": "—"}),
+        ({}, {"laterality": None, "focus": None, "gaze": None, "label": "—"}),
+        (None, {"laterality": None, "focus": None, "gaze": None, "label": "—"}),
     ],
 )
 def test_image_descriptor_resolution(metadata, expected):
@@ -898,6 +922,8 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
             f"__present__metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "1",
             f"metadata__image__{encounter_set_data['image'].id}__referral_needed_or_positive_image": "no",
             f"metadata__image__{encounter_set_data['image'].id}__laterality": "left",
+            f"__present__metadata__image__{encounter_set_data['image'].id}__gaze_position": "1",
+            f"metadata__image__{encounter_set_data['image'].id}__gaze_position": "up_left",
         },
         headers={'X-CSRFToken': csrf_token},
         follow_redirects=True,
@@ -909,6 +935,7 @@ def test_verify_encounter_set_metadata_update(client, auth_client_factory, encou
     assert encounter_set_data['encounter'].metadata_json["patient"]["patient_age_yrs"] == "56"
     assert encounter_set_data['encounter'].metadata_json["encounter"]["clinical_note"] == "verified note"
     assert encounter_set_data['image'].metadata_json["laterality"] == "left"
+    assert encounter_set_data['image'].metadata_json["gaze_position"] == "up_left"
     assert encounter_set_data['image'].referral_needed_or_positive_image == "no"
     assert "referral_needed_or_positive_image" not in encounter_set_data['image'].metadata_json
 

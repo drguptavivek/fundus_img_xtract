@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from flask import flash, jsonify, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
@@ -239,23 +239,23 @@ def _json_result(result: upload_profile_service.MutationResult, *, redirect_endp
 
 
 @api_bp.route("/upload-profiles/projects", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def create_upload_profile_project():
     """Create a project for upload profile governance."""
     dto = _project_input_from_request()
-    return _json_result(upload_profile_service.create_project(dto), redirect_endpoint="admin.upload_projects_admin")
+    return _json_result(upload_profile_service.create_project(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
 
 
 @api_bp.route("/upload-profiles/projects/<int:project_id>", methods=["PATCH", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def update_upload_profile_project(project_id: int):
     """Update a project for upload profile governance."""
     dto = _project_input_from_request()
-    return _json_result(upload_profile_service.update_project(project_id, dto), redirect_endpoint="admin.upload_projects_admin")
+    return _json_result(upload_profile_service.update_project(current_user.id, project_id, dto), redirect_endpoint="admin.upload_projects_admin")
 
 
 @api_bp.route("/projects/<int:project_id>/referral-diseases", methods=["GET", "PUT", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def project_referral_diseases(project_id: int):
     """Read or replace referral-only diseases allowed by one project."""
     with transaction_scope() as db:
@@ -288,7 +288,7 @@ def project_referral_diseases(project_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/encounter-set-permissions", methods=["GET", "PUT", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def project_encounter_set_permissions(project_id: int):
     """Read or upsert user/lab permissions for EncounterSet browsing and verification."""
     with transaction_scope() as db:
@@ -338,15 +338,15 @@ def project_encounter_set_permissions(project_id: int):
 
 
 @api_bp.route("/upload-profiles/investigators", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def add_upload_profile_investigator():
     """Assign a project investigator."""
     dto = _investigator_input_from_request()
-    return _json_result(upload_profile_service.add_investigator(dto), redirect_endpoint="admin.upload_projects_admin")
+    return _json_result(upload_profile_service.add_investigator(current_user.id, dto), redirect_endpoint="admin.upload_projects_admin")
 
 
 @api_bp.route("/upload-profiles/assignments", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def assign_upload_profile_user():
     """Assign a user to an upload profile through project governance."""
     dto = _project_profile_assignment_input_from_request()
@@ -354,7 +354,7 @@ def assign_upload_profile_user():
 
 
 @api_bp.route("/upload-profiles/assignments/remove", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def remove_upload_profile_user():
     """Remove a user assignment from an upload profile."""
     dto = _project_profile_assignment_remove_input_from_request()
@@ -362,7 +362,7 @@ def remove_upload_profile_user():
 
 
 @api_bp.route("/upload-profiles/projects/<int:project_id>/profiles", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def enable_upload_profile_for_project(project_id: int):
     """Enable a reusable upload profile template for one project."""
     dto = _project_profile_input_from_request(project_id)
@@ -370,7 +370,7 @@ def enable_upload_profile_for_project(project_id: int):
 
 
 @api_bp.route("/upload-profiles/project-profiles/<int:project_upload_profile_id>/activate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def activate_project_upload_profile(project_upload_profile_id: int):
     """Reactivate an upload profile mapping for a project."""
     return _json_result(
@@ -380,7 +380,7 @@ def activate_project_upload_profile(project_upload_profile_id: int):
 
 
 @api_bp.route("/upload-profiles/project-profiles/<int:project_upload_profile_id>/deactivate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def deactivate_project_upload_profile(project_upload_profile_id: int):
     """Deactivate an upload profile mapping for a project."""
     return _json_result(
@@ -390,7 +390,7 @@ def deactivate_project_upload_profile(project_upload_profile_id: int):
 
 
 @api_bp.route("/upload-profiles", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def create_upload_profile():
     """Create an upload profile."""
     dto = _profile_input_from_request()
@@ -398,7 +398,7 @@ def create_upload_profile():
 
 
 @api_bp.route("/upload-profiles/<int:profile_id>", methods=["PATCH", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def update_upload_profile(profile_id: int):
     """Update an upload profile."""
     dto = _profile_input_from_request()
@@ -406,21 +406,21 @@ def update_upload_profile(profile_id: int):
 
 
 @api_bp.route("/upload-profiles/<int:profile_id>/activate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def activate_upload_profile(profile_id: int):
     """Activate an upload profile."""
     return _json_result(upload_profile_service.set_profile_active(current_user.id, profile_id, True))
 
 
 @api_bp.route("/upload-profiles/<int:profile_id>/deactivate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def deactivate_upload_profile(profile_id: int):
     """Deactivate an upload profile."""
     return _json_result(upload_profile_service.set_profile_active(current_user.id, profile_id, False))
 
 
 @api_bp.route("/upload-profiles/<int:profile_id>/duplicate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def duplicate_upload_profile(profile_id: int):
     """Duplicate an upload profile without copying assignments."""
     return _json_result(upload_profile_service.duplicate_profile(current_user.id, profile_id))

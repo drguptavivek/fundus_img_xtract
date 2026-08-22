@@ -44,6 +44,7 @@ from models import (
     RemidioConnection,
     RemidioRoutingRule,
     RemidioSite,
+    User,
 )
 from upload_profiles.models import ProjectUploadProfile
 from upload_profiles.service import manager_lab_unit_ids
@@ -205,32 +206,38 @@ def _encounter_set_browser_projects(db: Session, user, *, no_pii: bool = False) 
 
 
 def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool = False):
-    if not no_pii:
-        from encounter_sets.permissions import (
-            CAPABILITY_BROWSE,
-            apply_classical_or_project_permission_scope,
-        )
+    from data_authorization.policy import ACTION_BROWSE, ACTION_BROWSE_PII, ACTION_ROLE_NAMES
+    from project_configuration.models import ProjectLabUnit
 
-        return apply_classical_or_project_permission_scope(
-            query,
-            model_class,
-            user,
-            CAPABILITY_BROWSE,
-            classical_operation="upload",
-        )
+    project_boundary = exists().where(
+        ProjectLabUnit.project_id == model_class.project_id,
+        ProjectLabUnit.lab_unit_id == model_class.lab_unit_id,
+        ProjectLabUnit.active.is_(True),
+    )
+    if user.has_role("admin"):
+        return query.filter(project_boundary)
+    action = ACTION_BROWSE if no_pii else ACTION_BROWSE_PII
+    role_names = set(ACTION_ROLE_NAMES[action])
+    if "project_pi" in role_names:
+        role_names.add("principal_investigator")
     legacy_membership = exists().where(
         ProjectInvestigator.project_id == model_class.project_id,
         ProjectInvestigator.user_id == user.id,
-        ProjectInvestigator.role == "collaborator",
+        ProjectInvestigator.role.in_((
+            "principal_investigator",
+            "collaborator",
+            "co_investigator",
+            "coordinator",
+        ) if no_pii else ("principal_investigator",)),
         ProjectInvestigator.active.is_(True),
     )
     project_grant = project_role_grant_exists_clause(
         user_id=user.id,
         project_id=model_class.project_id,
-        role_names={"collaborator"},
+        role_names=role_names,
         lab_unit_id=getattr(model_class, "lab_unit_id", None),
     )
-    return query.filter(or_(legacy_membership, project_grant))
+    return query.filter(project_boundary, or_(legacy_membership, project_grant))
 
 
 def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> int:
@@ -243,7 +250,7 @@ def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> 
             or_(EncounterSetAttachment.asset_kind == "pdf", EncounterSetAttachment.mime_type == "application/pdf"),
         )
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
+    query = _apply_encounter_set_browser_scope(query, PatientEncounters, user, no_pii=False)
     return sum(1 for attachment in query.all() if _attachment_is_remidio_ai_report(attachment) and _attachment_ocr_is_remaining(attachment))
 
 
@@ -1616,9 +1623,28 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
     return {"job_id": job_id, "status": "completed" if failed == 0 and partial == 0 else "partial_error", "items": results}
 
 
-def list_project_sync_dashboard(db: Session, *, project_id: int | None = None) -> dict[str, Any]:
+def list_project_sync_dashboard(
+    db: Session,
+    *,
+    project_id: int | None = None,
+    user: Any | None = None,
+) -> dict[str, Any]:
     projects = _projects_with_routing(db)
-    selected_project_id = project_id or (projects[0]["id"] if projects else None)
+    if user is not None:
+        from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+
+        projects = [
+            project
+            for project in projects
+            if user_can_project_action(
+                db,
+                user=user,
+                project_id=project["id"],
+                action=ACTION_REMIDIO_SYNC,
+            )
+        ]
+    allowed_project_ids = {project["id"] for project in projects}
+    selected_project_id = project_id if project_id in allowed_project_ids else (projects[0]["id"] if projects else None)
     routes = []
     windows = []
     jobs = []
@@ -2264,7 +2290,11 @@ def _project_sync_job_for_action(db: Session, job_id: int) -> Job:
 def _require_project_sync_lab_scope(db: Session, project_id: int, user_id: int | None) -> None:
     if user_id is None:
         return
-    scoped_lab_ids = manager_lab_unit_ids(user_id)
+    from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+
+    user = db.get(User, user_id)
+    if user is None:
+        raise RemidioConfigError("The requesting user was not found.")
     route_lab_ids = {
         row[0]
         for row in db.query(ProjectUploadProfileRemidioApiBinding.lab_unit_id)
@@ -2276,8 +2306,26 @@ def _require_project_sync_lab_scope(db: Session, project_id: int, user_id: int |
         )
         .all()
     }
-    if route_lab_ids and not route_lab_ids.issubset(scoped_lab_ids):
-        raise RemidioConfigError("You cannot sync Remidio API routes outside your lab-unit scope.")
+    if route_lab_ids:
+        allowed = all(
+            user_can_project_action(
+                db,
+                user=user,
+                project_id=project_id,
+                action=ACTION_REMIDIO_SYNC,
+                lab_unit_id=lab_unit_id,
+            )
+            for lab_unit_id in route_lab_ids
+        )
+    else:
+        allowed = user_can_project_action(
+            db,
+            user=user,
+            project_id=project_id,
+            action=ACTION_REMIDIO_SYNC,
+        )
+    if not allowed:
+        raise RemidioConfigError("You cannot sync Remidio API routes outside your project scope.")
 
 
 def _projects_with_routing(db: Session) -> list[dict[str, Any]]:

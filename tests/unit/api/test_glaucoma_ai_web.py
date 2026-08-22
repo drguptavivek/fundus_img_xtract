@@ -8,6 +8,23 @@ from tests.helpers.factories import UserFactory
 _SEQUENCE = count(1)
 
 
+def test_retired_glaucoma_ai_page_is_not_registered(
+    client,
+    login_user,
+    db_session,
+):
+    user = UserFactory.create_by_role(
+        db_session,
+        "ophthalmologist",
+        username="retired_glaucoma_ai_page",
+    )
+    login_user(user.username, "Test@2026")
+
+    response = client.get("/glaucoma-ai/")
+
+    assert response.status_code == 404
+
+
 def test_glaucoma_ai_recent_results_partial_is_paginated(client, login_user, db_session, monkeypatch):
     import glaucoma_ai.routes as routes
 

@@ -1,5 +1,7 @@
+import pytest
+
 from data_authorization.dto import ProjectRoleGrantInput
-from data_authorization.exceptions import ProjectGrantPermissionDenied
+from data_authorization.exceptions import ProjectGrantPermissionDenied, ProjectGrantValidationError
 from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
 from data_authorization.service import (
     deactivate_project_role_grant,
@@ -10,6 +12,7 @@ from data_authorization.service import (
 )
 from models import Project, Role, User
 from tests.helpers.factories import UserFactory
+from project_configuration.models import ProjectLabUnit
 
 
 def _role(db, name: str) -> Role:
@@ -33,6 +36,11 @@ def _project(db, suffix: str) -> Project:
     db.add(project)
     db.flush()
     return project
+
+
+def _configure_labs(db, project: Project, *lab_ids: int) -> None:
+    db.add_all(ProjectLabUnit(project_id=project.id, lab_unit_id=lab_id, active=True) for lab_id in lab_ids)
+    db.flush()
 
 
 def test_project_grant_uses_global_role_catalog_and_is_membership(db_session, core_test_data):
@@ -63,7 +71,7 @@ def test_project_grant_uses_global_role_catalog_and_is_membership(db_session, co
     )
 
 
-def test_site_pi_project_grant_manages_only_its_hospital(db_session, core_test_data):
+def test_site_pi_is_a_title_and_cannot_manage_project_access(db_session, core_test_data):
     hospital_a = db_session.merge(core_test_data["hospital_a"])
     hospital_b = db_session.merge(core_test_data["hospital_b"])
     lab_a = db_session.merge(core_test_data["lab_a1"])
@@ -72,6 +80,7 @@ def test_site_pi_project_grant_manages_only_its_hospital(db_session, core_test_d
     site_pi = _user(db_session, "grant_site_pi")
     collaborator = _user(db_session, "grant_site_collaborator")
     project = _project(db_session, "SITE")
+    _configure_labs(db_session, project, lab_a.id, lab_b.id)
     _role(db_session, "site_pi")
     _role(db_session, "collaborator")
 
@@ -86,9 +95,50 @@ def test_site_pi_project_grant_manages_only_its_hospital(db_session, core_test_d
             hospital_id=hospital_a.id,
         ),
     )
+    for lab in (lab_a, lab_b):
+        with pytest.raises(ProjectGrantPermissionDenied):
+            upsert_project_role_grant(
+                db_session,
+                actor=site_pi,
+                data=ProjectRoleGrantInput(
+                    project_id=project.id,
+                    user_id=collaborator.id,
+                    role_name="collaborator",
+                    scope_type=LAB_UNIT_SCOPE,
+                    lab_unit_id=lab.id,
+                ),
+            )
+
+    assert hospital_a.id != hospital_b.id
+
+
+def test_project_admin_manages_operational_roles_across_configured_project_labs(db_session, core_test_data):
+    hospital_a = db_session.merge(core_test_data["hospital_a"])
+    lab_a = db_session.merge(core_test_data["lab_a1"])
+    lab_b = db_session.merge(core_test_data["lab_b1"])
+    admin = UserFactory.create_admin(db_session, username="grant_project_admin_seed")
+    project_admin = _user(db_session, "grant_project_admin")
+    collaborator = _user(db_session, "grant_project_collaborator")
+    project = _project(db_session, "PROJECT_ADMIN")
+    _configure_labs(db_session, project, lab_a.id, lab_b.id)
+    _role(db_session, "project_admin")
+    _role(db_session, "collaborator")
+    _role(db_session, "site_pi")
+
+    upsert_project_role_grant(
+        db_session,
+        actor=admin,
+        data=ProjectRoleGrantInput(
+            project_id=project.id,
+            user_id=project_admin.id,
+            role_name="project_admin",
+            scope_type=HOSPITAL_SCOPE,
+            hospital_id=hospital_a.id,
+        ),
+    )
     allowed = upsert_project_role_grant(
         db_session,
-        actor=site_pi,
+        actor=project_admin,
         data=ProjectRoleGrantInput(
             project_id=project.id,
             user_id=collaborator.id,
@@ -99,32 +149,40 @@ def test_site_pi_project_grant_manages_only_its_hospital(db_session, core_test_d
     )
     assert allowed.lab_unit_id == lab_a.id
 
-    try:
+    second = upsert_project_role_grant(
+        db_session,
+        actor=project_admin,
+        data=ProjectRoleGrantInput(
+            project_id=project.id,
+            user_id=collaborator.id,
+            role_name="collaborator",
+            scope_type=LAB_UNIT_SCOPE,
+            lab_unit_id=lab_b.id,
+        ),
+    )
+    assert second.lab_unit_id == lab_b.id
+
+    with pytest.raises(ProjectGrantPermissionDenied):
         upsert_project_role_grant(
             db_session,
-            actor=site_pi,
+            actor=project_admin,
             data=ProjectRoleGrantInput(
                 project_id=project.id,
                 user_id=collaborator.id,
-                role_name="collaborator",
-                scope_type=LAB_UNIT_SCOPE,
-                lab_unit_id=lab_b.id,
+                role_name="site_pi",
+                scope_type=HOSPITAL_SCOPE,
+                hospital_id=hospital_a.id,
             ),
         )
-    except ProjectGrantPermissionDenied:
-        pass
-    else:
-        raise AssertionError("site_pi grant crossed its hospital scope")
-
-    assert hospital_a.id != hospital_b.id
 
 
-def test_multiple_role_scopes_do_not_grant_global_roles(db_session, core_test_data):
+def test_legacy_global_roles_are_not_assignable_as_project_roles(db_session, core_test_data):
     hospital = db_session.merge(core_test_data["hospital_a"])
     lab = db_session.merge(core_test_data["lab_a1"])
     admin = UserFactory.create_admin(db_session, username="grant_multi_admin")
     target = _user(db_session, "grant_multi_target")
     project = _project(db_session, "MULTI")
+    _configure_labs(db_session, project, lab.id)
     _role(db_session, "data_manager")
     _role(db_session, "fileUploader")
 
@@ -144,13 +202,10 @@ def test_multiple_role_scopes_do_not_grant_global_roles(db_session, core_test_da
             lab_unit_id=lab.id,
         ),
     ):
-        upsert_project_role_grant(db_session, actor=admin, data=data)
+        with pytest.raises(ProjectGrantValidationError):
+            upsert_project_role_grant(db_session, actor=admin, data=data)
 
-    grants = list_project_role_grants(db_session, actor=admin, project_id=project.id)
-    assert {(grant.role_name, grant.scope_type) for grant in grants} == {
-        ("data_manager", HOSPITAL_SCOPE),
-        ("fileUploader", LAB_UNIT_SCOPE),
-    }
+    assert list_project_role_grants(db_session, actor=admin, project_id=project.id) == ()
     assert not target.has_role("data_manager", "fileUploader")
 
 
@@ -185,6 +240,7 @@ def test_replace_roles_can_move_scope_and_remove_grants(db_session, core_test_da
     admin = UserFactory.create_admin(db_session, username="grant_edit_admin")
     target = _user(db_session, "grant_edit_target")
     project = _project(db_session, "EDIT")
+    _configure_labs(db_session, project, lab.id)
     _role(db_session, "collaborator")
     _role(db_session, "analytics_viewer")
 

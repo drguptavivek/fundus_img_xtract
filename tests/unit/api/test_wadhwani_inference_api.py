@@ -1,5 +1,6 @@
 from services.wadhwani_glaucoma_inference import WadhwaniInferenceResult
 from upload_profiles.admin_service import MutationResult
+from data_authorization.policy import ProjectResourceScope
 
 
 def test_wadhwani_inference_api_returns_service_payload(client, login_user, monkeypatch):
@@ -20,6 +21,14 @@ def test_wadhwani_inference_api_returns_service_payload(client, login_user, monk
             predicted_class=1,
             predicted_class_name="Glaucoma Present",
             grade_impression="Glaucoma",
+        ),
+    )
+    monkeypatch.setattr(
+        "api.ai_models.grading_task_project_scope",
+        lambda _db, task_id: ProjectResourceScope(
+            project_id=None,
+            hospital_id=None,
+            lab_unit_id=None,
         ),
     )
 

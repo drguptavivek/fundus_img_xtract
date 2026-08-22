@@ -13,7 +13,6 @@ from models import AIModel, AIModelDisease, AIModelIntegration, Disease, Patient
 from remote_inference.models import ProjectManualRemoteInferenceWorkflow
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.service import manager_lab_unit_ids
-from utils.hospital_scoping import apply_scoping
 
 WADHWANI_PROVIDER = "wadhwani_glaucoma"
 ENCOUNTER_SET_UPLOAD_KIND = "encounter_set"
@@ -184,7 +183,9 @@ def workflow_keys_from_values(values: Iterable[str]) -> list[ManualRemoteInferen
     return workflows
 
 
-def list_manual_wadhwani_projects(db, user: Any) -> list[dict[str, Any]]:
+def list_manual_wadhwani_projects(
+    db, user: Any, *, action: str = "project.wai.run"
+) -> list[dict[str, Any]]:
     """List active, scoped projects enabled for manual EncounterSet Wadhwani inference."""
     query = (
         db.query(Project)
@@ -204,8 +205,15 @@ def list_manual_wadhwani_projects(db, user: Any) -> list[dict[str, Any]]:
         .order_by(Project.title.asc())
         .distinct()
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
-    return [{"id": project.id, "title": project.title, "code": project.code} for project in query.all()]
+    from data_authorization.policy import user_can_project_action
+
+    return [
+        {"id": project.id, "title": project.title, "code": project.code}
+        for project in query.all()
+        if user_can_project_action(
+            db, user=user, project_id=project.id, action=action
+        )
+    ]
 
 
 def project_allows_manual_wadhwani(db, project_id: int) -> bool:

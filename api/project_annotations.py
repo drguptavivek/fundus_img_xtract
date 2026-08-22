@@ -62,7 +62,7 @@ def get_task_annotation_context(task_uuid: str):
 
 
 @api_bp.route("/projects/<int:project_id>/annotation-policy", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def get_project_annotation_policy(project_id: int):
     try:
         with transaction_scope() as db:
@@ -79,7 +79,7 @@ def get_project_annotation_policy(project_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/annotation-policy", methods=["PUT"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def put_project_annotation_policy(project_id: int):
     try:
         update = parse_policy_update(request.get_json(silent=True))
@@ -102,7 +102,7 @@ def put_project_annotation_policy(project_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/schema.<string:export_format>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def export_project_schema(project_id: int, export_format: str):
     """Download the project annotation and classification schema."""
     if export_format not in {"json", "toml"}:

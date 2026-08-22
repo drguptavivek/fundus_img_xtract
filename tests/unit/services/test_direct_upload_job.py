@@ -21,12 +21,18 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
+from project_configuration.models import ProjectLabUnit
 
 
 _SEQUENCE = count(1)
 
 
 def _assign_profile(db_session, *, profile: UploadProfile, project: Project, lab: LabUnit, user: User) -> None:
+    if db_session.query(ProjectLabUnit.id).filter_by(
+        project_id=project.id,
+        lab_unit_id=lab.id,
+    ).one_or_none() is None:
+        db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
     project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
     db_session.add(project_profile)
     db_session.flush()

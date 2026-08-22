@@ -13,8 +13,7 @@ import json
 from job_store import db_create_job
 from worker import queue_job
 from . import bp
-from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from auth.roles import global_uploader_or_project_assignment_required
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UPLOAD_KIND_REMIDIO,
@@ -64,6 +63,26 @@ def _get_int_setting(db_session, key: str, env_var: str, default: int, *, min_va
 def _allowed_zip(name: str) -> bool:
     return "." in name and name.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
+
+def _available_ingest_modes(profiles: list[dict]) -> tuple[dict[str, str], ...]:
+    """Return only ZIP modes enabled by at least one assigned profile."""
+    modes: list[dict[str, str]] = []
+    if any(
+        "encounter_set" in profile.get("upload_kinds", [])
+        and profile.get("allow_remidio_zip_encounter_set")
+        for profile in profiles
+    ):
+        modes.append({"value": "remidio_encounter_set", "label": "Remidio ZIP EncounterSet"})
+    if any(
+        "encounter_set" in profile.get("upload_kinds", [])
+        and profile.get("allow_iitk_zip_encounter_set")
+        for profile in profiles
+    ):
+        modes.append({"value": "iitk_encounter_set", "label": "IITK ZIP EncounterSet"})
+    if any("remidio" in profile.get("upload_kinds", []) for profile in profiles):
+        modes.append({"value": "legacy_remidio", "label": "Legacy Remidio"})
+    return tuple(modes)
+
 def _uniquify(dest_dir: Path, filename: str) -> Path:
     candidate = dest_dir / secure_filename(filename)
     if not candidate.exists():
@@ -99,16 +118,8 @@ def get_daily_upload_dir():
     return upload_daily
 
 @bp.route("/upload_files", methods=["GET"])
-@roles_required(
-    "fileUploader",
-)
+@global_uploader_or_project_assignment_required(UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET)
 def upload_form():
-    # Get available hospitals and lab units for the current user via shared eligibility helper
-    allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-    if not allowed_lab_unit_ids:
-        flash("No lab unit access.", "warning")
-        return redirect(url_for("home.index"))
-
     from db_transaction_manager import transaction_scope
 
     with transaction_scope() as db:
@@ -117,6 +128,11 @@ def upload_form():
             current_user.id,
             {UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET},
         )
+        ingest_modes = _available_ingest_modes(upload_options.profiles)
+        allowed_lab_unit_ids = {item["id"] for item in upload_options.lab_units}
+        if not ingest_modes:
+            flash("No active upload profile is assigned to your account.", "warning")
+            return redirect(url_for("home.index"))
         lab_units = (
             db.query(LabUnit)
             .options(selectinload(LabUnit.hospital))
@@ -191,6 +207,12 @@ def upload_form():
             min_value=1,
         )
 
+    requested_mode = request.args.get("ingest_mode") or ""
+    selected_ingest_mode = (
+        requested_mode
+        if any(mode["value"] == requested_mode for mode in ingest_modes)
+        else ingest_modes[0]["value"]
+    )
     return render_template(
         "upload/upload_multi.html",
         per_file_mb=int(per_file_max_bytes / (1024 * 1024)),
@@ -200,13 +222,14 @@ def upload_form():
         zip_cameras=zip_cameras_data,
         projects=upload_options.projects,
         upload_profiles=upload_options.profiles,
-        recent_uploads=recent_uploads
+        recent_uploads=recent_uploads,
+        selected_project_id=request.args.get("project_id", type=int),
+        ingest_modes=ingest_modes,
+        selected_ingest_mode=selected_ingest_mode,
     )
 
 @bp.route("/upload", methods=["POST"])
-@roles_required(
-    "fileUploader",
-)
+@global_uploader_or_project_assignment_required(UPLOAD_KIND_REMIDIO, UPLOAD_KIND_ENCOUNTER_SET)
 def upload_files():
     per_file_default = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
     max_files_default = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))
@@ -242,11 +265,6 @@ def upload_files():
         flash("Please select a hospital, project, lab unit, and required camera.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
-    allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-    if not allowed_lab_unit_ids:
-        flash("No lab unit access.", "warning")
-        return redirect(url_for("remedio_zip_uploads.upload_form"))
-
     # Validate that the selected lab unit belongs to the selected hospital
     with get_db_session() as db:
         lab_unit = db.query(LabUnit).filter(
@@ -267,10 +285,6 @@ def upload_files():
             flash("Please select a ZIP-enabled camera.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
             
-        # Validate that the current user has access to this lab unit
-        if lab_unit_id not in allowed_lab_unit_ids:
-            flash("You don't have access to the selected lab unit.", "danger")
-            return redirect(url_for("remedio_zip_uploads.upload_form"))
         try:
             if ingest_mode == "encounter_set":
                 upload_profile = validate_encounter_set_upload_scope(

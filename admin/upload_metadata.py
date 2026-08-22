@@ -21,7 +21,7 @@ def _context() -> dict:
     }
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def upload_metadata_fields_admin():
     """Render reusable upload metadata field master UI."""
     if not _has_manager_scope():
@@ -30,7 +30,7 @@ def upload_metadata_fields_admin():
     return render_template("admin/upload_metadata_fields.html", **_context())
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def upload_metadata_fields_list():
     """Render upload metadata field master list partial."""
     if not _has_manager_scope():

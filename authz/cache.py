@@ -196,8 +196,15 @@ def _collect_authorization_changes(db: Session, _flush_context: Any, _instances:
         elif name in {"UserRole", "UserDiseaseUnitRole", "ProjectGraderAllocation"}:
             user_ids.add(getattr(row, "user_id", 0) or 0)
             project_ids.add(getattr(row, "project_id", 0) or 0)
-        elif name in {"ProjectRoleGrant", "ProjectEncounterSetPermission", "ProjectInvestigator"}:
+        elif name in {
+            "ProjectRoleGrant",
+            "ProjectEncounterSetPermission",
+            "ProjectInvestigator",
+            "ProjectUploadProfileAssignment",
+        }:
             user_ids.add(getattr(row, "user_id", 0) or 0)
+            project_ids.add(getattr(row, "project_id", 0) or 0)
+        elif name in {"ProjectUploadProfile", "ProjectLabUnit"}:
             project_ids.add(getattr(row, "project_id", 0) or 0)
         elif name == "ProjectGradingAllocationPolicy":
             project_ids.add(getattr(row, "project_id", 0) or 0)

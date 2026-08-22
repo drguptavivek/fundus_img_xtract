@@ -42,7 +42,7 @@
 
           {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('resident') or current_user_has('optometrist') or current_user_has('fileUploader') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs','remidio_api_uploads'] or (request.endpoint|default('', true)).startswith('jobs.') or request.endpoint in ['admin.upload_profiles_admin', 'admin.encounter_set_types_admin', 'admin.upload_metadata_fields_admin']) else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Upload
             </a>
@@ -51,38 +51,6 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload_index' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload_index') }}">Dashboard</a>
               </li>
-              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('fileUploader') or current_user_has('optometrist') %}
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li><h6 class="dropdown-header">Create Encounters</h6></li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'remidio_api_uploads.encounter_set_browser' %}active{% endif %}"
-                  href="{{ url_for('remidio_api_uploads.encounter_set_browser') }}">EncounterSet Browser</a>
-              </li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'remidio_api_uploads.remidio_api_sync' %}active{% endif %}"
-                  href="{{ url_for('remidio_api_uploads.remidio_api_sync') }}">Remidio API Sync</a>
-              </li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'remidio_api_uploads.encounter_set_wadhwani_inference' %}active{% endif %}"
-                  href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Wadhwani Inference</a>
-              </li>
-              {% endif %}
-              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'admin.encounter_set_types_admin' %}active{% endif %}"
-                  href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a>
-              </li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'admin.upload_profiles_admin' %}active{% endif %}"
-                  href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a>
-              </li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'admin.upload_metadata_fields_admin' %}active{% endif %}"
-                  href="{{ url_for('admin.upload_metadata_fields_admin') }}">Upload Metadata Fields</a>
-              </li>
-              {% endif %}
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -112,12 +80,6 @@
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
-              </li>
-              {% endif %}
-              {% if current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') or current_user_has('ophthalmologist') or current_user_has('optometrist') or current_user_has('fileUploader') %}
-              <li>
-                <a class="dropdown-item {% if request.blueprint == 'glaucoma_ai' %}active{% endif %}"
-                  href="{{ url_for('glaucoma_ai.index') }}">Glaucoma AI Upload</a>
               </li>
               {% endif %}
               {% if current_user_has('fileUploader') %}
@@ -381,18 +343,24 @@
               </li>
               <li class="dropend">
                 <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
-                  Upload Management
+                  Upload Configuration
                 </a>
                 <ul class="dropdown-menu admin-submenu">
                   <li><a class="dropdown-item" href="{{ url_for('admin.upload_profiles_admin') }}#upload-profiles">Upload Profiles</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.upload_metadata_fields_admin') }}">Upload Metadata Fields</a></li>
+                </ul>
+              </li>
+              <li class="dropend">
+                <a class="dropdown-item dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                  Integrations
+                </a>
+                <ul class="dropdown-menu admin-submenu">
                   <li><a class="dropdown-item" href="{{ url_for('admin.remidio_admin') }}">Remidio Connections</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.remidio_api_routing_dashboard') }}">Remidio API Routing</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.remidio_encounter_migration') }}">Remidio Encounter Migration</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.task_backfill_admin') }}">Task Backfill</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.metadata_backfill_admin') }}">Metadata Backfill</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.iitk_admin') }}">IITK API</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">AI Models / Wadhwani</a></li>
                 </ul>
               </li>
               <li class="dropend">
@@ -408,11 +376,7 @@
                   <li><a class="dropdown-item" href="{{ url_for('admin.list_diseases') }}">Diseases</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.list_disease_gradings') }}">Disease Gradings</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.linked_disease_gradings_list') }}">Linked Disease Gradings</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_profiles_admin') }}">Upload Profiles</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.encounter_set_types_admin') }}">EncounterSet Types</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.upload_metadata_fields_admin') }}">Upload Metadata Fields</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.manage_eligibility_users') }}">Grading Eligibility</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">AI Models</a></li>
                 </ul>
               </li>
               <li class="dropend">
@@ -425,6 +389,9 @@
                   <li><a class="dropdown-item" href="{{ url_for('admin.grading_state_inconsistencies') }}">Grading State Inconsistencies</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.linked_task_inconsistencies') }}">Linked Task Inconsistencies</a></li>
                   <li><a class="dropdown-item" href="{{ url_for('admin.email_settings_list') }}">Email Settings</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.task_backfill_admin') }}">Task Backfill</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.metadata_backfill_admin') }}">Metadata Backfill</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a></li>
                   <li><a class="dropdown-item" href="/healthz">Health</a></li>
                 </ul>
               </li>

@@ -13,7 +13,7 @@ import logging
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
-from models import Hospital, LabUnit, Project, Role, User, user_lab_units
+from models import Hospital, LabUnit, Project, Role, User
 from utils.log_sanitize import sanitize_log_value
 
 from .dto import ProjectRoleGrantDTO, ProjectRoleGrantInput
@@ -27,29 +27,16 @@ from .models import (
 )
 
 
-PROJECT_GRANT_MANAGER_ROLES = frozenset({"project_pi", "site_pi", "local_admin", "data_manager"})
+from .policy import (
+    PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES,
+    PROJECT_ASSIGNABLE_ROLE_NAMES,
+    ROLE_PROJECT_ADMIN,
+)
+from project_configuration.service import configured_project_lab_unit_ids
+from project_configuration.models import ProjectLabUnit
 
-PROJECT_ASSIGNABLE_ROLE_NAMES = frozenset({
-    "project_pi",
-    "site_pi",
-    "principal_investigator",
-    "co_investigator",
-    "coordinator",
-    "collaborator",
-    "local_admin",
-    "data_manager",
-    "fileUploader",
-    "optometrist",
-    "ophthalmologist",
-    "resident",
-    "discrepancy_reviewer",
-    "data_exporter",
-    "regrade_adjudicator",
-    "dataset_creator",
-    "analytics_viewer",
-    "field_optometrist",
-    "field_ophthalmologist",
-})
+
+PROJECT_GRANT_MANAGER_ROLES = frozenset({ROLE_PROJECT_ADMIN})
 
 _LOGGER = logging.getLogger("project_authorization")
 
@@ -143,7 +130,8 @@ def replace_project_role_grants(
         for role_name in role_names
         if role_name and role_name.strip()
     }
-    unsupported = selected_roles - PROJECT_ASSIGNABLE_ROLE_NAMES
+    actor_assignable_roles = _actor_assignable_role_names(actor)
+    unsupported = selected_roles - actor_assignable_roles
     if unsupported:
         raise ProjectGrantValidationError("One or more roles cannot be assigned within a project.")
     scope_input = ProjectRoleGrantInput(
@@ -176,9 +164,11 @@ def replace_project_role_grants(
         _require_manage_scope(db, actor=actor, data=original_input)
         old_rows = db.execute(
             select(ProjectRoleGrant)
+            .join(Role, Role.id == ProjectRoleGrant.role_id)
             .where(
                 ProjectRoleGrant.project_id == project_id,
                 ProjectRoleGrant.user_id == user_id,
+                Role.name.in_(actor_assignable_roles),
                 _exact_scope_clause(
                     scope_type=original_scope_type,
                     hospital_id=original_hospital_id,
@@ -204,6 +194,7 @@ def replace_project_role_grants(
             ProjectRoleGrant.project_id == project_id,
             ProjectRoleGrant.user_id == user_id,
             exact_scope,
+            Role.name.in_(actor_assignable_roles),
         )
         .options(
             selectinload(ProjectRoleGrant.user),
@@ -312,13 +303,17 @@ def list_project_role_grants(
 
     statement = (
         select(ProjectRoleGrant)
+        .join(Role, Role.id == ProjectRoleGrant.role_id)
         .options(
             selectinload(ProjectRoleGrant.user),
             selectinload(ProjectRoleGrant.role),
             selectinload(ProjectRoleGrant.hospital),
             selectinload(ProjectRoleGrant.lab_unit).selectinload(LabUnit.hospital),
         )
-        .where(ProjectRoleGrant.project_id == project_id)
+        .where(
+            ProjectRoleGrant.project_id == project_id,
+            Role.name.in_(PROJECT_ASSIGNABLE_ROLE_NAMES),
+        )
         .order_by(
             ProjectRoleGrant.active.desc(),
             ProjectRoleGrant.user_id,
@@ -410,6 +405,25 @@ def project_role_names_for_scope(
     lab_unit_id: int | None = None,
 ) -> frozenset[str]:
     """Resolve active role names whose project scope contains one resource."""
+    if lab_unit_id is not None and not db.execute(
+        select(ProjectLabUnit.id).where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.lab_unit_id == lab_unit_id,
+            ProjectLabUnit.active.is_(True),
+        )
+    ).scalar_one_or_none():
+        return frozenset()
+    if hospital_id is not None and not db.execute(
+        select(ProjectLabUnit.id)
+        .join(LabUnit, LabUnit.id == ProjectLabUnit.lab_unit_id)
+        .where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.active.is_(True),
+            LabUnit.hospital_id == hospital_id,
+        )
+        .limit(1)
+    ).scalar_one_or_none():
+        return frozenset()
     scope_conditions = [ProjectRoleGrant.scope_type == PROJECT_SCOPE]
     if hospital_id is not None:
         scope_conditions.append(and_(
@@ -471,14 +485,29 @@ def project_role_grant_exists_clause(
                     exists().where(lab.id == lab_unit_id, lab.hospital_id == grant.hospital_id),
                 )
             )
-    return exists().where(
+    conditions = [
         grant.project_id == project_id,
         grant.user_id == user_id,
         grant.active.is_(True),
         grant.role_id == role.id,
         role.name.in_(roles),
         or_(*scope_conditions),
-    )
+    ]
+    if lab_unit_id is not None:
+        conditions.append(exists().where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.lab_unit_id == lab_unit_id,
+            ProjectLabUnit.active.is_(True),
+        ))
+    elif hospital_id is not None:
+        configured_lab = aliased(LabUnit)
+        conditions.append(exists().where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.lab_unit_id == configured_lab.id,
+            configured_lab.hospital_id == hospital_id,
+            ProjectLabUnit.active.is_(True),
+        ))
+    return exists().where(*conditions)
 
 
 def _validate_grant_input(
@@ -492,8 +521,8 @@ def _validate_grant_input(
     if target_user is None or not target_user.is_active:
         raise ProjectGrantValidationError("An active user is required.")
     role = db.execute(select(Role).where(Role.name == data.role_name)).scalar_one_or_none()
-    if role is None:
-        raise ProjectGrantValidationError("Select a globally defined application role.")
+    if role is None or role.name not in PROJECT_ASSIGNABLE_ROLE_NAMES:
+        raise ProjectGrantValidationError("Select an assignable project role.")
 
     return project, target_user, role
 
@@ -511,11 +540,20 @@ def _validate_scope_target(db: Session, data: ProjectRoleGrantInput) -> None:
             raise ProjectGrantValidationError("Hospital scope requires exactly one hospital.")
         if db.get(Hospital, data.hospital_id) is None:
             raise ProjectGrantValidationError("Hospital not found.")
+        configured_hospital_ids = set(db.execute(
+            select(LabUnit.hospital_id).where(
+                LabUnit.id.in_(configured_project_lab_unit_ids(db, project_id=data.project_id) or {-1})
+            )
+        ).scalars())
+        if data.hospital_id not in configured_hospital_ids:
+            raise ProjectGrantValidationError("Hospital has no Lab Unit configured for this project.")
     else:
         if data.lab_unit_id is None or data.hospital_id is not None:
             raise ProjectGrantValidationError("Lab-unit scope requires exactly one lab unit.")
         if db.get(LabUnit, data.lab_unit_id) is None:
             raise ProjectGrantValidationError("Lab unit not found.")
+        if data.lab_unit_id not in configured_project_lab_unit_ids(db, project_id=data.project_id):
+            raise ProjectGrantValidationError("Lab unit is not configured for this project.")
 
 
 def _exact_scope_clause(*, scope_type: str, hospital_id: int | None, lab_unit_id: int | None):
@@ -555,58 +593,27 @@ def _log_grant_edit(*, actor: User, row: ProjectRoleGrant, change: str) -> None:
 def _require_manage_scope(db: Session, *, actor: User, data: ProjectRoleGrantInput) -> None:
     if actor.has_role("admin"):
         return
-    if actor.has_role("local_admin", "data_manager") and _global_actor_contains_scope(
-        db, actor=actor, data=data
-    ):
-        return
-    if user_has_project_role(
-        db,
-        user_id=actor.id,
-        project_id=data.project_id,
-        role_names=PROJECT_GRANT_MANAGER_ROLES,
-        hospital_id=data.hospital_id,
-        lab_unit_id=data.lab_unit_id,
-    ):
+    if data.role_name not in PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES:
+        raise ProjectGrantPermissionDenied("Only a System Admin can assign project governance roles.")
+    if db.execute(
+        select(ProjectRoleGrant.id)
+        .join(Role, Role.id == ProjectRoleGrant.role_id)
+        .where(
+            ProjectRoleGrant.project_id == data.project_id,
+            ProjectRoleGrant.user_id == actor.id,
+            ProjectRoleGrant.active.is_(True),
+            Role.name.in_(PROJECT_GRANT_MANAGER_ROLES),
+        )
+        .limit(1)
+    ).scalar_one_or_none() is not None:
         return
     raise ProjectGrantPermissionDenied("You cannot manage the requested project scope.")
-
-
-def _global_actor_contains_scope(db: Session, *, actor: User, data: ProjectRoleGrantInput) -> bool:
-    if data.scope_type == PROJECT_SCOPE:
-        return False
-    if actor.hospital_id is None:
-        return False
-    if data.scope_type == HOSPITAL_SCOPE:
-        return data.hospital_id == actor.hospital_id
-    lab_hospital_id = db.execute(
-        select(LabUnit.hospital_id).where(LabUnit.id == data.lab_unit_id)
-    ).scalar_one_or_none()
-    if lab_hospital_id != actor.hospital_id:
-        return False
-    if actor.has_role("local_admin"):
-        return True
-    return bool(db.execute(select(user_lab_units.c.user_id).where(
-        user_lab_units.c.user_id == actor.id,
-        user_lab_units.c.lab_unit_id == data.lab_unit_id,
-    )).first())
 
 
 def _manageable_grant_clause(db: Session, *, actor: User, project_id: int):
     if actor.has_role("admin"):
         return True
     conditions = []
-    if actor.has_role("local_admin", "data_manager") and actor.hospital_id is not None:
-        lab_ids = select(LabUnit.id).where(LabUnit.hospital_id == actor.hospital_id)
-        conditions.extend([
-            and_(
-                ProjectRoleGrant.scope_type == HOSPITAL_SCOPE,
-                ProjectRoleGrant.hospital_id == actor.hospital_id,
-            ),
-            and_(
-                ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
-                ProjectRoleGrant.lab_unit_id.in_(lab_ids),
-            ),
-        ])
     manager_grants = db.execute(
         select(ProjectRoleGrant)
         .join(Role, Role.id == ProjectRoleGrant.role_id)
@@ -617,24 +624,27 @@ def _manageable_grant_clause(db: Session, *, actor: User, project_id: int):
             Role.name.in_(PROJECT_GRANT_MANAGER_ROLES),
         )
     ).scalars().all()
-    if any(grant.scope_type == PROJECT_SCOPE for grant in manager_grants):
-        return True
-    for grant in manager_grants:
-        if grant.scope_type == HOSPITAL_SCOPE:
-            lab_ids = select(LabUnit.id).where(LabUnit.hospital_id == grant.hospital_id)
-            conditions.extend([
-                and_(
-                    ProjectRoleGrant.scope_type == HOSPITAL_SCOPE,
-                    ProjectRoleGrant.hospital_id == grant.hospital_id,
-                ),
-                and_(
-                    ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
-                    ProjectRoleGrant.lab_unit_id.in_(lab_ids),
-                ),
-            ])
-        elif grant.scope_type == LAB_UNIT_SCOPE:
-            conditions.append(and_(
+    if manager_grants:
+        configured_lab_ids = configured_project_lab_unit_ids(db, project_id=project_id)
+        configured_hospital_ids = select(LabUnit.hospital_id).where(
+            LabUnit.id.in_(configured_lab_ids or {-1})
+        )
+        conditions.extend([
+            ProjectRoleGrant.scope_type == PROJECT_SCOPE,
+            and_(
+                ProjectRoleGrant.scope_type == HOSPITAL_SCOPE,
+                ProjectRoleGrant.hospital_id.in_(configured_hospital_ids),
+            ),
+            and_(
                 ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
-                ProjectRoleGrant.lab_unit_id == grant.lab_unit_id,
-            ))
+                ProjectRoleGrant.lab_unit_id.in_(configured_lab_ids or {-1}),
+            ),
+        ])
     return or_(*conditions) if conditions else None
+
+
+def _actor_assignable_role_names(actor: User) -> frozenset[str]:
+    """System Admin appoints governance; Project Admin delegates operations."""
+    if actor.has_role("admin"):
+        return PROJECT_ASSIGNABLE_ROLE_NAMES
+    return PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES

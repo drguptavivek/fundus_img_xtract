@@ -16,7 +16,7 @@ from . import api_bp
 
 
 LOGGER = logging.getLogger("api.iitk_api_integration")
-IITK_ROLES = ("admin", "local_admin", "data_manager")
+IITK_ROLES = ("admin",)
 
 
 @api_bp.route("/iitk/configurations", methods=["GET"])

@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from authz.cache import schedule_authorization_invalidation
+from data_authorization.policy import ACTION_MANAGE_UPLOADERS, user_can_project_action
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
 from encounter_sets.models import ProjectEncounterSetPermission
@@ -32,8 +34,8 @@ from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UPLOAD_KIND_PREGRADED,
     UPLOAD_KIND_REMIDIO,
-    manager_lab_unit_ids,
 )
+from project_configuration.service import configured_project_lab_unit_ids
 
 PROJECT_INVESTIGATOR_ROLES = {
     "principal_investigator",
@@ -170,10 +172,40 @@ def validate_mydriatic_flags(*, allow_mydriatic: bool, allow_non_mydriatic: bool
         return "Default cannot be non-mydriatic unless non-mydriatic uploads are allowed."
     return None
 
-def create_project(project_input: ProjectCreateInput) -> MutationResult:
+def _require_system_admin(db, manager_user_id: int) -> MutationResult | None:
+    manager = db.execute(
+        select(User).options(selectinload(User.roles)).where(User.id == manager_user_id)
+    ).scalar_one_or_none()
+    if manager is None or not manager.has_role("admin"):
+        return MutationResult(False, "Only a System Admin can change project configuration.", 403)
+    return None
+
+
+def _profile_authorization_scope(db, profile_id: int) -> tuple[set[int], set[int]]:
+    project_ids = set(db.execute(
+        select(ProjectUploadProfile.project_id).where(
+            ProjectUploadProfile.upload_profile_id == profile_id
+        )
+    ).scalars())
+    user_ids = set(db.execute(
+        select(ProjectUploadProfileAssignment.user_id)
+        .join(
+            ProjectUploadProfile,
+            ProjectUploadProfile.id
+            == ProjectUploadProfileAssignment.project_upload_profile_id,
+        )
+        .where(ProjectUploadProfile.upload_profile_id == profile_id)
+    ).scalars())
+    return project_ids, user_ids
+
+
+def create_project(manager_user_id: int, project_input: ProjectCreateInput) -> MutationResult:
     if not project_input.title or not project_input.code:
         return MutationResult(False, "Project title and code are required.", 400)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         try:
             project = Project(title=project_input.title, code=project_input.code, description=project_input.description, active=True)
             db.add(project)
@@ -184,10 +216,13 @@ def create_project(project_input: ProjectCreateInput) -> MutationResult:
             return MutationResult(False, "Duplicate or invalid project configuration.", 400)
 
 
-def update_project(project_id: int, project_input: ProjectCreateInput) -> MutationResult:
+def update_project(manager_user_id: int, project_id: int, project_input: ProjectCreateInput) -> MutationResult:
     if not project_input.title or not project_input.code:
         return MutationResult(False, "Project title and code are required.", 400)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         project = db.get(Project, project_id)
         if not project:
             return MutationResult(False, "Project not found.", 404)
@@ -202,12 +237,15 @@ def update_project(project_id: int, project_input: ProjectCreateInput) -> Mutati
             return MutationResult(False, "Duplicate or invalid project configuration.", 400)
 
 
-def add_investigator(investigator_input: InvestigatorCreateInput) -> MutationResult:
+def add_investigator(manager_user_id: int, investigator_input: InvestigatorCreateInput) -> MutationResult:
     if not investigator_input.project_id or not investigator_input.user_id:
         return MutationResult(False, "Project and investigator are required.", 400)
     if investigator_input.role not in PROJECT_INVESTIGATOR_ROLES:
         return MutationResult(False, "Project collaborator role is invalid.", 400)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         try:
             investigator = ProjectInvestigator(
                 project_id=investigator_input.project_id,
@@ -226,9 +264,10 @@ def add_investigator(investigator_input: InvestigatorCreateInput) -> MutationRes
 def enable_project_profile(manager_user_id: int, profile_input: ProjectProfileInput) -> MutationResult:
     if not profile_input.project_id or not profile_input.upload_profile_id:
         return MutationResult(False, "Project and upload profile are required.", 400)
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         project = db.get(Project, profile_input.project_id)
         profile = db.get(UploadProfile, profile_input.upload_profile_id)
         if not project or not profile:
@@ -250,6 +289,7 @@ def enable_project_profile(manager_user_id: int, profile_input: ProjectProfileIn
             db.add(mapping)
         try:
             db.flush()
+            schedule_authorization_invalidation(db, project_ids={project.id})
             return MutationResult(True, "Upload profile enabled for project.", payload={"project_upload_profile_id": mapping.id})
         except IntegrityError:
             db.rollback()
@@ -257,13 +297,15 @@ def enable_project_profile(manager_user_id: int, profile_input: ProjectProfileIn
 
 
 def set_project_profile_active(manager_user_id: int, project_upload_profile_id: int, active: bool) -> MutationResult:
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         mapping = db.get(ProjectUploadProfile, project_upload_profile_id)
         if not mapping:
             return MutationResult(False, "Project upload profile mapping not found.", 404)
         mapping.active = active
+        schedule_authorization_invalidation(db, project_ids={mapping.project_id})
         return MutationResult(
             True,
             "Upload profile enabled for project." if active else "Upload profile disabled for project.",
@@ -274,16 +316,32 @@ def set_project_profile_active(manager_user_id: int, project_upload_profile_id: 
 def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectProfileAssignmentInput) -> MutationResult:
     if not assignment_input.project_upload_profile_id or not assignment_input.user_id or not assignment_input.lab_unit_ids:
         return MutationResult(False, "Project profile, user, and lab unit are required.", 400)
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
     requested_lab_ids = set(assignment_input.lab_unit_ids)
-    if not requested_lab_ids.issubset(scoped_lab_ids):
-        return MutationResult(False, "You cannot assign upload access outside your lab-unit scope.", 403)
     with transaction_scope() as db:
         project_profile = db.get(ProjectUploadProfile, assignment_input.project_upload_profile_id)
         if not project_profile or not project_profile.active:
             return MutationResult(False, "Project upload profile mapping not found or inactive.", 404)
+        manager = db.get(User, manager_user_id)
+        if manager is None:
+            return MutationResult(False, "Project manager was not found.", 403)
+        if not user_can_project_action(
+            db,
+            user=manager,
+            project_id=project_profile.project_id,
+            action=ACTION_MANAGE_UPLOADERS,
+        ):
+            return MutationResult(False, "You cannot manage uploaders for this project.", 403)
         if project_profile.profile and project_profile.profile.automated_remidio_populated:
-            return MutationResult(False, "Automated Remidio API profiles do not use uploader assignments.", 400)
+            return MutationResult(
+                False,
+                "Automated Remidio API profiles do not use uploader assignments.",
+                400,
+            )
+        configured_lab_ids = configured_project_lab_unit_ids(
+            db, project_id=project_profile.project_id
+        )
+        if not requested_lab_ids.issubset(configured_lab_ids):
+            return MutationResult(False, "Select only Lab Units configured for this project.", 400)
         lab_error = _validate_user_lab_assignment(db, assignment_input.user_id, requested_lab_ids)
         if lab_error:
             return MutationResult(False, lab_error, 400)
@@ -329,6 +387,11 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
             last_assignment = assignment
         try:
             db.flush()
+            schedule_authorization_invalidation(
+                db,
+                user_ids={assignment_input.user_id},
+                project_ids={project_profile.project_id},
+            )
             return MutationResult(
                 True,
                 "User assigned to project upload profile.",
@@ -342,13 +405,26 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
 def remove_project_profile_assignment(manager_user_id: int, assignment_input: ProjectProfileAssignmentRemoveInput) -> MutationResult:
     if not assignment_input.assignment_id:
         return MutationResult(False, "Assignment is required.", 400)
-    scoped_lab_ids = manager_lab_unit_ids(manager_user_id)
     with transaction_scope() as db:
         assignment = db.get(ProjectUploadProfileAssignment, assignment_input.assignment_id)
-        if not assignment or assignment.lab_unit_id not in scoped_lab_ids:
-            return MutationResult(False, "Project upload profile assignment not found in your lab-unit scope.", 404)
-        assignment.active = False
+        if not assignment:
+            return MutationResult(False, "Project upload profile assignment not found.", 404)
         project_profile = db.get(ProjectUploadProfile, assignment.project_upload_profile_id)
+        manager = db.get(User, manager_user_id)
+        if manager is None or project_profile is None:
+            return MutationResult(False, "Project upload profile assignment not found.", 404)
+        can_manage = user_can_project_action(
+            db,
+            user=manager,
+            project_id=project_profile.project_id,
+            action=ACTION_MANAGE_UPLOADERS,
+        )
+        configured_lab_ids = configured_project_lab_unit_ids(
+            db, project_id=project_profile.project_id
+        )
+        if not can_manage or assignment.lab_unit_id not in configured_lab_ids:
+            return MutationResult(False, "Project upload profile assignment not found in your project scope.", 404)
+        assignment.active = False
         remaining = db.execute(
             select(ProjectUploadProfileAssignment.id)
             .join(
@@ -383,14 +459,20 @@ def remove_project_profile_assignment(manager_user_id: int, assignment_input: Pr
                     permission.can_create_datasets,
                     permission.can_adjudicate_regrades,
                 ))
+        schedule_authorization_invalidation(
+            db,
+            user_ids={assignment.user_id},
+            project_ids={project_profile.project_id},
+        )
         return MutationResult(True, "User removed from project upload profile.", payload={"assignment_id": assignment.id})
 
 
 def create_profile(manager_user_id: int, profile_input: UploadProfileInput) -> MutationResult:
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     profile = UploadProfile(active=True)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         try:
             validation_error = _apply_profile_input(db, profile, profile_input)
             if validation_error:
@@ -404,9 +486,10 @@ def create_profile(manager_user_id: int, profile_input: UploadProfileInput) -> M
 
 
 def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadProfileInput) -> MutationResult:
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         profile = db.get(UploadProfile, profile_id)
         if not profile:
             return MutationResult(False, "Upload profile not found.", 404)
@@ -414,6 +497,10 @@ def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadP
             validation_error = _apply_profile_input(db, profile, profile_input)
             if validation_error:
                 return MutationResult(False, validation_error, 400)
+            project_ids, user_ids = _profile_authorization_scope(db, profile.id)
+            schedule_authorization_invalidation(
+                db, user_ids=user_ids, project_ids=project_ids
+            )
             return MutationResult(True, "Upload profile updated.", payload={"profile_id": profile.id})
         except IntegrityError:
             db.rollback()
@@ -421,9 +508,10 @@ def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadP
 
 
 def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         source = db.get(UploadProfile, profile_id)
         if not source:
             return MutationResult(False, "Upload profile not found.", 404)
@@ -511,13 +599,18 @@ def duplicate_profile(manager_user_id: int, profile_id: int) -> MutationResult:
 
 
 def set_profile_active(manager_user_id: int, profile_id: int, active: bool) -> MutationResult:
-    if not manager_lab_unit_ids(manager_user_id):
-        return MutationResult(False, "You are not assigned to any lab units for upload profile management.", 403)
     with transaction_scope() as db:
+        denied = _require_system_admin(db, manager_user_id)
+        if denied:
+            return denied
         profile = db.get(UploadProfile, profile_id)
         if not profile:
             return MutationResult(False, "Upload profile not found.", 404)
         profile.active = active
+        project_ids, user_ids = _profile_authorization_scope(db, profile.id)
+        schedule_authorization_invalidation(
+            db, user_ids=user_ids, project_ids=project_ids
+        )
         return MutationResult(True, "Upload profile activated." if active else "Upload profile deactivated.", payload={"profile_id": profile.id})
 
 
@@ -1091,7 +1184,6 @@ def _validate_user_lab_assignment(db, user_id: int | None, lab_unit_ids: set[int
     user = (
         db.execute(
             select(User)
-            .options(selectinload(User.lab_units))
             .where(User.id == user_id, User.is_active.is_(True))
         )
         .scalars()
@@ -1106,10 +1198,4 @@ def _validate_user_lab_assignment(db, user_id: int | None, lab_unit_ids: set[int
     )
     if {lab.id for lab in labs} != lab_unit_ids:
         return "Selected lab unit was not found."
-    user_lab_ids = {lab.id for lab in user.lab_units or []}
-    if not lab_unit_ids.issubset(user_lab_ids):
-        return "Selected user must be explicitly assigned to every selected lab unit."
-    user_hospital_id = getattr(user, "hospital_id", None)
-    if any(lab.hospital_id != user_hospital_id for lab in labs):
-        return "Selected lab units must belong to the user's hospital."
     return None

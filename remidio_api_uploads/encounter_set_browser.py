@@ -5,54 +5,46 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import abort, render_template, request, send_file, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from auth.roles import ROLE_COLLABORATOR, roles_or_project_grant_required
 from db_transaction_manager import get_db_session
-from encounter_sets.access import ENCOUNTER_SET_PII_ROLES
 from encounter_sets.models import EncounterSetAttachment
-from encounter_sets.permissions import CAPABILITY_BROWSE, apply_project_permission_scope
 from models import BASE_DIR, PatientEncounters
 from remidio_api_integration import service as remidio_service
-from utils.hospital_scoping import apply_scoping
 
 from . import bp
 
 
-BROWSER_ROLES = ENCOUNTER_SET_PII_ROLES
-COLLABORATOR_BROWSER_ROLES = (ROLE_COLLABORATOR, "collaborators")
-
-
 @bp.route("/uploads/encountersets/browse", methods=["GET"])
-@roles_or_project_grant_required(*BROWSER_ROLES)
+@login_required
 def encounter_set_browser():
     context = _browser_context()
     return render_template("remidio_api_uploads/encounter_set_browser.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse/workspace", methods=["GET"])
-@roles_or_project_grant_required(*BROWSER_ROLES)
+@login_required
 def encounter_set_browser_workspace():
     context = _browser_context()
     return render_template("remidio_api_uploads/_encounter_set_browser_workspace.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii", methods=["GET"])
-@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
+@login_required
 def encounter_set_browser_no_pii():
     context = _browser_context(no_pii=True)
     return render_template("remidio_api_uploads/encounter_set_browser_no_pii.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii/workspace", methods=["GET"])
-@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
+@login_required
 def encounter_set_browser_no_pii_workspace():
     context = _browser_context(no_pii=True)
     return render_template("remidio_api_uploads/_encounter_set_browser_workspace_no_pii.html", **context)
 
 
 @bp.route("/uploads/encountersets/browse-no-pii/<int:encounter_id>/download", methods=["GET"])
-@roles_or_project_grant_required(*COLLABORATOR_BROWSER_ROLES)
+@login_required
 def encounter_set_browser_no_pii_download(encounter_id: int):
     with get_db_session() as db:
         result = remidio_service.build_no_pii_encounter_set_zip(
@@ -74,7 +66,7 @@ def encounter_set_browser_no_pii_download(encounter_id: int):
 
 
 @bp.route("/uploads/encountersets/attachments/<uuid>", methods=["GET"])
-@roles_or_project_grant_required(*BROWSER_ROLES)
+@login_required
 def encounter_set_attachment(uuid: str):
     with get_db_session() as db:
         query = (
@@ -82,10 +74,23 @@ def encounter_set_attachment(uuid: str):
             .join(PatientEncounters, EncounterSetAttachment.patient_encounter_id == PatientEncounters.id)
             .filter(EncounterSetAttachment.uuid == uuid)
         )
-        query = apply_scoping(query, PatientEncounters, current_user, "upload")
-        query = apply_project_permission_scope(query, PatientEncounters, current_user, CAPABILITY_BROWSE)
         attachment = query.first()
         if not attachment or not attachment.folder_rel or not attachment.stored_filename:
+            abort(404)
+        encounter = db.get(PatientEncounters, attachment.patient_encounter_id)
+        from data_authorization.policy import ACTION_BROWSE_PII, user_can_project_action
+
+        if (
+            encounter is None
+            or encounter.project_id is None
+            or not user_can_project_action(
+                db,
+                user=current_user,
+                project_id=encounter.project_id,
+                action=ACTION_BROWSE_PII,
+                lab_unit_id=encounter.lab_unit_id,
+            )
+        ):
             abort(404)
         path = (BASE_DIR / Path(attachment.folder_rel) / attachment.stored_filename).resolve()
         if not path.exists() or not path.is_file():
@@ -113,6 +118,8 @@ def _browser_context(*, no_pii: bool = False) -> dict:
             encounter_id=encounter_id,
             no_pii=no_pii,
         )
+    if not context.get("projects"):
+        abort(403)
     context["browser_url"] = _browser_url(context, no_pii=no_pii)
     context["browser_workspace_endpoint"] = (
         "remidio_api_uploads.encounter_set_browser_no_pii_workspace"

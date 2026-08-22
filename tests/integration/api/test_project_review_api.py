@@ -27,6 +27,7 @@ from upload_profiles.models import (
     UploadProfileEncounterSetTypePackageImageScheme,
     UploadProfileKind,
 )
+from project_configuration.models import ProjectLabUnit
 
 
 def _role(db, name):
@@ -55,6 +56,11 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
     blocked_project = Project(title="Blocked Review Project", code="BLOCKED_REVIEW_PROJECT", active=True)
     db_session.add_all([user, project, blocked_project])
     db_session.flush()
+    db_session.add(ProjectLabUnit(
+        project_id=project.id,
+        lab_unit_id=allowed_lab.id,
+        active=True,
+    ))
     db_session.add(ProjectRoleGrant(
         project_id=project.id,
         user_id=user.id,

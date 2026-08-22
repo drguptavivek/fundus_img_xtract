@@ -57,6 +57,38 @@ from utils.timezone_choices import (
 )
 from app_cache import cache
 from grading_allocation.eligibility import invalidate_user_eligibility_cache
+from data_authorization.policy import PROJECT_ONLY_ROLE_NAMES
+
+
+def _global_user_roles_statement():
+    """Roles assignable outside a project; project governance stays in Project Access."""
+    return (
+        select(Role)
+        .where(Role.name.not_in(PROJECT_ONLY_ROLE_NAMES))
+        .order_by(Role.name.asc())
+    )
+
+
+def _replace_global_user_roles(
+    db,
+    *,
+    actor: User,
+    user: User,
+    selected_role_names: set[str],
+    valid_role_names: set[str],
+) -> None:
+    """Replace visible global roles without touching hidden project roles."""
+    selected_role_names.intersection_update(valid_role_names)
+    existing = {role.name for role in (user.roles or [])}
+    preserved_role_names = existing.intersection(PROJECT_ONLY_ROLE_NAMES)
+    if not actor.has_role("admin"):
+        if "admin" in existing:
+            preserved_role_names.add("admin")
+        selected_role_names.discard("admin")
+    target_role_names = selected_role_names | preserved_role_names
+    user.roles = db.execute(
+        select(Role).where(Role.name.in_(target_role_names or {"__none__"}))
+    ).scalars().all()
 
 
 def _can_access_user_detail(target_user: User) -> bool:
@@ -257,6 +289,15 @@ def add_user():
     pre_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units")) if request.method == "POST" else set()
 
     if request.method == "POST":
+        if pre_roles.intersection(PROJECT_ONLY_ROLE_NAMES):
+            return _add_user_err(
+                "Project roles must be assigned from Project Access.",
+                None, None, None, pre_username, pre_active,
+                pre_roles - PROJECT_ONLY_ROLE_NAMES,
+                pre_full_name, pre_phone, pre_designation, pre_email, pre_yj,
+                pre_ldos or default_ldos_str, pre_file_upload_quota,
+                pre_lab_unit_ids, pre_timezone,
+            )
         username = pre_username
         password = generate_strong_password(12)
         default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
@@ -384,7 +425,7 @@ Please keep this information secure.
 
     # Fetch roles, hospitals, and lab_units in the same session that will be used for rendering
     with get_db_session() as db:
-        roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+        roles = db.execute(_global_user_roles_statement()).scalars().all()
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
@@ -413,7 +454,7 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
 
     # Fetch fresh data in a new session to avoid detached instance errors
     with get_db_session() as db:
-        roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+        roles = db.execute(_global_user_roles_statement()).scalars().all()
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
@@ -465,7 +506,7 @@ def edit_user(user_id: int):
                  flash("You do not have permission to edit this user.", "danger")
                  return redirect(url_for("admin.users_list"))
 
-        roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+        roles = db.execute(_global_user_roles_statement()).scalars().all()
 
         # Hospital isolation: admin sees all hospitals, local_admin sees only their own
         user_roles = {r.name for r in (current_user.roles or [])}
@@ -515,7 +556,7 @@ def edit_user(user_id: int):
             if not user:
                 flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
-            roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+            roles = db.execute(_global_user_roles_statement()).scalars().all()
 
             # Hospital isolation: admin sees all hospitals, local_admin sees only their own
             user_roles = {r.name for r in (current_user.roles or [])}
@@ -530,21 +571,14 @@ def edit_user(user_id: int):
             # Handle role assignments
             if "save_roles" in request.form:
                 selected_roles = set(request.form.getlist("roles"))
-                # Normalize role names to ones that exist in DB (ignore stray/unknown values)
                 valid_role_names = {r.name for r in roles}
-                selected_roles &= valid_role_names
-
-                existing = {r.name for r in (user.roles or [])}
-                will_add = selected_roles - existing
-
-                # add roles
-                if will_add:
-                    add_objs = db.execute(select(Role).where(Role.name.in_(will_add))).scalars().all()
-                    for r in add_objs:
-                        user.roles.append(r)
-
-                if existing - selected_roles:
-                    flash("Existing roles were preserved. This screen only adds roles.", "info")
+                _replace_global_user_roles(
+                    db,
+                    actor=current_user,
+                    user=user,
+                    selected_role_names=selected_roles,
+                    valid_role_names=valid_role_names,
+                )
 
                 db.add(user)
                 cache_key = f"auth:user:{user.id}"

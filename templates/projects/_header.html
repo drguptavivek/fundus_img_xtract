@@ -29,18 +29,45 @@ try { localStorage.setItem('selectedProjectId', '{{ data.project.id }}'); } catc
 </script>
 
 <ul class="nav nav-tabs mb-4" aria-label="Project sections">
-  <li class="nav-item">
+  {% if capabilities.can_view_overview %}<li class="nav-item">
     <a class="nav-link {{ 'active' if request.endpoint == 'projects.summary' else '' }}"
        href="{{ url_for('projects.summary', project_id=data.project.id) }}">Summary</a>
-  </li>
+  </li>{% endif %}
+  {% if capabilities.can_browse %}
   <li class="nav-item">
+    <a class="nav-link {{ 'active' if request.endpoint in ['remidio_api_uploads.encounter_set_browser', 'remidio_api_uploads.encounter_set_browser_no_pii'] else '' }}"
+       href="{{ url_for('remidio_api_uploads.encounter_set_browser' if capabilities.can_browse_pii else 'remidio_api_uploads.encounter_set_browser_no_pii', project_id=data.project.id) }}">EncounterSet Browser</a>
+  </li>
+  {% endif %}
+  {% if capabilities.can_view_overview %}<li class="nav-item">
     <a class="nav-link {{ 'active' if request.endpoint == 'projects.uploads' else '' }}"
        href="{{ url_for('projects.uploads', project_id=data.project.id) }}">Uploads</a>
+  </li>{% endif %}
+  {% if capabilities.upload_kinds or capabilities.can_sync_remidio %}
+  <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">Upload</a>
+    <ul class="dropdown-menu">
+      {% if 'direct_image' in capabilities.upload_kinds %}<li><a class="dropdown-item" href="{{ url_for('direct_uploads.upload', project_id=data.project.id) }}">Direct Image Upload</a></li>{% endif %}
+      {% if 'pregraded' in capabilities.upload_kinds %}<li><a class="dropdown-item" href="{{ url_for('direct_uploads.pregraded_upload', project_id=data.project.id) }}">Pre-Graded Upload</a></li>{% endif %}
+      {% if 'remidio' in capabilities.upload_kinds %}<li><a class="dropdown-item" href="{{ url_for('remedio_zip_uploads.upload_form', project_id=data.project.id, ingest_mode='legacy_remidio') }}">Remidio ZIP Upload</a></li>{% endif %}
+      {% if 'encounter_set' in capabilities.upload_kinds %}<li><a class="dropdown-item" href="{{ url_for('remedio_zip_uploads.upload_form', project_id=data.project.id, ingest_mode='encounter_set') }}">EncounterSet ZIP Upload</a></li>{% endif %}
+      {% if capabilities.can_sync_remidio %}<li><a class="dropdown-item" href="{{ url_for('remidio_api_uploads.remidio_api_sync', project_id=data.project.id) }}">Remidio API Sync</a></li>{% endif %}
+    </ul>
   </li>
-  <li class="nav-item">
+  {% endif %}
+  {% if capabilities.can_run_wai %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', project_id=data.project.id) }}">Run WAI</a></li>
+  {% endif %}
+  {% if capabilities.can_view_wai_results %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', project_id=data.project.id, include_prior=1, results_only=1) }}">WAI Results</a></li>
+  {% endif %}
+  {% if capabilities.can_manage_access or capabilities.can_manage_uploaders %}
+  <li class="nav-item"><a class="nav-link" href="{{ url_for('admin.upload_projects_admin', project_id=data.project.id) }}">Project Access</a></li>
+  {% endif %}
+  {% if capabilities.can_view_overview %}<li class="nav-item">
     <a class="nav-link {{ 'active' if request.endpoint == 'projects.gradings' else '' }}"
        href="{{ url_for('projects.gradings', project_id=data.project.id) }}">Gradings</a>
-  </li>
+  </li>{% endif %}
 </ul>
 
 <div class="alert alert-light border py-2 small" role="note">

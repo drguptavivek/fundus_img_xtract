@@ -2,17 +2,21 @@
 from __future__ import annotations
 
 from flask import flash, redirect, render_template, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from data_authorization.exceptions import ProjectAuthorizationError
 from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, PROJECT_SCOPE
-from data_authorization.service import (
+from data_authorization.policy import (
+    ACTION_MANAGE_ACCESS,
+    ACTION_MANAGE_UPLOADERS,
+    PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES,
     PROJECT_ASSIGNABLE_ROLE_NAMES,
-    list_project_role_grants,
+    user_can_project_action,
 )
+from data_authorization.service import list_project_role_grants
 from db_transaction_manager import transaction_scope
 from grading_allocation import service as grading_allocation_service
 from models import (
@@ -27,11 +31,11 @@ from models import (
     ProjectInvestigator,
     Role,
     User,
-    user_lab_units,
 )
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding, RemidioApiSourceRule
 from remote_inference.automated_service import project_automated_workflow_context
 from remote_inference.manual_service import project_manual_workflow_context
+from project_configuration.service import configured_project_lab_unit_ids
 from remote_inference.encounter_service import workflow_context as encounter_workflow_context
 from iitk_api_integration import service as iitk_service
 from upload_profiles.service import manager_lab_unit_ids
@@ -71,10 +75,8 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
     users = (
         db.execute(
             select(User)
-            .join(user_lab_units, user_lab_units.c.user_id == User.id)
-            .where(user_lab_units.c.lab_unit_id.in_(scoped_lab_ids), User.is_active.is_(True))
+            .where(User.is_active.is_(True))
             .options(selectinload(User.lab_units), selectinload(User.roles))
-            .distinct()
             .order_by(User.username)
         )
         .scalars()
@@ -308,7 +310,7 @@ def _mapping_form_context(db, scoped_lab_ids: set[int]) -> dict:
     }
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def upload_profiles_admin():
     """Render dedicated upload profile CRUD."""
     scoped_lab_ids = _manager_lab_unit_ids()
@@ -322,33 +324,53 @@ def upload_profiles_admin():
         return render_template("admin/upload_profiles.html", **context)
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def upload_projects_admin():
     """Render project and investigator governance."""
-    scoped_lab_ids = _manager_lab_unit_ids()
-    if not scoped_lab_ids:
-        flash("You are not assigned to any lab units for project management.", "warning")
-        return redirect(url_for("admin.users_list"))
-
     with transaction_scope() as db:
+        project_ids = _manageable_project_ids(db)
+        if not project_ids:
+            return render_template("admin/upload_projects.html", projects=[], projects_only=True), 403
+        scoped_lab_ids = _manageable_project_lab_ids(db, project_ids)
         context = _mapping_form_context(db, scoped_lab_ids)
+        context["projects"] = [project for project in context["projects"] if project.id in project_ids]
+        context["project_cards"] = [
+            card for card in context["project_cards"] if card["project"].id in project_ids
+        ]
+        context["project_profile_mappings"] = [
+            mapping for mapping in context["project_profile_mappings"] if mapping.project_id in project_ids
+        ]
+        context["can_configure_project"] = current_user.has_role("admin")
+        context["selected_project_id"] = request.args.get("project_id", type=int)
         context["projects_only"] = True
         return render_template("admin/upload_projects.html", **context)
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def upload_project_workspace(project_id: int):
     """Render one project management workspace fragment."""
-    scoped_lab_ids = _manager_lab_unit_ids()
-    if not scoped_lab_ids:
-        return render_template("admin/partials/project_detail_panel.html", selected_project=None), 403
-
     with transaction_scope() as db:
+        can_manage_access = user_can_project_action(
+            db, user=current_user, project_id=project_id, action=ACTION_MANAGE_ACCESS
+        )
+        can_manage_uploaders = user_can_project_action(
+            db, user=current_user, project_id=project_id, action=ACTION_MANAGE_UPLOADERS
+        )
+        if not (can_manage_access or can_manage_uploaders):
+            return render_template("admin/partials/project_detail_panel.html", selected_project=None), 403
+        scoped_lab_ids = set(configured_project_lab_unit_ids(db, project_id=project_id))
         context = _mapping_form_context(db, scoped_lab_ids)
         selected_project = next((project for project in context["projects"] if project.id == project_id), None)
         if not selected_project:
             return render_template("admin/partials/project_detail_panel.html", selected_project=None), 404
         context["selected_project"] = selected_project
+        context["can_configure_project"] = current_user.has_role("admin")
+        context["can_manage_access"] = can_manage_access
+        context["can_manage_uploaders"] = can_manage_uploaders
+        context["configuration_lab_units"] = db.execute(
+            select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.hospital_id, LabUnit.name)
+        ).scalars().all()
+        context["configured_project_lab_unit_ids"] = scoped_lab_ids
         context["project_profile_mappings"] = [
             mapping for mapping in context["project_profile_mappings"] if mapping.project_id == project_id
         ]
@@ -364,12 +386,22 @@ def upload_project_workspace(project_id: int):
         except ProjectAuthorizationError:
             grants = ()
         context["project_access_rows"] = _group_project_access_rows(grants)
+        assignable_roles = (
+            PROJECT_ASSIGNABLE_ROLE_NAMES
+            if current_user.has_role("admin")
+            else PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES
+        )
         context["project_role_options"] = tuple(sorted(
             db.execute(
-                select(Role).where(Role.name.in_(PROJECT_ASSIGNABLE_ROLE_NAMES)).order_by(Role.name)
+                select(Role).where(Role.name.in_(assignable_roles)).order_by(Role.name)
             ).scalars().all(),
             key=lambda role: role.name.lower(),
         ))
+        context["project_assignable_role_names"] = assignable_roles
+        for row in context["project_access_rows"]:
+            row["editable"] = any(
+                grant.role_name in assignable_roles for grant in row["grants"]
+            )
         context.update(project_automated_workflow_context(db, project_id))
         context.update(project_manual_workflow_context(db, project_id))
         context["dr_dme_encounter_workflow"] = encounter_workflow_context(db, project_id)
@@ -420,10 +452,32 @@ def _group_project_access_rows(grants) -> list[dict]:
     )
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def upload_project_create_workspace():
     """Render project create workspace fragment."""
     scoped_lab_ids = _manager_lab_unit_ids()
     if not scoped_lab_ids:
         return render_template("admin/partials/project_create_panel.html"), 403
     return render_template("admin/partials/project_create_panel.html")
+
+
+def _manageable_project_ids(db) -> set[int]:
+    if current_user.has_role("admin"):
+        return set(db.execute(select(Project.id)).scalars())
+    return {
+        project_id
+        for project_id in db.execute(select(Project.id).where(Project.active.is_(True))).scalars()
+        if user_can_project_action(
+            db,
+            user=current_user,
+            project_id=project_id,
+            action=ACTION_MANAGE_ACCESS,
+        )
+    }
+
+
+def _manageable_project_lab_ids(db, project_ids: set[int]) -> set[int]:
+    allowed: set[int] = set()
+    for project_id in project_ids:
+        allowed.update(configured_project_lab_unit_ids(db, project_id=project_id))
+    return allowed

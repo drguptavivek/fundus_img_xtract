@@ -19,6 +19,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from upload_profiles.service import UPLOAD_KIND_DIRECT_IMAGE
+from project_configuration.models import ProjectLabUnit
 
 
 _SEQUENCE = count(1)
@@ -165,6 +166,7 @@ def direct_upload_web_data(db_session, core_test_data):
     area = Area(name=f"Direct Web Area {suffix}")
     db_session.add_all([lab, project, camera, area])
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
 
     uploader = UserFactory.create_by_role(db_session, "fileUploader", username=f"direct_web_uploader_{suffix}", lab_units=[lab])
     profile = UploadProfile(

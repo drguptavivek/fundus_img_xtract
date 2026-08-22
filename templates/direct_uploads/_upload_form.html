@@ -5,6 +5,7 @@
       class="card"
       data-upload-profile-form
       data-required-upload-kind="direct_image"
+      data-initial-project-id="{{ selected_project_id or '' }}"
       data-upload-defaults-storage-key="fundus.directUpload.web.defaults.v1"
       hx-post="{{ url_for('fundus_api.create_direct_upload_web') }}"
       hx-target="#direct-upload-workspace"
@@ -25,7 +26,7 @@
         <label class="form-label">Project</label>
         <div class="d-flex flex-wrap gap-2" id="project-buttons">
           {% for project in projects %}
-          <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off" required {% if projects|length == 1 %}checked{% endif %}>
+          <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off" required {% if selected_project_id == project.id or (not selected_project_id and projects|length == 1) %}checked{% endif %}>
           <label class="btn btn-outline-primary btn-sm text-start" for="project_{{ project.id }}">{{ project.title }} <span class="text-muted">({{ project.code }})</span></label>
           {% endfor %}
         </div>

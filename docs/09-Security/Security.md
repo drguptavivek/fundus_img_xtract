@@ -6,6 +6,23 @@ The system implements a comprehensive security framework with multiple layers of
 
 ## Authentication and Authorization
 
+### Project authorization boundary
+
+Project-owned data is authorized independently from projectless legacy data.
+Each project has an explicit System Admin-configured set of Lab Units. Every
+project role grant, upload assignment, browser query, grading/verification
+workflow, integration, analytics/export operation, and WAI operation is
+intersected with that boundary. A project-wide grant means all configured Lab
+Units in that project, never all Lab Units in the application.
+
+Global role rows remain available for older projectless records, but global
+operational roles do not authorize project-owned resources. Project Admin may
+manage operational grants and uploaders across the configured project boundary;
+only System Admin may change project configuration or that boundary. Upload
+authority comes exclusively from an active upload-profile assignment, and an
+upload-only user is routed directly to the assigned upload method rather than
+the project summary or grading workspace.
+
 ### Authentication System
 
 The system implements a robust authentication system with the following security features:

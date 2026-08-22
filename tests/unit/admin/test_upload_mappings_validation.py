@@ -33,6 +33,13 @@ from upload_profiles.service import (
     UploadProfileError,
     validate_encounter_set_upload_scope,
 )
+from project_configuration.models import ProjectLabUnit
+
+
+@pytest.fixture(autouse=True)
+def _allow_system_configuration_for_validation_tests(monkeypatch):
+    """These tests exercise profile validation, not the System Admin gate."""
+    monkeypatch.setattr(admin_service, "_require_system_admin", lambda db, user_id: None)
 
 
 def test_validate_mydriatic_flags_rejects_no_allowed_scope():
@@ -179,8 +186,6 @@ def test_create_profile_persists_image_metadata_task_rule(db_session, monkeypatc
     )
     db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -365,6 +370,7 @@ def test_update_project_changes_title_code_and_description(db_session, monkeypat
     db_session.flush()
 
     result = admin_service.update_project(
+        1,
         project.id,
         ProjectCreateInput(title="Updated Project", code="UPDATED", description="new"),
     )
@@ -518,8 +524,6 @@ def test_encounter_set_profile_rejects_multiple_package_policies(db_session, mon
         [manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type_one, encounter_set_type_two]
     )
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -580,6 +584,7 @@ def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, mo
     )
     db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
 
     result = admin_service.create_profile(
         manager.id,
@@ -753,6 +758,7 @@ def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monke
     )
     db_session.add_all([manager, uploader, hospital, lab, project, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
 
     result = admin_service.create_profile(
         manager.id,
@@ -915,8 +921,6 @@ def test_report_triggered_image_policy_requires_matching_remidio_ocr_linkage(db_
     )
     db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -982,8 +986,6 @@ def test_amd_report_triggered_image_policy_requires_matching_remidio_ocr_linkage
     )
     db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -1049,8 +1051,6 @@ def test_encounter_set_profile_accepts_positive_plus_negative_controls_policy(db
     )
     db_session.add_all([manager, hospital, lab, amd_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -1117,8 +1117,6 @@ def test_encounter_set_profile_rejects_invalid_positive_control_ratio(db_session
     )
     db_session.add_all([manager, hospital, lab, image_scheme, encounter_scheme, encounter_set_type])
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(
@@ -1199,8 +1197,6 @@ def test_encounter_set_profile_ignores_retired_profile_ai_workflow_input(db_sess
         ]
     )
     db_session.flush()
-    monkeypatch.setattr(admin_service, "manager_lab_unit_ids", lambda manager_user_id: {lab.id})
-
     result = admin_service.create_profile(
         manager.id,
         UploadProfileInput(

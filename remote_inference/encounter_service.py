@@ -24,7 +24,6 @@ from remote_inference.automated_service import _project_capabilities
 from upload_profiles.admin_service import MutationResult
 from upload_profiles.service import manager_lab_unit_ids
 from utils.celery_helpers import enqueue_task
-from utils.hospital_scoping import apply_scoping
 
 
 JOB_TYPE = "encounter_set_madhunetra_dr_dme"
@@ -223,7 +222,9 @@ def save_integration(payload: dict[str, Any]) -> MutationResult:
     return MutationResult(True, "MadhuNetrAI integration configuration updated.")
 
 
-def list_manual_projects(db, user: Any) -> list[dict[str, Any]]:
+def list_manual_projects(
+    db, user: Any, *, action: str = "project.wai.run"
+) -> list[dict[str, Any]]:
     """Return scoped projects whose encounter DR-DME manual workflow is enabled."""
     query = (
         db.query(Project)
@@ -237,8 +238,13 @@ def list_manual_projects(db, user: Any) -> list[dict[str, Any]]:
         .distinct()
         .order_by(Project.title, Project.id)
     )
-    query = apply_scoping(query, PatientEncounters, user, "upload")
-    return [{"id": row.id, "title": row.title, "code": row.code} for row in query.all()]
+    from data_authorization.policy import user_can_project_action
+
+    return [
+        {"id": row.id, "title": row.title, "code": row.code}
+        for row in query.all()
+        if user_can_project_action(db, user=user, project_id=row.id, action=action)
+    ]
 
 
 def load_job_payload(db, job_token: str) -> dict[str, Any] | None:
@@ -364,6 +370,12 @@ def create_manual_job(
     if count_error:
         return MutationResult(False, count_error, 400)
     with transaction_scope() as db:
+        from data_authorization.policy import ACTION_WAI_RUN, user_can_project_action
+
+        if not user_can_project_action(
+            db, user=user, project_id=project_id, action=ACTION_WAI_RUN
+        ):
+            return MutationResult(False, "You cannot run WAI inference for this project.", 403)
         candidate_page = list_candidates(
             db,
             filters=CandidateFilters(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from flask import flash, jsonify, render_template, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -28,7 +28,7 @@ def _json_result(result):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/manual-workflows", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def get_project_manual_remote_inference_workflows(project_id: int):
     """Return the project's available and enabled manual remote workflows."""
     if not manager_lab_unit_ids(current_user.id):
@@ -54,7 +54,7 @@ def get_project_manual_remote_inference_workflows(project_id: int):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/manual-workflows", methods=["POST", "PATCH"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def save_project_manual_remote_inference_workflows(project_id: int):
     """Replace the project's enabled manual remote inference workflows."""
     if request.is_json:
@@ -67,7 +67,7 @@ def save_project_manual_remote_inference_workflows(project_id: int):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/automated-workflows", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def get_project_automated_remote_inference_workflows(project_id: int):
     """Return profile-derived options and project-owned automated rules."""
     if not manager_lab_unit_ids(current_user.id):
@@ -92,11 +92,24 @@ def get_project_automated_remote_inference_workflows(project_id: int):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/wadhwani/encounter-set-jobs", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def get_recent_project_wadhwani_encounter_set_jobs(project_id: int):
     """Return the latest 10 scoped EncounterSet Wadhwani jobs for a project."""
-    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
     with get_db_session() as db:
+        from data_authorization.policy import (
+            ACTION_WAI_RESULTS,
+            allowed_lab_unit_ids_for_action,
+            user_can_project_action,
+        )
+
+        if not user_can_project_action(
+            db, user=current_user, project_id=project_id, action=ACTION_WAI_RESULTS
+        ):
+            return jsonify(success=False, error="Project WAI results are outside your scope."), 403
+        project_labs = allowed_lab_unit_ids_for_action(
+            db, user=current_user, project_id=project_id, action=ACTION_WAI_RESULTS
+        )
+        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id) if project_labs is None else set(project_labs)
         if db.get(Project, project_id) is None:
             return jsonify(success=False, error="Project not found."), 404
         jobs = job_service.list_recent_encounter_set_wadhwani_jobs(
@@ -136,7 +149,7 @@ def get_recent_project_wadhwani_encounter_set_jobs(project_id: int):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/automated-workflows", methods=["POST", "PATCH"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def save_project_automated_remote_inference_workflows(project_id: int):
     """Replace the project's active automated rules with capability validation."""
     if request.is_json:
@@ -160,7 +173,7 @@ def save_project_automated_remote_inference_workflows(project_id: int):
 
 
 @api_bp.route("/remote-inference/wadhwani/encounter-set-jobs/<job_token>/resume", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def resume_interrupted_wadhwani_encounter_set_job(job_token: str):
     """Resume only the unfinished portion of a stale manual Wadhwani batch."""
     return _json_result(
@@ -169,7 +182,7 @@ def resume_interrupted_wadhwani_encounter_set_job(job_token: str):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/encounter-workflows/dr-dme", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def get_project_dr_dme_encounter_workflow(project_id: int):
     """Return capability and independent automatic/manual DR-DME controls."""
     if not manager_lab_unit_ids(current_user.id):
@@ -182,7 +195,7 @@ def get_project_dr_dme_encounter_workflow(project_id: int):
 
 
 @api_bp.route("/remote-inference/projects/<int:project_id>/encounter-workflows/dr-dme", methods=["POST", "PATCH"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def save_project_dr_dme_encounter_workflow(project_id: int):
     """Save independent automatic/manual controls for the encounter workflow."""
     body = request.get_json(silent=True) if request.is_json else request.form.to_dict()
@@ -194,7 +207,7 @@ def save_project_dr_dme_encounter_workflow(project_id: int):
 
 
 @api_bp.route("/remote-inference/encounter-set-candidates", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "fileUploader")
+@login_required
 def get_encounter_remote_inference_candidates():
     """List authorized EncounterSets using the requested DR-DME eligibility view."""
     try:
@@ -223,6 +236,12 @@ def get_encounter_remote_inference_candidates():
         page_size=optional_int("page_size", ALLOWED_PAGE_SIZES[0]),
     ).normalized()
     with get_db_session() as db:
+        from data_authorization.policy import ACTION_WAI_RUN, user_can_project_action
+
+        if not user_can_project_action(
+            db, user=current_user, project_id=project_id, action=ACTION_WAI_RUN
+        ):
+            return jsonify(success=False, error="Project WAI execution is outside your scope."), 403
         if db.get(Project, project_id) is None:
             return jsonify(success=False, error="Project not found."), 404
         result = list_dr_dme_candidates(db, filters=filters, user=current_user)
@@ -257,7 +276,7 @@ def get_encounter_remote_inference_candidates():
 
 
 @api_bp.route("/remote-inference/encounter-set-jobs", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager", "fileUploader")
+@login_required
 def create_encounter_remote_inference_job():
     """Queue up to 100 authorized EncounterSets, with one job item per encounter."""
     body = request.get_json(silent=True) if request.is_json else request.form

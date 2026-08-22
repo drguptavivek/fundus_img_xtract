@@ -5,45 +5,33 @@ from . import bp
 from db_transaction_manager import get_db_session
 from utils.rate_limiter import api_rate_limit
 from models import User, LabUnit
-from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from auth.roles import global_uploader_or_project_assignment_required
+from upload_profiles.service import get_user_upload_options_for_kind
 
 @bp.route("/api/lab-units/<int:user_id>", methods=["GET"])
 @login_required
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 @api_rate_limit("120 per minute")
 def get_lab_units(user_id):
     with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_unit_ids:
-            return jsonify([])
-
         # Only allow access if caller is requesting self OR has admin/local_admin role
         if current_user.id != user_id and not current_user.has_role("admin", "local_admin"):
             return jsonify({"error": "Forbidden"}), 403
 
-        lab_units = (
-            db.query(LabUnit)
-            .filter(
-                LabUnit.id.in_(allowed_lab_unit_ids),
-                LabUnit.id.in_([lu.id for lu in user.lab_units]),
-            )
-            .order_by(LabUnit.name.asc())
-            .all()
-        )
-        return jsonify([{"id": lu.id, "name": lu.name} for lu in lab_units])
+        options = get_user_upload_options_for_kind(db, current_user.id, "direct_image")
+        return jsonify([{"id": item["id"], "name": item["name"]} for item in options.lab_units])
 
 @bp.route("/api/hospital/<int:lab_unit_id>", methods=["GET"])
 @login_required
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 @api_rate_limit("120 per minute")
 def get_hospital(lab_unit_id):
     with get_db_session() as db:
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if lab_unit_id not in allowed_lab_unit_ids:
+        options = get_user_upload_options_for_kind(db, current_user.id, "direct_image")
+        if lab_unit_id not in {item["id"] for item in options.lab_units}:
             return jsonify({"error": "Forbidden"}), 403
 
         lu = db.get(LabUnit, lab_unit_id)

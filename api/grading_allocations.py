@@ -18,7 +18,7 @@ from db_transaction_manager import transaction_scope
 from . import api_bp
 
 
-MANAGER_ROLES = ("admin", "local_admin", "data_manager")
+MANAGER_ROLES = ("admin",)
 GRADER_ROLES = ("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
 
 

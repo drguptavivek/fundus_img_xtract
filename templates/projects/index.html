@@ -7,8 +7,9 @@
   var available = {{ projects|map(attribute='id')|list|tojson }};
   var stored = Number(localStorage.getItem('selectedProjectId'));
   var selected = available.indexOf(stored) !== -1 ? stored : available[0];
+  var destinations = {{ destinations|tojson }};
   localStorage.setItem('selectedProjectId', String(selected));
-  window.location.replace({{ url_for('projects.summary', project_id=0)|tojson }}.replace('/0/', '/' + selected + '/'));
+  window.location.replace(destinations[String(selected)] || destinations[selected]);
 }());
 </script>
 {% endblock %}

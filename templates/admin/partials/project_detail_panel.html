@@ -16,6 +16,7 @@
   </div>
   <div class="card-body">
     <div class="row g-4">
+      {% if can_configure_project %}
       <div class="col-12">
         <h3 class="h6">Project Details</h3>
         <form method="post"
@@ -41,7 +42,36 @@
           <button class="btn btn-primary" type="submit">Save Project</button>
         </form>
       </div>
-
+      <div class="col-12">
+        <h3 class="h6">Project Lab Units</h3>
+        <p class="small text-muted">This is the hard data and authorization boundary for the project. Project-wide access means every Lab Unit selected here.</p>
+        <form class="border rounded p-3"
+              method="post"
+              action="{{ url_for('fundus_api.put_project_lab_units', project_id=selected_project.id) }}"
+              hx-post="{{ url_for('fundus_api.put_project_lab_units', project_id=selected_project.id) }}"
+              hx-swap="none"
+              data-json-api-htmx
+              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+              data-json-api-reload-target="#project-detail-workspace">
+          {{ csrf_field() }}
+          <div class="row g-2">
+            {% for lab_unit in configuration_lab_units %}
+            <div class="col-md-6 col-xl-4">
+              <div class="form-check border rounded p-2 ps-4 h-100">
+                <input class="form-check-input" type="checkbox" name="lab_unit_ids" value="{{ lab_unit.id }}"
+                       id="project_lab_{{ selected_project.id }}_{{ lab_unit.id }}"
+                       {% if lab_unit.id in configured_project_lab_unit_ids %}checked{% endif %}>
+                <label class="form-check-label" for="project_lab_{{ selected_project.id }}_{{ lab_unit.id }}">
+                  {{ lab_unit.name }}
+                  <span class="d-block small text-muted">{{ lab_unit.hospital.name if lab_unit.hospital else 'Unknown hospital' }}</span>
+                </label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button class="btn btn-primary mt-3" type="submit">Save Project Lab Units</button>
+        </form>
+      </div>
       <div class="col-12">
         <h3 class="h6">Referral Diseases</h3>
         <form class="border rounded p-3"
@@ -76,7 +106,20 @@
           <button class="btn btn-primary" type="submit">Save Referral Diseases</button>
         </form>
       </div>
+      {% endif %}
 
+      <div class="col-12">
+        <div class="alert {{ 'alert-info' if configured_project_lab_unit_ids else 'alert-warning' }} mb-0">
+          <div class="fw-semibold">Project boundary</div>
+          {% if configured_project_lab_unit_ids %}
+          All access below is limited to: {{ lab_units|map(attribute='name')|join(', ') }}.
+          {% else %}
+          No Lab Units are configured. System Admin must configure the project before scoped access or uploads can be assigned.
+          {% endif %}
+        </div>
+      </div>
+
+      {% if can_manage_access %}
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <div>
@@ -101,6 +144,7 @@
                   <td>
                     <div class="d-flex flex-wrap gap-1">
                       {% for grant in row.grants %}
+                      {% if grant.role_name in project_assignable_role_names %}
                       <form method="post"
                             action="{{ url_for('fundus_api.remove_project_role_grant', project_id=selected_project.id, grant_id=grant.id) }}"
                             hx-post="{{ url_for('fundus_api.remove_project_role_grant', project_id=selected_project.id, grant_id=grant.id) }}"
@@ -117,15 +161,22 @@
                           {{ grant.role_name.replace('_', ' ')|title }} <span aria-hidden="true">&times;</span>
                         </button>
                       </form>
+                      {% else %}
+                      <span class="badge text-bg-light border text-dark"
+                            title="Only System Admin can change this governance title">
+                        {{ grant.role_name.replace('_', ' ')|title }}
+                      </span>
+                      {% endif %}
                       {% endfor %}
                     </div>
                   </td>
                   <td class="text-end">
-                    <button class="btn btn-sm btn-outline-primary" type="button"
+                    {% if row.editable %}<button class="btn btn-sm btn-outline-primary" type="button"
                             data-bs-toggle="collapse" data-bs-target="#project-access-edit-{{ access_row_index }}"
-                            aria-expanded="false" aria-controls="project-access-edit-{{ access_row_index }}">Edit</button>
+                            aria-expanded="false" aria-controls="project-access-edit-{{ access_row_index }}">Edit</button>{% endif %}
                   </td>
                 </tr>
+                {% if row.editable %}
                 <tr class="collapse" id="project-access-edit-{{ access_row_index }}">
                   <td colspan="4" class="bg-body-tertiary">
                     <form method="post"
@@ -177,6 +228,7 @@
                     </form>
                   </td>
                 </tr>
+                {% endif %}
                 {% else %}
                 <tr><td colspan="4" class="text-muted text-center py-3">No project access assigned.</td></tr>
                 {% endfor %}
@@ -236,7 +288,9 @@
           </form>
         </div>
       </div>
+      {% endif %}
 
+      {% if can_configure_project %}
       {% include "admin/partials/project_grading_allocation.html" %}
 
       {% include "admin/partials/project_annotation_policy_panel.html" %}
@@ -276,12 +330,15 @@
           {% endif %}
         </form>
       </div>
+      {% endif %}
 
+      {% if can_manage_uploaders %}
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <h3 class="h6 mb-0">Profiles And Uploaders</h3>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Reusable Profiles</a>
+          {% if can_configure_project %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.upload_profiles_admin') }}">Manage Reusable Profiles</a>{% endif %}
         </div>
+        {% if can_configure_project %}
         <form class="border rounded p-3 mb-3"
               method="post"
               action="{{ url_for('fundus_api.enable_upload_profile_for_project', project_id=selected_project.id) }}"
@@ -306,6 +363,7 @@
             </div>
           </div>
         </form>
+        {% endif %}
         <div class="row g-3">
           {% for mapping in project_profile_mappings %}
           {% set profile = mapping.profile %}
@@ -323,7 +381,7 @@
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <span class="badge {{ 'bg-success' if mapping.active and profile.active else 'bg-secondary' }}">{{ 'Active' if mapping.active and profile.active else 'Inactive' }}</span>
-                  {% if mapping.active %}
+                  {% if can_configure_project and mapping.active %}
                   <form method="post"
                         action="{{ url_for('fundus_api.deactivate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
                         hx-post="{{ url_for('fundus_api.deactivate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
@@ -334,7 +392,7 @@
                     {{ csrf_field() }}
                     <button class="btn btn-sm btn-outline-danger" type="submit">Disable</button>
                   </form>
-                  {% else %}
+                  {% elif can_configure_project %}
                   <form method="post"
                         action="{{ url_for('fundus_api.activate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
                         hx-post="{{ url_for('fundus_api.activate_project_upload_profile', project_upload_profile_id=mapping.id) }}"
@@ -351,7 +409,7 @@
               <div class="small text-muted mt-2">
                 Diseases: {{ profile.diseases|map(attribute='disease.name')|join(', ') or '-' }}
               </div>
-              {% if profile.automated_remidio_populated %}
+              {% if profile.automated_remidio_populated and can_configure_project %}
               <div class="alert alert-info py-2 mt-2 mb-2 small">
                 Automated Remidio API profile. Manage source routing from
                 <a href="{{ url_for('admin.remidio_api_routing_dashboard') }}">Remidio API Routing</a>;
@@ -408,73 +466,8 @@
                 IITK ZIP EncounterSet upload is explicitly enabled for this profile.
               </div>
               {% endif %}
-              <div class="table-responsive mt-2">
-                <table class="table table-sm align-middle mb-0">
-                  <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>
-                  <tbody>
-                    {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
-                    <tr>
-                      <td>{{ assignment.user.full_name or assignment.user.username }}</td>
-                      <td>{{ assignment.lab_unit.name }}</td>
-                      <td class="text-end">
-                        <form method="post"
-                              action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
-                              hx-post="{{ url_for('fundus_api.remove_upload_profile_user') }}"
-                              hx-swap="none"
-                              data-json-api-htmx
-                              data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
-                              data-json-api-reload-target="#project-detail-workspace">
-                          {{ csrf_field() }}
-                          <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
-                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                        </form>
-                      </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="3" class="text-muted text-center py-2">No uploaders assigned.</td></tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-              <form class="row g-2 align-items-end mt-2"
-                    method="post"
-                    action="{{ url_for('fundus_api.assign_upload_profile_user') }}"
-                    hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
-                    hx-swap="none"
-                    data-json-api-htmx
-                    data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
-                    data-json-api-reload-target="#project-detail-workspace">
-                {{ csrf_field() }}
-                <input type="hidden" name="project_upload_profile_id" value="{{ mapping.id }}">
-                <div class="col-md-5">
-                  <label class="form-label" for="profile_user_search_{{ mapping.id }}">Search User</label>
-                  <input class="form-control" id="profile_user_search_{{ mapping.id }}" type="search" placeholder="Type name or username" data-user-search="profile_user_id_{{ mapping.id }}">
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label" for="profile_user_id_{{ mapping.id }}">Matched User</label>
-                  <select class="form-select" id="profile_user_id_{{ mapping.id }}" name="user_id" required data-project-profile-user-select data-lab-target="profile_lab_ids_{{ mapping.id }}">
-                    <option value="">Select user</option>
-                    {% for user in users %}
-                    <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}" data-lab-ids="{{ user.lab_units|map(attribute='id')|join(',') }}">{{ user.full_name or user.username }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <label class="form-label">Lab Unit</label>
-                  <div class="border rounded p-2" id="profile_lab_ids_{{ mapping.id }}" style="max-height: 7rem; overflow:auto;">
-                    {% for lab_unit in lab_units %}
-                    <div class="form-check mb-1" data-project-profile-lab-row data-lab-id="{{ lab_unit.id }}">
-                      <input class="form-check-input" type="checkbox" name="lab_unit_ids" value="{{ lab_unit.id }}" id="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">
-                      <label class="form-check-label small" for="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </div>
-                <div class="col-12 text-end">
-                  <button class="btn btn-outline-primary w-100" type="submit">Add</button>
-                </div>
-              </form>
               {% endif %}
+              {% include "admin/partials/project_uploader_assignments.html" %}
             </div>
           </div>
           {% else %}
@@ -484,7 +477,9 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
 
+      {% if can_configure_project %}
       <div class="col-12">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
           <h3 class="h6 mb-0">Manual Remote AI Workflows</h3>
@@ -657,6 +652,7 @@
         <div class="alert alert-warning py-2 mt-3 mb-0"><ul class="mb-0">{% for reason in dr_dme.automatic_blocking_reasons %}<li>{{ reason }}</li>{% endfor %}</ul></div>
         {% endif %}
       </div>
+      {% endif %}
     </div>
   </div>
 </div>

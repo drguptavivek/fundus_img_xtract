@@ -18,10 +18,9 @@ from flask_login import current_user
 from sqlalchemy import select, func
 
 from . import bp
-from auth.roles import roles_required
+from auth.roles import global_uploader_or_project_assignment_required
 from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from upload_profiles.service import (
     UPLOAD_KIND_PREGRADED,
     UploadProfileError,
@@ -61,11 +60,12 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 
 
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required(UPLOAD_KIND_PREGRADED)
 def pregraded_upload():
     with get_db_session() as db_session:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
+        upload_options = get_user_upload_options_for_kind(db_session, current_user.id, UPLOAD_KIND_PREGRADED)
+        allowed_lab_units = {item["id"] for item in upload_options.lab_units}
+        if not upload_options.profiles:
             flash("You are not mapped to any lab units.", "warning")
             return redirect(url_for("home.index"))
 
@@ -359,7 +359,7 @@ def pregraded_upload():
 
         # Check if there's stored form data from a previous submission
         stored_form_data = session.get("pregraded_upload_form_data")
-        context = {}
+        context = {"selected_project": request.args.get("project_id", type=int)}
         
         if stored_form_data:
             # Pass the stored form data to the template
@@ -466,8 +466,6 @@ def pregraded_upload():
         areas = (
             db_session.execute(select(Area).order_by(Area.name)).scalars().all()
         )
-        upload_options = get_user_upload_options_for_kind(db_session, current_user.id, UPLOAD_KIND_PREGRADED)
-
         # Get recent pregraded uploads for display
         recent_uploads = get_recent_zip_uploads(
             limit=5,

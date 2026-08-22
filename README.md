@@ -248,7 +248,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
-- [Security](docs/10-DEVELOP/Security.md) -  authentication, authorization, and security features
+- [Security](docs/09-Security/Security.md) - authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
 - [Gunicorn Deployment](docs/10-DEVELOP/GUNICORN.md) - Running the application with Gunicorn in production

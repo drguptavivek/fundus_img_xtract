@@ -31,10 +31,13 @@ from models import (
 from remidio_api_integration.models import RemidioApiExamEncounter
 from upload_profiles.models import (
     ProjectUploadProfile,
+    ProjectUploadProfileAssignment,
     UploadProfile,
     UploadProfileDisease,
     UploadProfileEncounterSetType,
 )
+from project_configuration.service import configured_project_lab_unit_ids
+from project_configuration.models import ProjectLabUnit
 
 from .dto import (
     ProjectChoiceDTO,
@@ -75,12 +78,25 @@ def list_projects(db: Session, *, user: User) -> tuple[ProjectChoiceDTO, ...]:
             ProjectRoleGrant.user_id == user.id,
             ProjectRoleGrant.active.is_(True),
         )
+        upload_membership = exists().where(
+            ProjectUploadProfile.project_id == Project.id,
+            ProjectUploadProfile.active.is_(True),
+            UploadProfile.id == ProjectUploadProfile.upload_profile_id,
+            UploadProfile.active.is_(True),
+            UploadProfile.automated_remidio_populated.is_(False),
+            ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id,
+            ProjectUploadProfileAssignment.user_id == user.id,
+            ProjectUploadProfileAssignment.active.is_(True),
+            ProjectLabUnit.project_id == Project.id,
+            ProjectLabUnit.lab_unit_id == ProjectUploadProfileAssignment.lab_unit_id,
+            ProjectLabUnit.active.is_(True),
+        )
         legacy_membership = exists().where(
             ProjectInvestigator.project_id == Project.id,
             ProjectInvestigator.user_id == user.id,
             ProjectInvestigator.active.is_(True),
         )
-        statement = statement.where(or_(role_membership, legacy_membership))
+        statement = statement.where(or_(role_membership, upload_membership, legacy_membership))
     return tuple(_project_dto(row) for row in db.execute(statement).scalars())
 
 
@@ -129,7 +145,7 @@ def get_summary(db: Session, *, user: User, project_id: int) -> ProjectSummaryDT
         ProjectMetricDTO("remidio_glaucoma_reports", "Remidio glaucoma reports", report_counts["glaucoma"]),
         ProjectMetricDTO("wadhwani_inferences", "Wadhwani glaucoma inferences", wadhwani_count),
     )
-    allowed_labs = None if scope.project_wide else _allowed_lab_ids(db, scope)
+    allowed_labs = _allowed_lab_ids(db, scope)
     configuration = effective_configuration(
         db, project_id=project.id, allowed_lab_ids=allowed_labs
     )
@@ -215,61 +231,65 @@ def _project_and_scope(db: Session, *, user: User, project_id: int) -> tuple[Pro
     project = db.get(Project, project_id)
     if project is None:
         raise ProjectReviewNotFound("Project not found.")
+    configured_labs = configured_project_lab_unit_ids(db, project_id=project_id)
     if user.has_role("admin"):
-        return project, _ResolvedScope(True, frozenset(), frozenset())
+        return project, _ResolvedScope(True, frozenset(), configured_labs)
     grants = db.execute(select(ProjectRoleGrant).where(
         ProjectRoleGrant.project_id == project_id,
         ProjectRoleGrant.user_id == user.id,
         ProjectRoleGrant.active.is_(True),
     )).scalars().all()
+    assignment_lab_ids = frozenset(db.execute(
+        select(ProjectUploadProfileAssignment.lab_unit_id)
+        .join(ProjectUploadProfile, ProjectUploadProfile.id == ProjectUploadProfileAssignment.project_upload_profile_id)
+        .where(
+            ProjectUploadProfile.project_id == project_id,
+            ProjectUploadProfile.active.is_(True),
+            ProjectUploadProfileAssignment.user_id == user.id,
+            ProjectUploadProfileAssignment.active.is_(True),
+        )
+    ).scalars())
     legacy = db.execute(select(ProjectInvestigator.id).where(
         ProjectInvestigator.project_id == project_id,
         ProjectInvestigator.user_id == user.id,
         ProjectInvestigator.active.is_(True),
     ).limit(1)).scalar_one_or_none()
     if legacy is not None or any(grant.scope_type == PROJECT_SCOPE for grant in grants):
-        return project, _ResolvedScope(True, frozenset(), frozenset())
-    if not grants:
+        return project, _ResolvedScope(True, frozenset(), configured_labs)
+    if not grants and not assignment_lab_ids:
         raise ProjectReviewNotFound("Project not found.")
+    hospital_ids = frozenset(
+        grant.hospital_id for grant in grants if grant.scope_type == HOSPITAL_SCOPE
+    )
+    hospital_lab_ids = frozenset(db.execute(
+        select(LabUnit.id).where(LabUnit.hospital_id.in_(hospital_ids or {-1}))
+    ).scalars()).intersection(configured_labs)
     return project, _ResolvedScope(
         False,
-        frozenset(grant.hospital_id for grant in grants if grant.scope_type == HOSPITAL_SCOPE),
-        frozenset(grant.lab_unit_id for grant in grants if grant.scope_type == LAB_UNIT_SCOPE),
+        hospital_ids,
+        (
+            frozenset(grant.lab_unit_id for grant in grants if grant.scope_type == LAB_UNIT_SCOPE)
+            | assignment_lab_ids
+            | hospital_lab_ids
+        ).intersection(configured_labs),
     )
 
 
 def _allowed_lab_ids(db: Session, scope: _ResolvedScope) -> frozenset[int]:
-    if scope.project_wide:
-        return frozenset()
-    hospital_labs = db.execute(select(LabUnit.id).where(
-        LabUnit.hospital_id.in_(scope.hospital_ids)
-    )).scalars() if scope.hospital_ids else ()
-    return frozenset(scope.lab_unit_ids | frozenset(hospital_labs))
+    del db
+    return scope.lab_unit_ids
 
 
 def _encounter_scope_clause(scope: _ResolvedScope):
     if scope.project_wide:
-        return literal(True)
-    clauses = []
-    if scope.lab_unit_ids:
-        clauses.append(PatientEncounters.lab_unit_id.in_(scope.lab_unit_ids))
-    if scope.hospital_ids:
-        clauses.append(exists().where(
-            LabUnit.id == PatientEncounters.lab_unit_id,
-            LabUnit.hospital_id.in_(scope.hospital_ids),
-        ))
-    return or_(*clauses) if clauses else literal(False)
+        return PatientEncounters.lab_unit_id.in_(scope.lab_unit_ids or {-1})
+    return PatientEncounters.lab_unit_id.in_(scope.lab_unit_ids or {-1})
 
 
 def _direct_scope_clause(scope: _ResolvedScope):
     if scope.project_wide:
-        return literal(True)
-    clauses = []
-    if scope.lab_unit_ids:
-        clauses.append(DirectImageUpload.lab_unit_id.in_(scope.lab_unit_ids))
-    if scope.hospital_ids:
-        clauses.append(DirectImageUpload.hospital_id.in_(scope.hospital_ids))
-    return or_(*clauses) if clauses else literal(False)
+        return DirectImageUpload.lab_unit_id.in_(scope.lab_unit_ids or {-1})
+    return DirectImageUpload.lab_unit_id.in_(scope.lab_unit_ids or {-1})
 
 
 def _profile_configuration(db: Session, project_id: int) -> tuple[ProjectProfileDTO, ...]:
@@ -413,8 +433,7 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
     ).join(Disease, Disease.id == GradingTask.disease_id).where(
         DirectImageUpload.project_id == project_id,
     )
-    if not scope.project_wide:
-        direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs))
+    direct_query = direct_query.where(DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}))
     for task, disease in db.execute(direct_query):
         bucket = grouped[("Single image", "disease specific", disease.name, task.state)]
         bucket[0] += 1
@@ -442,8 +461,7 @@ def _grading_rows(db: Session, project_id: int, scope: _ResolvedScope) -> tuple[
             EncounterFile.patient_encounter_id,
         ),
     ).where(PatientEncounters.project_id == project_id)
-    if not scope.project_wide:
-        encounter_query = encounter_query.where(PatientEncounters.lab_unit_id.in_(allowed_labs))
+    encounter_query = encounter_query.where(PatientEncounters.lab_unit_id.in_(allowed_labs or {-1}))
     encounter_image_counts = dict(db.execute(select(
         EncounterSetImage.patient_encounter_id,
         func.count(EncounterSetImage.id),
@@ -526,10 +544,9 @@ def _wadhwani_count(db: Session, project_id: int, scope: _ResolvedScope) -> int:
             PatientEncounters.project_id == project_id,
         ),
     )
-    if not scope.project_wide:
-        allowed_labs = _allowed_lab_ids(db, scope)
-        query = query.where(or_(
-            DirectImageUpload.lab_unit_id.in_(allowed_labs),
-            PatientEncounters.lab_unit_id.in_(allowed_labs),
-        ))
+    allowed_labs = _allowed_lab_ids(db, scope)
+    query = query.where(or_(
+        DirectImageUpload.lab_unit_id.in_(allowed_labs or {-1}),
+        PatientEncounters.lab_unit_id.in_(allowed_labs or {-1}),
+    ))
     return _scalar_count(db, query)

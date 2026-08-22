@@ -235,6 +235,7 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" \
   --output inference-thumbnail.jpg
 ```
 
-## Browser Page
-
-Session-authenticated users with the same role set can use `/glaucoma-ai/`. The page includes CSRF protection, renders uploaded images once, and polls `/glaucoma-ai/recent/results` for compact JSON updates so thumbnails are not repeatedly fetched.
+The retired standalone `/glaucoma-ai/` browser page is not part of this API.
+Project-scoped manual WAI execution and result browsing are exposed from the
+project workspace; the JSON upload APIs above remain available to supported
+clients.

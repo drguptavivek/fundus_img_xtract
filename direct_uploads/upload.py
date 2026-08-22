@@ -1,16 +1,16 @@
 # direct_uploads/uploads.py
 
-from flask import render_template, redirect, url_for, flash
+from flask import render_template, redirect, request, url_for, flash
 from flask_login import current_user
 
 from utils.env_loader import load_environment
 
 from . import bp
 from db_transaction_manager import get_db_session
-from auth.roles import roles_required
+from auth.roles import global_uploader_or_project_assignment_required, roles_required
 from utils.rate_limiter import upload_rate_limit
 
-from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids_no_admin_override
+from utils.upload_eligibility import get_user_uploadVerify_eligibility
 
 
 load_environment()
@@ -24,12 +24,17 @@ def upload_index():
 
 
 @bp.route("/direct/upload", methods=["GET"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 @upload_rate_limit("60 per minute")  # Reduced to prevent abuse while allowing reasonable uploads
 def upload():
     with get_db_session() as db_session:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
+        from upload_profiles.service import get_user_upload_options_for_kind
+
+        options = get_user_upload_options_for_kind(db_session, current_user.id, "direct_image")
+        if not options.profiles:
             flash("You are not mapped to any lab units.", "warning")
             return redirect(url_for("home.index"))
-        return render_template("direct_uploads/upload.html")
+        return render_template(
+            "direct_uploads/upload.html",
+            selected_project_id=request.args.get("project_id", type=int),
+        )

@@ -25,7 +25,6 @@ from utils.jobUtils import get_recent_zip_uploads
 from utils.log_sanitize import sanitize_log_value
 from utils.celery_helpers import enqueue_task
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 @dataclass(frozen=True)
@@ -233,18 +232,11 @@ def create_web_direct_upload_from_form(*, db, user_id: int, username: str | None
     area_id = _required_int(form, "area_id")
     is_mydriatic = form.get("is_mydriatic") == "on"
 
-    allowed_lab_units = set(get_user_lab_unit_ids_no_admin_override(user_id))
-    if not allowed_lab_units:
-        raise DirectUploadJobError("You are not mapped to any lab units.", code="lab_unit_required", status_code=403)
-
     lab_unit = db.get(LabUnit, lab_unit_id)
     if lab_unit is None:
         raise DirectUploadJobError("Invalid selection for one or more fields.", code="invalid_selection")
     if lab_unit.hospital_id != hospital_id:
         raise DirectUploadJobError("Selected Lab Unit does not belong to the selected Hospital.", code="lab_unit_hospital_mismatch")
-    if lab_unit.id not in allowed_lab_units:
-        raise DirectUploadJobError("You don't have access to the selected lab unit.", code="lab_unit_forbidden", status_code=403)
-
     user = db.get(User, user_id)
     if user is None:
         raise DirectUploadJobError("Invalid upload user.", code="invalid_user", status_code=403)
@@ -293,7 +285,8 @@ def create_web_direct_upload_from_form(*, db, user_id: int, username: str | None
 
 def build_web_direct_upload_context(*, db, user_id: int) -> dict[str, Any]:
     """Build template context for the legacy web direct-upload page."""
-    user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(user_id))
+    upload_options = get_user_upload_options_for_kind(db, user_id, UPLOAD_KIND_DIRECT_IMAGE)
+    user_lab_unit_ids = {item["id"] for item in upload_options.lab_units}
     lab_units = db.execute(
         select(LabUnit)
         .where(LabUnit.id.in_(user_lab_unit_ids))
@@ -302,10 +295,12 @@ def build_web_direct_upload_context(*, db, user_id: int) -> dict[str, Any]:
     ).scalars().all()
     accessible_hospital_ids = {lab_unit.hospital_id for lab_unit in lab_units}
     hospitals = db.execute(select(Hospital).where(Hospital.id.in_(accessible_hospital_ids)).order_by(Hospital.name)).scalars().all()
-    cameras = db.execute(select(Camera).order_by(Camera.name)).scalars().all()
-    diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
-    areas = db.execute(select(Area).order_by(Area.name)).scalars().all()
-    upload_options = get_user_upload_options_for_kind(db, user_id, UPLOAD_KIND_DIRECT_IMAGE)
+    camera_ids = {item["id"] for item in upload_options.cameras}
+    disease_ids = {item["id"] for item in upload_options.diseases}
+    area_ids = {item["id"] for item in upload_options.areas}
+    cameras = db.execute(select(Camera).where(Camera.id.in_(camera_ids or {-1})).order_by(Camera.name)).scalars().all()
+    diseases = db.execute(select(Disease).where(Disease.id.in_(disease_ids or {-1})).order_by(Disease.name)).scalars().all()
+    areas = db.execute(select(Area).where(Area.id.in_(area_ids or {-1})).order_by(Area.name)).scalars().all()
     settings = get_direct_upload_settings(db, user=db.get(User, user_id))
     return {
         "hospitals": [{"id": hospital.id, "name": hospital.name} for hospital in hospitals],

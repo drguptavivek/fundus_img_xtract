@@ -8,6 +8,7 @@ import yaml
 from models import EncounterSetImage, Hospital, LabUnit, PatientEncounters, Project, ProjectInvestigator, Role, User
 from data_authorization.models import ProjectRoleGrant
 from remidio_api_integration import service
+from project_configuration.models import ProjectLabUnit
 
 
 def _collaborator(db_session, username: str = "no_pii_collaborator") -> User:
@@ -28,6 +29,7 @@ def _project_encounter(db_session, *, code: str, patient_id: str, patient_name: 
     project = Project(title=f"Collaborator Browser Project {code}", code=code, active=True)
     db_session.add_all([hospital, lab, project])
     db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
     encounter = PatientEncounters(
         uuid=str(uuid.uuid4()),
         name=patient_name,

@@ -6,13 +6,13 @@
   <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
     <div class="small text-muted">
       {{ filter_stats.encounter_count }} EncounterSets · {{ filter_stats.image_count }} images match filters{% if not filters.include_prior %} and have no prior Wadhwani run or AI grade{% endif %}.
-      <span class="ms-2">
+      {% if can_run_wai %}<span class="ms-2">
         Selected for queue:
         <span class="fw-semibold" data-selected-encounter-count>0</span> EncounterSets ·
         <span class="fw-semibold" data-selected-image-count>0</span> images
-      </span>
+      </span>{% endif %}
     </div>
-    <div class="d-flex gap-2">
+    {% if can_run_wai %}<div class="d-flex gap-2">
       <button class="btn btn-outline-primary" type="button" data-select-all-visible-images>
         Select all visible
       </button>
@@ -20,7 +20,7 @@
         Queue selected images
       </button>
       <span class="badge text-bg-light border align-self-center">Max {{ max_encounter_sets_per_batch }} EncounterSets</span>
-    </div>
+    </div>{% endif %}
   </div>
 
   {% if not encounters %}
@@ -44,7 +44,7 @@
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('remidio_api_uploads.encounter_set_browser', project_id=filters.project_id, month=encounter_date[:7], date=encounter_date[:10], encounter_id=encounter.id) }}"
              target="_blank" rel="noopener noreferrer">View</a>
-          <button class="btn btn-sm btn-outline-primary" type="button" data-select-encounter-images> Select all visible images</button>
+          {% if can_run_wai %}<button class="btn btn-sm btn-outline-primary" type="button" data-select-encounter-images> Select all visible images</button>{% endif %}
         </div>
       </div>
       <div class="card-body">
@@ -84,7 +84,7 @@
                    alt="Image {{ image.position }}">
             </div>
             <div class="p-2 small">
-              <div class="form-check border-bottom pb-2 mb-2">
+              {% if can_run_wai %}<div class="form-check border-bottom pb-2 mb-2">
                 <input class="form-check-input"
                        type="checkbox"
                        id="queue_image_{{ image.id }}"
@@ -95,7 +95,7 @@
                 <label class="form-check-label fw-semibold" for="queue_image_{{ image.id }}">
                   Queue this image
                 </label>
-              </div>
+              </div>{% endif %}
               <div class="d-flex justify-content-between gap-2">
                 <span class="fw-semibold">Image {{ image.position }}</span>
                 <span class="badge text-bg-{{ 'success' if state == 'success' else 'danger' if state == 'failed' else 'warning' if state in ['pending', 'running'] else 'secondary' }}">
@@ -109,7 +109,7 @@
                 {% if image.quality %}<span class="badge text-bg-light border">{{ image.quality }}</span>{% endif %}
                 {% if state == 'failed' %}<span class="badge text-bg-danger">Retry selectable</span>{% endif %}
               </div>
-              <div class="border-top mt-2 pt-2">
+              {% if can_view_wai_results %}<div class="border-top mt-2 pt-2">
                 {% if status.grade_name or status.prediction or status.predicted_class_name or status.probability %}
                 <div class="fw-semibold">{{ status.grade_name or status.prediction or '-' }}</div>
                 <div class="text-muted">{{ status.predicted_class_name or '-' }}</div>
@@ -118,7 +118,7 @@
                 {% else %}
                 <div class="text-muted">No Wadhwani result yet.</div>
                 {% endif %}
-              </div>
+              </div>{% endif %}
             </div>
           </div>
           {% endfor %}

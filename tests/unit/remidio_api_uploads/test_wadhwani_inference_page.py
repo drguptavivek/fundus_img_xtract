@@ -21,6 +21,7 @@ from remidio_api_uploads.wadhwani_inference import (
     _wadhwani_status_by_image,
 )
 from remote_inference.dr_dme import CandidatePage, MAX_MANUAL_ENCOUNTERS
+from project_configuration.models import ProjectLabUnit
 
 
 def test_wadhwani_status_uses_only_the_glaucoma_task(db_session, core_test_data):
@@ -167,7 +168,7 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
     monkeypatch.setattr(
         "remidio_api_uploads.wadhwani_inference.encounter_service.list_manual_projects",
-        lambda db, user: [{"id": 7, "title": "Vision Centre", "code": "VC"}],
+        lambda db, user, action=None: [{"id": 7, "title": "Vision Centre", "code": "VC"}],
     )
     monkeypatch.setattr(
         "remidio_api_uploads.wadhwani_inference.encounter_service.integration_context",
@@ -272,6 +273,10 @@ def test_dr_dme_job_status_renders_report_lineage(client, login_user, monkeypatc
 
     monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
     monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference._require_job_access",
+        lambda db, token: None,
+    )
+    monkeypatch.setattr(
         "remidio_api_uploads.wadhwani_inference.encounter_service.load_job_payload",
         lambda db, token: {
             "token": token,
@@ -332,6 +337,10 @@ def test_dr_dme_job_page_recovers_workflow_from_job_token(client, login_user, mo
         yield SimpleNamespace(execute=lambda _statement: ScalarResult())
 
     monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
+    monkeypatch.setattr(
+        "remidio_api_uploads.wadhwani_inference._require_job_access",
+        lambda db, token: None,
+    )
 
     response = client.get("/uploads/encountersets/wadhwani_inference/jobs/direct-dr-dme-token")
 
@@ -442,6 +451,18 @@ def test_recent_encounter_set_jobs_api_returns_latest_ten_scoped_jobs(
     other_project = Project(title=f"Other WAI {uuid4()}", code=f"OW{uuid4().hex[:8]}", active=True)
     db_session.add_all([project, other_project])
     db_session.flush()
+    db_session.add_all([
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=core_test_data["lab_unit"].id,
+            active=True,
+        ),
+        ProjectLabUnit(
+            project_id=other_project.id,
+            lab_unit_id=core_test_data["lab_unit"].id,
+            active=True,
+        ),
+    ])
     base_time = utcnow()
     tokens = []
     for index in range(11):

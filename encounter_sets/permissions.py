@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, exists, func, or_, select, true
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from data_authorization.service import project_role_grant_exists_clause, user_has_project_role
@@ -20,6 +20,7 @@ from data_authorization.models import (
     ProjectRoleGrant,
 )
 from models import LabUnit, Project, Role, User, user_lab_units
+from project_configuration.models import ProjectLabUnit
 
 from .models import ProjectEncounterSetPermission
 
@@ -103,8 +104,15 @@ def apply_project_permission_scope(query, model_class, user: User, capability: s
         raise ValueError(f"Unknown EncounterSet capability: {capability}")
     # System administrators retain break-glass access; all operational users
     # require an explicit project/lab capability row.
+    project_boundary = exists().where(
+        ProjectLabUnit.project_id == model_class.project_id,
+        ProjectLabUnit.lab_unit_id == model_class.lab_unit_id,
+        ProjectLabUnit.active.is_(True),
+    )
     if is_project_permission_admin(user):
-        return query
+        if hasattr(query, "filter"):
+            return query.filter(project_boundary)
+        return query.where(project_boundary)
     capability_clause = CAPABILITY_COLUMNS[capability].is_(True)
     if capability == CAPABILITY_BROWSE:
         capability_clause = (
@@ -125,7 +133,7 @@ def apply_project_permission_scope(query, model_class, user: User, capability: s
         hospital_id=getattr(model_class, "hospital_id", None),
         lab_unit_id=getattr(model_class, "lab_unit_id", None),
     )
-    condition = or_(matching_role_grant, matching_permission)
+    condition = and_(project_boundary, or_(matching_role_grant, matching_permission))
     if hasattr(query, "filter"):
         return query.filter(condition)
     return query.where(condition)
@@ -183,8 +191,6 @@ def user_has_task_capability(
     """Authorize a polymorphic grading task using its source project's lineage."""
     if capability not in CAPABILITY_COLUMNS:
         raise ValueError(f"Unknown project capability: {capability}")
-    if is_project_permission_admin(user):
-        return True
     from models import DirectImageUpload, EncounterFile, EncounterSetImage, GradingTask, PatientEncounters
 
     task = db.get(GradingTask, task_id)
@@ -210,6 +216,12 @@ def user_has_task_capability(
         image = db.get(DirectImageUpload, task.direct_image_upload_id)
         project_id = image.project_id if image else None
     if project_id is None:
+        return True
+    from project_configuration.service import configured_project_lab_unit_ids
+
+    if task.lab_unit_id not in configured_project_lab_unit_ids(db, project_id=project_id):
+        return False
+    if is_project_permission_admin(user):
         return True
     legacy_permission = db.execute(
         select(ProjectEncounterSetPermission.id).where(
@@ -249,9 +261,6 @@ def _project_task_capability_clause(
     """Build project capability SQL with an explicit classical-data boundary."""
     if capability not in CAPABILITY_COLUMNS:
         raise ValueError(f"Unknown project capability: {capability}")
-    if is_project_permission_admin(user):
-        return true()
-
     from models import DirectImageUpload, EncounterFile, EncounterSetImage, GradingTask, PatientEncounters
 
     task = aliased(GradingTask)
@@ -282,6 +291,11 @@ def _project_task_capability_clause(
         role_names=CAPABILITY_ROLES[capability],
         lab_unit_id=task.lab_unit_id,
     )
+    project_boundary = exists().where(
+        ProjectLabUnit.project_id == project_id,
+        ProjectLabUnit.lab_unit_id == task.lab_unit_id,
+        ProjectLabUnit.active.is_(True),
+    )
     task_scope = select(1).select_from(task).outerjoin(
         task_encounter, task_encounter.id == task.patient_encounter_id
     ).outerjoin(
@@ -295,7 +309,10 @@ def _project_task_capability_clause(
     ).outerjoin(
         direct_image, direct_image.id == task.direct_image_upload_id
     )
-    authorization = or_(role_grant_exists, permission_exists)
+    authorization = project_boundary if is_project_permission_admin(user) else and_(
+        project_boundary,
+        or_(role_grant_exists, permission_exists),
+    )
     if allow_classical:
         authorization = or_(project_id.is_(None), authorization)
     else:
@@ -313,7 +330,9 @@ def capability_lab_unit_ids(
     if capability not in CAPABILITY_COLUMNS:
         raise ValueError(f"Unknown project capability: {capability}")
     if is_project_permission_admin(user):
-        return set(db.execute(select(LabUnit.id)).scalars())
+        return set(db.execute(
+            select(ProjectLabUnit.lab_unit_id).where(ProjectLabUnit.active.is_(True))
+        ).scalars())
 
     lab_unit_ids: set[int] = set()
     if user.has_role(*CAPABILITY_ROLES[capability]):
@@ -341,22 +360,25 @@ def capability_lab_unit_ids(
             Role.name.in_(CAPABILITY_ROLES[capability]),
         )
     ).scalars().all()
-    if any(grant.scope_type == PROJECT_SCOPE for grant in grants):
-        lab_unit_ids.update(db.execute(select(LabUnit.id)).scalars())
-    hospital_ids = {
-        grant.hospital_id
-        for grant in grants
-        if grant.scope_type == HOSPITAL_SCOPE and grant.hospital_id is not None
-    }
-    if hospital_ids:
-        lab_unit_ids.update(db.execute(
-            select(LabUnit.id).where(LabUnit.hospital_id.in_(hospital_ids))
-        ).scalars())
-    lab_unit_ids.update(
-        grant.lab_unit_id
-        for grant in grants
-        if grant.scope_type == LAB_UNIT_SCOPE and grant.lab_unit_id is not None
-    )
+    for grant in grants:
+        configured_labs = select(ProjectLabUnit.lab_unit_id).where(
+            ProjectLabUnit.project_id == grant.project_id,
+            ProjectLabUnit.active.is_(True),
+        )
+        if grant.scope_type == PROJECT_SCOPE:
+            lab_unit_ids.update(db.execute(configured_labs).scalars())
+        elif grant.scope_type == HOSPITAL_SCOPE and grant.hospital_id is not None:
+            lab_unit_ids.update(db.execute(
+                configured_labs.join(
+                    LabUnit,
+                    LabUnit.id == ProjectLabUnit.lab_unit_id,
+                ).where(LabUnit.hospital_id == grant.hospital_id)
+            ).scalars())
+        elif grant.scope_type == LAB_UNIT_SCOPE and grant.lab_unit_id is not None:
+            if db.execute(
+                configured_labs.where(ProjectLabUnit.lab_unit_id == grant.lab_unit_id)
+            ).scalar_one_or_none() is not None:
+                lab_unit_ids.add(grant.lab_unit_id)
     return lab_unit_ids
 
 
@@ -373,6 +395,11 @@ def legacy_project_capabilities_for_scope(
         ProjectEncounterSetPermission.project_id == project_id,
         ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
         ProjectEncounterSetPermission.active.is_(True),
+        exists().where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.lab_unit_id == lab_unit_id,
+            ProjectLabUnit.active.is_(True),
+        ),
     )).scalar_one_or_none()
     if row is None:
         return frozenset()

@@ -1,15 +1,66 @@
-# Project Role Grants API
+# Project Authorization API
 
 Project membership and project data scope are represented by role grants. Each
 grant references the global application `roles` catalog, but applies only inside
 one project. It does not add the role to `user_roles` and therefore cannot grant
 classical/non-project authority.
 
-## Scope model
+## Project Lab Unit boundary
+
+Every project has an explicit set of active Lab Units configured by a System
+Admin. This is the outer boundary for all project data and workflows: role
+grants, uploader assignments, EncounterSet browsing, grading, verification,
+analytics, datasets, exports, Remidio ingestion/sync, and WAI execution/results.
+
+`project` scope means every currently configured Lab Unit in that project. It
+never means every Lab Unit in the application. A hospital- or lab-scoped grant
+must also fall inside the configured boundary. Project Admin management covers
+the complete configured boundary; the historical scope of the Project Admin's
+own grant does not reduce the Lab Units they can select.
+
+### Read configured Lab Units
+
+`GET /api/projects/{project_id}/lab-units`
+
+Authentication: System Admin (`admin`) only.
+
+```json
+{
+  "success": true,
+  "lab_units": [{
+    "id": 18,
+    "project_id": 4,
+    "lab_unit_id": 2,
+    "lab_unit_name": "Retina Lab",
+    "hospital_id": 1,
+    "hospital_name": "Hospital A",
+    "active": true
+  }]
+}
+```
+
+### Replace configured Lab Units
+
+`PUT|POST /api/projects/{project_id}/lab-units`
+
+Authentication: System Admin (`admin`) only. Session-authenticated mutations
+require CSRF (`X-CSRFToken` for JSON/HTMX or the rendered form token).
+
+```json
+{"lab_unit_ids": [2, 5]}
+```
+
+The response has the same `lab_units` array as the GET. Invalid Lab Unit IDs
+return `400`; a non-admin receives `403`. Removing a Lab Unit deactivates active
+lab-scoped grants, upload-profile assignments, legacy project permissions,
+grading allocations, and integration bindings outside the new boundary. Rows
+are retained for audit history.
+
+## Role scope model
 
 A grant has exactly one scope:
 
-- `project`: every hospital and lab unit belonging to the project data.
+- `project`: every Lab Unit explicitly configured for the project.
 - `hospital`: one hospital within the project.
 - `lab_unit`: one lab unit within the project.
 
@@ -25,13 +76,39 @@ All mutations emit a structured `project_authorization` application log record
 with actor, project, target user, role, scope, and active state identifiers. The
 log does not contain patient data.
 
+## Canonical project roles
+
+- `project_pi`: project-wide title and Project view access.
+- `site_pi`: scoped title and Project view access.
+- `project_admin`: Project Access and uploader-assignment management across all
+  configured project Lab Units. It does not configure the project or imply
+  grading, verification, upload, analytics, export, dataset, or WAI authority.
+- `collaborator`: scoped project view/browse access.
+- `verifier`: scoped verification and manual WAI execution.
+- `ophthalmologist`: scoped ophthalmologist grading work.
+- `optometrist`: scoped optometry/verification work, manual WAI execution, and
+  detailed WAI results.
+- `analytics_viewer`, `dataset_creator`, `data_exporter`,
+  `discrepancy_reviewer`, `regrade_adjudicator`: the named scoped workflow.
+
+Upload authority is not a role grant. It comes only from an active assignment
+to an active project upload profile for a configured Lab Unit, and the user sees
+only the upload methods enabled by that profile.
+
+System Admin configures project Lab Units, EncounterSet types, upload profiles,
+upload metadata, Remidio/IITK integration, and remote-inference policy. Project
+Admin assigns operational project roles and uploaders to enabled profiles.
+
+Global role records remain in the shared catalog because projectless legacy
+data still uses them. A global role never authorizes project-owned data.
+
 ## List grants
 
 `GET /api/projects/{project_id}/role-grants`
 
-Authentication: logged-in session. The service permits system `admin`, a
-classical `local_admin` or `data_manager` within their site scope, or a project
-`project_pi`, `site_pi`, `local_admin`, or `data_manager` grant within its scope.
+Authentication: logged-in session. System Admin can manage every project;
+Project Admin can manage access inside their project. Project PI and Site PI are
+titles and cannot manage access.
 
 Response:
 
@@ -47,7 +124,7 @@ Response:
       "user_id": 15,
       "username": "uploader1",
       "user_name": "Uploader One",
-      "role_name": "fileUploader",
+      "role_name": "verifier",
       "scope_type": "lab_unit",
       "hospital_id": null,
       "hospital_name": "Hospital A",
@@ -68,7 +145,7 @@ Response:
   "user_id": 15,
   "scope_type": "lab_unit",
   "lab_unit_id": 2,
-  "role_names": ["fileUploader", "optometrist"]
+  "role_names": ["verifier", "optometrist"]
 }
 ```
 

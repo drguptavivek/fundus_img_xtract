@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from auth.roles import roles_required
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
 from encounter_sets.models import EncounterSetAttachment
-from models import PatientEncounters
+from models import Job, PatientEncounters
 from remidio_api_integration import routing as api_routing
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError, RemidioIntegrationError
@@ -23,8 +23,8 @@ from . import api_bp
 
 
 logger = logging.getLogger("api.remidio_api_integration")
-REMIDIO_ROLES = ("admin", "data_manager")
-REMIDIO_BINDING_ROLES = ("admin", "local_admin", "data_manager")
+REMIDIO_ROLES = ("admin",)
+REMIDIO_BINDING_ROLES = ("admin",)
 REMIDIO_ATTACHMENT_OCR_ROLES = ("admin", "local_admin", "data_manager", "fileUploader", "optometrist")
 
 
@@ -519,14 +519,14 @@ def sync_remidio_api_routing_profile(routing_profile_id: int):
 
 
 @api_bp.route("/remidio/projects/<int:project_id>/sync", methods=["POST"])
-@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+@login_required
 def sync_remidio_api_project(project_id: int):
     payload = _json_payload()
     return _sync_remidio_api_project_from_payload(project_id, payload)
 
 
 @api_bp.route("/remidio/projects/sync", methods=["POST"])
-@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+@login_required
 def sync_selected_remidio_api_project():
     payload = _json_payload()
     try:
@@ -554,10 +554,11 @@ def _sync_remidio_api_project_from_payload(project_id: int, payload: dict):
 
 
 @api_bp.route("/remidio/project-sync-jobs/<int:job_id>/pause", methods=["POST"])
-@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+@login_required
 def pause_remidio_api_project_sync_job(job_id: int):
     try:
         with transaction_scope() as db:
+            _require_project_sync_job_action(db, job_id)
             data = service.pause_project_sync_job(db, job_id)
         return jsonify({"success": True, "data": data, "message": "Remidio API project sync paused."})
     except RemidioIntegrationError as exc:
@@ -565,10 +566,11 @@ def pause_remidio_api_project_sync_job(job_id: int):
 
 
 @api_bp.route("/remidio/project-sync-jobs/<int:job_id>/resume", methods=["POST"])
-@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+@login_required
 def resume_remidio_api_project_sync_job(job_id: int):
     try:
         with transaction_scope() as db:
+            _require_project_sync_job_action(db, job_id)
             data = service.resume_project_sync_job(db, job_id)
         service.enqueue_project_sync_job(job_id, user_id=current_user.id)
         return jsonify({"success": True, "data": data, "message": "Remidio API project sync resumed."})
@@ -577,10 +579,11 @@ def resume_remidio_api_project_sync_job(job_id: int):
 
 
 @api_bp.route("/remidio/project-sync-jobs/<int:job_id>/cancel", methods=["POST"])
-@roles_required(*REMIDIO_BINDING_ROLES, "fileUploader")
+@login_required
 def cancel_remidio_api_project_sync_job(job_id: int):
     try:
         with transaction_scope() as db:
+            _require_project_sync_job_action(db, job_id)
             data = service.cancel_project_sync_job(db, job_id)
         return jsonify({"success": True, "data": data, "message": "Remidio API project sync cancelled."})
     except RemidioIntegrationError as exc:
@@ -618,6 +621,24 @@ def ingest_remidio_staged_files(connection_id: int):
             return jsonify({"success": True, "data": service.ingest_connection_files(db, connection_id, payload)})
     except RemidioIntegrationError as exc:
         return _error_response(exc)
+
+
+def _require_project_sync_job_action(db, job_id: int) -> None:
+    """Keep project-sync controls with the scoped uploader who started the job."""
+    job = db.get(Job, job_id)
+    if job is None or job.project_id is None:
+        raise RemidioConfigError("Remidio API project sync job was not found.")
+    if current_user.has_role("admin"):
+        return
+    from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+
+    if job.uploader_user_id != current_user.id or not user_can_project_action(
+        db,
+        user=current_user,
+        project_id=job.project_id,
+        action=ACTION_REMIDIO_SYNC,
+    ):
+        raise RemidioConfigError("You cannot manage this Remidio API project sync job.")
 
 
 def _json_payload() -> dict:

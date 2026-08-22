@@ -9,7 +9,7 @@ from db_transaction_manager import get_db_session, transaction_scope
 from . import api_bp
 
 # Import utility functions and models
-from auth.roles import roles_required
+from auth.roles import global_uploader_or_project_assignment_required
 from models import User, LabUnit, Job, JobItem
 from services.uploads.direct import (
     DirectUploadJobError,
@@ -18,8 +18,6 @@ from services.uploads.direct import (
     enqueue_direct_upload_post_commit,
 )
 from upload_profiles.service import UploadProfileError
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-from utils.hospital_scoping import apply_scoping
 
 
 # -------------------
@@ -28,7 +26,7 @@ from utils.hospital_scoping import apply_scoping
 
 @api_bp.route('/users/<int:user_id>/lab-units', methods=['GET'])
 @login_required
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def get_lab_units(user_id):
     """Get lab units for a user."""
     with get_db_session() as db:
@@ -38,22 +36,25 @@ def get_lab_units(user_id):
         if current_user.id != user_id:
             return jsonify({"error": "Forbidden"}), 403
 
-        query = select(LabUnit).order_by(LabUnit.name.asc())
-        query = apply_scoping(query, LabUnit, current_user, "view")
-        lab_units = db.execute(query).scalars().all()
+        context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+        lab_units = context["lab_units"]
         
-        return jsonify([{"id": lu.id, "name": lu.name} for lu in lab_units])
+        return jsonify([{"id": lu["id"], "name": lu["name"]} for lu in lab_units])
 
 
 @api_bp.route('/lab-units/<int:lab_unit_id>/hospital', methods=['GET'])
 @login_required
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def get_hospital(lab_unit_id):
     """Get hospital for a lab unit."""
     with get_db_session() as db:
-        query = select(LabUnit).where(LabUnit.id == lab_unit_id).options(selectinload(LabUnit.hospital))
-        query = apply_scoping(query, LabUnit, current_user, "view")
-        lu = db.execute(query).scalar_one_or_none()
+        context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+        allowed_ids = {item["id"] for item in context["lab_units"]}
+        lu = db.execute(
+            select(LabUnit)
+            .where(LabUnit.id == lab_unit_id, LabUnit.id.in_(allowed_ids or {-1}))
+            .options(selectinload(LabUnit.hospital))
+        ).scalar_one_or_none()
         
         if not lu:
             return jsonify({"error": "Lab unit not found or access denied"}), 404
@@ -62,7 +63,7 @@ def get_hospital(lab_unit_id):
 
 @api_bp.route('/upload-jobs/<job_token>/status', methods=['GET'])
 @login_required
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with get_db_session() as db:
@@ -73,18 +74,19 @@ def get_upload_status(job_token):
 
 
 @api_bp.route("/direct-uploads/form", methods=["GET"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def direct_upload_form():
     """HTMX/JSON form options for browser direct uploads."""
     with get_db_session() as db:
         context = build_web_direct_upload_context(db=db, user_id=current_user.id)
+        context["selected_project_id"] = request.args.get("project_id", type=int)
     if _wants_json():
         return jsonify(_options_payload(context))
     return render_template("direct_uploads/_upload_form.html", **context)
 
 
 @api_bp.route("/direct-uploads/workspace", methods=["GET"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def direct_upload_workspace():
     """HTMX/JSON workspace for recent direct upload jobs."""
     with get_db_session() as db:
@@ -95,7 +97,7 @@ def direct_upload_workspace():
 
 
 @api_bp.route("/direct-uploads/uploads/web", methods=["POST"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def create_direct_upload_web():
     """Session-auth HTMX/JSON endpoint for browser direct uploads."""
     try:
@@ -146,7 +148,7 @@ def create_direct_upload_web():
 
 
 @api_bp.route("/direct-uploads/uploads/<job_token>/status", methods=["GET"])
-@roles_required("fileUploader")
+@global_uploader_or_project_assignment_required("direct_image")
 def direct_upload_status(job_token: str):
     with get_db_session() as db:
         job = _scoped_job(db, job_token)
@@ -176,8 +178,7 @@ def _scoped_job(db, job_token: str) -> Job | None:
     if not job:
         return None
     if job.uploader_user_id != current_user.id:
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if job.lab_unit_id not in allowed_lab_unit_ids:
+        if not current_user.has_role("admin"):
             return None
     return job
 

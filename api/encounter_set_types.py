@@ -16,7 +16,7 @@ from . import api_bp
 
 
 @api_bp.route("/encounter-set-types", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def list_encounter_set_types():
     """List reusable encounter-set types visible to the manager."""
     rows = encounter_set_type_service.list_encounter_set_types(
@@ -27,7 +27,7 @@ def list_encounter_set_types():
 
 
 @api_bp.route("/encounter-set-types", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def create_encounter_set_type():
     """Create an encounter-set type."""
     result = encounter_set_type_service.create_encounter_set_type(
@@ -38,14 +38,14 @@ def create_encounter_set_type():
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def get_encounter_set_type(type_id: int):
     """Read one encounter-set type."""
     return _json_result(encounter_set_type_service.get_encounter_set_type(current_user.id, type_id))
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>/schema", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def export_encounter_set_type_schema(type_id: int):
     """Export one encounter-set type schema as JSON."""
     result = encounter_set_type_service.export_encounter_set_type_schema(current_user.id, type_id)
@@ -63,7 +63,7 @@ def export_encounter_set_type_schema(type_id: int):
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>", methods=["PATCH", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def update_encounter_set_type(type_id: int):
     """Update an encounter-set type."""
     result = encounter_set_type_service.update_encounter_set_type(
@@ -75,28 +75,28 @@ def update_encounter_set_type(type_id: int):
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>/activate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def activate_encounter_set_type(type_id: int):
     """Activate an encounter-set type."""
     return _json_result(encounter_set_type_service.set_encounter_set_type_active(current_user.id, type_id, True))
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>/deactivate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def deactivate_encounter_set_type(type_id: int):
     """Deactivate an encounter-set type."""
     return _json_result(encounter_set_type_service.set_encounter_set_type_active(current_user.id, type_id, False))
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>/delete", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def delete_encounter_set_type(type_id: int):
     """Delete an encounter-set type when it is not linked to upload profiles."""
     return _json_result(encounter_set_type_service.delete_encounter_set_type(current_user.id, type_id))
 
 
 @api_bp.route("/encounter-set-types/<int:type_id>", methods=["DELETE"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def delete_encounter_set_type_rest(type_id: int):
     """REST delete alias for API clients."""
     return _json_result(encounter_set_type_service.delete_encounter_set_type(current_user.id, type_id))

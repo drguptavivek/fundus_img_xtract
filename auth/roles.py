@@ -22,6 +22,8 @@ ROLE_REGRADE_ADJUDICATOR = "regrade_adjudicator"
 ROLE_COLLABORATOR = "collaborator"
 ROLE_PROJECT_PI = "project_pi"
 ROLE_SITE_PI = "site_pi"
+ROLE_PROJECT_ADMIN = "project_admin"
+ROLE_VERIFIER = "verifier"
 ROLE_FIELD_OPTOMETRIST = "field_optometrist"
 ROLE_FIELD_OPHTHALMOLOGIST = "field_ophthalmologist"
 
@@ -47,6 +49,8 @@ DEFAULT_ROLES = [
     ROLE_COLLABORATOR,
     ROLE_PROJECT_PI,
     ROLE_SITE_PI,
+    ROLE_PROJECT_ADMIN,
+    ROLE_VERIFIER,
     ROLE_FIELD_OPTOMETRIST,
     ROLE_FIELD_OPHTHALMOLOGIST,
     "principal_investigator",
@@ -127,6 +131,35 @@ def roles_or_project_grant_required(*required: str):
             if has_project_grant:
                 return fn(*args, **kwargs)
             return abort(403)
+        return wrapper
+    return decorator
+
+
+def global_uploader_or_project_assignment_required(*upload_kinds: str):
+    """Allow legacy global uploaders or users assigned an active project profile.
+
+    This is only a coarse route gate.  Mutations must validate their exact
+    project/profile/lab selection through ``upload_profiles.service``.
+    """
+    required_kinds = frozenset(upload_kinds)
+
+    def decorator(fn):
+        @wraps(fn)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if current_user.has_role("admin", "fileUploader"):
+                return fn(*args, **kwargs)
+            from data_authorization.policy import user_has_any_project_upload_assignment
+
+            with get_db_session() as db:
+                allowed = user_has_any_project_upload_assignment(
+                    db,
+                    user=current_user,
+                    upload_kinds=required_kinds,
+                )
+            if not allowed:
+                return abort(403)
+            return fn(*args, **kwargs)
         return wrapper
     return decorator
 

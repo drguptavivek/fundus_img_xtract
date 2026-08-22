@@ -31,35 +31,35 @@ from utils.log_sanitize import sanitize_log_value
 from zip_processor import cleanup_processed_zip_intake_files
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def remidio_admin():
     """Render the Remidio connection administration page."""
     with transaction_scope() as db:
         return render_template("admin/remidio.html", **_context(db))
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def remidio_workspace():
     """Render the HTMX workspace fragment after Remidio mutations."""
     with transaction_scope() as db:
         return render_template("admin/partials/remidio_workspace.html", **_context(db))
 
 
-@roles_required("admin", "data_manager", "local_admin")
+@roles_required("admin")
 def remidio_api_routing_dashboard():
     """Render the Remidio API routing dashboard."""
     with transaction_scope() as db:
         return render_template("admin/remidio_api_routing.html", **_routing_context(db))
 
 
-@roles_required("admin", "data_manager", "local_admin")
+@roles_required("admin")
 def remidio_api_routing_workspace():
     """Render the Remidio API routing dashboard workspace fragment."""
     with transaction_scope() as db:
         return render_template("admin/partials/remidio_api_routing_workspace.html", **_routing_context(db))
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def stuck_remidio_uploads_status():
     """Return a dry-run view of processed Remidio ZIPs still in intake."""
     date_folder = request.args.get("date_folder") or None
@@ -74,7 +74,7 @@ def stuck_remidio_uploads_status():
     return jsonify({"success": True, "data": result})
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def cleanup_stuck_remidio_uploads():
     """Run the guarded cleanup for processed Remidio ZIPs still in intake."""
     payload = request.get_json(silent=True) or request.form

@@ -74,6 +74,12 @@
       if (radio && !radio.disabled) radio.checked = true;
     });
 
+    var initialProjectId = form.getAttribute("data-initial-project-id");
+    if (initialProjectId) {
+      var initialProject = radioByValue(form, "project_id", initialProjectId);
+      if (initialProject && !initialProject.disabled) initialProject.checked = true;
+    }
+
     var mydriatic = form.querySelector('[name="is_mydriatic"]');
     if (mydriatic && typeof defaults.is_mydriatic === "boolean" && !mydriatic.disabled) {
       mydriatic.checked = defaults.is_mydriatic;
@@ -135,8 +141,9 @@
     var configuredKind = form.getAttribute("data-required-upload-kind");
     var requiredKind = configuredKind || (ingestMode === "legacy_remidio" ? "remidio" : "encounter_set");
     var usesClinicalOptions = requiredKind !== "encounter_set";
-    var requiresRemidioEncounterSet = ingestMode === "remidio_encounter_set" || ingestMode === "encounter_set";
-    var requiresIitkEncounterSet = ingestMode === "iitk_encounter_set";
+    var requiresRemidioEncounterSet = requiredKind === "encounter_set" &&
+      (ingestMode === "remidio_encounter_set" || ingestMode === "encounter_set");
+    var requiresIitkEncounterSet = requiredKind === "encounter_set" && ingestMode === "iitk_encounter_set";
     var modeProfiles = profiles.filter(function (profile) {
       if (Array.isArray(profile.upload_kinds) && profile.upload_kinds.indexOf(requiredKind) === -1) return false;
       if (requiresRemidioEncounterSet && !profile.allow_remidio_zip_encounter_set) return false;

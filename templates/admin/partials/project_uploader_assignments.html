@@ -1,0 +1,67 @@
+{% from "_forms.html" import csrf_field %}
+<div class="table-responsive mt-2">
+  <table class="table table-sm align-middle mb-0">
+    <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>
+    <tbody>
+      {% for assignment in mapping.assignments if assignment.active and assignment.lab_unit_id in scoped_lab_ids %}
+      <tr>
+        <td>{{ assignment.user.full_name or assignment.user.username }}</td>
+        <td>{{ assignment.lab_unit.name }}</td>
+        <td class="text-end">
+          <form method="post"
+                action="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                hx-post="{{ url_for('fundus_api.remove_upload_profile_user') }}"
+                hx-swap="none"
+                data-json-api-htmx
+                data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+                data-json-api-reload-target="#project-detail-workspace">
+            {{ csrf_field() }}
+            <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="text-muted text-center py-2">No uploaders assigned.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form class="row g-2 align-items-end mt-2"
+      method="post"
+      action="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+      hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
+      hx-swap="none"
+      data-json-api-htmx
+      data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
+      data-json-api-reload-target="#project-detail-workspace">
+  {{ csrf_field() }}
+  <input type="hidden" name="project_upload_profile_id" value="{{ mapping.id }}">
+  <div class="col-md-5">
+    <label class="form-label" for="profile_user_search_{{ mapping.id }}">Search User</label>
+    <input class="form-control" id="profile_user_search_{{ mapping.id }}" type="search" placeholder="Type name or username" data-user-search="profile_user_id_{{ mapping.id }}">
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" for="profile_user_id_{{ mapping.id }}">Matched User</label>
+    <select class="form-select" id="profile_user_id_{{ mapping.id }}" name="user_id" required>
+      <option value="">Select user</option>
+      {% for user in users %}
+      <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Lab Unit</label>
+    <div class="border rounded p-2" id="profile_lab_ids_{{ mapping.id }}" style="max-height: 7rem; overflow:auto;">
+      {% for lab_unit in lab_units %}
+      <div class="form-check mb-1" data-project-profile-lab-row data-lab-id="{{ lab_unit.id }}">
+        <input class="form-check-input" type="checkbox" name="lab_unit_ids" value="{{ lab_unit.id }}" id="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">
+        <label class="form-check-label small" for="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-12 text-end">
+    <button class="btn btn-outline-primary w-100" type="submit">Add</button>
+  </div>
+</form>

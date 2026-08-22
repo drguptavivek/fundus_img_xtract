@@ -14,7 +14,7 @@ from . import api_bp
 
 
 @api_bp.route("/upload-metadata/field-definitions", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def list_upload_metadata_field_definitions():
     rows = upload_metadata_service.list_field_definitions(
         current_user.id,
@@ -24,13 +24,13 @@ def list_upload_metadata_field_definitions():
 
 
 @api_bp.route("/upload-metadata/field-definitions", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def create_upload_metadata_field_definition():
     return _json_result(upload_metadata_service.create_field_definition(current_user.id, _input_from_request()))
 
 
 @api_bp.route("/upload-metadata/field-definitions/key-availability", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def check_upload_metadata_field_key():
     exclude_id = _int_arg(request.args.get("exclude_id"))
     result = upload_metadata_service.check_field_key_availability(
@@ -42,19 +42,19 @@ def check_upload_metadata_field_key():
 
 
 @api_bp.route("/upload-metadata/field-definitions/<int:field_id>", methods=["PATCH", "POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def update_upload_metadata_field_definition(field_id: int):
     return _json_result(upload_metadata_service.update_field_definition(current_user.id, field_id, _input_from_request()))
 
 
 @api_bp.route("/upload-metadata/field-definitions/<int:field_id>/activate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def activate_upload_metadata_field_definition(field_id: int):
     return _json_result(upload_metadata_service.set_field_definition_active(current_user.id, field_id, True))
 
 
 @api_bp.route("/upload-metadata/field-definitions/<int:field_id>/deactivate", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def deactivate_upload_metadata_field_definition(field_id: int):
     return _json_result(upload_metadata_service.set_field_definition_active(current_user.id, field_id, False))
 

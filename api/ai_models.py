@@ -1,4 +1,5 @@
-from flask import jsonify, request
+from flask import abort, jsonify, request
+from flask_login import login_required
 from flask_login import current_user
 from sqlalchemy.orm import selectinload
 
@@ -7,11 +8,17 @@ from auth.roles import roles_required
 from utils.utils import get_db_session
 from services.wadhwani_glaucoma_inference import run_task_inference
 from remote_inference import encounter_service
+from data_authorization.policy import (
+    ACTION_WAI_RUN,
+    grading_task_project_scope,
+    user_can_project_action,
+)
+from db_transaction_manager import transaction_scope
 from . import api_bp
 
 
 @api_bp.route("/ai-models", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "optometrist")
+@roles_required("admin")
 def get_ai_models():
     """API endpoint to get all AI models."""
     with get_db_session() as db:
@@ -43,8 +50,25 @@ def get_ai_models():
 
 
 @api_bp.route("/ai-models/wadhwani-glaucoma/tasks/<int:task_id>/infer", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@login_required
 def infer_wadhwani_glaucoma_task(task_id: int):
+    with transaction_scope() as db:
+        scope = grading_task_project_scope(db, task_id=task_id)
+        if scope is None:
+            abort(404)
+        if scope.project_id is None:
+            allowed = current_user.has_role("admin", "verifier", "optometrist")
+        else:
+            allowed = user_can_project_action(
+                db,
+                user=current_user,
+                project_id=scope.project_id,
+                action=ACTION_WAI_RUN,
+                hospital_id=scope.hospital_id,
+                lab_unit_id=scope.lab_unit_id,
+            )
+        if not allowed:
+            abort(403)
     payload = request.get_json(silent=True) or {}
     force = bool(payload.get("force", False))
     result = run_task_inference(

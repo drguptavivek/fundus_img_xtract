@@ -7,7 +7,7 @@
   <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">{{ page_title }}</h1>
-      <p class="text-muted mb-0">Submit every eligible macula image in an EncounterSet as one combined DR and DME screening.</p>
+      <p class="text-muted mb-0">{{ 'Browse detailed project DR and DME results.' if results_only else 'Submit every eligible macula image in an EncounterSet as one combined DR and DME screening.' }}</p>
     </div>
     <div class="btn-group" role="group" aria-label="Remote inference workflow">
       <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Glaucoma</a>
@@ -27,6 +27,7 @@
         hx-get="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference_workspace') }}"
         hx-target="#madhunetraWorkspace" hx-trigger="submit" hx-swap="innerHTML">
     <input type="hidden" name="workflow" value="dr_dme">
+    {% if results_only %}<input type="hidden" name="results_only" value="1">{% endif %}
     <div class="card-body row g-3 align-items-end">
       <div class="col-md-3">
         <label class="form-label" for="project_id">Project</label>

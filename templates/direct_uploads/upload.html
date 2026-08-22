@@ -16,7 +16,7 @@
   <div class="row g-4">
     <div class="col-lg-5">
       <div id="direct-upload-form-panel"
-           hx-get="{{ url_for('fundus_api.direct_upload_form') }}"
+           hx-get="{{ url_for('fundus_api.direct_upload_form', project_id=selected_project_id) }}"
            hx-trigger="load"
            hx-swap="innerHTML">
         <div class="card">

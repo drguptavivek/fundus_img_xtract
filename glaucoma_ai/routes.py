@@ -17,12 +17,6 @@ from upload_profiles.service import (
 from . import bp
 
 
-@bp.route("/", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
-def index():
-    return render_template("glaucoma_ai/upload.html")
-
-
 @bp.route("/form", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "optometrist", "fileUploader")
 def upload_form_partial():

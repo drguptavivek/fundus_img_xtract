@@ -5,11 +5,7 @@
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h4 mb-0">Remedio ZIP File Upload</h1>
-        <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
-        <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
-        <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
-        <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
-        <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('projects.index') }}">Projects</a>
     </div>
 
 
@@ -23,7 +19,7 @@
       </div>
 
       <div class="card-body">
-        <form method="post" action="{{ url_for('remedio_zip_uploads.upload_files') }}" enctype="multipart/form-data" data-upload-profile-form>
+        <form method="post" action="{{ url_for('remedio_zip_uploads.upload_files') }}" enctype="multipart/form-data" data-upload-profile-form data-initial-project-id="{{ selected_project_id or '' }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div data-upload-profiles='{{ upload_profiles | tojson }}'></div>
 
@@ -38,12 +34,10 @@
           <div class="mb-3">
             <label class="form-label">Ingest Mode <span class="text-danger">*</span></label>
             <div class="d-flex flex-wrap gap-2">
-              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_remidio_encounter_set" value="remidio_encounter_set" autocomplete="off" checked>
-              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="ingest_mode_remidio_encounter_set">Remidio ZIP EncounterSet</label>
-              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_iitk_encounter_set" value="iitk_encounter_set" autocomplete="off">
-              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="ingest_mode_iitk_encounter_set">IITK ZIP EncounterSet</label>
-              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_legacy" value="legacy_remidio" autocomplete="off">
-              <label class="btn btn-outline-secondary btn-sm rounded-pill px-3" for="ingest_mode_legacy">Legacy Remidio</label>
+              {% for mode in ingest_modes %}
+              <input type="radio" class="btn-check" name="ingest_mode" id="ingest_mode_{{ mode.value }}" value="{{ mode.value }}" autocomplete="off" {% if selected_ingest_mode == mode.value %}checked{% endif %}>
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="ingest_mode_{{ mode.value }}">{{ mode.label }}</label>
+              {% endfor %}
             </div>
           </div>
 
@@ -51,7 +45,7 @@
             <label class="form-label">Project <span class="text-danger">*</span></label>
             <div class="d-flex flex-wrap gap-2" id="project-buttons">
               {% for project in projects %}
-              <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off">
+              <input type="radio" class="btn-check" name="project_id" id="project_{{ project.id }}" value="{{ project.id }}" autocomplete="off" {% if selected_project_id == project.id %}checked{% endif %}>
               <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="project_{{ project.id }}">{{ project.title }} <span class="text-muted">({{ project.code }})</span></label>
               {% endfor %}
             </div>
@@ -104,8 +98,6 @@
           
           <div class="d-flex gap-2">
             <button class="btn btn-primary" type="submit">Upload &amp; Queue</button>
-            <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">Recent Jobs</a>
-            <a class="btn btn-outline-secondary" href="/healthz">Health</a>
           </div>
           </fieldset>
         </form>

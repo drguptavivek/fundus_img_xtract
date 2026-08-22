@@ -45,7 +45,7 @@ def _render_workspace(workspace: str):
     return render_template("admin/encounter_set_types.html", **context)
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def encounter_set_types_admin():
     """Render EncounterSetType configuration UI."""
     if not _has_manager_scope():
@@ -54,7 +54,7 @@ def encounter_set_types_admin():
     return _render_workspace("list")
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def encounter_set_types_list():
     """Render the EncounterSetType list partial for HTMX refreshes."""
     if not _has_manager_scope():
@@ -62,7 +62,7 @@ def encounter_set_types_list():
     return _render_workspace("list")
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def encounter_set_type_new():
     """Render create workspace."""
     if not _has_manager_scope():
@@ -71,7 +71,7 @@ def encounter_set_type_new():
     return _render_workspace("new")
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def encounter_set_type_edit(type_id: int):
     """Render edit workspace."""
     if not _has_manager_scope():
@@ -88,7 +88,7 @@ def encounter_set_type_edit(type_id: int):
     return render_template("admin/encounter_set_types.html", **context)
 
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def encounter_set_type_view(type_id: int):
     """Render read-only EncounterSetType detail workspace."""
     if not _has_manager_scope():

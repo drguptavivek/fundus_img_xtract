@@ -11,7 +11,6 @@ from sqlalchemy.orm import selectinload
 from models import EncounterSetImage, PatientEncounters
 from remote_inference.dr_dme_service import evaluate_encounter, normalize_eye, normalize_focus
 from remote_inference.models import EncounterAIInferenceRun, ProjectEncounterAIWorkflow
-from utils.hospital_scoping import apply_scoping
 
 
 ALLOWED_PAGE_SIZES = (25, 50, 75, 100)
@@ -128,6 +127,25 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
     if workflow is None:
         return CandidatePage((), 0, 0, filters.page, filters.page_size, filters.page > 1, False)
 
+    from data_authorization.policy import (
+        ACTION_WAI_RESULTS,
+        ACTION_WAI_RUN,
+        allowed_lab_unit_ids_for_action,
+    )
+
+    run_labs = allowed_lab_unit_ids_for_action(
+        db, user=user, project_id=filters.project_id, action=ACTION_WAI_RUN
+    )
+    result_labs = allowed_lab_unit_ids_for_action(
+        db, user=user, project_id=filters.project_id, action=ACTION_WAI_RESULTS
+    )
+    if run_labs is None or result_labs is None:
+        allowed_labs = None
+    else:
+        allowed_labs = run_labs | result_labs
+    if allowed_labs == frozenset():
+        return CandidatePage((), 0, 0, filters.page, filters.page_size, filters.page > 1, False)
+
     query = (
         db.query(PatientEncounters)
         .options(
@@ -149,7 +167,9 @@ def list_candidates(db, *, filters: CandidateFilters, user: Any) -> CandidatePag
         query = query.filter(PatientEncounters.capture_date_dt <= date_to)
     if filters.encounter_ids:
         query = query.filter(PatientEncounters.id.in_(filters.encounter_ids))
-    encounters = apply_scoping(query, PatientEncounters, user, "upload").all()
+    if allowed_labs is not None:
+        query = query.filter(PatientEncounters.lab_unit_id.in_(allowed_labs))
+    encounters = query.all()
 
     runs = db.execute(
         select(EncounterAIInferenceRun).where(

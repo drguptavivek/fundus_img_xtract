@@ -185,14 +185,34 @@ def _matches_lab_unit(resource: ResourceRef, grant: RelationshipGrant) -> bool:
 
 
 def _matches_upload_profile(resource: ResourceRef, grant: RelationshipGrant) -> bool:
-    return (
-        resource.attr("project_id") == grant.attr("project_id")
-        and resource.attr("lab_unit_id") == grant.attr("lab_unit_id")
-        and _contains(grant.attr("disease_ids"), resource.attr("disease_id"))
-        and _contains(grant.attr("camera_ids"), resource.attr("camera_id"))
-        and _contains(grant.attr("area_ids"), resource.attr("area_id"))
-        and _contains(grant.attr("upload_kinds"), resource.attr("upload_kind"))
-    )
+    """Match an upload assignment against a resource.
+
+    Project and lab unit always have to agree: an uploader's reach is the
+    (project, lab unit) pairs their assignments cover, and within such a lab
+    unit they see every upload, not only their own.
+
+    The clinical dimensions are checked only when the grant carries them. A
+    grant built from a full upload profile constrains disease, camera, area
+    and upload kind, because those decide what may be *created*. A grant that
+    only conveys visibility carries none of them, and an absent constraint is
+    no constraint - distinct from an empty one, which admits nothing.
+    """
+    if resource.attr("project_id") != grant.attr("project_id"):
+        return False
+    if resource.attr("lab_unit_id") != grant.attr("lab_unit_id"):
+        return False
+    for attribute, resource_key in (
+        ("disease_ids", "disease_id"),
+        ("camera_ids", "camera_id"),
+        ("area_ids", "area_id"),
+        ("upload_kinds", "upload_kind"),
+    ):
+        allowed = grant.attr(attribute)
+        if allowed is None:
+            continue
+        if not _contains(allowed, resource.attr(resource_key)):
+            return False
+    return True
 
 
 def _matches_grading_slot(resource: ResourceRef, action: str, grant: RelationshipGrant) -> bool:

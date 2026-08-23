@@ -25,6 +25,36 @@ When code and this document disagree, stop and update the policy before changing
 - Admin-global scope applies only to actions whose policy explicitly accepts admin-global scope.
 - A route must load or derive the resource needed by the action before enforcing a resource-specific rule.
 
+## The Pipeline And Its Steps
+
+Work moves through three steps, and each is scoped by a different
+relationship. Holding one step confers nothing at the next.
+
+**1. Upload.** An uploader sees the uploads in a lab unit, the progress of
+the upload jobs there, and the status of the WAI and Remidio OCR inferences
+those uploads trigger. Within a lab unit they see every upload, not only
+their own; "mine" is a filter on that list rather than the boundary of it.
+
+- Outside a project the reach is the uploader's own lab units.
+- Inside a project it is the (project, lab unit) pairs covered by their
+  upload profile assignments.
+- An uploader is not a verifier. Upload access confers no verification and
+  no grading authority.
+
+**2. Verification.** A verifier confirms what was captured.
+
+- Outside a project the reach is the verifier's own lab units.
+- Inside a project it is the lab units assigned to that verifier within the
+  project, held through an explicit project role grant carrying a
+  verification role.
+
+**3. Grading.** A grader reads the images clinically.
+
+- Outside a project eligibility is the grading slot: role slot, lab unit and
+  disease together, held on top of a grader role at user level.
+- Inside a project the same slot applies and a project grader allocation is
+  required as well.
+
 ## Existing Policy Sources
 
 These documents already contain authorization policy language and should be

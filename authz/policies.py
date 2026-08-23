@@ -379,6 +379,25 @@ def _universal(roles: frozenset[str]) -> ActionPolicy:
         },
     )
 
+UPLOADER_ROLES = frozenset({
+    "fileUploader", "pregarded_uploader", "admin", "local_admin", "data_manager", "optometrist",
+})
+
+
+def _upload_step(roles: frozenset[str] = UPLOADER_ROLES) -> ActionPolicy:
+    """Step one of the pipeline: what an uploader may see of their own work.
+
+    Outside a project this is their own lab units. Inside one it is the
+    (project, lab unit) pairs their upload profile assignments cover, which
+    is what lets them follow their upload jobs and the WAI and Remidio OCR
+    inferences those uploads trigger. It confers no verification and no
+    grading authority.
+    """
+    return ActionPolicy(
+        roles=roles,
+        grant_sources=GENERAL_SCOPE_GRANTS | {GrantSource.UPLOAD_PROFILE},
+    )
+
 def _aggregate_kpi() -> ActionPolicy:
     """Aggregate operational reporting: lab scope reaches every row.
 
@@ -455,7 +474,7 @@ POLICIES.update({
     "screenings.reprocess": _general(ADMIN_DATA),
 
     # --- uploads -------------------------------------------------------------
-    "upload.direct.view": _general(UPLOAD_OPERATOR_ROLES),
+    "upload.direct.view": _upload_step(),
     "upload.direct.edit_image": _general(UPLOAD_OPERATOR_ROLES),
     "upload.pregraded.create": ActionPolicy(
         roles=frozenset({"fileUploader", "pregarded_uploader"}),
@@ -465,15 +484,15 @@ POLICIES.update({
         roles=frozenset({"fileUploader"}),
         grant_sources=frozenset({GrantSource.UPLOAD_PROFILE}),
     ),
-    "upload.zip.view": _general(UPLOAD_OPERATOR_ROLES),
+    "upload.zip.view": _upload_step(),
 
     # --- preprocess ----------------------------------------------------------
     "preprocess.dashboard.view": _general(UPLOAD_OPERATOR_ROLES),
     "preprocess.image.update": _general(UPLOAD_OPERATOR_ROLES),
 
     # --- jobs / reports / notifications --------------------------------------
-    "jobs.view": _general(JOBS_ROLES),
-    "jobs.result.view": _general(JOBS_ROLES),
+    "jobs.view": _upload_step(JOBS_ROLES),
+    "jobs.result.view": _upload_step(JOBS_ROLES),
     "jobs.regenerate": _general(JOBS_ROLES),
     "reports.view": _general(UPLOAD_OPERATOR_ROLES),
     "notifications.view": _self_only(),

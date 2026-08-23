@@ -106,6 +106,7 @@ def _resolve_uncached(db: Session, user) -> ResolvedGrants:
     grants.extend(project_grants)
     grants.extend(_legacy_capability_grants(db, actor.id))
     grants.extend(_legacy_collaborator_grants(db, actor.id))
+    grants.extend(_upload_assignment_grants(db, actor.id))
     grants.extend(_grading_slot_grants(db, actor.id))
 
     return ResolvedGrants(
@@ -221,6 +222,37 @@ def _legacy_collaborator_grants(db: Session, user_id: int) -> list[RelationshipG
         for project_id in legacy_collaborator_project_ids(db, user_id=user_id)
     ]
 
+
+def _upload_assignment_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
+    """One grant per active project upload assignment.
+
+    An uploader's reach in a project is the (project, lab unit) pairs their
+    upload profile assignments cover. This is what lets them see the uploads
+    they made and the progress of those jobs, and it carries no verification
+    or grading authority.
+    """
+    from upload_profiles.models import ProjectUploadProfile, ProjectUploadProfileAssignment
+
+    rows = db.execute(
+        select(ProjectUploadProfile.project_id, ProjectUploadProfileAssignment.lab_unit_id)
+        .join(
+            ProjectUploadProfileAssignment,
+            ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id,
+        )
+        .where(
+            ProjectUploadProfileAssignment.user_id == user_id,
+            ProjectUploadProfileAssignment.active.is_(True),
+            ProjectUploadProfile.active.is_(True),
+        )
+    ).all()
+    return [
+        RelationshipGrant(
+            source=GrantSource.UPLOAD_PROFILE,
+            lab_unit_id=lab_unit_id,
+            attributes={"project_id": project_id, "lab_unit_id": lab_unit_id, "hospital_id": None},
+        )
+        for project_id, lab_unit_id in {(p, l) for p, l in rows}
+    ]
 
 def _grading_slot_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
     from models import UserDiseaseUnitRole

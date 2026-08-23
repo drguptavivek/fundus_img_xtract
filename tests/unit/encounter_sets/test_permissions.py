@@ -15,11 +15,23 @@ from encounter_sets.permissions import (
     set_project_permission,
 )
 from data_authorization.models import ProjectRoleGrant
+from project_configuration.models import ProjectLabUnit
 from models import Disease, GradingTask, PatientEncounters, Project, RegradeTask, Role, User
 from tests.helpers.factories import UserFactory
 
 
 def _encounter(db, *, project, lab_unit, suffix):
+    """Create an encounter and configure its lab unit on the project.
+
+    An encounter can only exist in a lab the project actually uses, and
+    apply_project_permission_scope enforces that boundary for every
+    operational user, so the fixture has to establish it too.
+    """
+    if db.query(ProjectLabUnit).filter_by(
+        project_id=project.id, lab_unit_id=lab_unit.id
+    ).one_or_none() is None:
+        db.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab_unit.id, active=True))
+        db.flush()
     row = PatientEncounters(
         name=f"Patient {suffix}",
         patient_id=f"PERM-{suffix}",

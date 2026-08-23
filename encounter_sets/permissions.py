@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from data_authorization.service import project_role_grant_exists_clause, user_has_project_role
@@ -103,17 +103,18 @@ def apply_project_permission_scope(query, model_class, user: User, capability: s
     """Restrict an EncounterSet query to explicitly authorized project/lab rows."""
     if capability not in CAPABILITY_COLUMNS:
         raise ValueError(f"Unknown EncounterSet capability: {capability}")
-    # System administrators retain break-glass access; all operational users
-    # require an explicit project/lab capability row.
+    # System administrators retain break-glass access, which means exactly
+    # that: no filter at all. Applying the project boundary to them would
+    # hide rows whose lab has since been removed from the project from the
+    # only people able to put that right. Operational users need both the
+    # boundary and an explicit project/lab capability row.
+    if is_project_permission_admin(user):
+        return query
     project_boundary = exists().where(
         ProjectLabUnit.project_id == model_class.project_id,
         ProjectLabUnit.lab_unit_id == model_class.lab_unit_id,
         ProjectLabUnit.active.is_(True),
     )
-    if is_project_permission_admin(user):
-        if hasattr(query, "filter"):
-            return query.filter(project_boundary)
-        return query.where(project_boundary)
     capability_clause = CAPABILITY_COLUMNS[capability].is_(True)
     if capability == CAPABILITY_BROWSE:
         capability_clause = (
@@ -310,7 +311,8 @@ def _project_task_capability_clause(
     ).outerjoin(
         direct_image, direct_image.id == task.direct_image_upload_id
     )
-    authorization = project_boundary if is_project_permission_admin(user) else and_(
+    # Break-glass again: an administrator is not narrowed by the boundary.
+    authorization = true() if is_project_permission_admin(user) else and_(
         project_boundary,
         or_(role_grant_exists, permission_exists),
     )

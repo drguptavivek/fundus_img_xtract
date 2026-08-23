@@ -27,6 +27,7 @@ from grading_allocation.eligibility import invalidate_user_eligibility_cache
 from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
 from grading_allocation.targets import derive_project_targets, target_identity_set
 from models import LabUnit, Project, User
+from project_configuration.models import ProjectLabUnit
 
 
 MANAGER_ROLES = {"admin", "local_admin", "data_manager"}
@@ -289,6 +290,20 @@ def _require_project_manager(db: Session, actor_user_id: int, project_id: int) -
     lab_ids = {lab.id for lab in actor.lab_units}
     if not lab_ids:
         raise AllocationForbiddenError("You are not assigned to any manageable lab units.")
+    # Holding a manager role somewhere is not authority over this project.
+    # Confine the actor to the labs this project is actually configured on,
+    # so reading or editing its plan requires a stake in it.
+    project_lab_ids = set(
+        db.execute(
+            select(ProjectLabUnit.lab_unit_id).where(
+                ProjectLabUnit.project_id == project_id,
+                ProjectLabUnit.active.is_(True),
+            )
+        ).scalars().all()
+    )
+    lab_ids &= project_lab_ids
+    if not lab_ids:
+        raise AllocationForbiddenError("You cannot manage grading allocation for this project.")
     return lab_ids
 
 

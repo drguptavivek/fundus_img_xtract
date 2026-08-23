@@ -170,9 +170,12 @@ def get_filtered_direct_image_dataframe(
             clauses.append("di.hospital_id = ANY(:hospital_ids)")
             params_sql["hospital_ids"] = list(hospital_ids)
 
-        if user_lab_unit_ids:
-            clauses.append("di.lab_unit_id = ANY(:user_lab_unit_ids)")
-            params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
+        # An empty set means this user reaches no lab unit, which must deny
+        # rather than drop the filter. get_user_permissions also returns an
+        # empty set when its lookup raises, so failing open here would hand a
+        # transient error every direct upload in every hospital.
+        clauses.append("di.lab_unit_id = ANY(:user_lab_unit_ids)")
+        params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
 
         if project_gated:
             if user_id is None:

@@ -110,3 +110,17 @@ def sanitize_log_headers(headers: dict | None) -> str:
 
     # Return as a sanitized string
     return str(sanitized)
+
+
+def escape_like(value: str) -> str:
+    """Escape LIKE/ILIKE wildcards in a user-supplied search term.
+
+    Without this, a `%` typed into a search box matches everything and a `_`
+    matches any character, so a filter meant to narrow a result set can be made
+    to widen it. Pair with ``escape="\\"`` on the ``ilike()`` call::
+
+        column.ilike(f"%{escape_like(term)}%", escape="\\")
+    """
+    if not value:
+        return value
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

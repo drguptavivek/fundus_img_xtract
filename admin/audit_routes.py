@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from auth.roles import roles_required
 from models import SensitiveOperationAudit, User
 from db_transaction_manager import get_db_session
-from utils.log_sanitize import sanitize_log_value
+from utils.log_sanitize import sanitize_log_value, escape_like
 
 logger = logging.getLogger('admin.audit')
 
@@ -51,7 +51,7 @@ def sensitive_operations_audit():
             query = query.where(SensitiveOperationAudit.status == status)
             
         if username:
-            query = query.join(User).where(User.username.ilike(f"%{username}%"))
+            query = query.join(User).where(User.username.ilike(f"%{escape_like(username)}%", escape="\\"))
             
         # Get total count for pagination
         # Note: simplistic count for now, optimization might be needed for large datasets

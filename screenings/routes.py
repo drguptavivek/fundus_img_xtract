@@ -165,33 +165,46 @@ def screening_detail(encounter_id: int):
         if not encounter:
             abort(404, description="Encounter not found")
 
-        if (not is_admin_like) and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+        # Fail closed: an empty lab set means this user reaches no lab, and a
+        # NULL-lab encounter is reachable by nobody but a global admin.
+        if not is_admin_like and (
+            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
+        ):
             abort(403)
 
-        # Prev/Next (global ordering: capture_date DESC, id DESC)
+        # Prev/Next (ordering: capture_date DESC, id DESC), confined to the
+        # same labs as the detail view above -- otherwise stepping through the
+        # list walks straight out of the user's scope.
+        def _nav_scope(q):
+            if is_admin_like:
+                return q
+            return q.filter(PatientEncounters.lab_unit_id.in_(allowed_lab_unit_ids or []))
+
         prev_enc = (
-            db.query(PatientEncounters)
-            .filter(
-                or_(
-                    PatientEncounters.capture_date > encounter.capture_date,
-                    and_(
-                        PatientEncounters.capture_date == encounter.capture_date,
-                        PatientEncounters.id > encounter.id,
-                    ),
+            _nav_scope(
+                db.query(PatientEncounters).filter(
+                    or_(
+                        PatientEncounters.capture_date > encounter.capture_date,
+                        and_(
+                            PatientEncounters.capture_date == encounter.capture_date,
+                            PatientEncounters.id > encounter.id,
+                        ),
+                    )
                 )
             )
             .order_by(PatientEncounters.capture_date.asc(), PatientEncounters.id.asc())
             .first()
         )
         next_enc = (
-            db.query(PatientEncounters)
-            .filter(
-                or_(
-                    PatientEncounters.capture_date < encounter.capture_date,
-                    and_(
-                        PatientEncounters.capture_date == encounter.capture_date,
-                        PatientEncounters.id < encounter.id,
-                    ),
+            _nav_scope(
+                db.query(PatientEncounters).filter(
+                    or_(
+                        PatientEncounters.capture_date < encounter.capture_date,
+                        and_(
+                            PatientEncounters.capture_date == encounter.capture_date,
+                            PatientEncounters.id < encounter.id,
+                        ),
+                    )
                 )
             )
             .order_by(PatientEncounters.capture_date.desc(), PatientEncounters.id.desc())
@@ -274,14 +287,12 @@ def reprocess_pdf(encounter_id: int):
 
         # Admin override or strict lab unit check (data_manager role is not exempt from hospital scoping unless global admin logic implemented elsewhere, but here rely on allowed_lab_unit_ids)
         # Note: 'data_manager' is often treated as local admin. If they have lab_units, restrict them.
-        if (not is_admin_like) or (allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids):
-             # Actually, if is_admin_like is true, we might still want to restrict if they are not GLOBAL admin.
-             # The existing pattern check:
-             # if (not is_admin_like) and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
-             # However, roles_required("admin", "data_manager") means only these roles access.
-             # If a data_manager is scoped to a hospital, allowed_lab_unit_ids will be populated.
-             if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
-                 abort(403)
+        # Fail closed: an empty lab set means this user reaches no lab, and a
+        # NULL-lab encounter is reachable by nobody but a global admin.
+        if not is_admin_like and (
+            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
+        ):
+            abort(403)
 
         # Find PDF files for this encounter
         pdf_files = db.query(EncounterFilePDF).filter(
@@ -357,7 +368,11 @@ def delete_encounter(encounter_id: int):
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin")
 
-        if not is_admin_like and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+        # Fail closed: an empty lab set means this user reaches no lab, and a
+        # NULL-lab encounter is reachable by nobody but a global admin.
+        if not is_admin_like and (
+            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
+        ):
             abort(403)
 
         # Check if there are any non-pending grading tasks for this encounter's images
@@ -560,9 +575,13 @@ def delete_reports(encounter_id: int):
             return redirect(url_for("screenings.list_screenings"))
 
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        # Check permissions - similar to other routes
-        if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
-             abort(403)
+        is_admin_like = current_user.has_role("admin")
+        # Fail closed: an empty lab set means this user reaches no lab, and a
+        # NULL-lab encounter is reachable by nobody but a global admin.
+        if not is_admin_like and (
+            not allowed_lab_unit_ids or encounter.lab_unit_id not in allowed_lab_unit_ids
+        ):
+            abort(403)
 
         # Delete existing reports
         dr_reports = db.query(DiabeticRetinopathyReport).filter_by(

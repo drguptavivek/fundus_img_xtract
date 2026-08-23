@@ -40,6 +40,9 @@ class BatchCreateParams:
     target_images_per_grader: int
     created_by_user_id: int
     lab_unit_id: Optional[int] = None
+    # Labs the requester may draw from. Applied when lab_unit_id is left
+    # unset, otherwise candidate selection would span every hospital.
+    allowed_lab_unit_ids: Optional[Sequence[int]] = None
     cooldown_days_override: Optional[int] = None
     normal_grade_id: Optional[int] = None
     remarks: Optional[str] = None
@@ -133,6 +136,7 @@ class IntraRaterService:
                 disease_id=params.disease_id,
                 grader_id=grader_id,
                 lab_unit_id=lab_unit.id if lab_unit else None,
+                allowed_lab_unit_ids=params.allowed_lab_unit_ids,
                 normal_grade_id=params.normal_grade_id,
                 cutoff_dt=cutoff_dt,
                 limit=params.target_images_per_grader,
@@ -337,6 +341,7 @@ class IntraRaterService:
         disease_id: int,
         grader_id: int,
         lab_unit_id: Optional[int],
+        allowed_lab_unit_ids: Optional[Sequence[int]],
         normal_grade_id: Optional[int],
         cutoff_dt: datetime,
         limit: int,
@@ -369,6 +374,11 @@ class IntraRaterService:
 
         if lab_unit_id is not None:
             query = query.filter(task_alias.lab_unit_id == lab_unit_id)
+        elif allowed_lab_unit_ids is not None:
+            # No single lab was requested, so confine the draw to the labs the
+            # requester actually reaches. Without this the batch is built from
+            # the grader's whole history, including other hospitals.
+            query = query.filter(task_alias.lab_unit_id.in_(list(allowed_lab_unit_ids)))
 
         query = query.filter(
             ~self.db.query(intra_task_alias.id)

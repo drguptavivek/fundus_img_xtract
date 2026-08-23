@@ -112,6 +112,11 @@ def encounter_ids(
         return []
 
     query = db.query(PatientEncounters.id).filter(PatientEncounters.lab_unit_id.in_(lab_unit_ids))
+    # The lab list above is a union of classical and project-derived labs, so
+    # on its own it lets a project grant on lab L export everything in L --
+    # other projects' encounters and classical ones alike. The row-level rule
+    # is what separates them.
+    query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
     if filters.capture_date is not None:
         query = query.filter(PatientEncounters.capture_date_dt == filters.capture_date)
     if filters.start_date is not None:

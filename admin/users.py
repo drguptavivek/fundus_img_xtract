@@ -377,29 +377,43 @@ def add_user():
                 timezone=pre_timezone or default_tz,
                 hospital_id=current_user.hospital_id
             )
-            
-            # Site Admin Enforcement: Prevent creating Master Admin
-            if "admin" in pre_roles and not current_user.has_role("admin"):
-                 # This validation happens deep inside transaction, so rolling back is automatic if we raise or return error.
-                 # But we are in a 'with transaction_scope' block which auto-commits on exit.
-                 # We should return error before db.add(user).
-                 pass # handled below before adding roles
-            
+
+            # Validate before db.add(user): transaction_scope commits on a
+            # normal exit, so an early `return` after the add would leave a
+            # half-built account behind (rejected request, user still created).
+
+            # Site Admin Enforcement: Check restricted roles
+            if pre_roles and "admin" in pre_roles and not current_user.has_role("admin"):
+                return _add_user_err("You cannot assign the admin role.", None, None, None, username, pre_active, pre_roles,
+                             pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
+                             pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+
+            lab_unit_objs = []
+            if pre_lab_unit_ids:
+                lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
+                # Hospital isolation: the account is created in the creator's
+                # hospital, so its lab units must belong to that hospital too.
+                # edit_user already enforced this; creation did not, which let
+                # a local_admin hand a new account cross-hospital scope.
+                for lu in lab_unit_objs:
+                    if lu.hospital_id != user.hospital_id:
+                        return _add_user_err(
+                            f"Lab unit '{lu.name}' belongs to a different hospital. "
+                            "Users can only be assigned lab units from their assigned hospital.",
+                            None, None, None, username, pre_active, pre_roles,
+                            pre_full_name, pre_phone, pre_designation, pre_email, pre_yj,
+                            pre_ldos or default_ldos_str, pre_file_upload_quota,
+                            pre_lab_unit_ids, pre_timezone,
+                        )
+
             db.add(user)
 
             if pre_roles:
-                # Site Admin Enforcement: Check restricted roles
-                if "admin" in pre_roles and not current_user.has_role("admin"):
-                     return _add_user_err("You cannot assign the admin role.", None, None, None, username, pre_active, pre_roles,
-                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
-                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
-
                 role_objs = db.execute(select(Role).where(Role.name.in_(pre_roles))).scalars().all()
                 for r in role_objs: user.roles.append(r)
 
-            if pre_lab_unit_ids:
-                lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
-                for lu in lab_unit_objs: user.lab_units.append(lu)
+            for lu in lab_unit_objs:
+                user.lab_units.append(lu)
 
         email_sent = None
         if pre_email:
@@ -736,6 +750,17 @@ def users_update(user_id: int):
         if not user:
             flash("User not found.", "danger")
             return redirect(url_for("admin.users_list"))
+
+        # 0) Site Admin Enforcement: a local_admin acts only within their own
+        # hospital, and never on an account holding the global admin role.
+        # edit_user already enforced the first half; this path did not.
+        if not current_user.has_role("admin"):
+            if getattr(user, "hospital_id", None) != current_user.hospital_id:
+                flash("You do not have permission to change this user.", "danger")
+                return redirect(url_for("admin.users_list"))
+            if "admin" in {r.name for r in (user.roles or [])}:
+                flash("You do not have permission to change an administrator account.", "danger")
+                return redirect(url_for("admin.users_list"))
 
         # 1) Don't let an admin deactivate themselves
         if user.id == getattr(current_user, "id", None) and not new_active:

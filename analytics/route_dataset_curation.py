@@ -556,16 +556,30 @@ def dataset_curation():
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
 
         datasets_query = db.query(CuratedDataset).filter(CuratedDataset.is_active.is_(True))
-        # Apply hospital scoping to datasets listing (admins see all in hospital, creators see all assigned)
-        # CuratedDataset doesn't have hospital_id/lab_unit_id, but it has created_by_user_id.
-        # However, for now we let it be filtered by disease_id or just show recent if they have role.
-        
-        datasets = (
-            datasets_query
-            .order_by(CuratedDataset.created_at.desc())
-            .limit(20)
-            .all()
-        )
+        # CuratedDataset carries no hospital_id/lab_unit_id of its own; its
+        # reach lives in filters_json.allowed_lab_units. Apply the same gate
+        # the detail and export routes use, otherwise the listing hands out
+        # every hospital's dataset names, purposes and uuids -- and the uuids
+        # are what those routes take as input.
+        def _dataset_visible(ds) -> bool:
+            if current_user.is_master_admin:
+                return True
+            if ds.created_by_user_id == current_user.id:
+                return True
+            stored_allowed = set(json.loads(ds.filters_json or "{}").get("allowed_lab_units") or [])
+            if not stored_allowed:
+                return False
+            return bool(stored_allowed.intersection(set(allowed_lab_units)))
+
+        datasets = [
+            ds for ds in (
+                datasets_query
+                .order_by(CuratedDataset.created_at.desc())
+                .limit(200)
+                .all()
+            )
+            if _dataset_visible(ds)
+        ][:20]
         dataset_stats: Dict[int, Dict[str, int]] = {}
         dataset_jobs: Dict[str, Dict[str, str]] = {}
         if datasets:
@@ -712,6 +726,15 @@ def dataset_detail(dataset_uuid: str):
             task_id = request.form.get("task_id", type=int)
             decision = request.form.get("decision")
             if task_id and decision in ("include", "exclude"):
+                # The task id is attacker-controllable. Without these two
+                # checks any task in any hospital could be added to a dataset
+                # and then read out through the export.
+                task = scope(
+                    db, db.query(GradingTask).filter(GradingTask.id == task_id),
+                    GradingTask, current_user, 'dataset.curation.view',
+                ).first()
+                if not task or task.disease_id != dataset.disease_id:
+                    abort(404)
                 include_flag = decision == "include"
                 item = (
                     db.query(CuratedDatasetItem)
@@ -1161,9 +1184,29 @@ def dataset_toggle_item(dataset_uuid: str):
             return ("Dataset is finalized.", 409)
         stored_filters = json.loads(dataset.filters_json or "{}")
 
+        # Gate on the dataset before touching anything, as the sibling routes
+        # do. The scoped task lookup below also has to precede the mutation:
+        # get_db_session commits on a normal exit, so the 404 early-return
+        # used to persist the flip it was rejecting.
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
+            return ("Forbidden", 403)
+
         task_id = request.form.get("task_id", type=int)
         if not task_id:
             return ("Missing task", 400)
+
+        task_query = (
+            db.query(GradingTask)
+            .filter(GradingTask.id == task_id)
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+        )
+        task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
+        task = task_query.first()
+        if not task:
+            return ("Not found", 404)
 
         item = (
             db.query(CuratedDatasetItem)
@@ -1177,16 +1220,6 @@ def dataset_toggle_item(dataset_uuid: str):
         item.selection_method = "manual"
         item.selected_by_user_id = current_user.id
         db.add(item)
-
-        task_query = (
-            db.query(GradingTask)
-            .filter(GradingTask.id == task_id)
-            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
-        )
-        task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
-        task = task_query.first()
-        if not task:
-            return ("Not found", 404)
 
         image_uuid = task.encounter_file.uuid if task.encounter_file else task.direct_image.uuid
         display_rows = _fetch_rows_by_task_ids(
@@ -1448,7 +1481,10 @@ def dataset_export(dataset_uuid: str):
             
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if not current_user.has_role('dataset_creator') and not current_user.is_master_admin:
+        # Holding dataset_creator is not itself authority over another
+        # hospital's dataset; the role exemption that used to sit here let any
+        # dataset_creator export any dataset uuid.
+        if not current_user.is_master_admin:
             if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
                 flash("You do not have access to the lab units for this dataset.", "error")
                 return redirect(url_for("analytics.dataset_curation"))
@@ -1461,7 +1497,16 @@ def dataset_export(dataset_uuid: str):
             )
             .all()
         )
+        # Re-scope at export time: items may have been added when the curator
+        # had wider reach, and _fetch_rows_by_task_ids applies no lab filter.
         task_ids = [item.task_id for item in items]
+        if task_ids:
+            task_ids = [
+                tid for (tid,) in scope(
+                    db, db.query(GradingTask.id).filter(GradingTask.id.in_(task_ids)),
+                    GradingTask, current_user, 'dataset.curation.view',
+                ).all()
+            ]
         if not task_ids:
             flash("No tasks selected for export in this dataset.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))

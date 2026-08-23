@@ -314,7 +314,10 @@ def verify_dr_edit(report_id: int):
         encounter = row.patient_encounter
         lab_unit_id = getattr(encounter, "lab_unit_id", None) if encounter else None
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if lab_unit_id is not None and lab_unit_id not in allowed_lab_units:
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        if lab_unit_id not in allowed_lab_units:
             flash("You don't have permission to access this encounter.", "danger")
             return redirect(url_for("verify_remedio_dr.verify_dr_list"))
 
@@ -424,11 +427,13 @@ def verify_dr_verify(report_id: int):
             from flask import abort
             abort(404)
         encounter = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        if encounter:
-            allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-            if encounter.lab_unit_id not in allowed_lab_units:
-                flash("You don't have permission to verify this encounter.", "danger")
-                return redirect(url_for('verify_remedio_dr.verify_dr_list'))
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not encounter or encounter.lab_unit_id not in allowed_lab_units:
+            flash("You don't have permission to verify this encounter.", "danger")
+            return redirect(url_for('verify_remedio_dr.verify_dr_list'))
         # Save incoming form data (same fields as edit save)
         row.result = (request.form.get("result") or "").strip() or None
         row.qualitative_result = (request.form.get("qualitative_result") or "").strip() or None
@@ -534,11 +539,13 @@ def verify_dr_unverify(report_id: int):
             from flask import abort
             abort(404)
         enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        if enc:
-            allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-            if enc.lab_unit_id not in allowed_lab_units:
-                flash("You don't have permission to modify this encounter.", "danger")
-                return redirect(url_for('verify_remedio_dr.verify_dr_list'))
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not enc or enc.lab_unit_id not in allowed_lab_units:
+            flash("You don't have permission to modify this encounter.", "danger")
+            return redirect(url_for('verify_remedio_dr.verify_dr_list'))
         if enc:
             # Check if we can unverify the encounter (all tasks must be pending)
             from services.taskCreationServices import can_unverify_image, remove_pending_tasks

@@ -16,7 +16,7 @@ from preprocess import bp
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-from utils.log_sanitize import sanitize_log_value
+from utils.log_sanitize import sanitize_log_value, escape_like
 from utils.sensitive_operations import _log_sensitive_operation
 from utils.media_cache import bump_media_cache_version, get_media_cache_version
 from auth.utils import utcnow
@@ -358,7 +358,7 @@ def anonymization_dashboard():
         if f_verified_by_id:
             query = query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
         if f_filename:
-            query = query.where(DirectImageUpload.filename.ilike(f'%{f_filename}%'))
+            query = query.where(DirectImageUpload.filename.ilike(f'%{escape_like(f_filename)}%', escape='\\'))
 
         # Get total count for pagination
         total_items = db_session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
@@ -388,7 +388,7 @@ def anonymization_dashboard():
         if f_area_id:
             pending_query = pending_query.where(DirectImageUpload.area_id == f_area_id)
         if f_filename:
-            pending_query = pending_query.where(DirectImageUpload.filename.ilike(f'%{f_filename}%'))
+            pending_query = pending_query.where(DirectImageUpload.filename.ilike(f'%{escape_like(f_filename)}%', escape='\\'))
         if f_pii_status:
             if f_pii_status == 'pending':
                 pending_query = pending_query.where(

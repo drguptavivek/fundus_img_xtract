@@ -134,6 +134,10 @@ def record_rejected_submission(
         .filter(GradingWorkbenchSession.uuid == session_uuid)
         .first()
     )
+    if session is None:
+        # A guessed uuid resolves to no session, and writing a row anyway lets
+        # anyone fill the audit trail with invented sessions.
+        return None
     row = rejected_event(
         db,
         actor_user_id=actor_user_id,

@@ -2,7 +2,7 @@ import os
 import logging
 import jwt
 from datetime import datetime, timedelta, timezone
-from flask import jsonify, request, current_app
+from flask import jsonify, request, current_app, url_for
 from uuid import uuid4
 from functools import wraps
 from io import BytesIO

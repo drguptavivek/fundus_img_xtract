@@ -29,6 +29,7 @@ from models import (
     UserDiseaseUnitRole
 )
 from authz import scope
+from utils.log_sanitize import escape_like
 
 
 def get_task_summary(
@@ -89,7 +90,7 @@ def get_task_summary(
         query = query.filter(Task.lab_unit_id == lab_unit_filter)
         
     if lab_unit_name_filter:
-        query = query.filter(Task.lab_unit.has(LabUnit.name.ilike(f'%{lab_unit_name_filter}%')))
+        query = query.filter(Task.lab_unit.has(LabUnit.name.ilike(f'%{escape_like(lab_unit_name_filter)}%', escape='\\')))
         
     if search_query:
         query = query.filter(

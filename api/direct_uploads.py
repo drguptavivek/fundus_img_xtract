@@ -30,11 +30,13 @@ from upload_profiles.service import UploadProfileError
 def get_lab_units(user_id):
     """Get lab units for a user."""
     with get_db_session() as db:
+        # Authorize before looking anything up, otherwise the 404/403 split
+        # answers "does this user id exist?" for any caller.
+        if current_user.id != user_id:
+            return jsonify({"error": "Forbidden"}), 403
         user = db.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
-        if current_user.id != user_id:
-            return jsonify({"error": "Forbidden"}), 403
 
         context = build_web_direct_upload_context(db=db, user_id=current_user.id)
         lab_units = context["lab_units"]

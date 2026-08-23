@@ -616,7 +616,13 @@ def discrepancy_export_download(job_token: str, filename: str):
 
     export_dir = (EXPORT_DIR / job_token).resolve()
     target = (export_dir / filename).resolve()
-    if not str(target).startswith(str(export_dir)) or not target.is_file():
+    # startswith would accept a sibling directory sharing the token as a
+    # prefix; relative_to is the real containment test.
+    try:
+        target.relative_to(export_dir)
+    except ValueError:
+        abort(404)
+    if not target.is_file():
         abort(404)
 
     return send_file(target, as_attachment=True)

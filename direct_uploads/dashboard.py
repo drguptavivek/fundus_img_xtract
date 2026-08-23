@@ -220,10 +220,18 @@ def dashboard():
                         flash("Invalid hospital selection.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
                     
-                    # Validate hospital - check if user has access to this hospital
-                    if current_user.has_role("local_admin") and new_hospital_id_int != current_user.hospital_id:
-                        flash("You cannot assign uploads to that hospital.", "danger")
-                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+                    # Validate hospital. This used to check local_admin only,
+                    # so every other role could relabel uploads into any
+                    # hospital. allowed_hospital_ids is the reach implied by
+                    # the user's own lab units.
+                    if not current_user.has_role("admin"):
+                        if current_user.has_role("local_admin"):
+                            if new_hospital_id_int != current_user.hospital_id:
+                                flash("You cannot assign uploads to that hospital.", "danger")
+                                return redirect(url_for("direct_uploads.dashboard"), code=303)
+                        elif new_hospital_id_int not in allowed_hospital_ids:
+                            flash("You cannot assign uploads to that hospital.", "danger")
+                            return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 upload_ids = [upload.id for upload in rows]
                 tasks_by_upload: dict[int, list[GradingTask]] = {}

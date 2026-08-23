@@ -638,7 +638,10 @@ def glaucoma_edit(clean_id: int):
         encounter = row.patient_encounter
         lab_unit_id = getattr(encounter, "lab_unit_id", None) if encounter else None
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if lab_unit_id is not None and lab_unit_id not in allowed_lab_units:
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        if lab_unit_id not in allowed_lab_units:
             flash("You don't have permission to access this encounter.", "danger")
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_list"))
 
@@ -764,7 +767,10 @@ def glaucoma_verify(clean_id: int):
             abort(404)
         encounter = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter and (encounter.lab_unit_id not in allowed_lab_units):
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        if not encounter or encounter.lab_unit_id not in allowed_lab_units:
             flash("You don't have permission to verify this encounter.", "danger")
             return redirect(url_for('verify_remedio_glaucoma.glaucoma_list'))
         # Save incoming form data (same fields as edit save)
@@ -884,6 +890,12 @@ def glaucoma_unverify(clean_id: int):
             from flask import abort
             abort(404)
         enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not enc or enc.lab_unit_id not in allowed_lab_units:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                return {"ok": False, "error": "forbidden", "message": "You don't have permission to unverify this encounter."}, 403
+            flash("You don't have permission to unverify this encounter.", "danger")
+            return redirect(url_for('verify_remedio_glaucoma.glaucoma_list'))
         if enc:
             # Check if we can unverify the encounter (all tasks must be pending)
             from services.taskCreationServices import can_unverify_image, remove_pending_tasks
@@ -997,7 +1009,10 @@ def glaucoma_mark_eye(clean_id: int):
             from flask import abort
             abort(404)
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if row.patient_encounter and row.patient_encounter.lab_unit_id not in allowed_lab_units:
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        if not row.patient_encounter or row.patient_encounter.lab_unit_id not in allowed_lab_units:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "forbidden"}, 403
             flash("You don't have permission to modify this encounter.", "danger")

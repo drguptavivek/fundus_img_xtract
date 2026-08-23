@@ -100,11 +100,15 @@ def create_intra_rater_batch() -> Response:
         try:
             if params.lab_unit_id is not None:
                 _ensure_lab_unit_exists(db, params.lab_unit_id, allowed_lab_units)
+            # Without a specific lab the batch would otherwise be drawn from
+            # the graders' entire history across every hospital.
+            params.allowed_lab_unit_ids = sorted(allowed_lab_units)
             _ensure_graders_authorized(
                 db=db,
                 grader_ids=params.grader_ids,
                 disease_id=params.disease_id,
                 lab_unit_id=params.lab_unit_id,
+                allowed_lab_unit_ids=params.allowed_lab_unit_ids,
             )
             if params.normal_grade_id is not None:
                 _ensure_normal_grade_valid(db, params.disease_id, params.normal_grade_id)
@@ -494,6 +498,7 @@ def _ensure_graders_authorized(
     grader_ids: Sequence[int],
     disease_id: int,
     lab_unit_id: int | None,
+    allowed_lab_unit_ids: Sequence[int] | None = None,
 ) -> None:
     """Ensure all graders have active permissions for disease/lab."""
     if not grader_ids:
@@ -511,6 +516,8 @@ def _ensure_graders_authorized(
     )
     if lab_unit_id is not None:
         q = q.filter(UserDiseaseUnitRole.lab_unit_id == lab_unit_id)
+    elif allowed_lab_unit_ids is not None:
+        q = q.filter(UserDiseaseUnitRole.lab_unit_id.in_(list(allowed_lab_unit_ids)))
 
     eligible_ids = {user_id for (user_id,) in q.distinct()}
     missing = set(grader_ids) - eligible_ids

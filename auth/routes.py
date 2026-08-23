@@ -853,7 +853,12 @@ def confirm_password():
     Route for re-authentication confirmation.
     Used by @reauth_required decorator.
     """
-    next_url = request.args.get('next') or request.form.get('next') or url_for('homepage')
+    # Only same-origin targets: `next` is attacker-controllable, and an
+    # unchecked redirect after re-authentication is a convincing phishing step.
+    from utils.security_middleware import is_safe_url
+
+    requested_next = request.args.get('next') or request.form.get('next')
+    next_url = requested_next if requested_next and is_safe_url(requested_next) else url_for('homepage')
     
     # Get user safely to avoid DetachedInstanceError
     from db_transaction_manager import get_db_session

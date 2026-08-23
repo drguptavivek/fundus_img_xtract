@@ -232,7 +232,10 @@ def nodr_edit(encounter_id: int):
 
         lab_unit_id = getattr(encounter, "lab_unit_id", None)
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if lab_unit_id is not None and lab_unit_id not in allowed_lab_units:
+        # Compare unconditionally. lab_unit_id is nullable and the report may be
+        # orphaned, so `is not None` / `if encounter:` guards let a NULL-lab or
+        # encounter-less row be edited by any role holder in any hospital.
+        if lab_unit_id not in allowed_lab_units:
             flash("You don't have permission to access this encounter.", "danger")
             return redirect(url_for("verify_remedio_nodr.nodr_list"))
 
@@ -441,6 +444,12 @@ def nodr_unverify(encounter_id: int):
         if not encounter:
             from flask import abort
             abort(404)
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if encounter.lab_unit_id not in allowed_lab_units:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                return {"ok": False, "error": "forbidden", "message": "You don't have permission to unverify this encounter."}, 403
+            flash("You don't have permission to unverify this encounter.", "danger")
+            return redirect(url_for("verify_remedio_nodr.nodr_list"))
 
         # Check if we can unverify the encounter (all tasks must be pending)
         images = [ef for ef in encounter.encounter_files if ef.file_type == 'image']

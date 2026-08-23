@@ -1283,6 +1283,11 @@ def threshold_explorer() -> object:
                 placeholders.append(f":{key}")
             if placeholders:
                 sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
+        elif not current_user.is_master_admin:
+            # Zero lab units means no reach, not unrestricted reach. The GET
+            # route already fails closed here; this one aggregated over every
+            # hospital instead.
+            sql_parts.append("AND 1=0")
 
         sql_parts.append("ORDER BY task_created_at DESC")
         query = text("\n".join(sql_parts))

@@ -32,7 +32,7 @@ from . import api_bp
 
 
 @api_bp.route("/grading-tasks/<string:task_uuid>/annotation-context", methods=["GET"])
-@roles_required("resident2", "ophthalmologist", "arbitrator", "admin")
+@roles_required("ophthalmologist", "admin")
 def get_task_annotation_context(task_uuid: str):
     """Return the server-resolved project policy for one accessible task."""
     slot = (request.args.get("slot") or "").strip()

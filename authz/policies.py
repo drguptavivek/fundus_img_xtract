@@ -325,8 +325,18 @@ def _project(
     *,
     min_scope: str = LAB_UNIT_SCOPE,
 ) -> ActionPolicy:
-    """Policy authorized only by an explicit project relationship."""
-    return ActionPolicy(roles=roles, grant_sources=grants, min_project_scope=min_scope)
+    """Policy authorized by an explicit project relationship, or admin break-glass.
+
+    ADMIN_GLOBAL is always accepted so a system administrator retains the
+    break-glass access that encounter_sets.permissions.is_project_permission_admin
+    already grants. Everyone else needs a real project relationship; hospital
+    scope and lab-unit assignment never reach project data.
+    """
+    return ActionPolicy(
+        roles=roles | {"admin"},
+        grant_sources=grants | {GrantSource.ADMIN_GLOBAL},
+        min_project_scope=min_scope,
+    )
 
 
 def _self_only() -> ActionPolicy:

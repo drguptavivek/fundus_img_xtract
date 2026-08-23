@@ -8,7 +8,7 @@ from flask_login import login_required
 from auth.roles import roles_required
 from flask_login import current_user
 from db_transaction_manager import transaction_scope
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from models import User, LoginAttempt, IpLock
 from . import api_bp
 
@@ -54,7 +54,7 @@ def api_admin_users_activity():
         types = {"user_created", "login_success", "login_failure", "ip_locked"}
 
     with transaction_scope() as db:
-        union_query = _build_user_activity_query(types, user_id_val, start_dt, end_dt)
+        union_query = _build_user_activity_query(db, types, user_id_val, start_dt, end_dt)
         subq = union_query.subquery()
 
         total = db.execute(sa.select(sa.func.count()).select_from(subq)).scalar_one() or 0
@@ -131,7 +131,7 @@ def _parse_date_range(start_date: str | None, end_date: str | None):
     return _parse(start_date, False), _parse(end_date, True)
 
 
-def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: datetime | None, end_dt: datetime | None):
+def _build_user_activity_query(db, types: set[str], user_id: int | None, start_dt: datetime | None, end_dt: datetime | None):
     """Build a UNION query of user activity events."""
     selects = []
 
@@ -147,7 +147,7 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
             created_q = created_q.where(User.id == user_id)
         
         # Apply hospital scoping to User
-        created_q = apply_scoping(created_q, User, current_user, "view")
+        created_q = scope(db, created_q, User, current_user, 'admin.users.view')
         
         if start_dt:
             created_q = created_q.where(User.created_at >= start_dt)
@@ -171,7 +171,7 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
                 success_q = success_q.where(user_alias.id == user_id)
             
             # Apply hospital scoping to (aliased) User
-            success_q = apply_scoping(success_q, user_alias, current_user, "view")
+            success_q = scope(db, success_q, user_alias, current_user, 'admin.users.view')
             
             if start_dt:
                 success_q = success_q.where(LoginAttempt.created_at >= start_dt)
@@ -191,7 +191,7 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
                 failure_q = failure_q.where(user_alias.id == user_id)
             
             # Apply hospital scoping to (aliased) User
-            failure_q = apply_scoping(failure_q, user_alias, current_user, "view")
+            failure_q = scope(db, failure_q, user_alias, current_user, 'admin.users.view')
             
             if start_dt:
                 failure_q = failure_q.where(LoginAttempt.created_at >= start_dt)

@@ -34,6 +34,7 @@ from authz.adapters import (
     grading_slot_grants,
     hospital_scope_grant,
     lab_unit_assignment_grants,
+    own_hospital_grant,
     self_grant,
 )
 from authz.types import AuthzActor, GrantSource, RelationshipGrant
@@ -96,7 +97,7 @@ def _resolve_uncached(db: Session, user) -> ResolvedGrants:
     actor = actor_from_user(user)
     grants: list[RelationshipGrant] = [self_grant(actor.id)]
 
-    for grant in (admin_global_grant(actor), hospital_scope_grant(actor)):
+    for grant in (admin_global_grant(actor), hospital_scope_grant(actor), own_hospital_grant(actor)):
         if grant is not None:
             grants.append(grant)
     grants.extend(lab_unit_assignment_grants(user))

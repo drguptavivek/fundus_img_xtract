@@ -62,6 +62,7 @@ def _grant_supplies_authority(
     if grant.source in {
         GrantSource.ADMIN_GLOBAL,
         GrantSource.HOSPITAL_SCOPE,
+        GrantSource.OWN_HOSPITAL,
         GrantSource.LAB_UNIT_ASSIGNMENT,
         GrantSource.UPLOAD_PROFILE,
         GrantSource.GRADING_SLOT,
@@ -100,6 +101,13 @@ def _grant_matches(
     # Classical scope is the non-project rule. A resource that belongs to a
     # project is reachable only through an explicit project relationship;
     # hospital membership or a lab-unit assignment never reaches it.
+    if grant.source == GrantSource.OWN_HOSPITAL:
+        return (
+            _reachable_classically(policy, resource)
+            and grant.hospital_id is not None
+            and resource.attr("hospital_id") == grant.hospital_id
+        )
+
     if grant.source == GrantSource.HOSPITAL_SCOPE:
         return _reachable_classically(policy, resource) and _matches_hospital_scope(actor, resource, grant)
 

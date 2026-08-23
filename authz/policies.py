@@ -393,8 +393,19 @@ POLICIES.update({
 
     # --- admin ---------------------------------------------------------------
     "admin.dashboard.view": _general(ADMIN_SITE),
-    "admin.users.view": _general(ADMIN_SITE),
-    "admin.users.manage": _general(ADMIN_SITE),
+    # User records are hospital-shaped and have no lab unit, so they use the
+    # own-hospital grant rather than lab assignment. Creating and changing
+    # users is an admin power, exercised globally by `admin` and within their
+    # own hospital by `local_admin`. `data_manager` may read user allocations
+    # and activity for their hospital but never edit them.
+    "admin.users.view": ActionPolicy(
+        roles=ADMIN_SITE | {"data_manager"},
+        grant_sources=frozenset({GrantSource.ADMIN_GLOBAL, GrantSource.OWN_HOSPITAL}),
+    ),
+    "admin.users.manage": ActionPolicy(
+        roles=ADMIN_SITE,
+        grant_sources=frozenset({GrantSource.ADMIN_GLOBAL, GrantSource.OWN_HOSPITAL}),
+    ),
     "admin.security.view": _general(ADMIN_ONLY),
     "admin.system.manage": _general(ADMIN_ONLY),
     "admin.s3.manage": _general(ADMIN_ONLY),

@@ -405,21 +405,20 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `admin.users.manage`
 
-- Rule: A user may create, edit, activate, or deactivate users within administrative scope when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: A user may create or change a user record only when the user has `admin` or `local_admin`.
+- Rule: `admin` manages users in every hospital; `local_admin` manages only their own hospital's users.
+- Rule: `data_manager` is deliberately excluded: it can view user allocations and activity but never edit them.
+- Rule: A user record belongs to a hospital and to no lab unit or project, so lab-unit assignment and project grants never reach it.
+- Relationship source: admin-global scope, or the actor's own hospital.
 - Resource: user (required).
 
 ### `admin.users.view`
 
-- Rule: A user may view users within the actor's administrative scope when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: A user may view user records, allocations and activity for their own hospital when the user has one of `admin`, `local_admin`, `data_manager`.
+- Rule: `admin` reaches users in every hospital; `local_admin` and `data_manager` reach only their own hospital.
+- Rule: `data_manager` may read user allocations and activity but may not create or change users; that is `admin.users.manage`.
+- Relationship source: admin-global scope, or the actor's own hospital.
 - Resource: user (not required).
-
-
-## Domain: analytics KPI reporting
-
-KPI surfaces are registered per family, and each family separates its
-aggregate surface from its row-level one.
 
 ### `analytics.kpi.encounter_files.view`
 

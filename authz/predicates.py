@@ -190,6 +190,11 @@ def _classical_branch(
     sources = policy.grant_sources
     conditions: list[ColumnElement] = []
 
+    if GrantSource.OWN_HOSPITAL in sources and scope.hospital_id is not None:
+        for grant in resolved.of(GrantSource.OWN_HOSPITAL):
+            if grant.hospital_id is not None:
+                conditions.append(scope.hospital_id == grant.hospital_id)
+
     if GrantSource.HOSPITAL_SCOPE in sources:
         for grant in resolved.of(GrantSource.HOSPITAL_SCOPE):
             if grant.hospital_id is None or scope.hospital_id is None:
@@ -474,6 +479,15 @@ def _register_core_scopes() -> None:
     ))
     # PatientEncounters has no hospital_id column; hospital is reached via the lab.
     register_scope(PatientEncounters, lambda: _encounter_scope(PatientEncounters, LabUnit))
+    # A user record belongs to a hospital and to no lab or project.
+    from models import User
+
+    register_scope(User, lambda: ScopeColumns(
+        project_id=None,
+        hospital_id=User.hospital_id,
+        lab_unit_id=None,
+        row_id=User.id,
+    ))
     register_scope(GradingTask, lambda: _task_scope(
         GradingTask, PatientEncounters, EncounterSetImage, EncounterFile, DirectImageUpload
     ))

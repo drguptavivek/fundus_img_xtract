@@ -22,6 +22,7 @@ class GrantSource(StrEnum):
     MEDIA_UPLOADER = "media_uploader"
     SIGNED_MEDIA_TOKEN = "signed_media_token"
     SELF = "self"
+    OWN_HOSPITAL = "own_hospital"
     PUBLIC = "public"
 
 

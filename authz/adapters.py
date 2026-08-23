@@ -95,3 +95,16 @@ def grading_slot_grants(slots: Iterable[Any]) -> list[RelationshipGrant]:
 def self_grant(user_id: int) -> RelationshipGrant:
     """Grant an actor authority over their own account-scoped records."""
     return RelationshipGrant(source=GrantSource.SELF, resource_id=user_id)
+
+
+def own_hospital_grant(actor: AuthzActor) -> RelationshipGrant | None:
+    """Grant an actor the hospital they belong to.
+
+    Distinct from ``hospital_scope_grant``, which is the site-admin power to
+    reach every lab of a hospital. This one carries no lab authority at all;
+    it exists for resources that are hospital-shaped and have no lab, such as
+    a user record. Only actions that list OWN_HOSPITAL accept it.
+    """
+    if actor.hospital_id is None:
+        return None
+    return RelationshipGrant(source=GrantSource.OWN_HOSPITAL, hospital_id=actor.hospital_id)

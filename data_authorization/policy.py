@@ -61,10 +61,6 @@ PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES = PROJECT_OPERATIONAL_ROLE_NAMES
 PROJECT_ONLY_ROLE_NAMES = PROJECT_GOVERNANCE_ROLE_NAMES | frozenset({ROLE_COLLABORATOR})
 PROJECT_WIDE_GOVERNANCE_ROLE_NAMES = frozenset({ROLE_PROJECT_PI, ROLE_PROJECT_ADMIN})
 
-LEGACY_PROJECT_ROLE_ALIASES = {
-    ROLE_PROJECT_PI: frozenset({"principal_investigator"}),
-    ROLE_COLLABORATOR: frozenset({"collaborator", "co_investigator", "coordinator"}),
-}
 
 ACTION_VIEW = "project.view"
 ACTION_BROWSE = "project.encountersets.browse"
@@ -328,7 +324,7 @@ def allowed_lab_unit_ids_for_action(
             ProjectRoleGrant.user_id == user.id,
             ProjectRoleGrant.project_id == project_id,
             ProjectRoleGrant.active.is_(True),
-            Role.name.in_(_expanded_role_names(roles)),
+            Role.name.in_(roles),
         )
     ).all()
     project_wide_governance_names = roles.intersection(PROJECT_WIDE_GOVERNANCE_ROLE_NAMES)
@@ -339,17 +335,10 @@ def allowed_lab_unit_ids_for_action(
             ProjectRoleGrant.user_id == user.id,
             ProjectRoleGrant.project_id == project_id,
             ProjectRoleGrant.active.is_(True),
-            Role.name.in_(_expanded_role_names(project_wide_governance_names)),
+            Role.name.in_(project_wide_governance_names),
         )
         .limit(1)
     ).scalar_one_or_none() is not None:
-        return configured_lab_ids
-    if _has_legacy_project_role(
-        db,
-        user_id=int(user.id),
-        project_id=project_id,
-        role_names=roles,
-    ):
         return configured_lab_ids
     if any(scope_type == PROJECT_SCOPE for scope_type, _, _ in grants):
         return configured_lab_ids
@@ -434,7 +423,7 @@ def _has_project_role(
             grant.user_id == user_id,
             grant.project_id == project_id,
             grant.active.is_(True),
-            Role.name.in_(_expanded_role_names(project_wide_governance_names)),
+            Role.name.in_(project_wide_governance_names),
         )
         .limit(1)
     ).scalar_one_or_none() is not None:
@@ -446,50 +435,12 @@ def _has_project_role(
             grant.user_id == user_id,
             grant.project_id == project_id,
             grant.active.is_(True),
-            Role.name.in_(_expanded_role_names(role_names)),
+            Role.name.in_(role_names),
             or_(*_scope_conditions(grant=grant, hospital_id=hospital_id, lab_unit_id=lab_unit_id)),
         )
         .limit(1)
     ).scalar_one_or_none() is not None
-    return persisted_grant or _has_legacy_project_role(
-        db,
-        user_id=user_id,
-        project_id=project_id,
-        role_names=role_names,
-    )
-
-
-def _expanded_role_names(role_names: frozenset[str]) -> frozenset[str]:
-    expanded = set(role_names)
-    for canonical_name in role_names:
-        expanded.update(LEGACY_PROJECT_ROLE_ALIASES.get(canonical_name, ()))
-    return frozenset(expanded)
-
-
-def _has_legacy_project_role(
-    db: Session,
-    *,
-    user_id: int,
-    project_id: int,
-    role_names: frozenset[str],
-) -> bool:
-    legacy_names = {
-        legacy_name
-        for canonical_name in role_names
-        for legacy_name in LEGACY_PROJECT_ROLE_ALIASES.get(canonical_name, ())
-    }
-    if not legacy_names:
-        return False
-    return db.execute(
-        select(ProjectInvestigator.id)
-        .where(
-            ProjectInvestigator.user_id == user_id,
-            ProjectInvestigator.project_id == project_id,
-            ProjectInvestigator.active.is_(True),
-            ProjectInvestigator.role.in_(legacy_names),
-        )
-        .limit(1)
-    ).scalar_one_or_none() is not None
+    return persisted_grant
 
 
 def _assignment_scope_clause(*, hospital_id: int | None, lab_unit_id: int | None):

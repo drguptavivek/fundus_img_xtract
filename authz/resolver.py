@@ -153,7 +153,7 @@ def _project_role_grants(db: Session, user_id: int) -> tuple[list[RelationshipGr
         if row.hospital_id is not None and row.hospital_id not in hospitals_by_project.get(row.project_id, ()):
             continue
         key = (row.project_id, row.hospital_id, row.lab_unit_id)
-        merged.setdefault(key, set()).update(_canonical_role_names(row.role.name))
+        merged.setdefault(key, set()).add(row.role.name)
 
     configured_by_project = {
         project_id: frozenset(lab_ids) for project_id, lab_ids in labs_by_project.items()
@@ -173,23 +173,6 @@ def _project_role_grants(db: Session, user_id: int) -> tuple[list[RelationshipGr
         for (project_id, hospital_id, lab_unit_id), role_names in merged.items()
     ], configured_by_project
 
-
-def _canonical_role_names(name: str) -> set[str]:
-    """Map a stored grant role onto the canonical names policies are written in.
-
-    Project grants in the field still carry the historical names
-    `principal_investigator`, `co_investigator` and `coordinator`. Policies are
-    written against `project_pi` and `collaborator`, so a grant is emitted
-    under both its stored name and its canonical one. Without this a PI's
-    grant matches no policy at all.
-    """
-    from data_authorization.policy import LEGACY_PROJECT_ROLE_ALIASES
-
-    names = {name}
-    for canonical, legacy in LEGACY_PROJECT_ROLE_ALIASES.items():
-        if name in legacy:
-            names.add(canonical)
-    return names
 
 def _legacy_capability_grants(db: Session, user_id: int) -> list[RelationshipGrant]:
     """One grant per active legacy ProjectEncounterSetPermission row."""

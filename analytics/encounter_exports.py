@@ -23,7 +23,7 @@ from models import (
     PatientEncounters,
     User,
 )
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 @dataclass(frozen=True)
@@ -92,7 +92,7 @@ def _workbook_bytes(wb: Workbook) -> bytes:
 
 def _scoped_lab_unit_ids(db: SASession, user: User, filters: EncounterExportFilters) -> list[int]:
     query = db.query(LabUnit.id)
-    query = apply_scoping(query, LabUnit, user, "analytics")
+    query = scope(db, query, LabUnit, user, 'analytics.encounters.view')
     if filters.hospital_id is not None:
         query = query.filter(LabUnit.hospital_id == filters.hospital_id)
     if filters.lab_unit_id is not None:

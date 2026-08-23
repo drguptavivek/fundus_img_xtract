@@ -18,7 +18,7 @@ from utils.final_grade_basis import (
     normalize_final_grade_basis,
     sql_final_grade_expression,
 )
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 from db_transaction_manager import get_db_session
@@ -693,7 +693,7 @@ def model_performance() -> str:
         # Lab unit options respecting hospital access
         lu_query = db.query(LabUnit).order_by(LabUnit.name)
         # Apply hospital scoping for analytics context
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "analytics")
+        lu_query = scope(db, lu_query, LabUnit, current_user, 'analytics.encounters.view')
         lab_units = lu_query.all()
         user_lab_unit_ids = [lu.id for lu in lab_units]
         lab_units_payload = [{"id": lu.id, "name": lu.name} for lu in lab_units]

@@ -7,7 +7,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit
 
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.taskUtils import get_task_detail
 from . import bp
 
@@ -36,7 +36,7 @@ def view_task_details(task_id: int):
             )
         )
         # Apply scoping to ensure task belongs to user's hospital/lab units
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = scope(db, query, GradingTask, current_user, 'tasks.view')
         task = query.first()
         
         if not task:
@@ -84,7 +84,7 @@ def all_tasks_viewer(image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = scope(db, query, GradingTask, current_user, 'tasks.view')
         task = query.first()
         if not task:
             from flask import abort

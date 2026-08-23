@@ -61,6 +61,15 @@ class ActionPolicy:
     Empty means the project branch accepts the same roles as ``roles``.
     """
 
+    owner_roles: frozenset[str] = frozenset()
+    """Roles that reach only the records they created, never a whole lab.
+
+    Field staff capture in the field and are accountable for their own work
+    rather than for a unit's. A role listed here is authorized solely through
+    the MEDIA_UPLOADER relationship, so lab-unit assignment and upload
+    assignments give it nothing.
+    """
+
     project_gated: bool = True
     """Whether the project boundary applies to this action at all.
 
@@ -90,6 +99,10 @@ class ActionPolicy:
 
     A grant broader than the minimum always qualifies.
     """
+
+    def owns_only(self, actor) -> bool:
+        """Whether this actor reaches only their own records for this action."""
+        return bool(self.owner_roles) and actor.has_any_role(self.owner_roles)
 
     def roles_for_project(self) -> frozenset[str]:
         """Roles that authorize this action on a project-owned resource."""
@@ -211,6 +224,14 @@ POLICIES: dict[str, ActionPolicy] = {
     "grading.resident.submit": _grading_slot(),
     "grading.resident2.submit": _grading_slot(),
     "grading.arbitrator.submit": _grading_slot(),
+    # A grader reads their own grades, and the other grades on a task they
+    # graded, so they can see how their reading compares. Participation in
+    # the task is the relationship; no slot or project grant is consulted,
+    # because by grading it they have already been authorized once.
+    "grading.grades.view": ActionPolicy(
+        roles=GRADER_ROLES,
+        grant_sources=frozenset({GrantSource.SELF}),
+    ),
     # Row-level analytics: classical scope for rows outside every project,
     # an explicit project relationship for rows inside one. Without the
     # project branch a project analytics_viewer could not see their own
@@ -385,6 +406,9 @@ UPLOADER_ROLES = frozenset({
 })
 
 
+FIELD_ROLES = frozenset({"field_optometrist", "field_ophthalmologist"})
+
+
 def _upload_step(roles: frozenset[str] = UPLOADER_ROLES) -> ActionPolicy:
     """Step one of the pipeline: what an uploader may see of their own work.
 
@@ -396,7 +420,28 @@ def _upload_step(roles: frozenset[str] = UPLOADER_ROLES) -> ActionPolicy:
     """
     return ActionPolicy(
         roles=roles,
-        grant_sources=GENERAL_SCOPE_GRANTS | {GrantSource.UPLOAD_PROFILE},
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.UPLOAD_PROFILE,
+            GrantSource.MEDIA_UPLOADER,
+        },
+        owner_roles=FIELD_ROLES,
+    )
+
+def _reviewer_step(roles: frozenset[str]) -> ActionPolicy:
+    """A review stage: the role, in the lab units allocated to the actor.
+
+    Outside a project those are the actor's own lab units. Inside one they
+    are the lab units the project allocated to them, carried by a project
+    role grant for the same role, so a reviewer never reaches a project's
+    data on lab-unit assignment alone.
+    """
+    return ActionPolicy(
+        roles=roles,
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.PROJECT_ROLE,
+            GrantSource.LEGACY_PROJECT_CAPABILITY,
+        },
+        project_roles=roles - {"admin"},
     )
 
 def _aggregate_kpi() -> ActionPolicy:
@@ -505,18 +550,18 @@ POLICIES.update({
     "ad_hoc_task.delete": _general(ADMIN_DATA),
 
     # --- discrepancy review --------------------------------------------------
-    "review.discrepancy.view": _general(REVIEW_ROLES),
+    "review.discrepancy.view": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
     "review.discrepancy.export": _general(frozenset({"admin", "data_manager", "data_exporter"})),
-    "review.task.view": _general(REVIEW_ROLES),
-    "review.task.submit": _general(frozenset({"admin", "discrepancy_reviewer"})),
+    "review.task.view": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
+    "review.task.submit": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
     "review.regrade_creator.manage": _general(ADMIN_SITE),
     # Adjudicating a regrade needs either the dedicated role or admin; there
     # is no per-disease or per-lab slot for it, unlike the grading slots.
-    "review.regrade.adjudicate": _general(frozenset({"regrade_adjudicator", "admin"})),
+    "review.regrade.adjudicate": _reviewer_step(frozenset({"regrade_adjudicator", "admin"})),
 
     # --- intra-rater ---------------------------------------------------------
-    "intra_rater.batch.view": _general(ADMIN_DATA),
-    "intra_rater.batch.create": _general(ADMIN_DATA),
+    "intra_rater.batch.view": _reviewer_step(frozenset({"data_manager", "admin"})),
+    "intra_rater.batch.create": _reviewer_step(frozenset({"data_manager", "admin"})),
     "intra_rater.task.view": _general(GRADING_READ_ROLES),
     "intra_rater.task.submit": _general(GRADING_SUBMIT_ROLES),
     "intra_rater.kpi.view": _general(GRADING_READ_ROLES),
@@ -552,9 +597,9 @@ POLICIES.update({
     "dataset.public_download": _public(),
 
     # --- glaucoma AI ---------------------------------------------------------
-    "glaucoma_ai.workspace.view": _general(UPLOAD_OPERATOR_ROLES | {"ophthalmologist"}),
-    "glaucoma_ai.result.view": _general(UPLOAD_OPERATOR_ROLES | {"ophthalmologist"}),
-    "glaucoma_ai.upload.create": _general(UPLOAD_OPERATOR_ROLES | {"ophthalmologist"}),
+    "glaucoma_ai.workspace.view": _upload_step(UPLOADER_ROLES | {"ophthalmologist"}),
+    "glaucoma_ai.result.view": _upload_step(UPLOADER_ROLES | {"ophthalmologist"}),
+    "glaucoma_ai.upload.create": _upload_step(UPLOADER_ROLES | {"ophthalmologist"}),
 
     # --- projects ------------------------------------------------------------
     # Gate actions: the effect spans the project, so partial authority confers

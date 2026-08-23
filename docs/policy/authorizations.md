@@ -54,6 +54,30 @@ their own; "mine" is a filter on that list rather than the boundary of it.
   disease together, held on top of a grader role at user level.
 - Inside a project the same slot applies and a project grader allocation is
   required as well.
+- A grader reads their own grades, and every other grade on a task they
+  graded, including the second reader's, the arbitrator's and the AI grade
+  allocated to that task, so they can see how their readings compare. That
+  visibility is bounded by participation: grades on tasks they did not grade
+  stay out of reach.
+
+**4. Discrepancy review and regrade adjudication.** Both work the same way:
+the role, in the lab units allocated to the actor.
+
+- Outside a project those are the actor's own lab units.
+- Inside a project they are the lab units the project allocated to them,
+  carried by a project role grant for the same role. Lab-unit assignment
+  alone never reaches a project's data.
+- Discrepancy review needs `discrepancy_reviewer`; regrade adjudication
+  needs `regrade_adjudicator`.
+
+**Intra-rater batches** are administered by `data_manager` under the same
+rule, and graded by clinicians through the grading slots above.
+
+**Inference.** The WAI and Remidio OCR inference browser follows the upload
+step it reports on: the actor's own lab units outside a project, and their
+upload assignments inside one. Field staff are the exception at every point
+above: `field_optometrist` and `field_ophthalmologist` see only the uploads
+and inferences they created themselves, never a whole lab unit.
 
 ## Existing Policy Sources
 
@@ -276,6 +300,15 @@ These rules cover actions that currently have executable entries in `authz/polic
 - Rule: Grading of a project-owned task is additionally governed by grader allocation, not by a project role grant.
 - Relationship source: grading slot.
 - Resource: grading task (required).
+
+### `grading.grades.view`
+
+- Rule: A grader may read their own grades on any task.
+- Rule: A grader may also read every other grade on a task they have graded, including the second reader's, the arbitrator's and the AI grade allocated to that task, so they can see how their reading compared.
+- Rule: Participation in the task is the relationship. No grading slot or project grant is re-checked, because grading the task already required one.
+- Rule: A grader has no visibility of grades on tasks they did not grade.
+- Relationship source: the actor's own participation in the task.
+- Resource: grade (required).
 
 ### `grading.resident2.submit`
 

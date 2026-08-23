@@ -47,6 +47,8 @@ class ScopeColumns:
     hospital_id: ColumnElement | None
     lab_unit_id: ColumnElement | None
     row_id: ColumnElement
+    owner_id: ColumnElement | None = None
+    """Who created the row, when the model records it. Used by owner-scoping."""
     correlate_from: tuple[Any, ...] = ()
     correlate_on: ColumnElement | None = None
 
@@ -149,6 +151,14 @@ def _compile(resolved: ResolvedGrants, policy: ActionPolicy, scope: ScopeColumns
     actor = resolved.actor
     role_ok = actor.has_any_role(policy.roles)
     sources = policy.grant_sources
+
+    if policy.owns_only(actor):
+        # Field staff reach their own captures and nothing else. A model that
+        # does not record who created a row cannot answer that question, so
+        # it yields nothing rather than falling back to a wider rule.
+        if scope.owner_id is None:
+            return false()
+        return scope.owner_id == actor.id
 
     branches: list[ColumnElement] = []
 
@@ -268,6 +278,33 @@ def _project_scope_match(scope: ScopeColumns, grant) -> ColumnElement:
         parts.append(scope.hospital_id == hosp if scope.hospital_id is not None else false())
     return and_(*parts)
 
+
+def grades_on_my_tasks(actor_id: int) -> ColumnElement:
+    """Grades a grader may read: their own, and others' on tasks they graded.
+
+    Dual grading only means something if a grader can see how their reading
+    compared with the second reader's, so participation in a task carries
+    visibility of every grade on it. That includes the AI grade allocated to
+    the task, which occupies the `ai` role slot on the same task and is
+    therefore covered without a separate rule. Grading the task is itself the
+    authorization, which is why no slot or project grant is re-checked here.
+    """
+    from models import Grade
+
+    mine = aliased(Grade)
+    participated = (
+        select(mine.id)
+        .where(mine.task_id == Grade.task_id, mine.grader_user_id == actor_id)
+        .correlate(Grade)
+        .exists()
+    )
+    return or_(Grade.grader_user_id == actor_id, participated)
+
+
+def scope_grades(query, resolved: ResolvedGrants):
+    """Restrict a Grade query to what this grader may read."""
+    clause = grades_on_my_tasks(resolved.actor.id)
+    return query.filter(clause) if hasattr(query, "filter") else query.where(clause)
 
 def scope(db, query, model: type, user, action: str):
     """Scope one query for one user and action. The single entry point.
@@ -462,6 +499,7 @@ def _register_core_scopes() -> None:
         hospital_id=DirectImageUpload.hospital_id,
         lab_unit_id=DirectImageUpload.lab_unit_id,
         row_id=DirectImageUpload.id,
+        owner_id=DirectImageUpload.uploader_id,
     ))
     register_scope(EncounterFile, lambda: ScopeColumns(
         project_id=EncounterFile.project_id,

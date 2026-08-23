@@ -26,6 +26,11 @@ def authorize(
 
     resource = resource or ResourceRef(type="none")
     actor_role_matches = actor.has_any_role(policy.roles)
+    owner_role_matches = policy.owns_only(actor)
+    if owner_role_matches:
+        # Field staff see their own captures and nothing else, so the lab and
+        # project relationships are set aside for them entirely.
+        grants = [g for g in grants if g.source == GrantSource.MEDIA_UPLOADER]
     for grant in grants:
         if grant.source not in policy.grant_sources:
             continue
@@ -35,7 +40,8 @@ def authorize(
             # The grant is narrower than the breadth of this action's effect.
             continue
         if _grant_matches(actor, resource, action, grant, policy) and _grant_supplies_authority(
-            actor_role_matches, policy.roles, policy.roles_for_project(), policy.capabilities, grant
+            actor_role_matches, owner_role_matches, policy.roles,
+            policy.roles_for_project(), policy.capabilities, grant
         ):
             return AuthzDecision.allow(action, grant.source)
 
@@ -54,6 +60,7 @@ _PROJECT_SOURCES = frozenset({
 
 def _grant_supplies_authority(
     actor_role_matches: bool,
+    owner_role_matches: bool,
     policy_roles: frozenset[str],
     policy_project_roles: frozenset[str],
     policy_capabilities: frozenset[str],
@@ -78,7 +85,7 @@ def _grant_supplies_authority(
     if grant.source == GrantSource.PROJECT_COLLABORATOR:
         return "collaborator" in {role.lower() for role in policy_project_roles}
     if grant.source == GrantSource.MEDIA_UPLOADER:
-        return actor_role_matches
+        return actor_role_matches or owner_role_matches
     if grant.source in {
         GrantSource.TASK_ELIGIBILITY,
         GrantSource.SIGNED_MEDIA_TOKEN,

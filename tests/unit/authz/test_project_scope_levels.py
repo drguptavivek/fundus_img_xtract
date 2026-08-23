@@ -167,11 +167,17 @@ def test_hospital_minimum_sits_between_the_two():
 # --- grading is governed by allocation, not by project role grants -----------
 
 
-def test_no_grading_action_consults_project_role_grants():
-    """Project tasks are governed by ProjectGraderAllocation alone."""
+def test_no_grading_submission_consults_project_role_grants():
+    """A project task is graded on allocation, never on a project role grant.
+
+    This covers grading submissions only. Administering intra-rater batches
+    is a data-manager activity scoped like the other review stages, so it
+    does carry a project role grant and is deliberately excluded here.
+    """
     offenders = sorted(
         action for action, policy in POLICIES.items()
-        if action.startswith(("grading.", "tasks.", "intra_rater."))
+        if action.startswith(("grading.", "tasks."))
+        and action != "grading.grades.view"
         and GrantSource.PROJECT_ROLE in policy.grant_sources
     )
     assert not offenders, f"grading must not be authorized by a project role grant: {offenders}"

@@ -21,3 +21,11 @@ zone = "web"
 description = "Submit an arbitration grade for a grading task using an active grading slot."
 resource_type = "grading_task"
 requires_resource = true
+
+[[actions]]
+name = "grading.grades.view"
+domain = "grading"
+zone = "web"
+description = "Read grades on a grading task the actor has graded, including other graders' grades."
+resource_type = "grade"
+requires_resource = true

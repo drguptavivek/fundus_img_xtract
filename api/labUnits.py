@@ -12,7 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Hospital, LabUnit
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 # -------------------
@@ -38,7 +38,7 @@ def get_lab_units_by_hospital(hospital_id):
             .where(LabUnit.hospital_id == hospital_id)
             .order_by(LabUnit.name.asc())
         )
-        query = apply_scoping(query, LabUnit, current_user, "view")
+        query = scope(db, query, LabUnit, current_user, 'api.lookups.view')
         lab_units = db.execute(query).scalars().all()
         
         lab_units_data = [
@@ -71,7 +71,7 @@ def get_all_lab_units_list():
             .options(selectinload(LabUnit.hospital))
             .order_by(LabUnit.name.asc())
         )
-        query = apply_scoping(query, LabUnit, current_user, "view")
+        query = scope(db, query, LabUnit, current_user, 'api.lookups.view')
         lab_units = db.execute(query).scalars().all()
         
         lab_units_data = [
@@ -101,7 +101,7 @@ def get_lab_unit_by_id(lab_unit_id):
     """Get a specific lab unit by ID."""
     with get_db_session() as db:
         query = select(LabUnit).where(LabUnit.id == lab_unit_id).options(selectinload(LabUnit.hospital))
-        query = apply_scoping(query, LabUnit, current_user, "view")
+        query = scope(db, query, LabUnit, current_user, 'api.lookups.view')
         lab_unit = db.execute(query).scalar_one_or_none()
         
         if not lab_unit:

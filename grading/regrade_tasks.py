@@ -42,7 +42,7 @@ from project_annotations.service import (
     resolve_task_annotation_context,
     validate_geometry_policy,
 )
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.log_sanitize import sanitize_log_value
 from utils.masterUtils import fetch_active_disease_gradings
 
@@ -52,7 +52,7 @@ regrade_logger = logging.getLogger("regrade_grading")
 
 def _fetch_allowed_lab_units(db):
     lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
-    lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+    lu_query = scope(db, lu_query, LabUnit, current_user, 'review.regrade.adjudicate')
     lab_units = db.execute(lu_query).scalars().all()
     allowed_lab_unit_ids = {lu.id for lu in lab_units}
     return lab_units, allowed_lab_unit_ids

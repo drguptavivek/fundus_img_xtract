@@ -13,7 +13,7 @@ from db_transaction_manager import get_db_session
 from job_store import db_create_job
 from models import Camera, Hospital, Job, JobItem, LabUnit
 from utils.celery_helpers import enqueue_task
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.wadhwani_glaucoma_selector import (
     DEFAULT_MANUAL_WADHWANI_LIMIT,
     MAX_MANUAL_WADHWANI_BATCH,
@@ -184,7 +184,7 @@ def wadhwani_glaucoma_inference_job_status_partial(job_token: str):
 
 def _allowed_lab_units(db) -> list[LabUnit]:
     query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
-    query = apply_scoping(query, LabUnit, current_user, "view")
+    query = scope(db, query, LabUnit, current_user, 'tasks.view')
     return db.execute(query).scalars().all()
 
 

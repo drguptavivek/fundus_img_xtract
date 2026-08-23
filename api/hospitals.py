@@ -12,7 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Hospital, LabUnit
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 # -------------------
@@ -33,7 +33,7 @@ def get_hospitals_list():
     """Get accessible hospitals for current user (hospital-aware)."""
     with get_db_session() as db:
         query = select(Hospital).order_by(Hospital.name.asc())
-        query = apply_scoping(query, Hospital, current_user, "view")
+        query = scope(db, query, Hospital, current_user, 'api.lookups.view')
         hospitals = db.execute(query).scalars().all()
 
         hospitals_data = [
@@ -61,7 +61,7 @@ def get_hospital_by_id(hospital_id):
     """Get a specific hospital by ID (hospital-aware)."""
     with get_db_session() as db:
         query = select(Hospital).where(Hospital.id == hospital_id)
-        query = apply_scoping(query, Hospital, current_user, "view")
+        query = scope(db, query, Hospital, current_user, 'api.lookups.view')
         hospital = db.execute(query).scalar_one_or_none()
         
         if not hospital:

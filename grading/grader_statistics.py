@@ -11,7 +11,7 @@ from sqlalchemy import func
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Disease, Grade, GradingTask, LabUnit, User
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 ROLE_LABELS = {
@@ -220,7 +220,7 @@ def grader_statistics():
     with get_db_session() as db:
         # Get allowed lab units via scoping
         lu_query = db.query(LabUnit)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        lu_query = scope(db, lu_query, LabUnit, current_user, 'tasks.view')
         allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
         
         if not allowed_lab_unit_ids:

@@ -23,7 +23,7 @@ from models import (
 from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from encounter_sets.permissions import (
     CAPABILITY_DATA_EXPORT,
     CAPABILITY_DISCREPANCY_REVIEW,
@@ -606,7 +606,7 @@ def discrepancy_export_download(job_token: str, filename: str):
             
         # Standard scoping check for job access
         lu_query = sa.select(LabUnit)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        lu_query = scope(db, lu_query, LabUnit, current_user, 'review.discrepancy.export')
         allowed_lab_unit_ids = {lu.id for lu in db.execute(lu_query).scalars().all()}
         
         if job.lab_unit_id is None and job.uploader_user_id != current_user.id:

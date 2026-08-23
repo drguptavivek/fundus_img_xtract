@@ -12,7 +12,7 @@ from db_transaction_manager import transaction_scope
 from models import LabUnit, RegradeTask, Role, User, user_lab_units
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.final_grade_basis import normalize_final_grade_basis
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from encounter_sets.permissions import (
     CAPABILITY_REGRADE_ADJUDICATION,
     user_has_task_capability,
@@ -29,7 +29,7 @@ from .route_discrepancy_review import (
 def create_regrade_tasks():
     with transaction_scope() as db:
         lu_query = sa.select(LabUnit)
-        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        lu_query = scope(db, lu_query, LabUnit, current_user, 'review.regrade_creator.manage')
         allowed_lab_units = db.execute(lu_query).scalars().all()
         allowed_lab_unit_ids = {lu.id for lu in allowed_lab_units}
         if not allowed_lab_unit_ids:

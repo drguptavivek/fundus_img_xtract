@@ -219,9 +219,9 @@ def test_role_and_slot_together_authorize(action, flag):
 
 
 @pytest.mark.parametrize("action,flag", GRADING_ACTIONS)
-def test_slot_without_the_clinician_role_is_refused(action, flag):
+def test_slot_without_a_grader_role_is_refused(action, flag):
     """An allocated slot alone does not make someone a grader."""
-    assert not authorize(_actor("data_manager"), action, _task(), grants=[_slot(flag)]).allowed
+    assert not authorize(_actor("optometrist"), action, _task(), grants=[_slot(flag)]).allowed
 
 
 @pytest.mark.parametrize("action,flag", GRADING_ACTIONS)
@@ -230,9 +230,21 @@ def test_role_without_a_slot_is_refused(action, flag):
 
 
 @pytest.mark.parametrize("action,flag", GRADING_ACTIONS)
-def test_admin_alone_cannot_grade(action, flag):
-    """Grading is clinical work; the admin role does not stand in for it."""
-    assert not authorize(_actor("admin"), action, _task(), grants=[_slot(flag)]).allowed
+def test_admin_is_a_grader_role_in_its_own_right(action, flag):
+    """`admin` may occupy a grading slot without holding a clinical role."""
+    assert authorize(_actor("admin"), action, _task(), grants=[_slot(flag)]).allowed
+
+
+@pytest.mark.parametrize("action,flag", GRADING_ACTIONS)
+def test_admin_still_needs_a_slot(action, flag):
+    """Being a grader role does not exempt admin from holding the slot."""
+    assert not authorize(_actor("admin"), action, _task(), grants=[]).allowed
+
+
+@pytest.mark.parametrize("action,flag", GRADING_ACTIONS)
+def test_a_non_grader_role_cannot_grade(action, flag):
+    """Only ophthalmologist and admin may occupy a grading slot."""
+    assert not authorize(_actor("data_manager"), action, _task(), grants=[_slot(flag)]).allowed
 
 
 @pytest.mark.parametrize("action,flag", GRADING_ACTIONS)

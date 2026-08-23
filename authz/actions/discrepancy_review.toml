@@ -37,3 +37,11 @@ zone = "web"
 description = "Create regrade tasks from discrepancy review workflows."
 resource_type = "grading_task"
 requires_resource = false
+
+[[actions]]
+name = "review.regrade.adjudicate"
+domain = "discrepancy_review"
+zone = "web"
+description = "Adjudicate a regrade task and submit the adjudicated grade."
+resource_type = "grading_task"
+requires_resource = false

@@ -124,16 +124,24 @@ MEDIA_IMAGE_CAPABILITIES = frozenset({
 MEDIA_DOCUMENT_CAPABILITIES = frozenset({"browse", "verify", "upload", "data_export"})
 
 
+# The two roles that may occupy a grading slot. `admin` is a grader role in
+# its own right; every other role must come by way of `ophthalmologist`.
+GRADER_ROLES = frozenset({CLINICIAN_ROLE, "admin"})
+
+
 def _grading_slot() -> ActionPolicy:
-    """Grading policy: the ophthalmologist role plus a matching grading slot.
+    """Grading policy: a grader role plus a matching grading slot.
 
     The engine requires the actor's roles to intersect ``roles`` *and* a
-    grant from ``grant_sources`` to match the task, so both conditions hold.
+    grant from ``grant_sources`` to match the task, so both conditions hold:
+    a slot without a grader role does not authorize grading, and a grader
+    role without a slot for that disease and lab does not either.
+
     Project-owned tasks are additionally governed by grader allocation in
     ``grading_allocation.eligibility``.
     """
     return ActionPolicy(
-        roles=frozenset({CLINICIAN_ROLE}),
+        roles=GRADER_ROLES,
         grant_sources=frozenset({GrantSource.GRADING_SLOT}),
     )
 
@@ -399,6 +407,9 @@ POLICIES.update({
     "review.task.view": _general(REVIEW_ROLES),
     "review.task.submit": _general(frozenset({"admin", "discrepancy_reviewer"})),
     "review.regrade_creator.manage": _general(ADMIN_SITE),
+    # Adjudicating a regrade needs either the dedicated role or admin; there
+    # is no per-disease or per-lab slot for it, unlike the grading slots.
+    "review.regrade.adjudicate": _general(frozenset({"regrade_adjudicator", "admin"})),
 
     # --- intra-rater ---------------------------------------------------------
     "intra_rater.batch.view": _general(ADMIN_DATA),

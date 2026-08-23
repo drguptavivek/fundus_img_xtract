@@ -241,23 +241,22 @@ These rules cover actions that currently have executable entries in `authz/polic
 
 ### `grading.resident.submit`
 
-- Rule: A user may submit a resident grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits the resident role.
+- Rule: A user may submit a resident grade only when the user holds a grader role (`ophthalmologist` or `admin`) at user level and an active grading slot for that task's disease and lab unit permits the resident role.
 - Rule: A grading slot alone does not authorize grading, and the clinician role alone does not either. Both must hold.
-- Rule: The `admin` role does not stand in for the clinician role; grading is clinical work.
 - Rule: Grading of a project-owned task is additionally governed by grader allocation, not by a project role grant.
 - Relationship source: grading slot.
 - Resource: grading task (required).
 
 ### `grading.resident2.submit`
 
-- Rule: A user may submit a second-reader grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits the second-reader role.
+- Rule: A user may submit a second-reader grade only when the user holds a grader role (`ophthalmologist` or `admin`) at user level and an active grading slot for that task's disease and lab unit permits the second-reader role.
 - Rule: A slot permitting the resident role does not permit the second-reader role; each slot authorizes only its own step of the workflow.
 - Relationship source: grading slot.
 - Resource: grading task (required).
 
 ### `grading.arbitrator.submit`
 
-- Rule: A user may submit an arbitration grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits arbitration.
+- Rule: A user may submit an arbitration grade only when the user holds a grader role (`ophthalmologist` or `admin`) at user level and an active grading slot for that task's disease and lab unit permits arbitration.
 - Rule: A slot permitting the resident or second-reader role does not permit arbitration.
 - Relationship source: grading slot.
 - Resource: grading task (required).
@@ -585,6 +584,15 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 - Rule: A user may create regrade tasks from discrepancy review workflows when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
 - Relationship source: classical scope.
 - Resource: grading_task (not required).
+
+### `review.regrade.adjudicate`
+
+- Rule: A user may adjudicate a regrade and submit the adjudicated grade when the user holds either `regrade_adjudicator` or `admin`, and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the task.
+- Rule: Either role suffices on its own; the two are not required together.
+- Rule: Unlike the grading slots, regrade adjudication has no per-disease or per-lab slot, so no allocation is consulted.
+- Rule: Site administration alone does not confer regrade adjudication.
+- Relationship source: classical scope.
+- Resource: grading task (not required).
 
 ### `review.task.submit`
 

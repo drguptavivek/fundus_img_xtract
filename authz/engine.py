@@ -29,8 +29,12 @@ def authorize(
     for grant in grants:
         if grant.source not in policy.grant_sources:
             continue
+        if grant.source in _PROJECT_SOURCES and policy.project_wide_only and not _is_project_wide(grant):
+            # A lab- or hospital-narrowed grant cannot authorize an action that
+            # is defined over the project as a whole.
+            continue
         if _grant_matches(actor, resource, action, grant) and _grant_supplies_authority(
-            actor_role_matches, policy.roles, policy.capabilities, grant
+            actor_role_matches, policy.roles, policy.roles_for_project(), policy.capabilities, grant
         ):
             return AuthzDecision.allow(action, grant.source)
 
@@ -40,9 +44,22 @@ def authorize(
     )
 
 
+_PROJECT_SOURCES = frozenset({
+    GrantSource.PROJECT_ROLE,
+    GrantSource.LEGACY_PROJECT_CAPABILITY,
+    GrantSource.PROJECT_COLLABORATOR,
+})
+
+
+def _is_project_wide(grant: RelationshipGrant) -> bool:
+    """Whether a project grant covers the whole project rather than one part."""
+    return grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
+
+
 def _grant_supplies_authority(
     actor_role_matches: bool,
     policy_roles: frozenset[str],
+    policy_project_roles: frozenset[str],
     policy_capabilities: frozenset[str],
     grant: RelationshipGrant,
 ) -> bool:
@@ -57,12 +74,12 @@ def _grant_supplies_authority(
     if grant.source == GrantSource.PROJECT_ROLE:
         return bool(
             {str(role).lower() for role in grant.attr("role_names") or ()}
-            & {role.lower() for role in policy_roles}
+            & {role.lower() for role in policy_project_roles}
         )
     if grant.source == GrantSource.LEGACY_PROJECT_CAPABILITY:
         return bool(set(grant.attr("capabilities") or ()) & set(policy_capabilities))
     if grant.source == GrantSource.PROJECT_COLLABORATOR:
-        return "collaborator" in {role.lower() for role in policy_roles}
+        return "collaborator" in {role.lower() for role in policy_project_roles}
     if grant.source == GrantSource.MEDIA_UPLOADER:
         return actor_role_matches
     if grant.source in {

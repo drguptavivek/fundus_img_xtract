@@ -209,15 +209,21 @@ def _project_branch(
     if scope.project_id is None:
         return None
     sources = policy.grant_sources
-    policy_roles = {r.lower() for r in policy.roles}
+    project_roles = {r.lower() for r in policy.roles_for_project()}
     conditions: list[ColumnElement] = []
+
+    def usable(grant) -> bool:
+        # Mirrors the project_wide_only check in engine.authorize.
+        return not policy.project_wide_only or (
+            grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
+        )
 
     if GrantSource.PROJECT_ROLE in sources:
         for grant in resolved.of(GrantSource.PROJECT_ROLE):
             # Mirrors engine._grant_supplies_authority for PROJECT_ROLE:
-            # the *granted* role names must intersect the policy roles.
+            # the *granted* role names must intersect the project role set.
             granted = {str(r).lower() for r in grant.attr("role_names") or ()}
-            if not granted & policy_roles:
+            if not granted & project_roles or not usable(grant):
                 continue
             conditions.append(_project_scope_match(scope, grant))
 
@@ -225,10 +231,14 @@ def _project_branch(
         for grant in resolved.of(GrantSource.LEGACY_PROJECT_CAPABILITY):
             if not set(grant.attr("capabilities") or ()) & set(policy.capabilities):
                 continue
+            if not usable(grant):
+                continue
             conditions.append(_project_scope_match(scope, grant))
 
-    if GrantSource.PROJECT_COLLABORATOR in sources and "collaborator" in policy_roles:
+    if GrantSource.PROJECT_COLLABORATOR in sources and "collaborator" in project_roles:
         for grant in resolved.of(GrantSource.PROJECT_COLLABORATOR):
+            if not usable(grant):
+                continue
             conditions.append(_project_scope_match(scope, grant))
 
     if not conditions:
@@ -322,11 +332,17 @@ def reachable_lab_unit_ids(db, resolved: ResolvedGrants, action: str) -> frozens
                 ).scalars())
 
     # Project: labs configured on projects the actor holds a qualifying grant for.
-    policy_roles = {r.lower() for r in policy.roles}
+    policy_roles = {r.lower() for r in policy.roles_for_project()}
+
+    def _usable(grant) -> bool:
+        return not policy.project_wide_only or (
+            grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
+        )
+
     if GrantSource.PROJECT_ROLE in sources:
         for grant in resolved.of(GrantSource.PROJECT_ROLE):
             granted = {str(r).lower() for r in grant.attr("role_names") or ()}
-            if not granted & policy_roles:
+            if not granted & policy_roles or not _usable(grant):
                 continue
             lab_ids.update(_grant_lab_ids(db, resolved, grant))
 
@@ -334,11 +350,15 @@ def reachable_lab_unit_ids(db, resolved: ResolvedGrants, action: str) -> frozens
         for grant in resolved.of(GrantSource.LEGACY_PROJECT_CAPABILITY):
             if not set(grant.attr("capabilities") or ()) & set(policy.capabilities):
                 continue
+            if not _usable(grant):
+                continue
             if grant.lab_unit_id is not None:
                 lab_ids.add(grant.lab_unit_id)
 
     if GrantSource.PROJECT_COLLABORATOR in sources and "collaborator" in policy_roles:
         for grant in resolved.of(GrantSource.PROJECT_COLLABORATOR):
+            if not _usable(grant):
+                continue
             lab_ids.update(_grant_lab_ids(db, resolved, grant))
 
     return frozenset(lab_ids)

@@ -237,3 +237,56 @@ def test_build_discrepancy_filter_query_accepts_scoped_project_role_grants(monke
     assert "scope_lab.hospital_id = prg.hospital_id" in where_sql
     assert params["project_capability_user_id"] == 22
     assert params["project_capability_role_names"] == ["discrepancy_reviewer"]
+
+
+# --- project-wide scope for dataset curation --------------------------------
+# The curation screen reads a materialized view through raw SQL rather than
+# the ORM, so the rule expressed in authz.policies for dataset.curation.*
+# has to be asserted against the generated SQL as well.
+
+
+def _curation_sql(monkeypatch, **overrides):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+    filters = {
+        "disease_id": 1,
+        "allowed_lab_units": [1],
+        "project_capability_columns": [],
+        "project_capability_role_names": ["dataset_creator"],
+        "project_capability_require_project_scope": True,
+        "allow_classical_capability": True,
+        "project_capability_user_id": 7,
+    }
+    filters.update(overrides)
+    _mv, where_sql, params, _ai = discrepancy_filters.build_discrepancy_filter_query(_FakeDB(), filters)
+    return where_sql, params
+
+
+def test_curation_accepts_only_project_wide_grants(monkeypatch):
+    where_sql, params = _curation_sql(monkeypatch)
+    assert "prg.scope_type = 'project'" in where_sql
+    assert "prg.scope_type = 'lab_unit'" not in where_sql, "a lab-scoped grant must not curate a project"
+    assert "prg.scope_type = 'hospital'" not in where_sql
+    assert params["project_capability_role_names"] == ["dataset_creator"]
+
+
+def test_curation_still_admits_rows_that_belong_to_no_project(monkeypatch):
+    """Unowned rows keep the classical lab-unit rule."""
+    where_sql, _ = _curation_sql(monkeypatch)
+    assert "IS NULL OR" in where_sql
+    assert "v.task_lab_unit_id = ANY(:allowed_lab_units)" in where_sql
+
+
+def test_curation_does_not_consult_legacy_capability_rows(monkeypatch):
+    where_sql, _ = _curation_sql(monkeypatch)
+    assert "project_encounter_set_permissions" not in where_sql
+
+
+def test_other_surfaces_keep_accepting_narrower_grants(monkeypatch):
+    """Only actions that opt in are restricted to project-wide grants."""
+    where_sql, _ = _curation_sql(
+        monkeypatch,
+        project_capability_role_names=["discrepancy_reviewer"],
+        project_capability_require_project_scope=False,
+    )
+    assert "prg.scope_type = 'lab_unit'" in where_sql
+    assert "prg.scope_type = 'hospital'" in where_sql

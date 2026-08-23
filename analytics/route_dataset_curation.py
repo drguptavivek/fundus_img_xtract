@@ -37,7 +37,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from utils.final_grade_basis import final_grade_basis_label, normalize_final_grade_basis
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.dataset_share import generate_share_otp, generate_share_token, hash_share_otp, hash_share_token
 from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
 from . import bp
@@ -126,14 +126,26 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
 
 
 def _filters_with_allowed(filters: Dict[str, Any], allowed_lab_units: Iterable[int]) -> Dict[str, Any]:
-    """Apply allowed lab units to stored filters."""
+    """Apply the curation scope: classical for unowned rows, project-wide for owned ones.
+
+    A row with no project follows the established lab-unit rule. A row owned
+    by a project is curatable only by a project ``dataset_creator`` holding a
+    project-wide grant, so authority over one lab of a project does not
+    extend to the project's data as a whole.
+
+    This mirrors the ``dataset.curation.*`` policies in ``authz.policies``;
+    the curation screen reads a materialized view through raw SQL, so the
+    same rule is expressed here rather than through the ORM predicate.
+    """
     merged = dict(filters)
     merged["allowed_lab_units"] = list(allowed_lab_units)
-    merged["project_capability_columns"] = (
-        []
-        if current_user.has_role("admin") or current_user.is_master_admin
-        else ["can_create_datasets"]
-    )
+    is_admin = current_user.has_role("admin") or current_user.is_master_admin
+    # Legacy per-lab capability rows never conferred curation at project
+    # scope; the project role grant is now the only route in.
+    merged["project_capability_columns"] = []
+    merged["project_capability_role_names"] = [] if is_admin else ["dataset_creator"]
+    merged["project_capability_require_project_scope"] = True
+    merged["allow_classical_capability"] = True
     merged["project_capability_user_id"] = current_user.id
     merged["final_grade_basis"] = normalize_final_grade_basis(merged.get("final_grade_basis"))
     return merged
@@ -153,7 +165,7 @@ def _fetch_options(db: Session, user: Any) -> Tuple[List[Disease], List[LabUnit]
     
     lab_units_query = db.query(LabUnit)
     # Apply hospital scoping for dataset creation options
-    lab_units_query = apply_scoping(lab_units_query, LabUnit, user, 'dataset_creation')
+    lab_units_query = scope(db, lab_units_query, LabUnit, user, 'dataset.curation.view')
     
     lab_units = (
         lab_units_query
@@ -618,7 +630,7 @@ def dataset_detail(dataset_uuid: str):
     """Manual screening page for a curated dataset."""
     with get_db_session() as db:
         # Get allowed lab units via scoped query
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
         dataset = (
@@ -748,7 +760,7 @@ def dataset_detail(dataset_uuid: str):
                     .filter(GradingTask.id == selected_task_id)
                     .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
                 )
-                task_query = apply_scoping(task_query, GradingTask, current_user, "view")
+                task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
                 selected_task = task_query.first()
                 if selected_task:
                     selected_image = selected_task.encounter_file or selected_task.direct_image
@@ -879,7 +891,7 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = {lu.id for lu in lab_units_query.all()}
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -898,7 +910,7 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = scope(db, query, GradingTask, current_user, 'dataset.curation.view')
         task = query.first()
         if not task:
             return ("Not found", 404)
@@ -1011,7 +1023,7 @@ def dataset_screen_gallery(dataset_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1092,7 +1104,7 @@ def dataset_screen_list(dataset_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1171,7 +1183,7 @@ def dataset_toggle_item(dataset_uuid: str):
             .filter(GradingTask.id == task_id)
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        task_query = apply_scoping(task_query, GradingTask, current_user, "view")
+        task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
         task = task_query.first()
         if not task:
             return ("Not found", 404)
@@ -1306,7 +1318,7 @@ def dataset_add_more(dataset_uuid: str):
             flash("Dataset is finalized and cannot be edited.", "warning")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1427,7 +1439,7 @@ def dataset_export(dataset_uuid: str):
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         # Get allowed lab units via scoped query
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
         if not allowed_lab_units and not current_user.is_master_admin:
@@ -1510,7 +1522,7 @@ def dataset_share_create(dataset_uuid: str):
             flash("Finalize the dataset before sharing.", "warning")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1680,7 +1692,7 @@ def dataset_finalize(dataset_uuid: str):
             flash("Dataset is already finalized.", "info")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1719,7 +1731,7 @@ def dataset_unfinalize(dataset_uuid: str):
             flash("Dataset is not finalized.", "info")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -1769,7 +1781,7 @@ def dataset_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "dataset_export").first()
         if not job:
             abort(404)
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
         if job.lab_unit_id is None and job.uploader_user_id != current_user.id and not current_user.is_master_admin:
@@ -1806,7 +1818,7 @@ def dataset_delete(dataset_uuid: str):
             abort(404)
 
         # Access control: user must have access to the dataset's lab units
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
 
         stored_filters = json.loads(dataset.filters_json or "{}")

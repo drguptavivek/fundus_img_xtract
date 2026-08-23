@@ -17,6 +17,28 @@ class ActionPolicy:
     public: bool = False
     """Deliberately unauthenticated action; no role or relationship is required."""
 
+    project_roles: frozenset[str] = frozenset()
+    """Roles accepted on the project branch, when they differ from ``roles``.
+
+    Some actions are deliberately narrower over project data than over
+    classical data: dataset curation, for example, is open to several roles
+    on lab-scoped rows but only to a project dataset_creator on project rows.
+    Empty means the project branch accepts the same roles as ``roles``.
+    """
+
+    project_wide_only: bool = False
+    """Require a project-wide grant; a lab- or hospital-narrowed one will not do.
+
+    The default is that any grant whose scope covers the row authorizes it.
+    When this is set, only a grant issued at project scope qualifies, so
+    someone given access to one lab of a project cannot act on the project as
+    a whole.
+    """
+
+    def roles_for_project(self) -> frozenset[str]:
+        """Roles that authorize this action on a project-owned resource."""
+        return self.project_roles or self.roles
+
 
 GENERAL_SCOPE_GRANTS = frozenset(
     {
@@ -210,6 +232,16 @@ def _public() -> ActionPolicy:
     return ActionPolicy(roles=frozenset(), grant_sources=frozenset(), public=True)
 
 
+def _curation(classical_roles: frozenset[str]) -> ActionPolicy:
+    """Dataset policy: classical scope for unowned rows, project-wide for owned ones."""
+    return ActionPolicy(
+        roles=classical_roles,
+        grant_sources=GENERAL_SCOPE_GRANTS | {GrantSource.PROJECT_ROLE},
+        project_roles=frozenset({"dataset_creator"}),
+        project_wide_only=True,
+    )
+
+
 POLICIES.update({
     # --- account: the actor's own record -----------------------------------
     "account.profile.view": _self_only(),
@@ -305,13 +337,19 @@ POLICIES.update({
     "intra_rater.kpi.view": _general(GRADING_READ_ROLES),
 
     # --- datasets ------------------------------------------------------------
-    "dataset.curation.view": _general(DATASET_ROLES),
-    "dataset.curation.update": _general(frozenset({"admin", "dataset_creator"})),
-    "dataset.finalize": _general(frozenset({"admin", "dataset_creator"})),
-    "dataset.delete": _general(frozenset({"admin", "dataset_creator"})),
-    "dataset.export.create": _general(frozenset({"admin", "dataset_creator", "data_exporter"})),
-    "dataset.export.download": _general(frozenset({"admin", "dataset_creator", "data_exporter"})),
-    "dataset.share.manage": _general(frozenset({"admin", "dataset_creator"})),
+    # Curation reads differently on either side of the project boundary.
+    # Rows with no project keep the classical rule: any dataset role, scoped
+    # by lab-unit assignment or hospital. Rows owned by a project are open
+    # only to a project dataset_creator holding a project-wide grant, and
+    # only within that project - a grant covering one lab of the project does
+    # not confer authority over the project's data as a whole.
+    "dataset.curation.view": _curation(DATASET_ROLES),
+    "dataset.curation.update": _curation(frozenset({"admin", "dataset_creator"})),
+    "dataset.finalize": _curation(frozenset({"admin", "dataset_creator"})),
+    "dataset.delete": _curation(frozenset({"admin", "dataset_creator"})),
+    "dataset.export.create": _curation(frozenset({"admin", "dataset_creator", "data_exporter"})),
+    "dataset.export.download": _curation(frozenset({"admin", "dataset_creator", "data_exporter"})),
+    "dataset.share.manage": _curation(frozenset({"admin", "dataset_creator"})),
     # Share recipients authenticate with a hashed share token, not a session.
     "dataset.public_download": _public(),
 

@@ -176,6 +176,26 @@ def build_discrepancy_filter_query(
                     )"""
             )
         if capability_role_names:
+            # A project-wide action accepts only a grant issued at project
+            # scope; authority over one lab of a project is not authority
+            # over the project's data as a whole.
+            if filters.get("project_capability_require_project_scope"):
+                scope_sql = "prg.scope_type = 'project'"
+            else:
+                scope_sql = """prg.scope_type = 'project'
+                          OR (
+                            prg.scope_type = 'lab_unit'
+                            AND prg.lab_unit_id = project_task.lab_unit_id
+                          )
+                          OR (
+                            prg.scope_type = 'hospital'
+                            AND EXISTS (
+                              SELECT 1
+                              FROM lab_units scope_lab
+                              WHERE scope_lab.id = project_task.lab_unit_id
+                                AND scope_lab.hospital_id = prg.hospital_id
+                            )
+                          )"""
             authorization_sql.append(
                 """EXISTS (
                       SELECT 1
@@ -192,23 +212,9 @@ def build_discrepancy_filter_query(
                         )
                         AND prg.active = TRUE
                         AND project_role.name = ANY(:project_capability_role_names)
-                        AND (
-                          prg.scope_type = 'project'
-                          OR (
-                            prg.scope_type = 'lab_unit'
-                            AND prg.lab_unit_id = project_task.lab_unit_id
-                          )
-                          OR (
-                            prg.scope_type = 'hospital'
-                            AND EXISTS (
-                              SELECT 1
-                              FROM lab_units scope_lab
-                              WHERE scope_lab.id = project_task.lab_unit_id
-                                AND scope_lab.hospital_id = prg.hospital_id
-                            )
-                          )
+                        AND ({scope_sql}
                         )
-                    )"""
+                    )""".replace("{scope_sql}", scope_sql)
             )
         project_authorization_sql = " OR ".join(authorization_sql)
         classical_authorization_sql = (

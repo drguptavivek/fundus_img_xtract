@@ -205,9 +205,16 @@ POLICIES: dict[str, ActionPolicy] = {
     "grading.resident.submit": _grading_slot(),
     "grading.resident2.submit": _grading_slot(),
     "grading.arbitrator.submit": _grading_slot(),
+    # Row-level analytics: classical scope for rows outside every project,
+    # an explicit project relationship for rows inside one. Without the
+    # project branch a project analytics_viewer could not see their own
+    # project's rows at all.
     "analytics.encounters.view": ActionPolicy(
         roles=frozenset({"admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist"}),
-        grant_sources=GENERAL_SCOPE_GRANTS,
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.PROJECT_ROLE,
+            GrantSource.LEGACY_PROJECT_CAPABILITY,
+        },
     ),
     "verification.direct.view": ActionPolicy(
         roles=VERIFICATION_ROLES,

@@ -28,7 +28,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
@@ -74,7 +74,7 @@ def image_results() -> str:
 
     with get_db_session() as db:
         query = db.query(GradingTask)
-        query = apply_scoping(query, GradingTask, current_user, 'analytics')
+        query = scope(db, query, GradingTask, current_user, 'analytics.encounters.view')
         
         # Check if user has any access at all
         if not current_user.is_master_admin and not current_user.hospital_id:
@@ -91,7 +91,7 @@ def image_results() -> str:
                 query = query.filter(GradingTask.direct_image_upload_id.isnot(None))
 
         if hospital_id:
-            # Note: apply_scoping already filters by user's hospital if applicable.
+            # Note: the scoping predicate already applies hospital and project rules.
             # Filtering by a specific hospital_id is still allowed for admins.
             query = query.join(LabUnit, GradingTask.lab_unit).filter(LabUnit.hospital_id == hospital_id)
 
@@ -140,7 +140,7 @@ def image_results() -> str:
 
         # Filter lab units to only those the user has access to
         lab_units_query = db.query(LabUnit)
-        lab_units_query = apply_scoping(lab_units_query, LabUnit, current_user, 'analytics')
+        lab_units_query = scope(db, lab_units_query, LabUnit, current_user, 'analytics.encounters.view')
         lab_units_list = (
             lab_units_query
             .options(selectinload(LabUnit.hospital))
@@ -150,7 +150,7 @@ def image_results() -> str:
 
         # Convert to simple data structures to avoid session issues in templates
         diseases_query = db.query(Disease).join(GradingTask, GradingTask.disease_id == Disease.id)
-        diseases_query = apply_scoping(diseases_query, GradingTask, current_user, 'analytics')
+        diseases_query = scope(db, diseases_query, GradingTask, current_user, 'analytics.encounters.view')
         diseases = [
             {"id": d.id, "name": d.name}
             for d in diseases_query
@@ -160,7 +160,7 @@ def image_results() -> str:
         ]
         
         hospitals_query = db.query(Hospital)
-        hospitals_query = apply_scoping(hospitals_query, Hospital, current_user, 'analytics')
+        hospitals_query = scope(db, hospitals_query, Hospital, current_user, 'analytics.encounters.view')
         hospitals = [
             {"id": h.id, "name": h.name}
             for h in hospitals_query

@@ -31,7 +31,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.date_utils import parse_date_yyyy_mm_dd
 from utils.pii_masking import should_mask_pii
 
@@ -113,11 +113,12 @@ def encounter_results() -> str:
         # Build scoped lab-unit set once, then drive encounter list from MV.
         scoped_lab_unit_ids = [
             row[0]
-            for row in apply_scoping(
+            for row in scope(
+                db,
                 db.query(LabUnit.id),
                 LabUnit,
                 current_user,
-                "analytics",
+                "analytics.encounters.view",
             ).all()
         ]
         if not scoped_lab_unit_ids:
@@ -235,14 +236,14 @@ def encounter_results() -> str:
 
         task_details: list[dict[str, Any]] = []
         if encounter_file_ids or encounter_set_image_ids:
-            # Apply apply_scoping to task query
+            # Scope the task query to what this user may read
             task_clauses = []
             if encounter_file_ids:
                 task_clauses.append(GradingTask.encounter_file_id.in_(encounter_file_ids))
             if encounter_set_image_ids:
                 task_clauses.append(GradingTask.encounter_set_image_id.in_(encounter_set_image_ids))
             task_query = db.query(GradingTask).filter(sa.or_(*task_clauses))
-            task_query = apply_scoping(task_query, GradingTask, current_user, 'analytics')
+            task_query = scope(db, task_query, GradingTask, current_user, 'analytics.encounters.view')
             
             tasks = (
                 task_query.options(
@@ -260,7 +261,7 @@ def encounter_results() -> str:
 
         # Filter hospitals and lab units to only those the user has access to
         lab_units_query = db.query(LabUnit)
-        lab_units_query = apply_scoping(lab_units_query, LabUnit, current_user, 'analytics')
+        lab_units_query = scope(db, lab_units_query, LabUnit, current_user, 'analytics.encounters.view')
         lab_units = (
             lab_units_query
             .options(selectinload(LabUnit.hospital))
@@ -269,7 +270,7 @@ def encounter_results() -> str:
         )
         
         hospitals_query = db.query(Hospital)
-        hospitals_query = apply_scoping(hospitals_query, Hospital, current_user, 'analytics')
+        hospitals_query = scope(db, hospitals_query, Hospital, current_user, 'analytics.encounters.view')
         hospitals = (
             hospitals_query
             .order_by(Hospital.name)

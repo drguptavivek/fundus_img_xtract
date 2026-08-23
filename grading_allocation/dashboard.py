@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import exists, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import exists, select, func, or_
+from sqlalchemy.orm import Session, selectinload, aliased
 
 from grading.workbench.package_workflow import reconcile_active_packages
 from grading_allocation.dtos import (
@@ -15,7 +15,7 @@ from grading_allocation.dtos import (
     TargetIdentity,
 )
 from grading_allocation.eligibility import eligible_enforced_project_task_contexts
-from grading_allocation.models import ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
 from grading_allocation.targets import derive_project_targets
 from models import (
     EncounterSetGradingPackage,
@@ -244,3 +244,79 @@ def exclude_enforced_project_encounter_set_tasks(query, task_entity=GradingTask)
         .correlate(task_entity)
     )
     return query.filter(~exists(enforced_task))
+
+def exclude_unallocated_project_tasks(
+    query,
+    *,
+    user_id: int,
+    capacity: str,
+    disease_id: int | None = None,
+    task_entity=GradingTask,
+):
+    """Drop project-owned tasks the user holds no allocation for.
+
+    Tasks belonging to no project are untouched: those follow the classical
+    grading-slot rule. A task owned by a project survives only if the user
+    holds an active allocation in that project, for that lab unit and
+    capacity, and either the allocation names no disease or names this one.
+
+    Precision note: an allocation scoped to a particular EncounterSet type is
+    matched here only on project, lab, capacity and disease, so a count can
+    still include a task of a different EncounterSet type. That errs towards
+    showing work rather than hiding it; the exact check runs per task in
+    ``grading_allocation.eligibility.is_user_eligible_for_task`` before the
+    task can actually be opened.
+    """
+    from models import DirectImageUpload, EncounterFile, EncounterSetImage, PatientEncounters
+
+    inner = aliased(task_entity)
+    task_encounter = aliased(PatientEncounters)
+    set_image = aliased(EncounterSetImage)
+    set_encounter = aliased(PatientEncounters)
+    encounter_file = aliased(EncounterFile)
+    file_encounter = aliased(PatientEncounters)
+    direct_image = aliased(DirectImageUpload)
+
+    project_id = func.coalesce(
+        task_encounter.project_id,
+        set_image.project_id,
+        set_encounter.project_id,
+        encounter_file.project_id,
+        file_encounter.project_id,
+        direct_image.project_id,
+    )
+
+    allocation_conditions = [
+        ProjectGraderAllocation.user_id == user_id,
+        ProjectGraderAllocation.active.is_(True),
+        ProjectGraderAllocation.capacity == capacity,
+        ProjectGraderAllocation.project_id == project_id,
+        ProjectGraderAllocation.lab_unit_id == inner.lab_unit_id,
+    ]
+    if disease_id is not None:
+        allocation_conditions.append(
+            or_(
+                ProjectGraderAllocation.disease_id.is_(None),
+                ProjectGraderAllocation.disease_id == disease_id,
+            )
+        )
+    allocated = select(ProjectGraderAllocation.id).where(*allocation_conditions)
+
+    # "This task belongs to a project and the user has no allocation for it."
+    unallocated = (
+        select(inner.id)
+        .select_from(inner)
+        .outerjoin(task_encounter, task_encounter.id == inner.patient_encounter_id)
+        .outerjoin(set_image, set_image.id == inner.encounter_set_image_id)
+        .outerjoin(set_encounter, set_encounter.id == set_image.patient_encounter_id)
+        .outerjoin(encounter_file, encounter_file.id == inner.encounter_file_id)
+        .outerjoin(file_encounter, file_encounter.id == encounter_file.patient_encounter_id)
+        .outerjoin(direct_image, direct_image.id == inner.direct_image_upload_id)
+        .where(
+            inner.id == task_entity.id,
+            project_id.isnot(None),
+            ~exists(allocated),
+        )
+        .correlate(task_entity)
+    )
+    return query.filter(~exists(unallocated))

@@ -28,10 +28,12 @@ from grading_allocation.exceptions import AllocationContextError
 from grading_allocation.models import ProjectGradingAllocationPolicy
 from grading_allocation.resolver import resolve_task_allocation_context
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
-from utils.hospital_scoping import apply_scoping
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
-from grading_allocation.dashboard import exclude_enforced_project_encounter_set_tasks
+from grading_allocation.dashboard import (
+    exclude_enforced_project_encounter_set_tasks,
+    exclude_unallocated_project_tasks,
+)
 from typing import Dict, Optional, List, Tuple
 
 
@@ -293,7 +295,9 @@ def get_user_kpi_pending_task_count_data(
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             if exclude_enforced_project_encounter_sets:
                 q = exclude_enforced_project_encounter_set_tasks(q)
-            q = apply_scoping(q, GradingTask, user, 'grading')
+            q = exclude_unallocated_project_tasks(
+                q, user_id=user_id, capacity="resident", disease_id=disease_id
+            )
             resident_pending_count = _pending_count(
                 db,
                 q,
@@ -322,7 +326,9 @@ def get_user_kpi_pending_task_count_data(
                 inconsistent_q = exclude_enforced_project_encounter_set_tasks(
                     inconsistent_q
                 )
-            inconsistent_q = apply_scoping(inconsistent_q, GradingTask, user, 'grading')
+            inconsistent_q = exclude_unallocated_project_tasks(
+                inconsistent_q, user_id=user_id, capacity="resident", disease_id=disease_id
+            )
             inconsistent_count = _pending_count(
                 db,
                 inconsistent_q,
@@ -356,7 +362,9 @@ def get_user_kpi_pending_task_count_data(
             q = _apply_linked_mismatch_exclusion(db, q, disease_id)
             if exclude_enforced_project_encounter_sets:
                 q = exclude_enforced_project_encounter_set_tasks(q)
-            q = apply_scoping(q, GradingTask, user, 'grading')
+            q = exclude_unallocated_project_tasks(
+                q, user_id=user_id, capacity="resident", disease_id=disease_id
+            )
             counts['resident2_pending'] = _pending_count(
                 db,
                 q,
@@ -411,7 +419,9 @@ def get_user_kpi_pending_task_count_data(
 
             if exclude_enforced_project_encounter_sets:
                 base_q = exclude_enforced_project_encounter_set_tasks(base_q)
-            q = apply_scoping(base_q, GradingTask, user, 'grading')
+            q = exclude_unallocated_project_tasks(
+                base_q, user_id=user_id, capacity="arbitrator", disease_id=disease_id
+            )
             
             # Use distinct because the join might produce multiple rows per primary task
             if enforced_project_ids:
@@ -546,7 +556,6 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
                 Grade.role_slot == 'resident',
                 Grade.task.has(GradingTask.disease_id == disease_id)
             )
-            q = apply_scoping(q, Grade, user, 'grading')
             counts['resident_completed'] = q.count()
         
         # Count resident2 completed tasks
@@ -556,7 +565,6 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
                 Grade.role_slot == 'resident2',
                 Grade.task.has(GradingTask.disease_id == disease_id)
             )
-            q = apply_scoping(q, Grade, user, 'grading')
             counts['resident2_completed'] = q.count()
     
         # Count arbitration completed tasks
@@ -566,7 +574,6 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
                 Grade.role_slot == 'arbitrator',
                 Grade.task.has(GradingTask.disease_id == disease_id)
             )
-            q = apply_scoping(q, Grade, user, 'grading')
             counts['arbitration_completed'] = q.count()
         
         kpi_data[disease_name] = counts
@@ -764,7 +771,10 @@ def get_user_kpi_linked_followup_counts(
             .group_by(LinkedDisease.id, LinkedDisease.name)
         )
 
-        q = apply_scoping(q, PrimaryTask, user, 'grading')
+        q = exclude_unallocated_project_tasks(
+            q, user_id=user_id, capacity="resident", disease_id=disease_id,
+            task_entity=PrimaryTask,
+        )
         if exclude_enforced_project_encounter_sets:
             q = exclude_enforced_project_encounter_set_tasks(q, PrimaryTask)
             q = exclude_enforced_project_encounter_set_tasks(q, LinkedTask)

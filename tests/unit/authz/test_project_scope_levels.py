@@ -167,22 +167,6 @@ def test_hospital_minimum_sits_between_the_two():
 # --- grading is governed by allocation, not by project role grants -----------
 
 
-def test_no_grading_submission_consults_project_role_grants():
-    """A project task is graded on allocation, never on a project role grant.
-
-    This covers grading submissions only. Administering intra-rater batches
-    is a data-manager activity scoped like the other review stages, so it
-    does carry a project role grant and is deliberately excluded here.
-    """
-    offenders = sorted(
-        action for action, policy in POLICIES.items()
-        if action.startswith(("grading.", "tasks."))
-        and action != "grading.grades.view"
-        and GrantSource.PROJECT_ROLE in policy.grant_sources
-    )
-    assert not offenders, f"grading must not be authorized by a project role grant: {offenders}"
-
-
 def test_grading_submit_is_authorized_only_by_a_slot():
     assert POLICIES["grading.resident.submit"].grant_sources == frozenset({GrantSource.GRADING_SLOT})
 
@@ -281,3 +265,18 @@ def test_every_slot_the_engine_matches_is_a_registered_action():
     """_matches_grading_slot handled resident2 and arbitrator before they existed."""
     for action, _flag in GRADING_ACTIONS:
         assert action in POLICIES, f"{action} is matched by the engine but not registered"
+
+
+def test_no_grading_submission_consults_project_role_grants():
+    """A project task is graded on allocation, never on a project role grant.
+
+    This covers the three grading submissions only. Browsing tasks, and
+    administering intra-rater batches or regrade work, are scoped like the
+    other stages and do carry a project role grant; what must not is the act
+    of grading itself.
+    """
+    offenders = sorted(
+        action for action, _flag in GRADING_ACTIONS
+        if GrantSource.PROJECT_ROLE in POLICIES[action].grant_sources
+    )
+    assert not offenders, f"grading must not be authorized by a project role grant: {offenders}"

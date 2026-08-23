@@ -70,8 +70,19 @@ the role, in the lab units allocated to the actor.
 - Discrepancy review needs `discrepancy_reviewer`; regrade adjudication
   needs `regrade_adjudicator`.
 
-**Intra-rater batches** are administered by `data_manager` under the same
-rule, and graded by clinicians through the grading slots above.
+**Browsing tasks and exporting data** follow the same rule as the review
+stages: the role, in the lab units allocated to the actor outside a project,
+and the scope the actor's project grant covers inside one - project-wide,
+hospital or lab unit. Task browsing is what feeds regrade and intra-rater
+creation, so it also accepts a project's governance roles, since a PI or
+project admin must be able to see their own project's work.
+
+**Creating the work is separate from doing it.** Regrade tasks and
+intra-rater batches are created, and reassigned, by `data_manager` under the
+same lab-unit rule. Adjudicating a regrade needs `regrade_adjudicator`, and
+grading an intra-rater task needs a grading slot. Neither administrative
+role can perform the clinical step, and neither clinical role can create the
+work.
 
 **Inference.** The WAI and Remidio OCR inference browser follows the upload
 step it reports on: the actor's own lab units outside a project, and their

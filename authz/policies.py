@@ -444,6 +444,24 @@ def _reviewer_step(roles: frozenset[str]) -> ActionPolicy:
         project_roles=roles - {"admin"},
     )
 
+def _browse_tasks() -> ActionPolicy:
+    """Browsing tasks, which is what feeds regrade and intra-rater creation.
+
+    On the project side this accepts the operational roles and the project's
+    governance roles, since a PI or project admin has to be able to see their
+    own project's work. The grant's own scope still decides how much of it:
+    project-wide reaches the project, hospital- or lab-scoped reaches that
+    much.
+    """
+    return ActionPolicy(
+        roles=CLINICAL_READ_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.PROJECT_ROLE,
+            GrantSource.LEGACY_PROJECT_CAPABILITY,
+        },
+        project_roles=(CLINICAL_READ_ROLES - {"admin"}) | PROJECT_GOVERNANCE_ROLES,
+    )
+
 def _aggregate_kpi() -> ActionPolicy:
     """Aggregate operational reporting: lab scope reaches every row.
 
@@ -511,8 +529,12 @@ POLICIES.update({
 
     # --- search / tasks ------------------------------------------------------
     "search.view": _general(CLINICAL_READ_ROLES),
-    "tasks.view": _general(CLINICAL_READ_ROLES),
-    "tasks.viewer.view": _general(CLINICAL_READ_ROLES),
+    # Browsing tasks is what feeds regrade and intra-rater creation, so it
+    # has to reach a project's tasks too. The grant's own scope decides how
+    # much: a project-wide grant reaches the project, a hospital- or
+    # lab-scoped one reaches that much of it.
+    "tasks.view": _browse_tasks(),
+    "tasks.viewer.view": _browse_tasks(),
 
     # --- screenings ----------------------------------------------------------
     "screenings.view": _general(UPLOAD_OPERATOR_ROLES),
@@ -551,10 +573,16 @@ POLICIES.update({
 
     # --- discrepancy review --------------------------------------------------
     "review.discrepancy.view": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
-    "review.discrepancy.export": _general(frozenset({"admin", "data_manager", "data_exporter"})),
+    # Export follows the same rule as the other stages: the role, in the
+    # lab units allocated to the actor, or the project scope their grant
+    # covers.
+    "review.discrepancy.export": _reviewer_step(frozenset({"data_exporter", "data_manager", "admin"})),
     "review.task.view": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
     "review.task.submit": _reviewer_step(frozenset({"discrepancy_reviewer", "admin"})),
-    "review.regrade_creator.manage": _general(ADMIN_SITE),
+    # Creating regrade work, and deciding who adjudicates it, is data
+    # management. Performing the adjudication is review.regrade.adjudicate
+    # and needs regrade_adjudicator.
+    "review.regrade_creator.manage": _reviewer_step(frozenset({"data_manager", "admin"})),
     # Adjudicating a regrade needs either the dedicated role or admin; there
     # is no per-disease or per-lab slot for it, unlike the grading slots.
     "review.regrade.adjudicate": _reviewer_step(frozenset({"regrade_adjudicator", "admin"})),

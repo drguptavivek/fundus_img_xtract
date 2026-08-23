@@ -25,7 +25,7 @@ from .route_discrepancy_review import (
 
 
 @bp.route("/regrade-tasks", methods=["POST"])
-@roles_required("admin", "local_admin")
+@roles_required("admin", "data_manager")
 def create_regrade_tasks():
     with transaction_scope() as db:
         lu_query = sa.select(LabUnit)
@@ -188,7 +188,7 @@ def create_regrade_tasks():
 
 
 @bp.route("/regrade-task-creator", methods=["GET"])
-@roles_required("admin", "local_admin")
+@roles_required("admin", "data_manager")
 def regrade_task_creator():
     enforced_filters = {
         "resident_compare": "mismatch",

@@ -152,6 +152,15 @@ alembic-head: alembic-heads ## Alias for alembic-heads.
 alembic-heads: ## Run alembic heads inside the web container.
 	$(WEB_UV) alembic heads
 
+.PHONY: alembic-revision
+alembic-revision: ## Create an empty migration with a generated id: make alembic-revision m="description"
+	@test -n "$(m)" || (echo 'usage: make alembic-revision m="what this migration does"' && exit 1)
+	$(WEB_UV) alembic revision -m "$(m)"
+	@echo
+	@echo "Edit the generated file by hand. Do not use --autogenerate: it emits"
+	@echo "unrelated and sometimes destructive operations. Write real upgrade()"
+	@echo "and downgrade() bodies and keep them idempotent."
+
 .PHONY: alembic-current
 alembic-current: ## Run alembic current inside the web container.
 	$(WEB_UV) alembic current

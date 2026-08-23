@@ -34,7 +34,6 @@ VERIFY_ROLE_NAMES = frozenset({
     "local_admin",
     "data_manager",
     "fileUploader",
-    "optometrist",
 })
 
 RESULT_ROLE_NAMES = frozenset({

@@ -52,7 +52,7 @@ CAPABILITY_ROLES = {
     }),
     CAPABILITY_VERIFY: frozenset({
         "verifier",
-        "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
+        "admin", "local_admin", "data_manager", "fileUploader",
         "field_optometrist", "field_ophthalmologist",
     }),
     CAPABILITY_UPLOAD: frozenset({"admin", "local_admin", "data_manager", "fileUploader"}),

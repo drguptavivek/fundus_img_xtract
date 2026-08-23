@@ -108,11 +108,12 @@ GENERAL_SCOPE_GRANTS = frozenset(
     }
 )
 
-# `verifier` is the dedicated role for verification work. The operational
-# roles remain accepted because they perform virtually all verification
-# today; no user holds `verifier` yet.
+# `verifier` is the role for verification work. `optometrist` used to confer
+# it and no longer does: every active optometrist was granted `verifier` in
+# the same migration, so nobody's ability to verify changed. `optometrist`
+# keeps its other powers, such as uploads and WAI runs.
 VERIFICATION_ROLES = frozenset({
-    "verifier", "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+    "verifier", "admin", "local_admin", "fileUploader", "data_manager",
 })
 
 MEDIA_IMAGE_ROLES = frozenset({

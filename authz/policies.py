@@ -108,7 +108,12 @@ GENERAL_SCOPE_GRANTS = frozenset(
     }
 )
 
-VERIFICATION_ROLES = frozenset({"admin", "local_admin", "fileUploader", "optometrist", "data_manager"})
+# `verifier` is the dedicated role for verification work. The operational
+# roles remain accepted because they perform virtually all verification
+# today; no user holds `verifier` yet.
+VERIFICATION_ROLES = frozenset({
+    "verifier", "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+})
 
 MEDIA_IMAGE_ROLES = frozenset({
     "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
@@ -237,6 +242,10 @@ POLICIES: dict[str, ActionPolicy] = {
         grant_sources=GENERAL_SCOPE_GRANTS,
     ),
     "verification.pregraded.update": ActionPolicy(
+        roles=VERIFICATION_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+    ),
+    "verification.encounter_set.update": ActionPolicy(
         roles=VERIFICATION_ROLES,
         grant_sources=GENERAL_SCOPE_GRANTS,
     ),

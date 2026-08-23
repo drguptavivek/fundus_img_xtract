@@ -18,7 +18,7 @@ from encounter_sets.permissions import (
     user_is_legacy_project_collaborator,
 )
 from models import PatientEncounters
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 RESULT_CAPABILITIES = frozenset({
@@ -28,6 +28,15 @@ RESULT_CAPABILITIES = frozenset({
     CAPABILITY_DATASET_CREATION,
     CAPABILITY_REGRADE_ADJUDICATION,
 })
+VERIFY_ROLE_NAMES = frozenset({
+    "verifier",
+    "admin",
+    "local_admin",
+    "data_manager",
+    "fileUploader",
+    "optometrist",
+})
+
 RESULT_ROLE_NAMES = frozenset({
     "admin",
     "local_admin",
@@ -102,14 +111,27 @@ def can_view_results(db: Session, *, user, encounter: PatientEncounters | None, 
 
 
 def can_verify_encounter(db: Session, *, user, encounter: PatientEncounters) -> bool:
+    """Whether this user may verify one EncounterSet encounter.
+
+    Verification needs a verification role in both branches. Outside a
+    project the role is paired with classical lab scope; inside one it must
+    come through an explicit project role grant. The legacy project
+    capability row no longer confers verification: no active row grants it,
+    and those rows are being retired.
+    """
     if not encounter.is_set_based:
         return False
     if encounter.project_id is None:
-        if not user.has_role("admin", "local_admin", "data_manager", "fileUploader", "optometrist"):
-            return False
         query = db.query(PatientEncounters.id).filter(PatientEncounters.id == encounter.id)
-        return apply_scoping(query, PatientEncounters, user, "upload").first() is not None
-    query = db.query(PatientEncounters.id).filter(PatientEncounters.id == encounter.id)
-    return apply_project_permission_scope(
-        query, PatientEncounters, user, CAPABILITY_VERIFY
-    ).first() is not None
+        return scope(
+            db, query, PatientEncounters, user, "verification.encounter_set.update"
+        ).first() is not None
+    if is_project_permission_admin(user):
+        return True
+    roles = project_role_names_for_scope(
+        db,
+        user_id=user.id,
+        project_id=encounter.project_id,
+        lab_unit_id=encounter.lab_unit_id,
+    )
+    return bool(roles & VERIFY_ROLE_NAMES)

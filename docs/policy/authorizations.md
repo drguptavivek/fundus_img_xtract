@@ -291,6 +291,16 @@ These rules cover actions that currently have executable entries in `authz/polic
 - Relationship source: `admin_global`, `hospital_scope`, or `lab_unit_assignment`.
 - Resource: `encounter`.
 
+### `verification.encounter_set.update`
+
+- Rule: A user may verify an EncounterSet encounter only when the user has one of `verifier`, `admin`, `local_admin`, `data_manager`, `fileUploader`, `optometrist`.
+- Rule: For an encounter outside any project the role is paired with classical hospital or lab-unit scope.
+- Rule: For a project-owned encounter the role must be held through an explicit project role grant on that project. Lab-unit assignment alone never authorizes verification of project data.
+- Rule: The legacy project capability row no longer confers verification.
+- Rule: `verifier` is the dedicated role for this work; the operational roles remain accepted because they perform virtually all verification today.
+- Relationship source: classical scope for unowned encounters; project authority for owned ones.
+- Resource: encounter (required).
+
 ### `verification.pregraded.view`
 
 - Rule: A user may view pregraded direct-image verification pages only when the user has one of `admin`, `local_admin`, `fileUploader`, `optometrist`, or `data_manager` and the pregraded direct image is covered by admin-global scope, hospital scope, or explicit lab-unit assignment.

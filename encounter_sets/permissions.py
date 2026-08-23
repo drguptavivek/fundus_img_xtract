@@ -51,6 +51,7 @@ CAPABILITY_ROLES = {
         "field_optometrist", "field_ophthalmologist",
     }),
     CAPABILITY_VERIFY: frozenset({
+        "verifier",
         "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
         "field_optometrist", "field_ophthalmologist",
     }),

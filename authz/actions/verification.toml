@@ -45,3 +45,11 @@ zone = "web"
 description = "Update pregraded direct-image verification metadata and tags."
 resource_type = "direct_image_upload"
 requires_resource = true
+
+[[actions]]
+name = "verification.encounter_set.update"
+domain = "verification"
+zone = "web"
+description = "Verify an EncounterSet encounter and record its verification state."
+resource_type = "encounter"
+requires_resource = true

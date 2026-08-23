@@ -142,7 +142,7 @@ def register_routes(bp) -> None:
     )
 
 
-@roles_required("regrade_adjudicator", "admin", "local_admin")
+@roles_required("regrade_adjudicator", "admin")
 def regrade_tasks():
     with transaction_scope() as db:
         lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
@@ -409,7 +409,7 @@ def regrade_tasks_reassign():
         )
 
 
-@roles_required("regrade_adjudicator", "admin", "local_admin")
+@roles_required("regrade_adjudicator", "admin")
 def start_random_regrade_task():
     with transaction_scope() as db:
         _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
@@ -455,7 +455,7 @@ def start_random_regrade_task():
         return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
 
-@roles_required("regrade_adjudicator", "admin", "local_admin")
+@roles_required("regrade_adjudicator", "admin")
 def regrade_task_detail(regrade_task_id: int):
     if not regrade_task_id or regrade_task_id <= 0:
         flash("Invalid regrade task reference.", "danger")
@@ -559,7 +559,7 @@ def regrade_task_detail(regrade_task_id: int):
         )
 
 
-@roles_required("regrade_adjudicator", "admin", "local_admin")
+@roles_required("regrade_adjudicator", "admin")
 def regrade_task_submit(regrade_task_id: int):
     if not regrade_task_id or regrade_task_id <= 0:
         flash("Invalid regrade task reference.", "danger")

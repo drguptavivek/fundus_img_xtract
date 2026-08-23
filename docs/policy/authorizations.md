@@ -25,6 +25,18 @@ When code and this document disagree, stop and update the policy before changing
 - Admin-global scope applies only to actions whose policy explicitly accepts admin-global scope.
 - A route must load or derive the resource needed by the action before enforcing a resource-specific rule.
 
+## Patient Identifiers
+
+Identifiers belong to the pre-grading steps. Capturing, uploading and
+verifying an encounter all require knowing which patient it is. From grading
+onwards the work is on the image, so identifiers are masked: grading,
+discrepancy review, regrade adjudication, intra-rater work, analytics and
+datasets never need them.
+
+This is a property of the action, not of the actor's roles. Deciding it from
+roles alone unmasks a grader who also happens to upload, on the grading
+screen itself. An action that has not been classified masks by default.
+
 ## The Pipeline And Its Steps
 
 Work moves through three steps, and each is scoped by a different

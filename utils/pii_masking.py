@@ -205,6 +205,10 @@ def should_mask_pii(
         True
     """
     if always_mask_roles is None:
+        # Deliberately over-inclusive. `resident` was retired as a role and
+        # `resident2` is a grading slot rather than a role, but masking is a
+        # safety property: naming them costs nothing, while dropping them
+        # would under-mask if any such assignment still exists.
         always_mask_roles = ['resident', 'resident2', 'ophthalmologist', 'analytics_viewer']
     
     # Always mask for roles in the always_mask list

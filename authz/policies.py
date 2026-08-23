@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 from authz.types import GrantSource
@@ -68,6 +69,17 @@ class ActionPolicy:
     rather than for a unit's. A role listed here is authorized solely through
     the MEDIA_UPLOADER relationship, so lab-unit assignment and upload
     assignments give it nothing.
+    """
+
+    shows_pii: bool = False
+    """Whether this action may show patient identifiers.
+
+    PII is a pre-grading concern. Upload and verification have to identify
+    the patient; from grading onwards the work is on the image and the
+    identifiers serve no purpose, so they are masked. Making this a property
+    of the action rather than of the actor's roles matters: masking decided
+    from roles alone unmasks a grader who also happens to upload, on the
+    grading screen itself.
     """
 
     project_gated: bool = True
@@ -643,7 +655,13 @@ POLICIES.update({
     # Filter actions: the effect is confined to the rows touched, so a
     # narrower grant simply reaches fewer rows.
     "project.encountersets.browse": _project(PROJECT_ASSIGNABLE_ROLES),
-    "project.encountersets.browse_pii": _project(PROJECT_ASSIGNABLE_ROLES - {"collaborator"}),
+    # analytics_viewer reads results without patient identifiers, so it is
+    # excluded here alongside collaborator. The masking layer already
+    # treats it as always-masked; this keeps authorization consistent
+    # with that rather than relying on masking alone.
+    "project.encountersets.browse_pii": _project(
+        PROJECT_ASSIGNABLE_ROLES - {"collaborator", "analytics_viewer"}
+    ),
     "project.upload.direct_image": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
     "project.upload.pregraded": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
     "project.upload.remidio": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
@@ -662,6 +680,53 @@ POLICIES.update({
 })
 
 
+# ---------------------------------------------------------------------------
+# Where patient identifiers may appear
+#
+# PII is a pre-grading concern. Capturing, uploading and verifying an
+# encounter all require identifying the patient. From grading onwards the
+# work is on the image itself, so identifiers are masked: grading, review,
+# regrade adjudication, intra-rater work, analytics and datasets never need
+# them. Any action not named here masks by default.
+# ---------------------------------------------------------------------------
+
+PRE_GRADING_ACTIONS = frozenset({
+    "upload.direct.create",
+    "upload.direct.view",
+    "upload.direct.edit_image",
+    "upload.pregraded.create",
+    "upload.zip.create",
+    "upload.zip.view",
+    "verification.direct.view",
+    "verification.direct.update",
+    "verification.remidio.view",
+    "verification.remidio.update",
+    "verification.pregraded.view",
+    "verification.pregraded.update",
+    "verification.encounter_set.update",
+    "project.encountersets.browse_pii",
+    "screenings.view",
+    "admin.users.view",
+    "admin.users.manage",
+    "account.profile.view",
+    "account.profile.update",
+})
+
+for _action in PRE_GRADING_ACTIONS:
+    _policy = POLICIES.get(_action)
+    if _policy is not None:
+        POLICIES[_action] = dataclasses.replace(_policy, shows_pii=True)
+
+
 def get_policy(action: str) -> ActionPolicy | None:
     """Return the registered static policy for an action, if one exists."""
     return POLICIES.get(action)
+
+def action_shows_pii(action: str) -> bool:
+    """Whether patient identifiers may be shown for this action.
+
+    Unknown actions mask, so a surface that has not been classified errs
+    towards concealing identifiers rather than revealing them.
+    """
+    policy = POLICIES.get(action)
+    return bool(policy and policy.shows_pii)

@@ -171,9 +171,15 @@ def _compile(resolved: ResolvedGrants, policy: ActionPolicy, scope: ScopeColumns
     return or_(*branches)
 
 
-def _is_classical(scope: ScopeColumns) -> ColumnElement:
-    # A model with no project axis is classical by definition.
-    return true() if scope.project_id is None else scope.project_id.is_(None)
+def _reachable_classically(policy: ActionPolicy, scope: ScopeColumns) -> ColumnElement:
+    """SQL twin of engine._reachable_classically.
+
+    A model with no project axis is classical by definition, and an action
+    that is not project-gated reaches every row.
+    """
+    if scope.project_id is None or not policy.project_gated:
+        return true()
+    return scope.project_id.is_(None)
 
 
 def _classical_branch(
@@ -200,7 +206,7 @@ def _classical_branch(
 
     if not conditions:
         return None
-    return and_(_is_classical(scope), or_(*conditions))
+    return and_(_reachable_classically(policy, scope), or_(*conditions))
 
 
 def _project_branch(

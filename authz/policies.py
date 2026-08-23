@@ -61,6 +61,18 @@ class ActionPolicy:
     Empty means the project branch accepts the same roles as ``roles``.
     """
 
+    project_gated: bool = True
+    """Whether the project boundary applies to this action at all.
+
+    Almost every action is project-gated: a row owned by a project is
+    reachable only through a project relationship, never through hospital or
+    lab-unit scope. Set this False only for aggregate operational reporting,
+    where a count of what a lab captured is a fact about that lab's own
+    throughput rather than a disclosure of project data. Such an action must
+    return counts and distributions only - never rows, identifiers or an
+    export - because those are disclosures and stay project-gated.
+    """
+
     min_project_scope: str = LAB_UNIT_SCOPE
     """Narrowest project grant that confers authority for this action.
 
@@ -321,6 +333,40 @@ def _curation(classical_roles: frozenset[str]) -> ActionPolicy:
     )
 
 
+ANALYTICS_ROLES = frozenset({
+    "admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist",
+})
+
+
+def _universal(roles: frozenset[str]) -> ActionPolicy:
+    """The standard dual-branch policy.
+
+    Rows outside every project follow classical hospital/lab scope; rows
+    owned by a project require an explicit project relationship. This is the
+    shape most data-bearing actions want.
+    """
+    return ActionPolicy(
+        roles=roles,
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.PROJECT_ROLE,
+            GrantSource.LEGACY_PROJECT_CAPABILITY,
+        },
+    )
+
+def _aggregate_kpi() -> ActionPolicy:
+    """Aggregate operational reporting: lab scope reaches every row.
+
+    Deliberately not project-gated. Only ever attach this to an endpoint that
+    returns counts or distributions; a row listing or export must use the
+    matching `.rows` action instead.
+    """
+    return ActionPolicy(
+        roles=ANALYTICS_ROLES,
+        grant_sources=GENERAL_SCOPE_GRANTS,
+        project_gated=False,
+    )
+
+
 POLICIES.update({
     # --- account: the actor's own record -----------------------------------
     "account.profile.view": _self_only(),
@@ -417,6 +463,19 @@ POLICIES.update({
     "intra_rater.task.view": _general(GRADING_READ_ROLES),
     "intra_rater.task.submit": _general(GRADING_SUBMIT_ROLES),
     "intra_rater.kpi.view": _general(GRADING_READ_ROLES),
+
+
+    # --- KPI reporting -------------------------------------------------------
+    # Aggregates answer "what passed through my lab", so they are not
+    # project-gated: a count of a lab's own throughput is a fact about that
+    # lab, not a disclosure of project data. Anything returning rows or an
+    # export is a disclosure and follows the universal project rule.
+    "analytics.kpi.encounter_files.view": _aggregate_kpi(),
+    "analytics.kpi.direct_files.view": _aggregate_kpi(),
+    "analytics.upload_stats.view": _aggregate_kpi(),
+    "analytics.hospital_dashboard.view": _aggregate_kpi(),
+    "analytics.kpi.encounter_files.rows": _universal(ANALYTICS_ROLES),
+    "analytics.kpi.direct_files.rows": _universal(ANALYTICS_ROLES),
 
     # --- datasets ------------------------------------------------------------
     # Curation reads differently on either side of the project boundary.

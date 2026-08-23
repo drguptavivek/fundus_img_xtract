@@ -416,6 +416,55 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 - Resource: user (not required).
 
 
+## Domain: analytics KPI reporting
+
+KPI surfaces are registered per family, and each family separates its
+aggregate surface from its row-level one.
+
+### `analytics.kpi.encounter_files.view`
+
+- Rule: A user may view aggregate encounter-file KPIs when the user has one of `admin`, `analytics_viewer`, `data_manager`, `local_admin`, `ophthalmologist` and hospital scope or an explicit lab-unit assignment covers the lab.
+- Rule: This action is deliberately not project-gated. A count of what a lab captured is a fact about that lab's own throughput, so project-owned images in the user's labs are counted without a project relationship.
+- Rule: This applies only to counts and distributions. Rows, identifiers and exports use `analytics.kpi.encounter_files.rows` and stay project-gated.
+- Relationship source: classical scope.
+- Resource: encounter file (not required).
+
+### `analytics.kpi.encounter_files.rows`
+
+- Rule: A user may read or export the per-image encounter-file dataframe for a row outside every project when hospital scope or an explicit lab-unit assignment covers it.
+- Rule: A row owned by a project requires an explicit project role grant or legacy project capability for that project. Lab-unit assignment alone never reaches it.
+- Relationship source: classical scope for unowned rows; project authority for owned rows.
+- Resource: encounter file (not required).
+
+### `analytics.kpi.direct_files.view`
+
+- Rule: A user may view aggregate direct-upload KPIs and upload metrics when the user has one of `admin`, `analytics_viewer`, `data_manager`, `local_admin`, `ophthalmologist` and hospital scope or an explicit lab-unit assignment covers the lab.
+- Rule: Not project-gated, on the same basis as the encounter-file aggregates.
+- Relationship source: classical scope.
+- Resource: direct image upload (not required).
+
+### `analytics.kpi.direct_files.rows`
+
+- Rule: A user may read or export the per-image direct-upload dataframe for a row outside every project when hospital scope or an explicit lab-unit assignment covers it.
+- Rule: A row owned by a project requires an explicit project role grant or legacy project capability for that project.
+- Relationship source: classical scope for unowned rows; project authority for owned rows.
+- Resource: direct image upload (not required).
+
+### `analytics.upload_stats.view`
+
+- Rule: A user may view aggregate upload counts for today and the last seven days when the user has one of `admin`, `analytics_viewer`, `data_manager`, `local_admin`, `ophthalmologist` and hospital scope or an explicit lab-unit assignment covers the lab.
+- Rule: Not project-gated; these are counts of a lab's own intake.
+- Relationship source: classical scope.
+- Resource: direct image upload (not required).
+
+### `analytics.hospital_dashboard.view`
+
+- Rule: A user may view the hospital dashboard and its aggregate disease, lab, user and roster views when the user has one of `admin`, `analytics_viewer`, `data_manager`, `local_admin`, `ophthalmologist` and hospital scope or an explicit lab-unit assignment covers the hospital.
+- Rule: Not project-gated; the dashboard reports the hospital's own activity.
+- Rule: Any drill-down that returns rows must use a project-gated action.
+- Relationship source: classical scope.
+- Resource: hospital (not required).
+
 ## Domain: api
 
 ### `api.lookups.manage`

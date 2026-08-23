@@ -141,11 +141,30 @@ VERIFICATION_ROLES = frozenset({
     "verifier", "admin", "local_admin", "fileUploader", "data_manager",
 })
 
+# Roles that read patient identifiers off an image. `collaborator` and
+# `analytics_viewer` are deliberately absent: both are non-PII roles, and an
+# OCR'd identifier is still an identifier.
+# Project oversight. Principal and co-investigators are designations on a
+# project, recorded on project_investigators. What comes with them is
+# read-only oversight of how the project is going: its analytics and grading
+# statistics, the uploads and EncounterSets, the project's own setup, who is
+# configured on it and which grading scheme it uses. Their grants carry
+# `project_pi` and `collaborator`. None of it includes patient identifiers.
+PROJECT_OVERSIGHT_ROLES = frozenset({
+    "project_pi", "site_pi", "project_admin", "collaborator",
+})
+
+MEDIA_PII_ROLES = frozenset({
+    "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
+    "verifier",
+})
+
 MEDIA_IMAGE_ROLES = frozenset({
     "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
-    "ophthalmologist", "collaborator",
+    "ophthalmologist",
     "analytics_viewer", "dataset_creator", "data_exporter",
     "discrepancy_reviewer", "regrade_adjudicator",
+    "project_pi", "site_pi", "project_admin", "collaborator",
 })
 MEDIA_DOCUMENT_ROLES = frozenset({
     "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
@@ -216,12 +235,12 @@ POLICIES: dict[str, ActionPolicy] = {
         capabilities=MEDIA_IMAGE_CAPABILITIES,
     ),
     "media.ocr_pii.read": ActionPolicy(
-        roles=MEDIA_IMAGE_ROLES,
+        roles=MEDIA_PII_ROLES,
         grant_sources=MEDIA_SESSION_GRANTS,
         capabilities=MEDIA_IMAGE_CAPABILITIES,
     ),
     "media.ocr_pii.process": ActionPolicy(
-        roles=MEDIA_IMAGE_ROLES,
+        roles=MEDIA_PII_ROLES,
         grant_sources=MEDIA_SESSION_GRANTS,
         capabilities=MEDIA_IMAGE_CAPABILITIES,
     ),
@@ -249,7 +268,8 @@ POLICIES: dict[str, ActionPolicy] = {
     # project branch a project analytics_viewer could not see their own
     # project's rows at all.
     "analytics.encounters.view": ActionPolicy(
-        roles=frozenset({"admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist"}),
+        roles=frozenset({"admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist"})
+        | PROJECT_OVERSIGHT_ROLES,
         grant_sources=GENERAL_SCOPE_GRANTS | {
             GrantSource.PROJECT_ROLE,
             GrantSource.LEGACY_PROJECT_CAPABILITY,
@@ -345,6 +365,11 @@ PROJECT_OPERATIONAL_ROLES = frozenset({
 PROJECT_ASSIGNABLE_ROLES = PROJECT_GOVERNANCE_ROLES | PROJECT_OPERATIONAL_ROLES
 
 FIELD_ROLES = frozenset({"field_optometrist", "field_ophthalmologist"})
+
+PROJECT_UPLOADER_ROLES = frozenset({
+    "fileUploader", "pregarded_uploader", "optometrist", "data_manager",
+    "local_admin", "verifier",
+}) | FIELD_ROLES
 MOBILE_FIELD_ROLES = FIELD_ROLES | frozenset({"admin", "optometrist", "ophthalmologist"})
 
 
@@ -395,7 +420,7 @@ def _curation(classical_roles: frozenset[str]) -> ActionPolicy:
 
 ANALYTICS_ROLES = frozenset({
     "admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist",
-})
+}) | PROJECT_OVERSIGHT_ROLES
 
 
 def _universal(roles: frozenset[str]) -> ActionPolicy:
@@ -416,9 +441,6 @@ def _universal(roles: frozenset[str]) -> ActionPolicy:
 UPLOADER_ROLES = frozenset({
     "fileUploader", "pregarded_uploader", "admin", "local_admin", "data_manager", "optometrist",
 })
-
-
-FIELD_ROLES = frozenset({"field_optometrist", "field_ophthalmologist"})
 
 
 def _upload_step(roles: frozenset[str] = UPLOADER_ROLES) -> ActionPolicy:
@@ -471,7 +493,7 @@ def _browse_tasks() -> ActionPolicy:
             GrantSource.PROJECT_ROLE,
             GrantSource.LEGACY_PROJECT_CAPABILITY,
         },
-        project_roles=(CLINICAL_READ_ROLES - {"admin"}) | PROJECT_GOVERNANCE_ROLES,
+        project_roles=(CLINICAL_READ_ROLES - {"admin"}) | PROJECT_OVERSIGHT_ROLES,
     )
 
 def _aggregate_kpi() -> ActionPolicy:
@@ -662,11 +684,13 @@ POLICIES.update({
     "project.encountersets.browse_pii": _project(
         PROJECT_ASSIGNABLE_ROLES - {"collaborator", "analytics_viewer"}
     ),
-    "project.upload.direct_image": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
-    "project.upload.pregraded": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
-    "project.upload.remidio": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
-    "project.upload.encounter_set": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
-    "project.upload.remidio_api_sync": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
+    # Uploading into a project needs an uploading role, not merely a project
+    # relationship. A browser role such as collaborator does not ingest data.
+    "project.upload.direct_image": _project(PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
+    "project.upload.pregraded": _project(PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
+    "project.upload.remidio": _project(PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
+    "project.upload.encounter_set": _project(PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
+    "project.upload.remidio_api_sync": _project(PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
 
     # --- mobile / field ------------------------------------------------------
     "mobile.context.view": _self_only(),
@@ -705,6 +729,8 @@ PRE_GRADING_ACTIONS = frozenset({
     "verification.pregraded.update",
     "verification.encounter_set.update",
     "project.encountersets.browse_pii",
+    "media.ocr_pii.read",
+    "media.ocr_pii.process",
     "screenings.view",
     "admin.users.view",
     "admin.users.manage",

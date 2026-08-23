@@ -55,10 +55,14 @@ DEFAULT_ROLES = [
     ROLE_VERIFIER,
     ROLE_FIELD_OPTOMETRIST,
     ROLE_FIELD_OPHTHALMOLOGIST,
-    "principal_investigator",
-    "co_investigator",
-    "coordinator",
 ]
+
+# `principal_investigator`, `co_investigator` and `coordinator` are not
+# authorization roles and are deliberately absent. The first two are
+# designations recorded on project_investigators, describing who someone is
+# on a project rather than what they may do; capability comes from the
+# project role grant instead. `coordinator` is retired outright. Their rows
+# survive in the roles table with no grants and no holders, pending removal.
 
 def ensure_roles(db, names: Iterable[str] = DEFAULT_ROLES) -> None:
     """Ensure all specified roles exist in the database.

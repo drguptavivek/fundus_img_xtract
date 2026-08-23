@@ -25,6 +25,27 @@ When code and this document disagree, stop and update the policy before changing
 - Admin-global scope applies only to actions whose policy explicitly accepts admin-global scope.
 - A route must load or derive the resource needed by the action before enforcing a resource-specific rule.
 
+## Roles And Designations
+
+A **role** grants capability. A **designation** records who someone is on a
+project - principal investigator, co-investigator - and grants nothing on its
+own. Designations live on `project_investigators`; capability always comes
+from a project role grant. `principal_investigator` and `co_investigator` are
+therefore not in the role catalogue, and no policy may name one.
+
+Designations are not inert. Being a principal or co-investigator carries
+read-only oversight of the project: its analytics and grading statistics,
+the uploads and EncounterSets, the project's own setup, who is configured on
+it and which grading scheme it uses. Their grants carry `project_pi` and
+`collaborator` respectively. Oversight observes and does not act: it grades
+nothing, verifies nothing and adjudicates nothing.
+
+`collaborator` is the non-PII browser role for international collaborators.
+It browses a project's EncounterSets and views images without patient
+identifiers. It does not ingest data, and it does not read identifiers off
+an image: OCR'd text is still an identifier, so the OCR actions exclude both
+`collaborator` and `analytics_viewer`.
+
 ## Patient Identifiers
 
 Identifiers belong to the pre-grading steps. Capturing, uploading and

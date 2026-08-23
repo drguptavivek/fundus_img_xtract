@@ -28,7 +28,7 @@ from models import (
     DirectImageUpload,
     UserDiseaseUnitRole
 )
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 
 
 def get_task_summary(
@@ -64,7 +64,7 @@ def get_task_summary(
     offset = (page - 1) * per_page
     
     # Base query for tasks with eager loads to avoid N+1s.
-    # Avoid explicit joins here because apply_scoping() adds its own joins.
+    # Avoid explicit joins here because the scoping predicate adds its own.
     query = db_session.query(Task).options(
         joinedload(Task.disease),
         joinedload(Task.lab_unit).joinedload(LabUnit.hospital),
@@ -73,7 +73,7 @@ def get_task_summary(
     )
     
     # Apply scoping based on user's lab units or admin override
-    query = apply_scoping(query, Task, current_user, "analytics")
+    query = scope(db_session, query, Task, current_user, 'tasks.view')
     
     # Apply optional filters
     if status_filter:
@@ -158,7 +158,7 @@ def get_task_detail(db_session, task_id: int, mask_pii_override: bool = False) -
     from sqlalchemy.orm import joinedload
     from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
     # Apply scoping to ensure task belongs to user's hospital/lab units
-    query = apply_scoping(db_session.query(Task), Task, current_user, "analytics")
+    query = scope(db_session, db_session.query(Task), Task, current_user, 'tasks.view')
     task = query.filter(Task.id == task_id).options(
         joinedload(Task.consensus),  # Load consensus information
         joinedload(Task.grades)
@@ -324,7 +324,7 @@ def get_tasks_by_status(
     query = db_session.query(Task).join(LabUnit).join(Disease).outerjoin(Image, Task.encounter_file_id == Image.id).outerjoin(DirectImageUpload, Task.direct_image_upload_id == DirectImageUpload.id)
     
     # Apply scoping based on user's lab units or admin override
-    query = apply_scoping(query, Task, current_user, "analytics")
+    query = scope(db_session, query, Task, current_user, 'tasks.view')
     
     # Apply status filter (state in the case of GradingTask)
     query = query.filter(Task.state == status)
@@ -376,7 +376,7 @@ def get_task_stats(db_session, lab_unit_ids: Optional[List[int]] = None) -> Dict
     query = db_session.query(Task)
     
     # Apply scoping based on user's lab units or admin override
-    query = apply_scoping(query, Task, current_user, "analytics")
+    query = scope(db_session, query, Task, current_user, 'tasks.view')
     
     # Count all tasks
     total_tasks = query.count()
@@ -454,7 +454,7 @@ def get_tasks_for_user(
     )
     
     # Apply scoping based on current user's lab units or admin override
-    query = apply_scoping(query, Task, current_user, "analytics")
+    query = scope(db_session, query, Task, current_user, 'tasks.view')
     
     # Apply optional status filter
     if status_filter:

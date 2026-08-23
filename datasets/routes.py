@@ -44,7 +44,7 @@ from utils.dataset_share import (
     verify_share_otp,
 )
 from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
-from utils.hospital_scoping import apply_scoping
+from authz import scope
 from utils.dataset_share_security import clear_failures, is_locked_out, register_failure
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
@@ -153,7 +153,7 @@ def list_datasets():
             if not browse_dataset:
                 browse_message = "Dataset not found."
             else:
-                lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+                lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
                 allowed_lab_units = {lu.id for lu in lab_units_query.all()}
                 stored_filters = {}
                 try:
@@ -220,7 +220,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
         if not dataset:
             return ("Not found", 404)
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
         allowed_lab_units = {lu.id for lu in lab_units_query.all()}
         stored_filters = {}
         try:
@@ -244,7 +244,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = scope(db, query, GradingTask, current_user, 'dataset.curation.view')
         task = query.first()
         if not task:
             return ("Not found", 404)
@@ -324,7 +324,7 @@ def share_dataset():
         if not dataset:
             abort(404)
 
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = {}
         try:
@@ -572,7 +572,7 @@ def toggle_share_status(share_id: int):
             abort(404)
 
         dataset = share.dataset
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
@@ -615,7 +615,7 @@ def regenerate_share_otp(share_id: int):
             abort(404)
 
         dataset = share.dataset
-        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])

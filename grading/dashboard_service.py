@@ -31,7 +31,6 @@ from models import (
     UserDiseaseUnitRole,
 )
 from grading.workbench.revisions import check_revision_eligibility_by_task_state
-from utils.hospital_scoping import apply_scoping
 from utils.timezone_choices import DEFAULT_TIMEZONE
 
 
@@ -415,7 +414,6 @@ def _submission_query(db, *, user, disease_id):
         )
         .filter(EncounterSetGradingSubmission.grader_user_id == user.id)
     )
-    query = apply_scoping(query, PatientEncounters, user, "grading")
     if disease_id:
         query = (
             query.join(
@@ -467,7 +465,6 @@ def _grade_query(db, *, user, history_type, disease_id):
             ~exists(submitted_grade),
         )
     )
-    query = apply_scoping(query, Grade, user, "grading")
     encounter_predicate = or_(
         GradingTask.encounter_set_package_id.is_not(None),
         GradingTask.encounter_set_image_id.is_not(None),

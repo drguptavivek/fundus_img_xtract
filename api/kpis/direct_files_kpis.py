@@ -51,7 +51,14 @@ from .kpiutils import (
 )
 
 
-def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set[int]) -> tuple[pd.DataFrame, Dict]:
+def get_filtered_direct_image_dataframe(
+    db,
+    params: Dict,
+    user_lab_unit_ids: Set[int],
+    *,
+    project_gated: bool = False,
+    user_id: int | None = None,
+) -> tuple[pd.DataFrame, Dict]:
     """
     Generate direct uploads data using the materialized view for performance.
 
@@ -59,6 +66,11 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
         db: Database session.
         params: Filter parameters.
         user_lab_unit_ids: Lab unit IDs user can access.
+        project_gated: When True, a project-owned image is included only if
+            the user holds a project role grant covering it. Aggregate callers
+            leave this False - a count of a lab's throughput is a fact about
+            that lab - while callers returning rows or an export set it True.
+        user_id: Required when project_gated is True.
 
     Returns:
         Tuple of (filtered pandas DataFrame, filters_applied dictionary)
@@ -161,6 +173,29 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
         if user_lab_unit_ids:
             clauses.append("di.lab_unit_id = ANY(:user_lab_unit_ids)")
             params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
+
+        if project_gated:
+            if user_id is None:
+                raise ValueError("project_gated requires user_id")
+            # Rows outside every project keep the lab rule above. A row owned
+            # by a project needs an explicit project role grant covering it,
+            # at project scope or narrowed to this hospital or lab unit.
+            clauses.append("""(
+                di.project_id IS NULL
+                OR EXISTS (
+                    SELECT 1
+                    FROM project_role_grants prg
+                    WHERE prg.user_id = :project_user_id
+                      AND prg.project_id = di.project_id
+                      AND prg.active = TRUE
+                      AND (
+                        prg.scope_type = 'project'
+                        OR (prg.scope_type = 'lab_unit' AND prg.lab_unit_id = di.lab_unit_id)
+                        OR (prg.scope_type = 'hospital' AND prg.hospital_id = di.hospital_id)
+                      )
+                )
+            )""")
+            params_sql["project_user_id"] = int(user_id)
 
         if clauses:
             base_sql += " AND " + " AND ".join(clauses)
@@ -291,7 +326,10 @@ def get_filtered_direct_dataframe():
             )
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_direct_image_dataframe(
+                db, params, user_lab_unit_ids,
+                project_gated=True, user_id=current_user.id,
+            )
             
             # Trim to minimal columns for browser payload
             minimal_columns = [
@@ -404,7 +442,10 @@ def get_filtered_direct_dataframe_excel():
             )
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_direct_image_dataframe(
+                db, params, user_lab_unit_ids,
+                project_gated=True, user_id=current_user.id,
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)

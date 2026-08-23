@@ -44,7 +44,8 @@ def get_filtered_encounter_dataframe(
     user_lab_unit_ids: Set[int],
     current_user_hospital_id: Optional[int] = None,
     current_user_role: Optional[str] = None,
-    user_for_scoping=None
+    user_for_scoping=None,
+    action: str = 'analytics.kpi.encounter_files.view',
 ) -> Tuple[pd.DataFrame, Dict]:
     """
     Generate and filter encounter dataframe based on user permissions and filter parameters.
@@ -55,7 +56,10 @@ def get_filtered_encounter_dataframe(
         user_lab_unit_ids: Set of lab unit IDs user has access to
         current_user_hospital_id: Optional hospital ID of current user (for PII masking)
         current_user_role: Optional role of current user (for PII masking)
-        user_for_scoping: Optional User object for hospital scoping in query
+        user_for_scoping: Optional User object for scoping the query
+        action: Authorization action to scope by. Aggregate callers keep the
+            default; callers returning rows or an export pass the .rows
+            action so project-owned rows require a project relationship.
 
     Returns:
         Tuple of (filtered pandas DataFrame with PII masked, filters_applied dictionary)
@@ -71,7 +75,8 @@ def get_filtered_encounter_dataframe(
             db,
             start_date=params.get('start_date'),
             end_date=params.get('end_date'),
-            user=user_for_scoping
+            user=user_for_scoping,
+            action=action,
         )
         
         # Check if dataframe is empty
@@ -201,7 +206,8 @@ def get_filtered_dataframe():
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(
-                db, params, user_lab_unit_ids, user_for_scoping=current_user
+                db, params, user_lab_unit_ids, user_for_scoping=current_user,
+                action='analytics.kpi.encounter_files.rows',
             )
             
             # Handle NaT values to prevent JSON serialization errors
@@ -262,7 +268,8 @@ def get_filtered_dataframe_excel():
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(
-                db, params, user_lab_unit_ids, user_for_scoping=current_user
+                db, params, user_lab_unit_ids, user_for_scoping=current_user,
+                action='analytics.kpi.encounter_files.rows',
             )
             
             # Handle NaT values to prevent JSON serialization errors

@@ -31,7 +31,8 @@ def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
 @get_db_session()
 def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = None, 
                                      end_date: Optional[datetime] = None,
-                                     user: Optional[User] = None) -> pd.DataFrame:
+                                     user: Optional[User] = None,
+                                     action: str = 'analytics.kpi.encounter_files.view') -> pd.DataFrame:
     """
     Generate encounter-wise upload processing metrics dataframe.
     
@@ -39,6 +40,8 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         db: Database session (handled by context manager)
         start_date: Optional start date filter for encounters
         end_date: Optional end date filter for encounters
+        action: Authorization action to scope by. Defaults to the aggregate
+            KPI action; pass the .rows action when returning rows or an export.
         
     Returns:
         pandas.DataFrame with encounter-wise operational metrics
@@ -46,9 +49,12 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
     # Build base query with all necessary relationships
     query = db.query(PatientEncounters)
     
-    # Apply hospital scoping if user provided
+    # Scope to what this action permits. The default is the aggregate KPI
+    # action, which is not project-gated: a count of what a lab captured is a
+    # fact about that lab's throughput. Callers returning rows or an export
+    # pass the matching .rows action, which is project-gated.
     if user:
-        query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
+        query = scope(db, query, PatientEncounters, user, action)
         
     query = query.options(
         joinedload(PatientEncounters.zip_file),

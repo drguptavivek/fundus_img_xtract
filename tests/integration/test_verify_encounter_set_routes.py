@@ -232,7 +232,7 @@ def test_rebuild_set_packages_preserves_only_ai_grades(
     assert label is not None
     grader = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"package_repair_{uuid.uuid4().hex[:8]}",
         lab_units=[encounter_set_data["lab_unit"]],
     )
@@ -2157,7 +2157,7 @@ def test_verify_encounter_set_wrong_role(client, auth_client_factory, encounter_
     # Actually, residents ARE allowed in media routes, but let's check verification UI roles:
     # @roles_required("admin", "optometrist", "data_manager")
     
-    user = UserFactory.create_by_role(db_session, "resident", username="res_no_verify")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="res_no_verify")
     auth_client = auth_client_factory(user)
     
     response = auth_client.get("/verify_encounter_set/")

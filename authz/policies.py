@@ -7,6 +7,41 @@ from dataclasses import dataclass
 from authz.types import GrantSource
 
 
+# Two different things are called "resident" in this system, and conflating
+# them has produced dead policy conditions more than once.
+#
+#   ROLE  - a user-level qualification held on the User record: what kind of
+#           work this person is licensed to do. `ophthalmologist`,
+#           `data_manager`, `fileUploader` are roles.
+#   SLOT  - a position in the dual-grading workflow for one task: `resident`,
+#           `resident2`, `arbitrator`. A slot is conferred per disease and lab
+#           by UserDiseaseUnitRole, or per project by ProjectGraderAllocation.
+#
+# `resident` happens to exist as both a role name and a slot name; `resident2`
+# and `arbitrator` are slot names only and are not roles at all. A policy's
+# `roles` set may therefore never contain a slot name - it would never match.
+GRADING_SLOT_NAMES = frozenset({"resident", "resident2", "arbitrator"})
+SLOT_ONLY_NAMES = frozenset({"resident2", "arbitrator"})
+
+# The user-level qualification required to grade, whichever slot is being filled.
+CLINICIAN_ROLE = "ophthalmologist"
+
+PROJECT_SCOPE = "project"
+HOSPITAL_SCOPE = "hospital"
+LAB_UNIT_SCOPE = "lab_unit"
+
+_SCOPE_RANK = {LAB_UNIT_SCOPE: 1, HOSPITAL_SCOPE: 2, PROJECT_SCOPE: 3}
+
+
+def _scope_rank(hospital_id, lab_unit_id) -> int:
+    """Rank one grant's breadth: a lab grant is narrower than a whole project."""
+    if lab_unit_id is not None:
+        return _SCOPE_RANK[LAB_UNIT_SCOPE]
+    if hospital_id is not None:
+        return _SCOPE_RANK[HOSPITAL_SCOPE]
+    return _SCOPE_RANK[PROJECT_SCOPE]
+
+
 @dataclass(frozen=True)
 class ActionPolicy:
     """Policy contract for one explicit application action."""
@@ -26,18 +61,31 @@ class ActionPolicy:
     Empty means the project branch accepts the same roles as ``roles``.
     """
 
-    project_wide_only: bool = False
-    """Require a project-wide grant; a lab- or hospital-narrowed one will not do.
+    min_project_scope: str = LAB_UNIT_SCOPE
+    """Narrowest project grant that confers authority for this action.
 
-    The default is that any grant whose scope covers the row authorizes it.
-    When this is set, only a grant issued at project scope qualifies, so
-    someone given access to one lab of a project cannot act on the project as
-    a whole.
+    The grant's scope must match the breadth of the action's effect.
+
+    * ``lab_unit`` (default) - the effect is confined to the rows touched, so
+      any grant covering those rows qualifies and the scope acts as a
+      *filter*: a lab-scoped grantee simply reaches fewer rows.
+    * ``hospital`` - site-level standing is required; a single-lab grant does
+      not qualify.
+    * ``project`` - the effect spans the project, so the scope acts as a
+      *gate*: partial authority confers nothing. Dataset curation is the
+      clearest case, since a dataset drawn from part of a project is not a
+      legitimate project dataset.
+
+    A grant broader than the minimum always qualifies.
     """
 
     def roles_for_project(self) -> frozenset[str]:
         """Roles that authorize this action on a project-owned resource."""
         return self.project_roles or self.roles
+
+    def accepts_project_scope(self, *, hospital_id, lab_unit_id) -> bool:
+        """Whether a grant at this scope is broad enough for the action."""
+        return _scope_rank(hospital_id, lab_unit_id) >= _SCOPE_RANK[self.min_project_scope]
 
 
 GENERAL_SCOPE_GRANTS = frozenset(
@@ -52,13 +100,13 @@ VERIFICATION_ROLES = frozenset({"admin", "local_admin", "fileUploader", "optomet
 
 MEDIA_IMAGE_ROLES = frozenset({
     "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
-    "ophthalmologist", "resident", "resident2", "arbitrator", "collaborator",
+    "ophthalmologist", "collaborator",
     "analytics_viewer", "dataset_creator", "data_exporter",
     "discrepancy_reviewer", "regrade_adjudicator",
 })
 MEDIA_DOCUMENT_ROLES = frozenset({
     "admin", "local_admin", "fileUploader", "optometrist", "data_manager",
-    "ophthalmologist", "resident", "data_exporter",
+    "ophthalmologist", "data_exporter",
 })
 MEDIA_PROJECT_GRANTS = frozenset({
     GrantSource.PROJECT_ROLE,
@@ -74,6 +122,21 @@ MEDIA_IMAGE_CAPABILITIES = frozenset({
     "analytics_view", "dataset_creation", "regrade_adjudication",
 })
 MEDIA_DOCUMENT_CAPABILITIES = frozenset({"browse", "verify", "upload", "data_export"})
+
+
+def _grading_slot() -> ActionPolicy:
+    """Grading policy: the ophthalmologist role plus a matching grading slot.
+
+    The engine requires the actor's roles to intersect ``roles`` *and* a
+    grant from ``grant_sources`` to match the task, so both conditions hold.
+    Project-owned tasks are additionally governed by grader allocation in
+    ``grading_allocation.eligibility``.
+    """
+    return ActionPolicy(
+        roles=frozenset({CLINICIAN_ROLE}),
+        grant_sources=frozenset({GrantSource.GRADING_SLOT}),
+    )
+
 
 POLICIES: dict[str, ActionPolicy] = {
     "media.image.view": ActionPolicy(
@@ -115,10 +178,13 @@ POLICIES: dict[str, ActionPolicy] = {
         roles=frozenset({"fileUploader"}),
         grant_sources=frozenset({GrantSource.UPLOAD_PROFILE}),
     ),
-    "grading.resident.submit": ActionPolicy(
-        roles=frozenset({"resident", "ophthalmologist"}),
-        grant_sources=frozenset({GrantSource.GRADING_SLOT}),
-    ),
+    # Grading needs both halves: the clinician role at user level, and an
+    # allocated slot for that disease and lab. The slot alone is not enough,
+    # and the role alone is not enough. The `resident` role is not used here
+    # because ophthalmologists fill resident slots; no user holds it.
+    "grading.resident.submit": _grading_slot(),
+    "grading.resident2.submit": _grading_slot(),
+    "grading.arbitrator.submit": _grading_slot(),
     "analytics.encounters.view": ActionPolicy(
         roles=frozenset({"admin", "local_admin", "data_manager", "analytics_viewer", "ophthalmologist"}),
         grant_sources=GENERAL_SCOPE_GRANTS,
@@ -166,14 +232,14 @@ ADMIN_DATA_SITE = frozenset({"admin", "data_manager", "local_admin"})
 # Clinical read surface: search, task lists, viewers.
 CLINICAL_READ_ROLES = frozenset({
     "admin", "local_admin", "data_manager", "fileUploader",
-    "ophthalmologist", "optometrist", "resident",
+    "ophthalmologist", "optometrist",
 })
 # Upload and verification operators.
 UPLOAD_OPERATOR_ROLES = frozenset({
     "admin", "local_admin", "data_manager", "fileUploader", "optometrist",
 })
 GRADING_READ_ROLES = frozenset({"admin", "data_manager", "ophthalmologist"})
-GRADING_SUBMIT_ROLES = frozenset({"admin", "ophthalmologist", "resident"})
+GRADING_SUBMIT_ROLES = frozenset({"admin", "ophthalmologist"})
 DATASET_ROLES = frozenset({
     "admin", "local_admin", "data_manager", "dataset_creator",
     "analytics_viewer", "data_exporter",
@@ -217,9 +283,14 @@ def _general(roles: frozenset[str]) -> ActionPolicy:
     return ActionPolicy(roles=roles, grant_sources=GENERAL_SCOPE_GRANTS)
 
 
-def _project(roles: frozenset[str], grants: frozenset[GrantSource] = PROJECT_GRANTS) -> ActionPolicy:
+def _project(
+    roles: frozenset[str],
+    grants: frozenset[GrantSource] = PROJECT_GRANTS,
+    *,
+    min_scope: str = LAB_UNIT_SCOPE,
+) -> ActionPolicy:
     """Policy authorized only by an explicit project relationship."""
-    return ActionPolicy(roles=roles, grant_sources=grants)
+    return ActionPolicy(roles=roles, grant_sources=grants, min_project_scope=min_scope)
 
 
 def _self_only() -> ActionPolicy:
@@ -238,7 +309,7 @@ def _curation(classical_roles: frozenset[str]) -> ActionPolicy:
         roles=classical_roles,
         grant_sources=GENERAL_SCOPE_GRANTS | {GrantSource.PROJECT_ROLE},
         project_roles=frozenset({"dataset_creator"}),
-        project_wide_only=True,
+        min_project_scope=PROJECT_SCOPE,
     )
 
 
@@ -358,16 +429,21 @@ POLICIES.update({
     "glaucoma_ai.result.view": _general(UPLOAD_OPERATOR_ROLES | {"ophthalmologist"}),
     "glaucoma_ai.upload.create": _general(UPLOAD_OPERATOR_ROLES | {"ophthalmologist"}),
 
-    # --- projects: explicit project relationship only ------------------------
-    "project.view": _project(PROJECT_ASSIGNABLE_ROLES),
-    "project.encountersets.browse": _project(PROJECT_ASSIGNABLE_ROLES),
-    "project.encountersets.browse_pii": _project(PROJECT_ASSIGNABLE_ROLES - {"collaborator"}),
-    "project.access.manage": _project(frozenset({"project_admin"})),
-    "project.uploaders.manage": _project(frozenset({"project_admin"})),
-    "project.wai.run": _project(frozenset({"verifier", "optometrist"})),
+    # --- projects ------------------------------------------------------------
+    # Gate actions: the effect spans the project, so partial authority confers
+    # nothing and only a project-wide grant qualifies.
+    "project.view": _project(PROJECT_ASSIGNABLE_ROLES, min_scope=PROJECT_SCOPE),
+    "project.access.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
+    "project.uploaders.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
+    "project.wai.run": _project(frozenset({"verifier", "optometrist"}), min_scope=PROJECT_SCOPE),
     "project.wai.results": _project(frozenset({
         "project_pi", "site_pi", "project_admin", "optometrist",
-    })),
+    }), min_scope=PROJECT_SCOPE),
+
+    # Filter actions: the effect is confined to the rows touched, so a
+    # narrower grant simply reaches fewer rows.
+    "project.encountersets.browse": _project(PROJECT_ASSIGNABLE_ROLES),
+    "project.encountersets.browse_pii": _project(PROJECT_ASSIGNABLE_ROLES - {"collaborator"}),
     "project.upload.direct_image": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
     "project.upload.pregraded": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),
     "project.upload.remidio": _project(PROJECT_ASSIGNABLE_ROLES, PROJECT_UPLOAD_GRANTS),

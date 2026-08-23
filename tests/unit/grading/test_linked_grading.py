@@ -59,7 +59,7 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
     # 1. Create User eligible ONLY for Glaucoma
     user = UserFactory.create_with_permissions(
         db_session,
-        role_name='resident',
+        role_name='ophthalmologist',
         username='test_partial_eligibility',
         disease_id=glaucoma.id,
         lab_unit_id=lab_unit.id,

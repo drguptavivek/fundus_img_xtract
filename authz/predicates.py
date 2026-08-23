@@ -213,9 +213,9 @@ def _project_branch(
     conditions: list[ColumnElement] = []
 
     def usable(grant) -> bool:
-        # Mirrors the project_wide_only check in engine.authorize.
-        return not policy.project_wide_only or (
-            grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
+        # Mirrors the min_project_scope check in engine.authorize.
+        return policy.accepts_project_scope(
+            hospital_id=grant.attr("hospital_id"), lab_unit_id=grant.attr("lab_unit_id")
         )
 
     if GrantSource.PROJECT_ROLE in sources:
@@ -335,8 +335,8 @@ def reachable_lab_unit_ids(db, resolved: ResolvedGrants, action: str) -> frozens
     policy_roles = {r.lower() for r in policy.roles_for_project()}
 
     def _usable(grant) -> bool:
-        return not policy.project_wide_only or (
-            grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
+        return policy.accepts_project_scope(
+            hospital_id=grant.attr("hospital_id"), lab_unit_id=grant.attr("lab_unit_id")
         )
 
     if GrantSource.PROJECT_ROLE in sources:

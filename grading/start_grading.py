@@ -22,7 +22,7 @@ def register_routes(bp):
     )
 
 
-@roles_required("resident", "ophthalmologist")
+@roles_required("ophthalmologist")
 def start_grading(disease_id: int, role_slot: str):
     """
     Start grading for a specific disease and role slot.
@@ -84,7 +84,7 @@ def start_grading(disease_id: int, role_slot: str):
         )
 
 
-@roles_required("resident", "ophthalmologist")
+@roles_required("ophthalmologist")
 def linked_followup(primary_disease_id: int, linked_disease_id: int):
     with transaction_scope() as db:
         primary_disease = db.query(Disease).filter(Disease.id == primary_disease_id).first()

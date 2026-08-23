@@ -21,7 +21,14 @@ from utils.hospital_scoping import apply_scoping
 
 @api_bp.route('/hospitals', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_hospitals_list():
     """Get accessible hospitals for current user (hospital-aware)."""
     with get_db_session() as db:
@@ -42,7 +49,14 @@ def get_hospitals_list():
 
 @api_bp.route('/hospitals/<int:hospital_id>', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_hospital_by_id(hospital_id):
     """Get a specific hospital by ID (hospital-aware)."""
     with get_db_session() as db:

@@ -21,7 +21,14 @@ from utils.hospital_scoping import apply_scoping
 
 @api_bp.route('/hospitals/<int:hospital_id>/labunits', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_lab_units_by_hospital(hospital_id):
     """Get all lab units for a specific hospital."""
     with get_db_session() as db:
@@ -48,7 +55,14 @@ def get_lab_units_by_hospital(hospital_id):
 
 @api_bp.route('/labunits', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_all_lab_units_list():
     """Get all lab units."""
     with get_db_session() as db:
@@ -75,7 +89,14 @@ def get_all_lab_units_list():
 
 @api_bp.route('/labunits/<int:lab_unit_id>', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_lab_unit_by_id(lab_unit_id):
     """Get a specific lab unit by ID."""
     with get_db_session() as db:

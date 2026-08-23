@@ -393,12 +393,17 @@ def ophthalmologist_user(db_session, core_test_data):
 
 @pytest.fixture
 def resident_user(db_session, core_test_data):
-    """Create a resident user with grading permissions"""
+    """A clinician holding the resident grading slot.
+
+    "resident" here is the grading *slot*, conferred by the
+    can_grade_resident flag below. The user-level qualification to grade any
+    slot is the ophthalmologist role; there is no `resident` role.
+    """
     from tests.helpers.factories import UserFactory
-    
+
     user = UserFactory.create_with_permissions(
         db_session,
-        role_name='resident',
+        role_name='ophthalmologist',
         disease_id=core_test_data['glaucoma'].id,
         lab_unit_id=core_test_data['lab_unit'].id,
         can_grade_resident=True
@@ -457,7 +462,7 @@ def test_users(db_session, core_test_data):
         ),
         'resident': UserFactory.create_with_permissions(
             db_session,
-            role_name='resident',
+            role_name='ophthalmologist',
             username='test_resident',
             disease_id=glaucoma.id,
             lab_unit_id=lab_unit.id,

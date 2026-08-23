@@ -32,7 +32,7 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     admin = UserFactory.create_admin(db_session, username=f"api_allocation_admin_{suffix}")
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"api_allocation_resident_{suffix}",
         lab_units=[],
     )

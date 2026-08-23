@@ -70,7 +70,7 @@ def _build_history_panel_context(
     }
 
 
-@roles_required("resident", "ophthalmologist")
+@roles_required("ophthalmologist")
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     with transaction_scope() as db:

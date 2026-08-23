@@ -30,7 +30,7 @@ def register_routes(bp):
 
 
 @login_required
-@roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+@roles_required("resident2", "ophthalmologist", "arbitrator", "admin")
 def encounter_set_grading(uuid):
     """Display encounter set for grading with sync-grid viewer."""
     with transaction_scope() as db:
@@ -90,7 +90,7 @@ def encounter_set_grading(uuid):
 
 
 @login_required
-@roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+@roles_required("resident2", "ophthalmologist", "arbitrator", "admin")
 def encounter_set_submit():
     """Submit grade for an encounter set."""
     from auth.utils import utcnow

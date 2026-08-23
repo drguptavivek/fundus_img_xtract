@@ -206,7 +206,7 @@ def test_save_and_restore_encounter_set_edit_uses_effective_paths(
 
 def test_edit_encounter_set_image_wrong_role(client, auth_client_factory, encounter_set_with_images, db_session):
     """Test that residents cannot edit encounter set images."""
-    user = UserFactory.create_by_role(db_session, "resident", username="res_no_edit")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="res_no_edit")
     auth_client = auth_client_factory(user)
 
     image = encounter_set_with_images['images'][0]

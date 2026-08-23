@@ -27,7 +27,6 @@ from utils.hospital_scoping import apply_scoping
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def search_route() -> str:

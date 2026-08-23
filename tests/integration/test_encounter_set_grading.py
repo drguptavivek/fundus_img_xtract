@@ -221,7 +221,7 @@ def test_grading_encounter_set_route(client, auth_client_factory, verified_encou
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_grader")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_grader")
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/grading/encounter_set/{task.uuid}")
@@ -268,7 +268,7 @@ def test_grading_encounter_set_shows_all_9_positions(client, auth_client_factory
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_grid")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_grid")
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/grading/encounter_set/{task.uuid}")
@@ -294,7 +294,7 @@ def test_grading_encounter_set_shows_not_gradable_images(client, auth_client_fac
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_not_gradable")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_not_gradable")
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/grading/encounter_set/{task.uuid}")
@@ -331,7 +331,7 @@ def test_submit_grade_for_encounter_set(client, auth_client_factory, verified_en
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_submit")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_submit")
     auth_client = auth_client_factory(user)
 
     grade_data = {
@@ -412,7 +412,7 @@ def test_media_route_serves_edited_image_first(client, auth_client_factory, veri
     img.edited_filename = "pos_1_edited.jpg"
     db_session.flush()
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_media")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_media")
     auth_client = auth_client_factory(user)
 
     # The edited image route should work
@@ -440,7 +440,7 @@ def test_grading_page_includes_sync_zoom_javascript(client, auth_client_factory,
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_sync")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_sync")
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/grading/encounter_set/{task.uuid}")
@@ -464,7 +464,7 @@ def test_grading_page_has_toggle_sync_button(client, auth_client_factory, verifi
         lab_unit_id=encounter.lab_unit_id
     )
 
-    user = UserFactory.create_by_role(db_session, "resident", username="resident_toggle")
+    user = UserFactory.create_by_role(db_session, "ophthalmologist", username="resident_toggle")
     auth_client = auth_client_factory(user)
 
     response = auth_client.get(f"/grading/encounter_set/{task.uuid}")

@@ -447,7 +447,7 @@ def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_liv
     project, _profile = _project_with_image_target(db_session, disease)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"bulk_eligibility_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -531,7 +531,7 @@ def test_eligibility_snapshot_is_cached_and_invalidatable(
     project, _profile = _project_with_image_target(db_session, disease)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"cached_eligibility_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -571,7 +571,7 @@ def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data
     lab = db_session.merge(core_test_data["lab_unit"])
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -602,7 +602,7 @@ def test_enabled_project_policy_uses_exact_project_allocation(db_session, core_t
     project, _profile = _project_with_image_target(db_session, disease)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"project_resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -651,7 +651,7 @@ def test_next_task_queue_uses_project_resident_allocation_for_resident2(
     project, _profile = _project_with_image_target(db_session, disease)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"queue_project_resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -753,7 +753,7 @@ def test_disabled_project_policy_preserves_legacy_eligibility(db_session, core_t
     project, _profile = _project_with_image_target(db_session, disease)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"legacy_project_resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -791,7 +791,7 @@ def test_service_creates_normalized_allocation_and_treats_arbitrator_as_optional
     )
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"service_resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
@@ -827,7 +827,7 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
     admin = UserFactory.create_admin(db_session, username=f"media_admin_{suffix}")
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"media_resident_{suffix}",
         lab_units=[],
     )
@@ -871,7 +871,7 @@ def test_service_enables_enforcement_with_resident_coverage_only(
     admin = UserFactory.create_admin(db_session, username=f"policy_admin_{suffix}")
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"policy_resident_{suffix}",
         lab_units=[lab],
     )

@@ -44,7 +44,10 @@ def test_upload_create_requires_upload_profile_relationship() -> None:
 
 
 def test_grading_submit_requires_matching_slot_relationship() -> None:
-    actor = AuthzActor(id=1, roles=frozenset({"resident"}), hospital_id=10)
+    # Grading requires the ophthalmologist role at user level plus a matching
+    # slot. The `resident` role was dropped from the policy: ophthalmologists
+    # fill resident slots and no user holds `resident`.
+    actor = AuthzActor(id=1, roles=frozenset({"ophthalmologist"}), hospital_id=10)
     task = ResourceRef(
         type="grading_task",
         id=100,

@@ -23,7 +23,7 @@ def test_dme_eligibility_uses_dr_permissions(db_session, core_test_data):
 
     user = UserFactory.create_with_permissions(
         db_session,
-        role_name='resident',
+        role_name='ophthalmologist',
         disease_id=dr.id,
         lab_unit_id=lab_unit.id,
         can_grade_resident=True,

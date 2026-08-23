@@ -990,9 +990,9 @@ def pregraded_grades():
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
             role_names = {role.name.lower() for role in grader.roles}
-            if form_role == ROLE_RESIDENT and not ({"resident", "ophthalmologist"} & role_names):
+            if form_role == ROLE_RESIDENT and "ophthalmologist" not in role_names:
                 processing_logger.warning(
-                    "Grader %s lacks resident role",
+                    "Grader %s lacks the ophthalmologist role",
                     sanitize_log_value(grader_user_id),
                 )
                 flash("Selected user is not eligible for resident grading.", "danger")

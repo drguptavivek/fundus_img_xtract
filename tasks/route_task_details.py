@@ -19,7 +19,6 @@ from . import bp
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def view_task_details(task_id: int):
@@ -70,7 +69,6 @@ def view_task_details(task_id: int):
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def all_tasks_viewer(image_uuid: str):

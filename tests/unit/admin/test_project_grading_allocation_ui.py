@@ -55,7 +55,7 @@ def test_project_workspace_renders_grader_allocation_editor(
     admin.lab_units.append(lab)
     resident = UserFactory.create_by_role(
         db_session,
-        "resident",
+        "ophthalmologist",
         username=f"allocation_ui_resident_{suffix}",
         lab_units=[lab],
     )

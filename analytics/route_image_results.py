@@ -47,7 +47,6 @@ TASK_STATE_OPTIONS: tuple[str, ...] = (
     "ophthalmologist",
     "data_manager",
     "analytics_viewer",
-    "resident",
     "optometrist",
 )
 def image_results() -> str:

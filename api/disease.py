@@ -8,7 +8,13 @@ from utils.utils import get_db_session
 from . import api_bp
 
 @api_bp.route("/disease-grades/<int:disease_id>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+)
 def get_disease_grades(disease_id: int):
     """API endpoint to get grades applicable to a specific disease."""
     with get_db_session() as db:
@@ -35,7 +41,13 @@ def get_disease_grades(disease_id: int):
 
 
 @api_bp.route("/diseases-with-gradings", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+)
 def get_diseases_with_gradings():
     """API endpoint to get all diseases with their associated gradings."""
     with get_db_session() as db:
@@ -61,7 +73,13 @@ def get_diseases_with_gradings():
 
  
 @api_bp.route("/diseases-gradings-features/<int:disease_id>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+)
 def get_disease_gradings_features(disease_id: int):
     """API endpoint to get all gradings and features associated with a disease."""
     with get_db_session() as db:

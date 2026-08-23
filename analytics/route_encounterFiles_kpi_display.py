@@ -25,7 +25,6 @@ from utils.date_utils import parse_date_yyyy_mm_dd
     "ophthalmologist",
     "data_manager",
     "analytics_viewer",
-    "resident",
     "optometrist",
 )
 def encounter_files() -> str:

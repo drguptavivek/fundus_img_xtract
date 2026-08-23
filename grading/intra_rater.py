@@ -65,7 +65,7 @@ def register_routes(bp) -> None:
     )
 
 
-@roles_required("resident", "ophthalmologist", "admin")
+@roles_required("ophthalmologist", "admin")
 def intra_rater_task(task_uuid: str):
     """Display a pending intra-rater reassessment."""
     resume_slot = (request.args.get("resume_slot") or "").strip().lower() or None
@@ -174,7 +174,7 @@ def intra_rater_task(task_uuid: str):
         )
 
 
-@roles_required("resident", "ophthalmologist", "admin")
+@roles_required("ophthalmologist", "admin")
 def intra_rater_feature_geometry(task_uuid: str):
     """Fetch stored feature geometry for an intra-rater task."""
     task_uuid = (task_uuid or "").strip()
@@ -241,7 +241,7 @@ def intra_rater_feature_geometry(task_uuid: str):
         )
 
 
-@roles_required("resident", "ophthalmologist", "admin")
+@roles_required("ophthalmologist", "admin")
 def intra_rater_submit():
     """Persist an intra-rater grade and continue the grading flow."""
     action = (request.form.get("action") or "").strip().lower()

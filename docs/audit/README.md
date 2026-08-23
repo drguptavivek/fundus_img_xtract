@@ -119,6 +119,7 @@ This directory contains comprehensive audit documentation for all Flask blueprin
 ## Related Documents
 
 - [Comprehensive Audit Report](COMPREHENSIVE_AUDIT_REPORT.md) - Full report
+- [Permissions & Scoping Audit (2026-08)](PERMISSIONS_SCOPING_AUDIT_2026-08.md) - Functionality-wise route/scoping audit with ranked findings
 - [Code Quality Report](../CODE_QUALITY_REPORT.md) - Security scan results
 - [PII Exposure Control Policy](../PII_Exposure_Control_Policy.md) - PII policy
 - [Security Conventions](../10-DEVELOP/Security.md) - Security guidelines

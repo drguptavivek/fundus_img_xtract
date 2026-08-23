@@ -34,7 +34,6 @@ from utils.final_grade_basis import normalize_final_grade_basis
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def search_images_route() -> str:
@@ -314,7 +313,6 @@ def search_images_route() -> str:
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def search_image_detail(task_id: int) -> str:

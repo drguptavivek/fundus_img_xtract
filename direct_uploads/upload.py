@@ -17,7 +17,14 @@ load_environment()
 
 
 @bp.route("/upload", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def upload_index():
     eligibility = get_user_uploadVerify_eligibility(current_user.id)
     return render_template("direct_uploads/index.html", eligibility=eligibility)

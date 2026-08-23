@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app_cache import cache
+from authz.policies import CLINICIAN_ROLE
 from grading_allocation.constants import AllocationCapacity, capacity_for_role_slot
 from grading_allocation.dtos import TaskAllocationContext
 from grading_allocation.exceptions import AllocationContextError
@@ -308,9 +309,18 @@ def _role_names_have_capacity(
     role_names: frozenset[str],
     capacity: AllocationCapacity,
 ) -> bool:
-    if capacity == AllocationCapacity.RESIDENT:
-        return bool(role_names & {"resident", "resident2", "ophthalmologist"})
-    return bool(role_names & {"arbitrator", "ophthalmologist"})
+    """Whether the user's global roles qualify them to fill a grading slot.
+
+    This checks the user-level qualification only; the slot itself comes from
+    UserDiseaseUnitRole or ProjectGraderAllocation and is checked separately,
+    so both halves must hold.
+
+    ``resident2`` and ``arbitrator`` are slot names, not roles - no such rows
+    exist in the roles table - so testing for them here never matched. The
+    qualification to grade, whichever slot is being filled, is the
+    ``ophthalmologist`` role.
+    """
+    return CLINICIAN_ROLE in role_names
 
 
 def _allocation_key(

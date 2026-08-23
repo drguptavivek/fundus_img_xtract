@@ -75,7 +75,6 @@ def _encounter_results_cache_key() -> str:
     "ophthalmologist",
     "data_manager",
     "analytics_viewer",
-    "resident",
     "optometrist",
 )
 @cache.cached(

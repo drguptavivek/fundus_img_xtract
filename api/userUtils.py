@@ -8,7 +8,14 @@ from . import api_bp
 
 @api_bp.route("/eligibleLabUnit", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_eligible_lab_units():
     """API endpoint to get eligible lab units for the current user (hospital-aware)."""
     from utils.hospital_scoping import get_user_lab_units_in_hospital
@@ -48,7 +55,14 @@ def get_eligible_lab_units():
 
 @api_bp.route("/eligibleLabUnitCurrentUser", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 def get_eligible_lab_units_currentUser():
     """API endpoint to get eligible lab units for the current user only (hospital-aware)."""
     from utils.hospital_scoping import get_user_lab_units_in_hospital

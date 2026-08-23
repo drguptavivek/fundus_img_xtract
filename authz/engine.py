@@ -29,9 +29,10 @@ def authorize(
     for grant in grants:
         if grant.source not in policy.grant_sources:
             continue
-        if grant.source in _PROJECT_SOURCES and policy.project_wide_only and not _is_project_wide(grant):
-            # A lab- or hospital-narrowed grant cannot authorize an action that
-            # is defined over the project as a whole.
+        if grant.source in _PROJECT_SOURCES and not policy.accepts_project_scope(
+            hospital_id=grant.attr("hospital_id"), lab_unit_id=grant.attr("lab_unit_id")
+        ):
+            # The grant is narrower than the breadth of this action's effect.
             continue
         if _grant_matches(actor, resource, action, grant) and _grant_supplies_authority(
             actor_role_matches, policy.roles, policy.roles_for_project(), policy.capabilities, grant
@@ -49,11 +50,6 @@ _PROJECT_SOURCES = frozenset({
     GrantSource.LEGACY_PROJECT_CAPABILITY,
     GrantSource.PROJECT_COLLABORATOR,
 })
-
-
-def _is_project_wide(grant: RelationshipGrant) -> bool:
-    """Whether a project grant covers the whole project rather than one part."""
-    return grant.attr("lab_unit_id") is None and grant.attr("hospital_id") is None
 
 
 def _grant_supplies_authority(

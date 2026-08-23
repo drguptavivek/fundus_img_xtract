@@ -23,7 +23,6 @@ from . import bp
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def all_tasks() -> str:

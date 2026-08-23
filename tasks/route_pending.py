@@ -17,7 +17,6 @@ from . import bp
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
 )
 def pending() -> str:

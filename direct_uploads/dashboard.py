@@ -111,7 +111,14 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
         )
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "ophthalmologist",
+    "optometrist",
+    "fileUploader",
+)
 @rate_limit("10000 per hour, 500 per minute", methods=["GET"])  # More permissive for pagination/browsing
 @rate_limit("3000 per hour, 60 per minute", methods=["POST"])   # More restrictive for operations
 def dashboard():

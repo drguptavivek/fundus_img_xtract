@@ -11,8 +11,11 @@ from db_transaction_manager import get_db_session, transaction_scope
 
 ROLE_ADMIN = "admin"
 ROLE_LOCAL_ADMIN = "local_admin"  # Site Admin
+# There is deliberately no ROLE_RESIDENT. "resident" is a grading *slot*,
+# not a user-level role: the qualification to grade any slot is
+# ROLE_OPHTHALMOLOGIST, and which slot a clinician may fill comes from their
+# grading slot or project allocation. See authz.policies for the vocabulary.
 ROLE_OPHTHALMOLOGIST = "ophthalmologist"
-ROLE_RESIDENT = "resident"
 ROLE_OPTOMETRIST = "optometrist"
 ROLE_DATA_MANAGER = "data_manager"
 ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
@@ -38,7 +41,6 @@ DEFAULT_ROLES = [
     "fileUploader",
     "ophthalmologist",
     "data_manager",
-    "resident",
     "optometrist",
     "discrepancy_reviewer",
     "data_exporter",

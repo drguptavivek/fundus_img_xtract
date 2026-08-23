@@ -5,3 +5,19 @@ zone = "web"
 description = "Submit a resident grade for a grading task using an active grading slot."
 resource_type = "grading_task"
 requires_resource = true
+
+[[actions]]
+name = "grading.resident2.submit"
+domain = "grading"
+zone = "web"
+description = "Submit a second-reader grade for a grading task using an active grading slot."
+resource_type = "grading_task"
+requires_resource = true
+
+[[actions]]
+name = "grading.arbitrator.submit"
+domain = "grading"
+zone = "web"
+description = "Submit an arbitration grade for a grading task using an active grading slot."
+resource_type = "grading_task"
+requires_resource = true

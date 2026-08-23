@@ -17,6 +17,9 @@ When code and this document disagree, stop and update the policy before changing
   remain on their documented classical or staged project-scoping rules until
   they are migrated explicitly.
 - Grading access is granted by grading slots, not by lab-unit scope alone.
+- A project grant's scope must match the breadth of the action's effect. Where the effect is confined to the rows touched, the scope filters rows and the narrowest grant qualifies. Where the effect spans the project, only a project-wide grant qualifies.
+- The hospitals and lab units a project grant may name are derived from the project's configured lab units; a grant can never reach a lab the project does not use.
+- Grading of project-owned tasks is governed by grader allocation, not by project role grants.
 - General scoped access is granted by admin-global scope, hospital scope, or explicit lab-unit assignment.
 - Local-admin hospital scope applies only inside the user's hospital.
 - Admin-global scope applies only to actions whose policy explicitly accepts admin-global scope.
@@ -238,9 +241,26 @@ These rules cover actions that currently have executable entries in `authz/polic
 
 ### `grading.resident.submit`
 
-- Rule: A user may submit a resident grade only when the user has the `resident` or `ophthalmologist` role and has an active grading-slot relationship for the task disease and lab unit with `can_grade_resident`.
-- Relationship source: `grading_slot`.
-- Resource: `grading_task`.
+- Rule: A user may submit a resident grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits the resident role.
+- Rule: A grading slot alone does not authorize grading, and the clinician role alone does not either. Both must hold.
+- Rule: The `admin` role does not stand in for the clinician role; grading is clinical work.
+- Rule: Grading of a project-owned task is additionally governed by grader allocation, not by a project role grant.
+- Relationship source: grading slot.
+- Resource: grading task (required).
+
+### `grading.resident2.submit`
+
+- Rule: A user may submit a second-reader grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits the second-reader role.
+- Rule: A slot permitting the resident role does not permit the second-reader role; each slot authorizes only its own step of the workflow.
+- Relationship source: grading slot.
+- Resource: grading task (required).
+
+### `grading.arbitrator.submit`
+
+- Rule: A user may submit an arbitration grade only when the user holds the `ophthalmologist` role at user level and an active grading slot for that task's disease and lab unit permits arbitration.
+- Rule: A slot permitting the resident or second-reader role does not permit arbitration.
+- Relationship source: grading slot.
+- Resource: grading task (required).
 
 ### `analytics.encounters.view`
 
@@ -762,9 +782,10 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `project.access.manage`
 
-- Rule: A user may grant or revoke project role assignments for other users only when the user has one of `project_admin` through an explicit project role grant or a legacy project capability row for that project.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
-- Relationship source: project authority.
+- Rule: A user may grant or revoke project role assignments for other users only when the user holds one of `project_admin` on that project through a **project-wide** role grant.
+- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action.
+- Relationship source: project-wide project authority.
 - Resource: project (required).
 
 ### `project.encountersets.browse`
@@ -818,34 +839,35 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `project.uploaders.manage`
 
-- Rule: A user may assign upload profiles and uploader access within a project only when the user has one of `project_admin` through an explicit project role grant or a legacy project capability row for that project.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
-- Relationship source: project authority.
+- Rule: A user may assign upload profiles and uploader access within a project only when the user holds one of `project_admin` on that project through a **project-wide** role grant.
+- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action.
+- Relationship source: project-wide project authority.
 - Resource: project (required).
 
 ### `project.view`
 
-- Rule: A user may view a project overview and its configuration summary only when the user has one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
-- Relationship source: project authority.
+- Rule: A user may view a project overview and its configuration summary only when the user holds one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` on that project through a **project-wide** role grant.
+- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action.
+- Relationship source: project-wide project authority.
 - Resource: project (required).
 
 ### `project.wai.results`
 
-- Rule: A user may view Wadhwani AI inference results for a project only when the user has one of `optometrist`, `project_admin`, `project_pi`, `site_pi` through an explicit project role grant or a legacy project capability row for that project.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
-- Relationship source: project authority.
+- Rule: A user may view Wadhwani AI inference results for a project only when the user holds one of `optometrist`, `project_admin`, `project_pi`, `site_pi` on that project through a **project-wide** role grant.
+- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action.
+- Relationship source: project-wide project authority.
 - Resource: project (required).
 
 ### `project.wai.run`
 
-- Rule: A user may trigger Wadhwani AI inference for project encounters only when the user has one of `optometrist`, `verifier` through an explicit project role grant or a legacy project capability row for that project.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
-- Relationship source: project authority.
+- Rule: A user may trigger Wadhwani AI inference for project encounters only when the user holds one of `optometrist`, `verifier` on that project through a **project-wide** role grant.
+- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action.
+- Relationship source: project-wide project authority.
 - Resource: project (required).
-
-
-## Domain: public
 
 ### `public.view`
 

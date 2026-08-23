@@ -491,6 +491,20 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `dataset.curation.view`
 
+- Rule: A user may view dataset curation screens for a row that belongs to no project when the user has one of `admin`, `analytics_viewer`, `data_exporter`, `data_manager`, `dataset_creator`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the row.
+- Rule: A user may view dataset curation screens for a row owned by a project only when the user holds `dataset_creator` on that project through a project-wide role grant. A grant scoped to one lab unit or one hospital of the project does not authorize curation of the project's data, and lab-unit assignment alone never reaches a project row.
+- Rule: Legacy project capability rows do not confer dataset curation.
+- Relationship source: classical scope for unowned rows; project-wide project authority for owned rows.
+- Resource: dataset (not required).
+
+### `dataset.curation.update`
+
+- Rule: A user may update curated dataset membership, screening state, and metadata when the user has one of `admin`, `dataset_creator` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Relationship source: classical scope.
+- Resource: dataset (required).
+
+### `dataset.curation.view`
+
 - Rule: A user may view curated datasets, dataset candidates, galleries, and dataset details when the user has one of `admin`, `analytics_viewer`, `data_exporter`, `data_manager`, `dataset_creator`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
 - Relationship source: classical scope.
 - Resource: dataset (not required).

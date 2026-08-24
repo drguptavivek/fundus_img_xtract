@@ -1028,19 +1028,66 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `project.wai.results`
 
-- Rule: A user may view Wadhwani AI inference results for a project only when the user holds one of `optometrist`, `project_admin`, `project_pi`, `site_pi` on that project through a **project-wide** role grant.
-- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action.
-- Relationship source: project-wide project authority.
+- Rule: A user may view Wadhwani AI inference results for a project when the user holds one of `optometrist`, `ophthalmologist`, `verifier`, `data_manager`, `analytics_viewer`, `project_admin`, `project_pi`, `site_pi`, `field_optometrist`, `field_ophthalmologist` on that project through a role grant.
+- Rule: The grant's own scope decides how much of the project is reached. A lab-scoped grant reaches that lab's inference results; a project-wide grant reaches the project. This is a filter, not a gate: partial authority confers partial reach rather than nothing.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action on project data.
+- Relationship source: project role grant, or an upload profile assignment covering the same (project, lab unit).
 - Resource: project (required).
 
 ### `project.wai.run`
 
-- Rule: A user may trigger Wadhwani AI inference for project encounters only when the user holds one of `optometrist`, `verifier` on that project through a **project-wide** role grant.
-- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action.
-- Relationship source: project-wide project authority.
+- Rule: A user may trigger Wadhwani AI inference for project encounters when the user holds one of `optometrist`, `verifier`, `field_optometrist`, `field_ophthalmologist` on that project through a role grant.
+- Rule: The grant's own scope decides which encounters. A lab-scoped grant authorizes inference in that lab only.
+- Rule: Hospital scope or lab-unit assignment alone never grants this action on project data.
+- Relationship source: project role grant, or an upload profile assignment covering the same (project, lab unit).
 - Resource: project (required).
+
+## Remote inference (WAI)
+
+Inference output is read at the verification stage, before grading, which is
+why it is registered under `inference.` rather than `analytics.` and why the
+row-level action is allowed to show patient identifiers.
+
+Reach follows lab-unit allocation on both sides of the project boundary, and
+additionally follows upload profile assignments. That last part is load-bearing:
+an automated Remidio API pull is created by a schedule, not a person, so it
+carries no uploading user, and the WAI inferences that run automatically on
+those pulls inherit the same gap. Field staff therefore reach them through the
+lab units their upload profiles cover, never through ownership. Because the
+reach is the lab unit rather than the profile, a project running a manual
+profile alongside an automated one still resolves correctly: an assignment to
+either profile in lab L reaches everything in lab L, whichever profile ingested
+it. Ownership is offered as a *filter* over that set; it is never the gate,
+because gating on it would hide exactly the automated rows field staff need.
+
+### `inference.wai.summary`
+
+- Rule: A user may view aggregate WAI inference statistics when the user holds one of `admin`, `local_admin`, `verifier`, `data_manager`, `analytics_viewer`, `optometrist`, `ophthalmologist`, `field_optometrist`, `field_ophthalmologist`.
+- Rule: Outside a project the reach is the actor's own lab units. Inside one it is the lab units a project role grant or an upload profile assignment allocates to them.
+- Rule: `admin` is unrestricted.
+- Relationship source: lab-unit assignment, hospital scope, project role grant, or upload profile assignment.
+- Resource: inference run (not required).
+
+### `inference.wai.rows`
+
+- Rule: Same roles and same reach as `inference.wai.summary`.
+- Rule: This action returns rows carrying patient identifiers and is therefore marked pre-grading. Whether identifiers are actually rendered still depends on the reader's role through the masking layer; a non-PII role such as `analytics_viewer` sees them masked.
+- Relationship source: lab-unit assignment, hospital scope, project role grant, or upload profile assignment.
+- Resource: inference run (not required).
+
+### `inference.wai.retry`
+
+- Rule: A user may re-queue a failed WAI inference run when the user holds one of `admin`, `local_admin`, `data_manager`, within the lab units allocated to them.
+- Rule: Narrower than reading, because a retry spends an external API call.
+- Relationship source: lab-unit assignment, hospital scope, project role grant, or upload profile assignment.
+- Resource: inference run (required).
+
+### `inference.wai.run`
+
+- Rule: A user may request a WAI inference on a grading task when the user holds one of `admin`, `verifier`, `optometrist`, `field_optometrist`, `field_ophthalmologist`, within the lab units allocated to them.
+- Rule: This applies on both sides of the project boundary. A classical task is reached through the actor's own lab units; a project task through a project role grant or an upload profile assignment for that project and lab.
+- Relationship source: lab-unit assignment, hospital scope, project role grant, or upload profile assignment.
+- Resource: grading task (required).
 
 ### `public.view`
 

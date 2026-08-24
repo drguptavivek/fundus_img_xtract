@@ -7,7 +7,7 @@ Two shapes of project action:
   rows. Browsing and uploads work this way.
 * **Gate** actions span the project, so partial authority confers nothing
   and only a project-wide grant qualifies. Dataset curation, access and
-  uploader management, WAI runs and the project overview work this way.
+  uploader management and the project overview work this way.
 
 A grant broader than the minimum always qualifies, so a project-wide
 grantee can do everything a lab-scoped one can.
@@ -25,8 +25,6 @@ GATE_ACTIONS = [
     "project.view",
     "project.access.manage",
     "project.uploaders.manage",
-    "project.wai.run",
-    "project.wai.results",
     "dataset.curation.view",
     "dataset.curation.update",
     "dataset.finalize",
@@ -37,6 +35,12 @@ GATE_ACTIONS = [
 ]
 
 FILTER_ACTIONS = [
+    # WAI follows lab-unit allocation: a verifier granted one lab of a project
+    # reaches that lab's inferences and may run inference there. Automated
+    # Remidio pulls have no uploading user, so lab allocation -- not
+    # ownership -- is what carries field staff to their own inference output.
+    "project.wai.run",
+    "project.wai.results",
     "project.encountersets.browse",
     "project.encountersets.browse_pii",
     "project.upload.direct_image",

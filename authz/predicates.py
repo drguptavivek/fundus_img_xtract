@@ -256,6 +256,19 @@ def _project_branch(
                 continue
             conditions.append(_project_scope_match(scope, grant))
 
+    if GrantSource.UPLOAD_PROFILE in sources:
+        # Mirrors engine._matches_upload_profile. An upload assignment always
+        # names a concrete (project, lab unit), so the match is exact and the
+        # role set is not re-checked -- the assignment *is* the authority.
+        # The clinical dimensions that matcher also honours (disease, camera,
+        # area, upload kind) constrain what may be created, and the resolver
+        # does not put them on these visibility grants, so there is nothing
+        # to mirror here.
+        for grant in resolved.of(GrantSource.UPLOAD_PROFILE):
+            if not usable(grant):
+                continue
+            conditions.append(_project_scope_match(scope, grant))
+
     if GrantSource.PROJECT_COLLABORATOR in sources and "collaborator" in project_roles:
         for grant in resolved.of(GrantSource.PROJECT_COLLABORATOR):
             if not usable(grant):

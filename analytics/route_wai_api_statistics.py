@@ -10,6 +10,6 @@ from . import bp
 
 
 @bp.route("/wai-api-statistics", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@roles_required("admin", "local_admin", "verifier", "data_manager", "analytics_viewer", "optometrist", "ophthalmologist", "field_optometrist", "field_ophthalmologist")
 def wai_api_statistics() -> str:
     return render_template("analytics/wai_api_statistics.html")

@@ -15,6 +15,10 @@ from data_authorization.policy import (
 )
 from db_transaction_manager import transaction_scope
 from . import api_bp
+from authz import ResourceRef, authorize
+from authz.resolver import resolve_grants
+
+ACTION_INFERENCE_RUN = "inference.wai.run"
 
 
 @api_bp.route("/ai-models", methods=["GET"])
@@ -57,7 +61,25 @@ def infer_wadhwani_glaucoma_task(task_id: int):
         if scope is None:
             abort(404)
         if scope.project_id is None:
-            allowed = current_user.has_role("admin", "verifier", "optometrist")
+            # Holding the role was the whole test here, with no lab scoping at
+            # all, so any verifier or optometrist could spend an inference call
+            # on any classical task in any hospital. The engine applies the
+            # same lab-unit rule the project branch below already had.
+            resolved = resolve_grants(db, current_user)
+            allowed = authorize(
+                resolved.actor,
+                ACTION_INFERENCE_RUN,
+                ResourceRef(
+                    type="grading_task",
+                    id=task_id,
+                    attributes={
+                        "project_id": None,
+                        "hospital_id": scope.hospital_id,
+                        "lab_unit_id": scope.lab_unit_id,
+                    },
+                ),
+                grants=resolved.grants,
+            ).allowed
         else:
             allowed = user_can_project_action(
                 db,

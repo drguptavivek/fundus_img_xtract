@@ -41,9 +41,12 @@ def get_database_info():
         return {"type": "sqlite", "path": db_path}
     elif DATABASE_URL.startswith("postgresql"):
         # For PostgreSQL, we need to extract connection details
-        # Format: postgresql+psycopg2://user:pass@host:5432/db
+        # models._build_database_url emits a plain postgresql:// scheme (no
+        # driver suffix); an explicit env override could still carry one, so
+        # accept both rather than assuming the driver is present.
+        # Format: postgresql://user:pass@host:5432/db
         import re
-        pattern = r"postgresql\+psycopg2://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)"
+        pattern = r"postgresql(?:\+psycopg2)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)"
         match = re.match(pattern, DATABASE_URL)
         if match:
             return {
@@ -138,7 +141,27 @@ def restore_postgresql_database(sql_path, db_info):
         # Set PGPASSWORD environment variable for psql
         env = os.environ.copy()
         env["PGPASSWORD"] = db_info["password"]
-        
+
+        # backup_db.py runs a plain `pg_dump` with no --clean/--if-exists, so
+        # the dump is CREATE-only. Applying it to a database that already
+        # holds the current schema fails on the first pre-existing object
+        # (observed: "function ... already exists"), and ON_ERROR_STOP then
+        # aborts with most of the dump unapplied. A full restore is supposed
+        # to replace everything anyway, so clear the target schema first --
+        # the same reset the test-db fixtures already perform between runs.
+        print(f"Resetting schema on {db_info['database']} before restore...")
+        subprocess.run([
+            "psql",
+            "-h", db_info["host"],
+            "-p", str(db_info["port"]),
+            "-U", db_info["user"],
+            "-d", db_info["database"],
+            "--no-password",
+            "--quiet",
+            "--set", "ON_ERROR_STOP=on",
+            "-c", "DROP SCHEMA public CASCADE; CREATE SCHEMA public;",
+        ], env=env, check=True)
+
         # Restore from SQL dump
         print(f"Restoring PostgreSQL database {db_info['database']} from {sql_path}...")
         with open(sql_path, 'r') as f:

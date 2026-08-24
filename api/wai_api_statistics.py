@@ -96,7 +96,7 @@ def _encounter_urls(row: dict[str, Any]) -> dict[str, Any]:
 
 
 @api_bp.route("/analytics/wai-api-statistics/options", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@roles_required("admin", "local_admin", "verifier", "data_manager", "analytics_viewer", "optometrist", "ophthalmologist", "field_optometrist", "field_ophthalmologist")
 def wai_api_statistics_options():
     with get_db_session() as db:
         payload = get_filter_options(db, current_user)
@@ -104,7 +104,7 @@ def wai_api_statistics_options():
 
 
 @api_bp.route("/analytics/wai-api-statistics/summary", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@roles_required("admin", "local_admin", "verifier", "data_manager", "analytics_viewer", "optometrist", "ophthalmologist", "field_optometrist", "field_ophthalmologist")
 def wai_api_statistics_summary():
     with get_db_session() as db:
         payload = get_summary(db, current_user, _filters_from_request())
@@ -112,7 +112,7 @@ def wai_api_statistics_summary():
 
 
 @api_bp.route("/analytics/wai-api-statistics/images", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@roles_required("admin", "local_admin", "verifier", "data_manager", "analytics_viewer", "optometrist", "ophthalmologist", "field_optometrist", "field_ophthalmologist")
 def wai_api_statistics_images():
     page = request.args.get("page", default=1, type=int)
     page_size = request.args.get("page_size", default=25, type=int)
@@ -123,7 +123,7 @@ def wai_api_statistics_images():
 
 
 @api_bp.route("/analytics/wai-api-statistics/encounters", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+@roles_required("admin", "local_admin", "verifier", "data_manager", "analytics_viewer", "optometrist", "ophthalmologist", "field_optometrist", "field_ophthalmologist")
 def wai_api_statistics_encounters():
     page = request.args.get("page", default=1, type=int)
     page_size = request.args.get("page_size", default=25, type=int)

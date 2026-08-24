@@ -496,6 +496,55 @@ def _browse_tasks() -> ActionPolicy:
         project_roles=(CLINICAL_READ_ROLES - {"admin"}) | PROJECT_OVERSIGHT_ROLES,
     )
 
+# Who reads WAI / remote inference output. Verifier and data_manager review it
+# as part of their stage; the clinical roles already see AI grades on their own
+# tasks and this adds the standalone browser; analytics_viewer keeps the access
+# it has today. Field roles are here too, and deliberately *not* owner-gated -
+# see _inference_step.
+WAI_READER_ROLES = frozenset({
+    "admin", "local_admin", "verifier", "data_manager", "analytics_viewer",
+    "optometrist", "ophthalmologist",
+}) | FIELD_ROLES
+
+# Who may trigger an inference run.
+WAI_RUN_ROLES = frozenset({"admin", "verifier", "optometrist"}) | FIELD_ROLES
+
+# Who may re-queue a failed run. Narrower: this spends an external API call.
+WAI_RETRY_ROLES = frozenset({"admin", "local_admin", "data_manager"})
+
+
+def _inference_step(roles: frozenset[str]) -> ActionPolicy:
+    """Inference results and runs: the role, in the lab units it is allocated.
+
+    Reach follows lab-unit allocation on both sides of the project boundary,
+    exactly like a review stage, and *additionally* follows upload profile
+    assignments.
+
+    That last part is the point. An automated Remidio API pull is created by a
+    schedule, not a person, so it can carry no uploading user - and the WAI
+    inferences that run automatically on those pulls inherit the same gap. A
+    field role therefore reaches them through the lab units its upload profiles
+    cover, never through ownership. Because the reach is the lab unit and not
+    the profile, a project running a manual profile and an automated one side
+    by side still resolves correctly: an assignment to either profile in lab L
+    reaches everything in lab L, whichever profile ingested it.
+
+    Consequently field roles are NOT listed in ``owner_roles`` here, unlike the
+    upload actions. Ownership is offered as a filter over this set; it is not
+    the gate, because gating on it would hide precisely the automated rows the
+    field staff need.
+    """
+    return ActionPolicy(
+        roles=roles,
+        grant_sources=GENERAL_SCOPE_GRANTS | {
+            GrantSource.PROJECT_ROLE,
+            GrantSource.LEGACY_PROJECT_CAPABILITY,
+            GrantSource.UPLOAD_PROFILE,
+        },
+        project_roles=roles - {"admin"},
+    )
+
+
 def _aggregate_kpi() -> ActionPolicy:
     """Aggregate operational reporting: lab scope reaches every row.
 
@@ -663,19 +712,30 @@ POLICIES.update({
     "glaucoma_ai.result.view": _upload_step(UPLOADER_ROLES | {"ophthalmologist"}),
     "glaucoma_ai.upload.create": _upload_step(UPLOADER_ROLES | {"ophthalmologist"}),
 
+    # --- WAI / remote inference ----------------------------------------------
+    "inference.wai.summary": _inference_step(WAI_READER_ROLES),
+    "inference.wai.rows": _inference_step(WAI_READER_ROLES),
+    "inference.wai.retry": _inference_step(WAI_RETRY_ROLES),
+    "inference.wai.run": _inference_step(WAI_RUN_ROLES),
+
     # --- projects ------------------------------------------------------------
     # Gate actions: the effect spans the project, so partial authority confers
     # nothing and only a project-wide grant qualifies.
     "project.view": _project(PROJECT_ASSIGNABLE_ROLES, min_scope=PROJECT_SCOPE),
     "project.access.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
     "project.uploaders.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
-    "project.wai.run": _project(frozenset({"verifier", "optometrist"}), min_scope=PROJECT_SCOPE),
-    "project.wai.results": _project(frozenset({
-        "project_pi", "site_pi", "project_admin", "optometrist",
-    }), min_scope=PROJECT_SCOPE),
 
     # Filter actions: the effect is confined to the rows touched, so a
     # narrower grant simply reaches fewer rows.
+    # WAI moved here from the gate list: access follows lab-unit allocation, so
+    # a verifier granted one lab of a project reaches that lab's inferences and
+    # may run inference there. Requiring a project-wide grant would have shut
+    # out exactly the lab-scoped staff who do the work.
+    "project.wai.run": _project(frozenset({"verifier", "optometrist"}) | FIELD_ROLES),
+    "project.wai.results": _project(frozenset({
+        "project_pi", "site_pi", "project_admin", "optometrist",
+        "verifier", "data_manager", "analytics_viewer", "ophthalmologist",
+    }) | FIELD_ROLES),
     "project.encountersets.browse": _project(PROJECT_ASSIGNABLE_ROLES),
     # analytics_viewer reads results without patient identifiers, so it is
     # excluded here alongside collaborator. The masking layer already
@@ -729,6 +789,7 @@ PRE_GRADING_ACTIONS = frozenset({
     "verification.pregraded.update",
     "verification.encounter_set.update",
     "project.encountersets.browse_pii",
+    "inference.wai.rows",
     "media.ocr_pii.read",
     "media.ocr_pii.process",
     "screenings.view",

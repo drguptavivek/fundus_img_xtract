@@ -721,7 +721,12 @@ POLICIES.update({
     # --- projects ------------------------------------------------------------
     # Gate actions: the effect spans the project, so partial authority confers
     # nothing and only a project-wide grant qualifies.
-    "project.view": _project(PROJECT_ASSIGNABLE_ROLES, min_scope=PROJECT_SCOPE),
+    # project.view is deliberately a filter, not a gate: any explicit project
+    # relationship, including a lab-scoped role grant or an upload-profile
+    # assignment, is enough to see the project's overview page. What the page
+    # then *shows* is still gated per action (browse, upload, manage access,
+    # run WAI, ...), so an uploader sees only upload cards there.
+    "project.view": _project(PROJECT_ASSIGNABLE_ROLES | PROJECT_UPLOADER_ROLES, PROJECT_UPLOAD_GRANTS),
     "project.access.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
     "project.uploaders.manage": _project(frozenset({"project_admin"}), min_scope=PROJECT_SCOPE),
 

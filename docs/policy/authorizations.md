@@ -1020,10 +1020,10 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `project.view`
 
-- Rule: A user may view a project overview and its configuration summary only when the user holds one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` on that project through a **project-wide** role grant.
-- Rule: A grant scoped to one lab unit or one hospital of the project does not authorize this action. Its effect spans the project, so partial authority confers nothing.
-- Rule: Hospital scope or lab-unit assignment alone never grants this action.
-- Relationship source: project-wide project authority.
+- Rule: A user may view a project overview and its configuration summary when the user holds one of `analytics_viewer`, `collaborator`, `data_exporter`, `dataset_creator`, `discrepancy_reviewer`, `ophthalmologist`, `optometrist`, `project_admin`, `project_pi`, `regrade_adjudicator`, `site_pi`, `verifier` on that project through a role grant, **or** one of `fileUploader`, `pregarded_uploader`, `optometrist`, `data_manager`, `local_admin`, `verifier`, `field_optometrist`, `field_ophthalmologist` through an upload profile assignment on that project.
+- Rule: The grant's own scope decides nothing here — this is a gate, not a filter: any explicit project relationship at any scope (project-wide, hospital, or lab unit) is enough to view the overview page. What the page displays is still decided per action (browse, upload, manage access, run WAI, ...), so a user with only an upload-profile assignment sees an overview limited to their upload cards.
+- Rule: Hospital scope or lab-unit assignment alone (with no project relationship at all) never grants this action.
+- Relationship source: project role grant, project collaborator grant, legacy project-capability grant, or an upload profile assignment.
 - Resource: project (required).
 
 ### `project.wai.results`

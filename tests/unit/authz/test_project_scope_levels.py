@@ -22,7 +22,6 @@ from authz.types import AuthzActor, GrantSource, RelationshipGrant
 PROJECT_ID, HOSPITAL_ID, LAB_ID, OTHER_LAB = 5, 1, 10, 11
 
 GATE_ACTIONS = [
-    "project.view",
     "project.access.manage",
     "project.uploaders.manage",
     "dataset.curation.view",
@@ -35,6 +34,7 @@ GATE_ACTIONS = [
 ]
 
 FILTER_ACTIONS = [
+    "project.view",
     # WAI follows lab-unit allocation: a verifier granted one lab of a project
     # reaches that lab's inferences and may run inference there. Automated
     # Remidio pulls have no uploading user, so lab allocation -- not

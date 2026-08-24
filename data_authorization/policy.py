@@ -128,20 +128,15 @@ def project_capabilities(db: Session, *, user: Any, project_id: int) -> ProjectC
         for action, kind in UPLOAD_ACTION_KIND.items()
         if user_can_project_action(db, user=user, project_id=project_id, action=action)
     )
+    can_view = user_can_project_action(db, user=user, project_id=project_id, action=ACTION_VIEW)
     return ProjectCapabilities(
         project_id=project_id,
-        can_view=user_can_project_action(db, user=user, project_id=project_id, action=ACTION_VIEW),
-        can_view_overview=(
-            user.has_role("admin")
-            or _has_project_role(
-                db,
-                user_id=user.id,
-                project_id=project_id,
-                role_names=PROJECT_ASSIGNABLE_ROLE_NAMES,
-                hospital_id=None,
-                lab_unit_id=None,
-            )
-        ),
+        can_view=can_view,
+        # `project.view` is a single gate action (see authz/policies.py and
+        # docs/policy/authorizations.md): any explicit project relationship,
+        # including an upload-only assignment, is enough to reach the
+        # overview page. What the page shows is still decided per action.
+        can_view_overview=can_view,
         can_browse=user_can_project_action(db, user=user, project_id=project_id, action=ACTION_BROWSE),
         can_browse_pii=user_can_project_action(db, user=user, project_id=project_id, action=ACTION_BROWSE_PII),
         can_manage_access=user_can_project_action(db, user=user, project_id=project_id, action=ACTION_MANAGE_ACCESS),

@@ -217,6 +217,70 @@ directly with no S3 resolution at all.
 family. This is recorded for completeness; acting on it is out of scope per
 "Explicitly out of scope" below.
 
+### D12. The `/grading` dashboard counts pending work by materializing it
+
+`utils/dualGradingKPIs.py:148-165` decides how to count pending tasks:
+
+```python
+if not enforced_project_ids:
+    return query.count()                    # COUNT(*) in Postgres
+return len(_eligible_pending_tasks(...))    # loads every row
+```
+
+`_eligible_pending_tasks` at `utils/dualGradingKPIs.py:102` issues `.all()` with
+five `selectinload` options and then iterates in Python calling
+`resolve_task_allocation_context(db, task)` per task. It counts by
+materializing.
+
+`grading/dashboard.py:199-201` calls the KPI function with
+`exclude_enforced_project_encounter_sets=True`, which populates
+`enforced_project_ids` with every project having `enforcement_enabled=True`
+(`utils/dualGradingKPIs.py:214-224`). The consequence is a cliff rather than a
+slope: as soon as **one** project has allocation enforcement enabled, every
+pending KPI on the page stops being a `COUNT(*)` and becomes a full load of the
+pending queue.
+
+Page cost then approximates: eligible diseases x role slots x every pending
+task in scope, fully hydrated. The arbitration branch forks the same way at
+`:425` — `with_entities()` on four columns when enforcement is off, whole
+entities when it is on.
+
+On the single-process server of D1, this ORM hydration holds the GIL, so a slow
+`/grading` load also stalls image delivery for other graders. It is the same
+coupling as D2, on a different page.
+
+The fix is already sanctioned by the module's own design.
+`exclude_unallocated_project_tasks()` at `grading_allocation/dashboard.py:248`
+is a SQL-level filter whose docstring states the intended contract explicitly:
+a coarse filter that "errs towards showing work rather than hiding it", with
+"the exact check runs per task in
+`grading_allocation.eligibility.is_user_eligible_for_task` before the task can
+actually be opened". `_eligible_pending_tasks` breaks that contract by running
+the exact per-task check at count time, which is what forces materialization.
+
+Secondary costs on the same request, real but subordinate:
+
+- `db.query(Disease).all()` executes four times per request —
+  `grading/dashboard.py:181` and `utils/dualGradingKPIs.py:202`, `:517`, `:681`.
+- Completed KPIs issue three `COUNT(*)` queries per disease, each with a
+  `Grade.task.has(...)` correlated subquery (`:559`, `:568`, `:577`), where one
+  grouped query would serve.
+- `get_user_kpi_linked_followup_counts` (`:662`) makes a further pass over the
+  same data.
+- Nothing on this page is cached, unlike `/` which caches its payload for
+  fifteen minutes (`home.py:106`).
+
+Confirmation query before any work starts:
+
+```sql
+SELECT count(*) FROM project_grading_allocation_policies WHERE enforcement_enabled = true;
+SELECT state, count(*) FROM grading_tasks GROUP BY state;
+```
+
+A non-zero first result together with large pending-state counts confirms this
+as the dominant cost. A zero first result means the secondary items above are
+the whole story and this diagnosis should be re-derived from measurement.
+
 ## Decisions
 
 - The server process model is fixed first. Every other measurement is unreliable
@@ -339,22 +403,38 @@ This phase carries the clinical risk in this plan. The display derivative must
 be reviewed by a grader before it becomes the default, and the full-resolution
 path must remain one action away.
 
-### Phase 3 — Task acquisition
+### Phase 3 — Task acquisition and queue counting
 
-1. Replace `ORDER BY random()` in `grading/workbench/queue.py:106` with a
+Step 1 is independent of steps 2 to 5 and is the highest-value single change in
+this plan. It should be pulled ahead of the rest of this phase, and may be
+taken before or alongside Phase 2.
+
+1. Make enforced-project allocation eligibility a SQL predicate so
+   `_pending_count` (`utils/dualGradingKPIs.py:148`) stays `query.count()` in
+   all cases, per D12. Follow the coarse-filter contract that
+   `exclude_unallocated_project_tasks()` already documents: filter in SQL for
+   counts, and keep the exact per-task check where it belongs, at task open. If
+   any part of the rule genuinely cannot be expressed in SQL, at minimum stop
+   hydrating full ORM entities and select only the columns the context resolver
+   reads, as the non-enforced arbitration branch already does at `:425`.
+   Alongside this: load diseases once per request rather than four times,
+   collapse the per-disease completed-KPI counts into a single grouped query,
+   and add a short-TTL cache for the KPI block with invalidation on task state
+   change.
+2. Replace `ORDER BY random()` in `grading/workbench/queue.py:106` with a
    bounded random selection that does not require sorting the full candidate
    set, and apply a `LIMIT` before ORM hydration.
-2. Apply the same treatment to `queue.py:241` and to
+3. Apply the same treatment to `queue.py:241` and to
    `utils/dualGradingGetNextTasks.py:572`, `:713`, `:759`.
-3. Add a composite index on `grading_tasks` matching the queue filter
+4. Add a composite index on `grading_tasks` matching the queue filter
    (`lab_unit_id`, `disease_id`, `state`, and the target-level discriminator),
    with a real `upgrade()` and `downgrade()`, guarded for idempotency per
    project migration rules.
-4. Leave `verify_encounter_set/routes.py:1625`,
+5. Leave `verify_encounter_set/routes.py:1625`,
    `grading/regrade_tasks.py:443`, and `review/discrepancy_export.py:248,251`
    for a follow-up unless measurement shows them on an interactive path.
 
-Verification: Save & Next latency measured against queue depth, showing it no
+Verification: `/grading` page load time measured against pending-queue depth, showing it no longer scales with it; Save & Next latency measured against queue depth, showing it no
 longer scales with the number of pending tasks; lease semantics unchanged under
 `with_for_update(skip_locked=True)`; no task is ever handed to two graders;
 existing dual-grading and allocation test suites pass unchanged. This phase

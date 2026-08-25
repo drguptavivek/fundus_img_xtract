@@ -181,6 +181,41 @@ def eligible_enforced_project_task_contexts(
     return eligible
 
 
+def legacy_eligible_lab_unit_ids(
+    db: Session,
+    *,
+    user_id: int,
+    disease_id: int,
+    capacity: AllocationCapacity,
+    lab_unit_ids=None,
+) -> list[int]:
+    """Labs where the user holds legacy disease/lab eligibility for a capacity.
+
+    This is the set form of ``_legacy_eligible``. Queue selection needs it
+    because ``eligible_lab_unit_ids`` returns legacy labs *unioned* with
+    enforced-project allocation labs, so membership there does not imply legacy
+    eligibility and the two branches must be separated again downstream.
+    """
+    effective_disease_id = get_primary_disease_id(db, disease_id)
+    query = select(UserDiseaseUnitRole.lab_unit_id).where(
+        UserDiseaseUnitRole.user_id == user_id,
+        UserDiseaseUnitRole.disease_id == effective_disease_id,
+        UserDiseaseUnitRole.active.is_(True),
+    )
+    if capacity == AllocationCapacity.RESIDENT:
+        query = query.where(
+            or_(
+                UserDiseaseUnitRole.can_grade_resident.is_(True),
+                UserDiseaseUnitRole.can_grade_resident2.is_(True),
+            )
+        )
+    else:
+        query = query.where(UserDiseaseUnitRole.can_arbitrate.is_(True))
+    if lab_unit_ids:
+        query = query.where(UserDiseaseUnitRole.lab_unit_id.in_(list(lab_unit_ids)))
+    return sorted(set(db.execute(query).scalars().all()))
+
+
 def eligible_lab_unit_ids(
     db: Session,
     *,
@@ -202,23 +237,11 @@ def eligible_lab_unit_ids(
     if user is None or not _user_has_capacity_role(user, capacity):
         return None
 
-    effective_disease_id = get_primary_disease_id(db, disease_id)
-    legacy_query = select(UserDiseaseUnitRole.lab_unit_id).where(
-        UserDiseaseUnitRole.user_id == user_id,
-        UserDiseaseUnitRole.disease_id == effective_disease_id,
-        UserDiseaseUnitRole.active.is_(True),
-    )
-    if capacity == AllocationCapacity.RESIDENT:
-        legacy_query = legacy_query.where(
-            or_(
-                UserDiseaseUnitRole.can_grade_resident.is_(True),
-                UserDiseaseUnitRole.can_grade_resident2.is_(True),
-            )
+    lab_ids = set(
+        legacy_eligible_lab_unit_ids(
+            db, user_id=user_id, disease_id=disease_id, capacity=capacity
         )
-    else:
-        legacy_query = legacy_query.where(UserDiseaseUnitRole.can_arbitrate.is_(True))
-
-    lab_ids = set(db.execute(legacy_query).scalars().all())
+    )
     project_lab_ids = db.execute(
         select(ProjectGraderAllocation.lab_unit_id)
         .join(

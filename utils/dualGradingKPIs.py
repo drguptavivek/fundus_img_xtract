@@ -14,8 +14,6 @@ from models import (
     DirectImageUpload,
     Disease,
     DiseaseGrading,
-    EncounterFile,
-    EncounterSetImage,
     Grade,
     GradingTask,
     LabUnit,
@@ -23,16 +21,15 @@ from models import (
     User,
     UserDiseaseUnitRole,
 )
-from grading_allocation.eligibility import eligible_enforced_project_task_contexts
-from grading_allocation.exceptions import AllocationContextError
 from grading_allocation.models import ProjectGradingAllocationPolicy
-from grading_allocation.resolver import resolve_task_allocation_context
 from grading.workbench.models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from utils.dualGradingEligibility import _has_user_graded_task_4weeks
+from grading_allocation.constants import capacity_for_role_slot
 from grading_allocation.dashboard import (
     exclude_enforced_project_encounter_set_tasks,
     exclude_unallocated_project_tasks,
+    filter_to_exact_allocation,
 )
 from typing import Dict, Optional, List, Tuple
 
@@ -99,52 +96,6 @@ def _apply_linked_mismatch_exclusion(db, query, disease_id: int):
     return query.filter(~mismatch_exists)
 
 
-def _eligible_pending_tasks(
-    db,
-    query,
-    *,
-    user_id: int,
-    role_slot: str,
-    enforced_project_ids: set[int],
-):
-    """Apply authoritative allocation eligibility to mixed legacy KPI candidates."""
-    tasks = (
-        query.distinct()
-        .options(
-            selectinload(GradingTask.encounter_file).selectinload(
-                EncounterFile.patient_encounter
-            ),
-            selectinload(GradingTask.direct_image),
-            selectinload(GradingTask.patient_encounter),
-            selectinload(GradingTask.encounter_set_image).selectinload(
-                EncounterSetImage.patient_encounter
-            ),
-            selectinload(GradingTask.encounter_set_package),
-        )
-        .all()
-    )
-    if not tasks or not enforced_project_ids:
-        return tasks
-    eligible_contexts = eligible_enforced_project_task_contexts(
-        db,
-        user_id=user_id,
-        task_slots=[(task, role_slot) for task in tasks],
-        enforced_project_ids=enforced_project_ids,
-    )
-    eligible_tasks = []
-    for task in tasks:
-        try:
-            context = resolve_task_allocation_context(db, task)
-        except AllocationContextError:
-            continue
-        if context.project_id in enforced_project_ids:
-            if (task.id, role_slot) in eligible_contexts:
-                eligible_tasks.append(task)
-        else:
-            eligible_tasks.append(task)
-    return eligible_tasks
-
-
 def _pending_count(
     db,
     query,
@@ -153,17 +104,108 @@ def _pending_count(
     role_slot: str,
     enforced_project_ids: set[int],
 ) -> int:
+    """Count a pending queue without materialising it.
+
+    The exact allocation check used to run per task in Python, which meant the
+    only way to count was to load every row and its five relationships. It is
+    now a SQL predicate, so this stays a COUNT and its cost tracks the filtered
+    rows rather than the size of the queue.
+    """
     if not enforced_project_ids:
-        return query.count()
-    return len(
-        _eligible_pending_tasks(
-            db,
-            query,
-            user_id=user_id,
-            role_slot=role_slot,
-            enforced_project_ids=enforced_project_ids,
-        )
+        return query.distinct().count()
+    capacity = capacity_for_role_slot(role_slot)
+    if capacity is None:
+        return 0
+    query = filter_to_exact_allocation(
+        query, user_id=user_id, capacity=capacity.value
     )
+    return query.distinct().count()
+
+
+def _resolve_user_disease_slots(db, user_id: int):
+    """Which diseases and slots the user may grade, without counting any work.
+
+    Derived purely from role rows and the linked-disease map, so this stays
+    cheap no matter how large the task table grows. Splitting it out lets the
+    dashboard render its queue cards immediately and fetch each disease's
+    counts afterwards, instead of blocking the page on the whole queue.
+
+    Returns ``(user, disease_names, disease_lab_units)`` or ``None`` when the
+    user does not exist or holds no active grading role.
+    """
+    user = (
+        db.query(User)
+        .options(selectinload(User.roles))
+        .filter(User.id == user_id)
+        .first()
+    )
+    if not user:
+        return None
+
+    disease_names = {disease.id: disease.name for disease in db.query(Disease).all()}
+
+    eligible_roles = db.query(UserDiseaseUnitRole).filter(
+        UserDiseaseUnitRole.user_id == user_id,
+        UserDiseaseUnitRole.active == True,  # noqa: E712 - SQL boolean comparison
+    ).all()
+    if not eligible_roles:
+        return None
+
+    # Group eligible lab units by disease, including linked diseases from primary permissions
+    disease_lab_units = {}
+    for role in eligible_roles:
+        primary_id = get_primary_disease_id(db, role.disease_id)
+        if role.disease_id != primary_id:
+            continue
+        linked_ids = get_linked_disease_ids(db, primary_id)
+        all_ids = [primary_id] + linked_ids
+        for disease_id in all_ids:
+            is_currently_primary = (disease_id == primary_id)
+            if disease_id not in disease_lab_units:
+                disease_lab_units[disease_id] = {
+                    'lab_units': set(),
+                    'can_grade_resident': False,
+                    'can_grade_resident2': False,
+                    'can_arbitrate': False,
+                    'is_linked_only': not is_currently_primary,
+                }
+            else:
+                if is_currently_primary:
+                    disease_lab_units[disease_id]['is_linked_only'] = False
+
+            disease_lab_units[disease_id]['lab_units'].add(role.lab_unit_id)
+            disease_lab_units[disease_id]['can_grade_resident'] |= role.can_grade_resident
+            disease_lab_units[disease_id]['can_grade_resident2'] |= role.can_grade_resident2
+            disease_lab_units[disease_id]['can_arbitrate'] |= role.can_arbitrate
+    return user, disease_names, disease_lab_units
+
+
+def get_user_gradable_diseases(db, user_id: int) -> List[Dict[str, object]]:
+    """The diseases whose queue cards the dashboard should render, uncounted.
+
+    Companion to ``get_user_kpi_pending_task_count_data``: this answers "which
+    cards exist", that answers "what is in each one". Linked-only diseases are
+    omitted here for the same reason they are skipped there - they are reached
+    through their primary disease.
+    """
+    resolved = _resolve_user_disease_slots(db, user_id)
+    if resolved is None:
+        return []
+    _user, disease_names, disease_lab_units = resolved
+
+    diseases = []
+    for disease_id, info in disease_lab_units.items():
+        if info.get('is_linked_only'):
+            continue
+        diseases.append({
+            'id': disease_id,
+            'name': disease_names.get(disease_id, f"Unknown Disease {disease_id}"),
+            'can_grade_resident': bool(info['can_grade_resident']),
+            'can_grade_resident2': bool(info['can_grade_resident2']),
+            'can_arbitrate': bool(info['can_arbitrate']),
+        })
+    diseases.sort(key=lambda row: row['name'])
+    return diseases
 
 
 def get_user_kpi_pending_task_count_data(
@@ -171,6 +213,7 @@ def get_user_kpi_pending_task_count_data(
     user_id: int,
     *,
     exclude_enforced_project_encounter_sets: bool = False,
+    disease_ids: set[int] | None = None,
 ) -> Dict[str, Dict[str, int]]:
     """
     Get KPI data for each core disease for pending tasks across all mapped lab units for each slot of a user.
@@ -193,23 +236,10 @@ def get_user_kpi_pending_task_count_data(
             ...
         }
     """
-    # Get user with roles
-    user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
-    if not user:
+    resolved = _resolve_user_disease_slots(db, user_id)
+    if resolved is None:
         return {}
-    
-    # Get all diseases
-    diseases = db.query(Disease).all()
-    disease_names = {disease.id: disease.name for disease in diseases}
-    
-    # Get user's eligible roles
-    eligible_roles = db.query(UserDiseaseUnitRole).filter(
-        UserDiseaseUnitRole.user_id == user_id,
-        UserDiseaseUnitRole.active == True
-    ).all()
-    
-    if not eligible_roles:
-        return {}
+    user, disease_names, disease_lab_units = resolved
 
     enforced_project_ids = (
         set(
@@ -222,39 +252,14 @@ def get_user_kpi_pending_task_count_data(
         if exclude_enforced_project_encounter_sets
         else set()
     )
-    
-    # Group eligible lab units by disease, including linked diseases from primary permissions
-    disease_lab_units = {}
-    for role in eligible_roles:
-        primary_id = get_primary_disease_id(db, role.disease_id)
-        if role.disease_id != primary_id:
-            continue
-        linked_ids = get_linked_disease_ids(db, primary_id)
-        all_ids = [primary_id] + linked_ids
-        for disease_id in all_ids:
-            is_currently_primary = (disease_id == primary_id)
-            if disease_id not in disease_lab_units:
-                disease_lab_units[disease_id] = {
-                    'lab_units': set(),
-                    'can_grade_resident': False,
-                    'can_grade_resident2': False,
-                    'can_arbitrate': False,
-                    'is_linked_only': not is_currently_primary,
-                }
-            else:
-                if is_currently_primary:
-                    disease_lab_units[disease_id]['is_linked_only'] = False
-            
-            disease_lab_units[disease_id]['lab_units'].add(role.lab_unit_id)
-            disease_lab_units[disease_id]['can_grade_resident'] |= role.can_grade_resident
-            disease_lab_units[disease_id]['can_grade_resident2'] |= role.can_grade_resident2
-            disease_lab_units[disease_id]['can_arbitrate'] |= role.can_arbitrate
-    
+
     # Calculate task counts for each disease
     kpi_data = {}
-    
+
     # For all users (including admins), only include diseases where they have eligibility
     for disease_id, info in disease_lab_units.items():
+        if disease_ids is not None and disease_id not in disease_ids:
+            continue
         # Skip diseases that are only linked to others; they are discoverable via their primary disease
         if info.get('is_linked_only'):
             continue
@@ -423,26 +428,24 @@ def get_user_kpi_pending_task_count_data(
                 base_q, user_id=user_id, capacity="arbitrator", disease_id=disease_id
             )
             
-            # Use distinct because the join might produce multiple rows per primary task
+            # Allocation eligibility is a SQL predicate now, so the enforced and
+            # unenforced paths differ only by that filter. Both project the four
+            # columns the count and linked-disease breakdown actually read.
             if enforced_project_ids:
-                eligible_arbitration_rows = _eligible_pending_tasks(
-                    db,
-                    q,
-                    user_id=user_id,
-                    role_slot="arbitrator",
-                    enforced_project_ids=enforced_project_ids,
+                q = filter_to_exact_allocation(
+                    q, user_id=user_id, capacity="arbitrator"
                 )
-            else:
-                eligible_arbitration_rows = (
-                    q.with_entities(
-                        GradingTask.id,
-                        GradingTask.state,
-                        GradingTask.encounter_file_id,
-                        GradingTask.direct_image_upload_id,
-                    )
-                    .distinct()
-                    .all()
+            # Use distinct because the join might produce multiple rows per primary task
+            eligible_arbitration_rows = (
+                q.with_entities(
+                    GradingTask.id,
+                    GradingTask.state,
+                    GradingTask.encounter_file_id,
+                    GradingTask.direct_image_upload_id,
                 )
+                .distinct()
+                .all()
+            )
 
             counts['arbitration_pending'] = len(eligible_arbitration_rows)
             counts['arbitration_breakdown'] = {}
@@ -664,6 +667,7 @@ def get_user_kpi_linked_followup_counts(
     user_id: int,
     *,
     exclude_enforced_project_encounter_sets: bool = False,
+    disease_ids: set[int] | None = None,
 ) -> Dict[str, List[Dict[str, int | str]]]:
     """
     Get counts of linked-task state mismatches by primary disease and linked disease.
@@ -715,6 +719,9 @@ def get_user_kpi_linked_followup_counts(
     results: Dict[str, List[Dict[str, int | str]]] = {}
 
     for disease_id, info in disease_lab_units.items():
+        if disease_ids is not None and disease_id not in disease_ids:
+            continue
+
         if info.get('is_linked_only'):
             continue
 

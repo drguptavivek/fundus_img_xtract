@@ -1,0 +1,59 @@
+{# One disease queue card, swapped in by HTMX after the dashboard has painted.
+
+   The column is always rendered, even when the queue is empty. Collapsing an
+   empty card would reflow every card after it as the responses arrive out of
+   order, so an empty queue keeps its slot and says so instead. #}
+{# Self-refreshing in place: listens for the panel-wide refresh event and
+   replaces itself only once the new content arrives, so the old card stays
+   visible instead of flashing back to a placeholder. #}
+<div class="col-md-4"
+     {% if card %}hx-get="{{ url_for('grading.disease_queue_fragment', disease_id=card.disease.id, refresh=1) }}"
+     hx-trigger="refresh-queues from:body"
+     hx-swap="outerHTML"{% endif %}>
+  <div class="card kpi-card {{ 'kpi--info' if card and card.has_work else 'kpi--muted' }} shadow-sm h-100">
+    <div class="card-body">
+      <h5 class="card-title">{{ card.disease.name if card else 'Unavailable' }}</h5>
+
+      {# Empty and error states keep the same one-control height as a card with
+         a Start Grading button, so the grid does not reflow as cards arrive. #}
+      {% if not card %}
+      <button type="button" class="btn btn-outline-secondary w-100 mb-2 disabled" disabled>
+        Queue unavailable
+      </button>
+
+      {% elif not card.has_work %}
+      <button type="button" class="btn btn-outline-secondary w-100 mb-2 disabled" disabled>
+        No pending work
+      </button>
+
+      {% else %}
+      {% if card.combined_pending > 0 %}
+      <a href="{{ url_for('grading.start_grading', disease_id=card.disease.id, role_slot='resident') }}"
+         class="btn btn-primary w-100 mb-2">
+        Start Grading ({{ card.combined_pending }} pending)
+      </a>
+      {% endif %}
+
+      {% if card.linked_followup_total > 0 %}
+      <div class="d-flex flex-column gap-2">
+        {% for item in card.linked_followups %}
+        <a href="{{ url_for('grading.linked_followup', primary_disease_id=card.disease.id, linked_disease_id=item.id) }}"
+           class="btn btn-outline-primary w-100">
+          Pending {{ item.name }} ({{ item.count }})
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if card.can_arbitrate and card.arbitration_pending > 0 %}
+      <div class="d-flex flex-column">
+        <a href="{{ url_for('grading.start_grading', disease_id=card.disease.id, role_slot='arbitrator') }}"
+           class="btn btn-warning w-100">
+          Start Arbitration ({{ card.arbitration_pending }} pending)
+        </a>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>

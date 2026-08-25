@@ -127,102 +127,41 @@
     </a>
   </div>
 
-  {% if project_encounter_set_queues %}
-  <div class="row g-3">
-    {% for queue in project_encounter_set_queues %}
-    <div class="col-lg-6" data-project-encounter-set-queue="{{ queue.target.key }}">
-      <div class="card shadow-sm h-100 border-primary-subtle">
-        <div class="card-body">
-          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-            <div>
-              <h4 class="h5 mb-1">{{ queue.project.title }}</h4>
-            </div>
-            <span class="badge text-bg-primary">EncounterSet</span>
-          </div>
-          <div class="fw-semibold mb-3">{{ queue.target.label }}</div>
-          <div class="d-flex flex-wrap gap-2">
-            {% for slot in queue.slots %}
-            <a class="btn btn-sm {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
-               href="{{ url_for('grading.encounter_set_package_grading', package_uuid=slot.first_package_uuid, slot_type=slot.slot) }}">
-              {{ slot.label }} ({{ slot.package_count }} set{{ '' if slot.package_count == 1 else 's' }})
-            </a>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="alert alert-light border mb-0">
-    No pending project-allocated EncounterSet grading is available to you.
-  </div>
-  {% endif %}
+  {% include "grading/_project_encounter_set_queues.html" %}
 </section>
 
 <section aria-labelledby="legacy-image-grading-heading">
-<div class="mb-3">
-  <h3 class="h4 mb-1" id="legacy-image-grading-heading">Legacy &amp; Image Grading</h3>
-  <div class="text-muted">Project-allocated EncounterSet packages are listed separately above.</div>
+<div class="mb-3 d-flex align-items-start justify-content-between gap-3">
+  <div>
+    <h3 class="h4 mb-1" id="legacy-image-grading-heading">Legacy &amp; Image Grading</h3>
+    <div class="text-muted">Project-allocated EncounterSet packages are listed separately above.</div>
+  </div>
+  {# Fires a panel-wide refresh event; each card re-fetches itself in place. #}
+  <button type="button"
+          class="btn btn-sm btn-outline-secondary flex-shrink-0"
+          hx-get="{{ url_for('grading.refresh_queues_trigger') }}"
+          hx-swap="none"
+          hx-indicator="#queue-refresh-spinner"
+          title="Counts are cached for {{ cache_ttl_seconds }} seconds. Refresh to recount now.">
+    <span id="queue-refresh-spinner"
+          class="htmx-indicator spinner-border spinner-border-sm me-1"
+          role="status" aria-hidden="true"></span>
+    Refresh counts
+  </button>
 </div>
 
 <!-- Start Grading Buttons -->
-{% if diseases %}
-<div class="row mb-4 g-3">
-  {% for disease in diseases %}
-    {% set has_pending_tasks = false %}
-    {% set show_resident_button = false %}
-    {% set linked_followup = linked_followup_counts_by_disease.get(disease.name, []) %}
-    {% set linked_followup_total = linked_followup | map(attribute='count') | sum %}
-    {% if (is_resident or is_resident2) and (kpi_resident_by_disease[disease.name] > 0 or kpi_resident2_by_disease[disease.name] > 0) %}
-      {% set has_pending_tasks = true %}
-      {% set show_resident_button = true %}
-    {% elif is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
-      {% set has_pending_tasks = true %}
-    {% elif linked_followup_total > 0 %}
-      {% set has_pending_tasks = true %}
-    {% endif %}
-    
-    {% if has_pending_tasks %}
-    <div class="col-md-4">
-      <div class="card kpi-card kpi--info shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title">{{ disease.name }}</h5>
-          
-          {% if show_resident_button %}
-          {% set combined_pending = kpi_resident_by_disease[disease.name] + kpi_resident2_by_disease[disease.name] %}
-          <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='resident') }}" 
-             class="btn btn-primary w-100 mb-2">
-            Start Grading ({{ combined_pending }} pending)
-          </a>
-          {% endif %}
-
-          {% if linked_followup_total > 0 %}
-          <div class="d-flex flex-column gap-2">
-            {% for item in linked_followup | sort(attribute='name') %}
-            <a href="{{ url_for('grading.linked_followup', primary_disease_id=disease.id, linked_disease_id=item.id) }}"
-               class="btn btn-outline-primary w-100">
-              Pending {{ item.name }} ({{ item.count }})
-            </a>
-            {% endfor %}
-          </div>
-          {% endif %}
-
-          {% if is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
-          <div class="d-flex flex-column">
-            <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='arbitrator') }}" 
-               class="btn btn-warning w-100">
-              Start Arbitration ({{ kpi_arbitration_by_disease[disease.name] }} pending)
-            </a>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    {% endif %}
-  {% endfor %}
+{# API-driven: the panel is fetched rather than server-rendered, so one contract
+   serves this page, HTMX and the JSON clients a mobile app will use. A single
+   loader covers the whole panel instead of six placeholder cards that each
+   resize on arrival - that sequence is what made a reload flash when the browser
+   restored scroll position partway down the page. #}
+<div id="disease-queues-shell"
+     hx-get="{{ url_for('grading.disease_queues_fragment') }}"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  {% include "grading/_queue_loading.html" %}
 </div>
-{% endif %}
 </section>
 
 
@@ -231,179 +170,6 @@
 {% include "grading/_history_panel.html" %}
 
 
-<!-- KPIs Row -->
-<div class="row mb-4 g-3">
-  <h3>Pending</h3>
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--primary shadow-sm h-100">
-      <div class="card-body">
-        {% set combined_resident_pending = kpi_resident_pending + kpi_resident2_pending %}
-        <h5 class="card-title">Resident Grading</h5>
-        <h2 class="card-text">{{ combined_resident_pending }}</h2>
-        <p class="text-muted">Pending Resident &amp; Resident2 Tasks</p>
-        {% if kpi_resident_by_disease %}
-        <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in kpi_resident_by_disease.items() %}
-          {% set disease_combined = count + kpi_resident2_by_disease.get(disease_name, 0) %}
-          {% if disease_combined > 0 %}
-          <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span>
-            <span class="badge bg-primary">{{ disease_combined }}</span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  
-
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--info shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Arbitration</h5>
-        <h2 class="card-text">{{ kpi_arbitration_pending }}</h2>
-        <p class="text-muted">Pending Arbitration Tasks</p> {% if kpi_arbitration_by_disease %} <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6> {% for disease_name, count in
-          kpi_arbitration_by_disease.items() %} {% if count > 0 %} <div class="d-flex justify-content-between"> <span>{{
-              disease_name }}</span> <span class="badge bg-primary">{{ count }}</span> </div> {% endif %} {% endfor %}
-        </div> {% endif %}
-      </div>
-    </div>
-  </div> 
-
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--warning shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title d-flex align-items-center gap-2">
-          <span>In Progress / Locked By You</span>
-          <span class="info-tooltip">
-            <button
-              type="button"
-              class="info-tooltip__trigger"
-              aria-label="Explain in-progress locked tasks"
-            >?</button>
-            <span class="info-tooltip__panel" role="tooltip">
-              These are tasks you opened but have not submitted yet. They stay locked to prevent duplicate assignment. Use Resume to continue your latest locked task. If you do not submit them, incomplete work is released after 30 minutes from initial allocation.
-            </span>
-          </span>
-        </h5>
-        <h2 class="card-text">{{ task_tracker_kpi.total }}</h2>
-        <p class="text-muted">
-          {{ task_tracker_kpi.active }} active
-          {% if task_tracker_kpi.stale %}
-          | {{ task_tracker_kpi.stale }} stuck
-          {% endif %}
-        </p>
-        {% if task_tracker_kpi.total > 0 %}
-        <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Slot</h6>
-          {% for slot_label, slot_key in [('Resident', 'resident'), ('Resident2', 'resident2'), ('Arbitrator', 'arbitrator')] %}
-          {% set count = task_tracker_kpi.by_role.get(slot_key, 0) %}
-          {% set stale = task_tracker_kpi.stale_by_role.get(slot_key, 0) %}
-          {% if count > 0 %}
-          <div class="d-flex justify-content-between align-items-center">
-            <span>{{ slot_label }}</span>
-            <span class="badge bg-warning text-dark">
-              {{ count }}{% if stale %} ({{ stale }} stuck){% endif %}
-            </span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% if task_tracker_kpi.resume_task %}
-        <div class="mt-3">
-          <a
-            href="{{ url_for('grading.workbench_page', session_uuid=task_tracker_kpi.resume_task.session_uuid) }}"
-            class="btn btn-warning btn-sm"
-          >
-            Resume {{ task_tracker_kpi.resume_task.disease_name }} ({{ task_tracker_kpi.resume_task.slot_type|capitalize }})
-          </a>
-          {% if task_tracker_kpi.resume_task.is_stale %}
-          <div class="small text-muted mt-2">
-            This lock is marked stale and may be auto-cleared soon.
-          </div>
-          {% endif %}
-        </div>
-        {% endif %}
-        <div class="small text-muted mt-2">
-          Workbenches release automatically after their idle or absolute lease expiry.
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-</div> 
-
-
-  
-
-<!-- Completed KPIs Row -->
-<div class="row g-3 mb-4"> 
-  <h3>My Gradings</h3>
-  <div class="col-md-4">
-    <div class="card  kpi-card shadow-sm h-100">
-      <div class="card-body">
-        {% set combined_resident_completed = kpi_resident_completed + kpi_resident2_completed %}
-        <h5 class="card-title d-flex align-items-center gap-2">
-          <span>Resident Grading Completed</span>
-          <span class="info-tooltip">
-            <button
-              type="button"
-              class="info-tooltip__trigger"
-              aria-label="Explain resident revision policy"
-            >?</button>
-            <span class="info-tooltip__panel" role="tooltip">
-              Resident and Resident2 grades can be revised by the original grader for up to 24 hours after submission. After that, the grading remains viewable from history but becomes read-only.
-            </span>
-          </span>
-        </h5>
-        <h2 class="card-text">{{ combined_resident_completed }}</h2>
-        <p class="text-muted">Completed Resident &amp; Resident2 Tasks</p>
-        {% if kpi_resident_completed_by_disease %} <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in
-          kpi_resident_completed_by_disease.items() %}
-          {% set disease_completed_combined = count + kpi_resident2_completed_by_disease.get(disease_name, 0) %}
-          {% if disease_completed_combined > 0 %} <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span> <span class="badge bg-success">{{ disease_completed_combined }}</span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div> 
-<div class="col-md-4">
-    <div class="card  kpi-card  shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title d-flex align-items-center gap-2">
-          <span>Arbitration Completed</span>
-          <span class="info-tooltip">
-            <button
-              type="button"
-              class="info-tooltip__trigger"
-              aria-label="Explain arbitrator revision policy"
-            >?</button>
-            <span class="info-tooltip__panel" role="tooltip">
-              Arbitrator decisions can be revised by the same arbitrator for up to 24 hours after submission. After that, the grading remains viewable from history but becomes read-only.
-            </span>
-          </span>
-        </h5>
-        <h2 class="card-text">{{ kpi_arbitration_completed }}</h2>
-        <p class="text-muted">Completed Arbitration Tasks</p> {% if kpi_arbitration_completed_by_disease %} <div
-          class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in kpi_arbitration_completed_by_disease.items() %} {% if count > 0 %} <div
-            class="d-flex justify-content-between"> <span>{{ disease_name }}</span> <span class="badge bg-success">
-              {{ count }}</span> </div> {% endif %} {% endfor %}
-        </div> {% endif %}
-      </div>
-    </div>
-  </div>  </div> 
   
 
 {% endblock %}

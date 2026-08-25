@@ -51,6 +51,29 @@ def _require_media_access(
         abort(404)
 
 
+# Cache policy for protected media.
+#
+# "no-cache" does not mean "do not store" - it means the browser must
+# revalidate with the server before *every* use. Each view therefore still runs
+# @login_required and authorize_media_source(); on success send_file() answers
+# 304 Not Modified with no image body, and on failure the browser is not
+# permitted to display its copy.
+#
+# This replaced "private, max-age=60", under which the browser displayed the
+# image from its own cache for sixty seconds without contacting the server at
+# all - no authentication, no authorization - while still writing the bytes to
+# disk. That was the weaker option on both axes: it gave up the access check and
+# kept the exposure.
+#
+# Retinal images are biometric data, so the bytes-at-rest exposure is a
+# data-protection decision, not a performance one. It was accepted deliberately
+# on 2026-08-25: graders navigate between images constantly and re-downloading
+# 5-15 MB originals each time is not viable, and this exposure is unchanged from
+# the previous policy. "no-store" would remove it but forces a full re-download
+# on every view. See docs/15-DEVELOPMENT/grader_responsiveness_performance_plan.md.
+PROTECTED_MEDIA_CACHE_CONTROL = "private, no-cache"
+
+
 def _build_image_response(
     image_path_str: str,
     filename: str,
@@ -123,7 +146,7 @@ def _serve_encounter_image(encounter_file: EncounterFile, zip_file: ZipFile, uui
         image_path_str,
         encounter_file.filename,
         uuid,
-        cache_control='private, max-age=60',
+        cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
     )
 
 
@@ -164,7 +187,7 @@ def _serve_encounter_thumbnail(encounter_file: EncounterFile, zip_file: ZipFile,
             str(thumbnail_path),
             thumbnail_filename,
             uuid,
-            cache_control='private, max-age=60',
+            cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
             extra_headers={'X-Thumbnail': 'true'},
             download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
         )
@@ -183,7 +206,7 @@ def _serve_direct_image(direct_image: DirectImageUpload, uuid: str, kind: str):
         image_path_str,
         filename,
         uuid,
-        cache_control='private, max-age=60',
+        cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
     )
 
 
@@ -570,7 +593,7 @@ def directImgOrigThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSou
                     str(thumbnail_path),
                     thumbnail_filename,
                     uuid,
-                    cache_control='private, max-age=60',
+                    cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                     extra_headers={'X-Thumbnail': 'true'},
                     download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
                 )
@@ -595,7 +618,7 @@ def directImgOrigThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSou
                         str(thumb_path),
                         thumb_basename,
                         uuid,
-                        cache_control='private, max-age=60',
+                        cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                         extra_headers={'X-Thumbnail': 'true'},
                         download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
                     )
@@ -637,7 +660,7 @@ def directImgEdThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSourc
                     str(thumbnail_path),
                     thumbnail_filename,
                     uuid,
-                    cache_control='private, max-age=60',
+                    cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                     extra_headers={'X-Thumbnail': 'true'},
                     download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
                 )
@@ -662,7 +685,7 @@ def directImgEdThumbnailByUUID(uuid: str, *, preauthorized: AuthorizedMediaSourc
                         str(thumb_path),
                         thumb_basename,
                         uuid,
-                        cache_control='private, max-age=60',
+                        cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                         extra_headers={'X-Thumbnail': 'true'},
                         download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
                     )
@@ -690,7 +713,7 @@ def _serve_direct_final_thumbnail(db, direct_image: DirectImageUpload, uuid: str
                 str(thumbnail_path),
                 thumbnail_filename,
                 uuid,
-                cache_control='private, max-age=60',
+                cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                 extra_headers={'X-Thumbnail': 'true'},
                 download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
             )
@@ -882,7 +905,7 @@ def _serve_encounter_set_thumbnail(img: EncounterSetImage, uuid: str):
                 str(thumb_path),
                 img.thumbnail_filename,
                 uuid,
-                cache_control="private, max-age=300",
+                cache_control=PROTECTED_MEDIA_CACHE_CONTROL,
                 extra_headers={"X-Thumbnail": "true"},
             )
     return _serve_encounter_set_final_image(img, uuid)

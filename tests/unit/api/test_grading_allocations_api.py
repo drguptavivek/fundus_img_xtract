@@ -179,12 +179,15 @@ def test_project_encounter_set_queue_api_returns_current_users_queues(
     )
     observed = {}
 
-    def _queues(_db, *, user_id):
+    # The route now goes through the cached accessor in grading.queue_cards,
+    # which returns already-serialised dicts rather than DTOs.
+    def _queues(_db, *, user_id, refresh=False):
         observed["user_id"] = user_id
-        return (queue,)
+        observed["refresh"] = refresh
+        return [queue.to_dict()]
 
     monkeypatch.setattr(
-        "api.grading_allocations.list_project_encounter_set_queues",
+        "api.grading_allocations.project_encounter_set_cards",
         _queues,
     )
 

@@ -1679,3 +1679,34 @@ audio {
   z-index: 1050;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 }
+
+/* Grading dashboard queue loader.
+   Mirrors the workbench submit overlay (.gwb-loader-*) so the dashboard and the
+   workbench present the same waiting state; kept under its own names so the two
+   can evolve independently. */
+.queue-loader-mark {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  margin: 0 auto 1rem;
+  display: grid;
+  place-items: center;
+}
+.queue-loader-mark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: .25rem solid transparent;
+  border-top-color: var(--bs-primary);
+  border-left-color: var(--bs-primary);
+  border-radius: 50%;
+  animation: queue-loader-counter-spin .9s linear infinite;
+}
+.queue-loader-logo {
+  width: 3.25rem;
+  height: 3.25rem;
+  object-fit: contain;
+  animation: queue-loader-logo-spin 2.2s linear infinite;
+}
+@keyframes queue-loader-logo-spin { to { transform: rotate(360deg); } }
+@keyframes queue-loader-counter-spin { to { transform: rotate(-360deg); } }

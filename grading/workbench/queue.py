@@ -6,27 +6,43 @@ does not create or consult the legacy ``TaskTracker`` rows.
 
 from __future__ import annotations
 
+import random
 from datetime import timedelta
 
-from sqlalchemy import and_, exists, func, or_
-from sqlalchemy.orm import aliased, joinedload
+from sqlalchemy import and_, exists, false as sa_false, func, or_
+from sqlalchemy.orm import aliased
 
+from grading_allocation.constants import capacity_for_role_slot
+from grading_allocation.dashboard import (
+    exact_allocation_predicate,
+    project_enforces_allocation,
+)
 from grading_allocation.eligibility import (
-    eligible_enforced_project_task_contexts,
     eligible_lab_unit_ids,
     is_user_eligible_for_task,
+    legacy_eligible_lab_unit_ids,
 )
-from grading_allocation.exceptions import AllocationContextError
-from grading_allocation.models import ProjectGradingAllocationPolicy
-from grading_allocation.resolver import resolve_task_allocation_context
-from models import EncounterFile, EncounterSetImage, Grade, GradingTask, LinkedDiseaseGrading
+from models import (
+    EncounterSetGradingPackage,
+    Grade,
+    GradingTask,
+    LinkedDiseaseGrading,
+)
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import reconcile_active_packages
 from .linked_tasks import get_linked_disease_ids
 from auth.utils import utcnow
 
 
-def select_next_task(db, *, user_id: int, disease_id: int, role_slot: str, lab_unit_id: int | None):
+def _build_candidate_query(
+    db, *, user_id: int, disease_id: int, role_slot: str, lab_unit_id: int | None
+):
+    """The queue's structural filters, before allocation eligibility.
+
+    Extracted so selection and its verification exercise exactly the same
+    predicates. Returns ``(query, labs)`` or ``None`` when the user has no
+    eligible lab for this disease and slot.
+    """
     labs = eligible_lab_unit_ids(
         db, user_id=user_id, disease_id=disease_id, role_slot=role_slot
     )
@@ -92,65 +108,110 @@ def select_next_task(db, *, user_id: int, disease_id: int, role_slot: str, lab_u
         )
         query = query.filter(~recent_user_grade.exists())
 
-    # Resolve project allocation in bulk. Calling the scalar eligibility
-    # service for every ineligible row made an empty Resident2 queue take tens
-    # of seconds before Save & Next could fall back to Resident work.
-    candidates = (
-        query.options(
-            joinedload(GradingTask.encounter_file).joinedload(EncounterFile.patient_encounter),
-            joinedload(GradingTask.direct_image),
-            joinedload(GradingTask.patient_encounter),
-            joinedload(GradingTask.encounter_set_image).joinedload(EncounterSetImage.patient_encounter),
-            joinedload(GradingTask.encounter_set_package),
-        )
-        .order_by(func.random())
-        .all()
-    )
-    enforced_project_ids = {
-        row[0]
-        for row in db.query(ProjectGradingAllocationPolicy.project_id)
-        .filter(ProjectGradingAllocationPolicy.enforcement_enabled.is_(True))
-        .all()
-    }
-    enforced_eligible = eligible_enforced_project_task_contexts(
+    return query, labs
+
+
+def select_next_task(db, *, user_id: int, disease_id: int, role_slot: str, lab_unit_id: int | None):
+    built = _build_candidate_query(
         db,
         user_id=user_id,
-        task_slots=[(candidate, role_slot) for candidate in candidates],
-        enforced_project_ids=enforced_project_ids,
+        disease_id=disease_id,
+        role_slot=role_slot,
+        lab_unit_id=lab_unit_id,
     )
-    legacy_allowed_by_lab: dict[int, bool] = {}
-    for candidate in candidates:
-        try:
-            context = resolve_task_allocation_context(db, candidate)
-        except AllocationContextError:
-            continue
-        if context.project_id in enforced_project_ids:
-            if (candidate.id, role_slot) in enforced_eligible:
-                locked = _lock_available_candidate(db, candidate.id, role_slot)
-                if locked is not None:
-                    return locked
-            continue
-        if role_slot in {"resident", "resident2"}:
-            # The SQL queue already excludes the opposite resident slot. The
-            # remaining legacy decision depends only on this queue's user,
-            # disease, lab and capacity, so evaluate it once rather than once
-            # for thousands of tasks from the same queue.
-            if candidate.lab_unit_id not in legacy_allowed_by_lab:
-                legacy_allowed_by_lab[candidate.lab_unit_id] = is_user_eligible_for_task(
-                    db, user_id=user_id, task=candidate, role_slot=role_slot
-                )
-            if legacy_allowed_by_lab[candidate.lab_unit_id]:
-                locked = _lock_available_candidate(db, candidate.id, role_slot)
-                if locked is not None:
-                    return locked
-            continue
-        if is_user_eligible_for_task(
-            db, user_id=user_id, task=candidate, role_slot=role_slot
-        ):
-            locked = _lock_available_candidate(db, candidate.id, role_slot)
-            if locked is not None:
-                return locked
+    if built is None:
+        return None
+    query, labs = built
+    # Eligibility is decided in SQL rather than by loading the queue and
+    # filtering it in Python. The previous shape sorted every eligible row by
+    # random(), hydrated it through five joinedloads and walked it; an empty
+    # queue paid that in full before it could report "no work". Selection is
+    # still random, and the lease below is still what actually claims a task.
+    query = _apply_sql_eligibility(
+        db,
+        query,
+        user_id=user_id,
+        role_slot=role_slot,
+        disease_id=disease_id,
+        labs=labs,
+    )
+
+    candidate_ids = [row[0] for row in query.with_entities(GradingTask.id).distinct()]
+    if not candidate_ids:
+        return None
+    # Shuffled here rather than by ORDER BY random(), which cannot use an index
+    # and forces the database to sort the whole candidate set before returning
+    # its first row.
+    random.shuffle(candidate_ids)
+
+    for task_id in candidate_ids:
+        locked = _lock_available_candidate(db, task_id, role_slot)
+        if locked is not None:
+            return locked
     return None
+
+
+# Slots whose grade by the same user disqualifies them from filling this slot.
+_CONFLICTING_SLOTS = {
+    "resident": ("resident2",),
+    "resident2": ("resident",),
+    "arbitrator": ("resident", "resident2"),
+}
+
+
+def _apply_sql_eligibility(
+    db, query, *, user_id: int, role_slot: str, disease_id: int, labs
+):
+    """Narrow a queue to tasks this user may actually open.
+
+    Mirrors ``grading_allocation.eligibility.is_user_eligible_for_task``:
+
+    * a conflicting grade by this user disqualifies the task, whatever the
+      owning project;
+    * a task owned by an enforcing project needs an exact allocation match;
+    * anything else falls back to legacy disease/lab eligibility.
+
+    ``eligible_lab_unit_ids`` returns the union of legacy labs and enforced
+    project-allocation labs, so a lab in ``labs`` does not by itself imply
+    legacy eligibility. The legacy branch is therefore re-narrowed to the
+    legacy subset here.
+    """
+    capacity = capacity_for_role_slot(role_slot)
+    if capacity is None:
+        return query.filter(sa_false())
+
+    conflicting = _CONFLICTING_SLOTS.get(role_slot, ())
+    if conflicting:
+        conflicting_grade = db.query(Grade.id).filter(
+            Grade.task_id == GradingTask.id,
+            Grade.grader_user_id == user_id,
+            Grade.role_slot.in_(conflicting),
+        )
+        query = query.filter(~conflicting_grade.exists())
+
+    legacy_labs = legacy_eligible_lab_unit_ids(
+        db,
+        user_id=user_id,
+        disease_id=disease_id,
+        capacity=capacity,
+        lab_unit_ids=labs,
+    )
+
+    package = aliased(EncounterSetGradingPackage)
+    query = query.outerjoin(
+        package, package.id == GradingTask.encounter_set_package_id
+    )
+    enforcing = project_enforces_allocation(GradingTask)
+    exact = exact_allocation_predicate(
+        GradingTask, package, user_id=user_id, capacity=capacity.value
+    )
+
+    legacy_branch = (
+        and_(~enforcing, GradingTask.lab_unit_id.in_(legacy_labs))
+        if legacy_labs
+        else sa_false()
+    )
+    return query.filter(or_(legacy_branch, and_(enforcing, exact)))
 
 
 def _lock_available_candidate(db, task_id: int, role_slot: str):

@@ -90,12 +90,19 @@ def test_acquire_creates_durable_lease_and_returns_complete_source_configuration
     assert lease.released_at is not None
 
 
-def test_empty_resident2_legacy_queue_reuses_queue_level_eligibility(
+def test_resident2_queue_decides_eligibility_without_per_task_calls(
     db_session,
     resident_user,
     core_test_data,
     monkeypatch,
 ):
+    """Selection must not consult the scalar eligibility service per candidate.
+
+    Calling it once per row is what made an empty Resident2 queue take tens of
+    seconds. Allocation eligibility is now a SQL predicate, so a queue of any
+    size costs no per-task Python at all - this asserts zero calls, which is
+    the stronger form of the per-lab memoisation this test used to check.
+    """
     user = db_session.merge(resident_user)
     disease = db_session.merge(core_test_data["glaucoma"])
     lab = db_session.merge(core_test_data["lab_unit"])
@@ -120,16 +127,11 @@ def test_empty_resident2_legacy_queue_reuses_queue_level_eligibility(
     monkeypatch.setattr(queue_module, "get_linked_disease_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         queue_module,
-        "eligible_enforced_project_task_contexts",
-        lambda *args, **kwargs: {},
-    )
-    monkeypatch.setattr(
-        queue_module,
         "is_user_eligible_for_task",
         lambda *args, **kwargs: eligibility_calls.append(kwargs["task"].id) or False,
     )
 
-    candidate = queue_module.select_next_task(
+    queue_module.select_next_task(
         db_session,
         user_id=user.id,
         disease_id=disease.id,
@@ -137,8 +139,7 @@ def test_empty_resident2_legacy_queue_reuses_queue_level_eligibility(
         lab_unit_id=lab.id,
     )
 
-    assert candidate is None
-    assert len(eligibility_calls) == 1
+    assert eligibility_calls == []
 
 
 @pytest.mark.parametrize("workflow", ["package", "revision"])

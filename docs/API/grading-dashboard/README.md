@@ -2,6 +2,82 @@
 
 These read-only endpoints power the grader-facing `/grading/` eligibility and history panels. Both endpoints require an authenticated user with the `resident` or `ophthalmologist` application role. Returned records are restricted by the caller's grading/lab scope.
 
+## Get my grading queues
+
+`GET /api/grading/me/queues`
+
+Both dashboard queue panels in one payload. Deliberately asymmetric:
+`project_encounter_sets` arrives complete with counts because those are cheap to
+derive, while `legacy_diseases` carries **no counts** — each disease is counted
+on demand through the per-disease endpoint below, so one large queue cannot hold
+up the rest of the dashboard.
+
+Requires the `resident` or `ophthalmologist` role. Results are scoped to the
+caller; there is no user parameter.
+
+```json
+{
+  "success": true,
+  "project_encounter_sets": [
+    {
+      "project": {"id": 3, "title": "Integrated DR Glaucoma Screening", "code": "ICMR-VG"},
+      "target": {"key": "disease_encounter:2:15", "label": "DR / EncounterSet",
+                 "encounter_set_type_name": "Remidio API Standard Encounter Set"},
+      "slots": [
+        {"slot": "resident", "label": "Resident", "package_count": 80,
+         "task_count": 804, "first_package_uuid": "c20bd587-..."}
+      ]
+    }
+  ],
+  "legacy_diseases": [
+    {"id": 1, "name": "Glaucoma", "can_grade_resident": true,
+     "can_grade_resident2": true, "can_arbitrate": true}
+  ]
+}
+```
+
+## Get one disease queue
+
+`GET /api/grading/me/queues/<disease_id>`
+
+Pending totals and linked follow-ups for a single disease. `combined_pending` is
+what the Start Grading control shows, because that control leases either resident
+slot. `has_work` is false when the queue is empty in every slot.
+
+Returns `404` with `error.code = "disease_not_gradable"` when the caller holds no
+active eligibility for the disease.
+
+```json
+{
+  "success": true,
+  "queue": {
+    "disease": {"id": 1, "name": "Glaucoma"},
+    "can_grade_resident": true, "can_grade_resident2": true, "can_arbitrate": true,
+    "resident_pending": 0, "resident2_pending": 5340, "combined_pending": 5340,
+    "arbitration_pending": 0, "arbitration_breakdown": {},
+    "linked_followups": [], "linked_followup_total": 0,
+    "has_work": true
+  }
+}
+```
+
+### Caching and freshness
+
+Both queue endpoints are served from a Redis object cache with a **30 second**
+TTL, keyed per grader (`grading:queue_card:{user}:{disease}` and
+`grading:project_queues:{user}`). Pass `?refresh=1` to bypass the cached value
+and re-store a freshly computed one; `GET /api/grading/project-encounter-set-queues`
+accepts the same parameter.
+
+These counts are a **workload indicator, not an entitlement**. Opening any task
+still runs the full per-task eligibility check, so a count that is up to 30
+seconds stale cannot grant access to work the grader may not do. Counts are also
+coarse in one direction only where a project enforces allocation: they reflect
+the exact allocation check, so they do not overstate available work.
+
+Package-state reconciliation runs on every call, including cache hits, because
+it is a write that advances packages past their post-Resident2 waiting period.
+
 ## Get my grading eligibility
 
 `GET /api/grading/me/eligibility`

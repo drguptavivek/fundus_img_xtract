@@ -43,7 +43,13 @@ def configure_blueprint() -> Blueprint:
     if _routes_configured:
         return bp
 
-    from .dashboard import index
+    from .dashboard import (
+        index,
+        disease_queue_fragment,
+        disease_queues_fragment,
+        project_queues_fragment,
+        refresh_queues_trigger,
+    )
     from .dual_grading import register_routes as register_dual_grading_routes
     from .start_grading import register_routes as register_start_grading_routes
     from .intra_rater import register_routes as register_intra_rater_routes
@@ -56,6 +62,26 @@ def configure_blueprint() -> Blueprint:
     from .workbench_page import register_routes as register_workbench_page_routes
 
     bp.add_url_rule("/", view_func=index, methods=["GET"])
+    bp.add_url_rule(
+        "/fragments/disease-queue/<int:disease_id>",
+        view_func=disease_queue_fragment,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/fragments/disease-queues",
+        view_func=disease_queues_fragment,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/fragments/project-queues",
+        view_func=project_queues_fragment,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/fragments/refresh-queues",
+        view_func=refresh_queues_trigger,
+        methods=["GET"],
+    )
     register_dual_grading_routes(bp)
     register_start_grading_routes(bp)
     register_intra_rater_routes(bp)

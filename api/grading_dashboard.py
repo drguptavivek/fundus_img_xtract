@@ -7,6 +7,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.dashboard_service import grader_eligibility_dto, grading_history_page
+from grading.queue_cards import disease_queue_card, grader_queue_overview
 
 from . import api_bp
 
@@ -22,6 +23,40 @@ def get_my_grading_eligibility():
             "success": True,
             "eligibility": grader_eligibility_dto(db, user_id=current_user.id),
         })
+
+
+@api_bp.route("/grading/me/queues", methods=["GET"])
+@roles_required(*GRADING_ROLES)
+def get_my_grading_queues():
+    """Both grading queue panels for the current grader.
+
+    Returns ``project_encounter_sets`` with their counts, and
+    ``legacy_diseases`` without counts - the latter are fetched per disease
+    from ``/grading/me/queues/<disease_id>`` so the dashboard can paint before
+    any queue has been counted.
+    """
+    with transaction_scope() as db:
+        return jsonify({
+            "success": True,
+            **grader_queue_overview(db, user_id=current_user.id),
+        })
+
+
+@api_bp.route("/grading/me/queues/<int:disease_id>", methods=["GET"])
+@roles_required(*GRADING_ROLES)
+def get_my_grading_queue(disease_id: int):
+    """Pending totals and linked follow-ups for one disease queue."""
+    with transaction_scope() as db:
+        card = disease_queue_card(db, user_id=current_user.id, disease_id=disease_id)
+        if card is None:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "disease_not_gradable",
+                    "message": "No active grading eligibility for this disease.",
+                },
+            }), 404
+        return jsonify({"success": True, "queue": card})
 
 
 @api_bp.route("/grading/me/history", methods=["GET"])

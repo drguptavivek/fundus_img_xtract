@@ -9,7 +9,7 @@ from flask_login import current_user
 
 from auth.roles import roles_required
 from grading_allocation.constants import AllocationCapacity, AllocationScope
-from grading_allocation.dashboard import list_project_encounter_set_queues
+from grading.queue_cards import project_encounter_set_cards
 from grading_allocation.dtos import AllocationInputDTO
 from grading_allocation.exceptions import GradingAllocationError
 from grading_allocation import service
@@ -27,11 +27,14 @@ GRADER_ROLES = ("resident", "resident2", "ophthalmologist", "arbitrator", "admin
 def get_project_encounter_set_queues():
     """Return pending enforced-project EncounterSet queues eligible for the user."""
     with transaction_scope() as db:
-        queues = list_project_encounter_set_queues(db, user_id=current_user.id)
         return jsonify(
             {
                 "success": True,
-                "queues": [queue.to_dict() for queue in queues],
+                "queues": project_encounter_set_cards(
+                    db,
+                    user_id=current_user.id,
+                    refresh=request.args.get("refresh") == "1",
+                ),
             }
         )
 

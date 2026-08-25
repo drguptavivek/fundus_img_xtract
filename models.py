@@ -1550,6 +1550,16 @@ class GradingTask(Base):
     # It does not redefine image identity; uniqueness is enforced across labs.
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id'), nullable=False, index=True)
 
+    # Owning project, resolved from whichever source row this task hangs off.
+    # Maintained by the database (trigger trg_grading_tasks_apply_project_id):
+    # do not assign it in application code, and do not trust an in-session value
+    # before the row is flushed and refreshed. A companion guard trigger refuses
+    # to move a source row to another project while tasks still reference it, so
+    # this value cannot go stale.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey('projects.id', ondelete='SET NULL'), nullable=True
+    )
+
     state: Mapped[str] = mapped_column(String(24), default='pending', nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

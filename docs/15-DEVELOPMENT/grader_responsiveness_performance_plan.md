@@ -16,6 +16,206 @@ The objective is interactive latency that stays flat as data volume grows, under
 a hard constraint that no image is ever served without a live authentication and
 authorization check.
 
+## Implementation record — 2026-08-25
+
+The queue-side work in this plan is implemented. The image-side work is not, and
+could not be evaluated on the machine used (see "Not done" below). Everything in
+this section was measured on a production restore: 27,558 grading tasks, 7,794 in
+`pending`, four projects with `enforcement_enabled = true`, user `main_admin`.
+
+### Measured outcome
+
+| Path | Before | After |
+|---|---|---|
+| `/grading` server render | ~1.3–1.5 s | **0.076 s** |
+| Pending KPI, Glaucoma | 0.537 s | **0.033 s** |
+| Pending KPI, DR | 0.320 s | **0.042 s** |
+| `select_next_task`, Glaucoma resident | 0.504 s | **0.008 s** |
+| `select_next_task`, Glaucoma resident2 | 0.231 s | **0.009 s** |
+
+Displayed counts are unchanged: DR 5,067, Glaucoma 5,340, Dry AMD 22. `EXPLAIN
+ANALYZE` on the rewritten queue reports 2.29 ms for the enforced-project path and
+1.60 ms for the legacy path, both driven by `ix_task_disease_lab_state`.
+
+### What was built
+
+1. **`grading_tasks.project_id`, maintained by the database**
+   (migration `0d3edcf7bc3b`). Owning project was previously resolved at read
+   time by outer-joining six tables and coalescing, *and* independently in Python
+   by `grading_allocation.resolver._source_project_ids` — two definitions of one
+   rule. It is now resolved once, on write, by
+   `trg_grading_tasks_apply_project_id`.
+
+   Chosen over the alternative of a plain SQL view after measuring both: the view
+   reached 10.5 ms because it still scanned the source tables whole, while the
+   column reached 3.0 ms. A materialized view was rejected outright — it would
+   reintroduce staleness and `ACCESS EXCLUSIVE` refresh locks on a value that
+   gates authorization.
+
+2. **Guard triggers on the four source tables.** The denormalisation is only safe
+   while a task's owning project never changes after the task exists. That
+   already held — `remidio_encounter_migration.service` deletes an encounter's
+   tasks and packages *before* reassigning its project — but it held by
+   convention. `grading_source_project_change_guard` now refuses any
+   `project_id` change while grading tasks still reference the row, so a future
+   caller cannot silently strand the stored value. The existing migration
+   complies unchanged.
+
+3. **Allocation eligibility expressed in SQL.**
+   `exact_allocation_predicate()` and `project_enforces_allocation()` in
+   `grading_allocation/dashboard.py` are the SQL form of
+   `is_user_eligible_for_task`, including its refusal to grant access when the
+   target identity cannot be resolved.
+
+4. **Counting stopped materialising.** `_pending_count` is now a `COUNT(*)`;
+   `_eligible_pending_tasks` is deleted. It previously loaded every pending row
+   through five `selectinload`s and filtered in Python — 36,520 rows and ~11 MB
+   to produce six integers.
+
+5. **`select_next_task` no longer sorts or hydrates the queue.** It filters in
+   SQL, fetches ids, shuffles in Python, and leases as before. Random selection
+   and the `FOR UPDATE SKIP LOCKED` lease semantics are unchanged.
+
+6. **Dashboard restructured.** The pending/completed KPI tiles were removed. Which
+   disease cards to show is derived from role rows alone (~6 ms); each card's
+   counts arrive afterwards from `/grading/fragments/disease-queue/<id>`, with the
+   same data available as JSON at `/api/grading/me/queues` and
+   `/api/grading/me/queues/<disease_id>`. Cards render an explicit empty state
+   rather than disappearing, so the grid does not reflow as responses arrive.
+
+7. **D3 implemented.** `server_side_session.py` rewrites the session row only when
+   its meaning changes or the slid expiry has drifted 60 s, against a 30-minute
+   idle timeout. The drift errs toward *earlier* expiry, which is fail-safe.
+
+8. **D7 resolved: protected media now uses `private, no-cache` + ETag.** Eight
+   `max-age=60` sites and one `max-age=300` were replaced by a single named
+   constant. Every image view runs the full authorization path again, while the
+   body is transferred only once. See "Resolved: client caching policy" below.
+
+9. **Both queue panels cached in Redis for 30 s**, with an explicit refresh
+   control. `app_cache.cache` was already `RedisCache` (`fim:cache:` prefix), so
+   this is the existing object cache rather than a new dependency. Keys are
+   `grading:queue_card:{user}:{disease}` and `grading:project_queues:{user}`.
+
+   A queue count is a workload indicator, not an entitlement — opening any task
+   still runs the full per-task eligibility check — so bounded staleness is
+   acceptable where it would not be for an authorization decision. The refresh
+   control busts both panels in one action, returning the Legacy container and
+   swapping the Project panel out of band, so the two can never display counts
+   from different moments.
+
+   `list_project_encounter_set_queues()` gained `reconcile=False` for this.
+   `reconcile_active_packages()` is a **write** that advances packages past
+   their post-Resident2 waiting period, and other request paths depend on it
+   having run, so it executes on every call including cache hits; only the
+   projection after it is cached. It is ~6% of that call (0.015 s of 0.248 s),
+   so caching the remainder still gives 0.218 s → 0.015 s.
+
+   Measured page cost with both panels warm: **0.076 s**.
+
+### What is deliberately not cached
+
+| Component | Cost | Why not |
+|---|---|---|
+| `list_active_sessions` | 0.004 s | Lease state. It changes the instant a grader acquires or releases a task; a stale value would offer a Resume control for a released lease. |
+| `grading_history_page` | 0.022 s | Keyed by date, history type, disease and page, *and* it changes as a direct result of the grader's own submission, so staleness is far more visible than a 30-second-old count. |
+| `grader_eligibility_dto` | 0.009 s | Cacheable in principle on a longer TTL, but too small to be worth the invalidation surface. |
+| `get_user_grading_eligibility_details` | 0.009 s | As above. |
+
+Redis runs `allkeys-lru` at 256 MB shared with the Celery broker (D8). At the
+time of writing it held 801 keys using 2.48 MB — about 1% — so these entries do
+not materially change the eviction risk. D8 remains worth fixing on its own
+merits: an evicted broker key is a lost background job, not a slow page.
+
+### Verification
+
+Because this is the grading authorization boundary, the SQL predicate was
+compared against `is_user_eligible_for_task` per candidate across all fifteen of
+`main_admin`'s queues. Every queue matched exactly, including the two extremes:
+Glaucoma legacy (5,341 candidates, 0 eligible) and Glaucoma resident2 under the
+enforced *Integrated DR Glaucoma Screening* project (6,181 candidates, 1,658
+eligible). The backfilled column was checked against both prior definitions — the
+Python resolver and the six-way `COALESCE` — with zero disagreements across all
+27,558 rows.
+
+Suite result: 435 passed, 2 failed; both failures (`test_wadhwani_glaucoma_batch`)
+reproduce on a clean tree and are unrelated.
+
+`test_empty_resident2_legacy_queue_reuses_queue_level_eligibility` was rewritten
+as `test_resident2_queue_decides_eligibility_without_per_task_calls`. It asserted
+exactly one per-lab eligibility call; selection now makes zero, so it asserts
+that instead — the stronger form of the same guard.
+
+### Browser verification
+
+The dashboard changes were confirmed in Chrome against the running application,
+not only server-side.
+
+Reload with scroll position restored — the case that originally looked like
+flashing:
+
+```
+CLS: 0        layout-shift entries: 0        document height delta: 0 px
+```
+
+Chrome's layout-shift instrument reports no shift at all. The earlier flashing
+came from six placeholder cards that each resized as their counts arrived; the
+panel is now fetched as one unit behind a single loader, so nothing moves.
+
+Refresh control:
+
+```
+CLS after click: 0     placeholders visible: false     loader visible: false
+fragments: refresh-queues -> project-queues?refresh=1
+                          -> disease-queue/{2,3,12,1,14,13}?refresh=1
+```
+
+One click fires the event; all six cards and the project panel re-fetch
+themselves and swap only when their own response lands, so visible counts are
+never replaced by a placeholder.
+
+### Corrections to this plan
+
+Measurement contradicted three of the claims below. They are left in place for
+provenance, with the correction recorded here.
+
+- **D2's index claim is wrong.** It states `grading_tasks` has "no composite index
+  matching the queue's actual filter predicate". `ix_task_disease_lab_state`
+  exists and the planner uses it:
+  `Index Cond: ((disease_id = 1) AND (lab_unit_id = ANY (...)) AND (state = ...))`.
+
+- **D12's recommendation was implemented, measured, and rejected.** Counting via
+  the coarse `exclude_unallocated_project_tasks()` filter was 5.2× faster, but it
+  ignores `scope` and `encounter_set_type_id`, which the exact check matches. On
+  this data it moved Glaucoma resident from 0 to 4,211 and DR resident from 0 to
+  776 — the dashboard would have advertised thousands of tasks that cannot be
+  opened, corroborated by `select_next_task` returning empty for that queue. The
+  exact check was kept and made fast instead.
+
+- **The magnitudes were overstated, and the attribution was wrong.** `/grading`
+  cost 0.88 s, not "tens of seconds". Only 28.5% of it was database time; the rest
+  was ORM hydration. No individual query was slow — the costliest statement shape
+  was 0.100 s across nine calls, every plan index-driven and fully buffer-cached.
+  The page was also dominated by a single tile: pending (10,429) cost 0.997 s of a
+  1.315 s page, while completed (207) cost 0.014 s, because one counted with
+  `COUNT(*)` and the other counted by materialising.
+
+### Not done
+
+- **D5, D6, D13 — image tiering and package preload.** Not implemented. D13 was
+  measured in a real browser and is recorded above; the byte cost behind it
+  could not be measured on the machine used: the database is a production restore but the
+  image files are absent (`files/` holds only `2026_05_03`–`06`, while rows
+  reference `2026_08_04`), so `/media/img/...` returns 404 and no image path can
+  be exercised. (D7's caching policy is resolved separately - it was a header
+  change that did not require serving a real image.)
+- **D1 — production process model.** The local stack runs the Flask development
+  server via a gitignored `docker-compose.override.yml`, which is deliberate dev
+  configuration and says nothing about production. Whether the deployment goes
+  through `gunicorn_config.py` must be checked on the deploy host, along with
+  `DEBUG`.
+- **D8, D9, D10, D11** — untouched.
+
 ## Constraints
 
 These are requirements, not preferences. Every decision below is subordinate to
@@ -70,6 +270,11 @@ be verified independently of any performance work.
 
 ### D2. Task acquisition is O(entire eligible queue)
 
+> **Implemented 2026-08-25, with one correction.** The unbounded random sort is
+> gone; see the implementation record above. The claim below that no composite
+> index matches the queue predicate is wrong - `ix_task_disease_lab_state`
+> exists and is used.
+
 `grading/workbench/queue.py:99-107`:
 
 ```python
@@ -106,6 +311,9 @@ since until then no index can be used.
 
 ### D3. Session state lives in Postgres and is written on every request
 
+> **Implemented 2026-08-25.** The row is rewritten only on material change or
+> 60s expiry drift, against a 30-minute idle timeout.
+
 `server_side_session.py:66` opens the session with `db.get(FlaskSession, sid)`.
 `server_side_session.py:124` saves it with an `UPDATE` and `COMMIT`
 **unconditionally** — there is no `if not session.modified: return` guard.
@@ -132,6 +340,12 @@ check is not mistaken for a database cost.
 
 ### D5. There is no display-size image tier
 
+> **Not done, not assessable locally** - the image files are absent from the
+> development machine, so the byte cost cannot be measured here. See **D13**:
+> browser measurement shows a package fetches *every* panel at full resolution
+> up front, so this waste is multiplied by the package size rather than paid
+> once per view.
+
 `utils/image_processing.py:20` defines `THUMBNAIL_SIZE = (180, 180)`. That is the
 only derivative the system produces. `MAX_IMAGE_SIZE` permits originals up to
 50 MB.
@@ -154,6 +368,9 @@ the current single-process server, a listing page with cold thumbnails stalls th
 whole application.
 
 ### D7. Image cache headers defeat the stated access-control requirement
+
+> **Resolved 2026-08-25.** Replaced with `private, no-cache` + ETag; see
+> "Resolved: client caching policy" above. The 304 path is verified.
 
 `utils/utilsImgServe.py:126`, `:167`, `:186`, `:573`, `:598`, `:640`, `:665`,
 and `:693` set `Cache-Control: private, max-age=60`.
@@ -219,6 +436,13 @@ family. This is recorded for completeness; acting on it is out of scope per
 
 ### D12. The `/grading` dashboard counts pending work by materializing it
 
+> **Diagnosis confirmed; prescription rejected.** Counting through the coarse
+> `exclude_unallocated_project_tasks()` filter overstated Glaucoma resident as
+> 4,211 against a true 0, because that filter ignores `scope` and
+> `encounter_set_type_id`. The exact check was kept and moved into SQL instead.
+> Magnitudes here are also overstated: the page cost 0.88s, ~70% of it ORM
+> hydration rather than database time. See the implementation record above.
+
 `utils/dualGradingKPIs.py:148-165` decides how to count pending tasks:
 
 ```python
@@ -281,6 +505,61 @@ A non-zero first result together with large pending-state counts confirms this
 as the dominant cost. A zero first result means the secondary items above are
 the whole story and this diagnosis should be re-derived from measurement.
 
+### D13. Every panel in a package preloads a full-resolution original
+
+> **Added 2026-08-25 from browser measurement.** Not present in the original
+> diagnosis, and it changes D5's sizing argument.
+
+`templates/grading/workbench.html:514-522`:
+
+```js
+async function preloadRemainingImagesSerially() {
+  for (const panel of imagePanels) {
+    if (panel.classList.contains('active')) continue;
+    await loadPanelMedia(panel);          // full-resolution original
+  }
+}
+window.addEventListener('load', () => {
+  preloadRemainingImagesSerially().catch(() => undefined);
+}, {once: true});
+```
+
+The template itself defers correctly - only the first panel is given `src`, the
+rest carry `data-src` (`:287-288`). This preloader then walks every remaining
+panel on `window.load` and fills them in. That is deliberate, and it is why
+moving between panels feels instant.
+
+Measured in Chrome on a five-image EncounterSet package, immediately after a
+reload, with the grader still on panel 0 and having navigated nowhere:
+
+```
+navType: "reload"      activePanelIndex: 0
+fullSizeRequests: 5    uniqueFullSize: 5    duplicated: []
+stillDeferred: 0       thumbnailRequests: 0
+```
+
+So the whole package is fetched at full resolution before the grader has looked
+past the first image. **This multiplies D5 by the number of images in the
+package.** D5 frames the waste as per view - ten to twenty times more pixels
+than the display can resolve. For a package it is that, N times over, up front:
+an eleven-image package pulls eleven originals at 5-15 MB, so 55-165 MB, to show
+one image.
+
+Two consequences for the plan:
+
+- The Phase 2 display tier is not merely an optimisation on this path, it is
+  what makes this preload design affordable. At a ~1600 px derivative of a few
+  hundred KB, preloading a whole package is cheap and the current behaviour is
+  right. At full resolution it is not.
+- The preload competes for bandwidth with the image the grader is actually
+  looking at, and with Save & Next, on the same connection. It runs serially and
+  starts after `load`, which limits the damage, but the ordering means a large
+  package can still be transferring while the grader is working.
+
+Do not simply remove the preloader: that trades a slow package open for a slow
+every-panel-navigation. Size the images first, then re-measure whether the
+preload is still worth keeping.
+
 ## Decisions
 
 - The server process model is fixed first. Every other measurement is unreliable
@@ -302,34 +581,54 @@ the whole story and this diagnosis should be re-derived from measurement.
 - No change in this plan alters grading business rules, task state transitions,
   lease semantics, or the dual-grading workflow.
 
-## Open decision: client caching policy
+## Resolved: client caching policy — `private, no-cache` (2026-08-25)
 
-This is the one item requiring a decision from the data-protection owner rather
-than from engineering. Both options satisfy the constraint that no image is
-served without an authentication check. They differ in whether image bytes may
-persist in the browser's disk cache between views.
+**Decided and implemented.** `utils/utilsImgServe.py` now serves protected media
+with `private, no-cache` from a single named constant
+(`PROTECTED_MEDIA_CACHE_CONTROL`), replacing eight `private, max-age=60` sites
+and one `private, max-age=300`.
 
-| Policy | Auth check per view | Bytes at rest on grader machine | Cost per repeat view |
+The requirement driving the decision was that large originals must not be
+re-downloaded on ordinary page navigation. `max-age=60` is not needed for that,
+and was the weaker option on both axes at once:
+
+| Policy | Re-downloads on navigation | Auth check per view | Bytes at rest on grader machine |
 |---|---|---|---|
-| `private, no-cache` + ETag | Yes, every view | Yes, in browser disk cache | `304`, a few hundred bytes |
-| `private, no-store` | Yes, every view | No | Full re-download |
+| `private, max-age=60` (previous) | No | **No — skipped for 60s** | Yes |
+| `private, no-cache` + ETag (**now**) | **No** — `304`, a few hundred bytes | **Yes, every view** | Yes |
+| `private, no-store` | **Yes, in full** | Yes | No |
 
-`no-cache` does not mean "do not cache". It requires the browser to revalidate
-with the server before **every** use. The full `@login_required` and
-`authorize_media_source()` path runs on each view; on success the server returns
-`304 Not Modified` with no image body, and on failure it returns 401/403 and the
-browser is not permitted to display its copy. Flask 3.1's `send_file` already
-emits `ETag` and `Last-Modified` and handles conditional requests
-(`conditional=True` is the default), so this is a header change rather than a
-feature.
+`no-cache` does not mean "do not store"; it requires revalidation before every
+use. Each view therefore runs `@login_required` and `authorize_media_source()`
+in full, and only then answers `304 Not Modified` with no image body. The
+grader keeps the "no re-download" behaviour and the access check is restored.
 
-Either option is a strict improvement over the current `max-age=60`, which skips
-the authentication check for sixty seconds *and* stores the bytes. **Phase 2
-implements `no-store` unless the data-protection owner confirms that disk-cached
-bytes are acceptable**, since `no-store` is the conservative reading and the
-Phase 2 display tier is what makes it affordable.
+Verified against a real file: first view `200` with `ETag` and `Last-Modified`;
+a repeat carrying `If-None-Match` returns `304`, and one carrying
+`If-Modified-Since` returns `304`. `send_file()` already emitted both validators
+and handles conditional requests by default, so this was a header change rather
+than a feature.
+
+**Bytes-at-rest was accepted deliberately**, not defaulted. Retinal imagery is
+biometric data, so this was the data-protection owner's call. `no-store` would
+remove the exposure but forces a full re-download of a 5-15 MB original on every
+view, which is not viable for a grader moving between images continuously - and
+the exposure is unchanged from the previous policy, which stored the same bytes
+*and* skipped authentication. The decision therefore strictly improves access
+control while holding retention constant.
+
+This matters more in light of **D13**: a package preloads every panel, so
+revalidation turns an eleven-image package revisit into eleven small conditional
+requests rather than eleven full originals.
 
 ## Phases
+
+> **Status.** Phase 3 is done, and went further than described here: allocation
+> eligibility moved into SQL and the owning project was denormalised onto the
+> task, so both the queue scan and the pending counts are now index-driven.
+> Phase 1's session-overhead item (D3) is done. Phases 0, 2, 4 and 5 are not
+> started, and Phase 2 remains blocked on the client-caching decision. See the
+> implementation record at the top for measurements and rationale.
 
 Phases 1 through 4 are independent and may be reordered if circumstances demand,
 except that Phase 0 precedes everything and Phase 5 depends on Phase 2.
@@ -380,6 +679,12 @@ sessions" all behave unchanged; Save & Next by one grader no longer delays image
 delivery to another; per-request database round trips measurably drop.
 
 ### Phase 2 — Image payload
+
+> **Scope note.** This phase now also governs D13. Size the derivative
+> first, then re-measure whether the whole-package preload is still worth
+> keeping - removing it before sizing would only trade a slow package open for
+> slow panel navigation.
+
 
 1. Settle the open decision above and set the image `Cache-Control` headers in
    `utils/utilsImgServe.py` accordingly, replacing every `max-age=60`. Whichever

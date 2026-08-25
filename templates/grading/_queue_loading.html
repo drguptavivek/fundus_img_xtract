@@ -1,0 +1,16 @@
+{# Panel-level loading state, matching the workbench's submit loader so the two
+   read as the same application. One steady indicator for the whole panel, sized
+   to roughly the height it will occupy, so the page does not jump when the real
+   cards replace it. #}
+<div class="row mb-4 g-3" aria-busy="true">
+  <div class="col-12">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5" role="status" aria-live="polite">
+        <div class="queue-loader-mark" aria-hidden="true">
+          <img class="queue-loader-logo" src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="">
+        </div>
+        <strong>Loading your grading queues&hellip;</strong>
+      </div>
+    </div>
+  </div>
+</div>

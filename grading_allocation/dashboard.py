@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import exists, select, func, or_
+from sqlalchemy import and_, case, exists, literal, select, func, or_
 from sqlalchemy.orm import Session, selectinload, aliased
 
 from grading.workbench.package_workflow import reconcile_active_packages
+from grading_allocation.constants import AllocationScope
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectGradingTargetDTO,
@@ -40,8 +41,15 @@ def list_project_encounter_set_queues(
     db: Session,
     *,
     user_id: int,
+    reconcile: bool = True,
 ) -> tuple[ProjectEncounterSetQueueDTO, ...]:
-    """Return pending enforced-project EncounterSet packages eligible for a user."""
+    """Return pending enforced-project EncounterSet packages eligible for a user.
+
+    ``reconcile=False`` skips the package-state reconciliation below. Only pass
+    it when the caller has already reconciled in this request - the read is
+    cacheable, but the reconciliation is a write that advances packages past
+    their post-Resident2 waiting period and must not be skipped.
+    """
     project_rows = db.execute(
         select(Project)
         .join(
@@ -55,7 +63,8 @@ def list_project_encounter_set_queues(
     if not projects:
         return ()
 
-    reconcile_active_packages(db)
+    if reconcile:
+        reconcile_active_packages(db)
 
     tasks = (
         db.execute(
@@ -267,24 +276,12 @@ def exclude_unallocated_project_tasks(
     ``grading_allocation.eligibility.is_user_eligible_for_task`` before the
     task can actually be opened.
     """
-    from models import DirectImageUpload, EncounterFile, EncounterSetImage, PatientEncounters
-
     inner = aliased(task_entity)
-    task_encounter = aliased(PatientEncounters)
-    set_image = aliased(EncounterSetImage)
-    set_encounter = aliased(PatientEncounters)
-    encounter_file = aliased(EncounterFile)
-    file_encounter = aliased(PatientEncounters)
-    direct_image = aliased(DirectImageUpload)
 
-    project_id = func.coalesce(
-        task_encounter.project_id,
-        set_image.project_id,
-        set_encounter.project_id,
-        encounter_file.project_id,
-        file_encounter.project_id,
-        direct_image.project_id,
-    )
+    # Owning project is denormalised onto the task by
+    # trg_grading_tasks_apply_project_id, so this no longer outer-joins the six
+    # source tables to coalesce it at read time.
+    project_id = inner.project_id
 
     allocation_conditions = [
         ProjectGraderAllocation.user_id == user_id,
@@ -306,12 +303,6 @@ def exclude_unallocated_project_tasks(
     unallocated = (
         select(inner.id)
         .select_from(inner)
-        .outerjoin(task_encounter, task_encounter.id == inner.patient_encounter_id)
-        .outerjoin(set_image, set_image.id == inner.encounter_set_image_id)
-        .outerjoin(set_encounter, set_encounter.id == set_image.patient_encounter_id)
-        .outerjoin(encounter_file, encounter_file.id == inner.encounter_file_id)
-        .outerjoin(file_encounter, file_encounter.id == encounter_file.patient_encounter_id)
-        .outerjoin(direct_image, direct_image.id == inner.direct_image_upload_id)
         .where(
             inner.id == task_entity.id,
             project_id.isnot(None),
@@ -320,3 +311,96 @@ def exclude_unallocated_project_tasks(
         .correlate(task_entity)
     )
     return query.filter(~exists(unallocated))
+
+
+def exact_allocation_predicate(task_entity, package, *, user_id: int, capacity: str):
+    """SQL form of the enforced-project half of ``is_user_eligible_for_task``.
+
+    ``package`` must be an ``EncounterSetGradingPackage`` alias already outer
+    joined to ``task_entity.encounter_set_package_id``.
+
+    Mirrors ``grading_allocation.resolver`` exactly, including its refusal to
+    grant access when the target identity cannot be resolved: Python returns a
+    ``None`` target for an EncounterSet task with no resolvable type or root
+    disease, and such a task is never eligible. ``target_resolvable`` below is
+    that same rule, so the two cannot diverge into granting access.
+    """
+    is_image_task = or_(
+        task_entity.encounter_file_id.isnot(None),
+        task_entity.direct_image_upload_id.isnot(None),
+    )
+    is_unified = package.grading_mode == "unified"
+
+    scope_expr = case(
+        (is_image_task, literal(AllocationScope.DISEASE_IMAGE.value)),
+        (is_unified, literal(AllocationScope.ENCOUNTER_SET_UNIFIED.value)),
+        else_=literal(AllocationScope.DISEASE_ENCOUNTER.value),
+    )
+    target_disease_expr = case(
+        (is_image_task, task_entity.disease_id),
+        (is_unified, literal(None)),
+        else_=package.root_scope_disease_id,
+    )
+    target_resolvable = or_(
+        is_image_task,
+        and_(is_unified, package.encounter_set_type_id.isnot(None)),
+        and_(
+            ~is_unified,
+            package.encounter_set_type_id.isnot(None),
+            package.root_scope_disease_id.isnot(None),
+        ),
+    )
+
+    allocation_match = select(ProjectGraderAllocation.id).where(
+        ProjectGraderAllocation.user_id == user_id,
+        ProjectGraderAllocation.active.is_(True),
+        ProjectGraderAllocation.capacity == capacity,
+        ProjectGraderAllocation.project_id == task_entity.project_id,
+        ProjectGraderAllocation.lab_unit_id == task_entity.lab_unit_id,
+        ProjectGraderAllocation.scope == scope_expr,
+        ProjectGraderAllocation.disease_id.is_not_distinct_from(target_disease_expr),
+        ProjectGraderAllocation.encounter_set_type_id.is_not_distinct_from(
+            package.encounter_set_type_id
+        ),
+    )
+    return and_(target_resolvable, exists(allocation_match))
+
+
+def project_enforces_allocation(task_entity):
+    """Whether this task's owning project has allocation enforcement enabled."""
+    return exists(
+        select(ProjectGradingAllocationPolicy.project_id).where(
+            ProjectGradingAllocationPolicy.project_id == task_entity.project_id,
+            ProjectGradingAllocationPolicy.enforcement_enabled.is_(True),
+        )
+    )
+
+
+def filter_to_exact_allocation(
+    query,
+    *,
+    user_id: int,
+    capacity: str,
+    task_entity=GradingTask,
+):
+    """Keep only tasks this user may actually open, decided entirely in SQL.
+
+    This is the counting-time equivalent of
+    ``grading_allocation.eligibility.is_user_eligible_for_task``. That function
+    resolves one task at a time from loaded ORM objects, which forced callers
+    that wanted a *count* to materialise the whole queue first. The same rule is
+    expressed here as a predicate so a count stays a count.
+    """
+    package = aliased(EncounterSetGradingPackage)
+    query = query.outerjoin(
+        package, package.id == task_entity.encounter_set_package_id
+    )
+    return query.filter(
+        or_(
+            task_entity.project_id.is_(None),
+            ~project_enforces_allocation(task_entity),
+            exact_allocation_predicate(
+                task_entity, package, user_id=user_id, capacity=capacity
+            ),
+        )
+    )

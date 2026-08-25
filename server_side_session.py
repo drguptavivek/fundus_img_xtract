@@ -16,6 +16,20 @@ from models import Session as DbSession, FlaskSession
 # Logger for session operations
 session_logger = logging.getLogger('session')
 
+# How stale the stored expiry may become before a response rewrites the row.
+#
+# Every authenticated request used to cost a SELECT + UPDATE + COMMIT, so a
+# grading page pulling a dozen images paid a dozen row writes and their WAL
+# flushes, plus the dead-tuple churn and autovacuum pressure that follows on a
+# hot table. The row only has to be rewritten when something in it actually
+# changes; sliding the idle expiry is the sole reason to write on an otherwise
+# unchanged request, and that can be batched.
+#
+# The cost of batching is granularity: a session can outlive its nominal idle
+# deadline by at most this long. Keep it far below the shortest idle timeout so
+# the security property is preserved rather than merely approximated.
+SESSION_EXPIRY_REFRESH_SECONDS = 60
+
 
 class DatabaseSession(CallbackDict, SessionMixin):
     def __init__(self, initial=None, session_id: Optional[str] = None, new: bool = False):
@@ -121,6 +135,38 @@ class DatabaseSessionInterface(SessionInterface):
         finally:
             db.close()
 
+    def _needs_rewrite(
+        self,
+        stored: FlaskSession,
+        *,
+        payload: str,
+        expires: datetime,
+        client_ip,
+        user_id_value: Optional[int],
+    ) -> bool:
+        """Whether this response has to write the session row back.
+
+        Anything that changes the row's meaning forces a write. The one thing
+        that changes on *every* request is the slid expiry, so that alone is
+        allowed to wait until it drifts past SESSION_EXPIRY_REFRESH_SECONDS.
+        """
+        if stored.data != payload:
+            return True
+        if stored.ip_address != client_ip:
+            return True
+        if user_id_value is not None and stored.user_id != user_id_value:
+            return True
+        if stored.started_at is None:
+            return True
+
+        stored_expiry = stored.expiry
+        if stored_expiry is None:
+            return True
+        # Rewrite once the stored deadline has drifted far enough behind the one
+        # this request would set, and always if it has already passed.
+        drift = (expires - self._ensure_utc(stored_expiry)).total_seconds()
+        return drift >= SESSION_EXPIRY_REFRESH_SECONDS
+
     def save_session(self, app, session, response):
         # Skip session handling for static files
         if session is None:
@@ -204,7 +250,14 @@ class DatabaseSessionInterface(SessionInterface):
                     ip_address=client_ip,
                 )
                 db.add(stored)
-            else:
+                db.commit()
+            elif self._needs_rewrite(
+                stored,
+                payload=payload,
+                expires=expires,
+                client_ip=client_ip,
+                user_id_value=user_id_value,
+            ):
                 stored.data = payload
                 stored.expiry = expires
                 stored.ip_address = client_ip  # Update IP address
@@ -212,7 +265,7 @@ class DatabaseSessionInterface(SessionInterface):
                     stored.user_id = user_id_value
                 if stored.started_at is None:
                     stored.started_at = self._now()
-            db.commit()
+                db.commit()
 
             # Enforce the limit only when this session becomes authenticated.
             # Running it on every response lets concurrent requests evict one

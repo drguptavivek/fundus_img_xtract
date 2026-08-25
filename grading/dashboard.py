@@ -10,12 +10,13 @@ from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading.dashboard_service import grader_eligibility_dto, grading_history_page
 from grading.workbench.service import list_active_sessions
-from grading_allocation.dashboard import list_project_encounter_set_queues
 from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
-from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
-from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
-from utils.dualGradingKPIs import get_user_kpi_linked_followup_counts
-from utils.dualGradingKPIs import get_user_task_tracker_kpi_data
+from grading.queue_cards import (
+    QUEUE_CARD_CACHE_TTL_SECONDS,
+    disease_queue_card,
+    gradable_disease_cards,
+    project_encounter_set_cards,
+)
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
  
@@ -157,129 +158,103 @@ def index():
         is_resident = has_resident_eligibility and (current_user.has_role('resident') or current_user.has_role('ophthalmologist'))
         is_resident2 = current_user.has_role('ophthalmologist')
         
-        # Initialize KPIs
-        kpi_resident_pending = 0
-        kpi_resident2_pending = 0
-        kpi_arbitration_pending = 0
-        
-        # Initialize disease-specific KPIs
-        kpi_resident_by_disease = {}
-        kpi_resident2_by_disease = {}
-        kpi_arbitration_by_disease = {}
-        
-        # Initialize completed KPIs
-        kpi_resident_completed = 0
-        kpi_resident2_completed = 0
-        kpi_arbitration_completed = 0
-        
-        # Initialize disease-specific completed KPIs
-        kpi_resident_completed_by_disease = {}
-        kpi_resident2_completed_by_disease = {}
-        kpi_arbitration_completed_by_disease = {}
-        
-        # Get all diseases to ensure we have entries for all diseases
-        all_diseases = db.query(Disease).all()
-        diseases_data = [
-            {
-                'id': disease.id,
-                'name': disease.name
-            }
-            for disease in all_diseases
-        ]
-        
-        # Calculate pending KPIs using the utility function
-        project_encounter_set_queues = list_project_encounter_set_queues(
-            db,
-            user_id=current_user.id,
+        # Which queue cards exist is answered from role rows alone. Their
+        # contents are fetched per disease afterwards, so rendering this page
+        # no longer waits on a sweep of the whole pending queue.
+        project_encounter_set_queues = project_encounter_set_cards(
+            db, user_id=current_user.id
         )
         active_sessions = list_active_sessions(db, user_id=current_user.id)
         active_workbench = active_sessions[0] if active_sessions else None
-        kpi_pending_data = get_user_kpi_pending_task_count_data(
-            db,
-            current_user.id,
-            exclude_enforced_project_encounter_sets=True,
-        )
-        
-        kpi_arbitration_breakdown_by_disease = {}
-
-        # Process pending KPI data from the utility function
-        for disease in all_diseases:
-            disease_name = disease.name
-            
-            # Initialize disease-specific KPIs
-            kpi_resident_by_disease[disease_name] = 0
-            kpi_resident2_by_disease[disease_name] = 0
-            kpi_arbitration_by_disease[disease_name] = 0
-            kpi_arbitration_breakdown_by_disease[disease_name] = {}
-            
-            # Get data for this disease if available
-            if disease_name in kpi_pending_data:
-                disease_kpi = kpi_pending_data[disease_name]
-                kpi_resident_by_disease[disease_name] = disease_kpi.get('resident_pending', 0)
-                kpi_resident2_by_disease[disease_name] = disease_kpi.get('resident2_pending', 0)
-                kpi_arbitration_by_disease[disease_name] = disease_kpi.get('arbitration_pending', 0)
-                kpi_arbitration_breakdown_by_disease[disease_name] = disease_kpi.get('arbitration_breakdown', {})
-                
-                # Add to totals
-                kpi_resident_pending += disease_kpi.get('resident_pending', 0)
-                kpi_resident2_pending += disease_kpi.get('resident2_pending', 0)
-                kpi_arbitration_pending += disease_kpi.get('arbitration_pending', 0)
-        
-        # Calculate completed KPIs using the utility function
-        kpi_completed_data = get_user_kpi_completed_task_count_data(db, current_user.id)
-        task_tracker_kpi = get_user_task_tracker_kpi_data(db, current_user.id)
-
-        linked_followup_counts_by_disease = get_user_kpi_linked_followup_counts(
-            db,
-            current_user.id,
-            exclude_enforced_project_encounter_sets=True,
-        )
-        
-        # Process completed KPI data from the utility function
-        for disease in all_diseases:
-            disease_name = disease.name
-            
-            # Initialize disease-specific completed KPIs
-            kpi_resident_completed_by_disease[disease_name] = 0
-            kpi_resident2_completed_by_disease[disease_name] = 0
-            kpi_arbitration_completed_by_disease[disease_name] = 0
-            
-            # Get data for this disease if available
-            if disease_name in kpi_completed_data:
-                disease_kpi = kpi_completed_data[disease_name]
-                kpi_resident_completed_by_disease[disease_name] = disease_kpi.get('resident_completed', 0)
-                kpi_resident2_completed_by_disease[disease_name] = disease_kpi.get('resident2_completed', 0)
-                kpi_arbitration_completed_by_disease[disease_name] = disease_kpi.get('arbitration_completed', 0)
-                
-                # Add to totals
-                kpi_resident_completed += disease_kpi.get('resident_completed', 0)
-                kpi_resident2_completed += disease_kpi.get('resident2_completed', 0)
-                kpi_arbitration_completed += disease_kpi.get('arbitration_completed', 0)
     return render_template(
         "grading/index.html",
         is_resident=is_resident,
         is_resident2=is_resident2,
-        kpi_resident_pending=kpi_resident_pending,
-        kpi_resident2_pending=kpi_resident2_pending,
-        kpi_arbitration_pending=kpi_arbitration_pending,
-        kpi_resident_by_disease=kpi_resident_by_disease,
-        kpi_resident2_by_disease=kpi_resident2_by_disease,
-        kpi_arbitration_by_disease=kpi_arbitration_by_disease,
-        kpi_arbitration_breakdown_by_disease=kpi_arbitration_breakdown_by_disease,
-        kpi_resident_completed=kpi_resident_completed,
-        kpi_resident2_completed=kpi_resident2_completed,
-        kpi_arbitration_completed=kpi_arbitration_completed,
-        kpi_resident_completed_by_disease=kpi_resident_completed_by_disease,
-        kpi_resident2_completed_by_disease=kpi_resident2_completed_by_disease,
-        kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
-        task_tracker_kpi=task_tracker_kpi,
+        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
+        refresh=False,
+        oob=False,
         user_eligibility=user_eligibility,
         grading_eligibility=eligibility,
-        diseases=diseases_data,
-        linked_followup_counts_by_disease=linked_followup_counts_by_disease,
-        project_encounter_set_queues=[
-            queue.to_dict() for queue in project_encounter_set_queues
-        ],
+        project_encounter_set_queues=project_encounter_set_queues,
         active_workbench=active_workbench,
         **history_panel_context,
     )
+
+
+@roles_required("ophthalmologist")
+def disease_queue_fragment(disease_id: int):
+    """HTMX fragment for one disease queue card.
+
+    The dashboard paints a placeholder per disease and swaps this in, so a slow
+    disease delays only its own card instead of the whole page. Mirrors
+    ``GET /api/grading/me/queues/<disease_id>`` from the same service call.
+
+    ``?refresh=1`` bypasses the cached count and re-stores a fresh one.
+    """
+    refresh = request.args.get("refresh") == "1"
+    with transaction_scope() as db:
+        card = disease_queue_card(
+            db,
+            user_id=current_user.id,
+            disease_id=disease_id,
+            refresh=refresh,
+        )
+    return render_template(
+        "grading/_disease_queue_card.html", card=card, refresh=refresh
+    )
+
+
+@roles_required("ophthalmologist")
+def disease_queues_fragment():
+    """The Legacy & Image Grading panel of self-loading placeholders.
+
+    Used for the first paint. Refreshing does not come back through here: each
+    rendered card re-fetches itself in place instead, so a refresh never
+    reverts visible counts to placeholders.
+    """
+    refresh = request.args.get("refresh") == "1"
+    with transaction_scope() as db:
+        queue_cards = [
+            card
+            for card in (
+                disease_queue_card(
+                    db,
+                    user_id=current_user.id,
+                    disease_id=disease["id"],
+                    refresh=refresh,
+                )
+                for disease in gradable_disease_cards(db, user_id=current_user.id)
+            )
+            if card is not None
+        ]
+    return render_template(
+        "grading/_disease_queues.html",
+        queue_cards=queue_cards,
+        refresh=refresh,
+        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
+    )
+
+
+@roles_required("ophthalmologist")
+def project_queues_fragment():
+    """The Project EncounterSet Grading panel on its own, for in-place refresh."""
+    refresh = request.args.get("refresh") == "1"
+    with transaction_scope() as db:
+        project_queues = project_encounter_set_cards(
+            db, user_id=current_user.id, refresh=refresh
+        )
+    return render_template(
+        "grading/_project_encounter_set_queues.html",
+        project_encounter_set_queues=project_queues,
+    )
+
+
+@roles_required("ophthalmologist")
+def refresh_queues_trigger():
+    """Fire the panel-wide refresh event; the panels re-fetch themselves.
+
+    Returns no body. The ``HX-Trigger`` header lets every card and the project
+    panel reload independently and in place, which avoids both a placeholder
+    flash and any inline script to dispatch the event.
+    """
+    return "", 204, {"HX-Trigger": "refresh-queues"}

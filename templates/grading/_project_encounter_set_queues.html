@@ -1,0 +1,41 @@
+{# Project EncounterSet Grading cards.
+
+   Extracted so the Legacy panel's refresh control can swap this out of band in
+   the same response, keeping both panels' counts consistent - they share a
+   cache TTL and a single refresh action. #}
+<div id="project-encounter-set-queues"
+     hx-get="{{ url_for('grading.project_queues_fragment', refresh=1) }}"
+     hx-trigger="refresh-queues from:body"
+     hx-swap="outerHTML">
+  {% if project_encounter_set_queues %}
+<div class="row g-3">
+  {% for queue in project_encounter_set_queues %}
+  <div class="col-lg-6" data-project-encounter-set-queue="{{ queue.target.key }}">
+    <div class="card shadow-sm h-100 border-primary-subtle">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <h4 class="h5 mb-1">{{ queue.project.title }}</h4>
+          </div>
+          <span class="badge text-bg-primary">EncounterSet</span>
+        </div>
+        <div class="fw-semibold mb-3">{{ queue.target.label }}</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% for slot in queue.slots %}
+          <a class="btn btn-sm {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
+             href="{{ url_for('grading.encounter_set_package_grading', package_uuid=slot.first_package_uuid, slot_type=slot.slot) }}">
+            {{ slot.label }} ({{ slot.package_count }} set{{ '' if slot.package_count == 1 else 's' }})
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-light border mb-0">
+  No pending project-allocated EncounterSet grading is available to you.
+</div>
+{% endif %}
+</div>

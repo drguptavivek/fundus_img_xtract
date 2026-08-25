@@ -1,20 +1,82 @@
-from flask import render_template, request, current_app, url_for, Response
+from flask import abort, render_template, request, current_app, url_for, Response
+from flask_login import current_user
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from db_transaction_manager import get_db_session
 from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport, Grade, GradingTask, DiseaseGrading
-from auth.roles import roles_required
+from authz import ResourceRef, authorize, resolve_grants
 import pandas as pd
 import io
 from pathlib import Path
 
 
-def hospital_dashboard():
-    """Show overview of all hospitals with user counts and image contributions"""
+# These routes previously carried no authorization at all. The application-wide
+# guard establishes authentication only, so any active account could read and
+# export image and facility data for every hospital. Both halves are needed: the
+# action decides whether the dashboard may be opened, the scope decides what it
+# may contain.
+ACTION_DASHBOARD_VIEW = "dashboard.view"
+
+
+def _dashboard_scope() -> tuple[set[int], set[int]]:
+    """Resolve the lab units and hospitals this caller may see on the dashboard.
+
+    The engine decides per lab unit rather than once for the page, because
+    dashboard.view is a classically scoped action: its grants carry a lab unit,
+    and a grant only matches a resource that names the same one. Asking without
+    a resource can never match, so the scope is exactly the set of lab units the
+    engine allows, and admin/hospital/lab grants each fall out of it naturally.
+
+    Returns ``(lab_unit_ids, hospital_ids)``. Fails closed: a caller the engine
+    allows nowhere gets 403 rather than an unfiltered view. Every query in this
+    module must be constrained by the returned sets before it renders or
+    exports anything.
+    """
+    if not getattr(current_user, "is_authenticated", False):
+        # The app-wide guard normally handles this, but the scope must fail
+        # closed on its own rather than depending on an upstream check.
+        abort(401)
+
     with get_db_session() as db:
-        # Get all hospitals
+        resolved = resolve_grants(db, current_user)
+        lab_unit_ids: set[int] = set()
+        hospital_ids: set[int] = set()
+        for lab_unit_id, hospital_id in db.execute(
+            select(LabUnit.id, LabUnit.hospital_id)
+        ).all():
+            allowed = authorize(
+                resolved.actor,
+                ACTION_DASHBOARD_VIEW,
+                ResourceRef(
+                    type="lab_unit",
+                    id=lab_unit_id,
+                    attributes={
+                        "lab_unit_id": lab_unit_id,
+                        "hospital_id": hospital_id,
+                        "project_id": None,
+                    },
+                ),
+                grants=resolved.grants,
+            ).allowed
+            if allowed:
+                lab_unit_ids.add(lab_unit_id)
+                if hospital_id is not None:
+                    hospital_ids.add(hospital_id)
+
+        if not lab_unit_ids:
+            # An empty scope means "no access", never "no filter".
+            abort(403)
+    return lab_unit_ids, hospital_ids
+
+
+def hospital_dashboard():
+    """Show hospitals within the caller's scope, with user and image counts."""
+    lab_unit_ids, hospital_ids = _dashboard_scope()
+    with get_db_session() as db:
         hospitals = db.execute(
-            select(Hospital).order_by(Hospital.name.asc())
+            select(Hospital)
+            .where(Hospital.id.in_(hospital_ids))
+            .order_by(Hospital.name.asc())
         ).scalars().all()
         
         # Get user counts per hospital
@@ -28,7 +90,10 @@ def hospital_dashboard():
                 .select_from(User)
                 .join(user_lab_units, User.id == user_lab_units.c.user_id)
                 .join(LabUnit, LabUnit.id == user_lab_units.c.lab_unit_id)
-                .where(LabUnit.hospital_id == hospital.id)
+                .where(
+                    LabUnit.hospital_id == hospital.id,
+                    LabUnit.id.in_(lab_unit_ids),
+                )
             ).scalar_one() or 0
             user_counts[hospital.id] = user_count
             
@@ -36,7 +101,10 @@ def hospital_dashboard():
             # For now, we'll count direct image uploads since they have a clear hospital relationship
             direct_image_count = db.execute(
                 select(func.count(DirectImageUpload.id))
-                .where(DirectImageUpload.hospital_id == hospital.id)
+                .where(
+                    DirectImageUpload.hospital_id == hospital.id,
+                    DirectImageUpload.lab_unit_id.in_(lab_unit_ids),
+                )
             ).scalar_one() or 0
             
             # TODO: Add encounter file counting once we establish the relationship
@@ -53,17 +121,24 @@ def hospital_dashboard():
 
 
 def hospital_detail(hospital_id):
-    """Show detailed information for a specific hospital."""
+    """Show one in-scope hospital's lab units and their members."""
+    lab_unit_ids, hospital_ids = _dashboard_scope()
+    if hospital_id not in hospital_ids:
+        # Non-disclosing: an out-of-scope hospital is indistinguishable from a
+        # missing one, so this cannot be used to enumerate hospitals.
+        return render_template("dashboard/hospital_not_found.html"), 404
+
     with get_db_session() as db:
         hospital = db.get(Hospital, hospital_id)
         if not hospital:
-            # Handle hospital not found
             return render_template("dashboard/hospital_not_found.html"), 404
-            
-        # Get all lab units for this hospital
+
         lab_units = db.execute(
             select(LabUnit)
-            .where(LabUnit.hospital_id == hospital_id)
+            .where(
+                LabUnit.hospital_id == hospital_id,
+                LabUnit.id.in_(lab_unit_ids),
+            )
             .order_by(LabUnit.name.asc())
         ).scalars().all()
         
@@ -97,17 +172,9 @@ def hospital_detail(hospital_id):
         )
 
 
-from flask import render_template, request, current_app, url_for, Response
-from sqlalchemy import select, func, or_
-from sqlalchemy.orm import selectinload
-from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
-from auth.roles import roles_required
-import pandas as pd
-import io
-
 
 def image_list():
-    """Show paginated list of all images (direct and ZIP) with detailed information."""
+    """Show a paginated list of in-scope images, or export the same selection."""
     # Get page number from request, default to 1
     page = request.args.get('page', 1, type=int)
     per_page = 50  # 50 items per page
@@ -115,20 +182,24 @@ def image_list():
     # Check if this is an export request
     export_format = request.args.get('export', None)
     search_query = request.args.get('search', '').strip()
-    
+
+    lab_unit_ids, _hospital_ids = _dashboard_scope()
+
     with get_db_session() as db:
-        # Build base queries for both image types
+        # Scope is applied to the base queries, before search, pagination and
+        # export branch off them. Export therefore cannot widen the selection
+        # the page shows - it reuses the same filtered query.
         direct_query = select(DirectImageUpload).options(
                 selectinload(DirectImageUpload.hospital),
                 selectinload(DirectImageUpload.lab_unit),
                 selectinload(DirectImageUpload.disease),
                 selectinload(DirectImageUpload.area)
-            )
+            ).where(DirectImageUpload.lab_unit_id.in_(lab_unit_ids))
         
         encounter_query = select(EncounterFile).options(
                 selectinload(EncounterFile.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(EncounterFile.patient_encounter).selectinload(PatientEncounters.glaucoma_results_cleaned)
-            )
+            ).where(EncounterFile.lab_unit_id.in_(lab_unit_ids))
         
         # Apply search filter if provided
         if search_query:

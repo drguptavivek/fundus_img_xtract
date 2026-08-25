@@ -1,3 +1,4 @@
+from uuid import uuid4
 
 import pytest
 from unittest.mock import MagicMock, patch
@@ -74,8 +75,25 @@ def test_dashboard_image_list_export_anonymization(app, db_session):
     db_session.add(img)
     db_session.commit()
 
+    # The dashboard now authorizes and scopes before exporting, so this needs a
+    # logged-in user holding the image's lab unit. The assertions below are
+    # about PII in the export, not about access control.
+    from flask_login import login_user
+    from models import LabUnit
+    from tests.helpers.factories import UserFactory
+
+    lab_unit = db_session.get(LabUnit, 1)
+    exporter = UserFactory.create_by_role(
+        db_session,
+        "ophthalmologist",
+        username=f"anonymization_exporter_{uuid4().hex[:8]}",
+        lab_units=[lab_unit] if lab_unit else [],
+    )
+    db_session.commit()
+
     # 2. Simulate export request
     with app.test_request_context('/dashboard/images?export=csv'):
+        login_user(exporter)
         # We need to mock get_db_session or ensure the test session is used
         # Since the route uses get_db_session which is a context manager
         # In tests, we often mock it or rely on the app context.

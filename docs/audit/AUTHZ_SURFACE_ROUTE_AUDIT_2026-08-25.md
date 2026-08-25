@@ -25,7 +25,7 @@ Additional high-risk gaps exist in project-grant administration, EncounterSet ve
 
 | ID | Severity | Surface | Result |
 |---|---|---|---|
-| AUTHZ-01 | Critical | `/dashboard/*` | Confirmed cross-tenant read/export escape for any authenticated user |
+| AUTHZ-01 | Critical | `/dashboard/*` | **Fixed 2026-08-26** — was a confirmed cross-tenant read/export escape for any authenticated user |
 | AUTHZ-02 | Critical | `/grading/encounter_set/*` | Confirmed task-allocation and grader-slot bypass |
 | AUTHZ-03 | High | Project role-grant service | Scoped `project_admin` can manage scopes beyond the manager grant |
 | AUTHZ-04 | High | EncounterSet verification mutations | Project-owned encounters fall back to lab assignment instead of requiring project authority |
@@ -50,6 +50,14 @@ Runtime inventory identified three dashboard view functions as private routes wi
 ## Detailed findings
 
 ### AUTHZ-01 — Hospital and image dashboard is login-only and globally unscoped
+
+> **Fixed 2026-08-26.** `dashboard/routes.py` now authorizes `dashboard.view`
+> per lab unit through the authz engine and scopes every query, including
+> export. Asking the engine per lab unit is required rather than stylistic:
+> the action's grants carry a lab unit and `_matches_lab_unit` compares it to
+> the resource, so a resource-less `authorize()` always returns
+> `missing_relationship`. Fails closed on both axes - anonymous 401, empty
+> scope 403. Covered by `tests/security/test_dashboard_authz.py`.
 
 **Severity: Critical — confirmed**
 

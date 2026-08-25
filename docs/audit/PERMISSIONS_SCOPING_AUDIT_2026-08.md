@@ -18,7 +18,7 @@ functional areas audited route-by-route down to the service layer.
 | # | Sev | Area | Finding | Evidence |
 |---|-----|------|---------|----------|
 | 1 | CRITICAL | Admin | `/dashboard/*` has **no role gate and no scoping**; any login lists every hospital's users and exports every image record (CSV/XLSX) | `dashboard/routes.py:12,55,109` |
-| 2 | CRITICAL | Grading | Legacy `POST /grading/encounter_set/submit` writes a `Grade` into **any slot on any task** with no eligibility / lab / project / state check, then recomputes consensus | `grading/encounter_set_grading.py:94-152` |
+| 2 | **FIXED 2026-08-26 (deleted)** | Grading | Legacy `POST /grading/encounter_set/submit` writes a `Grade` into **any slot on any task** with no eligibility / lab / project / state check, then recomputes consensus | `grading/encounter_set_grading.py:94-152` |
 | 3 | CRITICAL | Analytics | `/analytics/encounter-files` returns **every PatientEncounter in the system** to 8 roles — `user_lab_unit_ids` is echoed, never applied; `user_for_scoping` omitted | `analytics/route_encounterFiles_kpi_display.py:64`, `api/kpis/encounter_files_kpis.py:100-160`, `utils/dataframeEncounterFiles.py:49` |
 | 4 | CRITICAL | Uploads/Jobs | Jobs with `lab_unit_id IS NULL` (dataset exports, sync jobs, review queues) are visible to every jobs-role user; `/jobs/<token>/regenerate` re-creates another hospital's dataset export under the caller and `download` then permits it | `jobs/routes.py:37-41,194,213-245`, `analytics/route_dataset_curation.py:1775` |
 | 5 | HIGH | Admin | `POST /admin/users/<id>/update` lets `local_admin` activate/deactivate users in **any hospital** (no `_can_access_user_detail`) | `admin/users.py:726-776` |

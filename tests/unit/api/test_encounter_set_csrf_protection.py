@@ -8,7 +8,6 @@ Protected Routes:
 - POST /verify-encounter-set/update_position
 - POST /verify-encounter-set/finalize/<uuid>
 - POST /verify-encounter-set/save_edit/<uuid>
-- POST /grading/encounter_set/submit
 
 Exempt Routes (JWT auth):
 """
@@ -291,44 +290,6 @@ class TestCSRFProtectionVerifyEncounterSet:
             )
 
         assert response.status_code == 403, "save_edit route should require CSRF token"
-
-
-class TestCSRFProtectionGrading:
-    """Test CSRF protection on /grading/encounter_set/submit"""
-
-    @pytest.fixture
-    def resident_user(self, app, db):
-        """Create resident user for grading"""
-        from models import User, Role
-        user = User(username='resident', email='res@example.com')
-        user.set_password('password')
-        role = db.query(Role).filter_by(name='resident').first()
-        if role:
-            user.roles.append(role)
-        db.session.add(user)
-        db.session.commit()
-        return user
-
-    @pytest.fixture
-    def test_client(self, app):
-        return app.test_client()
-
-    def test_grade_submission_requires_csrf(self, test_client, resident_user):
-        """Test that grading submission requires CSRF token"""
-        with test_client:
-            # Login
-            test_client.post('/login', data={
-                'username': 'resident',
-                'password': 'password'
-            }, follow_redirects=True)
-
-            # POST without CSRF token
-            response = test_client.post(
-                '/grading/encounter_set/submit',
-                json={'task_id': 'some-uuid', 'grades': {}}
-            )
-
-        assert response.status_code == 403, "grade submission should require CSRF token"
 
 
 # Token-authenticated routes are CSRF-exempt. That behaviour now lives entirely on

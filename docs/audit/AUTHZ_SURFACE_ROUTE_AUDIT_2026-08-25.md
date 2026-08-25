@@ -26,7 +26,7 @@ Additional high-risk gaps exist in project-grant administration, EncounterSet ve
 | ID | Severity | Surface | Result |
 |---|---|---|---|
 | AUTHZ-01 | Critical | `/dashboard/*` | **Fixed 2026-08-26** — was a confirmed cross-tenant read/export escape for any authenticated user |
-| AUTHZ-02 | Critical | `/grading/encounter_set/*` | Confirmed task-allocation and grader-slot bypass |
+| AUTHZ-02 | Critical | `/grading/encounter_set/*` | **Fixed 2026-08-26 (routes deleted)** — was a confirmed task-allocation and grader-slot bypass |
 | AUTHZ-03 | High | Project role-grant service | Scoped `project_admin` can manage scopes beyond the manager grant |
 | AUTHZ-04 | High | EncounterSet verification mutations | Project-owned encounters fall back to lab assignment instead of requiring project authority |
 | AUTHZ-05 | High | Pregraded grade import | Upload-profile/project authorization is absent on the grade-import route |
@@ -76,6 +76,17 @@ This conflicts with `docs/policy/authorizations.md:661-665`, which requires an a
 **Required remediation:** wire all three routes to the dashboard action and scope every hospital/image query before rendering or exporting. Export must reuse the same filtered query as the page.
 
 ### AUTHZ-02 — Legacy EncounterSet grading bypasses task allocation and trusts the requested slot
+
+> **Fixed 2026-08-26 by deletion.** `grading/encounter_set_grading.py` and
+> `templates/grading/encounter_set_grading.html` are removed and the routes
+> unregistered. The transport had no caller: nothing referenced
+> `url_for('grading.encounter_set_grading')`, and its only production
+> reference was the form inside the template it rendered itself. The
+> workbench supersedes it and checks allocation exactly, so patching would
+> have meant reimplementing allocation resolution, server-side slot
+> derivation and label validation in a second place - which is how the two
+> drifted apart to begin with. Submission and consensus remain covered by
+> `tests/unit/grading/test_workbench_submission.py`.
 
 **Severity: Critical — confirmed**
 

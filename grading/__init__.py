@@ -10,7 +10,6 @@ Module Structure:
 - dashboard.py: Main dashboard with KPIs and grading history
 - dual_grading.py: Core grading workflow with task access, submission, and revision
 - start_grading.py: Entry point for initiating grading sessions
-- encounter_set_grading.py: Encounter-set based grading for diseases like Strabismus
 - consensus.py: Consensus management utilities wrapper
 
 Documentation:
@@ -55,7 +54,6 @@ def configure_blueprint() -> Blueprint:
     from .intra_rater import register_routes as register_intra_rater_routes
     from .inter_rater_compare import register_routes as register_inter_rater_routes
     from .grader_statistics import register_routes as register_grader_statistics_routes
-    from .encounter_set_grading import register_routes as register_encounter_set_routes
     from .encounter_set_package_grading import register_routes as register_encounter_set_package_routes
     from .regrade_tasks import register_routes as register_regrade_task_routes
     from .wadhwani_glaucoma_inference import register_routes as register_wadhwani_glaucoma_inference_routes
@@ -87,7 +85,6 @@ def configure_blueprint() -> Blueprint:
     register_intra_rater_routes(bp)
     register_inter_rater_routes(bp)
     register_grader_statistics_routes(bp)
-    register_encounter_set_routes(bp)
     register_encounter_set_package_routes(bp)
     register_regrade_task_routes(bp)
     register_wadhwani_glaucoma_inference_routes(bp)

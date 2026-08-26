@@ -2001,6 +2001,15 @@ def _queue_encounter_set_image_post_processing(result: dict[str, Any], *, user_i
     return {"images_queued": queue_image_post_processing(image_ids, user_id=user_id)}
 
 
+def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
+    """Dispatch every post-ingestion workflow for a completed Remidio sync."""
+    image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
+    pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
+    ai_result = _queue_encounter_set_ai_inference(result, user_id=user_id)
+    _bump_field_cache_for_ingest(result)
+    return {**image_result, **pdf_result, **ai_result}
+
+
 def _bump_field_cache_for_ingest(result: dict[str, Any]) -> None:
     """Invalidate cached field queues once newly fetched encounters land."""
     try:

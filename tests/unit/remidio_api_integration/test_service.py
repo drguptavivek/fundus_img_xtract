@@ -1,8 +1,49 @@
 import pytest
 
 from remidio_api_integration.errors import RemidioConfigError
+from remidio_api_integration import service
 from remidio_api_integration.service import upsert_routing_rule
 from models import RemidioConnection
+
+
+def test_remidio_post_processing_dispatches_every_workflow(monkeypatch):
+    ingest_result = {"groups": [{"ingest": {"exams": []}}]}
+    calls = []
+
+    monkeypatch.setattr(
+        service,
+        "_queue_encounter_set_image_post_processing",
+        lambda result, *, user_id: calls.append(("images", result, user_id)) or {"images_queued": 2},
+    )
+    monkeypatch.setattr(
+        service,
+        "_queue_encounter_set_attachment_pdf_ocr",
+        lambda result, *, user_id: calls.append(("pdf", result, user_id)) or {"pdf_ocr_queued": 1},
+    )
+    monkeypatch.setattr(
+        service,
+        "_queue_encounter_set_ai_inference",
+        lambda result, *, user_id: calls.append(("ai", result, user_id)) or {"wadhwani_tasks_queued": 3},
+    )
+    monkeypatch.setattr(
+        service,
+        "_bump_field_cache_for_ingest",
+        lambda result: calls.append(("cache", result, None)),
+    )
+
+    queued = service._queue_remidio_api_post_processing(ingest_result, user_id=41)
+
+    assert queued == {
+        "images_queued": 2,
+        "pdf_ocr_queued": 1,
+        "wadhwani_tasks_queued": 3,
+    }
+    assert calls == [
+        ("images", ingest_result, 41),
+        ("pdf", ingest_result, 41),
+        ("ai", ingest_result, 41),
+        ("cache", ingest_result, None),
+    ]
 
 
 def test_upsert_routing_rule_requires_site_custom_identifier(db_session, core_test_data):

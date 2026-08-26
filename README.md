@@ -337,10 +337,9 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
 - [Authorization Rules](docs/policy/authorizations.md) - Human-readable source of truth for action-level authorization rules before route wiring
-- [RBAC/ABAC Route Policy](docs/RBAC_ABAC_Route_Policy.md) - Route, data-service, media-layer, project-grant, cache, and telemetry enforcement boundaries
-- [Upload Policy](docs/policy/upload_policy.md) - Dashboard access vs upload-form access and fileUploader-only eligibility rules
-- [Admin Access Policy](docs/policy/admin_access_policy.md) - Admin vs local_admin hospital/lab-unit scope rules
-- [ReBAC Authorization Policy](docs/policy/rebac_authorization_policy.md) - Central action-policy model for roles, upload profiles, grading slots, lab-unit grants, and hospital-scope grants
+- [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Who is allowed to do what at each step of the work, inside a project and outside one, without jargon. Also rendered at [authorization_in_plain_language.html](docs/policy/authorization_in_plain_language.html)
+- [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Which role reaches which project action and at what grant scope; governance and operational drawn separately. Same content rendered at [authorization_matrix.html](docs/policy/authorization_matrix.html)
+- [ReBAC Authorization Engine](docs/10-DEVELOP/authorizations_rebac_engine.md) - Implementation contract for the `authz` engine: grant sources, `authorize()` entry points, and registry domains
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation
 
 #### Master Data Utilities

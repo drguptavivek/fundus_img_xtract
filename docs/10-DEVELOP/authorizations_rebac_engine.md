@@ -1,10 +1,21 @@
-# ReBAC Authorization Policy
+---
+title: ReBAC Authorization Engine
+kind: implementation-contract
+authority: docs/policy/authorizations.md
+related:
+  - docs/policy/authorizations.md
+last_reviewed: 2026-08-26
+---
 
-This policy defines the central authorization model for RBAC, ABAC, upload
+# ReBAC Authorization Engine
+
+This document is the **implementation contract** for the `authz` engine, not a
+source of policy. Where it and `authorizations.md` disagree, that document
+wins. It describes the central authorization model for RBAC, ABAC, upload
 profiles, grading slots, lab-unit grants, and hospital-scope grants.
 
 For action-specific human-readable rules, use
-[`authorizations.md`](authorizations.md). Route wiring and code review must
+[`authorizations.md`](../policy/authorizations.md). Route wiring and code review must
 check that document before enforcing an action.
 
 ## Core Rule
@@ -42,10 +53,15 @@ Upload actions require:
 - selected project, lab unit, disease, camera, area, and upload kind must match
   the profile.
 
-The authorized project is persisted on created upload/image records. In this
-phase, project participates in upload authorization and tagging only; it is not
-yet the general authorization boundary for grading, verification, analytics,
-datasets, jobs, media, or search.
+The authorized project is persisted on created upload/image records.
+
+This paragraph previously said project was "not yet the general authorization
+boundary" beyond uploads. That was true when written in May 2026 and is no
+longer: project is an active boundary for patient media, EncounterSet
+browsing, dataset curation and WAI, and the per-action rules in
+`../policy/authorizations.md` state where it applies. Where a domain still
+runs on classical scope alone, that document says so and the divergence
+register records what has yet to move.
 
 Direct-image duplicates are detected globally by image content hash. A duplicate
 attempt must not create a new `DirectImageUpload`, `DirectImageVerify`,
@@ -63,7 +79,7 @@ Grading follows grading slots.
 
 Grading actions require:
 
-- compatible coarse role, such as `resident` or `ophthalmologist`;
+- compatible coarse role, such as `ophthalmologist` or `optometrist`;
 - `grading_slot` grant matching the task disease and lab unit;
 - the slot flag required by the action:
   - `can_grade_resident`

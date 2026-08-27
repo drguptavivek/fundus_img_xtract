@@ -19,6 +19,7 @@ def serialize_dto(value):
         return {
             item.name: serialize_dto(getattr(value, item.name))
             for item in fields(value)
+            if item.metadata.get("api", True)
         }
     if isinstance(value, dict):
         return {str(key): serialize_dto(item) for key, item in value.items()}

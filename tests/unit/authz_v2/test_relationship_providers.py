@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from types import SimpleNamespace
 
 from authz_v2.core.actions import Action
@@ -131,10 +132,14 @@ def test_grading_provider_attests_workflow_and_default_off_allocation():
 
 def test_signed_credential_requires_exact_session_binding_and_expiry():
     principal, facts = _facts("password_reset_credential", signed=True)
+    raw_token = "correct-reset-token"
+    session = replace(principal.session, credential_proof=raw_token)
+    principal = replace(principal, session=session)
+    facts = replace(facts, principal=principal, session=session)
     credential = PasswordResetCredential(
         id=7,
         user_id=1,
-        token_hash="a" * 64,
+        token_hash=sha256(raw_token.encode()).hexdigest(),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
     target = ResourceTarget(credential, facts.resource)
@@ -236,7 +241,10 @@ def test_image_disclosure_provider_never_overrides_an_invalid_target_state():
 
 def test_automation_requires_exact_bound_rule_for_non_project_target():
     session = SessionContextDTO(
-        "worker-1", SessionChannel.AUTOMATION, datetime.now(UTC)
+        "worker-1",
+        SessionChannel.AUTOMATION,
+        datetime.now(UTC),
+        automation_rule_id=81,
     )
     principal = PrincipalDTO(None, True, False, session)
     context = ResourceContextDTO(
@@ -272,7 +280,10 @@ def test_automation_requires_exact_bound_rule_for_non_project_target():
 
 def test_project_automation_requires_the_calling_worker_to_supply_exact_rule_id():
     session = SessionContextDTO(
-        "worker-1", SessionChannel.AUTOMATION, datetime.now(UTC)
+        "worker-1",
+        SessionChannel.AUTOMATION,
+        datetime.now(UTC),
+        automation_rule_id=81,
     )
     principal = PrincipalDTO(None, True, False, session)
     project_scope = ScopeDTO(ScopeType.PROJECT, 40, project_id=40)

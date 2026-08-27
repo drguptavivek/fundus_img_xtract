@@ -334,7 +334,7 @@ def resolve_dataset(db, resource_id: object) -> ResourceTarget | None:
 
 
 def resolve_mobile_session(db, resource_id: object) -> ResourceTarget | None:
-    if not is_positive_int(resource_id):
+    if not is_stable_resource_id(resource_id):
         return None
     session = db.get(MobileAuthSession, resource_id)
     if session is None:
@@ -342,7 +342,18 @@ def resolve_mobile_session(db, resource_id: object) -> ResourceTarget | None:
     user = db.get(User, session.user_id)
     if user is None:
         return None
-    scope = resolve_scope(db, hospital_id=user.hospital_id)
+    scope = resolve_scope(
+        db,
+        hospital_id=user.hospital_id,
+        allow_system=user.hospital_id is None,
+    )
+    if scope is None:
+        return None
+    active = bool(
+        not session.is_revoked
+        and session.refresh_token_expires_at > datetime.now(UTC)
+        and user.is_active
+    )
     return ResourceTarget(
         session,
         ResourceContextDTO(
@@ -351,8 +362,8 @@ def resolve_mobile_session(db, resource_id: object) -> ResourceTarget | None:
             scope,
             owner_id=session.user_id,
             state={
-                "target_active": not session.is_revoked,
-                "domain_valid": not session.is_revoked,
+                "target_active": active,
+                "domain_valid": active,
             },
         ),
     )
@@ -377,7 +388,11 @@ def resolve_password_reset(db, resource_id: object) -> ResourceTarget | None:
         ResourceContextDTO(
             "password_reset_credential",
             credential.id,
-            resolve_scope(db, hospital_id=user.hospital_id),
+            resolve_scope(
+                db,
+                hospital_id=user.hospital_id,
+                allow_system=user.hospital_id is None,
+            ),
             owner_id=user.id,
             state={"target_active": valid, "domain_valid": valid},
         ),

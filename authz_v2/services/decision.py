@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from time import perf_counter
@@ -15,12 +16,18 @@ from authz_v2.core.principals import (
     GrantSource,
     PrincipalDTO,
     RoleGrantDTO,
+    SessionChannel,
+    SessionContextDTO,
 )
 from authz_v2.core.resources import ScopeSetDTO
 from authz_v2.domain.exceptions import AuthorizationError, DenialCode
 from authz_v2.repositories.contracts import AuthorizationRepository, GrantRecord
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
+from authz_v2.telemetry.events import AuthorizationEvent
+from authz_v2.telemetry.logging import emit_authorization_event
 from authz_v2.telemetry.metrics import increment, observe_decision_duration
+
+SessionAttestor = Callable[[object, PrincipalDTO, SessionContextDTO], bool]
 
 
 def _record_decision_metrics(decision: DecisionDTO, elapsed: float) -> None:
@@ -44,10 +51,17 @@ class AuthorizationDecisionService:
     """Resolve authoritative facts, then evaluate one canonical action."""
 
     def __init__(
-        self, repository: AuthorizationRepository, resources: ResourceRegistry
+        self,
+        repository: AuthorizationRepository,
+        resources: ResourceRegistry,
+        *,
+        session_attestor: SessionAttestor | None = None,
+        event_emitter: Callable[[AuthorizationEvent], None] = emit_authorization_event,
     ) -> None:
         self.repository = repository
         self.resources = resources
+        self.session_attestor = session_attestor
+        self.event_emitter = event_emitter
 
     def check(
         self,
@@ -78,9 +92,40 @@ class AuthorizationDecisionService:
                 DecisionDTO(False, canonical, "evaluation_error"),
                 perf_counter() - started,
             )
+            self._emit_event(principal, canonical, "error", None, False, started)
             raise
         _record_decision_metrics(result[0], perf_counter() - started)
+        self._emit_event(
+            principal,
+            result[0].action,
+            "allow" if result[0].allowed else "deny",
+            result[0].policy_path,
+            result[0].policy_path == "admin_break_glass",
+            started,
+        )
         return result
+
+    def _emit_event(
+        self, principal, action, outcome, policy_path, break_glass, started
+    ) -> None:
+        try:
+            session = principal.session
+            self.event_emitter(
+                AuthorizationEvent(
+                    event="authorization_decision",
+                    request_id=session.request_id if session else None,
+                    actor_id=principal.user_id,
+                    session_kind=session.channel.value if session else "unknown",
+                    endpoint="",
+                    action=action,
+                    outcome=outcome,
+                    policy_path=policy_path,
+                    break_glass=break_glass,
+                    duration_ms=(perf_counter() - started) * 1000,
+                )
+            )
+        except Exception:  # noqa: BLE001 - operational telemetry is best effort
+            return
 
     def _evaluate(
         self,
@@ -97,8 +142,15 @@ class AuthorizationDecisionService:
             ), None
 
         definition = CATALOGUE[canonical]
+        signed_only = all(
+            path_name == "signed_credential"
+            for path_name, _expression in definition.authorization_paths
+        )
         authoritative = self._principal(
-            principal, definition.authorization_paths[0][0] == "public"
+            db,
+            principal,
+            definition.authorization_paths[0][0] == "public",
+            signed=signed_only,
         )
         if authoritative is None:
             return DecisionDTO(
@@ -224,16 +276,13 @@ class AuthorizationDecisionService:
                     ),
                 )
 
-        return (
-            check_action(
-                canonical,
-                facts,
-                resource_type=target.context.resource_type if target else None,
-                resource_resolved=target is not None
-                or not definition.requires_resource,
-            ),
-            target,
+        decision = check_action(
+            canonical,
+            facts,
+            resource_type=target.context.resource_type if target else None,
+            resource_resolved=target is not None or not definition.requires_resource,
         )
+        return decision, target
 
     def require(
         self,
@@ -241,6 +290,8 @@ class AuthorizationDecisionService:
         principal: PrincipalDTO,
         action: str | Action,
         resource: object | None,
+        *,
+        audit_service=None,
     ) -> AuthorizationReceiptDTO:
         decision, target = self._evaluate_with_metrics(db, principal, action, resource)
         if not decision.allowed or decision.policy_path is None:
@@ -252,7 +303,7 @@ class AuthorizationDecisionService:
 
         canonical = action_from_name(action)
         definition = CATALOGUE[canonical]
-        return AuthorizationReceiptDTO(
+        receipt = AuthorizationReceiptDTO(
             action=canonical.value,
             resource_type=definition.resource_type,
             resource_id=target.context.resource_id if target else None,
@@ -260,33 +311,103 @@ class AuthorizationDecisionService:
             grant_ids=tuple(
                 item for item in decision.evidence if isinstance(item, int)
             ),
+            scope=target.context.scope if target else None,
+            relationship_evidence=decision.relationship_evidence,
             break_glass=decision.policy_path == "admin_break_glass",
             request_id=principal.session.request_id if principal.session else None,
             evaluated_at=principal.session.evaluated_at
             if principal.session
             else datetime.now(UTC),
         )
+        if definition.audit_required or receipt.break_glass:
+            if audit_service is None:
+                raise AuthorizationError(DenialCode.AUDIT_REQUIRED)
+            authoritative = self._principal(
+                db,
+                principal,
+                False,
+                signed=all(
+                    path_name == "signed_credential"
+                    for path_name, _expression in definition.authorization_paths
+                ),
+            )
+            if authoritative is None:
+                raise AuthorizationError(DenialCode.INVALID_SESSION)
+            audit_service.record_allowed(
+                event="authorization_allow",
+                principal=authoritative,
+                receipt=receipt,
+                resource=target.context if target else None,
+            )
+        return receipt
 
-    def active_grants(self, principal: PrincipalDTO) -> tuple[GrantRecord, ...]:
-        authoritative = self._principal(principal, False)
+    def require_audited(
+        self, db, principal, action, resource, *, audit_service
+    ) -> AuthorizationReceiptDTO:
+        return self.require(
+            db,
+            principal,
+            action,
+            resource,
+            audit_service=audit_service,
+        )
+
+    def active_grants(
+        self, principal: PrincipalDTO, *, db=None
+    ) -> tuple[GrantRecord, ...]:
+        authoritative = self._principal(db, principal, False)
         return self._grants(authoritative) if authoritative is not None else ()
 
-    def authoritative_principal(self, principal: PrincipalDTO) -> PrincipalDTO:
+    def authoritative_principal(
+        self, principal: PrincipalDTO, *, db=None
+    ) -> PrincipalDTO:
         """Reload the current authenticated principal or deny closed."""
-        authoritative = self._principal(principal, False)
+        authoritative = self._principal(db, principal, False)
         if authoritative is None:
             raise AuthorizationError(DenialCode.INACTIVE_PRINCIPAL)
         return authoritative
 
-    def _principal(self, principal: PrincipalDTO, public: bool) -> PrincipalDTO | None:
+    def _principal(
+        self, db, principal: PrincipalDTO, public: bool, *, signed: bool = False
+    ) -> PrincipalDTO | None:
         if public:
             return principal
+        session = principal.session
+        if signed:
+            if (
+                session is None
+                or session.channel is not SessionChannel.SIGNED
+                or session.credential_id is None
+                or not session.credential_proof
+            ):
+                return None
+            return PrincipalDTO(
+                None,
+                True,
+                False,
+                replace(session, evaluated_at=datetime.now(UTC)),
+            )
         if principal.user_id is None or not principal.authenticated:
             return None
         current = self.repository.principal(principal.user_id)
         if current is None or not current.active or not current.authenticated:
             return None
-        return replace(current, session=principal.session)
+        session = principal.session
+        if (
+            session is not None
+            and session.channel in {SessionChannel.MOBILE, SessionChannel.AUTOMATION}
+            and (
+                self.session_attestor is None
+                or not self.session_attestor(db, current, session)
+            )
+        ):
+            return None
+        return replace(
+            current,
+            session=(
+                replace(session, evaluated_at=datetime.now(UTC)) if session else None
+            ),
+        )
 
     def _grants(self, principal: PrincipalDTO) -> tuple[GrantRecord, ...]:
         if principal.user_id is None:

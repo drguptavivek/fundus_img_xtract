@@ -106,7 +106,14 @@ def filter_query(
     registered = decision_service.resources.get(resource_adapter.resource_type)
     if registered is not resource_adapter:
         raise AuthorizationError(DenialCode.UNKNOWN_RESOURCE)
-    if not supports_scope_only_query(canonical):
-        raise AuthorizationError(DenialCode.UNSUPPORTED_QUERY)
-    grants = applicable_grants(canonical, decision_service.active_grants(principal))
-    return resource_adapter.query_scoper(db, principal, canonical, grants, query)
+    grants = applicable_grants(
+        canonical, decision_service.active_grants(principal, db=db)
+    )
+    policy = decision_service.resources.query_policy(
+        canonical, resource_adapter.resource_type
+    )
+    if policy is not None:
+        return policy(db, principal, canonical, grants, query)
+    if supports_scope_only_query(canonical):
+        return resource_adapter.query_scoper(db, principal, canonical, grants, query)
+    raise AuthorizationError(DenialCode.UNSUPPORTED_QUERY)

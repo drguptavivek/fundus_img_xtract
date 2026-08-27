@@ -22,6 +22,7 @@ from .expressions import (
     roles_any,
     scoped_roles,
     supporting_grant_ids,
+    supporting_relationships,
 )
 from .principals import EvaluationFactsDTO, GrantSource, SessionChannel
 from .resources import DisclosureClass
@@ -185,8 +186,10 @@ MANDATORY_AUDIT = frozenset(
         "dataset.finalize",
         "dataset.delete",
         "dataset.export.create",
+        "dataset.export.download_identifiers",
         "dataset.share.manage",
         "review.discrepancy.export",
+        "review.discrepancy.export_identifiers",
         "jobs.regenerate",
         "inference.wai.retry",
     }
@@ -1068,6 +1071,7 @@ def check_action(
                 "allowed",
                 path_name,
                 supporting_grant_ids(expression, facts),
+                supporting_relationships(expression, facts),
             )
     if not facts.principal.active and definition.authorization_paths[0][0] != "public":
         return DecisionDTO(False, canonical.value, "inactive_principal")

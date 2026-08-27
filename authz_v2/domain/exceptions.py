@@ -13,6 +13,8 @@ class DenialCode(StrEnum):
     UNSUPPORTED_QUERY = "unsupported_query"
     EXPIRED_CREDENTIAL = "expired_credential"
     DOMAIN_CONSTRAINT = "domain_constraint"
+    AUDIT_REQUIRED = "audit_required"
+    INVALID_SESSION = "invalid_session"
 
 
 class AuthorizationError(PermissionError):

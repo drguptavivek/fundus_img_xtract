@@ -6,6 +6,9 @@ from pathlib import Path
 from flask import Flask
 
 from app_init.logging_config import RequestContextFilter, configure_logging
+from authz_v2.core.principals import PrincipalDTO
+from authz_v2.resources.registry import ResourceRegistry
+from authz_v2.services.decision import AuthorizationDecisionService
 from authz_v2.telemetry.events import AuthorizationEvent
 from authz_v2.telemetry.logging import emit_authorization_event
 from authz_v2.telemetry.metrics import duration_snapshot, observe_decision_duration
@@ -91,3 +94,28 @@ def test_request_log_context_never_contains_query_or_credential_values():
     assert "Session cookie value" not in app_source
     assert "Form CSRF token value" not in app_source
     assert "sanitize_log_value(request.url)" not in app_source
+
+
+class _Repository:
+    def principal(self, user_id):
+        return PrincipalDTO(user_id, True, True)
+
+    def grants_for(self, _user_id):
+        return ()
+
+
+def test_decision_service_emits_deny_and_telemetry_failure_never_allows_or_denies():
+    events = []
+    service = AuthorizationDecisionService(
+        _Repository(), ResourceRegistry(), event_emitter=events.append
+    )
+    principal = PrincipalDTO(1, True, True)
+    decision = service.check(None, principal, "unknown.action", None)
+    assert not decision.allowed and events[-1].outcome == "deny"
+
+    broken = AuthorizationDecisionService(
+        _Repository(),
+        ResourceRegistry(),
+        event_emitter=lambda _event: (_ for _ in ()).throw(RuntimeError("down")),
+    )
+    assert not broken.check(None, principal, "unknown.action", None).allowed

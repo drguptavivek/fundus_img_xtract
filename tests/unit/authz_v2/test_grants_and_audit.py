@@ -24,7 +24,7 @@ from authz_v2.repositories.contracts import GrantRecord
 from authz_v2.repositories.grants import GrantRepository
 from authz_v2.services.audit import AuthorizationAuditService
 from authz_v2.services.grants import GrantMutationService
-from models import LabUnit
+from models import LabUnit, Project
 from project_configuration.models import ProjectLabUnit
 
 
@@ -138,9 +138,13 @@ def test_grant_creation_uses_stored_project_site_lineage():
     class FakeDb:
         def get(self, model, identity):
             if model is ProjectLabUnit and identity == 999:
-                return SimpleNamespace(id=999, project_id=11, lab_unit_id=20)
+                return SimpleNamespace(
+                    id=999, project_id=11, lab_unit_id=20, active=True
+                )
             if model is LabUnit and identity == 20:
                 return SimpleNamespace(id=20, hospital_id=1)
+            if model is Project and identity == 11:
+                return SimpleNamespace(id=11, active=True)
             return None
 
     class Repository:

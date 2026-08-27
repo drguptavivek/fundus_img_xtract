@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from .principals import EvaluationFactsDTO, GrantSource, SessionChannel
+from .principals import (
+    EvaluationFactsDTO,
+    GrantSource,
+    RelationshipEvidenceDTO,
+    SessionChannel,
+)
 from .resources import DisclosureClass
 from .roles import Role
 
@@ -250,6 +255,50 @@ def supporting_grant_ids(
             and grant.scope.contains(facts.resource.scope, allow_system=False)
         )
     return ()
+
+
+def supporting_relationships(
+    expression: Expression | Requirement, facts: EvaluationFactsDTO
+) -> tuple[RelationshipEvidenceDTO, ...]:
+    """Return relationship rows used by the first satisfied expression branch."""
+    if not evaluate(expression, facts):
+        return ()
+    if isinstance(expression, Expression):
+        children = expression.requirements
+        if expression.operator == "any_of":
+            children = tuple(child for child in children if evaluate(child, facts))[:1]
+        return tuple(
+            dict.fromkeys(
+                evidence
+                for child in children
+                for evidence in supporting_relationships(child, facts)
+            )
+        )
+    if not isinstance(expression, RelationshipRequirement) or facts.resource is None:
+        return ()
+    return tuple(
+        evidence
+        for evidence in facts.relationships
+        if evidence.active
+        and evidence.relationship is expression.source
+        and (
+            not expression.require_subject
+            or evidence.subject_id == facts.principal.user_id
+        )
+        and evidence.object_type == facts.resource.resource_type
+        and evidence.object_id == facts.resource.resource_id
+        and (
+            not expression.require_scope
+            or (
+                facts.resource.scope is not None
+                and evidence.scope is not None
+                and evidence.scope.contains(facts.resource.scope, allow_system=False)
+            )
+        )
+        and all(
+            evidence.attribute(key) is value for key, value in expression.attributes
+        )
+    )[:1]
 
 
 def active_principal() -> ActivePrincipalRequirement:

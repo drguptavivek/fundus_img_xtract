@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from hashlib import sha256
+from hmac import compare_digest
 
 from sqlalchemy import select
 
@@ -258,17 +260,24 @@ def participation_facts(db, principal, _action, target, facts):
 def signed_credential_facts(db, _principal, _action, target, facts):
     """Attest exact active credential selected by the signed session."""
     session = facts.session
-    if session is None or session.credential_id != str(target.context.resource_id):
+    if (
+        session is None
+        or session.channel.value != "signed"
+        or session.credential_id != str(target.context.resource_id)
+        or not session.credential_proof
+    ):
         return facts
     value = target.value
     now = datetime.now(UTC)
+    supplied_hash = sha256(session.credential_proof.encode("utf-8")).hexdigest()
+    proof_valid = compare_digest(supplied_hash, value.token_hash)
     if isinstance(value, PasswordResetCredential):
         valid = value.consumed_at is None and value.expires_at > now
     elif isinstance(value, DatasetShare):
         valid = bool(value.is_active and value.expires_at > now)
     else:
         valid = False
-    if not valid:
+    if not valid or not proof_valid:
         return facts
     return _append(
         facts,
@@ -294,10 +303,11 @@ def automation_rule_facts(db, _principal, action, target, facts):
         or scope is None
         or scope.project_id is None
         or session.channel.value != "automation"
+        or session.automation_rule_id is None
     ):
         return facts
     rule_id = target.context.state.get("automation_rule_id")
-    if not is_positive_int(rule_id):
+    if not is_positive_int(rule_id) or session.automation_rule_id != rule_id:
         return facts
     rule = db.get(ProjectAutomatedRemoteInferenceRule, rule_id)
     if rule is not None and (not rule.active or rule.project_id != scope.project_id):

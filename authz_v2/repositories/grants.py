@@ -230,14 +230,15 @@ class GrantRepository:
             )
         if scope.scope_type is ScopeType.PROJECT:
             project = self.db.get(Project, scope.scope_id)
-            if project is None:
+            if project is None or not project.active:
                 return None
             return ScopeDTO(ScopeType.PROJECT, project.id, project_id=project.id)
         project_lab = self.db.get(ProjectLabUnit, scope.scope_id)
-        if project_lab is None:
+        if project_lab is None or not getattr(project_lab, "active", True):
             return None
         lab = self.db.get(LabUnit, project_lab.lab_unit_id)
-        if lab is None:
+        project = self.db.get(Project, project_lab.project_id)
+        if lab is None or project is None or not project.active:
             return None
         return ScopeDTO(
             ScopeType.PROJECT_LAB_UNIT,

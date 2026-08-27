@@ -6,7 +6,7 @@ from sqlalchemy import and_, false, or_, select
 
 from authz_v2.core.resources import ScopeDTO
 from authz_v2.core.roles import Role, ScopeType
-from models import LabUnit
+from models import Hospital, LabUnit, Project
 from project_configuration.models import ProjectLabUnit
 
 
@@ -16,9 +16,19 @@ def resolve_scope(
     project_id: int | None = None,
     lab_unit_id: int | None = None,
     hospital_id: int | None = None,
+    allow_system: bool = False,
 ) -> ScopeDTO | None:
     """Resolve one canonical scope without crossing project/classical ownership."""
+    identifiers = (project_id, lab_unit_id, hospital_id)
+    if any(
+        value is not None and (not isinstance(value, int) or value <= 0)
+        for value in identifiers
+    ):
+        return None
     if project_id is not None:
+        project = db.get(Project, project_id)
+        if project is None or not project.active:
+            return None
         if lab_unit_id is None:
             return ScopeDTO(ScopeType.PROJECT, project_id, project_id=project_id)
         project_lab = db.execute(
@@ -27,7 +37,7 @@ def resolve_scope(
                 ProjectLabUnit.lab_unit_id == lab_unit_id,
             )
         ).scalar_one_or_none()
-        if project_lab is None:
+        if project_lab is None or not project_lab.active:
             return None
         lab = db.get(LabUnit, lab_unit_id)
         if lab is None:
@@ -51,8 +61,10 @@ def resolve_scope(
             lab_unit_id=lab.id,
         )
     if hospital_id is not None:
+        if db.get(Hospital, hospital_id) is None:
+            return None
         return ScopeDTO(ScopeType.HOSPITAL, hospital_id, hospital_id=hospital_id)
-    return ScopeDTO(ScopeType.SYSTEM)
+    return ScopeDTO(ScopeType.SYSTEM) if allow_system else None
 
 
 def admin_has_system_scope(grants) -> bool:

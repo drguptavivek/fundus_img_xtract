@@ -13,7 +13,7 @@ def authorization_endpoint(
     action: str | Action,
     *,
     resolver: str | None = None,
-    enforcement: str = "handler",
+    enforcement: str = "central",
 ):
     """Classify exactly one Flask endpoint for centralized default-deny checks."""
     policy = EndpointPolicy(mode, action_from_name(action), resolver, enforcement)

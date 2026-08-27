@@ -46,11 +46,22 @@ class GrantMutationService:
         if scope is None:
             raise ValueError("authorization grant has an unresolved scope")
         validate_grant_target(request.role, scope)
-        receipt = self.decision_service.require(
+        require = getattr(
+            self.decision_service,
+            "require_audited",
+            self.decision_service.require,
+        )
+        kwargs = (
+            {"audit_service": self.audit_service}
+            if hasattr(self.decision_service, "require_audited")
+            else {}
+        )
+        receipt = require(
             self.repository.db,
             actor,
             Action.AUTHORIZATION_GRANTS_MANAGE,
             GrantTargetRef(request.user_id, scope.scope_type, scope.scope_id),
+            **kwargs,
         )
         self._require_delegation(actor_id, request.role, scope)
         role_id = self.repository.role_id(request.role)
@@ -130,11 +141,22 @@ class GrantMutationService:
         scope = self.repository.scope_for(grant)
         if scope is None:
             raise ValueError("authorization grant has unresolved scope")
-        receipt = self.decision_service.require(
+        require = getattr(
+            self.decision_service,
+            "require_audited",
+            self.decision_service.require,
+        )
+        kwargs = (
+            {"audit_service": self.audit_service}
+            if hasattr(self.decision_service, "require_audited")
+            else {}
+        )
+        receipt = require(
             self.repository.db,
             actor,
             Action.AUTHORIZATION_GRANTS_MANAGE,
             GrantTargetRef(grant.user_id, scope.scope_type, scope.scope_id),
+            **kwargs,
         )
         self._require_delegation(actor_id, role, scope)
         changed_fields: list[str] = []

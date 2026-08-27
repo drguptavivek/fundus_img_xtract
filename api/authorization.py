@@ -31,8 +31,7 @@ from authz_v2.domain.grants import (
 from authz_v2.flask import EndpointMode, authorization_endpoint
 from authz_v2.repositories.audit import AuditRepository
 from authz_v2.repositories.grants import GrantRepository
-from authz_v2.resources.composition import register_core_adapters
-from authz_v2.resources.registry import registry
+from authz_v2.resources.composition import build_core_registries
 from authz_v2.serialization.api import serialize_dto
 from authz_v2.services.audit import AuthorizationAuditService
 from authz_v2.services.decision import AuthorizationDecisionService
@@ -43,6 +42,8 @@ from authz_v2.services.projections import (
     workspace_projection,
 )
 from db_transaction_manager import transaction_scope
+
+registry, _choice_registry = build_core_registries()
 
 
 def _principal_from_current_user() -> PrincipalDTO:
@@ -59,7 +60,6 @@ def _principal_from_current_user() -> PrincipalDTO:
 
 
 def _services(db):
-    register_core_adapters(registry)
     repository = GrantRepository(db)
     decision = AuthorizationDecisionService(repository, registry)
     audit = AuthorizationAuditService(AuditRepository(db))

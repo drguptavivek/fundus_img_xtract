@@ -33,7 +33,7 @@ class EndpointPolicy:
     mode: EndpointMode
     action: Action
     resolver: str | None = None
-    enforcement: str = "handler"
+    enforcement: str = "central"
 
     def __post_init__(self) -> None:
         definition = CATALOGUE[self.action]
@@ -47,6 +47,7 @@ class EndpointPolicy:
         if self.mode is not EndpointMode.PUBLIC and is_public:
             raise ValueError("public catalogue action must use public endpoint mode")
         exact_modes = {
+            EndpointMode.PUBLIC,
             EndpointMode.PROTECTED,
             EndpointMode.SIGNED_RESOURCE,
             EndpointMode.MOBILE_SESSION,
@@ -75,6 +76,8 @@ class EndpointPolicy:
             raise ValueError(
                 "screen endpoint cannot stand in for an exact resource decision"
             )
+        if self.mode in exact_modes and self.enforcement != "central":
+            raise ValueError("exact endpoint authorization must be centrally enforced")
         required_channel = {
             EndpointMode.SIGNED_RESOURCE: SessionChannel.SIGNED,
             EndpointMode.MOBILE_SESSION: SessionChannel.MOBILE,

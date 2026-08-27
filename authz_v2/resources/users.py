@@ -6,11 +6,11 @@ from dataclasses import replace
 
 from sqlalchemy import false
 
-from authz_v2.core.resources import ResourceContextDTO, ScopeDTO
+from authz_v2.core.resources import ResourceContextDTO
 from authz_v2.core.roles import ScopeType
 from authz_v2.resources.references import is_positive_int
 from authz_v2.resources.registry import ResourceAdapter, ResourceTarget
-from authz_v2.resources.scoping import admin_has_system_scope
+from authz_v2.resources.scoping import admin_has_system_scope, resolve_scope
 from models import User
 
 
@@ -20,11 +20,13 @@ def resolve_user(db, resource_id: object) -> ResourceTarget | None:
     user = db.get(User, resource_id)
     if user is None:
         return None
-    scope = (
-        ScopeDTO(ScopeType.HOSPITAL, user.hospital_id, hospital_id=user.hospital_id)
-        if user.hospital_id is not None
-        else ScopeDTO(ScopeType.SYSTEM)
+    scope = resolve_scope(
+        db,
+        hospital_id=user.hospital_id,
+        allow_system=user.hospital_id is None,
     )
+    if scope is None:
+        return None
     return ResourceTarget(
         user, ResourceContextDTO("user", user.id, scope, resolved=True)
     )

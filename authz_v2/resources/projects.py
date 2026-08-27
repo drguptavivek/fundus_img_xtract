@@ -25,7 +25,7 @@ def resolve_project(db, resource_id: object) -> ResourceTarget | None:
     if not is_positive_int(resource_id):
         return None
     project = db.get(Project, resource_id)
-    if project is None:
+    if project is None or not project.active:
         return None
     scope = ScopeDTO(ScopeType.PROJECT, project.id, project_id=project.id)
     return ResourceTarget(
@@ -51,11 +51,11 @@ def resolve_project_upload_target(db, resource_id: object) -> ResourceTarget | N
     if not is_positive_int(resource_id):
         return None
     project_lab = db.get(ProjectLabUnit, resource_id)
-    if project_lab is None:
+    if project_lab is None or not project_lab.active:
         return None
     lab = db.get(LabUnit, project_lab.lab_unit_id)
     project = db.get(Project, project_lab.project_id)
-    if lab is None or project is None:
+    if lab is None or project is None or not project.active:
         return None
     scope = ScopeDTO(
         ScopeType.PROJECT_LAB_UNIT,

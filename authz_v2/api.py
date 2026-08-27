@@ -5,17 +5,18 @@ from __future__ import annotations
 from authz_v2.core.actions import Action
 from authz_v2.core.principals import PrincipalDTO
 from authz_v2.domain.descriptions import describe_catalogue
+from authz_v2.repositories.audit import AuditRepository
 from authz_v2.repositories.grants import GrantRepository
-from authz_v2.resources.composition import register_core_adapters, register_core_choices
-from authz_v2.resources.registry import choice_registry, registry
+from authz_v2.resources.composition import build_core_registries
+from authz_v2.services.audit import AuthorizationAuditService
 from authz_v2.services.choices import list_choices as _list_choices
 from authz_v2.services.decision import AuthorizationDecisionService
 from authz_v2.services.listing import filter_query as _filter_query
 
+registry, choice_registry = build_core_registries()
+
 
 def _service(db) -> AuthorizationDecisionService:
-    register_core_adapters(registry)
-    register_core_choices(choice_registry)
     return AuthorizationDecisionService(GrantRepository(db), registry)
 
 
@@ -28,7 +29,13 @@ def check(
 def require(
     db, principal: PrincipalDTO, action: str | Action, resource: object | None = None
 ):
-    return _service(db).require(db, principal, action, resource)
+    return _service(db).require(
+        db,
+        principal,
+        action,
+        resource,
+        audit_service=AuthorizationAuditService(AuditRepository(db)),
+    )
 
 
 def filter_query(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import cache
 
 from authz_v2.core.actions import Action
 from authz_v2.core.choices import ChoiceListDTO
@@ -29,8 +30,9 @@ from authz_v2.resources.users import USER_ADAPTER
 from authz_v2.services.projections import upload_projection, workspace_projection
 
 
-def register_core_adapters(resources: ResourceRegistry) -> None:
-    for adapter in (
+@cache
+def _core_adapters() -> tuple[ResourceAdapter, ...]:
+    return (
         USER_ADAPTER,
         replace(
             PROJECT_ADAPTER,
@@ -59,26 +61,42 @@ def register_core_adapters(resources: ResourceRegistry) -> None:
         ),
         GRANT_TARGET_ADAPTER,
         *RESOURCE_ADAPTERS,
-    ):
-        if resources.get(adapter.resource_type) is None:
-            resources.register(adapter)
+    )
+
+
+def register_core_adapters(resources: ResourceRegistry) -> None:
+    for adapter in _core_adapters():
+        resources.register(adapter)
+
+
+def _workspace_choices(db, _principal, action, grants, _filters):
+    return ChoiceListDTO(action.value, workspace_projection(db, grants))
+
+
+def _upload_choices(db, principal, action, grants, _filters):
+    return ChoiceListDTO(action.value, upload_projection(db, principal, grants))
 
 
 def register_core_choices(choices: ChoiceRegistry) -> None:
     """Register authoritative set projections used by the narrow facade."""
-    if choices.get("workspaces") is None:
-        choices.register(
-            "workspaces",
-            Action.AUTHORIZATION_ME_WORKSPACES_VIEW,
-            lambda db, _principal, action, grants, _filters: ChoiceListDTO(
-                action.value, workspace_projection(db, grants)
-            ),
-        )
-    if choices.get("upload_options") is None:
-        choices.register(
-            "upload_options",
-            Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW,
-            lambda db, principal, action, grants, _filters: ChoiceListDTO(
-                action.value, upload_projection(db, principal, grants)
-            ),
-        )
+    choices.register(
+        "workspaces",
+        Action.AUTHORIZATION_ME_WORKSPACES_VIEW,
+        _workspace_choices,
+    )
+    choices.register(
+        "upload_options",
+        Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW,
+        _upload_choices,
+    )
+
+
+def build_core_registries() -> tuple[ResourceRegistry, ChoiceRegistry]:
+    """Compose immutable registries once at the application boundary."""
+    resources = ResourceRegistry()
+    choices = ChoiceRegistry()
+    register_core_adapters(resources)
+    register_core_choices(choices)
+    resources.freeze()
+    choices.freeze()
+    return resources, choices

@@ -32,9 +32,9 @@ def list_choices(
         raise AuthorizationError(DenialCode.UNKNOWN_RESOURCE)
     if registration.action is not canonical:
         raise AuthorizationError(DenialCode.NOT_AUTHORIZED)
-    authoritative = decision_service.authoritative_principal(principal)
+    authoritative = decision_service.authoritative_principal(principal, db=db)
     definition = CATALOGUE[canonical]
-    all_grants = decision_service.active_grants(authoritative)
+    all_grants = decision_service.active_grants(authoritative, db=db)
     if definition.requires_resource:
         if definition.resource_type != "user" or authoritative.user_id is None:
             raise AuthorizationError(DenialCode.UNSUPPORTED_QUERY)

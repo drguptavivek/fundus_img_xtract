@@ -425,7 +425,7 @@ Resource: `dataset`; disclosure: `masked`; audit: `optional`.
 
 Authorize dataset.export.download_identifiers.
 
-Resource: `dataset`; disclosure: `identifier_release`; audit: `optional`.
+Resource: `dataset`; disclosure: `identifier_release`; audit: `required`.
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_exporter; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
@@ -958,7 +958,7 @@ Resource: `discrepancy`; disclosure: `masked`; audit: `required`.
 
 Authorize review.discrepancy.export_identifiers.
 
-Resource: `discrepancy`; disclosure: `identifier_release`; audit: `optional`.
+Resource: `discrepancy`; disclosure: `identifier_release`; audit: `required`.
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_exporter,data_manager; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)

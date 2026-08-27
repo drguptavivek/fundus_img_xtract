@@ -48,7 +48,7 @@ dataset.curation.view,dataset,scoped_role|admin_break_glass,masked,optional
 dataset.delete,dataset,scoped_role|admin_break_glass,masked,required
 dataset.export.create,dataset,scoped_role|admin_break_glass,masked,required
 dataset.export.download,dataset,scoped_role|admin_break_glass,masked,optional
-dataset.export.download_identifiers,dataset,scoped_role|admin_break_glass,identifier_release,optional
+dataset.export.download_identifiers,dataset,scoped_role|admin_break_glass,identifier_release,required
 dataset.export.grades,dataset,scoped_role|admin_break_glass,masked,optional
 dataset.finalize,dataset,scoped_role|admin_break_glass,masked,required
 dataset.public_download,dataset_share,signed_credential,masked,optional
@@ -108,7 +108,7 @@ public.analytics.view,public,public,masked,optional
 public.view,public,public,masked,optional
 reports.view,report,scoped_role|admin_break_glass,masked,optional
 review.discrepancy.export,discrepancy,scoped_role|admin_break_glass,masked,required
-review.discrepancy.export_identifiers,discrepancy,scoped_role|admin_break_glass,identifier_release,optional
+review.discrepancy.export_identifiers,discrepancy,scoped_role|admin_break_glass,identifier_release,required
 review.discrepancy.view,discrepancy,scoped_role|admin_break_glass,masked,optional
 review.regrade.adjudicate,grading_task,scoped_role|admin_break_glass,masked,optional
 review.regrade_creator.manage,grading_task,scoped_role|admin_break_glass,masked,optional

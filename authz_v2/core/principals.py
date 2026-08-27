@@ -36,6 +36,9 @@ class SessionContextDTO:
     channel: SessionChannel
     evaluated_at: datetime
     credential_id: str | None = None
+    credential_proof: str | None = field(default=None, repr=False, compare=False)
+    session_id: str | None = None
+    automation_rule_id: int | None = None
 
 
 @dataclass(frozen=True)

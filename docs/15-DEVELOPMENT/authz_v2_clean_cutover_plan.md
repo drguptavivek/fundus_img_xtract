@@ -202,7 +202,9 @@ Rules:
 
 - `check()` never raises for an ordinary denial.
 - `require()` raises one typed authorization exception and returns a receipt on
-  success.
+  success. Mandatory-audit and break-glass calls also require a durable audit
+  service in the caller transaction; omission or audit failure denies the
+  operation.
 - Mutations call `require()` after loading and locking their exact objects,
   inside the transaction that performs the mutation.
 - `filter_query()` applies the same `ScopeSet` semantics used by exact checks.
@@ -367,10 +369,11 @@ ScopeSetDTO
 disclosure classification, and only the live state fields required by the
 action. It never accepts raw request data as authoritative context.
 
-`AuthorizationReceiptDTO` records the action, resource reference, named policy
-path, supporting grant IDs, break-glass state, request ID, and evaluation time.
-Sensitive domain services and audit logging consume this receipt rather than
-reconstructing the decision.
+`AuthorizationReceiptDTO` records the action, resource reference, resolved
+typed scope, named policy path, supporting general grant IDs, only the
+non-secret specialized relationship evidence selected by that path,
+break-glass state, request ID, and evaluation time. Sensitive domain services
+and audit logging consume this receipt rather than reconstructing the decision.
 
 UI/API contracts include:
 

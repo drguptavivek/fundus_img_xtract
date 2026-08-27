@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from threading import RLock
 from typing import Any, TypeVar
 
 from authz_v2.core.actions import Action
@@ -54,16 +55,61 @@ class ChoiceAdapter:
 class ResourceRegistry:
     def __init__(self) -> None:
         self._adapters: dict[str, ResourceAdapter[Any]] = {}
+        self._query_policies: dict[tuple[Action, str], QueryScoper[Any]] = {}
+        self._frozen = False
+        self._lock = RLock()
 
     def register(self, adapter: ResourceAdapter[Any]) -> None:
-        if adapter.resource_type in self._adapters:
-            raise ValueError(
-                f"resource adapter already registered: {adapter.resource_type}"
-            )
-        self._adapters[adapter.resource_type] = adapter
+        with self._lock:
+            if self._frozen:
+                raise RuntimeError("resource registry is frozen")
+            existing = self._adapters.get(adapter.resource_type)
+            if existing is not None:
+                if existing == adapter:
+                    return
+                raise ValueError(
+                    f"conflicting resource adapter: {adapter.resource_type}"
+                )
+            self._adapters[adapter.resource_type] = adapter
 
     def replace(self, adapter: ResourceAdapter[Any]) -> None:
-        self._adapters[adapter.resource_type] = adapter
+        with self._lock:
+            if self._frozen:
+                raise RuntimeError("resource registry is frozen")
+            if adapter.resource_type not in self._adapters:
+                raise LookupError(
+                    f"unregistered resource type: {adapter.resource_type}"
+                )
+            self._adapters[adapter.resource_type] = adapter
+
+    def freeze(self) -> None:
+        with self._lock:
+            self._frozen = True
+
+    def register_query_policy(
+        self, action: Action, resource_type: str, policy: QueryScoper[Any]
+    ) -> None:
+        key = (action, resource_type)
+        with self._lock:
+            if self._frozen:
+                raise RuntimeError("resource registry is frozen")
+            existing = self._query_policies.get(key)
+            if existing is not None:
+                if existing is policy:
+                    return
+                raise ValueError(
+                    f"conflicting query policy: {action.value}/{resource_type}"
+                )
+            self._query_policies[key] = policy
+
+    def query_policy(
+        self, action: Action, resource_type: str
+    ) -> QueryScoper[Any] | None:
+        return self._query_policies.get((action, resource_type))
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
 
     def get(self, resource_type: str) -> ResourceAdapter[Any] | None:
         return self._adapters.get(resource_type)
@@ -83,17 +129,30 @@ class ChoiceRegistry:
 
     def __init__(self) -> None:
         self._providers: dict[str, ChoiceAdapter] = {}
+        self._frozen = False
+        self._lock = RLock()
 
     def register(
         self, choice_kind: str, action: Action, provider: ChoiceProvider
     ) -> None:
-        if choice_kind in self._providers:
-            raise ValueError(f"choice provider already registered: {choice_kind}")
-        self._providers[choice_kind] = ChoiceAdapter(choice_kind, action, provider)
+        adapter = ChoiceAdapter(choice_kind, action, provider)
+        with self._lock:
+            if self._frozen:
+                raise RuntimeError("choice registry is frozen")
+            existing = self._providers.get(choice_kind)
+            if existing is not None:
+                if existing == adapter:
+                    return
+                raise ValueError(f"conflicting choice provider: {choice_kind}")
+            self._providers[choice_kind] = adapter
 
     def get(self, choice_kind: str) -> ChoiceAdapter | None:
         return self._providers.get(choice_kind)
 
+    def freeze(self) -> None:
+        with self._lock:
+            self._frozen = True
 
-registry = ResourceRegistry()
-choice_registry = ChoiceRegistry()
+    @property
+    def frozen(self) -> bool:
+        return self._frozen

@@ -15,9 +15,12 @@ class RouteAuthorizationDTO:
     path: str
     mode: str | None
     action: str | None
+    actions: tuple[str, ...]
     enforcement: str | None
     resolver: str | None
+    binding: str | None
     resource_type: str | None
+    resource_types: tuple[str, ...]
     disclosure_class: str | None
     audit_required: bool | None
 
@@ -31,6 +34,7 @@ def build_route_manifest(app) -> tuple[RouteAuthorizationDTO, ...]:
         view = app.view_functions.get(rule.endpoint)
         policy: EndpointPolicy | None = getattr(view, "__authz_endpoint_policy__", None)
         definition = CATALOGUE[policy.action] if policy else None
+        actions = (policy.action, *policy.action_variants) if policy else ()
         rows.append(
             RouteAuthorizationDTO(
                 endpoint=rule.endpoint,
@@ -38,9 +42,14 @@ def build_route_manifest(app) -> tuple[RouteAuthorizationDTO, ...]:
                 path=str(rule),
                 mode=policy.mode.value if policy else None,
                 action=policy.action.value if policy else None,
+                actions=tuple(action.value for action in actions),
                 enforcement=policy.enforcement if policy else None,
                 resolver=policy.resolver if policy else None,
+                binding=policy.binding if policy else None,
                 resource_type=definition.resource_type if definition else None,
+                resource_types=tuple(
+                    CATALOGUE[action].resource_type for action in actions
+                ),
                 disclosure_class=(
                     definition.disclosure_class.value if definition else None
                 ),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .actions import ACTION_MANIFEST, Action, action_from_name
 from .decisions import DecisionDTO
@@ -547,6 +547,26 @@ def _credential(name: str, resource_type: str) -> None:
     )
 
 
+def _add_signed_credential_path(name: str) -> None:
+    """Add an exact signed-resource alternative to an existing action."""
+    action = Action(name)
+    definition = CATALOGUE[action]
+    signed_path = (
+        "signed_credential",
+        all_of(
+            channels_any(SessionChannel.SIGNED),
+            fact(BooleanFact.EXACT_RESOURCE),
+            fact(BooleanFact.TARGET_ACTIVE),
+            relationship(SIGNED, require_subject=False, require_scope=False),
+            name="signed_credential",
+        ),
+    )
+    CATALOGUE[action] = replace(
+        definition,
+        authorization_paths=definition.authorization_paths + (signed_path,),
+    )
+
+
 def _automation(
     name: str, resource_type: str, interactive_roles: frozenset[Role]
 ) -> None:
@@ -1006,6 +1026,8 @@ _resource(
     RAW_METADATA_READERS,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_add_signed_credential_path("media.image.view")
+_add_signed_credential_path("media.pdf.view")
 
 # Interactive job controls and stored automation rules are separate named paths.
 _resource("jobs.regenerate", "job", JOBS, domain_condition=True)

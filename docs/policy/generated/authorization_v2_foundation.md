@@ -669,6 +669,7 @@ Resource: `image`; disclosure: `masked`; audit: `optional`.
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,data_manager,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,fileUploader,local_admin,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+- `signed_credential`: SessionChannelRequirement(channels=signed), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=target_active; expected=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=False; require_scope=False)
 
 ### `media.metadata.process`
 
@@ -723,6 +724,7 @@ Resource: `encounter_file`; disclosure: `identifier_in_place`; audit: `optional`
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,optometrist,verifier; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+- `signed_credential`: SessionChannelRequirement(channels=signed), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=target_active; expected=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=False; require_scope=False)
 
 ### `mobile.context.view`
 

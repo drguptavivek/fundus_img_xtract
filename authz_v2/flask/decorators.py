@@ -14,9 +14,18 @@ def authorization_endpoint(
     *,
     resolver: str | None = None,
     enforcement: str = "central",
+    action_variants: tuple[str | Action, ...] = (),
+    binding: str | None = None,
 ):
     """Classify exactly one Flask endpoint for centralized default-deny checks."""
-    policy = EndpointPolicy(mode, action_from_name(action), resolver, enforcement)
+    policy = EndpointPolicy(
+        mode,
+        action_from_name(action),
+        resolver,
+        enforcement,
+        tuple(action_from_name(item) for item in action_variants),
+        binding,
+    )
 
     def decorate(fn):
         if getattr(fn, "__authz_endpoint_policy__", None) is not None:

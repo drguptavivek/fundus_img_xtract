@@ -73,20 +73,28 @@ def install_default_deny(
         )
         if any(item is None for item in dependencies):
             return jsonify({"error": "not_authorized"}), 403
-        resolver = resource_resolvers.get(policy.resolver) if policy.resolver else None
-        definition_requires_resource = policy.resolver is not None
+        resolver_name = policy.binding or policy.resolver
+        resolver = resource_resolvers.get(resolver_name) if resolver_name else None
+        definition_requires_resource = resolver_name is not None
         if definition_requires_resource and resolver is None:
             return jsonify({"error": "not_authorized"}), 403
         try:
             db = database()
-            resource = resolver(dict(request.view_args or {})) if resolver else None
+            resolved = resolver(db, dict(request.view_args or {})) if resolver else None
+            if policy.binding:
+                selected_action, resource = resolved
+                allowed_actions = {policy.action, *policy.action_variants}
+                if selected_action not in allowed_actions:
+                    raise PermissionError("resolver selected an undeclared action")
+            else:
+                selected_action, resource = policy.action, resolved
             if definition_requires_resource and resource is None:
                 return jsonify({"error": "not_authorized"}), 403
             service = decision_service(db)
             receipt = service.require(
                 db,
                 principal(),
-                policy.action,
+                selected_action,
                 resource,
                 audit_service=audit_service(db) if audit_service else None,
             )

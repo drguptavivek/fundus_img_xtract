@@ -34,9 +34,28 @@ class EndpointPolicy:
     action: Action
     resolver: str | None = None
     enforcement: str = "central"
+    action_variants: tuple[Action, ...] = ()
+    binding: str | None = None
 
     def __post_init__(self) -> None:
-        definition = CATALOGUE[self.action]
+        actions = (self.action, *self.action_variants)
+        if len(actions) != len(set(actions)):
+            raise ValueError("endpoint action variants must be unique")
+        definitions = tuple(CATALOGUE[action] for action in actions)
+        definition = definitions[0]
+        if self.binding:
+            if self.resolver:
+                raise ValueError(
+                    "dynamic endpoint binding cannot also declare a resolver"
+                )
+            if len(actions) < 2:
+                raise ValueError("dynamic endpoint binding requires action variants")
+            if any(not item.requires_resource for item in definitions):
+                raise ValueError(
+                    "dynamic endpoint actions must require exact resources"
+                )
+        elif self.action_variants:
+            raise ValueError("action variants require a dynamic endpoint binding")
         is_public = any(
             path_name == "public" for path_name, _ in definition.authorization_paths
         )
@@ -56,7 +75,7 @@ class EndpointPolicy:
         if (
             self.mode in exact_modes
             and definition.requires_resource
-            and not self.resolver
+            and not (self.resolver or self.binding)
         ):
             raise ValueError(
                 f"{self.mode.value} endpoint requires an exact resource resolver"
@@ -64,6 +83,7 @@ class EndpointPolicy:
         if (
             self.mode in exact_modes
             and definition.requires_resource
+            and not self.binding
             and self.resolver != definition.resource_type
         ):
             raise ValueError(
@@ -83,9 +103,12 @@ class EndpointPolicy:
             EndpointMode.MOBILE_SESSION: SessionChannel.MOBILE,
             EndpointMode.AUTOMATION: SessionChannel.AUTOMATION,
         }.get(self.mode)
-        if required_channel is not None and not any(
-            _declares_channel(expression, required_channel)
-            for _path_name, expression in definition.authorization_paths
+        if required_channel is not None and any(
+            not any(
+                _declares_channel(expression, required_channel)
+                for _path_name, expression in item.authorization_paths
+            )
+            for item in definitions
         ):
             raise ValueError(
                 f"{self.mode.value} endpoint action must require the "

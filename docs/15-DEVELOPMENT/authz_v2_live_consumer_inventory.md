@@ -13,20 +13,24 @@ docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web \
 
 The command enumerates the runtime Flask URL map and the full Celery task registry, unwraps each callable to its source file and line, records any literal canonical/legacy action name in the callable, and emits deterministic JSON. The reviewed baseline is enforced by `tests/unit/app_init/test_authz_v2_consumer_inventory.py`.
 
-| Consumer | Count | Direct action literal | Explicitly unmapped |
-|---|---:|---:|---:|
-| Flask/API route rules | 680 | 50 | 630 |
-| Celery tasks | 47 | 0 | 47 |
-| Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 977 |
-| Total | 1,704 | 50 | 1,654 |
+| Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
+|---|---:|---:|---:|---:|
+| Flask/API route rules | 680 | 17 | 50 | 613 |
+| Celery tasks | 47 | 0 | 0 | 47 |
+| Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 0 | 977 |
+| Total | 1,704 | 17 | 50 | 1,637 |
 
-Reviewed identity fingerprint: `02955f29a2d0bfb40ca38be17d8308cb34c5cbe8ed39d0fa3929a4538114d85d`.
+Reviewed identity fingerprint: `6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
 The query candidates are intentionally over-inclusive: they include ordinary domain and lookup materialization as well as authorization-sensitive lists. This prevents helper/service queries from disappearing from the audit surface. The table below records the relationship/state-dependent live sets already proven to require Authz policy; each remaining candidate must be marked scope-only, action-specific, choice-only, exact-only, or non-authorization filtering as its vertical slice is migrated.
 
-Largest unmapped HTTP families are `fundus_api` (195), `admin` (164), `grading` (27), `mobile_api` (27), `media` (17), `verify_encounter_set` (16), `analytics` (14), `verify_remedio` (14), and `direct_uploads` (12). These counts define the route-migration workload; they are not authorization approvals.
+Largest unmapped HTTP families are `fundus_api` (195), `admin` (164), `grading` (27), `mobile_api` (27), `verify_encounter_set` (16), `analytics` (14), `verify_remedio` (14), and `direct_uploads` (12). The `media` family is now 17/17 explicitly classified. These counts define the route-migration workload; they are not authorization approvals.
+
+### Vertical slice 1: clinical media delivery
+
+All 17 media routes now declare exact `media.image.view` or `media.pdf.view` contracts. Signed image/thumbnail routes require the signed session channel and exact resource; authenticated routes require exact scoped resources. The polymorphic signed `/<uuid>` endpoint declares a closed two-action allowlist and uses a dynamic binding, so a resolver may select only image or PDF authorization after resolving the stored source. An undeclared action, missing binding, missing resource, or resolver error denies before handler execution.
 
 ## Authorization-sensitive list/query classification
 
@@ -54,4 +58,4 @@ Largest unmapped HTTP families are `fundus_api` (195), `admin` (164), `grading` 
 
 ## Remaining cutover work
 
-The 677 explicitly unmapped runtime consumers must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 660 explicitly unmapped runtime consumers (613 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

@@ -1,35 +1,33 @@
-# Gates: Authorization v2 live-consumer inventory and query policies
+# Gates: Authorization v2 vertical slice 1 - clinical media
 
-Scope: Complete cutover steps 1 and 2: exhaustively inventory live Flask/API/Celery authorization consumers and list queries, then implement the concrete action-specific SQL policies required by those live relationship/state-dependent lists. Keep `authz_v2` inactive and retain the single consolidated migration.
+Scope: Begin the 677-consumer migration with the complete 17-route clinical media family, establish dynamic exact-action bindings needed by later slices, and leave the remaining 660 consumers explicitly visible and fail-closed for future slices.
 
-- [x] G1: A reproducible inventory enumerates every registered Flask/API endpoint and Celery task with source identity, any directly discoverable canonical action, and an explicit legacy/automation gap classification rather than inferred authorization.
+- [x] G1: All 17 production media routes have explicit canonical action, mode, exact resolver or closed dynamic binding, and central enforcement metadata.
   CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/app_init/test_authz_v2_consumer_inventory.py -q
-  EXPECT: 680 HTTP rows and 47 Celery rows with the reviewed fingerprint
+  EXPECT: /3 passed/
+  EVIDENCE: Inventory reports authz_v2=17, legacy_unmapped=613, automation_unmapped=47; media-family test requires exactly 17/17 authz_v2 rows.
 
-- [x] G2: Every production list-materialization site is present as an explicit review candidate, and each proven relationship/state-dependent live set is classified as action-specific, choice-only, or exact-only; none silently uses generic scope SQL.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run python -m scripts.authz_v2_inventory 2>/dev/null | jq -e '.counts.query_candidate_unmapped == 977 and ([.consumers[] | select(.kind == "query")] | length == 977)'
-  EXPECT: true
+- [x] G2: Signed media actions require exact resource, active target, signed channel, and stored signed-credential relationship; omission of any selected fact denies.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/core/test_contracts.py -q
+  EXPECT: /passed/
+  EVIDENCE: Core exhaustive path-removal suite passed as part of the 720-test combined run.
 
-- [x] G3: Each relationship/state-dependent live list has a registered `(action, resource_type)` SQL policy that reproduces the exact authorization rule before materialization, or an explicit fail-closed exact-only/choice-only classification.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_query_policies.py -q
-  EXPECT: all pass
+- [x] G3: The polymorphic signed media route may select only its declared image/PDF actions, and missing/invalid binding or resource denies before handler execution.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_endpoint_enforcement.py tests/unit/authz_v2/test_flask_guard.py -q
+  EXPECT: /12 passed/
+  EVIDENCE: 12 endpoint contract/enforcement tests passed in the focused run; undeclared dynamic action leaves service uncalled.
 
-- [x] G4: Query-policy tests prove exact/list equivalence and deny missing facts, forged lineage, inactive ancestry, cross-project, cross-site, and classical-scope access to project-owned resources.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_query_policies.py tests/unit/authz_v2/test_scope_resolution.py tests/unit/authz_v2/test_resource_adapters.py -q
-  EXPECT: all pass
+- [x] G4: Generated executable-policy artifacts and deterministic consumer baseline match the new catalogue and route contracts exactly.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_generated_policy_docs.py tests/unit/app_init/test_authz_v2_consumer_inventory.py -q
+  EXPECT: /5 passed/
+  EVIDENCE: 5 passed after regeneration; fingerprint 6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3.
 
-- [x] G5: Inventory and policy catalogue parity is machine-checked so a new or changed protected route/task/list fails CI until explicitly classified.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/app_init/test_authz_v2_consumer_inventory.py tests/unit/authz_v2/test_registry_lifecycle.py -q
-  EXPECT: all pass and zero drift
+- [x] G5: Authz v2 remains inactive, the single-migration/clean-cutover boundary remains intact, and the remaining 660 runtime consumers remain explicitly counted rather than inferred as authorized.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_foundation_boundary.py tests/unit/authz_v2/test_migration.py -q
+  EXPECT: /4 passed/
+  EVIDENCE: Boundary and migration tests passed in the 720-test combined run; inventory documents 613 HTTP plus 47 worker gaps.
 
-- [x] G6: Route business validation remains outside Authz; only authorization-relevant upload-profile identity/allowance facts enter policy decisions, and missing required caller facts deny.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_relationship_providers.py tests/unit/authz_v2/test_services.py -q
-  EXPECT: all pass
-
-- [x] G7: The implementation preserves clean-cutover boundaries: `authz_v2` remains inactive, there is no legacy fallback/dual decision path, the working DB stays pre-authz, and exactly one authz_v2 migration exists.
-  CHECK: inactive-boundary and migration invariant checks
-  EXPECT: boundary_ok
-
-- [x] G8: Full affected tests, Ruff, formatting, Bandit, diff checks, direct integration review, Beads export, commit, pull/rebase, and push succeed; origin equals HEAD and unrelated user changes remain untouched.
-  CHECK: final combined validation and git verification
-  EXPECT: all pass and branch up to date with origin
+- [ ] G6: Static checks, direct adversarial review, Beads export, scoped commit, pull/rebase, and push succeed while unrelated user files remain untouched.
+  CHECK: git diff --check
+  EXPECT: clean
+  EVIDENCE: pending

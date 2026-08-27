@@ -89,6 +89,32 @@ def test_exact_non_web_modes_require_resolver_and_matching_channel(mode, action)
         authorization_endpoint(mode, Action.ACCOUNT_PROFILE_VIEW, resolver="user")
 
 
+def test_dynamic_endpoint_binding_declares_and_enforces_an_action_allowlist():
+    app = Flask(__name__)
+
+    @app.get("/media/<uuid_str>")
+    @authorization_endpoint(
+        EndpointMode.SIGNED_RESOURCE,
+        Action.MEDIA_IMAGE_VIEW,
+        action_variants=(Action.MEDIA_PDF_VIEW,),
+        binding="media_source",
+    )
+    def media(uuid_str):
+        return uuid_str
+
+    manifest = build_route_manifest(app)[0]
+    assert manifest.actions == ("media.image.view", "media.pdf.view")
+    assert manifest.binding == "media_source"
+    assert manifest.resource_types == ("image", "encounter_file")
+
+    with pytest.raises(ValueError, match="dynamic endpoint binding requires"):
+        authorization_endpoint(
+            EndpointMode.SIGNED_RESOURCE,
+            Action.MEDIA_IMAGE_VIEW,
+            binding="media_source",
+        )
+
+
 def test_route_manifest_projects_catalogue_security_metadata():
     app = Flask(__name__)
 

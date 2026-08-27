@@ -113,7 +113,7 @@ def build_live_consumer_inventory(app, celery_app) -> tuple[ConsumerInventoryRow
         if source and source.startswith("tests/"):
             continue
         metadata = route_metadata[rule.endpoint]
-        actions = (metadata.action,) if metadata.action else _actions(body)
+        actions = metadata.actions if metadata.action else _actions(body)
         classification = (
             "authz_v2"
             if metadata.action

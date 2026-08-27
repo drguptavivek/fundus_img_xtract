@@ -11,31 +11,14 @@ Supports both local file serving and S3 storage with:
 
 import logging
 from typing import NoReturn
-from flask import request, redirect, abort
+
+from flask import abort, redirect, request
 from flask_login import current_user, login_required
-from utils.rate_limiter import rate_limit, rate_limit_with_feedback
-from utils.utilsImgServe import (
-    directImgFinalByUUID,
-    directImgOrigByUUID,
-    encounterImageByUUID,
-    directImgEdByUUID,
-    imgForGradingByUUID,
-    encounterPDFByUUID,
-    # Thumbnail serving functions
-    encounterImageThumbnailByUUID,
-    directImgOrigThumbnailByUUID,
-    directImgEdThumbnailByUUID,
-    directImgFinalThumbnailByUUID,
-    universalImageThumbnailByUUID,
-    encounterSetImageByUUID,
-    encounterSetImageThumbnailByUUID,
-    encounterSetImageEditedByUUID,
-)
-from utils.log_sanitize import sanitize_log_value
-from db_transaction_manager import transaction_scope
-from models import DirectImageUpload, EncounterFile, EncounterFilePDF, EncounterSetImage, S3Config
+
 from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
 from authz.telemetry import record_authorization_decision
+from authz_v2.flask import EndpointMode, authorization_endpoint
+from db_transaction_manager import transaction_scope
 from media.authorization import (
     IMAGE_SOURCE_TYPES,
     MediaAccessDenied,
@@ -44,6 +27,32 @@ from media.authorization import (
     authorize_media_source,
     authorize_signed_media_source,
     resolve_media_source,
+)
+from models import (
+    DirectImageUpload,
+    EncounterFile,
+    EncounterFilePDF,
+    EncounterSetImage,
+    S3Config,
+)
+from utils.log_sanitize import sanitize_log_value
+from utils.rate_limiter import rate_limit, rate_limit_with_feedback
+from utils.utilsImgServe import (
+    directImgEdByUUID,
+    directImgEdThumbnailByUUID,
+    directImgFinalByUUID,
+    directImgFinalThumbnailByUUID,
+    directImgOrigByUUID,
+    directImgOrigThumbnailByUUID,
+    encounterImageByUUID,
+    # Thumbnail serving functions
+    encounterImageThumbnailByUUID,
+    encounterPDFByUUID,
+    encounterSetImageByUUID,
+    encounterSetImageEditedByUUID,
+    encounterSetImageThumbnailByUUID,
+    imgForGradingByUUID,
+    universalImageThumbnailByUUID,
 )
 
 from . import bp
@@ -56,31 +65,49 @@ audit_logger = logging.getLogger("security.audit")
 # HMAC-Signed Media Routes (New S3-aware routes)
 # ============================================================================
 
+
 @bp.route("/<uuid_str>", methods=["GET"])
+@authorization_endpoint(
+    EndpointMode.SIGNED_RESOURCE,
+    "media.image.view",
+    action_variants=("media.pdf.view",),
+    binding="media_source",
+)
 @rate_limit("4000 per hour; 400 per minute", methods=["GET"], per_method=True)
 def serve_media_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
         uuid_str,
         variant="original",
-        expected_sources=IMAGE_SOURCE_TYPES | frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}),
+        expected_sources=IMAGE_SOURCE_TYPES
+        | frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}),
     )
 
 
 @bp.route("/<uuid_str>/edited", methods=["GET"])
+@authorization_endpoint(
+    EndpointMode.SIGNED_RESOURCE, "media.image.view", resolver="image"
+)
 @rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True)
 def serve_media_edited_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
         uuid_str,
         variant="edited",
-        expected_sources=frozenset({
-            MediaSourceType.DIRECT_IMAGE_UPLOAD,
-            MediaSourceType.ENCOUNTER_SET_IMAGE,
-        }),
+        expected_sources=frozenset(
+            {
+                MediaSourceType.DIRECT_IMAGE_UPLOAD,
+                MediaSourceType.ENCOUNTER_SET_IMAGE,
+            }
+        ),
     )
 
 
 @bp.route("/<uuid_str>/thumbnail", methods=["GET"])
-@rate_limit_with_feedback("4000 per hour; 500 per minute", methods=["GET"], per_method=True)
+@authorization_endpoint(
+    EndpointMode.SIGNED_RESOURCE, "media.image.view", resolver="image"
+)
+@rate_limit_with_feedback(
+    "4000 per hour; 500 per minute", methods=["GET"], per_method=True
+)
 def serve_media_thumbnail_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
         uuid_str,
@@ -105,22 +132,30 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
 
     with transaction_scope() as db:
         try:
-            resource = resolve_media_source(db, media_uuid=uuid_str, expected_sources=expected_sources)
+            resource = resolve_media_source(
+                db, media_uuid=uuid_str, expected_sources=expected_sources
+            )
         except MediaResolutionError:
             _reject_signed_media(403, "Invalid or expired media token")
         if resource.hospital_id is None:
             _reject_signed_media(403, "Invalid or expired media token")
         digest = token_digest(token)
         valid = get_hmac_validation(
-            token_hash=digest, media_uuid=uuid_str,
-            hospital_id=resource.hospital_id, expires=expires_int,
+            token_hash=digest,
+            media_uuid=uuid_str,
+            hospital_id=resource.hospital_id,
+            expires=expires_int,
         )
         if not valid:
-            valid = validate_media_token(uuid_str, token, expires_int, resource.hospital_id)
+            valid = validate_media_token(
+                uuid_str, token, expires_int, resource.hospital_id
+            )
             if valid:
                 set_hmac_validation(
-                    token_hash=digest, media_uuid=uuid_str,
-                    hospital_id=resource.hospital_id, expires=expires_int,
+                    token_hash=digest,
+                    media_uuid=uuid_str,
+                    hospital_id=resource.hospital_id,
+                    expires=expires_int,
                 )
         if not valid:
             _reject_signed_media(403, "Invalid or expired media token")
@@ -128,15 +163,19 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
         action = (
             "media.pdf.view"
             if resource.source_type == MediaSourceType.ENCOUNTER_FILE_PDF
-            else "media.thumbnail.view" if variant == "thumbnail"
+            else "media.thumbnail.view"
+            if variant == "thumbnail"
             else "media.image.view"
         )
         try:
             authorize_signed_media_source(resource=resource, action=action)
             if current_user.is_authenticated:
                 authorize_media_source(
-                    db, user=current_user, media_uuid=uuid_str,
-                    action=action, expected_sources=expected_sources,
+                    db,
+                    user=current_user,
+                    media_uuid=uuid_str,
+                    action=action,
+                    expected_sources=expected_sources,
                 )
         except (MediaAccessDenied, MediaResolutionError):
             abort(404)
@@ -171,10 +210,11 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
                         get_s3_client(s3_config), s3_config, object_key, **kwargs
                     )
                     return redirect(url, code=307)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - storage fallback is intentional
                     logger.warning(
                         "S3 media redirect failed uuid=%s error=%s",
-                        sanitize_log_value(uuid_str), sanitize_log_value(exc),
+                        sanitize_log_value(uuid_str),
+                        sanitize_log_value(exc),
                     )
 
         if resource.source_type == MediaSourceType.DIRECT_IMAGE_UPLOAD:
@@ -191,7 +231,9 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
             if variant == "edited":
                 return encounterSetImageEditedByUUID(uuid_str, preauthorized=resource)
             if variant == "thumbnail":
-                return encounterSetImageThumbnailByUUID(uuid_str, preauthorized=resource)
+                return encounterSetImageThumbnailByUUID(
+                    uuid_str, preauthorized=resource
+                )
             return encounterSetImageByUUID(uuid_str, preauthorized=resource)
         return encounterPDFByUUID(uuid_str, preauthorized=resource)
 
@@ -211,51 +253,92 @@ def _reject_signed_media(status_code: int, description: str) -> NoReturn:
 # enforced again inside the media layer.
 # ============================================================================
 
+
 @bp.route("/encounter/img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "4000 per hour; 200 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _encounterImageByUUID(uuid_str: str):
     return encounterImageByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("2000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "2000 per hour; 200 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _directImgOrigByUUID(uuid_str: str):
     return directImgOrigByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "2000 per hour; 100 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _directImgEdByUUID(uuid_str: str):
     return directImgEdByUUID(uuid_str)
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "4000 per hour; 200 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _directImgFinalByUUID(uuid_str: str):
     return directImgFinalByUUID(uuid_str)
 
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("1000 per hour; 300 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "1000 per hour; 300 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)
 
 
 @bp.route("/encounter/pdf/<uuid_str>", methods=["GET"])
+@authorization_endpoint(
+    EndpointMode.PROTECTED, "media.pdf.view", resolver="encounter_file"
+)
 @login_required
-@rate_limit("4000 per hour; 400 per minute", methods=["GET"], per_method=True, error_message="PDF fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "4000 per hour; 400 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="PDF fetch limit exceeded. Please slow down.",
+)
 def _encounterPDFByUUID(uuid_str: str):
     return encounterPDFByUUID(uuid_str)
 
 
 # === Thumbnail Serving Routes ===
 
+
 @bp.route("/encounter/img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -269,6 +352,7 @@ def _encounterImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -282,6 +366,7 @@ def _directImgOrigThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -295,6 +380,7 @@ def _directImgEdThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -308,6 +394,7 @@ def _directImgFinalThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -322,15 +409,23 @@ def _universalImageThumbnailByUUID(uuid_str: str):
 
 # === Encounter Set Media Routes ===
 
+
 @bp.route("/encounter_set/img/<uuid_str>", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "4000 per hour; 200 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _encounterSetImageByUUID(uuid_str: str):
     """Serve encounter set image by UUID."""
     return encounterSetImageByUUID(uuid_str)
 
 
 @bp.route("/encounter_set/img/<uuid_str>/thumbnail", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -344,8 +439,14 @@ def _encounterSetImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/edited", methods=["GET"])
+@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
-@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit(
+    "4000 per hour; 200 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Image fetch limit exceeded. Please slow down.",
+)
 def _encounterSetImageEditedByUUID(uuid_str: str):
     """Serve encounter set edited image by UUID (only if edited version exists)."""
     return encounterSetImageEditedByUUID(uuid_str)
@@ -354,6 +455,7 @@ def _encounterSetImageEditedByUUID(uuid_str: str):
 # ============================================================================
 # Local Fallback Helpers
 # ============================================================================
+
 
 def _serve_direct_local(direct_image: DirectImageUpload, uuid: str):
     """Serve DirectImageUpload from local filesystem."""

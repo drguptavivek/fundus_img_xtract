@@ -19,15 +19,28 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
+        "authz_v2": 17,
         "legacy_action_literal": 50,
-        "legacy_unmapped": 630,
+        "legacy_unmapped": 613,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 977,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "02955f29a2d0bfb40ca38be17d8308cb34c5cbe8ed39d0fa3929a4538114d85d"
+        == "6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3"
     )
+
+
+def test_high_risk_media_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    media_rows = [
+        row for row in rows if row.kind == "http" and row.source == "media/routes.py"
+    ]
+    assert len(media_rows) == 17
+    assert {row.classification for row in media_rows} == {"authz_v2"}
+    assert all(row.canonical_actions for row in media_rows)
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

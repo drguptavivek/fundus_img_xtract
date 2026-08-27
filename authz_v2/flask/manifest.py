@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from authz_v2.core.catalogue import CATALOGUE
 from authz_v2.flask.contracts import EndpointPolicy
+from authz_v2.flask.hooks import endpoint_policy_for_app
 
 
 @dataclass(frozen=True)
@@ -31,8 +32,7 @@ def build_route_manifest(app) -> tuple[RouteAuthorizationDTO, ...]:
     for rule in app.url_map.iter_rules():
         if rule.endpoint == "static":
             continue
-        view = app.view_functions.get(rule.endpoint)
-        policy: EndpointPolicy | None = getattr(view, "__authz_endpoint_policy__", None)
+        policy: EndpointPolicy | None = endpoint_policy_for_app(app, rule.endpoint)
         definition = CATALOGUE[policy.action] if policy else None
         actions = (policy.action, *policy.action_variants) if policy else ()
         rows.append(

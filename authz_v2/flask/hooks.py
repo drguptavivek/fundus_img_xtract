@@ -7,6 +7,7 @@ from collections.abc import Callable
 from flask import current_app, g, jsonify, request
 
 from authz_v2.flask.contracts import EndpointMode, EndpointPolicy
+from authz_v2.flask.route_catalogue import catalogued_endpoint_policy
 from authz_v2.telemetry.metrics import increment
 
 
@@ -21,7 +22,8 @@ def endpoint_policy(endpoint: str | None) -> EndpointPolicy | None:
     if not endpoint:
         return None
     view = current_app.view_functions.get(endpoint)
-    return getattr(view, "__authz_endpoint_policy__", None) if view else None
+    decorated = getattr(view, "__authz_endpoint_policy__", None) if view else None
+    return decorated or catalogued_endpoint_policy(endpoint)
 
 
 def unclassified_endpoints(app) -> tuple[str, ...]:
@@ -31,12 +33,15 @@ def unclassified_endpoints(app) -> tuple[str, ...]:
             rule.endpoint
             for rule in app.url_map.iter_rules()
             if rule.endpoint != "static"
-            and getattr(
-                app.view_functions.get(rule.endpoint), "__authz_endpoint_policy__", None
-            )
-            is None
+            and endpoint_policy_for_app(app, rule.endpoint) is None
         )
     )
+
+
+def endpoint_policy_for_app(app, endpoint: str) -> EndpointPolicy | None:
+    view = app.view_functions.get(endpoint)
+    decorated = getattr(view, "__authz_endpoint_policy__", None) if view else None
+    return decorated or catalogued_endpoint_policy(endpoint)
 
 
 def install_default_deny(

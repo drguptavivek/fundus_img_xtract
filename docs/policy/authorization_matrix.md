@@ -10,7 +10,7 @@ Which role reaches which project action, and at what grant scope. This is the po
 decided: what must be true. [`authorizations.md`](authorizations.md) carries the rule behind
 every cell and is the authority; where the two disagree, it wins.
 
-`20 roles` · `16 project actions` · `two grant scopes` · governance and operational drawn separately
+`21 roles` · `16 operational columns` · `3 grader-allocation management actions` · `two grant scopes`
 
 ## The four rules the grid is built from
 
@@ -223,6 +223,22 @@ it has no column here. Two things must hold and neither substitutes for the othe
 user-level qualification (`ophthalmologist`), and an active grading slot for that task's disease
 and Lab Unit. A slot alone does not authorize grading; the clinical role alone does not either.
 
+### Allocating graders is a separate management plane
+
+An allocation does not qualify somebody to grade. It selects an already-qualified
+`ophthalmologist`, with a matching active slot, for a project target and Lab Unit. The three
+management actions are deliberately separate because their effects have different scope.
+
+| Action | Ordinary holder | Required scope |
+|:---|:---|:---|
+| View the allocation plan | `project_pi`, `site_pi`, `project_admin`, `data_manager` | The grant filters the plan to the project or Lab Unit it names |
+| Create, reactivate or deactivate an allocation | `project_admin`, `data_manager` | Contained within the actor's project grant; never self-allocation |
+| Switch allocation enforcement | `project_admin` | Project scope only; every active target must already have effective reader coverage |
+
+`admin` is break-glass for all three, but it cannot make an unqualified person a grader or waive
+the target, role, slot or coverage checks. `local_admin` and classical Lab Unit assignment confer
+nothing on project allocations. Investigators observe the plan and never change it.
+
 ## Patient identifiers
 
 Three different things are called patient identifiers, and they are governed separately. Two of
@@ -273,7 +289,7 @@ holder is unaffected by any of them.
 |:---|:---|:---|
 | `sites_can_export_grades` | Export of the readings human graders produced | `data_exporter` |
 | `sites_can_create_datasets` | Dataset curation and finalisation | `dataset_creator` |
-| `sites_can_share_datasets` | Dataset sharing and release | `dataset_creator` |
+| `sites_can_share_datasets` | Dataset sharing and release | `data_exporter` |
 
 A site always exports its own encounters, images and captured data — that is its own record and
 no setting withholds it. What is withheld by default is the **grades**: the project's clinical
@@ -283,8 +299,10 @@ and a setting that is off narrows nothing except the work named in the table.
 
 ## Reserved to a System Admin
 
-Project setup carries consequences across the whole project and is never delegable to
-`project_pi`, `site_pi` or `project_admin` at any scope.
+System administration is `admin` only. Hospital, project, workflow and clinical roles do not
+open system status, maintenance, security, storage or configuration controls. Project setup
+carries consequences across the whole project and is likewise never delegable to `project_pi`,
+`site_pi` or `project_admin` at any scope.
 
 - Upload profile **definitions** — distinct from assigning a user to an existing profile, which is `uploaders.manage`
 - Grading schemes and grading profiles
@@ -292,12 +310,19 @@ Project setup carries consequences across the whole project and is never delegab
 - Remidio API routing and connection bindings
 - Which Lab Units a project spans
 
+`user_manager` is the narrow exception inside the administration area. It manages ordinary user
+records, ordinary non-project roles, Lab Unit assignments, grading slots, enrolled devices and
+sessions in its own hospital. It cannot manage or grant `admin` or `user_manager`, change project
+grants or grader allocations, reach another hospital, or use any system-administration action.
+
 ## Roles whose scope is classical
 
-`local_admin` administers one hospital and the Lab Units within it, and may hold several — it
-holds one relation per hospital and reaches exactly those. This is why the hospital cannot stay
-a column on the user record: a column holds one value, and the relation is what allows several.
-`current_user.hospital_id` is never an authorization rule.
+`user_manager` has a hospital relationship only for the user-management actions above.
+`local_admin` is a hospital-scoped operational role outside projects, not a system or user
+administrator. Either may hold several hospital relations and reaches exactly those for the
+actions its role confers. This is why the hospital cannot stay a column on the user record: a
+column holds one value, and the relation is what allows several. `current_user.hospital_id` is
+never an authorization rule.
 
 `data_manager` administers the work without performing it: it creates and reassigns regrade
 tasks and intra-rater batches, and runs inference retrospectively. Running inference at capture

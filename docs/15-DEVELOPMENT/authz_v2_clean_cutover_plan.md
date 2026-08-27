@@ -1,0 +1,811 @@
+# Clean Authorization Deep-Module and Atomic Cutover Plan
+
+## Objective and delivery boundary
+
+Replace the current parallel authorization mechanisms with one dependency-clean
+deep module. Development takes place under the temporary package name
+`authz_v2/`; the released application contains only the unversioned `authz/`
+package after the old `authz/`, `data_authorization/`, role-list decorators,
+legacy capability paths, and bypass helpers have been removed.
+
+The cutover is clean:
+
+- no legacy authorization fallback;
+- no production dual-read or dual-decision behavior;
+- no permanent compatibility shim;
+- no migration keyed by usernames or other person-specific values; and
+- no protected route left on an old role or scope check.
+
+The reviewed policy documents remain authoritative for who may do what. This
+plan defines how that policy becomes one executable, testable system.
+
+## Decisions already settled
+
+- Typed Python is the single executable policy source.
+- PostgreSQL stores grants, relationships, resource lineage, credentials, and
+  current workflow state. Pure Python evaluates exact decisions after loading
+  the required facts.
+- SQL applies authorization to list queries; unauthorized rows are not loaded
+  into application memory and filtered afterwards.
+- One `authorization_grants` table replaces `user_roles`, classical role/scope
+  combinations, and project role grants as authorization sources.
+- Upload-profile assignments, grading slots, project grader allocations,
+  ownership/participation, signed credentials, and automation rules remain
+  specialized because they contribute facts that a general role grant cannot.
+- `admin` break-glass remains always active where the action accepts it. It is
+  excluded from another user's self-service actions and from clinical grading
+  submissions.
+- The action catalogue is consolidated by authorization boundary instead of
+  preserving 121 names mechanically. An action remains separate whenever its
+  capability, scope, state, disclosure, credential, or audit rule differs.
+- Notification sending temporarily becomes one canonical `admin`-only action.
+  Self-scoped notification viewing and updating remain separate.
+- Operational log files retain the current configurable 180-day rotation
+  policy until an organizational retention policy replaces it.
+
+## Governing authorization equation
+
+Every exact decision reduces to:
+
+```text
+principal
++ canonical action
++ server-resolved resource
++ one complete named authorization path
++ current domain and disclosure constraints
+= allow or deny
+```
+
+A named path is an explicit conjunction. Alternative paths are explicit
+disjunctions. A policy never treats a bag of grant sources as though any one
+of them could satisfy requirements that are intended to be additive.
+
+Examples:
+
+```text
+project upload
+= scoped uploading role
++ exact active upload-profile assignment
++ current target remains active
+
+The authorization receipt establishes the allowed profile identity and scope.
+The upload domain service separately validates kind, disease, camera, area,
+encounter-set type, and mydriatic state against that profile; those internal
+profile rules are not authorization facts.
+
+clinical grade submission
+= ophthalmologist qualification
++ exact active disease/Lab Unit grading slot
++ task currently accepts the requested workflow slot
++ no conflicting or duplicate grade
++ matching project allocation when allocation enforcement is active
+
+PII export
+= ordinary export authority over the same resources
++ pii_exporter at a containing scope
++ an explicitly identifier-bearing action
+```
+
+`resident`, `resident2`, and `arbitrator` are workflow slots, never roles.
+Neither a grading slot nor a project allocation substitutes for the
+`ophthalmologist` qualification or for the other relationship.
+
+## Project, classical, and channel context
+
+Project versus classical ownership is not a trusted property of a URL, page,
+form, browser workspace, or token claim.
+
+- Existing resources derive context from persisted lineage.
+- Create requests derive context from the exact server-validated target and
+  persist that context on every created root record.
+- A workspace selector only narrows what the caller asks to see.
+- Mobile context is an additional credential/channel constraint. It does not
+  replace server-side role, scope, profile, slot, allocation, or state checks.
+- Grading always derives ownership and target information from the task and its
+  stored lineage, regardless of which route opened it.
+
+A project dashboard, settings page, discrepancy screen, dataset workspace, or
+upload page is a composite surface. Page admission proves that at least one
+relevant object is reachable; each panel and API call uses its own action and
+returns only its own authorized data.
+
+## Deep-module ownership and dependency direction
+
+The temporary implementation package is:
+
+```text
+authz_v2/
+├── __init__.py
+├── api.py                       # narrow public Python facade
+├── core/
+│   ├── actions.py               # canonical typed action identifiers
+│   ├── catalogue.py             # the single executable policy catalogue
+│   ├── expressions.py           # all_of/any_of and typed requirements
+│   ├── principals.py            # principal and session contracts
+│   ├── resources.py             # resource and scope contracts
+│   ├── decisions.py             # decisions and authorization receipts
+│   └── roles.py                 # role purpose and legal grant scopes
+├── domain/
+│   ├── models.py                # AuthorizationGrant and audit models
+│   ├── grants.py                # grant lifecycle and delegation rules
+│   ├── descriptions.py          # human-readable catalogue projection
+│   └── exceptions.py            # stable internal error codes
+├── services/
+│   ├── decision.py              # exact check and require orchestration
+│   ├── listing.py               # list-object and SQL scoping facade
+│   ├── choices.py               # screen eligibility and picker choices
+│   ├── grants.py                # authorized grant administration
+│   └── audit.py                 # receipt-driven audit persistence
+├── repositories/
+│   ├── contracts.py             # persistence ports
+│   ├── grants.py                # SQLAlchemy grant repository
+│   ├── scopes.py                # scope containment and ScopeSet queries
+│   └── audit.py                 # append-only audit repository
+├── resources/
+│   ├── registry.py              # resource adapter registration
+│   ├── tasks.py
+│   ├── encounters.py
+│   ├── uploads.py
+│   ├── datasets.py
+│   ├── jobs.py
+│   ├── users.py
+│   ├── projects.py
+│   └── media.py
+├── flask/
+│   ├── contracts.py             # endpoint classifications
+│   ├── decorators.py            # metadata and screen-admission decorators
+│   └── hooks.py                 # default-deny before_request enforcement
+├── serialization/
+│   ├── api.py                   # stable JSON serializers
+│   └── catalogue.py             # Markdown/HTML/matrix serializers
+└── telemetry/
+    ├── events.py                # structured operational events
+    ├── metrics.py               # low-cardinality counters and timings
+    └── logging.py               # handler integration and privacy filters
+```
+
+Dependency direction is one-way:
+
+```text
+authz core contracts
+        ↓
+authorization services
+        ↓
+repository/resource ports
+        ↓
+SQLAlchemy and feature adapters
+
+Flask routes and domain services → public authz facade
+```
+
+The pure core imports no Flask, SQLAlchemy, Redis, application ORM model, or
+feature module. Feature adapters are registered at the application composition
+root; the core does not import features back into itself.
+
+## Narrow public Python API
+
+Only the following operations are supported outside the module:
+
+```python
+check(db, principal, action, resource) -> DecisionDTO
+
+require(db, principal, action, resource) -> AuthorizationReceiptDTO
+
+filter_query(db, principal, action, resource_adapter, query) -> ScopedQuery
+
+list_choices(db, principal, action, choice_kind, filters=None) -> ChoiceListDTO
+
+describe_catalogue(filters=None) -> AuthorizationCatalogueDTO
+```
+
+Rules:
+
+- `check()` never raises for an ordinary denial.
+- `require()` raises one typed authorization exception and returns a receipt on
+  success.
+- Mutations call `require()` after loading and locking their exact objects,
+  inside the transaction that performs the mutation.
+- `filter_query()` applies the same `ScopeSet` semantics used by exact checks.
+- `list_choices()` is an authorization decision about a set, not presentation
+  filtering.
+- Unknown actions, unregistered resource types, unresolved lineage, inactive
+  principals, missing scope, and unsupported query adapters deny closed.
+- Exact references reject booleans, zero, negative IDs, ambiguous polymorphic
+  IDs, and incomplete typed targets before any database lookup. A route need
+  supply only stable identifiers that the server can resolve; if a required
+  identifier, session channel, relationship, workflow fact, credential, or
+  automation-rule ID is absent, the decision is denied.
+- A generic SQL scope filter is available only when every authorization path
+  can be represented by principal, role, and scope predicates. Actions needing
+  row-specific participation, upload assignment, grading slot, workflow,
+  credential, identifier-release, or automation evidence must use an
+  action-specific query/choice provider or deny as `unsupported_query`.
+
+## Authorization grant schema
+
+`authorization_grants` is the sole general role-relation table:
+
+```text
+id
+user_id
+role_id
+scope_type                    system | hospital | lab_unit | project | project_lab_unit
+hospital_id                   nullable FK
+lab_unit_id                   nullable FK
+project_id                    nullable FK
+project_lab_unit_id           nullable FK
+description                   nullable human-readable text
+active
+created_by_user_id
+updated_by_user_id
+deactivated_by_user_id
+created_at
+updated_at
+deactivated_at
+```
+
+Database checks enforce the target shape:
+
+- `system`: all target foreign keys are null;
+- `hospital`: only `hospital_id` is populated;
+- `lab_unit`: only `lab_unit_id` is populated;
+- `project`: only `project_id` is populated; and
+- `project_lab_unit`: only `project_lab_unit_id` is populated.
+
+Use partial unique indexes for each target form so one logical tuple has one
+historical row that can be deactivated or reactivated. Grants are not deleted.
+
+The `roles` table may remain as referential identity and display metadata, but
+it is not a second policy source. Typed Python declares role purpose, permitted
+scope types, delegation rules, and action capabilities; parity tests ensure
+stored role names match the catalogue.
+
+### Grant description
+
+`authorization_grants.description` explains why a grant exists.
+
+- It is optional, plain text, trimmed, and length-limited.
+- It never participates in a decision.
+- It is escaped when rendered.
+- It is not emitted in operational logs.
+- Creating or changing it is included in grant audit history.
+- It is visible only through authorized access-management interfaces, not
+  ordinary current-user capability responses.
+
+### Scope containment
+
+- A system grant contains every scope only where the action explicitly accepts
+  that system relation.
+- A hospital grant contains classical Lab Units in that hospital only.
+- A classical Lab Unit grant never reaches project-owned data.
+- A project grant contains active `ProjectLabUnit` objects belonging to that
+  project.
+- A `ProjectLabUnit` grant contains only that project-site object.
+- Project-hospital scope is absent from the new model.
+- An actor may delegate a grant only at or below a scope their own grant
+  reaches, and only for roles the policy permits them to delegate.
+
+## Specialized relationships
+
+The general grant table is not overloaded with domain-specific attributes.
+
+- Upload-profile assignments retain the exact project/profile/Lab Unit. The
+  upload service owns the profile's internal allowed dimensions.
+- Grading slots retain disease, Lab Unit, resident/resident2/arbitrator flags,
+  active state, and history.
+- Project grader allocations retain project, `ProjectLabUnit`, semantic target,
+  capacity, active state, and actor history.
+- Ownership and participation are derived from the authoritative domain row.
+- Signed media/share/reset credentials remain exact, expiring, revocable
+  credentials on their owning records.
+- Automation authority comes from an active stored rule and matching event or
+  job target. Workers and AI models are not users and receive no human grants.
+  The worker supplies the exact stored automation-rule ID alongside the exact
+  target; the provider never authorizes from "any active rule" in a project.
+
+## Typed action catalogue and human-readable generation
+
+Each canonical action declares:
+
+- stable identifier, label, and short explanation;
+- resource type and whether an exact resource is required;
+- one or more named authorization paths;
+- scope and minimum-scope semantics;
+- self, ownership, credential, automation, or specialized requirements;
+- masked, identifier-in-place, or identifier-release disclosure class;
+- break-glass treatment;
+- mandatory-audit treatment; and
+- any domain condition contract required before mutation.
+
+The migration inventory maps every existing action name to one canonical
+action or to an explicit retirement reason. Actions may be combined only when
+all security dimensions above are identical.
+
+The catalogue projects through DTOs rather than a second hand-maintained map:
+
+```text
+AuthorizationCatalogueDTO
+├── ActionDescriptionDTO
+│   ├── action, label, description, and resource type
+│   ├── AccessPathDescriptionDTO[]
+│   ├── disclosure class
+│   ├── break-glass mode
+│   └── audit mode
+└── RoleDescriptionDTO
+    ├── role, label, and purpose
+    └── permitted scope types
+```
+
+These DTOs generate:
+
+- the human-readable action list;
+- role/action and project-scope matrices;
+- administration UI descriptions;
+- Markdown and HTML policy summaries; and
+- parity fixtures for policy tests.
+
+Rich policy prose remains in the reviewed policy documents. Generated output
+summarizes executable facts and does not attempt to mechanically recreate every
+clinical explanation.
+
+## Decision, receipt, eligibility, and API DTOs
+
+Internal contracts are detached from ORM rows:
+
+```text
+PrincipalDTO
+SessionContextDTO
+ScopeDTO
+ResourceContextDTO
+RelationshipEvidenceDTO
+DecisionDTO
+AuthorizationReceiptDTO
+ScopeSetDTO
+```
+
+`ResourceContextDTO` carries server-resolved identity, scope, owner/requester,
+disclosure classification, and only the live state fields required by the
+action. It never accepts raw request data as authoritative context.
+
+`AuthorizationReceiptDTO` records the action, resource reference, named policy
+path, supporting grant IDs, break-glass state, request ID, and evaluation time.
+Sensitive domain services and audit logging consume this receipt rather than
+reconstructing the decision.
+
+UI/API contracts include:
+
+```text
+CapabilityDTO
+EligibilityOptionDTO
+WorkspaceOptionDTO
+UploadOptionDTO
+NamedObjectDTO
+ChoiceListDTO
+```
+
+For example, upload eligibility returns a union of authorized classical and
+project targets. Each option names its context, project when present, hospital,
+Lab Unit, and upload profile. It does not expose or decide the profile's
+internal domain configuration. It is screen-building information only;
+submission reloads and authorizes the exact selection again.
+
+Normal API denials expose a stable generic code such as `not_authorized`.
+Supporting grant IDs, internal denial predicates, and detailed relationship
+evidence remain server-side.
+
+## REST API surface
+
+Authorization APIs live under `api_bp` and delegate to the same service facade:
+
+```text
+GET   /api/authorization/me/capabilities
+GET   /api/authorization/me/workspaces
+GET   /api/authorization/me/upload-options
+GET   /api/authorization/grants
+POST  /api/authorization/grants
+PATCH /api/authorization/grants/{grant_id}
+GET   /api/authorization/catalogue
+```
+
+- Current-user endpoints return only usable capabilities and choices, never
+  raw grants or denial evidence.
+- Grant endpoints require the exact access-management action and enforce
+  delegation containment, protected-role rules, non-self-allocation rules, and
+  target validity.
+- `PATCH` changes description or active state; grants are not deleted.
+- Catalogue access is limited to an explicitly authorized administration or
+  documentation action.
+- Query parameters use allowlisted enums and stable IDs.
+- All mutations require CSRF for session-authenticated clients.
+- API request/response shapes, authorization, validation errors, scope, CSRF,
+  and examples are documented under `docs/API/authorization/`.
+
+Feature APIs such as project settings, discrepancy review, dataset curation,
+grading, and upload submission continue to live with their feature under
+`api/`; they call the same authorization facade rather than exposing generic
+authorization internals.
+
+## Self-service account and password recovery
+
+Self-service is a dynamic actor-to-resource relationship, not an
+`authorization_grants` row.
+
+Canonical self actions include:
+
+```text
+account.profile.view
+account.profile.update
+account.password.change
+account.notifications.view
+account.notifications.update
+account.mobile_sessions.view
+account.mobile_sessions.revoke
+account.viewer_preferences.manage
+```
+
+They require an active authenticated principal and an exact actor/resource
+identity match. `admin` break-glass does not apply. An administrator or
+hospital-scoped `user_manager` acting on another account uses explicit
+`admin.users.*` or device/session administration actions and never impersonates
+the user.
+
+Provide explicit APIs for self profile reads/updates and password changes using
+the shared account service. Password recovery remains a distinct credential
+path:
+
+```text
+auth.password_reset.request
+auth.password_reset.complete
+```
+
+- Request is public and rate-limited.
+- Completion requires the exact unexpired, single-use reset credential.
+- Reset credentials are random, hashed at rest, and invalidated after use.
+- Tokens, email addresses, phone numbers, and credential-derived keys are not
+  written to authorization logs.
+- A login session, user role, grant, or break-glass path cannot substitute for
+  the reset credential.
+
+## Flask hooks and decorators
+
+A centralized `before_request` hook denies unclassified endpoints and performs
+the authentication mode declared by endpoint metadata.
+
+Every live endpoint is classified as exactly one of:
+
+- explicit public action;
+- authenticated screen entry;
+- exact protected action;
+- signed-resource access;
+- mobile-session access; or
+- internal automation execution.
+
+Decorators attach static metadata and may call screen admission. They do not:
+
+- contain role lists;
+- trust project or Lab Unit request values;
+- load broad datasets and filter them in Python;
+- authorize later API calls or mutations; or
+- replace exact service-level checks.
+
+Page routes render initial layouts and reusable partials. Dynamic reads and all
+mutations use documented APIs. A composite page requests each panel through
+its own action instead of inheriting one oversized page permission.
+
+Public routes are exact endpoint/action declarations. URL-prefix exemptions,
+including broad analytics prefixes, are removed.
+
+## Domain-state enforcement
+
+The generic engine owns principal, role, relationship, scope, disclosure, and
+credential evaluation. Feature services own workflow transitions and current
+state, but the public mutation path makes both checks mandatory in one
+transaction.
+
+Examples:
+
+- verification locks the encounter/image and refuses unsafe edits after
+  downstream work;
+- grading locks the task and rechecks slot order, allocation, conflicting
+  grades, and duplicate submission;
+- regrade, intra-rater, and ad hoc services revalidate source eligibility and
+  current assignment;
+- dataset release rechecks finalization, exact scope, site settings, and PII
+  classification;
+- manual Remidio control rechecks the initiating user and current sync
+  authority; and
+- job retry, resume, cancel, and configuration changes are newly authorized
+  interactive actions before enqueue.
+
+Routes cannot bypass these guards because all writes move behind the feature
+service facade and route-level direct ORM mutation is removed.
+
+## Logging, audit, and metrics
+
+Authorization logging has three separate channels.
+
+### Operational structured events
+
+Structured JSON events record:
+
+```text
+event
+request_id
+actor_id or anonymous
+session kind
+action
+allow | deny | error
+named policy path on allow
+break-glass flag
+duration
+```
+
+They never contain patient identifiers, usernames, media UUIDs, storage paths,
+tokens, OTPs, cookies, request bodies, full URLs, query strings, grant
+descriptions, or detailed denial predicates. Endpoint names replace URLs.
+
+### Durable authorization audit
+
+An append-only PostgreSQL audit table records consequential events:
+
+- grant creation, description change, activation, and deactivation;
+- break-glass use;
+- PII export and share creation;
+- dataset release;
+- user, grading-slot, device, and session administration;
+- project grader allocation and policy changes;
+- project settings and stored automation-rule changes; and
+- sensitive denied mutations.
+
+Authorized sensitive events may record internal resource and scope IDs. Denied
+events omit attacker-supplied resource identifiers. No audit row stores patient
+names, original filenames, tokens, or credential secrets.
+
+For mandatory-audit actions, the audit row is written in the same transaction
+as the mutation. Failure rolls back the operation. Audited sensitive reads
+must successfully record the event before bytes or identified data are served.
+Ordinary operational telemetry failure never changes allow/deny behavior.
+
+The audit table is immutable through the application service and protected by
+database enforcement rejecting update/delete operations. Downgrade logic
+removes that enforcement before dropping the table.
+
+### Metrics
+
+Low-cardinality counters and timings cover:
+
+```text
+authz_decisions_total{action,outcome}
+authz_break_glass_total{action}
+authz_decision_duration_seconds{action}
+authz_unclassified_endpoint_total
+authz_audit_write_failures_total
+```
+
+Actor, resource, project, grant, hospital, and Lab Unit IDs are never metric
+labels.
+
+## Log rotation and process safety
+
+Only one component owns rotation for a file.
+
+- Production emits structured JSON to stdout/stderr for container aggregation.
+- If local files are retained for the administration log viewer, use
+  `WatchedFileHandler`, not `RotatingFileHandler` or
+  `TimedRotatingFileHandler` on files also managed by logrotate.
+- Logrotate remains the sole owner of file rotation, compression, archive
+  count, and file recreation.
+- Run rotation with the effective application log owner/group and `0640`
+  permissions rather than assuming `root:root` is correct.
+- Apply the same policy to web, Gunicorn, and Celery output.
+- Keep the current configurable 180-day operational archive policy until a
+  formal retention rule replaces it.
+- Database authorization-audit retention is configured separately and is not
+  affected by file rotation.
+
+The `authorization` logger receives an explicit structured handler. Existing
+double rotation of application-managed files plus `/app/logs/*.log` logrotate
+is removed.
+
+## Code-comment and documentation standard
+
+Public contracts, services, adapters, decorators, and resource resolvers have
+typed signatures and docstrings describing their boundary and failure mode.
+
+Inline comments explain only non-obvious security invariants, including:
+
+- why classical Lab Unit grants do not inherit into project data;
+- why project/classical context must come from stored lineage;
+- why PII authority is additive and cannot widen scope;
+- why grading needs qualification, slot, state, and allocation independently;
+- why screen admission is not mutation authority;
+- why workers and AI models are not users; and
+- why audit failure blocks only mandatory-audit operations.
+
+Comments do not narrate ordinary code, preserve obsolete behavior, or become a
+second policy source. API documentation and generated catalogue output are
+updated with every public contract change.
+
+## ID-based migration
+
+Migrations contain real idempotent `upgrade()` and `downgrade()` logic and use
+stable IDs and joins only.
+
+The conversion is implemented in one consolidated authorization-v2 migration;
+foundation corrections amend that migration rather than creating a chain of
+follow-on authorization migrations. The conversion performs:
+
+1. Create the new grant, audit, site-policy, constraint, and index structures.
+2. Seed canonical role names such as `user_manager` and `pii_exporter` without
+   assigning them to named people.
+3. Convert `admin` to system grants.
+4. Convert `ophthalmologist` to the required qualification relation and create
+   scoped operational grants only where existing relationships justify them.
+5. Convert `local_admin` to hospital grants using persisted hospital IDs; do
+   not promote it to `user_manager`.
+6. Convert classical operational authority to grants on exact Lab Units.
+7. Convert project grants to project or exact `ProjectLabUnit` targets;
+   project-hospital grants are rejected.
+8. Convert investigator designations only through the reviewed deterministic
+   designation-to-role mapping.
+9. Convert legacy project capability flags to the smallest equivalent
+   canonical role set at the same project-site scope. An upload capability
+   without the required profile assignment is a migration error, not broader
+   access.
+10. Preserve specialized upload assignments, grading slots, allocations,
+    signed credentials, and automation records while switching their consumers
+    to typed providers.
+11. Default per-site grade export, dataset creation, and dataset sharing to
+    off.
+12. Emit a conversion report containing counts and stable row IDs for invalid
+    or ambiguous records, with no usernames or sensitive person data.
+
+The cutover stops on ambiguity. It never guesses, widens scope, or commits a
+person-specific correction. Necessary data remediation is performed through a
+generic query or authorized administration workflow before retrying.
+
+## Endpoint and action migration
+
+Create a committed route/action manifest from the live Flask URL map. It records
+for every endpoint:
+
+- authentication classification;
+- canonical action;
+- page-entry versus exact enforcement location;
+- resource resolver;
+- list/query adapter when applicable;
+- disclosure class; and
+- mandatory audit behavior.
+
+Migration proceeds by vertical feature slice after the core contracts freeze:
+
+1. Account self-service, user administration, mobile sessions, exact public
+   routes, and temporary admin-only notification sending.
+2. Project overview/settings, access management, uploader management, and
+   grader-allocation management.
+3. Uploads, manual/scheduled Remidio, capture inference, retrospective
+   inference, and job control.
+4. Grading, task browsing, discrepancy review, regrade, intra-rater, and ad hoc
+   work.
+5. Analytics/KPI, search, datasets, exports/shares, media, reports, screenings,
+   and background-job views.
+
+Feature work may run in parallel only after the shared contracts are frozen and
+when file ownership does not overlap. No slice is considered migrated while a
+route, service, list query, serializer, export, or worker path still uses an
+old decision.
+
+## Atomic cutover and deletion
+
+`authz_v2` is built and tested without becoming an alternative production
+decision source. At the release boundary:
+
+1. Stop interactive web and worker processing.
+2. Apply the ID-based migration.
+3. Validate source/conversion/target counts and require zero unresolved rows.
+4. Switch every route, API, service, query, serializer, worker enqueue path,
+   and worker rule validator to the new facade.
+5. Remove old `authz/`, the decision portions of `data_authorization/`, direct
+   role authorization, `is_master_admin` authorization, legacy project
+   capabilities, duplicated query scopers, and URL-prefix public exemptions.
+6. Rename `authz_v2/` to `authz/` and update imports.
+7. Drop replaced authorization tables only after the conversion and application
+   gates pass in the same release procedure.
+8. Restart services and run post-cutover smoke and denial probes.
+
+Static checks forbid imports or calls to removed engines, authorization through
+`User.has_role()`, final-control role decorators, `is_master_admin` bypasses,
+request-derived scope, and unregistered public endpoints.
+
+## Verification plan
+
+All project tests run inside Docker using the repository's host UID/GID command
+pattern.
+
+### Core and catalogue
+
+- Pure truth tables for every reusable policy expression.
+- Every canonical action has at least one positive and one negative path.
+- Unknown action/resource/scope denies.
+- Role scope invariants and delegation containment.
+- Existing-action migration manifest has no unmapped names.
+- Generated Markdown/HTML/matrix output agrees with catalogue DTOs.
+- Core dependency test proves no Flask, SQLAlchemy, Redis, or feature imports.
+
+### Exact checks and list authorization
+
+- Exact-check and SQL-list equivalence across two hospitals, classical Lab
+  Units, projects, and project sites.
+- Forged request project/Lab Unit values cannot change a loaded resource.
+- Classical Lab Unit grants never reach project-owned rows.
+- Revoked, inactive, stale, or malformed relationships deny immediately.
+- Composite screens return independently authorized panels and choices.
+
+### Domain scenarios
+
+- Classical and project upload eligibility plus independently checked exact
+  submission.
+- Role-only access and assignment-only access deny. Profile dimension
+  mismatches are rejected independently by the upload domain service.
+- Manual Remidio route coverage, initiating-user job control, scheduled rule
+  authority, and interactive reauthorization.
+- Grading requires qualification, exact slot, valid state, no conflict, and
+  required allocation independently.
+- Project grader allocation view/manage/policy actions enforce scope,
+  non-self-allocation, candidate validity, and coverage.
+- Verification, regrade, intra-rater, ad hoc, dataset, export, PII, media, job,
+  mobile, and share revocation/state boundaries.
+- Admin break-glass never submits a clinical grade or acts through another
+  user's self relationship.
+
+### Account and credential scenarios
+
+- Self profile view/update and password change reach only the actor.
+- Administrative user actions are distinct and attributable.
+- Password-reset request is public and rate-limited.
+- Reset completion requires the exact active token and consumes it once.
+- Expired, replayed, malformed, logged-in-only, and break-glass attempts deny.
+- Tokens and personal contact data do not appear in logs.
+
+### Route, API, audit, and logging gates
+
+- Live URL map contains zero unclassified endpoints.
+- Adding a new endpoint without metadata fails tests and remains private.
+- Public analytics includes only exact reviewed aggregate endpoints.
+- API DTO serialization contains no ORM rows or internal evidence.
+- Mandatory-audit failure rolls back sensitive operations.
+- Ordinary telemetry failure does not alter the decision.
+- Denied events contain no target identifier; allowed audit events contain only
+  approved internal references.
+- Exactly one file-rotation owner exists for each log path.
+- Authorization logger is explicitly configured for web and worker processes.
+
+### Migration and final integration
+
+- Upgrade from a representative pre-cutover database.
+- ID-only conversion with no usernames in revision source or output.
+- Invalid project-hospital, orphaned, widened, and ambiguous records stop the
+  conversion.
+- Downgrade restores the prior schema where data can be represented safely and
+  refuses silent loss otherwise.
+- Full Docker test suite, static bypass scan, route/action manifest, migration
+  checks, and post-cutover smoke checks pass.
+- A final read-only code-quality and adversarial authorization review finds no
+  material bypass or dependency inversion.
+
+## Completion gates
+
+The redesign is complete only when all of the following are true:
+
+- one released `authz/` package exists and `authz_v2/` no longer exists;
+- the old decision engine and legacy capability authorization are absent;
+- every live endpoint is explicitly classified;
+- every protected read is scoped before serialization;
+- every mutation is exactly authorized inside its transaction;
+- no route role list is a final authorization control;
+- no project/classical decision trusts request context;
+- all self-service, signed credential, worker, and public paths are explicit;
+- authorization grants and sensitive decisions are auditable;
+- operational logs contain no forbidden identifiers or secrets;
+- log rotation has one owner; and
+- Docker validation and the final adversarial review pass.

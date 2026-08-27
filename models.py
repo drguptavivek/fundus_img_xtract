@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, BigInteger, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import sessionmaker, relationship, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
@@ -12,6 +12,7 @@ from uuid import uuid4
 from utils.env_loader import load_environment
 from auth.utils import utcnow
 from utils.log_sanitize import sanitize_log_value
+from db_base import Base
 
 load_environment()
 
@@ -68,9 +69,6 @@ GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/glaucoma_pdfs
 SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.txt")
 ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
-
-class Base(DeclarativeBase):
-    pass
 
 user_lab_units = Table(
     'user_lab_units', Base.metadata,
@@ -3168,3 +3166,11 @@ from grading.workbench.models import (  # noqa: E402,F401
 )
 from data_authorization.models import ProjectRoleGrant  # noqa: E402,F401
 from project_configuration.models import ProjectLabUnit  # noqa: E402,F401
+from authz_v2.domain.models import (  # noqa: E402,F401
+    AuthorizationAuditEvent,
+    AuthorizationGrant,
+    AuthorizationResourceScope,
+    AuthorizationUploadProfileAssignment,
+    PasswordResetCredential,
+    ProjectLabUnitAuthorizationPolicy,
+)

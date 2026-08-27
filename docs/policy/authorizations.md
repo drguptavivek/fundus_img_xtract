@@ -33,6 +33,8 @@ When code and this document disagree, stop and update the policy before changing
 - Grading of project-owned tasks is governed by grader allocation, not by project role grants.
 - General scoped access is granted by admin-global scope, hospital scope, or explicit lab-unit assignment.
 - Local-admin hospital scope applies only inside the user's hospital.
+- System administration is reserved to `admin`. `user_manager` reaches only the explicit user-management actions, within its own hospital; `local_admin` and `data_manager` are not administration-console roles.
+- Background workers are execution subjects, not users. They receive no human roles or interactive scope and may execute only work admitted by an authorized service boundary or an active stored automation rule.
 - Break-glass reaches every action, including ingestion. Uploading by profile assignment is the ordinary path, not a rule that excludes `admin`.
 - Two classes are outside it, and both are deliberate. An action scoped to the actor's own record - a password, a session, a notification, a viewer preference - is never reachable by break-glass: an administrator acting on another person's account does so through an explicit administrative action, which is attributable, rather than as that person. And a grading submission requires the grading slot itself, because the `admin` role does not stand in for the clinician role; an administrator who should grade holds a slot.
 - An action outside those two classes that does not accept admin-global scope is a defect, not an exception.
@@ -275,13 +277,14 @@ asserts that every role in `auth.roles.DEFAULT_ROLES` appears here.
 | Role | Purpose |
 |---|---|
 | `admin` | System administrator. Cross-hospital reach, break-glass on every action, and sole owner of the project setup that is never delegable: upload profile definitions, grading schemes, WAI autoruns, Remidio routing, and which Lab Units a project spans. |
-| `local_admin` | Site administrator in the classical, non-project model: administers one hospital and the Lab Units within it. Distinct from `admin`, which is cross-hospital break-glass, and retained because classical scoping is where most non-project work still lives. |
+| `user_manager` | Manages ordinary user accounts, classical roles, Lab Unit assignments, grading slots, enrolled devices and sessions within one hospital. Cannot manage or grant `admin` or `user_manager`, project grants, project grader allocations, or system configuration. |
+| `local_admin` | Hospital-scoped operational role in the classical, non-project model. Distinct from both `admin` and `user_manager`: it reaches ordinary hospital work but no system or user administration action. |
 | `fileUploader` | Ingests data. Classically it may create any kind of upload — direct, pre-graded or Remidio ZIP — but only into the Lab Units assigned to it. Inside a project the upload profile decides the kind and the upload grant decides the Lab Unit. The role alone authorizes nothing anywhere, and it does not verify. |
 | `pregarded_uploader` | Ingests pre-graded image sets. The work is technical: identifying the AI model whose grades these are, and mapping the source sheet's values onto the standard grade catalogue. It asserts findings rather than only capturing images, and the generic uploading role does not confer it. |
 | `optometrist` | Clinic-based clinician: uploads, and runs WAI inference. Does not verify. |
-| `ophthalmologist` | The user-level qualification to grade. It authorizes no slot by itself: which slot a clinician may fill comes from their grading slot or project allocation, and both halves must hold. |
+| `ophthalmologist` | The user-level qualification to grade. It authorizes no slot by itself: an active grading slot determines which workflow position the clinician may fill, and project work additionally requires a matching project allocation. All applicable relationships must hold. |
 | `verifier` | Verifies uploaded data before it becomes gradable work. |
-| `data_manager` | Administers the work without performing it: creates and reassigns regrade tasks and intra-rater batches. |
+| `data_manager` | Administers the work without performing it: creates and reassigns regrade tasks and intra-rater batches, and allocates already-qualified graders within its project grant scope. |
 | `discrepancy_reviewer` | Reviews cases where graders disagreed and records the reconciled reading. Does not adjudicate regrades. |
 | `regrade_adjudicator` | Adjudicates a regrade. Cannot create the regrade work it adjudicates. |
 | `dataset_creator` | Assembles datasets: curates, updates, finalises and deletes them. Reads and corrects identifiers burnt into images so they do not leave the system, and never reads record identifiers. Does not release. |
@@ -291,7 +294,7 @@ asserts that every role in `auth.roles.DEFAULT_ROLES` appears here.
 | `collaborator` | The non-PII browser for international collaborators. Browses; never ingests. |
 | `project_pi` | The project's principal investigator: project-wide, read-only oversight of how the project is going. |
 | `site_pi` | The principal investigator at one site: oversight of the Lab Units granted to them. May hold several Lab Units in a project; may never hold the project. Being lab-unit-scoped, its access to the project's site-gated work follows the project's settings - it exports its site's encounters and data freely, and its graders' readings only where the project permits and it holds `data_exporter`. |
-| `project_admin` | The project's access manager. Delegates operational roles and uploader assignments, within its own grant scope. |
+| `project_admin` | The project's access manager. Delegates operational roles, uploader assignments and grader allocations within its own grant scope; a project-wide holder may also switch project-wide allocation enforcement. |
 | `field_optometrist` | Field staff operating cameras away from the clinic. Distinct from the clinic roles because a stricter device and session policy applies. |
 | `field_ophthalmologist` | Field staff operating cameras away from the clinic, carrying the ophthalmologist's clinical qualification rather than the optometrist's. Subject to the same stricter device and session policy. |
 
@@ -713,6 +716,10 @@ this document first.
 - Rule: Upload profile management is allowed for `admin`, `local_admin`, or `data_manager` only within the manager's allowed lab-unit scope.
 - Rule: Selected uploaders for a profile must already be assigned to the profile lab unit.
 - Rule: Mobile upload APIs require a valid mobile bearer session, an active user, the `fileUploader` role, and the same active upload-profile relationship used by web uploads.
+- Rule: A manual Remidio API project sync requires an active upload-profile assignment whose kind permits Remidio API sync and whose Lab Unit scope covers every active route the requested project sync will use. Listing a project as eligible is not authorization to submit it.
+- Rule: The user who started a manual Remidio API project-sync job may pause, resume or cancel it only while that same user still holds the project-sync authority; `admin` is break-glass. Another eligible uploader does not inherit control of the job.
+- Rule: Scheduled Remidio API pulls have no requesting user. They are admitted only by the active stored prospective-sync, routing-profile, source-rule and project-binding configuration, and workers may process only the exact project and routes that configuration selected.
+- Rule: Remidio connections, routing profiles, source rules and project bindings are system configuration and require `admin`; this is separate from permission to run a manual project sync.
 
 ### Verification
 
@@ -731,12 +738,28 @@ this document first.
 - Rule: Arbitration requires a compatible role and a grading-slot relationship with `can_arbitrate`.
 - Rule: Grading and arbitration may cross hospitals only through grading-slot relationships; lab-unit assignment alone is not enough.
 - Rule: Grading routes must also enforce task state, role-slot order, and duplicate-grade prevention.
-- Rule: The policy must resolve whether `resident2` and `arbitrator` are real role names or only grading slot names before those route gates are migrated.
+- Rule: `resident`, `resident2` and `arbitrator` are grading slot names, never user roles. Route gates and candidate queries must derive them from active slots rather than accepting same-named roles.
+
+### Project Grader Allocation
+
+- Rule: A project grader allocation is a workflow relationship binding an already-qualified user to one project, Lab Unit, active grading target and grading capacity. It is never a role and never a grading slot.
+- Rule: `project.grader_allocations.view` permits `project_pi`, `site_pi`, `project_admin` and `data_manager` to read the allocation plan through an explicit project role grant. The grant's object limits the rows: a project grant sees the project; a Lab Unit grant sees that Lab Unit. `admin` is break-glass.
+- Rule: `project.grader_allocations.manage` permits `project_admin` or `data_manager` to create, reactivate or deactivate allocations through an explicit project role grant, with `admin` as break-glass. Hospital scope, `local_admin`, and classical Lab Unit assignment alone never reach project allocations.
+- Rule: Allocation management is contained. A project-scoped manager may allocate at any configured Lab Unit in the project; a Lab Unit-scoped manager may allocate only at that Lab Unit and cannot write a project-wide relationship.
+- Rule: A manager may not allocate themselves. An allocation must be made by another actor holding the required management authority.
+- Rule: Creation or reactivation requires an active target generated from the project's active upload and grading configuration, an active user holding `ophthalmologist`, and a compatible active grading slot for the selected Lab Unit, disease and capacity. `resident`, `resident2` and `arbitrator` remain slot names, not candidate roles.
+- Rule: An allocation never substitutes for the clinical role or slot. Revoking the user, `ophthalmologist`, or the matching slot makes the allocation ineffective immediately but does not delete its history.
+- Rule: `project.grader_allocation_policy.manage` permits only a project-scoped `project_admin` to enable or disable allocation enforcement for the whole project, with `admin` as break-glass. A Lab Unit-scoped `project_admin`, `data_manager`, `local_admin`, `project_pi` or `site_pi` cannot change this project-wide rule.
+- Rule: Enforcement may be enabled only when every active grading target has effective reader coverage. Coverage counts only allocations whose user, clinical role and matching slot are all active. The server derives targets and candidates; client-supplied names, roles, target labels or scope claims are never authority.
+- Rule: Allocation changes are activated or deactivated rather than deleted, and record actor, time, target, Lab Unit and capacity. They affect future task acquisition and submission checks, never the attribution or authority record of a completed grade.
+- Relationship source: project role grant for management; project grader allocation for project grading; admin-global scope for break-glass.
+- Resource: project and grading target; Lab Unit when scoped.
 
 ### Discrepancy Review And Regrade
 
 - Rule: A user may view discrepancy review queues only when the user has a discrepancy-review role accepted by the route policy and the tasks are in the user's allowed lab-unit or review scope.
-- Rule: A user may export discrepancy review data only when the user has an export-capable role and the exported tasks are in scope.
+- Rule: A user may create or download the masked discrepancy review export only when the user has `data_exporter` or `data_manager` and the exported tasks are in scope; viewing or reviewing the queue does not confer release.
+- Rule: A discrepancy export containing patient identifiers is the separate `review.discrepancy.export_pii` action and additionally requires `pii_exporter`. The additive permission never widens the tasks authorized by the base export action.
 - Rule: A user may submit task review decisions only when the user is a discrepancy reviewer for the task workflow.
 - Rule: Regrade task creation and reassignment require `data_manager`, or `admin` as break-glass, and must preserve lab-unit and task-state constraints. `local_admin` does not confer it: administering the work is `data_manager`'s, and performing it needs `regrade_adjudicator`.
 - Rule: Review and regrade policy must distinguish read-only review visibility from mutation authority.
@@ -756,7 +779,9 @@ this document first.
 
 ### Analytics
 
-- Rule: A user may view analytics only when the user has an analytics-capable role and the data is covered by admin-global scope, hospital scope, or explicit lab-unit assignment.
+- Rule: Public analytics and authenticated KPI analytics are separate authorization surfaces. Only the explicitly designated public analytics page and its aggregate APIs require no user relationship.
+- Rule: Public analytics may return only approved system-wide totals, trends and aggregates. It must never return patient rows, identifiers, export files or project clinical-result drill-downs.
+- Rule: A user may view authenticated KPI analytics only when the user has an analytics-capable role and the data is covered by admin-global scope, hospital scope, explicit lab-unit assignment, or the exact project relationship stated by the action.
 - Rule: Analytics exports must apply the same scope as the corresponding analytics view.
 - Rule: Analytics and exported outputs must preserve PII masking/anonymization requirements from the PII exposure policy.
 
@@ -766,13 +791,16 @@ this document first.
 - Rule: A user may create or update curated datasets only when the selected images are in the user's allowed scope.
 - Rule: Dataset export requires `data_exporter` (or `admin`) and a finalised dataset. `dataset_creator` assembles and does not release.
 - Rule: Dataset sharing is limited to `data_exporter` and `admin`. Sharing is release, not assembly, so `dataset_creator` does not confer it.
-- Rule: Public dataset downloads are token and OTP based; they are not authorized by session roles alone.
+- Rule: Public dataset downloads require the exact active, unexpired share token, successful OTP verification, accepted terms, and the exact dataset named by the share. Session roles alone confer nothing and the credential reaches no other dataset.
+- Rule: A public share cannot add identifiers to an export. Any share whose files contain patient identifiers requires `pii_exporter` in addition to the role that authorized release, before the files are made available.
 - Rule: Dataset exports and shares must preserve anonymization and PII controls before files are made available.
 
 ### Admin And Local Admin
 
 - Rule: `admin` has cross-hospital access only for actions whose policy accepts admin-global scope.
-- Rule: `local_admin` has hospital-scope access inside the user's own hospital and must not cross hospitals.
+- Rule: System administration actions are `admin` only. Hospital, project, workflow and clinical roles do not confer administration-console access.
+- Rule: `user_manager` may manage ordinary user records, roles, Lab Unit assignments, grading slots, enrolled devices and sessions inside its own hospital only. It may not manage or grant `admin` or `user_manager`, write project grants or project grader allocations, or change system configuration.
+- Rule: `local_admin` has hospital-scope access to ordinary classical work inside the user's own hospital and must not cross hospitals. It confers no system or user administration action.
 - Rule: A user may hold both `admin` and `local_admin`. Relations are disjunctive: each is evaluated and either may admit, so there is no precedence between them. `admin` reaches further only because more actions accept admin-global scope, not because it outranks anything.
 - Rule: `master-admin` is not an authorization bypass for upload, grading, or route-level ReBAC policies.
 - Rule: Admin routes that load hospital-scoped data must use shared scoping helpers and must not rely on `current_user.hospital_id` alone.
@@ -783,6 +811,8 @@ this document first.
 - Rule: A user may view a job when the job was created by the user, the job belongs to an allowed lab unit, or the user's role and policy grant admin/hospital scope.
 - Rule: A user may view job results or regenerate job artifacts only when the job is visible under the same owner or lab-unit rule and the action-specific role is accepted.
 - Rule: Job APIs must not expose another user's job details unless the job's lab unit is within scope or a policy explicitly accepts broader access.
+- Rule: A background worker receives no human role. A manual job carries its requester for attribution, not as delegated worker authority; a scheduled job is admitted by its active stored rule and exact target.
+- Rule: An interactive retry, resume, cancellation or change is a new action and must be authorized before it is queued. A worker may not fabricate a user context to admit work that no user or automation rule authorized.
 
 ### Media
 
@@ -817,6 +847,16 @@ this document first.
 - Rule: Lookup APIs must require a logged-in session or valid token unless explicitly public.
 - Rule: Lookup APIs that return hospitals, lab units, users, image metadata, OCR data, or viewer settings must filter results to the caller's allowed scope.
 - Rule: Mobile context may expose role and lab-unit information from token claims, but uploads and mutations must still revalidate against server-side relationships.
+- Rule: A field device may sign in only after a System Admin or the target user's hospital-scoped `user_manager` issues a one-time enrolment code and the server records the approved device relationship.
+- Rule: `admin` or the target user's hospital-scoped `user_manager` may approve or block that user's device and revoke its mobile sessions through explicit user-administration actions. Blocking a device must invalidate its existing sessions; an old token is not continuing authority.
+- Rule: A user may still list and revoke only their own mobile sessions through the self-scoped mobile actions; administrative device management never impersonates the user.
+
+### Workflow State
+
+- Rule: Authorization is evaluated against current resource and workflow state at mutation time, not inherited from a previously rendered page, eligibility list, queued request or stale token claim.
+- Rule: Verification mutations stop when downstream grading state makes editing, unverification or retagging unsafe.
+- Rule: Grading submissions require the currently valid task state, role-slot order, active slot and any required project allocation, and must prevent duplicate submission.
+- Rule: Regrade, intra-rater and ad hoc task mutations must revalidate source eligibility, current assignment and state before changing work.
 
 ## Divergences To Reconcile
 
@@ -1451,6 +1491,69 @@ Until it is settled the rules are left as they stand, named in
 `GRADING_ROLE_UNSETTLED` in `tests/unit/authz/test_role_catalogue.py` so the
 list empties itself when the rules and the model agree.
 
+**D-51 — Project grader-allocation authority is not modelled.**
+The approved policy separates three actions: viewing an allocation plan,
+managing contained allocations, and switching project-wide enforcement. None
+is registered in `authz/actions/*.toml` or represented in `authz/policies.py`.
+
+The live layers also disagree. `api/grading_allocations.py` admits only the
+user-level `admin` role, while `grading_allocation/service.py` accepts
+`admin`, `local_admin` or `data_manager` and derives reach from classical Lab
+Unit assignments intersected with the project's configured Lab Units. Neither
+path asks for the project role grant decided above. The service lets any such
+Lab Unit-scoped manager toggle enforcement for the whole project, and its
+candidate test accepts the retired `resident`, `resident2` and `arbitrator`
+role names rather than `ophthalmologist` plus a matching active grading slot.
+
+Migration must add the three actions, resolve managers through project grants,
+apply containment to allocation writes, require project scope for the policy
+toggle, and derive effective candidates and coverage from the clinical role
+and slot. Until then, the allocation UI and service implement an older policy.
+
+**D-52 — System and user administration are not separated.**
+The approved model reserves system administration to `admin` and introduces
+hospital-scoped `user_manager` for user records, ordinary roles, Lab Unit
+assignments, grading slots, enrolled devices and sessions. The role is absent
+from `auth.roles.DEFAULT_ROLES`, the action policies and the database seed.
+
+The live admin routes still admit `local_admin` to user CRUD and mobile-device
+management (`admin/users.py`), admit `local_admin` or `data_manager` to several
+status, package, quota, grading and maintenance routes, and the registered
+`admin.dashboard.view`, `admin.grading_eligibility.manage`,
+`admin.users.*` and `api.mobile.session.manage` policies encode the older role
+sets. Migration must first add `user_manager` and its hospital relationship,
+then move only the user-centred actions to it and make every remaining system
+administration route `admin` only. The user-manager write path must prevent
+managing or granting `admin` or `user_manager` and must not write project
+grants or grader allocations.
+
+**D-53 — Public analytics is hidden inside a generic public gate.**
+`public/analytics.py` deliberately serves unauthenticated system-wide
+aggregates, but `app.py` exempts the `/analytics` page and every
+`/api/analytics/` prefix while the registry exposes only `public.view`. The
+authenticated KPI actions are separate, but the public surface has no action
+of its own and the prefix exemption can silently admit a future API. The clean
+model needs `public.analytics.view` for the exact page and approved aggregate
+endpoints; it must not inherit patient rows, exports or project clinical-result
+drill-downs from KPI analytics.
+
+**D-54 — Discrepancy export has no separate identifier-bearing action.**
+`review.discrepancy.export` currently creates the export for `admin`,
+`data_manager` or `data_exporter`. `include_original_filename` is a form flag
+special-cased to `admin`, although an original filename can itself carry a
+patient identifier. There is no `review.discrepancy.export_pii` action and
+`pii_exporter` is not enforced. Migration must make the ordinary export masked,
+require the separate action plus additive `pii_exporter` for identifier-bearing
+files, and preserve the base task scope in both paths.
+
+**D-55 — Notification sending has no action policy.**
+The registry covers only self-scoped notification view and update. Live compose,
+peer, administrator, broadcast and system-send routes use inline relationship
+queries or `admin` decorators, so their sender and recipient authority cannot
+yet converge on the engine. The policy decision is intentionally deferred;
+these routes must not be migrated until their action and recipient rules are
+written.
+
 **D-15 — Upload eligibility helpers disagree.**
 Some paths expand admin to all lab units while profile-based access requires
 explicit assignment. Wiring must preserve the profile-assignment rule.
@@ -1533,66 +1636,72 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `admin.dashboard.view`
 
-- Rule: A user may view administrative dashboards and status pages when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` may view system-administration dashboards and status pages.
+- Relationship source: admin-global scope.
 - Resource: admin_dashboard (not required).
 
 ### `admin.grading_eligibility.manage`
 
-- Rule: A user may manage user grading eligibility and slot assignments when the user has one of `admin`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: `admin` may manage grading eligibility and slot assignments across hospitals; `user_manager` may manage them only for ordinary users in the manager's own hospital.
+- Rule: `user_manager` may not manage `admin` or another `user_manager` through this action.
+- Relationship source: admin-global scope, or the target user's hospital matching the user manager's hospital.
 - Resource: grading_slot (not required).
 
 ### `admin.lookup.manage`
 
-- Rule: A user may manage lookup tables such as hospitals, lab units, diseases, cameras, and areas when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may manage lookup tables such as hospitals, lab units, diseases, cameras, and areas.
+- Relationship source: admin-global scope.
 - Resource: lookup (not required).
 
 ### `admin.s3.manage`
 
-- Rule: A user may manage S3 configuration and S3 sync administration when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may manage S3 configuration and S3 sync administration.
+- Relationship source: admin-global scope.
 - Resource: s3_config (not required).
 
 ### `admin.security.view`
 
-- Rule: A user may view security, audit, CVE, log, and sensitive-operation administration pages when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may view security, audit, CVE, log, and sensitive-operation administration pages.
+- Relationship source: admin-global scope.
 - Resource: security_event (not required).
 
 ### `admin.system.manage`
 
-- Rule: A user may manage system operations including database, Celery, packages, thumbnails, disk usage, and rate limits when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may manage system operations including database, Celery, packages, thumbnails, disk usage, and rate limits.
+- Relationship source: admin-global scope.
 - Resource: system_operation (not required).
 
 ### `admin.upload_profiles.manage`
 
-- Rule: A user may manage upload projects, profiles, assignments, and profile activation when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may define upload projects and profiles or change their configuration and activation. Assigning users to an existing project profile is the separate contained `project.uploaders.manage` action.
+- Relationship source: admin-global scope.
 - Resource: upload_profile (not required).
 
 ### `admin.users.manage`
 
-- Rule: A user may create or change a user record only when the user has `admin` or `local_admin`.
-- Rule: `admin` manages users in every hospital; `local_admin` manages only their own hospital's users.
+- Rule: A user may create or change an ordinary user record only when the actor has `admin` or `user_manager`.
+- Rule: `admin` manages users in every hospital; `user_manager` manages only ordinary users in its own hospital.
+- Rule: `user_manager` may assign ordinary non-project roles and Lab Units, but may not manage or grant `admin` or `user_manager`, project grants or project grader allocations.
 - Rule: `admin` is break-glass here as everywhere else.
-- Rule: `data_manager` is deliberately excluded: it can view user allocations and activity but never edit them.
+- Rule: `local_admin` and `data_manager` are deliberately excluded: they administer hospital operations and workflow, not accounts.
 - Rule: A user record belongs to a hospital and to no lab unit or project, so lab-unit assignment and project grants never reach it.
 - Relationship source: admin-global scope, or the actor's own hospital.
 - Resource: user (required).
 
 ### `admin.users.view`
 
-- Rule: A user may view user records, allocations and activity for their own hospital when the user has one of `admin`, `local_admin`, `data_manager`.
-- Rule: `admin` reaches users in every hospital; `local_admin` and `data_manager` reach only their own hospital.
+- Rule: A user may view user records, allocations and activity only when the actor has `admin` or `user_manager`.
+- Rule: `admin` reaches users in every hospital; `user_manager` reaches only ordinary users in its own hospital.
 - Rule: `admin` is break-glass here as everywhere else.
-- Rule: `data_manager` may read user allocations and activity but may not create or change users; that is `admin.users.manage`.
+- Rule: `local_admin` and `data_manager` do not inherit user visibility from their operational roles.
 - Relationship source: admin-global scope, or the actor's own hospital.
 - Resource: user (not required).
 
 ## Domain: analytics
+
+The actions in this domain are authenticated KPI analytics. They are not the
+anonymous public analytics surface: `public.view` currently covers that surface,
+and D-53 records why the redesign must give it its own action.
 
 ### `analytics.encounters.view`
 
@@ -1659,8 +1768,8 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `api.lookups.manage`
 
-- Rule: A user may mutate API-managed lookup or configuration resources when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may mutate API-managed lookup or configuration resources.
+- Relationship source: admin-global scope.
 - Resource: lookup (required).
 
 ### `api.lookups.view`
@@ -1671,8 +1780,10 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `api.mobile.session.manage`
 
-- Rule: A user may manage mobile authentication sessions for the authenticated account when the user has one of `admin`, `local_admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: `admin` may issue device enrolment codes, approve or block devices, and revoke mobile sessions for any user; `user_manager` may do so only for an ordinary user in the manager's own hospital.
+- Rule: Blocking an enrolled device revokes its active sessions. Administrative management is attributable to the administrator and does not impersonate the target user.
+- Rule: The self-scoped `mobile.session.view` and `mobile.session.revoke` actions remain the only path by which a user manages their own sessions.
+- Relationship source: admin-global scope, or the target user's hospital matching the user manager's hospital.
 - Resource: mobile_session (not required).
 
 ### `api.ocr.manage`
@@ -1692,8 +1803,8 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `audit.data_quality.view`
 
-- Rule: A user may view data-quality audit reports such as encounters missing a capture date when the user has one of `admin` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
-- Relationship source: classical scope.
+- Rule: Only `admin` through admin-global scope may view cross-system data-quality audit reports such as encounters missing a capture date.
+- Relationship source: admin-global scope.
 - Resource: encounter (not required).
 
 ## Domain: auth
@@ -1792,8 +1903,9 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `dataset.public_download`
 
-- Rule: This action is deliberately public: Public token-based dataset download flow. No authentication is required.
-- Relationship source: none; the action is deliberately public.
+- Rule: This action does not use a logged-in user's roles. It requires the exact active, unexpired dataset share named by a valid token, successful OTP verification, accepted terms, and the exact export job belonging to that share's dataset.
+- Rule: The share reaches no other dataset and cannot add identifiers to the release. A share whose files contain patient identifiers must have been created through a release authorized by `pii_exporter` in addition to the base export role.
+- Relationship source: the active share capability, OTP-verified recipient session and exact dataset relationship; no authenticated-user relationship.
 - Resource: dataset_share (required).
 
 ### `dataset.share.manage`
@@ -1808,7 +1920,9 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 
 ### `review.discrepancy.export`
 
-- Rule: A user may create or download discrepancy review exports when the user has one of `admin`, `data_exporter`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers the resource.
+- Rule: A user may create or download masked discrepancy review exports when the user has one of `admin`, `data_exporter`, `data_manager` and admin-global scope, hospital scope, or an explicit lab-unit assignment covers every exported task.
+- Rule: Queue visibility and `discrepancy_reviewer` do not confer export. Release requires this action independently of review.
+- Rule: An export containing original filenames or any other patient identifier is `review.discrepancy.export_pii` and additionally requires `pii_exporter`; it preserves the same task scope and may not widen it.
 - Relationship source: classical scope.
 - Resource: discrepancy_export (not required).
 
@@ -2244,7 +2358,10 @@ Every action in `authz/actions/*.toml` has an executable policy in `authz/polici
 ### `project.upload.remidio_api_sync`
 
 - Rule: A user may run Remidio API synchronisation for a project only when the user holds one of `fileUploader`, `pregarded_uploader`, `optometrist`, `data_manager`, `local_admin`, `verifier`, `field_optometrist`, `field_ophthalmologist` and an active upload profile assignment covers that project.
-- Rule: The profile decides which kinds of upload are permitted; the upload grant decides which Lab Units. Both bounds must hold, and the role alone authorizes nothing.
+- Rule: For a manual sync the profile must permit the Remidio API sync kind, and its assignment must cover every active route Lab Unit the requested project sync will use. The dashboard's eligible-project list confers nothing on the later mutation.
+- Rule: The user who started a manual project-sync job may pause, resume or cancel it only while that same user still holds this action; another eligible uploader may not take over the job. `admin` is break-glass.
+- Rule: A scheduled prospective sync has no user. It is admitted by the active stored prospective-sync, routing-profile, source-rule and project-binding configuration, and the worker may process only the exact project and routes selected by that configuration.
+- Rule: The user id carried by a manual worker job is attribution, not delegated authority. An interactive resume or retry is authorized again before enqueue.
 - Rule: A project role grant does not authorize uploading. Browsing a project is not ingesting into it, so `collaborator`, `analytics_viewer` and the governance roles confer nothing here.
 - Rule: Hospital scope or lab-unit assignment alone never grants this action; project rows require an explicit project relationship.
 - Rule: `admin` is break-glass here as everywhere else.
@@ -2311,7 +2428,9 @@ need.
 
 ### `public.view`
 
-- Rule: This action is deliberately public: Public application pages that do not require authentication. No authentication is required.
+- Rule: This action is deliberately public: the public application landing surface and the public analytics page and its aggregate APIs. No authentication is required. Login, help and documentation use their own explicitly public actions.
+- Rule: Public analytics may expose only explicitly approved system-wide totals, trends and aggregates. It may not expose patient rows, identifiers, exports or project clinical-result drill-downs; authenticated KPI actions remain separate.
+- Rule: A route is public only because this policy names it, never because its URL uses `/analytics`, `/help`, `/docs` or another allowlisted prefix.
 - Relationship source: none; the action is deliberately public.
 - Resource: public_page (not required).
 

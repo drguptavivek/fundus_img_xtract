@@ -202,21 +202,10 @@ def _register_csrf_protection(app: Flask) -> None:
             auth_logger.debug(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
 
             try:
-                session_keys = list(session.keys()) if session else []
                 auth_logger.debug(
-                    "CSRF Check - Session keys: %s",
-                    sanitize_log_value(session_keys),
+                    "CSRF Check - Session CSRF token exists: %s",
+                    "csrf_token" in session,
                 )
-                if 'csrf_token' in session:
-                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: True")
-                else:
-                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: False")
-
-                if hasattr(session, 'session_id'):
-                    auth_logger.debug(
-                        "CSRF Check - Session ID: %s",
-                        sanitize_log_value(session.session_id),
-                    )
 
                 cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
                 session_cookie = request.cookies.get(cookie_name)
@@ -224,11 +213,6 @@ def _register_csrf_protection(app: Flask) -> None:
                     "CSRF Check - Session cookie exists: %s",
                     sanitize_log_value(session_cookie is not None),
                 )
-                if session_cookie:
-                    auth_logger.debug(
-                        "CSRF Check - Session cookie value: %s",
-                        sanitize_log_value(session_cookie[:50]),
-                    )
 
             except Exception as e:
                 auth_logger.error(
@@ -240,17 +224,6 @@ def _register_csrf_protection(app: Flask) -> None:
                 auth_logger.debug(
                     "CSRF Check - Form keys: %s",
                     sanitize_log_value(list(request.form.keys())),
-                )
-                if 'csrf_token' in request.form:
-                    auth_logger.debug(
-                        "CSRF Check - Form CSRF token value: %s",
-                        sanitize_log_value(request.form["csrf_token"][:50]),
-                    )
-            if request.headers:
-                csrf_headers = {k: v for k, v in request.headers.items() if 'csrf' in k.lower()}
-                auth_logger.debug(
-                    "CSRF Check - CSRF Headers: %s",
-                    sanitize_log_value(csrf_headers),
                 )
 
     app.before_request(csrf_protect)
@@ -376,23 +349,20 @@ def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> N
         forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
         client_ip = forwarded_for or request.remote_addr or "-"
         ua = request.headers.get("User-Agent", "-")
-        full_url = request.url
+        endpoint = request.endpoint or "unmatched"
 
         if request.path == "/login" and response.status_code == 200:
             if hasattr(response, 'headers'):
-                set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
+                sets_cookie = any(
+                    key.lower() == "set-cookie"
+                    for key, _value in response.headers.items()
+                )
                 auth_logger = logging.getLogger("auth")
-                if set_cookie_headers:
-                    auth_logger.info(
-                        "Login response - Setting cookies: %s",
-                        sanitize_log_value(set_cookie_headers),
-                    )
-                else:
-                    auth_logger.info("Login response - No cookies being set")
+                auth_logger.info("Login response - sets_cookie=%s", sets_cookie)
 
         line = (
             f"{sanitize_log_value(client_ip)} {sanitize_log_value(request.method)} "
-            f"{sanitize_log_value(full_url)} {sanitize_log_value(response.status_code)} "
+            f"endpoint={sanitize_log_value(endpoint)} {sanitize_log_value(response.status_code)} "
             f"UA={sanitize_log_value(ua)} duration={sanitize_log_value(duration_ms if duration_ms is not None else '-')}ms"
         )
 
@@ -668,7 +638,10 @@ def _register_stack_trace_handlers(app: Flask) -> None:
         runtime_logger = logging.getLogger("runtime_error")
         if runtime_logger.isEnabledFor(logging.DEBUG):
             from utils.stack_trace_handler import log_current_stack
-            log_current_stack(f"Processing request: {request.method} {request.url}")
+            log_current_stack(
+                f"Processing request: {request.method} "
+                f"endpoint={request.endpoint or 'unmatched'}"
+            )
 
     @app.after_request
     def _global_stack_trace_after_handler(response):
@@ -681,7 +654,7 @@ def _register_stack_trace_handlers(app: Flask) -> None:
             runtime_logger.debug(
                 "Request completed: %s %s Status: %s Duration: %.3fs",
                 sanitize_log_value(request.method),
-                sanitize_log_value(request.url),
+                sanitize_log_value(request.endpoint or "unmatched"),
                 sanitize_log_value(response.status_code),
                 duration or 0.0,
             )
@@ -709,16 +682,13 @@ def _register_error_handlers(app: Flask) -> None:
         auth_logger.error(
             "CSRF Error - Request: %s %s",
             sanitize_log_value(request.method),
-            sanitize_log_value(request.url),
+            sanitize_log_value(request.endpoint or "unmatched"),
         )
         auth_logger.error(
             "CSRF Error - User-Agent: %s",
             sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
         )
-        auth_logger.error(
-            "CSRF Error - Referer: %s",
-            sanitize_log_value(request.headers.get("Referer", "None")),
-        )
+        auth_logger.error("CSRF Error - Referer present: %s", "Referer" in request.headers)
         auth_logger.error(
             "CSRF Error - Form data keys: %s",
             sanitize_log_value(list(request.form.keys()) if request.form else "None"),

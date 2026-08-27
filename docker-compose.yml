@@ -311,6 +311,8 @@ services:
       - "shared_buffers=128MB"
       - "-c"
       - "max_connections=20"
+      - "-c"
+      - "max_locks_per_transaction=256" # Test schema teardown locks every migrated object
 
 volumes:
   postgres_data:

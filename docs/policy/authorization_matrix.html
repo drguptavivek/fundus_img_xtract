@@ -520,8 +520,9 @@
       because they answer separate questions: who governs the project, and who does its work.
     </p>
     <div class="status-strip">
-      <span class="tag">20 roles</span>
-      <span class="tag">16 project actions</span>
+      <span class="tag">21 roles</span>
+      <span class="tag">16 operational columns</span>
+      <span class="tag">3 allocation management actions</span>
       <span class="tag">2 grant scopes</span>
       <span class="tag">hospital scope retired on project grants</span>
     </div>
@@ -663,6 +664,26 @@
         that task's disease and Lab Unit. A slot alone does not authorize grading; the clinical role
         alone does not either.</p>
       </div>
+      <div class="rule">
+        <h3>Allocating graders is a separate management plane</h3>
+        <p>An allocation does not qualify somebody to grade. It selects an already-qualified
+        <code>ophthalmologist</code>, with a matching active slot, for a project target and Lab Unit.
+        The three management actions are separate because their effects have different scope.</p>
+        <div class="table-shell">
+          <table class="plain">
+            <thead><tr><th>Action</th><th>Ordinary holder</th><th>Required scope</th></tr></thead>
+            <tbody>
+              <tr><td>View the allocation plan</td><td><code>project_pi</code>, <code>site_pi</code>, <code>project_admin</code>, <code>data_manager</code></td><td>The grant filters the plan to the project or Lab Unit it names</td></tr>
+              <tr><td>Create, reactivate or deactivate an allocation</td><td><code>project_admin</code>, <code>data_manager</code></td><td>Contained within the actor's project grant; never self-allocation</td></tr>
+              <tr><td>Switch allocation enforcement</td><td><code>project_admin</code></td><td>Project scope only; every active target must already have effective reader coverage</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>admin</code> is break-glass for all three, but it cannot make an unqualified person
+        a grader or waive the target, role, slot or coverage checks. <code>local_admin</code> and
+        classical Lab Unit assignment confer nothing on project allocations. Investigators observe
+        the plan and never change it.</p>
+      </div>
     </div>
   </section>
 
@@ -727,7 +748,7 @@
         <tbody>
           <tr><td><code>sites_can_export_grades</code></td><td>Export of the readings human graders produced</td><td><code>data_exporter</code></td></tr>
           <tr><td><code>sites_can_create_datasets</code></td><td>Dataset curation and finalisation</td><td><code>dataset_creator</code></td></tr>
-          <tr><td><code>sites_can_share_datasets</code></td><td>Dataset sharing and release</td><td><code>dataset_creator</code></td></tr>
+          <tr><td><code>sites_can_share_datasets</code></td><td>Dataset sharing and release</td><td><code>data_exporter</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -743,8 +764,10 @@
   <section>
     <h2>Reserved to a System Admin</h2>
     <p class="lede">
-      Project setup carries consequences across the whole project and is never delegable to
-      <code>project_pi</code>, <code>site_pi</code> or <code>project_admin</code> at any scope.
+      System administration is <code>admin</code> only. Hospital, project, workflow and clinical
+      roles do not open system status, maintenance, security, storage or configuration controls.
+      Project setup carries consequences across the whole project and is likewise never delegable
+      to <code>project_pi</code>, <code>site_pi</code> or <code>project_admin</code> at any scope.
     </p>
     <ul class="reserved">
       <li>Upload profile <em>definitions</em> — distinct from assigning a user to an existing profile, which is <code>uploaders.manage</code></li>
@@ -753,19 +776,22 @@
       <li>Remidio API routing and connection bindings</li>
       <li>Which Lab Units a project spans</li>
     </ul>
+    <p class="prose"><code>user_manager</code> is the narrow exception inside the administration
+    area. It manages ordinary user records, ordinary non-project roles, Lab Unit assignments,
+    grading slots, enrolled devices and sessions in its own hospital. It cannot manage or grant
+    <code>admin</code> or <code>user_manager</code>, change project grants or grader allocations,
+    reach another hospital, or use any system-administration action.</p>
   </section>
 
   <section>
     <h2>Roles whose scope is classical</h2>
-    <p class="lede">
-      <code>local_admin</code> administers one hospital and the Lab Units within it, and may hold
-      several. It holds one relation per hospital and reaches exactly those.
-    </p>
-    <p class="prose">
-      This is why the hospital cannot stay a column on the user record: a column holds one value,
-      and the relation is what allows several. <code>current_user.hospital_id</code> is never an
-      authorization rule.
-    </p>
+    <p class="lede"><code>user_manager</code> has a hospital relationship only for the
+    user-management actions above. <code>local_admin</code> is a hospital-scoped operational role
+    outside projects, not a system or user administrator.</p>
+    <p class="prose">Either may hold several hospital relations and reaches exactly those for the
+    actions its role confers. This is why the hospital cannot stay a column on the user record: a
+    column holds one value, and the relation is what allows several.
+    <code>current_user.hospital_id</code> is never an authorization rule.</p>
     <p class="prose">
       <code>data_manager</code> administers the work without performing it: it creates and
       reassigns regrade tasks and intra-rater batches, and runs inference retrospectively. Running

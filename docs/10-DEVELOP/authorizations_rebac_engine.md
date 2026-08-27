@@ -35,8 +35,11 @@ The authorization layer recognizes these relationship sources:
 
 - `upload_profile`: active upload profile assignment and matching profile dimensions.
 - `grading_slot`: active disease/lab-unit grading slot with the required slot flag.
+- `project_role_grant`: active role relation on a project or one of its Lab Units.
+- `project_grader_allocation`: active project/Lab Unit/target/capacity assignment for an already-qualified grader.
 - `lab_unit_assignment`: explicit user-to-lab-unit relationship.
 - `hospital_scope`: site-admin/local-admin access to resources in the user's hospital.
+- `user_management_scope`: a `user_manager` relation to one hospital, accepted only by explicit user, grading-slot, enrolled-device and mobile-session administration actions.
 - `admin_global`: admin access for actions that explicitly accept global admin scope.
 
 ## Domain Rules
@@ -79,21 +82,72 @@ Grading follows grading slots.
 
 Grading actions require:
 
-- compatible coarse role, such as `ophthalmologist` or `optometrist`;
+- the `ophthalmologist` clinical role;
 - `grading_slot` grant matching the task disease and lab unit;
 - the slot flag required by the action:
   - `can_grade_resident`
   - `can_grade_resident2`
   - `can_arbitrate`
+- for a project-owned task whose allocation policy is enabled, a matching
+  `project_grader_allocation` grant for the same project, Lab Unit, target and
+  capacity.
+
+The first-reader, second-reader and arbitrator names describe grading slots;
+they are not user roles. A project allocation is a third independent
+relationship and substitutes for neither the clinical role nor the slot.
+
+### Project Grader Allocation Management
+
+Allocation management uses three actions rather than one overloaded check:
+
+- `project.grader_allocations.view` reads the plan through `project_pi`,
+  `site_pi`, `project_admin` or `data_manager` project grants, filtered to the
+  grant object;
+- `project.grader_allocations.manage` lets `project_admin` or `data_manager`
+  create, reactivate and deactivate allocations at or below their project
+  grant object; and
+- `project.grader_allocation_policy.manage` changes project-wide enforcement
+  and therefore requires a project-scoped `project_admin` grant.
+
+`admin_global` is break-glass for all three but does not bypass candidate,
+target, slot or coverage validation. Classical hospital or Lab Unit scope
+never manages a project allocation. Allocation rows remain historical records:
+they are deactivated, not deleted, and every change records its actor.
 
 ### General App Access
 
-Admin screens, analytics, jobs, media, search, verification, datasets, and other
-non-upload/non-grading features follow role plus scope:
+System administration uses `admin_global` only. User administration is a
+separate surface: `admin_global` reaches every hospital, while
+`user_management_scope` reaches ordinary users in the related hospital and
+cannot manage or grant `admin` or `user_manager`, project grants or grader
+allocations.
+
+Authenticated KPI analytics, jobs, media, search, verification, datasets, and
+other non-upload/non-grading features follow role plus scope:
 
 - `admin_global` for global admin actions;
-- `hospital_scope` for local-admin/site-admin actions inside the user's hospital;
+- `user_management_scope` for the narrow user-administration actions;
+- `hospital_scope` for ordinary local-admin operations inside the user's hospital;
 - `lab_unit_assignment` for explicitly assigned lab units.
+
+Public analytics is not an unscoped form of KPI analytics. It is an explicit
+public action limited to approved system aggregates. Row lists, exports,
+identifiers and project clinical-result drill-downs always use authenticated
+actions.
+
+### Background Execution
+
+Workers are not actors with human roles. A manual request is authorized before
+enqueue and keeps the requester only for attribution. A scheduled request is
+admitted by an active stored automation rule and exact target. Retry, resume,
+cancellation and configuration changes are new interactive actions and must be
+authorized before enqueue; workers never fabricate a user context.
+
+Manual Remidio project sync additionally requires a Remidio-sync upload profile
+assignment covering every route Lab Unit. The initiating user alone controls
+that job while still eligible, with `admin_global` as break-glass. Scheduled
+prospective syncs use the active routing, source-rule, binding and project
+configuration instead of a user relationship.
 
 ## Implementation Entry Points
 

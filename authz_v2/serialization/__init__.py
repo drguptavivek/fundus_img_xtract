@@ -1,0 +1,1 @@
+"""Stable authorization DTO serializers."""

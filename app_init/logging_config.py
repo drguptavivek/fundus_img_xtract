@@ -1,26 +1,24 @@
 """Logging configuration helpers for the Fundus Image Manager."""
+
 from __future__ import annotations
 
 import logging
 import os
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import WatchedFileHandler
 from pathlib import Path
-from typing import Dict, List
 
-from flask import Flask, request
+from flask import Flask, has_request_context, request
 
 
 class RequestContextFilter(logging.Filter):
     """Populate request context fields on log records when available."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-        record.url = "-"
+        record.endpoint = "-"
         record.method = "-"
-        try:
-            record.url = request.url  # type: ignore[attr-defined]
+        if has_request_context():
+            record.endpoint = request.endpoint or "unmatched"  # type: ignore[attr-defined]
             record.method = request.method  # type: ignore[attr-defined]
-        except Exception:
-            pass
         return True
 
 
@@ -29,15 +27,17 @@ def _make_handler(
     level: int,
     formatter: logging.Formatter,
     *,
-    filters: List[logging.Filter] | None = None,
+    filters: list[logging.Filter] | None = None,
     log_dir: Path,
     max_bytes: int,
     backup_count: int,
 ) -> logging.Handler:
-    handler = RotatingFileHandler(
+    # Retain the settings in the call contract during cutover; logrotate now
+    # owns both thresholds and archives for every file in this directory.
+    _ = (max_bytes, backup_count)
+    # logrotate is the only rotation owner for files under LOG_DIR.
+    handler = WatchedFileHandler(
         log_dir / filename,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
         encoding="utf-8",
         delay=True,
     )
@@ -53,27 +53,26 @@ def _configure_logger(
     level: int,
     handler: logging.Handler,
     *,
-    extra_handlers: List[logging.Handler] | None = None,
+    extra_handlers: list[logging.Handler] | None = None,
 ) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.propagate = False
     for existing in list(logger.handlers):
         logger.removeHandler(existing)
-        try:
-            existing.close()
-        except Exception:
-            pass
+        existing.close()
     logger.addHandler(handler)
     for extra in extra_handlers or []:
         logger.addHandler(extra)
     return logger
 
 
-def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
+def configure_logging(app: Flask) -> dict[str, logging.Logger]:
     """Configure application loggers and attach them to the Flask app."""
     log_root_setting = app.config.get("LOG_DIR") or os.getenv("LOG_DIR")
-    log_dir = Path(log_root_setting or (Path(__file__).resolve().parent.parent / "logs"))
+    log_dir = Path(
+        log_root_setting or (Path(__file__).resolve().parent.parent / "logs")
+    )
     log_dir.mkdir(parents=True, exist_ok=True)
 
     debug_mode = bool(app.debug or app.config.get("ENABLE_DEBUG_LOGGING", False))
@@ -84,7 +83,9 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     detailed_format = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d %(message)s"
     )
-    http_error_format = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s url=%(url)s %(message)s")
+    http_error_format = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s endpoint=%(endpoint)s %(message)s"
+    )
 
     request_filter = RequestContextFilter()
 
@@ -105,42 +106,165 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         max_bytes=log_max_bytes,
         backup_count=log_backup_count,
     )
-    grades_handler = _make_handler("grades.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    pregraded_processing_handler = _make_handler("pregraded_processing.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    auth_handler = _make_handler("auth.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    editing_handler = _make_handler("editing.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    consensus_handler = _make_handler("consensus.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    email_success_handler = _make_handler("email_success.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    email_error_handler = _make_handler("email_error.log", logging.ERROR, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    app_handler = _make_handler("app.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    flask_limiter_handler = _make_handler("flask_limiter.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    intra_rater_debug_handler = _make_handler("intra_rater_debug.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    sqlalchemy_failure_handler = _make_handler("sqlalchemy_failure.log", logging.ERROR, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    flash_handler = _make_handler("flash_messages.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    materialized_view_handler = _make_handler("materialized_view.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    thumbnail_maintenance_handler = _make_handler("thumbnail_maintenance.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    startup_env_handler = _make_handler("startup_env_error.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    pii_detection_handler = _make_handler("pii_detection.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    image_metadata_handler = _make_handler("image_metadata.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    encounter_set_handler = _make_handler("encounter_set.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    s3_sync_handler = _make_handler("s3_sync.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    db_query_handler = TimedRotatingFileHandler(
-        log_dir / "db_query.log",
-        when="midnight",
-        interval=1,
-        backupCount=7,
-        encoding="utf-8",
-        delay=True,
+    grades_handler = _make_handler(
+        "grades.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    pregraded_processing_handler = _make_handler(
+        "pregraded_processing.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    auth_handler = _make_handler(
+        "auth.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    editing_handler = _make_handler(
+        "editing.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    consensus_handler = _make_handler(
+        "consensus.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    email_success_handler = _make_handler(
+        "email_success.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    email_error_handler = _make_handler(
+        "email_error.log",
+        logging.ERROR,
+        detailed_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    app_handler = _make_handler(
+        "app.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    flask_limiter_handler = _make_handler(
+        "flask_limiter.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    intra_rater_debug_handler = _make_handler(
+        "intra_rater_debug.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    sqlalchemy_failure_handler = _make_handler(
+        "sqlalchemy_failure.log",
+        logging.ERROR,
+        detailed_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    flash_handler = _make_handler(
+        "flash_messages.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    materialized_view_handler = _make_handler(
+        "materialized_view.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    thumbnail_maintenance_handler = _make_handler(
+        "thumbnail_maintenance.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    startup_env_handler = _make_handler(
+        "startup_env_error.log",
+        logging.INFO,
+        detailed_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    pii_detection_handler = _make_handler(
+        "pii_detection.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    image_metadata_handler = _make_handler(
+        "image_metadata.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    encounter_set_handler = _make_handler(
+        "encounter_set.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    s3_sync_handler = _make_handler(
+        "s3_sync.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    db_query_handler = WatchedFileHandler(
+        log_dir / "db_query.log", encoding="utf-8", delay=True
     )
     db_query_handler.setLevel(logging.INFO)
     db_query_handler.setFormatter(detailed_format)
-    db_query_slow_handler = TimedRotatingFileHandler(
-        log_dir / "db_query_slow.log",
-        when="midnight",
-        interval=1,
-        backupCount=7,
-        encoding="utf-8",
-        delay=True,
+    db_query_slow_handler = WatchedFileHandler(
+        log_dir / "db_query_slow.log", encoding="utf-8", delay=True
     )
     db_query_slow_handler.setLevel(logging.WARNING)
     db_query_slow_handler.setFormatter(detailed_format)
@@ -148,49 +272,103 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     debug_handler = None
     console_handler = None
     if debug_mode:
-        debug_handler = _make_handler("debug.log", logging.DEBUG, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+        debug_handler = _make_handler(
+            "debug.log",
+            logging.DEBUG,
+            detailed_format,
+            log_dir=log_dir,
+            max_bytes=log_max_bytes,
+            backup_count=log_backup_count,
+        )
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(detailed_format)
 
-    http_error_logger = _configure_logger("http_error", logging.WARNING, http_error_handler)
-    runtime_error_logger = _configure_logger("runtime_error", logging.ERROR, runtime_error_handler)
+    http_error_logger = _configure_logger(
+        "http_error", logging.WARNING, http_error_handler
+    )
+    runtime_error_logger = _configure_logger(
+        "runtime_error", logging.ERROR, runtime_error_handler
+    )
     grades_logger = _configure_logger("grades", logging.INFO, grades_handler)
-    pregraded_processing_logger = _configure_logger("pregraded_processing", logging.INFO, pregraded_processing_handler)
+    pregraded_processing_logger = _configure_logger(
+        "pregraded_processing", logging.INFO, pregraded_processing_handler
+    )
     auth_logger = _configure_logger("auth", logging.INFO, auth_handler)
     editing_logger = _configure_logger("editing", logging.INFO, editing_handler)
     consensus_logger = _configure_logger("consensus", logging.INFO, consensus_handler)
-    email_success_logger = _configure_logger("email_success", logging.INFO, email_success_handler)
-    email_error_logger = _configure_logger("email_error", logging.ERROR, email_error_handler)
+    email_success_logger = _configure_logger(
+        "email_success", logging.INFO, email_success_handler
+    )
+    email_error_logger = _configure_logger(
+        "email_error", logging.ERROR, email_error_handler
+    )
     rate_limit_logger = _configure_logger("rate_limit", logging.INFO, app_handler)
-    flask_limiter_logger = _configure_logger("flask-limiter", logging.INFO, flask_limiter_handler)
-    intra_rater_debug_logger = _configure_logger("intra_rater_debug", logging.INFO, intra_rater_debug_handler)
-    sqlalchemy_failure_logger = _configure_logger("sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler)
+    flask_limiter_logger = _configure_logger(
+        "flask-limiter", logging.INFO, flask_limiter_handler
+    )
+    intra_rater_debug_logger = _configure_logger(
+        "intra_rater_debug", logging.INFO, intra_rater_debug_handler
+    )
+    sqlalchemy_failure_logger = _configure_logger(
+        "sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler
+    )
     flash_logger = _configure_logger("flash.messages", logging.INFO, flash_handler)
-    materialized_view_logger = _configure_logger("materialized_view", logging.INFO, materialized_view_handler)
-    thumbnail_maintenance_logger = _configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
-    startup_env_logger = _configure_logger("startup_env", logging.INFO, startup_env_handler)
-    pii_detection_logger = _configure_logger("pii_detection", logging.INFO, pii_detection_handler)
-    image_metadata_logger = _configure_logger("image_metadata", logging.INFO, image_metadata_handler)
-    encounter_set_logger = _configure_logger("api.encounter_set", logging.INFO, encounter_set_handler)
-    s3_sync_logger = _configure_logger("admin.s3_sync_status", logging.INFO, s3_sync_handler)
+    materialized_view_logger = _configure_logger(
+        "materialized_view", logging.INFO, materialized_view_handler
+    )
+    thumbnail_maintenance_logger = _configure_logger(
+        "thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler
+    )
+    startup_env_logger = _configure_logger(
+        "startup_env", logging.INFO, startup_env_handler
+    )
+    pii_detection_logger = _configure_logger(
+        "pii_detection", logging.INFO, pii_detection_handler
+    )
+    image_metadata_logger = _configure_logger(
+        "image_metadata", logging.INFO, image_metadata_handler
+    )
+    encounter_set_logger = _configure_logger(
+        "api.encounter_set", logging.INFO, encounter_set_handler
+    )
+    s3_sync_logger = _configure_logger(
+        "admin.s3_sync_status", logging.INFO, s3_sync_handler
+    )
+    authorization_handler = _make_handler(
+        "authorization.log",
+        logging.INFO,
+        base_format,
+        log_dir=log_dir,
+        max_bytes=log_max_bytes,
+        backup_count=log_backup_count,
+    )
+    authorization_logger = _configure_logger(
+        "authorization", logging.INFO, authorization_handler
+    )
     db_query_logger = _configure_logger("db_query", logging.INFO, db_query_handler)
-    db_query_slow_logger = _configure_logger("db_query_slow", logging.WARNING, db_query_slow_handler)
+    db_query_slow_logger = _configure_logger(
+        "db_query_slow", logging.WARNING, db_query_slow_handler
+    )
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
-        email_debug_handler = _make_handler("email_debug.log", logging.DEBUG, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+        email_debug_handler = _make_handler(
+            "email_debug.log",
+            logging.DEBUG,
+            detailed_format,
+            log_dir=log_dir,
+            max_bytes=log_max_bytes,
+            backup_count=log_backup_count,
+        )
         _configure_logger("email_debug", logging.DEBUG, email_debug_handler)
     else:
         email_debug_logger = logging.getLogger("email_debug")
         for existing in list(email_debug_logger.handlers):
             email_debug_logger.removeHandler(existing)
-            try:
-                existing.close()
-            except Exception:
-                pass
+            existing.close()
         email_debug_logger.handlers = []
 
-    extra_app_handlers: List[logging.Handler] = []
+    extra_app_handlers: list[logging.Handler] = []
     if debug_handler is not None:
         debug_logger = _configure_logger(
             "debug",
@@ -219,25 +397,69 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     app.logger.propagate = False
 
     grades_logger.info("Grades logger initialized at %s", str(log_dir / "grades.log"))
-    pregraded_processing_logger.info("Pregraded processing logger initialized at %s", str(log_dir / "pregraded_processing.log"))
+    pregraded_processing_logger.info(
+        "Pregraded processing logger initialized at %s",
+        str(log_dir / "pregraded_processing.log"),
+    )
     auth_logger.info("Auth logger initialized at %s", str(log_dir / "auth.log"))
-    editing_logger.info("Editing logger initialized at %s", str(log_dir / "editing.log"))
-    consensus_logger.info("Consensus logger initialized at %s", str(log_dir / "consensus.log"))
-    email_success_logger.info("Email success logger initialized at %s", str(log_dir / "email_success.log"))
-    email_error_logger.info("Email error logger initialized at %s", str(log_dir / "email_error.log"))
-    runtime_error_logger.info("Runtime error logger initialized at %s", str(log_dir / "runtime_error.log"))
-    flask_limiter_logger.info("Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log"))
-    intra_rater_debug_logger.info("Intra-rater debug logger initialized at %s", str(log_dir / "intra_rater_debug.log"))
-    sqlalchemy_failure_logger.info("SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log"))
-    flash_logger.info("Flash message logger initialized at %s", str(log_dir / "flash_messages.log"))
-    materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
-    thumbnail_maintenance_logger.info("Thumbnail maintenance logger initialized at %s", str(log_dir / "thumbnail_maintenance.log"))
-    startup_env_logger.info("Startup environment logger initialized at %s", str(log_dir / "startup_env_error.log"))
-    pii_detection_logger.info("PII detection logger initialized at %s", str(log_dir / "pii_detection.log"))
-    image_metadata_logger.info("Image metadata logger initialized at %s", str(log_dir / "image_metadata.log"))
-    encounter_set_logger.info("Encounter set API logger initialized at %s", str(log_dir / "encounter_set.log"))
-    s3_sync_logger.info("S3 sync status logger initialized at %s", str(log_dir / "s3_sync.log"))
-    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
+    editing_logger.info(
+        "Editing logger initialized at %s", str(log_dir / "editing.log")
+    )
+    consensus_logger.info(
+        "Consensus logger initialized at %s", str(log_dir / "consensus.log")
+    )
+    email_success_logger.info(
+        "Email success logger initialized at %s", str(log_dir / "email_success.log")
+    )
+    email_error_logger.info(
+        "Email error logger initialized at %s", str(log_dir / "email_error.log")
+    )
+    runtime_error_logger.info(
+        "Runtime error logger initialized at %s", str(log_dir / "runtime_error.log")
+    )
+    flask_limiter_logger.info(
+        "Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log")
+    )
+    intra_rater_debug_logger.info(
+        "Intra-rater debug logger initialized at %s",
+        str(log_dir / "intra_rater_debug.log"),
+    )
+    sqlalchemy_failure_logger.info(
+        "SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log")
+    )
+    flash_logger.info(
+        "Flash message logger initialized at %s", str(log_dir / "flash_messages.log")
+    )
+    materialized_view_logger.info(
+        "Materialized view logger initialized at %s",
+        str(log_dir / "materialized_view.log"),
+    )
+    thumbnail_maintenance_logger.info(
+        "Thumbnail maintenance logger initialized at %s",
+        str(log_dir / "thumbnail_maintenance.log"),
+    )
+    startup_env_logger.info(
+        "Startup environment logger initialized at %s",
+        str(log_dir / "startup_env_error.log"),
+    )
+    pii_detection_logger.info(
+        "PII detection logger initialized at %s", str(log_dir / "pii_detection.log")
+    )
+    image_metadata_logger.info(
+        "Image metadata logger initialized at %s", str(log_dir / "image_metadata.log")
+    )
+    encounter_set_logger.info(
+        "Encounter set API logger initialized at %s", str(log_dir / "encounter_set.log")
+    )
+    s3_sync_logger.info(
+        "S3 sync status logger initialized at %s", str(log_dir / "s3_sync.log")
+    )
+    db_query_logger.info(
+        "DB query logger initialized at %s", str(log_dir / "db_query.log")
+    )
+    authorization_logger.info(
+        "Authorization logger initialized at %s", str(log_dir / "authorization.log")
+    )
 
     return {
         "http_error": http_error_logger,
@@ -263,6 +485,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         "s3_sync": s3_sync_logger,
         "db_query": db_query_logger,
         "db_query_slow": db_query_slow_logger,
+        "authorization": authorization_logger,
         "app": app_logger,
         "debug": debug_logger,
     }

@@ -55,6 +55,19 @@ A page made of several panels does not get one oversized permission. A project d
 admit somebody to the overview while its upload, analytics, grading, dataset and access panels
 each ask their own question and return only their own authorized data.
 
+## Permission is checked again as work moves
+
+Authority is not frozen when a page, task or job is first opened. The server checks the current
+state again when the action is submitted.
+
+A verifier cannot reopen or retag an encounter once downstream grading makes that unsafe. A
+grader still needs the correct live task state, grading slot and project allocation at submission,
+and cannot submit the same step twice. Regrade, intra-rater and ad hoc work likewise checks that
+the source is still eligible and the assignment is still current.
+
+A stale browser tab, an old eligibility response and a queued-but-not-yet-run request therefore
+carry no authority of their own.
+
 ## Getting pictures in
 
 **Outside a project** an ordinary uploader may use the ordinary upload formats — direct images
@@ -74,6 +87,20 @@ profile may permit the pre-graded kind, and the person still has to hold the rol
 
 An uploader sees every upload in their site, not only their own. "Mine" is a filter on that
 list, not the edge of it.
+
+## Pulling from the Remidio API
+
+A manual Remidio API pull is an upload action. The person needs an active upload-profile
+assignment for that project, for the Remidio API sync kind, covering every site route the pull
+will use. The project list on the screen is only an eligibility list; the server checks the exact
+project and routes again before it creates the job.
+
+The person who started a manual job may pause, resume or cancel it only while they still hold the
+same sync authority. A System Admin may use break-glass. Another uploader cannot take over the
+job merely because they can sync the same project.
+
+The separate administration of Remidio connections, routing profiles and source rules is system
+configuration. Only the System Admin may change it.
 
 ## Checking what arrived
 
@@ -145,6 +172,17 @@ That's written down on its own rather than inherited from the summary. One retur
 other returns records, which is a different disclosure. A rule that handed the row list down from
 the summary would have quietly widened it.
 
+## Automatic workers are not users
+
+Scheduled Remidio pulls, OCR, inference, thumbnails and export workers do not log in and do not
+receive human roles. They may execute only work already admitted by an authorized service
+boundary or by an active stored project rule whose target and routing still match.
+
+For a manual job, the recorded user is attribution, not authority borrowed by the worker. For a
+scheduled job, authority comes from the active stored rule and matching event, not from a made-up
+user. An interactive retry, resume or change is a new user action and is authorized again before
+the worker receives it.
+
 ## Out in the field
 
 Field staff use cameras away from the clinic. That is why they are separate roles — a stricter
@@ -156,8 +194,15 @@ assignment never opens it, which is stricter than the desktop.
 The phone knows which roles you hold and can show them to you, but nothing is decided from what
 the phone says. Every upload and every change is checked again on the server.
 
-Your sessions are yours. You can see which devices are signed in as you and sign any of them out.
-Nobody else can, an administrator included.
+Through the self-service phone API, your sessions are yours: you can see which devices are signed
+in as you and sign any of them out. That self-scoped action never opens another person's session.
+The explicit user-administration action below is separate and attributable to its administrator.
+
+Before a field device can sign in, a System Admin or the hospital's user manager issues a
+single-use enrolment code for that user. They may approve or block the user's device and revoke
+its sessions, but only inside their user-management scope. Blocking a device removes its access;
+the device's old token is not authority to continue. These are explicit administrative actions,
+not an administrator pretending to be the user.
 
 One gap worth knowing: today a field ophthalmologist can't grade on the phone where a clinic one
 can. The two field roles were meant to carry the same distinction as their clinic counterparts —
@@ -189,6 +234,34 @@ A grader sees their own reading, and every other reading on a case they graded �
 reader's, the arbitrator's, the AI's — so they can see how they compared. Cases they never
 touched stay out of reach.
 
+## Who allocates project graders
+
+An allocation is a project saying which already-qualified ophthalmologist may work on which of
+its grading targets at which site. It is not a role, and it is not a grading slot. Inside a
+project all three still have to agree: `ophthalmologist` says the person is clinically qualified,
+the slot says whether they may act as first reader, second reader or arbitrator for that disease
+and site, and the allocation says this project selected them for that work.
+
+The project's access manager and its data manager may make or withdraw allocations, but only
+inside the part of the project their own grant covers. A site-level manager allocates at that site
+and nowhere else. A hospital administrator who has no project grant cannot do it merely because
+the site is in their hospital.
+
+An investigator may see the allocation plan for the part of the project they oversee but cannot
+change it. A manager cannot allocate themselves; somebody else with the necessary authority must
+do that. The person selected must already be active, hold `ophthalmologist`, and hold the matching
+active grading slot. Removing any one of those makes the allocation ineffective without erasing
+its history.
+
+Switching allocation enforcement on or off affects the whole project, so it is narrower still:
+only a project-wide access manager may do it. A data manager or site-level access manager may
+arrange their own work but cannot change that project-wide rule. Enforcement cannot be switched
+on until every active grading target has effective reader coverage.
+
+The System Admin may use the emergency path for allocation management, but the override creates
+no clinical qualification. It never substitutes for `ophthalmologist`, the grading slot, a valid
+target or complete coverage.
+
 ## When graders disagree
 
 A discrepancy reviewer looks at cases where readings differed and records the settled answer. A
@@ -196,6 +269,11 @@ regrade adjudicator settles regrades. They're different roles.
 
 Outside a project they cover their own sites. Inside one they cover the sites the project
 allocated to them, through a project grant for that same role.
+
+Exporting the review is a separate release action. The ordinary discrepancy export is masked and
+needs `data_exporter` or `data_manager` over the same tasks; seeing or reviewing the queue does
+not confer it. An export that includes patient identifiers is a different action and additionally
+needs `pii_exporter`. The PII permission never widens which tasks may be exported.
 
 ## Creating work is not doing it
 
@@ -225,7 +303,25 @@ From a search result a data manager can create grading work on the spot, and rem
 Only a data manager. Making work is administration, and it's kept away from the people who will
 do it.
 
-## Counts and lists are not the same thing
+## Public analytics
+
+The public analytics page is deliberately anonymous and needs no user role or relationship. That
+exception covers only the specifically approved system-wide totals, trends and other aggregates
+published on that page. It never covers patient rows, identifiers, exports or a drill-down into a
+project's clinical results.
+
+Public analytics is a different authorization surface from the authenticated KPI workspaces
+below. A route is public only because the policy names it as public; putting it under an
+`/analytics` URL does not make it public.
+
+## Signing in and other public entry points
+
+Login and password recovery must be public so a user can establish or recover an identity.
+Logout, reauthentication and account changes are self-scoped after that identity exists.
+Published help and API documentation may also be public, but only through their own named public
+actions. Every other route is authenticated by default; a URL prefix is never authorization.
+
+## KPI analytics: counts and lists are not the same thing
 
 This is the sharpest line in the whole policy, and it's easy to miss because both are called
 KPIs.
@@ -290,6 +386,17 @@ The same person holding grants at two sites may export grades at one and not the
 
 Letting a patient's name leave the building is its own separate permission, held on top of
 whatever allowed the data out.
+
+## Downloading a shared dataset
+
+The recipient of a public dataset link does not inherit the exporter's role. The exact active
+share, its unexpired token, the one-time password, accepted terms and the exact dataset together
+authorize the download. A login session alone does not.
+
+The link reaches no other dataset and stops working when the share is disabled, expired or locked.
+The data was authorized for release when the share was created; the public token can never add
+patient identifiers that the release action did not authorize. A release containing identifiers
+therefore requires `pii_exporter` before the share is made available.
 
 ## Patient names
 
@@ -364,15 +471,37 @@ The override doesn't open them either. An administrator who needs to act on your
 as an administrator, through an action recorded as theirs, rather than stepping into your account
 as you.
 
+Reading and updating your own notifications is settled. Sending peer, administrator, broadcast
+or system notifications is not yet represented by authorization actions. That is a recorded gap;
+those routes must not be consolidated into the new engine until their sender and recipient rules
+are decided.
+
+## System administration and user management
+
+System administration belongs only to the `admin` role: system status and maintenance, security,
+storage, lookup tables, upload-profile definitions, grading configuration, AI configuration and
+Remidio routing. A hospital or project role does not open those controls.
+
+`user_manager` is the one narrow exception inside the administration area. It may create, view,
+edit, activate and deactivate ordinary users in its own hospital; assign their ordinary
+non-project roles, sites and grading slots; and manage their enrolled mobile devices and sessions.
+It cannot manage a System Admin or another user manager, grant either privileged role, change
+project grants or grader allocations, or reach users in another hospital. The System Admin may do
+the same work across hospitals through the explicit user-management actions.
+
+`local_admin` remains a hospital-scoped operational role outside projects. It is not a system or
+user administrator. `data_manager` administers workflow, not accounts.
+
 ## Who hands out access
 
 Only a system administrator appoints the people who govern a project. Nobody else can hand that
 out, at any level.
 
-The project's access manager gives out the working roles, and only within their own patch —
-somebody covering one site can't grant anything beyond that site. That single rule is what lets
-a small project keep one access manager and a large one appoint one per site, without the policy
-being any different.
+The project's access manager gives out the working roles and, together with the project's data
+manager, allocates already-qualified graders. Both act only within their own patch — somebody
+covering one site can't grant or allocate anything beyond that site. That single rule is what lets
+a small project keep one project-wide manager and a large one appoint managers per site, without
+the policy being any different.
 
 Investigators watch. They don't grade, verify, settle disagreements or upload anything. A
 project investigator covers the whole project. A site investigator covers their own sites and

@@ -27,7 +27,7 @@ Scope: Begin the 677-consumer migration with the complete 17-route clinical medi
   EXPECT: /4 passed/
   EVIDENCE: Boundary and migration tests passed in the 720-test combined run; inventory documents 613 HTTP plus 47 worker gaps.
 
-- [ ] G6: Static checks, direct adversarial review, Beads export, scoped commit, pull/rebase, and push succeed while unrelated user files remain untouched.
-  CHECK: git diff --check
+- [x] G6: Static checks, direct adversarial review, Beads export, scoped commit, pull/rebase, and push succeed while unrelated user files remain untouched.
+  CHECK: git diff --check && echo clean
   EXPECT: clean
-  EVIDENCE: pending
+  EVIDENCE: Ruff format/check, Bandit, and diff checks passed; direct review added dynamic resource-type parity and positive/negative selector tests; commit 163d2f1c pushed and origin equalled HEAD; only the pre-existing user files remained dirty.

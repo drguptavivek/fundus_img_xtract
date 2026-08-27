@@ -23,6 +23,7 @@ from authz_v2.resources.relationships import (
     compose_facts,
     dataset_state_facts,
     grading_slot_facts,
+    ownership_facts,
     participation_facts,
     pii_image_facts,
     signed_credential_facts,
@@ -74,6 +75,7 @@ def _model_adapter(
     *,
     owner_attr: str | None = None,
     requester_attr: str | None = None,
+    allow_system_scope: bool = False,
 ) -> ResourceAdapter:
     def resolver(db, resource_id: object) -> ResourceTarget | None:
         automation_rule_id = None
@@ -92,6 +94,7 @@ def _model_adapter(
             project_id=getattr(value, "project_id", None),
             lab_unit_id=getattr(value, "lab_unit_id", None),
             hospital_id=getattr(value, "hospital_id", None),
+            allow_system=allow_system_scope,
         )
         if scope is None:
             return None
@@ -406,7 +409,11 @@ DIRECT_IMAGE_ADAPTER = _model_adapter(
 )
 GRADING_TASK_ADAPTER = _model_adapter("grading_task", GradingTask)
 JOB_ADAPTER = _model_adapter(
-    "job", Job, owner_attr="uploader_user_id", requester_attr="uploader_user_id"
+    "job",
+    Job,
+    owner_attr="uploader_user_id",
+    requester_attr="uploader_user_id",
+    allow_system_scope=True,
 )
 UPLOAD_JOB_ADAPTER = _model_adapter(
     "upload_job", Job, owner_attr="uploader_user_id", requester_attr="uploader_user_id"
@@ -505,7 +512,11 @@ for _name in ("inference_target",):
     )
 JOB_ADAPTER = replace(
     JOB_ADAPTER,
-    facts_provider=compose_facts(JOB_ADAPTER.facts_provider, automation_rule_facts),
+    facts_provider=compose_facts(
+        JOB_ADAPTER.facts_provider,
+        ownership_facts,
+        automation_rule_facts,
+    ),
 )
 
 

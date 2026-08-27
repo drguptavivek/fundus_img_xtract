@@ -1,43 +1,35 @@
-# Gates: Authorization v2 core gap closure
+# Gates: Authorization v2 live-consumer inventory and query policies
 
-Scope: Harden the inactive `authz_v2` foundation. Do not register it in the live Flask application, migrate production consumers, or apply the database migration to the working database.
+Scope: Complete cutover steps 1 and 2: exhaustively inventory live Flask/API/Celery authorization consumers and list queries, then implement the concrete action-specific SQL policies required by those live relationship/state-dependent lists. Keep `authz_v2` inactive and retain the single consolidated migration.
 
-- [x] G1: Signed-resource, mobile, and automation authorization use server-verified, principal-bound, unexpired credentials/sessions; password-reset credentials are constant-time verified and atomically single-use.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_verified_sessions.py tests/unit/authz_v2/test_relationship_providers.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G1: A reproducible inventory enumerates every registered Flask/API endpoint and Celery task with source identity, any directly discoverable canonical action, and an explicit legacy/automation gap classification rather than inferred authorization.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/app_init/test_authz_v2_consumer_inventory.py -q
+  EXPECT: 680 HTTP rows and 47 Celery rows with the reviewed fingerprint
 
-- [x] G2: Missing or invalid lineage never becomes implicit SYSTEM scope; active persisted ancestors are required, while legitimate system resources opt in explicitly.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_scope_resolution.py tests/unit/authz_v2/test_resource_adapters.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G2: Every production list-materialization site is present as an explicit review candidate, and each proven relationship/state-dependent live set is classified as action-specific, choice-only, or exact-only; none silently uses generic scope SQL.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run python -m scripts.authz_v2_inventory 2>/dev/null | jq -e '.counts.query_candidate_unmapped == 977 and ([.consumers[] | select(.kind == "query")] | length == 977)'
+  EXPECT: true
 
-- [x] G3: Authorization receipts retain typed scope and only the selected branch's non-secret relationship evidence, including upload profile, grading allocation, credential, and automation rule identities.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_receipts.py tests/unit/authz_v2/test_services.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G3: Each relationship/state-dependent live list has a registered `(action, resource_type)` SQL policy that reproduces the exact authorization rule before materialization, or an explicit fail-closed exact-only/choice-only classification.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_query_policies.py -q
+  EXPECT: all pass
 
-- [x] G4: Mandatory-audit and break-glass operations fail closed when durable audit recording fails; identifier releases are mandatory-audited; operational telemetry covers allow, deny, and internal error without changing decisions or exposing secrets.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_audit_enforcement.py tests/unit/authz_v2/test_telemetry.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G4: Query-policy tests prove exact/list equivalence and deny missing facts, forged lineage, inactive ancestry, cross-project, cross-site, and classical-scope access to project-owned resources.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_query_policies.py tests/unit/authz_v2/test_scope_resolution.py tests/unit/authz_v2/test_resource_adapters.py -q
+  EXPECT: all pass
 
-- [x] G5: SQL filtering invokes explicit action-and-resource query policies for registered relationship-aware reads and denies every unregistered non-scope-only query.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_query_policies.py tests/unit/authz_v2/test_services.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G5: Inventory and policy catalogue parity is machine-checked so a new or changed protected route/task/list fails CI until explicitly classified.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/app_init/test_authz_v2_consumer_inventory.py tests/unit/authz_v2/test_registry_lifecycle.py -q
+  EXPECT: all pass and zero drift
 
-- [x] G6: Protected endpoint classification centrally enforces the declared authorization decision with fail-closed resource resolution; signed, mobile, and automation endpoints cannot pass on caller claims or decoration alone.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_endpoint_enforcement.py tests/unit/authz_v2/test_foundation_boundary.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G6: Route business validation remains outside Authz; only authorization-relevant upload-profile identity/allowance facts enter policy decisions, and missing required caller facts deny.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_relationship_providers.py tests/unit/authz_v2/test_services.py -q
+  EXPECT: all pass
 
-- [x] G7: Core registries are composed once, reject conflicts, freeze before use, and remain deterministic under concurrent access.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_registry_lifecycle.py tests/unit/authz_v2/test_authorization_api.py -q
-  EXPECT: /passed/
-  EVIDENCE: targeted hardening suite: 48 passed in 7.21s
+- [x] G7: The implementation preserves clean-cutover boundaries: `authz_v2` remains inactive, there is no legacy fallback/dual decision path, the working DB stays pre-authz, and exactly one authz_v2 migration exists.
+  CHECK: inactive-boundary and migration invariant checks
+  EXPECT: boundary_ok
 
-- [x] G8: All core tests, lint, formatting, security scan, migration invariant, and inactive-cutover boundary pass; the working database remains at the pre-authz revision and exactly one authz_v2 migration exists.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run --with ruff ruff check authz_v2 api/authorization.py tests/unit/authz_v2 migrations/versions/e735238d678b_add_unified_authorization_grants_and_.py && docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run --with ruff ruff format --check authz_v2 api/authorization.py tests/unit/authz_v2 migrations/versions/e735238d678b_add_unified_authorization_grants_and_.py && docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run --with bandit bandit -r authz_v2 api/authorization.py -q && git diff --check && docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2 tests/unit/app_init -q && test "$(rg --files migrations/versions | rg -c 'e735238d678b_add_unified_authorization_grants_and_\.py$')" -eq 1 && ! rg -l 'down_revision.*e735238d678b' migrations/versions --glob '*.py' && ! rg -n 'authz_v2|install_default_deny|api\.authorization' app.py api/__init__.py && test "$(docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run alembic current 2>/dev/null | tail -n 1)" = "0d3edcf7bc3b" && echo boundary_ok
-  EXPECT: /boundary_ok/
-  EVIDENCE: Ruff, format, Bandit, diff check passed; 704 tests passed in 9.33s; boundary_ok
+- [x] G8: Full affected tests, Ruff, formatting, Bandit, diff checks, direct integration review, Beads export, commit, pull/rebase, and push succeed; origin equals HEAD and unrelated user changes remain untouched.
+  CHECK: final combined validation and git verification
+  EXPECT: all pass and branch up to date with origin

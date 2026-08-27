@@ -84,8 +84,14 @@ def scope_model_query(model, grants, query):
     grants include their stored project sites. A non-Admin system grant never
     becomes an accidental global bypass.
     """
+    predicate = scope_model_predicate(model, grants)
+    return query if predicate is None else query.where(predicate)
+
+
+def scope_model_predicate(model, grants):
+    """Return the reusable SQL scope predicate, or ``None`` for global Admin."""
     if admin_has_system_scope(grants):
-        return query
+        return None
 
     columns = model.__table__.columns
     has_project = "project_id" in columns
@@ -153,4 +159,4 @@ def scope_model_query(model, grants, query):
                 classical = and_(model.project_id.is_(None), classical)
             clauses.append(classical)
 
-    return query.where(or_(*clauses)) if clauses else query.where(false())
+    return or_(*clauses) if clauses else false()

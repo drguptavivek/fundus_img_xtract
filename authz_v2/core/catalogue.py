@@ -319,6 +319,58 @@ def _resource(
     )
 
 
+def _owned_resource(
+    name: str,
+    resource_type: str,
+    roles: frozenset[Role],
+    *,
+    disclosure: DisclosureClass = DisclosureClass.MASKED,
+) -> None:
+    common = (
+        active_principal(),
+        fact(BooleanFact.EXACT_RESOURCE),
+        IdentifierReleaseRequirement(),
+    )
+    normal = roles - ADMIN
+    paths: list[tuple[str, Expression]] = [
+        (
+            "owner",
+            all_of(
+                *common,
+                roles_any(*roles),
+                relationship(GrantSource.OWNERSHIP, require_scope=False),
+                name="owner",
+            ),
+        )
+    ]
+    if normal:
+        paths.append(
+            (
+                "scoped_role",
+                all_of(*common, scoped_roles(*normal), name="scoped_role"),
+            )
+        )
+    if Role.ADMIN in roles:
+        paths.append(
+            (
+                "admin_break_glass",
+                all_of(
+                    *common,
+                    scoped_roles(Role.ADMIN, allow_system=True),
+                    name="admin_break_glass",
+                ),
+            )
+        )
+    _store(
+        name,
+        resource_type=resource_type,
+        requires_resource=True,
+        paths=tuple(paths),
+        disclosure=disclosure,
+        break_glass=BreakGlassMode.ADMIN,
+    )
+
+
 def _self(
     name: str,
     resource_type: str,
@@ -658,7 +710,6 @@ for _name, _type, _roles, _disclosure in (
         VERIFIERS,
         DisclosureClass.IDENTIFIER_IN_PLACE,
     ),
-    ("jobs.result.view", "job", JOBS, DisclosureClass.MASKED),
     ("reports.view", "report", VERIFIERS, DisclosureClass.MASKED),
     ("ad_hoc_task.view", "ad_hoc_task", ADMIN_DATA, DisclosureClass.MASKED),
     ("ad_hoc_task.create", "ad_hoc_task", ADMIN_DATA, DisclosureClass.MASKED),
@@ -678,6 +729,7 @@ for _name, _type, _roles, _disclosure in (
         disclosure=_disclosure,
         domain_condition=_name.endswith(("delete", "update", "create")),
     )
+_owned_resource("jobs.result.view", "job", JOBS)
 
 # Upload submissions always require both a grant role and an exact profile.
 for _name, _type in (

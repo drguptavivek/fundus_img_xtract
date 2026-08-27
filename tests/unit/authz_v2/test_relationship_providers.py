@@ -21,6 +21,7 @@ from authz_v2.resources.relationships import (
     automation_rule_facts,
     dataset_state_facts,
     grading_slot_facts,
+    ownership_facts,
     participation_facts,
     pii_image_facts,
     signed_credential_facts,
@@ -36,6 +37,7 @@ from models import (
     ProjectLabUnitAuthorizationPolicy,
     ProjectUploadProfileAssignment,
     UploadProfile,
+    UserDiseaseUnitRole,
 )
 
 
@@ -116,8 +118,17 @@ def test_grading_provider_attests_workflow_and_default_off_allocation():
     principal, facts = _facts("grading_task")
     task = GradingTask(id=7, project_id=40, lab_unit_id=20, state="pending")
     policy = ProjectGradingAllocationPolicy(project_id=40, enforcement_enabled=False)
+    slot = UserDiseaseUnitRole(
+        id=12,
+        user_id=1,
+        disease_id=3,
+        lab_unit_id=20,
+        can_grade_resident=True,
+        active=True,
+    )
+    task.disease_id = 3
     provided = grading_slot_facts(
-        QueueDB(Result(), Result((policy,))),
+        QueueDB(Result(), Result((slot,)), Result((policy,))),
         principal,
         Action.GRADING_RESIDENT_SUBMIT,
         ResourceTarget(task, facts.resource),
@@ -127,7 +138,28 @@ def test_grading_provider_attests_workflow_and_default_off_allocation():
     assert evidence.relationship is GrantSource.GRADING_SLOT
     assert evidence.attribute("workflow_accepts") is True
     assert evidence.attribute("allocation_enforced") is False
+    assert provided.grading_slot_matches
     assert provided.no_conflict and provided.no_duplicate
+
+
+def test_grading_provider_denies_without_exact_disease_lab_slot():
+    principal, facts = _facts("grading_task")
+    task = GradingTask(
+        id=7,
+        project_id=None,
+        disease_id=3,
+        lab_unit_id=20,
+        state="pending",
+    )
+    provided = grading_slot_facts(
+        QueueDB(Result(), Result()),
+        principal,
+        Action.GRADING_RESIDENT_SUBMIT,
+        ResourceTarget(task, facts.resource),
+        facts,
+    )
+    assert not provided.grading_slot_matches
+    assert provided.relationships[0].active is False
 
 
 def test_signed_credential_requires_exact_session_binding_and_expiry():
@@ -173,6 +205,29 @@ def test_participation_is_derived_from_exact_grade_authorship():
     assert allowed.relationships[0].relationship is GrantSource.PARTICIPATION
     denied = participation_facts(
         QueueDB(Result()), principal, Action.GRADING_GRADES_VIEW, target, facts
+    )
+    assert not denied.relationships
+
+
+def test_job_ownership_is_derived_from_persisted_owner_identity():
+    principal, facts = _facts("job")
+    owned_context = replace(facts.resource, owner_id=principal.user_id)
+    allowed = ownership_facts(
+        None,
+        principal,
+        Action.JOBS_RESULT_VIEW,
+        ResourceTarget(object(), owned_context),
+        replace(facts, resource=owned_context),
+    )
+    assert allowed.owner_or_participant
+    assert allowed.relationships[0].relationship is GrantSource.OWNERSHIP
+    denied_context = replace(owned_context, owner_id=principal.user_id + 1)
+    denied = ownership_facts(
+        None,
+        principal,
+        Action.JOBS_RESULT_VIEW,
+        ResourceTarget(object(), denied_context),
+        replace(facts, resource=denied_context),
     )
     assert not denied.relationships
 

@@ -73,7 +73,7 @@ intra_rater.kpi.view,screen,authenticated_screen|admin_break_glass,masked,option
 intra_rater.task.submit,intra_rater_task,scoped_role,masked,optional
 intra_rater.task.view,intra_rater_task,scoped_role|admin_break_glass,masked,optional
 jobs.regenerate,job,scoped_role|admin_break_glass,masked,required
-jobs.result.view,job,scoped_role|admin_break_glass,masked,optional
+jobs.result.view,job,owner|scoped_role|admin_break_glass,masked,optional
 jobs.view,screen,authenticated_screen|admin_break_glass,masked,optional
 media.image.view,image,scoped_role|admin_break_glass,masked,optional
 media.metadata.process,image,scoped_role|admin_break_glass,masked,optional

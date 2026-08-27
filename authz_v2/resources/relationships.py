@@ -24,6 +24,8 @@ from authz_v2.domain.models import (
 from authz_v2.resources.references import is_positive_int
 from authz_v2.resources.registry import FactsProvider
 from authz_v2.resources.upload_targets import ResolvedUploadTarget
+from grading_allocation.exceptions import AllocationContextError
+from grading_allocation.resolver import resolve_task_allocation_context
 from models import (
     CuratedDataset,
     CuratedDatasetItem,
@@ -36,6 +38,7 @@ from models import (
     ProjectGradingAllocationPolicy,
     ProjectLabUnit,
     ProjectUploadProfileAssignment,
+    UserDiseaseUnitRole,
 )
 
 
@@ -56,6 +59,25 @@ def _append(facts, evidence: RelationshipEvidenceDTO, **updates):
         facts,
         relationships=(*facts.relationships, evidence),
         **updates,
+    )
+
+
+def ownership_facts(_db, principal, _action, target, facts):
+    """Attest exact persisted ownership without trusting a caller claim."""
+    if principal.user_id is None or target.context.owner_id != principal.user_id:
+        return facts
+    return _append(
+        facts,
+        RelationshipEvidenceDTO(
+            GrantSource.OWNERSHIP,
+            target.context.resource_id,
+            principal.user_id,
+            target.context.resource_type,
+            target.context.resource_id,
+            True,
+            target.context.scope,
+        ),
+        owner_or_participant=True,
     )
 
 
@@ -131,6 +153,11 @@ _ACCEPTED_STATE = {
     "resident2": {"resident_done"},
     "arbitrator": {"arbitration"},
 }
+_CLASSICAL_SLOT_FLAG = {
+    "resident": UserDiseaseUnitRole.can_grade_resident,
+    "resident2": UserDiseaseUnitRole.can_grade_resident2,
+    "arbitrator": UserDiseaseUnitRole.can_arbitrate,
+}
 
 
 def grading_slot_facts(db, principal, action, target, facts):
@@ -154,6 +181,21 @@ def grading_slot_facts(db, principal, action, target, facts):
     }
     no_conflict = all(grade.role_slot not in conflicts[slot] for grade in user_grades)
 
+    slot_assignment = (
+        db.execute(
+            select(UserDiseaseUnitRole).where(
+                UserDiseaseUnitRole.user_id == principal.user_id,
+                UserDiseaseUnitRole.disease_id == task.disease_id,
+                UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
+                UserDiseaseUnitRole.active.is_(True),
+                _CLASSICAL_SLOT_FLAG[slot].is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    slot_matches = slot_assignment is not None
+
     enforcement = False
     allocation_matches = True
     allocation_id = None
@@ -166,19 +208,37 @@ def grading_slot_facts(db, principal, action, target, facts):
         enforcement = bool(policy and policy.enforcement_enabled)
         if enforcement:
             capacity = "arbitrator" if slot == "arbitrator" else "resident"
-            allocation = (
-                db.execute(
-                    select(ProjectGraderAllocation).where(
-                        ProjectGraderAllocation.project_id == task.project_id,
-                        ProjectGraderAllocation.lab_unit_id == task.lab_unit_id,
-                        ProjectGraderAllocation.user_id == principal.user_id,
-                        ProjectGraderAllocation.capacity == capacity,
-                        ProjectGraderAllocation.active.is_(True),
+            try:
+                allocation_context = resolve_task_allocation_context(db, task)
+            except AllocationContextError:
+                allocation_context = None
+            target = allocation_context.target if allocation_context else None
+            allocation = None
+            if (
+                allocation_context is not None
+                and allocation_context.project_id == task.project_id
+                and target is not None
+            ):
+                allocation = (
+                    db.execute(
+                        select(ProjectGraderAllocation).where(
+                            ProjectGraderAllocation.project_id == task.project_id,
+                            ProjectGraderAllocation.lab_unit_id == task.lab_unit_id,
+                            ProjectGraderAllocation.user_id == principal.user_id,
+                            ProjectGraderAllocation.capacity == capacity,
+                            ProjectGraderAllocation.scope == target.scope.value,
+                            ProjectGraderAllocation.disease_id.is_not_distinct_from(
+                                target.disease_id
+                            ),
+                            ProjectGraderAllocation.encounter_set_type_id.is_not_distinct_from(
+                                target.encounter_set_type_id
+                            ),
+                            ProjectGraderAllocation.active.is_(True),
+                        )
                     )
+                    .scalars()
+                    .first()
                 )
-                .scalars()
-                .first()
-            )
             allocation_matches = allocation is not None
             allocation_id = allocation.id if allocation else None
 
@@ -188,7 +248,7 @@ def grading_slot_facts(db, principal, action, target, facts):
         principal.user_id,
         target.context.resource_type,
         target.context.resource_id,
-        True,
+        slot_matches,
         target.context.scope,
         (
             ("workflow_accepts", workflow_accepts),
@@ -200,7 +260,7 @@ def grading_slot_facts(db, principal, action, target, facts):
     facts = _append(
         facts,
         slot_evidence,
-        grading_slot_matches=True,
+        grading_slot_matches=slot_matches,
         allocation_enforced=enforcement,
         workflow_accepts=workflow_accepts,
         no_conflict=no_conflict,

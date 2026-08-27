@@ -15,6 +15,7 @@ from authz_v2.resources.projects import (
     resolve_project,
     scope_projects,
 )
+from authz_v2.resources.query_policies import register_core_query_policies
 from authz_v2.resources.registry import (
     ChoiceRegistry,
     ResourceAdapter,
@@ -96,6 +97,7 @@ def build_core_registries() -> tuple[ResourceRegistry, ChoiceRegistry]:
     resources = ResourceRegistry()
     choices = ChoiceRegistry()
     register_core_adapters(resources)
+    register_core_query_policies(resources)
     register_core_choices(choices)
     resources.freeze()
     choices.freeze()

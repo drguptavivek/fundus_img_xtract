@@ -648,6 +648,7 @@ Authorize jobs.result.view.
 
 Resource: `job`; disclosure: `masked`; audit: `optional`.
 
+- `owner`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), AnyRoleRequirement(roles=admin,data_exporter,data_manager,dataset_creator,discrepancy_reviewer,fileUploader,local_admin,optometrist), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False)
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_exporter,data_manager,dataset_creator,discrepancy_reviewer,fileUploader,local_admin,optometrist; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 

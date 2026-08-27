@@ -2,6 +2,11 @@
 
 ## Objective and delivery boundary
 
+The reviewed live-consumer and list-query baseline is maintained in
+[`authz_v2_live_consumer_inventory.md`](authz_v2_live_consumer_inventory.md).
+Its runtime fingerprint must be updated deliberately whenever a route or Celery
+task is added, removed, or moved.
+
 Replace the current parallel authorization mechanisms with one dependency-clean
 deep module. Development takes place under the temporary package name
 `authz_v2/`; the released application contains only the unversioned `authz/`

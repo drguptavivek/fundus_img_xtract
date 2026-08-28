@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 621,
+        "authz_v2": 628,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 20,
+        "legacy_unmapped": 13,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1600,6 +1600,29 @@ def test_scoping_and_ai_integration_routes_bind_exact_authorization_targets():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is action
         assert policy.resolver == resolver
+
+
+def test_dataset_download_routes_require_the_exact_signed_share_credential():
+    names = {
+        "datasets.download_welcome",
+        "datasets.download_status",
+        "datasets.download_verify",
+        "datasets.download_generate",
+        "datasets.download_regenerate",
+        "datasets.download_accept",
+        "datasets.download_file",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert {row.name for row in family} == names
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in names:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.SIGNED_RESOURCE
+        assert policy.action is Action.DATASET_PUBLIC_DOWNLOAD
+        assert policy.resolver == "dataset_share"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

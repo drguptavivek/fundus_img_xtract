@@ -1477,6 +1477,17 @@ pattern.
   literals, 20 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 242 actions.
 
+### Implemented vertical slice 58: signed dataset download surface
+
+- All seven dataset-share download routes require the exact active
+  `dataset_share` and a signed-channel credential whose proof matches that
+  share. Possession of an unrelated valid share cannot authorize another URL.
+- OTP verification, lockout, terms acceptance, export generation state, and
+  filename/path validation remain application and credential-workflow logic.
+- The reviewed inventory is now 628 v2 HTTP consumers, 39 legacy action
+  literals, 13 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 242 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

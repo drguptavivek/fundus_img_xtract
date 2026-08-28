@@ -67,6 +67,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     **{
+        endpoint: _signed(Action.DATASET_PUBLIC_DOWNLOAD, "dataset_share")
+        for endpoint in (
+            "datasets.download_welcome",
+            "datasets.download_status",
+            "datasets.download_verify",
+            "datasets.download_generate",
+            "datasets.download_regenerate",
+            "datasets.download_accept",
+            "datasets.download_file",
+        )
+    },
+    **{
         endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.DOCS_API_VIEW)
         for endpoint in (
             "docs.api_docs",

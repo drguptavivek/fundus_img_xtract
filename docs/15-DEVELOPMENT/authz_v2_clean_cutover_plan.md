@@ -1357,6 +1357,19 @@ pattern.
   literals, 50 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 233 actions.
 
+### Implemented vertical slice 50: self context and bulk notifications
+
+- The current-user hospital/capability projection, notification list, and
+  mark-all-read operation now require exact self authorization. Admin authority
+  cannot substitute for the self relationship on these actions.
+- Notification filtering, pagination, notification type, and read-state updates
+  remain notification application behavior.
+- Notification-by-ID and recipient-targeted routes remain denied until exact
+  notification ownership and recipient target binders are implemented.
+- The reviewed inventory is now 594 v2 HTTP consumers, 39 legacy action
+  literals, 47 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 233 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

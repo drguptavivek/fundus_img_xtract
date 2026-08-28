@@ -1,21 +1,21 @@
-# Authz v2 slice 49: discrepancy task review
+# Authz v2 slice 50: self context and bulk notifications
 
-- [x] G1 GET and POST use distinct exact grading-task actions.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_review_task_detail_uses_exact_method_specific_task_actions -q'
+- [x] G1 All three routes bind the exact current user.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_self_context_and_bulk_notification_routes_use_exact_current_user -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes with exact GET view and POST submit contracts.
+  EVIDENCE: Family test passes with user resolver and dedicated self actions.
 
-- [x] G2 Both decisions deny when the exact task is absent.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py::test_every_exact_action_denies_when_the_route_omits_its_resource -q'
+- [x] G2 Self actions reject admin substitution and missing users.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py -q'
   EXPECT: exit 0
-  EVIDENCE: All exact-action missing-resource cases pass in the 186-test run.
+  EVIDENCE: Full 1100-case core contract suite passes within the combined run.
 
-- [x] G3 Review workflow and clinical submission logic stays outside Authz.
+- [x] G3 Notification filtering and read-state behavior stays outside Authz.
   CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py -q'
   EXPECT: exit 0
-  EVIDENCE: Both domain-boundary tests pass; no review workflow facts were added.
+  EVIDENCE: Both domain-boundary tests pass; notification state was not modeled.
 
 - [x] G4 Inventory and documentation are current.
   CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
   EXPECT: exit 0
-  EVIDENCE: Inventory passes at 591 explicit and 50 unmapped routes; slice 49 is documented.
+  EVIDENCE: Inventory passes at 594 explicit and 47 unmapped routes; slice 50 is documented.

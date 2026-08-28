@@ -170,6 +170,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         "GET": _exact(Action.REVIEW_TASK_VIEW, "grading_task"),
         "POST": _exact(Action.REVIEW_TASK_SUBMIT, "grading_task"),
     },
+    "fundus_api.get_user_hospital_context": _exact(
+        Action.AUTHORIZATION_ME_CAPABILITIES_VIEW, "user"
+    ),
+    "notifications.notifications": _exact(
+        Action.ACCOUNT_NOTIFICATIONS_VIEW, "user"
+    ),
+    "notifications.mark_all_notifications_read": _exact(
+        Action.ACCOUNT_NOTIFICATIONS_UPDATE, "user"
+    ),
     "fundus_api.get_project_annotation_policy": _exact(
         Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
     ),

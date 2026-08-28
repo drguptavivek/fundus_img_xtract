@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 591,
+        "authz_v2": 594,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 50,
+        "legacy_unmapped": 47,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1397,6 +1397,24 @@ def test_review_task_detail_uses_exact_method_specific_task_actions():
     assert policies["GET"].action is Action.REVIEW_TASK_VIEW
     assert policies["POST"].action is Action.REVIEW_TASK_SUBMIT
     assert {policy.resolver for policy in policies.values()} == {"grading_task"}
+
+
+def test_self_context_and_bulk_notification_routes_use_exact_current_user():
+    expected = {
+        "fundus_api.get_user_hospital_context": Action.AUTHORIZATION_ME_CAPABILITIES_VIEW,
+        "notifications.notifications": Action.ACCOUNT_NOTIFICATIONS_VIEW,
+        "notifications.mark_all_notifications_read": Action.ACCOUNT_NOTIFICATIONS_UPDATE,
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in expected]
+    assert len(family) == 3
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, action in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is action
+        assert policy.resolver == "user"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

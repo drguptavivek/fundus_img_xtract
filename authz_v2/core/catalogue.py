@@ -1200,6 +1200,12 @@ _resource(
     domain_condition=True,
 )
 _resource(
+    "upload.lab_unit.view",
+    "upload_lab_unit",
+    CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN}),
+    disclosure=DisclosureClass.MASKED,
+)
+_resource(
     "upload.direct.update",
     "direct_image_upload",
     CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN}),

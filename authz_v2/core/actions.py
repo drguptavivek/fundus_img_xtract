@@ -247,6 +247,7 @@ _CANONICAL_ONLY = {
     "upload.direct.update",
     "upload.pregraded.workspace.view",
     "upload.workspace.view",
+    "upload.lab_unit.view",
     "verification.encounter_set.view",
 }
 _CANONICAL_NAMES = sorted(set(ACTION_MIGRATION_MAP.values()) | _CANONICAL_ONLY)

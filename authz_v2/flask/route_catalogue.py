@@ -90,6 +90,27 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.update_project_grader_allocation_policy": _exact(
         Action.PROJECT_GRADER_ALLOCATIONS_ENFORCEMENT_MANAGE, "project"
     ),
+    "fundus_api.get_lab_units": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
+    "fundus_api.get_hospital": _exact(
+        Action.UPLOAD_LAB_UNIT_VIEW, "upload_lab_unit"
+    ),
+    **{
+        endpoint: _exact(Action.JOBS_RESULT_VIEW, "job")
+        for endpoint in (
+            "fundus_api.get_upload_status",
+            "fundus_api.direct_upload_status",
+        )
+    },
+    **{
+        endpoint: _screen(Action.UPLOAD_WORKSPACE_VIEW)
+        for endpoint in (
+            "fundus_api.direct_upload_form",
+            "fundus_api.direct_upload_workspace",
+        )
+    },
+    "fundus_api.create_direct_upload_web": _exact(
+        Action.UPLOAD_CREATE, "upload_target"
+    ),
     # Browser authentication. CAPTCHA generation and validation, reset workflow
     # rules, and password policy remain application concerns. Authz classifies
     # only public entry, exact signed reset credentials, and the current user.

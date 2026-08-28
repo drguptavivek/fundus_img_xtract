@@ -193,6 +193,7 @@ upload.direct.batch.update,direct_upload_batch,scoped_role|admin_break_glass,ide
 upload.direct.edit_image,image,scoped_role|admin_break_glass,identifier_in_place,optional
 upload.direct.update,direct_image_upload,scoped_role|admin_break_glass,identifier_in_place,optional
 upload.direct.view,direct_image_upload,scoped_role|admin_break_glass,identifier_in_place,optional
+upload.lab_unit.view,upload_lab_unit,scoped_role|admin_break_glass,masked,optional
 upload.pregraded.create,upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
 upload.pregraded.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional
 upload.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional

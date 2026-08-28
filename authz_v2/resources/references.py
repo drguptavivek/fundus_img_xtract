@@ -161,6 +161,14 @@ class ProjectAllocationTargetRef:
     user_id: int | None = None
 
 
+@dataclass(frozen=True)
+class UploadLabUnitRef:
+    """Lab Unit option in either classical or explicit project context."""
+
+    lab_unit_id: int
+    project_id: int | None = None
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

@@ -27,6 +27,7 @@ from authz_v2.resources.adapters import (
     resolve_s3_sync_record,
     resolve_sensitive_audit_event,
     resolve_system_operation,
+    resolve_upload_lab_unit,
     resolve_task_backfill_target,
     resolve_workbench_session,
     resolve_workbench_acquisition,
@@ -42,6 +43,7 @@ from authz_v2.resources.references import (
     LookupRecordRef,
     JobTokenRef,
     ProjectAllocationTargetRef,
+    UploadLabUnitRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
     RemoteInferenceBatchRef,
@@ -467,3 +469,47 @@ def test_project_allocation_target_binds_project_site_user_and_existing_id(
     )
     assert proposed is not None and existing is not None
     assert proposed.context.scope == existing.context.scope == scope
+
+
+def test_upload_lab_unit_requires_explicit_valid_project_context(monkeypatch):
+    project_scope = ScopeDTO(
+        ScopeType.PROJECT_LAB_UNIT,
+        91,
+        project_id=7,
+        lab_unit_id=3,
+        project_lab_unit_id=91,
+    )
+    classical_scope = ScopeDTO(
+        ScopeType.LAB_UNIT, 3, hospital_id=2, lab_unit_id=3
+    )
+    monkeypatch.setattr(
+        resource_adapters,
+        "resolve_scope",
+        lambda _db, *, project_id, lab_unit_id: (
+            project_scope
+            if (project_id, lab_unit_id) == (7, 3)
+            else classical_scope
+            if (project_id, lab_unit_id) == (None, 3)
+            else None
+        ),
+    )
+
+    class Database:
+        def get(self, model, resource_id):
+            return (
+                SimpleNamespace(id=3, hospital_id=2)
+                if model.__name__ == "LabUnit" and resource_id == 3
+                else None
+            )
+
+    db = Database()
+    assert resolve_upload_lab_unit(db, 3) is None
+    assert resolve_upload_lab_unit(db, UploadLabUnitRef(3, 8)) is None
+    assert (
+        resolve_upload_lab_unit(db, UploadLabUnitRef(3, 7)).context.scope
+        == project_scope
+    )
+    assert (
+        resolve_upload_lab_unit(db, UploadLabUnitRef(3)).context.scope
+        == classical_scope
+    )

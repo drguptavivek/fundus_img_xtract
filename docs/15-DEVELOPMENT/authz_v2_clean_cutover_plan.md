@@ -968,6 +968,21 @@ pattern.
   literals, 212 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 18: browser direct-upload API
+
+- All seven direct-upload APIs distinguish self-user option lookup, exact
+  project/classical Lab Unit disclosure, workspace admission, exact upload
+  target creation, and owned/scoped job status.
+- Project-only Lab Unit disclosure requires the caller to supply project
+  context so the resolver can prove an active persisted project-site scope;
+  omitting required project facts denies instead of falling back to classical
+  hospital authority.
+- Upload-profile selection and camera, disease, area, mydriatic, file, quota,
+  duplicate, and inference validation remain in the direct-upload service.
+- The reviewed inventory is now 431 v2 HTTP consumers, 44 legacy action
+  literals, 205 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

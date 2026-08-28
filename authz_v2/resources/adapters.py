@@ -27,6 +27,7 @@ from authz_v2.resources.references import (
     LookupRecordRef,
     JobTokenRef,
     ProjectAllocationTargetRef,
+    UploadLabUnitRef,
     RemoteInferenceBatchRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
@@ -551,6 +552,39 @@ def resolve_remote_inference_batch(db, reference: object) -> ResourceTarget | No
     )
 
 
+def resolve_upload_lab_unit(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, UploadLabUnitRef) or not is_positive_int(
+        reference.lab_unit_id
+    ):
+        return None
+    if reference.project_id is not None and not is_positive_int(
+        reference.project_id
+    ):
+        return None
+    scope = resolve_scope(
+        db,
+        project_id=reference.project_id,
+        lab_unit_id=reference.lab_unit_id,
+    )
+    if scope is None:
+        return None
+    lab_unit = db.get(LabUnit, reference.lab_unit_id)
+    if lab_unit is None:
+        return None
+    return ResourceTarget(
+        lab_unit,
+        ResourceContextDTO(
+            "upload_lab_unit",
+            (
+                f"project:{reference.project_id}:lab:{reference.lab_unit_id}"
+                if reference.project_id is not None
+                else f"lab:{reference.lab_unit_id}"
+            ),
+            scope,
+            state={"target_active": True, "domain_valid": True},
+            resolved=True,
+        ),
+    )
 DIRECT_UPLOAD_BATCH_ADAPTER = ResourceAdapter(
     "direct_upload_batch",
     _resolve_direct_upload_batch,
@@ -561,6 +595,11 @@ DIRECT_UPLOAD_BATCH_ADAPTER = ResourceAdapter(
 REMOTE_INFERENCE_BATCH_ADAPTER = ResourceAdapter(
     "remote_inference_batch",
     resolve_remote_inference_batch,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+)
+UPLOAD_LAB_UNIT_ADAPTER = ResourceAdapter(
+    "upload_lab_unit",
+    resolve_upload_lab_unit,
     lambda _db, _principal, _action, _grants, query: query.where(false()),
 )
 GRADING_TASK_ADAPTER = _model_adapter("grading_task", GradingTask)
@@ -1686,6 +1725,7 @@ RESOURCE_ADAPTERS = (
     DIRECT_IMAGE_ADAPTER,
     DIRECT_UPLOAD_BATCH_ADAPTER,
     REMOTE_INFERENCE_BATCH_ADAPTER,
+    UPLOAD_LAB_UNIT_ADAPTER,
     DISCREPANCY_ADAPTER,
     EMAIL_SETTINGS_ADAPTER,
     ENCOUNTER_ADAPTER,

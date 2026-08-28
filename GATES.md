@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 17 - project grader allocations
+# Gates: Authorization v2 vertical slice 18 - browser direct-upload API
 
-- [x] G1: All 7 project grader-allocation routes have explicit contracts.
-  CHECK: grading-allocation inventory family test
-  EVIDENCE: inventory is 424 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 7 browser direct-upload API routes have explicit contracts.
+  CHECK: direct-upload API inventory family test
+  EVIDENCE: inventory is 431 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Proposed allocations bind an existing user to one persisted project site.
-  CHECK: project-allocation target resolver tests
-  EVIDENCE: missing users and unknown project-site scopes deny
+- [x] G2: Lab Unit disclosure binds classical or explicit project context.
+  CHECK: upload Lab Unit resolver tests
+  EVIDENCE: invalid or unknown project context denies; valid classical and project-site scopes remain distinct
 
-- [x] G3: Existing allocation mutations bind both route identifiers.
-  CHECK: project-allocation target resolver tests
-  EVIDENCE: an allocation whose persisted project differs from the route project denies
+- [x] G3: Upload creation and job reads use exact target contracts.
+  CHECK: route resolver assertions
+  EVIDENCE: creation uses upload_target and status endpoints use job
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: capacity/scope compatibility, grader eligibility, derived targets, coverage, and activation remain in grading_allocation
+  EVIDENCE: profile, camera, disease, area, mydriatic, file, quota, duplicate, and inference rules remain in services.uploads.direct
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1120 tests; inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1127 tests; generated parity and inventory checks pass

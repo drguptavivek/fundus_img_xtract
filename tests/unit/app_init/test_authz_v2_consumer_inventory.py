@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 424,
+        "authz_v2": 431,
         "legacy_action_literal": 44,
-        "legacy_unmapped": 212,
+        "legacy_unmapped": 205,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "4c23784f617263dd7d4a715b49254ed0733e6080b5147926f6eb45a33d66b203"
+        == "15abaaa1ed04a22936f6715d9e361d95be57e9ab7e9a693ab5967ff2fdcc611d"
     )
 
 
@@ -147,6 +147,26 @@ def test_project_grading_allocation_family_is_exact_and_scope_bound():
         ].resolver
         == "project"
     )
+
+
+def test_direct_upload_api_family_has_exact_user_scope_upload_and_job_contracts():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/direct_uploads.py"
+    ]
+    assert len(family) == 7
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["fundus_api.get_lab_units"].resolver == "user"
+    assert ROUTE_POLICIES["fundus_api.get_hospital"].resolver == "upload_lab_unit"
+    assert (
+        ROUTE_POLICIES["fundus_api.create_direct_upload_web"].resolver
+        == "upload_target"
+    )
+    assert ROUTE_POLICIES["fundus_api.direct_upload_status"].resolver == "job"
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

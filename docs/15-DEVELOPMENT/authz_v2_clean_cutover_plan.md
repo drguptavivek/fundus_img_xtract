@@ -1438,6 +1438,20 @@ pattern.
   literals, 30 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 239 actions.
 
+### Foundation boundary hardening: no application-domain policy
+
+- The Authz v2 core is structurally isolated from application models and
+  services. An executable architecture test rejects any absolute import from
+  outside `authz_v2` except Python standard-library modules.
+- Authz resource adapters may resolve identity, exact resource, scope,
+  ownership, participant/delegation relationships, credential validity,
+  disclosure class, and authorization-policy flags. They must not interpret
+  disease or capture taxonomy, camera/area/mydriatic metadata, image quality,
+  diagnosis, encounter/grading workflow state, or upload/file content.
+- Route and service code remains responsible for validating those domain
+  details after authorization. Supplying them to an Authz decision cannot make
+  an otherwise unauthorized decision pass.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

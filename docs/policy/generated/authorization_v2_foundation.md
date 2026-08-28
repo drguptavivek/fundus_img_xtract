@@ -1067,6 +1067,15 @@ Resource: `inference_target`; disclosure: `masked`; audit: `optional`.
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 - `stored_automation_rule`: SessionChannelRequirement(channels=automation), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=automation_rule; attributes=(('target_matches', True),); require_subject=False; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
 
+### `inference.wai.run.retry`
+
+Authorize inference.wai.run.retry.
+
+Resource: `inference_result`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `inference.wai.summary`
 
 Authorize inference.wai.summary.

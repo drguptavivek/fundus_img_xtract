@@ -1614,6 +1614,12 @@ _resource(
     INFERENCE_ROW_ROLES,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_resource(
+    "inference.wai.run.retry",
+    "inference_result",
+    frozenset({Role.ADMIN, Role.LOCAL_ADMIN, Role.DATA_MANAGER}),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
 
 _resource(
     "notifications.send",

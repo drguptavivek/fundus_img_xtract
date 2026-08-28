@@ -1194,6 +1194,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "analytics.hospital_dashboard_encounter_view",
         )
     },
+    **{
+        endpoint: _screen(Action.INFERENCE_WAI_SUMMARY)
+        for endpoint in (
+            "fundus_api.wai_api_statistics_options",
+            "fundus_api.wai_api_statistics_summary",
+            "fundus_api.wai_api_statistics_images",
+            "fundus_api.wai_api_statistics_encounters",
+        )
+    },
+    "fundus_api.wai_api_statistics_retry": _exact(
+        Action.INFERENCE_WAI_RUN_RETRY, "inference_result"
+    ),
     "jobs.list_recent_jobs": _screen(Action.JOBS_VIEW),
     **{
         endpoint: _exact(Action.JOBS_RESULT_VIEW, "job")

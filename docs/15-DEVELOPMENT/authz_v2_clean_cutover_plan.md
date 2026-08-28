@@ -1173,6 +1173,18 @@ pattern.
   literals, 119 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 219 actions.
 
+### Implemented vertical slice 34: WAI statistics API
+
+- The four WAI statistics option, summary, image-row, and encounter-row reads
+  now require explicit WAI analytics admission. Their returned rows still need
+  the registered SQL query-policy cutover before this family is release-ready.
+- Retry resolves the exact persisted inference run. Whether that run failed,
+  represents the supported inference kind, and can be requeued remains in the
+  WAI statistics application service rather than Authz.
+- The reviewed inventory is now 527 v2 HTTP consumers, 39 legacy action
+  literals, 114 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 220 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

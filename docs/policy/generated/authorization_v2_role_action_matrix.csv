@@ -125,6 +125,7 @@ inference.wai.retrospective.run,inference_target,scoped_role|admin_break_glass|s
 inference.wai.retry,job,scoped_role|admin_break_glass|stored_automation_rule,masked,required
 inference.wai.rows,inference_result,scoped_role|admin_break_glass,identifier_in_place,optional
 inference.wai.run,inference_target,scoped_role|admin_break_glass|stored_automation_rule,masked,optional
+inference.wai.run.retry,inference_result,scoped_role|admin_break_glass,identifier_in_place,optional
 inference.wai.summary,screen,authenticated_screen|admin_break_glass,masked,optional
 intra_rater.batch.create,intra_rater_batch_target,scoped_role|admin_break_glass,masked,optional
 intra_rater.batch.view,screen,authenticated_screen|admin_break_glass,masked,optional

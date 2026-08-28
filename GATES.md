@@ -1,21 +1,21 @@
-# Authz v2 slice 33: hospital analytics dashboard
+# Authz v2 slice 34: WAI statistics API
 
-- [x] G1 All six hospital-dashboard routes have explicit screen-admission contracts.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_hospital_dashboard_routes_are_screen_admission_only -q'
+- [x] G1 All five WAI statistics routes have explicit Authz v2 contracts.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_wai_statistics_routes_separate_admission_rows_and_retry -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes; all six page/JSON routes classify as Authz v2.
+  EVIDENCE: Focused family test passes; all five routes classify as Authz v2.
 
-- [x] G2 Screen admission is not represented as row authorization.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_hospital_dashboard_routes_are_screen_admission_only -q'
+- [x] G2 Statistics reads are screen admission while retry resolves the exact persisted inference run.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py::test_legacy_manifest_maps_every_action_exactly_once tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_wai_statistics_routes_separate_admission_rows_and_retry -q'
   EXPECT: exit 0
-  EVIDENCE: Family test confirms EndpointMode.SCREEN with no exact-resource resolver for all six routes.
+  EVIDENCE: Four reads are screen mode without a resolver; retry uses inference.wai.run.retry with inference_result.
 
-- [x] G3 Inventory baseline and fingerprint are current.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
+- [x] G3 Retry eligibility and statistics filters remain application-domain logic.
+  CHECK: ! rg -n 'inference_status|result_type|capture_start|capture_end' authz_v2
   EXPECT: exit 0
-  EVIDENCE: Inventory passes at 522 explicit routes, 119 unmapped routes, and fingerprint 613a96633e5f0b5aa4e515524f3745e2107c77a165f30f7c97c1e01b28176a3a.
+  EVIDENCE: No inference status, result type, or capture-date filter predicates occur under authz_v2.
 
-- [x] G4 Documentation records separate query-policy work.
-  CHECK: rg -n 'hospital analytics dashboard|does not authorize returned rows' docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md
+- [x] G4 Inventory, generated catalogue artifacts, and documentation are current.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_generated_policy_docs.py tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
   EXPECT: exit 0
-  EVIDENCE: Plan slice 33 explicitly states screen admission does not authorize rows and records the pending SQL query-policy migration.
+  EVIDENCE: Five contract/generated-doc/inventory tests pass; inventory is 527 explicit and 114 unmapped; catalogue is 220.

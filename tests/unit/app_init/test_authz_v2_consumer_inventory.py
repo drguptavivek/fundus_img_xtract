@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 522,
+        "authz_v2": 527,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 119,
+        "legacy_unmapped": 114,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1024,6 +1024,31 @@ def test_hospital_dashboard_routes_are_screen_admission_only():
         and ROUTE_POLICIES[endpoint].resolver is None
         for endpoint in names
     )
+
+
+def test_wai_statistics_routes_separate_admission_rows_and_retry():
+    reads = {
+        "fundus_api.wai_api_statistics_options",
+        "fundus_api.wai_api_statistics_summary",
+        "fundus_api.wai_api_statistics_images",
+        "fundus_api.wai_api_statistics_encounters",
+    }
+    retry = "fundus_api.wai_api_statistics_retry"
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.name in reads | {retry}
+    ]
+    assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        and ROUTE_POLICIES[endpoint].resolver is None
+        for endpoint in reads
+    )
+    assert ROUTE_POLICIES[retry].action is Action.INFERENCE_WAI_RUN_RETRY
+    assert ROUTE_POLICIES[retry].resolver == "inference_result"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 
 from authz_v2.core.catalogue import CATALOGUE
-from authz_v2.core.principals import PrincipalDTO
-from authz_v2.core.resources import ScopeDTO
+from authz_v2.core.principals import EvaluationFactsDTO, PrincipalDTO, RoleGrantDTO
+from authz_v2.core.resources import ResourceContextDTO, ScopeDTO, ScopeSetDTO
 from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
-from authz_v2.resources.adapters import TypedResourceRef
+from authz_v2.resources.adapters import TypedResourceRef, resolve_mobile_session
 from authz_v2.resources.composition import register_core_adapters
-from authz_v2.resources.references import AutomationTargetRef
-from authz_v2.resources.registry import ResourceRegistry
+from authz_v2.resources.references import (
+    AdminMobileSessionTargetRef,
+    AutomationTargetRef,
+)
+from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
 from authz_v2.resources.scoping import scope_model_query
 from authz_v2.resources.upload_targets import UploadTargetRef
+from authz_v2.resources.users import user_creation_facts
 from models import DirectImageUpload
 
 
@@ -116,3 +122,81 @@ def test_classical_scope_filter_excludes_project_owned_rows():
     sql = str(query)
     assert "direct_image_uploads.project_id IS NULL" in sql
     assert "direct_image_uploads.hospital_id IN" in sql
+
+
+def test_user_creation_requires_delegable_roles_inside_actor_scope():
+    hospital = ScopeDTO(ScopeType.HOSPITAL, 10, hospital_id=10)
+    other_hospital = ScopeDTO(ScopeType.HOSPITAL, 11, hospital_id=11)
+    target = ResourceTarget(
+        ((Role.DATA_MANAGER, hospital),),
+        ResourceContextDTO("user_creation_target", "new:hospital:10", hospital),
+    )
+
+    def creation_facts(actor_role, actor_scope):
+        grant = RoleGrantDTO(1, actor_role, actor_scope)
+        return EvaluationFactsDTO(
+            PrincipalDTO(1, True, True),
+            resource=target.context,
+            active_roles=frozenset({actor_role}),
+            role_grants=(grant,),
+            reachable_scopes=ScopeSetDTO(frozenset({actor_scope})),
+            exact_resource=True,
+        )
+
+    admin = creation_facts(Role.ADMIN, ScopeDTO(ScopeType.SYSTEM))
+    assert user_creation_facts(None, admin.principal, None, target, admin).domain_valid
+
+    user_manager = creation_facts(Role.USER_MANAGER, hospital)
+    assert not user_creation_facts(
+        None, user_manager.principal, None, target, user_manager
+    ).domain_valid
+
+    cross_hospital_target = ResourceTarget(
+        ((Role.DATA_MANAGER, other_hospital),), target.context
+    )
+    assert not user_creation_facts(
+        None, user_manager.principal, None, cross_hospital_target, user_manager
+    ).domain_valid
+
+
+def test_user_creation_never_delegates_admin_and_only_admin_delegates_leadership():
+    system = ScopeDTO(ScopeType.SYSTEM)
+    admin_grant = RoleGrantDTO(1, Role.ADMIN, system)
+    base = EvaluationFactsDTO(
+        PrincipalDTO(1, True, True),
+        active_roles=frozenset({Role.ADMIN}),
+        role_grants=(admin_grant,),
+        reachable_scopes=ScopeSetDTO(frozenset({system})),
+        exact_resource=True,
+    )
+    for requested_role, requested_scope in (
+        (Role.ADMIN, system),
+        (Role.PROJECT_PI, ScopeDTO(ScopeType.PROJECT, 40, project_id=40)),
+        (
+            Role.SITE_PI,
+            ScopeDTO(
+                ScopeType.PROJECT_LAB_UNIT,
+                30,
+                hospital_id=10,
+                lab_unit_id=20,
+                project_id=40,
+                project_lab_unit_id=30,
+            ),
+        ),
+    ):
+        target = ResourceTarget(
+            ((requested_role, requested_scope),),
+            ResourceContextDTO("user_creation_target", "new:hospital:10", requested_scope),
+        )
+        result = user_creation_facts(None, base.principal, None, target, base)
+        assert result.domain_valid is (requested_role is not Role.ADMIN)
+
+
+def test_admin_mobile_session_reference_rejects_path_user_mismatch():
+    class SessionOnlyDatabase:
+        def get(self, model, resource_id):
+            assert resource_id == "session-1"
+            return SimpleNamespace(user_id=7)
+
+    reference = AdminMobileSessionTargetRef(user_id=8, session_id="session-1")
+    assert resolve_mobile_session(SessionOnlyDatabase(), reference) is None

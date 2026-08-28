@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 154 | 46 | 480 |
+| Flask/API route rules | 680 | 161 | 45 | 474 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 154 | 46 | 1,505 |
+| Total | 1,705 | 161 | 45 | 1,499 |
 
-Reviewed identity fingerprint: `00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64`.
+Reviewed identity fingerprint: `1f9ad56c816eb93e41613055b188422475f9b8d54a0f85ceae6e9c87fab3224f`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -64,6 +64,10 @@ Both project role-grant API routes now have complete method-specific contracts. 
 
 Seven admin user/security read-workspace routes now have explicit contracts. User collections and activity use Admin/Local Admin screen admission only; their SQL remains responsible for reproducing hospital scoping and a screen receipt cannot authorize an individual row. User detail binds the exact stored user. Role definitions, role usage, and route diagnostics remain Admin-only security screens and convey no role-mutation authority.
 
+### Vertical slice 9b: admin user and device mutations
+
+Seven admin mutation routes now separate page admission from exact mutation authority. User edits, activation changes, password resets, enrolment-code issue, and device status changes bind the exact stored user; session revocation binds the stored mobile session and requires the URL user/session pair to agree. Account creation has a dedicated exact target containing the hospital and every requested scoped grant. Missing role/scope facts, cross-hospital scope, roles outside their permitted scope types, and non-delegable grants deny. In particular, no caller can create another Admin grant, and only Admin can include Project PI or Site PI grants.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -90,4 +94,4 @@ Seven admin user/security read-workspace routes now have explicit contracts. Use
 
 ## Remaining cutover work
 
-The remaining 527 explicitly unmapped runtime consumers (480 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 521 explicitly unmapped runtime consumers (474 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

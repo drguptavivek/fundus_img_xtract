@@ -179,6 +179,7 @@ MANDATORY_AUDIT = frozenset(
         "account.notifications.update",
         "account.mobile_sessions.revoke",
         "auth.password_reset.complete",
+        "admin.users.create",
         "admin.users.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
@@ -720,6 +721,13 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.users.create",
+    "user_creation_target",
+    USER_ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
 _resource(
     "admin.users.view",
     "user",

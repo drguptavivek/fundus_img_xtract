@@ -21,15 +21,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 154,
-        "legacy_action_literal": 46,
-        "legacy_unmapped": 480,
+        "authz_v2": 161,
+        "legacy_action_literal": 45,
+        "legacy_unmapped": 474,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64"
+        == "1f9ad56c816eb93e41613055b188422475f9b8d54a0f85ceae6e9c87fab3224f"
     )
 
 
@@ -173,6 +173,33 @@ def test_admin_user_security_read_slice_is_classified():
     family = [row for row in rows if row.kind == "http" and row.name in names]
     assert len(family) == len(names) == 7
     assert {row.classification for row in family} == {"authz_v2"}
+
+
+def test_admin_user_mutations_are_exact_and_method_specific():
+    names = {
+        "admin.add_user",
+        "admin.change_password",
+        "admin.edit_user",
+        "admin.users_update",
+        "admin.revoke_mobile_session",
+        "admin.issue_device_enrolment_code",
+        "admin.update_mobile_device_status",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 7
+    assert {row.classification for row in family} == {"authz_v2"}
+
+    for endpoint in ("admin.add_user", "admin.change_password", "admin.edit_user"):
+        policy = ROUTE_POLICIES[endpoint]
+        assert isinstance(policy, dict)
+        assert policy["GET"].mode is EndpointMode.SCREEN or (
+            endpoint == "admin.edit_user"
+            and policy["GET"].mode is EndpointMode.PROTECTED
+        )
+        assert policy["POST"].mode is EndpointMode.PROTECTED
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

@@ -66,6 +66,25 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     "admin.user_detail": _exact(Action.ADMIN_USERS_VIEW, "user"),
+    "admin.add_user": {
+        "GET": _screen(Action.ADMIN_USERS_WORKSPACE_VIEW),
+        "POST": _exact(Action.ADMIN_USERS_CREATE, "user_creation_target"),
+    },
+    "admin.change_password": {
+        "GET": _screen(Action.ADMIN_SECURITY_VIEW),
+        # The request adapter resolves the submitted username to the stored user.
+        "POST": _exact(Action.ADMIN_USERS_MANAGE, "user"),
+    },
+    "admin.edit_user": {
+        "GET": _exact(Action.ADMIN_USERS_VIEW, "user"),
+        "POST": _exact(Action.ADMIN_USERS_MANAGE, "user"),
+    },
+    "admin.users_update": _exact(Action.ADMIN_USERS_MANAGE, "user"),
+    "admin.revoke_mobile_session": _exact(
+        Action.API_MOBILE_SESSION_MANAGE, "mobile_session"
+    ),
+    "admin.issue_device_enrolment_code": _exact(Action.ADMIN_USERS_MANAGE, "user"),
+    "admin.update_mobile_device_status": _exact(Action.ADMIN_USERS_MANAGE, "user"),
     "fundus_api.project_role_grants": {
         "GET": _exact(Action.PROJECT_GRANTS_VIEW, "project"),
         "POST": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),

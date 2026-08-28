@@ -27,7 +27,7 @@ from authz_v2.resources.relationships import (
     upload_profile_facts,
 )
 from authz_v2.resources.upload_targets import resolve_project_upload_target
-from authz_v2.resources.users import USER_ADAPTER
+from authz_v2.resources.users import USER_ADAPTER, USER_CREATION_TARGET_ADAPTER
 from authz_v2.services.projections import upload_projection, workspace_projection
 
 
@@ -35,6 +35,7 @@ from authz_v2.services.projections import upload_projection, workspace_projectio
 def _core_adapters() -> tuple[ResourceAdapter, ...]:
     return (
         USER_ADAPTER,
+        USER_CREATION_TARGET_ADAPTER,
         replace(
             PROJECT_ADAPTER,
             facts_provider=compose_facts(

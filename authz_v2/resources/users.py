@@ -6,12 +6,13 @@ from dataclasses import replace
 
 from sqlalchemy import false
 
-from authz_v2.core.resources import ResourceContextDTO
-from authz_v2.core.roles import ScopeType
-from authz_v2.resources.references import is_positive_int
+from authz_v2.core.resources import ResourceContextDTO, ScopeDTO
+from authz_v2.core.roles import Role, ScopeType, may_delegate, role_accepts_scope
+from authz_v2.repositories.grants import GrantRepository
+from authz_v2.resources.references import UserCreationTargetRef, is_positive_int
 from authz_v2.resources.registry import ResourceAdapter, ResourceTarget
 from authz_v2.resources.scoping import admin_has_system_scope, resolve_scope
-from models import User
+from models import Hospital, User
 
 
 def resolve_user(db, resource_id: object) -> ResourceTarget | None:
@@ -51,3 +52,70 @@ def user_facts(_db, _principal, _action, target, facts):
 
 
 USER_ADAPTER = ResourceAdapter("user", resolve_user, scope_users, user_facts)
+
+
+def resolve_user_creation_target(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, UserCreationTargetRef):
+        return None
+    if not is_positive_int(reference.hospital_id):
+        return None
+    hospital = db.get(Hospital, reference.hospital_id)
+    if hospital is None:
+        return None
+
+    repository = GrantRepository(db)
+    resolved_grants: list[tuple[Role, object]] = []
+    for requested in reference.requested_grants:
+        if not isinstance(requested, tuple) or len(requested) != 2:
+            return None
+        role, requested_scope = requested
+        if (
+            not isinstance(role, Role)
+            or not isinstance(requested_scope, ScopeDTO)
+            or not role_accepts_scope(
+            role, requested_scope.scope_type
+            )
+        ):
+            return None
+        scope = repository.resolve_scope(requested_scope)
+        if scope is None or scope.hospital_id != hospital.id:
+            return None
+        resolved_grants.append((role, scope))
+
+    scope = repository.resolve_scope(
+        ScopeDTO(ScopeType.HOSPITAL, hospital.id, hospital_id=hospital.id)
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        tuple(resolved_grants),
+        ResourceContextDTO(
+            "user_creation_target",
+            f"new:hospital:{hospital.id}",
+            scope,
+            state={"domain_valid": False},
+            resolved=True,
+        ),
+    )
+
+
+def user_creation_facts(_db, _principal, _action, target, facts):
+    allowed = all(
+        any(
+            may_delegate(actor_grant.role, requested_role)
+            and actor_grant.scope.contains(
+                requested_scope, allow_system=actor_grant.role is Role.ADMIN
+            )
+            for actor_grant in facts.role_grants
+        )
+        for requested_role, requested_scope in target.value
+    )
+    return replace(facts, domain_valid=allowed)
+
+
+USER_CREATION_TARGET_ADAPTER = ResourceAdapter(
+    "user_creation_target",
+    resolve_user_creation_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    user_creation_facts,
+)

@@ -13,6 +13,7 @@ from authz_v2.domain.models import (
     PasswordResetCredential,
 )
 from authz_v2.resources.references import (
+    AdminMobileSessionTargetRef,
     AutomationTargetRef,
     is_positive_int,
     is_stable_resource_id,
@@ -338,10 +339,18 @@ def resolve_dataset(db, resource_id: object) -> ResourceTarget | None:
 
 
 def resolve_mobile_session(db, resource_id: object) -> ResourceTarget | None:
+    expected_user_id = None
+    if isinstance(resource_id, AdminMobileSessionTargetRef):
+        if not is_positive_int(resource_id.user_id):
+            return None
+        expected_user_id = resource_id.user_id
+        resource_id = resource_id.session_id
     if not is_stable_resource_id(resource_id):
         return None
     session = db.get(MobileAuthSession, resource_id)
     if session is None:
+        return None
+    if expected_user_id is not None and session.user_id != expected_user_id:
         return None
     user = db.get(User, session.user_id)
     if user is None:

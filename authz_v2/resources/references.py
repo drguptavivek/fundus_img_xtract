@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from authz_v2.core.resources import ScopeDTO
+from authz_v2.core.roles import Role
+
 
 @dataclass(frozen=True)
 class AutomationTargetRef:
@@ -11,6 +14,22 @@ class AutomationTargetRef:
 
     target: object
     automation_rule_id: int
+
+
+@dataclass(frozen=True)
+class UserCreationTargetRef:
+    """Requested account scope and grants, supplied together or denied."""
+
+    hospital_id: int
+    requested_grants: tuple[tuple[Role, ScopeDTO], ...]
+
+
+@dataclass(frozen=True)
+class AdminMobileSessionTargetRef:
+    """Bind an admin session mutation to both URL identifiers."""
+
+    user_id: int
+    session_id: str
 
 
 def is_positive_int(value: object) -> bool:

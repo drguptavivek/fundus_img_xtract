@@ -141,6 +141,61 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "admin.manual_refresh": _exact(
         Action.ADMIN_SYSTEM_OPERATION, "system_operation"
     ),
+    "admin.email_settings_list": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.create_email_settings": {
+        "GET": _screen(Action.ADMIN_SECURITY_VIEW),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.edit_email_settings": {
+        "GET": _exact(Action.ADMIN_EMAIL_SETTINGS_VIEW, "email_settings_config"),
+        "POST": _exact(Action.ADMIN_EMAIL_SETTINGS_MANAGE, "email_settings_config"),
+    },
+    **{
+        endpoint: _exact(
+            Action.ADMIN_EMAIL_SETTINGS_MANAGE, "email_settings_config"
+        )
+        for endpoint in (
+            "admin.test_email_settings",
+            "admin.delete_email_settings",
+            "admin.activate_email_settings",
+            "admin.api_test_current_email_config",
+            "admin.send_sample_email",
+        )
+    },
+    "admin.s3_configs_list": _screen(Action.ADMIN_S3_MANAGE),
+    "admin.s3_configs_api_list": _screen(Action.ADMIN_S3_MANAGE),
+    "admin.s3_config_create": {
+        "GET": _screen(Action.ADMIN_S3_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.s3_config_edit": {
+        "GET": _exact(Action.ADMIN_S3_CONFIG_VIEW, "s3_config"),
+        "POST": _exact(Action.ADMIN_S3_CONFIG_MANAGE, "s3_config"),
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_S3_CONFIG_MANAGE, "s3_config")
+        for endpoint in (
+            "admin.s3_config_delete",
+            "admin.s3_config_activate",
+            "admin.s3_config_test_connection",
+            "admin.s3_config_rotate_pepper",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation")
+        for endpoint in (
+            "admin.s3_config_api_test_connection_modal",
+            "admin.s3_config_api_create",
+        )
+    },
+    "admin.admin_settings": {
+        "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.upload_settings": {
+        "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

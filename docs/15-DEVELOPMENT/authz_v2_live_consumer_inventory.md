@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 206 | 45 | 429 |
+| Flask/API route rules | 680 | 226 | 45 | 409 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 206 | 45 | 1,454 |
+| Total | 1,705 | 226 | 45 | 1,434 |
 
-Reviewed identity fingerprint: `6c9903b072a21bf00a9f4ccda3ee860826342b5fa1a8ad66af0966d4d2c09f91`.
+Reviewed identity fingerprint: `9546c039ff076711e0ae4f4add4a4eb7498f318b31d04a7f5543e486529941d7`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -76,6 +76,10 @@ All 21 system-status, CVE, and package-update routes now have explicit contracts
 
 All 24 thumbnail-maintenance, materialized-view, and image-metadata routes now have explicit contracts. Read-only surfaces retain their existing Admin/Data Manager, Admin/Local Admin, or Admin-only boundaries. Mutations use three distinct exact actions so a status receipt cannot start work and one operator class cannot borrow another class's authority: storage maintenance permits Admin/Data Manager, metadata queue control permits Admin/Local Admin, and materialized-view refresh remains Admin-only. Every mutation requires a closed server-recognized operation identifier.
 
+### Vertical slice 9e: credential and application configuration
+
+All 20 email, S3, and application-setting routes now have explicit method-aware contracts. Lists and blank creation forms are screen admission only. Stored email and S3 configuration reads and mutations bind the exact persisted configuration; active-email tests and sample delivery must resolve the single active stored configuration. Candidate creation/test operations and application-setting updates require an exact closed system-operation reference. Consequently a list receipt, missing configuration ID, unrecognized operation, absent active configuration, or candidate body without its declared operation denies before credential-bearing behavior executes.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -102,4 +106,4 @@ All 24 thumbnail-maintenance, materialized-view, and image-metadata routes now h
 
 ## Remaining cutover work
 
-The remaining 476 explicitly unmapped runtime consumers (429 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 456 explicitly unmapped runtime consumers (409 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

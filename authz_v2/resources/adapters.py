@@ -14,6 +14,7 @@ from authz_v2.domain.models import (
     PasswordResetCredential,
 )
 from authz_v2.resources.references import (
+    ActiveConfigurationRef,
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
     SystemOperationRef,
@@ -42,6 +43,7 @@ from models import (
     DatasetShare,
     DiabeticRetinopathyReport,
     DirectImageUpload,
+    EmailSettings,
     EncounterFile,
     EncounterFilePDF,
     EncounterSetImage,
@@ -53,6 +55,7 @@ from models import (
     MobileAuthSession,
     PatientEncounters,
     ProjectGraderAllocation,
+    S3Config,
     User,
 )
 from project_configuration.models import ProjectLabUnit
@@ -567,6 +570,11 @@ _SYSTEM_OPERATIONS = frozenset(
         "metadata_clear_queued",
         "metadata_clear_running",
         "materialized_views_refresh",
+        "email_settings_create",
+        "s3_config_create",
+        "s3_config_test_candidate",
+        "app_settings_update",
+        "upload_settings_update",
     }
 )
 
@@ -591,6 +599,72 @@ def resolve_system_operation(_db, reference: object) -> ResourceTarget | None:
 SYSTEM_OPERATION_ADAPTER = ResourceAdapter(
     "system_operation",
     resolve_system_operation,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
+
+
+def resolve_email_settings(db, reference: object) -> ResourceTarget | None:
+    if isinstance(reference, ActiveConfigurationRef):
+        if reference.kind != "email_settings":
+            return None
+        value = db.execute(
+            select(EmailSettings).where(EmailSettings.is_active.is_(True))
+        ).scalar_one_or_none()
+    else:
+        if not is_positive_int(reference):
+            return None
+        value = db.get(EmailSettings, reference)
+    if value is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "email_settings_config",
+            value.id,
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+EMAIL_SETTINGS_ADAPTER = ResourceAdapter(
+    "email_settings_config",
+    resolve_email_settings,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
+
+
+def resolve_s3_config(db, reference: object) -> ResourceTarget | None:
+    if not is_positive_int(reference):
+        return None
+    value = db.get(S3Config, reference)
+    if value is None:
+        return None
+    scope = resolve_scope(db, hospital_id=value.hospital_id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "s3_config",
+            value.id,
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+S3_CONFIG_ADAPTER = ResourceAdapter(
+    "s3_config",
+    resolve_s3_config,
     lambda _db, _principal, _action, _grants, query: query.where(false()),
     lambda _db, _principal, _action, _target, facts: replace(
         facts, domain_valid=True
@@ -632,6 +706,7 @@ RESOURCE_ADAPTERS = (
     DATASET_ADAPTER,
     DATASET_SHARE_ADAPTER,
     DIRECT_IMAGE_ADAPTER,
+    EMAIL_SETTINGS_ADAPTER,
     DIRECT_UPLOAD_BATCH_ADAPTER,
     DISCREPANCY_ADAPTER,
     ENCOUNTER_ADAPTER,
@@ -650,6 +725,7 @@ RESOURCE_ADAPTERS = (
     PROJECT_ALLOCATION_TARGET_ADAPTER,
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
+    S3_CONFIG_ADAPTER,
     SYSTEM_OPERATION_ADAPTER,
     UPLOAD_JOB_ADAPTER,
     UPLOAD_PROFILE_ADAPTER,

@@ -184,6 +184,8 @@ MANDATORY_AUDIT = frozenset(
         "admin.system.operation",
         "admin.storage.operation",
         "admin.metadata.operation",
+        "admin.email_settings.manage",
+        "admin.s3_config.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -725,6 +727,32 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.email_settings.view",
+    "email_settings_config",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.email_settings.manage",
+    "email_settings_config",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_resource(
+    "admin.s3_config.view",
+    "s3_config",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.s3_config.manage",
+    "s3_config",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
 _resource(
     "admin.system.operation",
     "system_operation",

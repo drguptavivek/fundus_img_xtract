@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 206,
+        "authz_v2": 226,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 429,
+        "legacy_unmapped": 409,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "6c9903b072a21bf00a9f4ccda3ee860826342b5fa1a8ad66af0966d4d2c09f91"
+        == "9546c039ff076711e0ae4f4add4a4eb7498f318b31d04a7f5543e486529941d7"
     )
 
 
@@ -247,6 +247,30 @@ def test_admin_maintenance_and_metadata_slice_is_classified():
         Action.ADMIN_STORAGE_OPERATION,
         Action.ADMIN_METADATA_OPERATION,
     }
+
+
+def test_admin_configuration_slice_is_classified_and_method_specific():
+    sources = {
+        "admin/email_settings.py",
+        "admin/s3_config.py",
+        "admin/app_settings.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 20
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "admin.create_email_settings",
+        "admin.s3_config_create",
+        "admin.s3_config_edit",
+        "admin.admin_settings",
+        "admin.upload_settings",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert isinstance(policy, dict)
+        assert policy["POST"].mode is EndpointMode.PROTECTED
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

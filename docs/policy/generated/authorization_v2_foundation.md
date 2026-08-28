@@ -104,6 +104,22 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 - `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=local_admin), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.email_settings.manage`
+
+Authorize admin.email_settings.manage.
+
+Resource: `email_settings_config`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.email_settings.view`
+
+Authorize admin.email_settings.view.
+
+Resource: `email_settings_config`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.grading_eligibility.manage`
 
 Authorize admin.grading_eligibility.manage.
@@ -137,6 +153,22 @@ Authorize admin.s3.manage.
 Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `admin.s3_config.manage`
+
+Authorize admin.s3_config.manage.
+
+Resource: `s3_config`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.s3_config.view`
+
+Authorize admin.s3_config.view.
+
+Resource: `s3_config`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `admin.security.view`
 

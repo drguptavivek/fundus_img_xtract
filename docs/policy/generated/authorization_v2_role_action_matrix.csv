@@ -11,10 +11,14 @@ ad_hoc_task.create,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 ad_hoc_task.delete,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 ad_hoc_task.view,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 admin.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
+admin.email_settings.manage,email_settings_config,admin_break_glass,identifier_in_place,required
+admin.email_settings.view,email_settings_config,admin_break_glass,identifier_in_place,optional
 admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.lookup.manage,screen,admin_break_glass,masked,optional
 admin.metadata.operation,system_operation,scoped_role|admin_break_glass,masked,required
 admin.s3.manage,screen,admin_break_glass,masked,optional
+admin.s3_config.manage,s3_config,admin_break_glass,identifier_in_place,required
+admin.s3_config.view,s3_config,admin_break_glass,identifier_in_place,optional
 admin.security.view,screen,admin_break_glass,masked,optional
 admin.storage.operation,system_operation,scoped_role|admin_break_glass,masked,required
 admin.system.manage,screen,admin_break_glass,masked,optional

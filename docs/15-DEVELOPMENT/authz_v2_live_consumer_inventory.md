@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 234 | 45 | 401 |
+| Flask/API route rules | 680 | 242 | 45 | 393 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 234 | 45 | 1,426 |
+| Total | 1,705 | 242 | 45 | 1,418 |
 
 Reviewed identity fingerprint: `9546c039ff076711e0ae4f4add4a4eb7498f318b31d04a7f5543e486529941d7`.
 
@@ -84,6 +84,10 @@ All 20 email, S3, and application-setting routes now have explicit method-aware 
 
 All eight database dump, Excel export, and restore routes now have explicit method-aware contracts. Informational pages and table/database metadata use Admin-only screen admission. Dump and Excel generation require the exact `admin.database.export` operation in addition to the existing reauthentication control. Restore upload, execution, and cancellation use a distinct exact `admin.database.restore` operation, including the legacy GET cancellation route. Missing or unknown operation identity denies before database data is read, written, or replaced.
 
+### Vertical slice 9g: operational storage and quotas
+
+All eight log, malicious-upload, disk-usage, and upload-quota routes now have explicit contracts. Logs, quarantine listings, and disk reports remain read-only admission surfaces. Duplicate and processed-ZIP deletion require distinct closed Admin system operations. Quota changes bind the exact stored user and use a dedicated Admin/Data Manager action, so list access cannot authorize a quota mutation and a forged or missing user ID denies.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -110,4 +114,4 @@ All eight database dump, Excel export, and restore routes now have explicit meth
 
 ## Remaining cutover work
 
-The remaining 448 explicitly unmapped runtime consumers (401 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 440 explicitly unmapped runtime consumers (393 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

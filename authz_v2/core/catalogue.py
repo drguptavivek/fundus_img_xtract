@@ -188,6 +188,7 @@ MANDATORY_AUDIT = frozenset(
         "admin.s3_config.manage",
         "admin.database.export",
         "admin.database.restore",
+        "admin.upload_quota.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -729,6 +730,13 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.upload_quota.manage",
+    "user",
+    frozenset({Role.ADMIN, Role.DATA_MANAGER}),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
 _resource(
     "admin.database.export",
     "system_operation",

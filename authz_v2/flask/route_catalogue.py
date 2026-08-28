@@ -215,6 +215,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "admin.database_restore.cancel_restore",
         )
     },
+    "admin.disk_usage": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.delete_duplicates": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    "admin.delete_old_processed_zips": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    "admin.log_viewer": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.malicious_uploads": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.list_upload_quotas": _screen(Action.ADMIN_SYSTEM_STATUS_VIEW),
+    "admin.upload_quota_redirect": _screen(Action.ADMIN_SYSTEM_STATUS_VIEW),
+    "admin.update_upload_quota": _exact(Action.ADMIN_UPLOAD_QUOTA_MANAGE, "user"),
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

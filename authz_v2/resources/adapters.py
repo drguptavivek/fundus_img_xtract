@@ -580,6 +580,8 @@ _SYSTEM_OPERATIONS = frozenset(
         "database_restore_upload",
         "database_restore_execute",
         "database_restore_cancel",
+        "disk_delete_duplicates",
+        "disk_delete_processed_zips",
     }
 )
 

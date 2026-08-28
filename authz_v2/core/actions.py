@@ -163,6 +163,7 @@ _CANONICAL_ONLY = {
     "admin.s3_config.manage",
     "admin.database.export",
     "admin.database.restore",
+    "admin.upload_quota.manage",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

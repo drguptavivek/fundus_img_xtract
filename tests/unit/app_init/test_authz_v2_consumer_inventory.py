@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 234,
+        "authz_v2": 242,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 401,
+        "legacy_unmapped": 393,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -296,6 +296,26 @@ def test_admin_database_movement_slice_is_classified_and_exact():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is Action.ADMIN_DATABASE_RESTORE
         assert policy.mode is EndpointMode.PROTECTED
+
+
+def test_admin_operational_storage_slice_is_classified():
+    sources = {
+        "admin/logs.py",
+        "admin/uploads.py",
+        "admin/disk_usage.py",
+        "admin/upload_quotas.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 8
+    assert {row.classification for row in family} == {"authz_v2"}
+    quota = ROUTE_POLICIES["admin.update_upload_quota"]
+    assert quota.action is Action.ADMIN_UPLOAD_QUOTA_MANAGE
+    assert quota.resolver == "user"
+    for endpoint in ("admin.delete_duplicates", "admin.delete_old_processed_zips"):
+        assert ROUTE_POLICIES[endpoint].action is Action.ADMIN_SYSTEM_OPERATION
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

@@ -803,6 +803,21 @@ pattern.
 
 ## Completion gates
 
+### Implemented vertical slice 9n: scoped admin audit, S3 sync, and backfill
+
+- Sensitive-audit detail, S3 hospital/status/retry, and task-backfill mutation
+  endpoints now have explicit v2 actions and exact resource contracts.
+- S3 status queries require an explicit hospital identifier; omitting it denies
+  instead of authorizing a global listing.
+- S3 retry resolves the sync record through its persisted S3 configuration and
+  hospital, and only a persisted failed record is domain-valid.
+- Task backfill requires a non-empty, unique, bounded Lab Unit set whose every
+  member resolves to the declared hospital. Missing or mixed-hospital targets
+  deny.
+- The reviewed inventory is now 319 v2 HTTP consumers, 45 legacy action
+  literals, 316 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

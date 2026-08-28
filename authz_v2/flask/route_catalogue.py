@@ -49,6 +49,23 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    "admin.sensitive_operations_audit": _screen(Action.ADMIN_SENSITIVE_AUDIT_VIEW),
+    "admin.sensitive_operation_details": _exact(
+        Action.ADMIN_SENSITIVE_AUDIT_DETAIL_VIEW, "sensitive_audit_event"
+    ),
+    "admin.s3_sync_dashboard": _screen(Action.ADMIN_S3_SYNC_VIEW),
+    "admin.s3_sync_hospital_detail": _exact(
+        Action.ADMIN_S3_SYNC_QUERY, "s3_sync_query"
+    ),
+    "admin.s3_sync_status_api": _exact(
+        Action.ADMIN_S3_SYNC_QUERY, "s3_sync_query"
+    ),
+    "admin.s3_sync_stats_api": _screen(Action.ADMIN_S3_SYNC_VIEW),
+    "admin.s3_sync_retry": _exact(Action.ADMIN_S3_SYNC_RETRY, "s3_sync_record"),
+    "admin.task_backfill_admin": _screen(Action.ADMIN_TASK_BACKFILL_VIEW),
+    "admin.task_backfill_run": _exact(
+        Action.ADMIN_TASK_BACKFILL_RUN, "task_backfill_target"
+    ),
     **{
         endpoint: _screen(Action.ADMIN_SYSTEM_STATUS_VIEW)
         for endpoint in (

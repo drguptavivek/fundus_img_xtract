@@ -35,9 +35,15 @@ def _get_user_hospitals():
         with transaction_scope() as db:
             return [h.id for h in db.execute(select(Hospital).order_by(Hospital.id)).scalars().all()]
 
-    # Non-admins see their lab unit hospitals
+    # Non-admins see the distinct hospitals containing their assigned lab units.
     if current_user.lab_units:
-        return [lab_unit.id for lab_unit in current_user.lab_units]
+        return sorted(
+            {
+                lab_unit.hospital_id
+                for lab_unit in current_user.lab_units
+                if lab_unit.hospital_id is not None
+            }
+        )
 
     return []
 

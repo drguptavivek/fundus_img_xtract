@@ -21,7 +21,9 @@ from authz_v2.resources.references import (
     GradingConfigRef,
     GradingRepairBatchRef,
     LookupRecordRef,
+    S3SyncQueryRef,
     SystemOperationRef,
+    TaskBackfillTargetRef,
     is_positive_int,
     is_stable_resource_id,
 )
@@ -70,6 +72,8 @@ from models import (
     PatientEncounters,
     ProjectGraderAllocation,
     S3Config,
+    S3SyncStatus,
+    SensitiveOperationAudit,
     User,
 )
 from project_configuration.models import ProjectLabUnit
@@ -705,6 +709,140 @@ S3_CONFIG_ADAPTER = ResourceAdapter(
     ),
 )
 
+
+def resolve_s3_sync_query(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, S3SyncQueryRef) or not is_positive_int(
+        reference.hospital_id
+    ):
+        return None
+    hospital = db.get(Hospital, reference.hospital_id)
+    if hospital is None:
+        return None
+    scope = resolve_scope(db, hospital_id=hospital.id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        hospital,
+        ResourceContextDTO(
+            "s3_sync_query",
+            hospital.id,
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def resolve_s3_sync_record(db, reference: object) -> ResourceTarget | None:
+    if not is_positive_int(reference):
+        return None
+    sync = db.get(S3SyncStatus, reference)
+    if sync is None:
+        return None
+    config = db.get(S3Config, sync.s3_config_id)
+    if config is None:
+        return None
+    scope = resolve_scope(db, hospital_id=config.hospital_id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        sync,
+        ResourceContextDTO(
+            "s3_sync_record",
+            sync.id,
+            scope,
+            state={"domain_valid": sync.status == "failed"},
+            resolved=True,
+        ),
+    )
+
+
+def resolve_sensitive_audit_event(db, reference: object) -> ResourceTarget | None:
+    if not is_positive_int(reference):
+        return None
+    event = db.get(SensitiveOperationAudit, reference)
+    if event is None:
+        return None
+    user = db.get(User, event.user_id) if event.user_id else None
+    hospital_id = getattr(user, "hospital_id", None) if user else None
+    scope = (
+        resolve_scope(db, hospital_id=hospital_id)
+        if hospital_id is not None
+        else ScopeDTO(ScopeType.SYSTEM)
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        event,
+        ResourceContextDTO(
+            "sensitive_audit_event",
+            event.id,
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def resolve_task_backfill_target(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, TaskBackfillTargetRef):
+        return None
+    ids = reference.lab_unit_ids
+    if (
+        not is_positive_int(reference.hospital_id)
+        or not ids
+        or len(ids) > 500
+        or len(set(ids)) != len(ids)
+        or any(not is_positive_int(value) for value in ids)
+    ):
+        return None
+    lab_units = tuple(
+        db.execute(select(LabUnit).where(LabUnit.id.in_(ids))).scalars()
+    )
+    if len(lab_units) != len(ids) or any(
+        unit.hospital_id != reference.hospital_id for unit in lab_units
+    ):
+        return None
+    scope = resolve_scope(db, hospital_id=reference.hospital_id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        lab_units,
+        ResourceContextDTO(
+            "task_backfill_target",
+            f"{reference.hospital_id}:" + ":".join(str(value) for value in sorted(ids)),
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def _admin_domain_facts(_db, _principal, _action, target, facts):
+    return replace(facts, domain_valid=target.context.state["domain_valid"])
+
+
+S3_SYNC_QUERY_ADAPTER = ResourceAdapter(
+    "s3_sync_query", resolve_s3_sync_query,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+S3_SYNC_RECORD_ADAPTER = ResourceAdapter(
+    "s3_sync_record", resolve_s3_sync_record,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+SENSITIVE_AUDIT_EVENT_ADAPTER = ResourceAdapter(
+    "sensitive_audit_event", resolve_sensitive_audit_event,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+TASK_BACKFILL_TARGET_ADAPTER = ResourceAdapter(
+    "task_backfill_target", resolve_task_backfill_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+
 _LOOKUP_MODELS = {
     "hospital": Hospital,
     "lab_unit": LabUnit,
@@ -952,7 +1090,11 @@ RESOURCE_ADAPTERS = (
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
     S3_CONFIG_ADAPTER,
+    S3_SYNC_QUERY_ADAPTER,
+    S3_SYNC_RECORD_ADAPTER,
+    SENSITIVE_AUDIT_EVENT_ADAPTER,
     SYSTEM_OPERATION_ADAPTER,
+    TASK_BACKFILL_TARGET_ADAPTER,
     UPLOAD_JOB_ADAPTER,
     UPLOAD_PROFILE_ADAPTER,
     UPLOAD_TARGET_ADAPTER,

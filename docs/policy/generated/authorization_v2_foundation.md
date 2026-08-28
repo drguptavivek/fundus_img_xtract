@@ -259,12 +259,57 @@ Resource: `s3_config`; disclosure: `identifier_in_place`; audit: `optional`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.s3_sync.query`
+
+Authorize admin.s3_sync.query.
+
+Resource: `s3_sync_query`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.s3_sync.retry`
+
+Authorize admin.s3_sync.retry.
+
+Resource: `s3_sync_record`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.s3_sync.view`
+
+Authorize admin.s3_sync.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=local_admin), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `admin.security.view`
 
 Authorize admin.security.view.
 
 Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `admin.sensitive_audit.detail.view`
+
+Authorize admin.sensitive_audit.detail.view.
+
+Resource: `sensitive_audit_event`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.sensitive_audit.view`
+
+Authorize admin.sensitive_audit.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_manager,local_admin), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
 ### `admin.storage.operation`
@@ -299,6 +344,24 @@ Authorize admin.system.status.view.
 Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_manager), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `admin.task_backfill.run`
+
+Authorize admin.task_backfill.run.
+
+Resource: `task_backfill_target`; disclosure: `masked`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.task_backfill.view`
+
+Authorize admin.task_backfill.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=local_admin), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
 ### `admin.upload_profiles.manage`

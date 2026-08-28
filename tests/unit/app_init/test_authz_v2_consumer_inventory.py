@@ -22,15 +22,46 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 310,
+        "authz_v2": 319,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 325,
+        "legacy_unmapped": 316,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "31b252b8a8cf8196a470a0f9c3a4655e837793535687f7e6e38841b3490a6f4a"
+        == "9786657c7636f9f46c3f995ff0bf47a53a0f692abaf097876bccd2e13f0a02a3"
+    )
+
+
+def test_final_admin_scope_sensitive_slice_is_classified_and_exact():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    admin_rows = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.name
+        in {
+            "admin.sensitive_operations_audit",
+            "admin.sensitive_operation_details",
+            "admin.s3_sync_dashboard",
+            "admin.s3_sync_hospital_detail",
+            "admin.s3_sync_status_api",
+            "admin.s3_sync_stats_api",
+            "admin.s3_sync_retry",
+            "admin.task_backfill_admin",
+            "admin.task_backfill_run",
+        }
+    ]
+    assert len(admin_rows) == 9
+    assert {row.classification for row in admin_rows} == {"authz_v2"}
+    assert ROUTE_POLICIES["admin.s3_sync_status_api"].resolver == "s3_sync_query"
+    assert ROUTE_POLICIES["admin.s3_sync_retry"].resolver == "s3_sync_record"
+    assert (
+        ROUTE_POLICIES["admin.task_backfill_run"].resolver
+        == "task_backfill_target"
     )
 
 

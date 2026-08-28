@@ -77,6 +77,21 @@ class GradingRepairBatchRef:
     task_ids: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class S3SyncQueryRef:
+    """Exact hospital boundary required for an S3 sync listing."""
+
+    hospital_id: int
+
+
+@dataclass(frozen=True)
+class TaskBackfillTargetRef:
+    """Complete, bounded backfill scope supplied by the caller."""
+
+    hospital_id: int
+    lab_unit_ids: tuple[int, ...]
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

@@ -55,6 +55,7 @@ ADMIN = frozenset({Role.ADMIN})
 ADMIN_SITE = frozenset({Role.ADMIN, Role.LOCAL_ADMIN})
 USER_ADMIN = frozenset({Role.ADMIN, Role.USER_MANAGER})
 ADMIN_DATA = frozenset({Role.ADMIN, Role.DATA_MANAGER})
+AUDIT_READ = frozenset({Role.ADMIN, Role.LOCAL_ADMIN, Role.DATA_MANAGER})
 CLINICAL_READ = frozenset(
     {
         Role.ADMIN,
@@ -195,6 +196,8 @@ MANDATORY_AUDIT = frozenset(
         "admin.executable_config.manage",
         "admin.grading_repair.apply_review",
         "admin.grading_repair.reset_batch",
+        "admin.s3_sync.retry",
+        "admin.task_backfill.run",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -698,6 +701,9 @@ for _name, _roles in (
     ("admin.grading_eligibility.manage", ADMIN_DATA),
     ("admin.upload_profiles.manage", ADMIN),
     ("admin.users.workspace.view", ADMIN_SITE),
+    ("admin.sensitive_audit.view", AUDIT_READ),
+    ("admin.s3_sync.view", ADMIN_SITE),
+    ("admin.task_backfill.view", ADMIN_SITE),
     ("authorization.catalogue.view", ADMIN),
     (
         "authorization.grants.view",
@@ -746,6 +752,31 @@ _resource(
     "admin.grading_repair.reset_batch",
     "grading_repair_batch",
     ADMIN,
+    domain_condition=True,
+)
+_resource(
+    "admin.sensitive_audit.detail.view",
+    "sensitive_audit_event",
+    AUDIT_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.s3_sync.query",
+    "s3_sync_query",
+    ADMIN_SITE,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.s3_sync.retry",
+    "s3_sync_record",
+    ADMIN_SITE,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_resource(
+    "admin.task_backfill.run",
+    "task_backfill_target",
+    ADMIN_SITE,
     domain_condition=True,
 )
 _resource(

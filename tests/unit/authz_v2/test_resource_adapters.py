@@ -16,7 +16,11 @@ from authz_v2.resources.adapters import (
     resolve_grading_repair_batch,
     resolve_lookup_record,
     resolve_mobile_session,
+    resolve_s3_sync_query,
+    resolve_s3_sync_record,
+    resolve_sensitive_audit_event,
     resolve_system_operation,
+    resolve_task_backfill_target,
 )
 from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
@@ -26,7 +30,9 @@ from authz_v2.resources.references import (
     GradingConfigRef,
     GradingRepairBatchRef,
     LookupRecordRef,
+    S3SyncQueryRef,
     SystemOperationRef,
+    TaskBackfillTargetRef,
 )
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
 from authz_v2.resources.scoping import scope_model_query
@@ -269,4 +275,24 @@ def test_grading_repair_batch_rejects_missing_duplicate_and_oversized_ids():
     assert resolve_grading_repair_batch(db, GradingRepairBatchRef((1, 1))) is None
     assert resolve_grading_repair_batch(
         db, GradingRepairBatchRef(tuple(range(1, 102)))
+    ) is None
+
+
+def test_scope_sensitive_admin_targets_fail_closed_before_database_access():
+    class NoDatabaseCalls:
+        def get(self, *_args):
+            raise AssertionError("invalid authorization reference reached the database")
+
+        def execute(self, *_args):
+            raise AssertionError("invalid authorization reference reached the database")
+
+    db = NoDatabaseCalls()
+    assert resolve_s3_sync_query(db, None) is None
+    assert resolve_s3_sync_query(db, S3SyncQueryRef(0)) is None
+    assert resolve_s3_sync_record(db, 0) is None
+    assert resolve_sensitive_audit_event(db, "1") is None
+    assert resolve_task_backfill_target(db, None) is None
+    assert resolve_task_backfill_target(db, TaskBackfillTargetRef(1, ())) is None
+    assert resolve_task_backfill_target(
+        db, TaskBackfillTargetRef(1, (2, 2))
     ) is None

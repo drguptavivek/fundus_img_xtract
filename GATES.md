@@ -1,21 +1,25 @@
-# Gates: Authorization v2 vertical slice 9m - global rate limits and upload configuration
+# Gates: Authorization v2 vertical slice 9n - scoped admin operations
 
-- [x] G1: All 12 rate-limit and upload-configuration entry routes have explicit contracts.
-  CHECK: global admin entry inventory family test
-  EVIDENCE: inventory is 310 Authz v2 HTTP routes; all named routes classify Authz v2
+- [x] G1: All nine remaining admin audit, S3-sync, and task-backfill routes have explicit contracts.
+  CHECK: final admin scope-sensitive inventory family test
+  EVIDENCE: inventory is 319 Authz v2 HTTP routes; no reviewed route remains unmapped
 
-- [x] G2: Rate-limit mutation cannot borrow dashboard admission.
-  CHECK: route catalogue actions
-  EVIDENCE: reads are screen-only; clear-one and clear-all require closed exact operations
+- [x] G2: Missing or malformed scope facts deny before database resolution.
+  CHECK: scope-sensitive adapter fail-closed test
+  EVIDENCE: absent hospital, audit identifier, sync identifier, or complete Lab Unit set returns no target
 
-- [x] G3: Project upload workspace binds the exact stored project.
-  CHECK: upload project workspace contract
-  EVIDENCE: project list uses grant admission; workspace uses project.view with project resolver
+- [x] G3: S3 exact operations resolve persisted hospital lineage and retry state.
+  CHECK: S3 query and record adapters
+  EVIDENCE: status queries require a hospital; retry requires a persisted failed sync and its persisted configuration
 
-- [x] G4: Upload profile and metadata entry pages retain their narrower screen actions.
-  CHECK: route catalogue contracts
-  EVIDENCE: profile, project-list, project-workspace, and metadata pages use distinct authorities
+- [x] G4: Task backfill cannot span undeclared or mixed hospital scope.
+  CHECK: task-backfill target adapter
+  EVIDENCE: unique bounded Lab Unit IDs must all resolve to the declared hospital
 
-- [x] G5: Full Authz/app-init tests, generated parity, static/security checks, Beads export, commit, remote ancestry, and push succeed.
+- [x] G5: Live local-admin hospital derivation uses Hospital IDs, not Lab Unit IDs.
+  CHECK: S3 dashboard helper implementation
+  EVIDENCE: distinct non-null lab_unit.hospital_id values are returned
+
+- [x] G6: Full Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: 960 tests pass; Ruff, Bandit, generated parity, and git diff checks pass
+  EVIDENCE: 991 tests pass after baseline refresh; generated artifacts and git diff checks pass

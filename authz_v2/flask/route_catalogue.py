@@ -1237,6 +1237,10 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.wai_api_statistics_retry": _exact(
         Action.INFERENCE_WAI_RUN_RETRY, "inference_result"
     ),
+    "fundus_api.get_project_lab_units": _exact(Action.PROJECT_VIEW, "project"),
+    "fundus_api.put_project_lab_units": _exact(
+        Action.PROJECT_ACCESS_MANAGE, "project"
+    ),
     "jobs.list_recent_jobs": _screen(Action.JOBS_VIEW),
     **{
         endpoint: _exact(Action.JOBS_RESULT_VIEW, "job")

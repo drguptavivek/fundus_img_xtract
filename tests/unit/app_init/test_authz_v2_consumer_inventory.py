@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 540,
+        "authz_v2": 542,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 101,
+        "legacy_unmapped": 99,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1110,6 +1110,26 @@ def test_project_review_routes_are_project_exact():
         and ROUTE_POLICIES[endpoint].resolver == "project"
         for endpoint in exact
     )
+
+
+def test_project_lab_unit_configuration_is_project_exact():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    names = {
+        "fundus_api.get_project_lab_units",
+        "fundus_api.put_project_lab_units",
+    }
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 2
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["fundus_api.get_project_lab_units"].action is (
+        Action.PROJECT_VIEW
+    )
+    assert ROUTE_POLICIES["fundus_api.put_project_lab_units"].action is (
+        Action.PROJECT_ACCESS_MANAGE
+    )
+    assert all(ROUTE_POLICIES[name].resolver == "project" for name in names)
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

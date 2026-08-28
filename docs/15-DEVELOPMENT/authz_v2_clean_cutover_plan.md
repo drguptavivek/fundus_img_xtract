@@ -1208,6 +1208,17 @@ pattern.
   literals, 101 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 225 actions.
 
+### Implemented vertical slice 37: project Lab Unit configuration API
+
+- Both routes resolve the exact active project. Reading uses project view;
+  replacement uses project access management, so a broad screen admission
+  cannot authorize the mutation.
+- Lab Unit list parsing, duplicate handling, relationship replacement, and
+  other configuration semantics remain in the project-configuration service.
+- The reviewed inventory is now 542 v2 HTTP consumers, 39 legacy action
+  literals, 99 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 225 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

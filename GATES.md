@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 22 - glaucoma AI browser workspace
+# Authz v2 slice 23: remove grading workflow domain leakage
 
-- [x] G1: All 4 glaucoma AI browser workspace routes have explicit contracts.
-  CHECK: browser workspace inventory family test
-  EVIDENCE: inventory is 452 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1 Grading authorization evaluates only durable authorization relationships, not task workflow state or prior-grade business rules.
+  CHECK: ! rg -n "workflow_accepts|no_conflict|no_duplicate|_ACCEPTED_STATE" authz_v2
+  EXPECT: exit 0
+  EVIDENCE: banned markers are absent and a foundation boundary regression test enforces this
 
-- [x] G2: Workspace admission cannot stand in for row authorization.
-  CHECK: endpoint mode assertions
-  EVIDENCE: every endpoint is SCREEN with screen_entry enforcement
+- [x] G2 Exact grading allocation and disease/lab/slot authorization remain fail closed and covered.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2/test_relationship_providers.py tests/unit/authz_v2/core/test_contracts.py tests/unit/authz_v2/test_domain_scenarios.py -q
+  EXPECT: exit 0
+  EVIDENCE: focused contract, provider, and scenario suite passes 1007 tests
 
-- [x] G3: Exact result/media authority remains separate.
-  CHECK: route catalogue separation
-  EVIDENCE: workspace uses upload.workspace.view while UUID routes retain owner-bound exact actions
+- [x] G3 The Authz v2 test suite passes.
+  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/authz_v2 -q
+  EXPECT: exit 0
+  EVIDENCE: Authz v2 suite passes 1103 tests with 3 warnings
 
-- [x] G4: Application-domain rules remain outside Authz v2.
-  CHECK: catalogue and route-policy diff review
-  EVIDENCE: option derivation, executable-model filtering, pagination, and mydriatic presentation remain in application modules
-
-- [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
-  CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1145 tests; inventory checks pass
+- [x] G4 Documentation records the authorization/domain boundary.
+  CHECK: rg -n "workflow state.*application service|prior-grade.*application service" docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md
+  EXPECT: exit 0
+  EVIDENCE: slice 23 records workflow state, duplicates, and prior-grade conflict as application-service rules

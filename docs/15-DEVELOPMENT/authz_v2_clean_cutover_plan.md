@@ -1039,6 +1039,15 @@ pattern.
   literals, 187 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 23: grading authorization/domain boundary
+
+- Grading authorization establishes only active user disease/lab/slot
+  eligibility and, when enabled, the exact matching project allocation.
+- Whether the task's workflow state accepts a transition, whether a submission
+  is a duplicate, and whether prior-grade participation creates a conflict are
+  grading-domain rules enforced by the grading application service. They are no
+  longer facts or predicates in `authz_v2`.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

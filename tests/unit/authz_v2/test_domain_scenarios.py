@@ -123,12 +123,7 @@ def test_field_ophthalmologist_can_grade_but_admin_cannot_break_glass():
         7,
         True,
         SITE,
-        (
-            ("workflow_accepts", True),
-            ("no_conflict", True),
-            ("no_duplicate", True),
-            ("allocation_enforced", False),
-        ),
+        (("allocation_enforced", False),),
     )
     assert decide(
         action, facts(action, Role.FIELD_OPHTHALMOLOGIST, relationship=relationship)

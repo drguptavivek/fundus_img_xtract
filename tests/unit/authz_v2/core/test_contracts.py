@@ -495,29 +495,17 @@ def test_mobile_upload_does_not_inherit_the_web_file_uploader_role():
     ).allowed
 
 
-def test_grading_requires_each_independent_condition_and_has_no_admin_break_glass():
+def test_grading_requires_authorized_slot_and_has_no_admin_break_glass():
     action = Action.GRADING_RESIDENT_SUBMIT
     allowed = _positive_facts(action)
     assert Role.ADMIN not in allowed.active_roles
     assert check_action(action, allowed, resource_type="grading_task").allowed
-    for field in ("workflow_accepts", "no_conflict", "no_duplicate"):
-        evidence = allowed.relationships[0]
-        assert not check_action(
-            action,
-            replace(
-                allowed,
-                relationships=(
-                    replace(
-                        evidence,
-                        attributes=tuple(
-                            (key, False if key == field else value)
-                            for key, value in evidence.attributes
-                        ),
-                    ),
-                ),
-            ),
-            resource_type="grading_task",
-        ).allowed
+    evidence = allowed.relationships[0]
+    assert not check_action(
+        action,
+        replace(allowed, relationships=(replace(evidence, active=False),)),
+        resource_type="grading_task",
+    ).allowed
     admin = replace(
         allowed,
         active_roles=frozenset({Role.ADMIN}),

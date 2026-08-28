@@ -92,9 +92,6 @@ class EvaluationFactsDTO:
     grading_slot_matches: bool = False
     allocation_enforced: bool = False
     allocation_matches: bool = False
-    workflow_accepts: bool = False
-    no_conflict: bool = False
-    no_duplicate: bool = False
     domain_valid: bool = False
     automation_rule_matches: bool = False
     automation_target_matches: bool = False

@@ -149,11 +149,6 @@ _GRADING_SLOT = {
     Action.GRADING_RESIDENT2_SUBMIT: "resident2",
     Action.GRADING_ARBITRATOR_SUBMIT: "arbitrator",
 }
-_ACCEPTED_STATE = {
-    "resident": {"pending"},
-    "resident2": {"resident_done"},
-    "arbitrator": {"arbitration"},
-}
 _CLASSICAL_SLOT_FLAG = {
     "resident": UserDiseaseUnitRole.can_grade_resident,
     "resident2": UserDiseaseUnitRole.can_grade_resident2,
@@ -162,26 +157,15 @@ _CLASSICAL_SLOT_FLAG = {
 
 
 def grading_slot_facts(db, principal, action, target, facts):
-    """Resolve workflow, conflicts, duplicates, and allocation for one slot."""
+    """Resolve the exact grading qualification and allocation for one slot.
+
+    Task-state transitions, duplicate submissions, and grader conflicts are
+    grading-domain rules enforced by the application service.
+    """
     slot = _GRADING_SLOT.get(action)
     task = target.value
     if slot is None or not isinstance(task, GradingTask) or principal.user_id is None:
         return facts
-    existing = tuple(
-        db.execute(select(Grade).where(Grade.task_id == task.id)).scalars()
-    )
-    user_grades = tuple(
-        grade for grade in existing if grade.grader_user_id == principal.user_id
-    )
-    workflow_accepts = task.state in _ACCEPTED_STATE[slot]
-    no_duplicate = all(grade.role_slot != slot for grade in user_grades)
-    conflicts = {
-        "resident": {"resident2"},
-        "resident2": {"resident"},
-        "arbitrator": {"resident", "resident2"},
-    }
-    no_conflict = all(grade.role_slot not in conflicts[slot] for grade in user_grades)
-
     slot_assignment = (
         db.execute(
             select(UserDiseaseUnitRole).where(
@@ -251,21 +235,13 @@ def grading_slot_facts(db, principal, action, target, facts):
         target.context.resource_id,
         slot_matches,
         target.context.scope,
-        (
-            ("workflow_accepts", workflow_accepts),
-            ("no_conflict", no_conflict),
-            ("no_duplicate", no_duplicate),
-            ("allocation_enforced", enforcement),
-        ),
+        (("allocation_enforced", enforcement),),
     )
     facts = _append(
         facts,
         slot_evidence,
         grading_slot_matches=slot_matches,
         allocation_enforced=enforcement,
-        workflow_accepts=workflow_accepts,
-        no_conflict=no_conflict,
-        no_duplicate=no_duplicate,
     )
     if enforcement and allocation_matches:
         facts = _append(

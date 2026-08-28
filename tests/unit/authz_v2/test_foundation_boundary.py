@@ -19,3 +19,18 @@ def test_staged_authorization_api_declares_its_inactive_boundary():
     assert '@api_bp.get("/authorization/me/capabilities")' in source
     assert '@api_bp.get("/authorization/me/workspaces")' in source
     assert '@api_bp.get("/authorization/me/upload-options")' in source
+
+
+def test_grading_workflow_rules_do_not_leak_into_authz_v2():
+    forbidden = (
+        "workflow_accepts",
+        "no_conflict",
+        "no_duplicate",
+        "_ACCEPTED_STATE",
+    )
+    sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in Path("authz_v2").rglob("*.py")
+    )
+    for marker in forbidden:
+        assert marker not in sources

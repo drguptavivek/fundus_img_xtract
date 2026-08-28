@@ -115,7 +115,7 @@ def test_upload_provider_requires_an_exact_active_assignment():
     assert not denied.relationships
 
 
-def test_grading_provider_attests_workflow_and_default_off_allocation():
+def test_grading_provider_attests_exact_slot_and_default_off_allocation():
     principal, facts = _facts("grading_task")
     task = GradingTask(id=7, project_id=40, lab_unit_id=20, state="pending")
     policy = ProjectGradingAllocationPolicy(project_id=40, enforcement_enabled=False)
@@ -129,7 +129,7 @@ def test_grading_provider_attests_workflow_and_default_off_allocation():
     )
     task.disease_id = 3
     provided = grading_slot_facts(
-        QueueDB(Result(), Result((slot,)), Result((policy,))),
+        QueueDB(Result((slot,)), Result((policy,))),
         principal,
         Action.GRADING_RESIDENT_SUBMIT,
         ResourceTarget(task, facts.resource),
@@ -137,10 +137,8 @@ def test_grading_provider_attests_workflow_and_default_off_allocation():
     )
     evidence = provided.relationships[0]
     assert evidence.relationship is GrantSource.GRADING_SLOT
-    assert evidence.attribute("workflow_accepts") is True
     assert evidence.attribute("allocation_enforced") is False
     assert provided.grading_slot_matches
-    assert provided.no_conflict and provided.no_duplicate
 
 
 def test_grading_provider_denies_without_exact_disease_lab_slot():

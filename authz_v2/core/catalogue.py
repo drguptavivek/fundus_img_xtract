@@ -505,19 +505,14 @@ def _upload(
 
 
 def _grading(name: str) -> None:
-    slot_state = (
-        ("workflow_accepts", True),
-        ("no_conflict", True),
-        ("no_duplicate", True),
-    )
     no_allocation = relationship(
         GRADING_SLOT,
-        attributes=(*slot_state, ("allocation_enforced", False)),
+        attributes=(("allocation_enforced", False),),
     )
     allocation = all_of(
         relationship(
             GRADING_SLOT,
-            attributes=(*slot_state, ("allocation_enforced", True)),
+            attributes=(("allocation_enforced", True),),
         ),
         relationship(GrantSource.PROJECT_ALLOCATION),
         name="allocation_enforced",

@@ -833,7 +833,7 @@ Authorize grading.arbitrator.submit.
 
 Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
-- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', False)); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', True)); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
+- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', False),); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', True),); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
 ### `grading.grades.view`
 
@@ -850,7 +850,7 @@ Authorize grading.resident.submit.
 
 Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
-- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', False)); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', True)); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
+- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', False),); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', True),); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
 ### `grading.resident2.submit`
 
@@ -858,7 +858,7 @@ Authorize grading.resident2.submit.
 
 Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
-- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', False)); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', True)); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
+- `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', False),); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', True),); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
 ### `grading.workbench.acquire`
 

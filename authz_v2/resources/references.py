@@ -207,13 +207,6 @@ class ImageBatchRef:
     image_uuids: tuple[str, ...]
 
 
-@dataclass(frozen=True)
-class ResourceSetRef:
-    """Bounded exact targets that must each pass the same authorization."""
-
-    members: tuple[object, ...]
-
-
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

@@ -36,15 +36,3 @@
   CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run pytest tests/unit/authz_v2/test_domain_boundary.py
   EXPECT: exit 0
   EVIDENCE: Existing domain-boundary gate remains the release check for this invariant.
-
-# Authz v2 foundation: bounded exact resource sets
-
-- [x] G1 Every distinct set member must resolve and authorize under the declared action.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run pytest tests/unit/authz_v2/test_services.py::test_bounded_resource_set_requires_every_distinct_member
-  EXPECT: exit 0
-  EVIDENCE: Passed; empty, duplicate, unresolved, and oversized sets deny.
-
-- [x] G2 Domain content remains outside the generic authorization set primitive.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run pytest tests/unit/authz_v2/test_foundation_boundary.py tests/unit/authz_v2/test_domain_boundary.py
-  EXPECT: exit 0
-  EVIDENCE: 6 passed in the combined foundation run.

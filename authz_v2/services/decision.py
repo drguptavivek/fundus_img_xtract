@@ -23,7 +23,6 @@ from authz_v2.core.resources import ScopeSetDTO
 from authz_v2.domain.exceptions import AuthorizationError, DenialCode
 from authz_v2.repositories.contracts import AuthorizationRepository, GrantRecord
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
-from authz_v2.resources.references import ResourceSetRef
 from authz_v2.telemetry.events import AuthorizationEvent
 from authz_v2.telemetry.logging import emit_authorization_event
 from authz_v2.telemetry.metrics import increment, observe_decision_duration
@@ -293,15 +292,7 @@ class AuthorizationDecisionService:
         resource: object | None,
         *,
         audit_service=None,
-    ) -> AuthorizationReceiptDTO | tuple[AuthorizationReceiptDTO, ...]:
-        if isinstance(resource, ResourceSetRef):
-            return self.require_all(
-                db,
-                principal,
-                action,
-                resource,
-                audit_service=audit_service,
-            )
+    ) -> AuthorizationReceiptDTO:
         decision, target = self._evaluate_with_metrics(db, principal, action, resource)
         if not decision.allowed or decision.policy_path is None:
             try:
@@ -370,56 +361,6 @@ class AuthorizationDecisionService:
                 resource=target.context if target else None,
             )
         return receipt
-
-    def require_all(
-        self,
-        db,
-        principal: PrincipalDTO,
-        action: str | Action,
-        resources: ResourceSetRef,
-        *,
-        audit_service=None,
-    ) -> tuple[AuthorizationReceiptDTO, ...]:
-        """Require one action for every distinct member of a bounded exact set."""
-        if not isinstance(resources, ResourceSetRef):
-            raise AuthorizationError(DenialCode.UNRESOLVED_RESOURCE)
-        members = resources.members
-        if not 0 < len(members) <= 500:
-            raise AuthorizationError(DenialCode.UNRESOLVED_RESOURCE)
-
-        evaluated: list[tuple[DecisionDTO, ResourceTarget]] = []
-        identities: set[tuple[str, int | str]] = set()
-        for member in members:
-            decision, target = self._evaluate_with_metrics(
-                db, principal, action, member
-            )
-            if (
-                not decision.allowed
-                or decision.policy_path is None
-                or target is None
-            ):
-                try:
-                    code = DenialCode(decision.reason_code)
-                except ValueError:
-                    code = DenialCode.NOT_AUTHORIZED
-                raise AuthorizationError(code)
-            identity = (target.context.resource_type, target.context.resource_id)
-            if identity in identities:
-                raise AuthorizationError(DenialCode.UNRESOLVED_RESOURCE)
-            identities.add(identity)
-            evaluated.append((decision, target))
-
-        return tuple(
-            self._receipt_for_allowed(
-                db,
-                principal,
-                action,
-                decision,
-                target,
-                audit_service=audit_service,
-            )
-            for decision, target in evaluated
-        )
 
     def require_audited(
         self, db, principal, action, resource, *, audit_service

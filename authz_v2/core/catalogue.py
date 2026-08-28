@@ -1126,6 +1126,18 @@ _resource(
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
     domain_condition=True,
 )
+_screen("admin.upload_metadata_fields.view", ADMIN)
+_resource(
+    "admin.upload_metadata_fields.create",
+    "system_operation",
+    ADMIN,
+)
+_resource(
+    "admin.upload_metadata_fields.manage",
+    "upload_metadata_field_definition",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
 _resource(
     "api.mobile.session.manage", "mobile_session", USER_ADMIN, domain_condition=True
 )

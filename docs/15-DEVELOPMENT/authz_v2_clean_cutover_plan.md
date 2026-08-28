@@ -1111,6 +1111,19 @@ pattern.
   literals, 144 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 29: upload metadata definitions
+
+- All six global upload-metadata field-definition endpoints now have explicit
+  contracts. Listing and key availability are read admission; creation requires
+  a fixed exact system-operation target; update/activate/deactivate require the
+  exact persisted field definition.
+- Field scope, key, type, selection mode, options, validation regex, upload and
+  verification flags, visibility, and PII-default validation remain in the
+  upload-metadata application service and are not Authz predicates.
+- The reviewed inventory is now 503 v2 HTTP consumers, 39 legacy action
+  literals, 138 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 212 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

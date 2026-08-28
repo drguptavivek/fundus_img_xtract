@@ -1160,6 +1160,27 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "jobs.regenerate_export": _exact(Action.JOBS_REGENERATE, "job"),
     **{
+        endpoint: _screen(Action.ADMIN_UPLOAD_METADATA_FIELDS_VIEW)
+        for endpoint in (
+            "fundus_api.list_upload_metadata_field_definitions",
+            "fundus_api.check_upload_metadata_field_key",
+        )
+    },
+    "fundus_api.create_upload_metadata_field_definition": _exact(
+        Action.ADMIN_UPLOAD_METADATA_FIELDS_CREATE, "system_operation"
+    ),
+    **{
+        endpoint: _exact(
+            Action.ADMIN_UPLOAD_METADATA_FIELDS_MANAGE,
+            "upload_metadata_field_definition",
+        )
+        for endpoint in (
+            "fundus_api.update_upload_metadata_field_definition",
+            "fundus_api.activate_upload_metadata_field_definition",
+            "fundus_api.deactivate_upload_metadata_field_definition",
+        )
+    },
+    **{
         endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
         for endpoint in (
             "verify_remedio_dr.verify_dr_detail",

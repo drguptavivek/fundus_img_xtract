@@ -380,6 +380,30 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 - `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=local_admin), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.upload_metadata_fields.create`
+
+Authorize admin.upload_metadata_fields.create.
+
+Resource: `system_operation`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.upload_metadata_fields.manage`
+
+Authorize admin.upload_metadata_fields.manage.
+
+Resource: `upload_metadata_field_definition`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.upload_metadata_fields.view`
+
+Authorize admin.upload_metadata_fields.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `admin.upload_profiles.manage`
 
 Authorize admin.upload_profiles.manage.

@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 497,
+        "authz_v2": 503,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 144,
+        "legacy_unmapped": 138,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "bd47c535b8c8e92efd632accf8252aaf56354aab2630a873331a1ce13f5ddde1"
+        == "7b20c17015c3392a17b3873713e809d1139b8e331109cd887fef465e43caad73"
     )
 
 
@@ -831,6 +831,30 @@ def test_job_routes_separate_list_read_result_and_regeneration_authority():
     regenerate = ROUTE_POLICIES["jobs.regenerate_export"]
     assert regenerate.action is Action.JOBS_REGENERATE
     assert regenerate.resolver == "job"
+
+
+def test_upload_metadata_definition_routes_are_exact_and_domain_neutral():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/upload_metadata.py"
+    ]
+    assert len(family) == 6
+    assert {row.classification for row in family} == {"authz_v2"}
+    create = ROUTE_POLICIES["fundus_api.create_upload_metadata_field_definition"]
+    assert create.action is Action.ADMIN_UPLOAD_METADATA_FIELDS_CREATE
+    assert create.resolver == "system_operation"
+    for endpoint in (
+        "fundus_api.update_upload_metadata_field_definition",
+        "fundus_api.activate_upload_metadata_field_definition",
+        "fundus_api.deactivate_upload_metadata_field_definition",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.ADMIN_UPLOAD_METADATA_FIELDS_MANAGE
+        assert policy.resolver == "upload_metadata_field_definition"
 
 
 def test_admin_executable_configuration_slice_is_classified():

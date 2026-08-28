@@ -44,6 +44,9 @@ admin.system.operation,system_operation,admin_break_glass,masked,required
 admin.system.status.view,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.task_backfill.run,task_backfill_target,scoped_role|admin_break_glass,masked,required
 admin.task_backfill.view,screen,authenticated_screen|admin_break_glass,masked,optional
+admin.upload_metadata_fields.create,system_operation,admin_break_glass,masked,optional
+admin.upload_metadata_fields.manage,upload_metadata_field_definition,admin_break_glass,identifier_in_place,optional
+admin.upload_metadata_fields.view,screen,admin_break_glass,masked,optional
 admin.upload_profiles.manage,screen,admin_break_glass,masked,optional
 admin.upload_profiles.update,upload_profile,admin_break_glass,identifier_in_place,optional
 admin.upload_quota.manage,user,scoped_role|admin_break_glass,identifier_in_place,required

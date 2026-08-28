@@ -104,6 +104,7 @@ from remidio_api_integration.models import (
     RemidioApiSourceRule,
 )
 from upload_profiles.models import ProjectUploadProfileAssignment, UploadProfile
+from upload_metadata.models import UploadMetadataFieldDefinition
 
 
 @dataclass(frozen=True)
@@ -656,6 +657,11 @@ UPLOAD_JOB_ADAPTER = _model_adapter(
 UPLOAD_PROFILE_ADAPTER = _model_adapter(
     "upload_profile", UploadProfile, allow_system_scope=True
 )
+UPLOAD_METADATA_FIELD_DEFINITION_ADAPTER = _model_adapter(
+    "upload_metadata_field_definition",
+    UploadMetadataFieldDefinition,
+    allow_system_scope=True,
+)
 def resolve_intra_rater_batch_target(db, reference: object) -> ResourceTarget | None:
     if not isinstance(reference, IntraRaterBatchTargetRef) or not is_positive_int(
         reference.lab_unit_id
@@ -799,6 +805,7 @@ _SYSTEM_OPERATIONS = frozenset(
         "remidio_api_routing_profile_upsert",
         "remidio_api_routing_profile_route_create",
         "remidio_api_routing_rule_upsert",
+        "upload_metadata_field_definition_create",
     }
 )
 
@@ -1803,6 +1810,7 @@ RESOURCE_ADAPTERS = (
     TASK_BACKFILL_TARGET_ADAPTER,
     UPLOAD_JOB_ADAPTER,
     UPLOAD_PROFILE_ADAPTER,
+    UPLOAD_METADATA_FIELD_DEFINITION_ADAPTER,
     UPLOAD_TARGET_ADAPTER,
     WORKBENCH_SESSION_ADAPTER,
     WORKBENCH_ACQUISITION_ADAPTER,

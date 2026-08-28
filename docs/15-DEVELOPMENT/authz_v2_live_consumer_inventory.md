@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 257 | 45 | 378 |
+| Flask/API route rules | 680 | 277 | 45 | 358 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 257 | 45 | 1,403 |
+| Total | 1,705 | 277 | 45 | 1,383 |
 
-Reviewed identity fingerprint: `856341934705047d177e122bbc34616a976ec2b1dba4d552bbe37475eb9c4fcb`.
+Reviewed identity fingerprint: `0b9e8f20ffc6e7b756a1f45fb427db2714b2ca377d24520f471778c7cf5ddb70`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -92,6 +92,10 @@ All eight log, malicious-upload, disk-usage, and upload-quota routes now have ex
 
 All 15 hospital, Lab Unit, disease, camera, and area administration routes now have method-aware contracts. Collection GETs remain lookup-screen admission; collection POSTs require a closed typed creation operation. Edits and deletes bind a typed exact persisted lookup row, never a bare ambiguous integer. Hospital and Lab Unit records resolve authoritative organizational scope, while global clinical lookup records resolve System scope. Unknown kinds, missing rows, invalid identifiers, or missing lineage deny.
 
+### Vertical slice 9i: grading configuration governance
+
+All 20 disease-grading, linked-grading, grading-scheme, encounter-set-type, and eligibility routes now have explicit contracts. Persisted grading definitions use typed exact configuration references; bare integers and unknown kinds deny. Creation and hierarchy-wide updates use distinct closed operations. Eligibility editing binds the exact stored user with Admin/Local Admin authority in the user's resolved hospital scope, while the requested disease/Lab Unit combinations remain application validation within that authorized user boundary.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -118,4 +122,4 @@ All 15 hospital, Lab Unit, disease, camera, and area administration routes now h
 
 ## Remaining cutover work
 
-The remaining 425 explicitly unmapped runtime consumers (378 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 405 explicitly unmapped runtime consumers (358 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

@@ -11,6 +11,7 @@ from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
 from authz_v2.resources.adapters import (
     TypedResourceRef,
+    resolve_grading_config,
     resolve_lookup_record,
     resolve_mobile_session,
     resolve_system_operation,
@@ -19,6 +20,7 @@ from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    GradingConfigRef,
     LookupRecordRef,
     SystemOperationRef,
 )
@@ -228,3 +230,14 @@ def test_lookup_records_require_a_closed_kind_and_typed_identifier():
     assert resolve_lookup_record(db, 1) is None
     assert resolve_lookup_record(db, LookupRecordRef("unknown", 1)) is None
     assert resolve_lookup_record(db, LookupRecordRef("area", 0)) is None
+
+
+def test_grading_config_records_reject_ambiguous_or_unknown_references():
+    class NoDatabaseCalls:
+        def get(self, *_args):
+            raise AssertionError("invalid grading config reached the database")
+
+    db = NoDatabaseCalls()
+    assert resolve_grading_config(db, 1) is None
+    assert resolve_grading_config(db, GradingConfigRef("unknown", 1)) is None
+    assert resolve_grading_config(db, GradingConfigRef("grading_scheme", 0)) is None

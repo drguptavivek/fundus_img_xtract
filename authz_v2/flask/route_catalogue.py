@@ -263,6 +263,58 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "admin.delete_area",
         )
     },
+    "admin.list_disease_gradings": {
+        "GET": _screen(Action.ADMIN_GRADING_ELIGIBILITY_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.get_grading_features": _exact(
+        Action.ADMIN_GRADING_CONFIG_VIEW, "grading_config_record"
+    ),
+    "admin.delete_disease_grading": _exact(
+        Action.ADMIN_GRADING_CONFIG_MANAGE, "grading_config_record"
+    ),
+    "admin.linked_disease_gradings_list": {
+        "GET": _screen(Action.ADMIN_GRADING_ELIGIBILITY_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.get_linked_disease_hierarchy": _screen(
+        Action.ADMIN_GRADING_ELIGIBILITY_MANAGE
+    ),
+    "admin.update_linked_disease_hierarchy": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    "admin.edit_linked_disease_grading": {
+        "GET": _exact(Action.ADMIN_GRADING_CONFIG_VIEW, "grading_config_record"),
+        "POST": _exact(Action.ADMIN_GRADING_CONFIG_MANAGE, "grading_config_record"),
+    },
+    "admin.delete_linked_disease_grading": _exact(
+        Action.ADMIN_GRADING_CONFIG_MANAGE, "grading_config_record"
+    ),
+    **{
+        endpoint: _screen(Action.ADMIN_GRADING_ELIGIBILITY_MANAGE)
+        for endpoint in (
+            "admin.grading_schemes_admin",
+            "admin.grading_schemes_list",
+            "admin.grading_scheme_new",
+            "admin.encounter_set_types_admin",
+            "admin.encounter_set_types_list",
+            "admin.encounter_set_type_new",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_GRADING_CONFIG_VIEW, "grading_config_record")
+        for endpoint in (
+            "admin.grading_scheme_detail",
+            "admin.grading_scheme_edit",
+            "admin.encounter_set_type_edit",
+            "admin.encounter_set_type_view",
+        )
+    },
+    "admin.manage_eligibility_users": _screen(Action.ADMIN_DASHBOARD_VIEW),
+    "admin.edit_eligibility": {
+        "GET": _exact(Action.ADMIN_GRADING_ELIGIBILITY_USER_MANAGE, "user"),
+        "POST": _exact(Action.ADMIN_GRADING_ELIGIBILITY_USER_MANAGE, "user"),
+    },
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

@@ -54,6 +54,14 @@ class LookupRecordRef:
     record_id: int
 
 
+@dataclass(frozen=True)
+class GradingConfigRef:
+    """Typed identity for a persisted grading configuration record."""
+
+    kind: str
+    record_id: int
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

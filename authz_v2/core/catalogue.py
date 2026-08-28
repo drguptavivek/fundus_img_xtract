@@ -190,6 +190,8 @@ MANDATORY_AUDIT = frozenset(
         "admin.database.restore",
         "admin.upload_quota.manage",
         "admin.lookup_record.manage",
+        "admin.grading_config.manage",
+        "admin.grading_eligibility.user.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -731,6 +733,24 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.grading_config.view",
+    "grading_config_record",
+    ADMIN,
+)
+_resource(
+    "admin.grading_config.manage",
+    "grading_config_record",
+    ADMIN,
+    domain_condition=True,
+)
+_resource(
+    "admin.grading_eligibility.user.manage",
+    "user",
+    ADMIN_SITE,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
 _resource(
     "admin.lookup_record.view",
     "lookup_record",

@@ -17,6 +17,7 @@ from authz_v2.resources.references import (
     ActiveConfigurationRef,
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    GradingConfigRef,
     LookupRecordRef,
     SystemOperationRef,
     is_positive_int,
@@ -37,6 +38,7 @@ from authz_v2.resources.relationships import (
 )
 from authz_v2.resources.scoping import resolve_scope, scope_model_query
 from authz_v2.resources.upload_targets import resolve_classical_upload_target
+from encounter_set_types.models import EncounterSetType
 from models import (
     AIInferenceRun,
     AMDReport,
@@ -47,6 +49,7 @@ from models import (
     DiabeticRetinopathyReport,
     DirectImageUpload,
     Disease,
+    DiseaseGrading,
     EmailSettings,
     EncounterFile,
     EncounterFilePDF,
@@ -58,6 +61,7 @@ from models import (
     IntraRaterTask,
     Job,
     LabUnit,
+    LinkedDiseaseGrading,
     MobileAuthSession,
     PatientEncounters,
     ProjectGraderAllocation,
@@ -593,6 +597,9 @@ _SYSTEM_OPERATIONS = frozenset(
         "lookup_create_disease",
         "lookup_create_camera",
         "lookup_create_area",
+        "disease_grading_create",
+        "linked_grading_create",
+        "linked_grading_hierarchy_update",
     }
 )
 
@@ -737,6 +744,44 @@ LOOKUP_RECORD_ADAPTER = ResourceAdapter(
         facts, domain_valid=True
     ),
 )
+
+_GRADING_CONFIG_MODELS = {
+    "disease_grading": DiseaseGrading,
+    "linked_grading": LinkedDiseaseGrading,
+    "grading_scheme": Disease,
+    "encounter_set_type": EncounterSetType,
+}
+
+
+def resolve_grading_config(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, GradingConfigRef):
+        return None
+    model = _GRADING_CONFIG_MODELS.get(reference.kind)
+    if model is None or not is_positive_int(reference.record_id):
+        return None
+    value = db.get(model, reference.record_id)
+    if value is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "grading_config_record",
+            f"{reference.kind}:{value.id}",
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+GRADING_CONFIG_ADAPTER = ResourceAdapter(
+    "grading_config_record",
+    resolve_grading_config,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
 PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
     "project_allocation_target", ProjectGraderAllocation
 )
@@ -779,6 +824,7 @@ RESOURCE_ADAPTERS = (
     ENCOUNTER_ADAPTER,
     ENCOUNTER_FILE_ADAPTER,
     ENCOUNTER_SET_ADAPTER,
+    GRADING_CONFIG_ADAPTER,
     GRADING_TASK_ADAPTER,
     IMAGE_ADAPTER,
     INFERENCE_RESULT_ADAPTER,

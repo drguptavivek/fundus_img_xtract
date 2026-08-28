@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 257,
+        "authz_v2": 277,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 378,
+        "legacy_unmapped": 358,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "856341934705047d177e122bbc34616a976ec2b1dba4d552bbe37475eb9c4fcb"
+        == "0b9e8f20ffc6e7b756a1f45fb427db2714b2ca377d24520f471778c7cf5ddb70"
     )
 
 
@@ -340,6 +340,28 @@ def test_admin_lookup_governance_slice_is_classified_and_exact():
         assert isinstance(policy, dict)
         assert policy["GET"].action is Action.ADMIN_LOOKUP_RECORD_VIEW
         assert policy["POST"].action is Action.ADMIN_LOOKUP_RECORD_MANAGE
+
+
+def test_admin_grading_configuration_slice_is_classified():
+    sources = {
+        "admin/disease_gradings.py",
+        "admin/linked_grading.py",
+        "admin/grading_schemes.py",
+        "admin/encounter_set_types.py",
+        "admin/grading_eligibility.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 20
+    assert {row.classification for row in family} == {"authz_v2"}
+    eligibility = ROUTE_POLICIES["admin.edit_eligibility"]
+    assert isinstance(eligibility, dict)
+    assert eligibility["POST"].action is (
+        Action.ADMIN_GRADING_ELIGIBILITY_USER_MANAGE
+    )
+    assert eligibility["POST"].resolver == "user"
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

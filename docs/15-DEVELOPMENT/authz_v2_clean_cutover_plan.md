@@ -1534,6 +1534,22 @@ pattern.
   legacy action literals, 7 unmapped HTTP consumers, 47 unmapped workers, and
   979 query candidates. The catalogue contains 248 actions.
 
+### Implemented foundation hardening: lossless request fact namespaces
+
+- Exact-resource binders receive path, query, form, and JSON facts in separate
+  namespaces; query and form additionally retain every repeated value as an
+  immutable tuple.
+- The original scalar query/form views remain available while routes are
+  migrated, but compound authorization must use the tuple view whenever a
+  transport key may occur more than once.
+- This is deliberately transport-only. Authz v2 does not interpret grades,
+  diseases, camera/area/mydriatic metadata, upload-profile field content, or
+  clinical/workflow validity. Application services validate those domain
+  details after the authorization boundary.
+- Missing or incomplete repeated values therefore cannot be hidden by Flask's
+  flattened first-value view; a binder either resolves the complete exact
+  authorization target or the central guard denies before the handler runs.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

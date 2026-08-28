@@ -19,7 +19,9 @@ class RequestAuthorizationInput(Mapping[str, object]):
 
     path: Mapping[str, object]
     query: Mapping[str, str]
+    query_lists: Mapping[str, tuple[str, ...]]
     form: Mapping[str, str]
+    form_lists: Mapping[str, tuple[str, ...]]
     json: Mapping[str, Any]
 
     def __getitem__(self, key: str) -> object:
@@ -37,7 +39,9 @@ def _request_authorization_input() -> RequestAuthorizationInput:
     return RequestAuthorizationInput(
         path=dict(request.view_args or {}),
         query=request.args.to_dict(flat=True),
+        query_lists={key: tuple(values) for key, values in request.args.lists()},
         form=request.form.to_dict(flat=True),
+        form_lists={key: tuple(values) for key, values in request.form.lists()},
         json=dict(payload) if isinstance(payload, dict) else {},
     )
 

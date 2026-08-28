@@ -144,6 +144,8 @@ def test_resolver_receives_separate_transport_namespaces_and_missing_body_facts_
     def resolve(_db, values):
         assert values["path_marker"] == "path-value"
         assert values.query.get("project_lab_unit_id") == "query-value"
+        assert values.query_lists["project_lab_unit_id"] == ("query-value",)
+        assert values.form_lists["project_lab_unit_id"] == ("30",)
         target_id = values.form.get("project_lab_unit_id")
         profile_id = values.form.get("upload_profile_id")
         return (target_id, profile_id) if target_id and profile_id else None
@@ -168,3 +170,39 @@ def test_resolver_receives_separate_transport_namespaces_and_missing_body_facts_
     )
     assert allowed.status_code == 200
     assert service.calls[-1][3] == ("30", "9")
+
+
+def test_resolver_receives_all_repeated_query_and_form_values():
+    app = Flask(__name__)
+    service = Service(True)
+
+    @app.post("/compound")
+    @authorization_endpoint(
+        EndpointMode.PROTECTED,
+        Action.ACCOUNT_PROFILE_VIEW,
+        resolver="user",
+    )
+    def compound():
+        return jsonify(ok=True)
+
+    def resolve(_db, values):
+        assert values.query["project_id"] == "7"
+        assert values.query_lists["project_id"] == ("7", "9")
+        assert values.form["grade"] == "resident"
+        assert values.form_lists["grade"] == ("resident", "arbitrator")
+        return "compound-resource"
+
+    install_default_deny(
+        app,
+        authenticated=lambda: True,
+        principal=lambda: "principal",
+        database=lambda: "db",
+        decision_service=lambda _db: service,
+        resource_resolvers={"user": resolve},
+    )
+    response = app.test_client().post(
+        "/compound?project_id=7&project_id=9",
+        data={"grade": ["resident", "arbitrator"]},
+    )
+    assert response.status_code == 200
+    assert service.calls[-1][3] == "compound-resource"

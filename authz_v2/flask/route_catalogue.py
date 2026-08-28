@@ -91,6 +91,57 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     **{
+        endpoint: _screen(Action.ADMIN_SYSTEM_STATUS_VIEW)
+        for endpoint in (
+            "admin.thumbnail_management",
+            "admin.api_thumbnail_stats",
+            "admin.api_maintenance_status",
+            "admin.api_thumbnail_health_check",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_STORAGE_OPERATION, "system_operation")
+        for endpoint in (
+            "admin.api_manual_maintenance",
+            "admin.api_cleanup_orphaned",
+            "admin.api_regenerate_missing",
+            "admin.api_validate_integrity",
+            "admin.api_full_maintenance",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ADMIN_DASHBOARD_VIEW)
+        for endpoint in (
+            "admin.image_metadata_admin",
+            "admin.image_metadata_status",
+            "admin.metadata_backfill_admin",
+            "admin.metadata_backfill_admin_alias",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_METADATA_OPERATION, "system_operation")
+        for endpoint in (
+            "admin.image_metadata_backfill",
+            "admin.metadata_backfill_run",
+            "admin.image_metadata_run_pii_queue",
+            "admin.image_metadata_stop_all",
+            "admin.image_metadata_clear_queued",
+            "admin.image_metadata_clear_running",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
+            "admin.materialized_view_status",
+            "admin.api_materialized_view_status",
+            "admin.api_last_refresh",
+            "admin.api_schedule_status",
+        )
+    },
+    "admin.manual_refresh": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (
             "admin.manage_roles",

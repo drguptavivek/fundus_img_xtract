@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 182 | 45 | 453 |
+| Flask/API route rules | 680 | 206 | 45 | 429 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 182 | 45 | 1,478 |
+| Total | 1,705 | 206 | 45 | 1,454 |
 
 Reviewed identity fingerprint: `6c9903b072a21bf00a9f4ccda3ee860826342b5fa1a8ad66af0966d4d2c09f91`.
 
@@ -72,6 +72,10 @@ Seven admin mutation routes now separate page admission from exact mutation auth
 
 All 21 system-status, CVE, and package-update routes now have explicit contracts. Read-only dashboards retain their deliberately distinct Admin/Data Manager, Admin/Local Admin, or Admin-only admission. Refreshing database sequences or dependency scan data cannot borrow a dashboard receipt: each mutation requires Admin plus an exact closed `system_operation` reference selected from the three supported operations. Raw strings, unknown operations, and missing operation facts deny.
 
+### Vertical slice 9d: maintenance and metadata operations
+
+All 24 thumbnail-maintenance, materialized-view, and image-metadata routes now have explicit contracts. Read-only surfaces retain their existing Admin/Data Manager, Admin/Local Admin, or Admin-only boundaries. Mutations use three distinct exact actions so a status receipt cannot start work and one operator class cannot borrow another class's authority: storage maintenance permits Admin/Data Manager, metadata queue control permits Admin/Local Admin, and materialized-view refresh remains Admin-only. Every mutation requires a closed server-recognized operation identifier.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -98,4 +102,4 @@ All 21 system-status, CVE, and package-update routes now have explicit contracts
 
 ## Remaining cutover work
 
-The remaining 500 explicitly unmapped runtime consumers (453 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 476 explicitly unmapped runtime consumers (429 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

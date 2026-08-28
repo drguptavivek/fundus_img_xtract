@@ -182,6 +182,8 @@ MANDATORY_AUDIT = frozenset(
         "admin.users.create",
         "admin.users.manage",
         "admin.system.operation",
+        "admin.storage.operation",
+        "admin.metadata.operation",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -727,6 +729,18 @@ _resource(
     "admin.system.operation",
     "system_operation",
     ADMIN,
+    domain_condition=True,
+)
+_resource(
+    "admin.storage.operation",
+    "system_operation",
+    frozenset({Role.ADMIN, Role.DATA_MANAGER}),
+    domain_condition=True,
+)
+_resource(
+    "admin.metadata.operation",
+    "system_operation",
+    ADMIN_SITE,
     domain_condition=True,
 )
 _resource(

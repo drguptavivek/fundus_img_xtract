@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 from app import create_app
+from authz_v2.core.actions import Action
 from authz_v2.flask.contracts import EndpointMode
 from authz_v2.flask.route_catalogue import ROUTE_POLICIES
 from celery_app import celery_app
@@ -21,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 182,
+        "authz_v2": 206,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 453,
+        "legacy_unmapped": 429,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -222,6 +223,30 @@ def test_admin_system_status_and_scanner_slice_is_classified():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.mode is EndpointMode.PROTECTED
         assert policy.resolver == "system_operation"
+
+
+def test_admin_maintenance_and_metadata_slice_is_classified():
+    sources = {
+        "admin/thumbnail_management.py",
+        "admin/materialized_view_status.py",
+        "admin/image_metadata.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 24
+    assert {row.classification for row in family} == {"authz_v2"}
+    mutation_actions = {
+        ROUTE_POLICIES[row.name].action
+        for row in family
+        if "POST" in row.methods
+    }
+    assert mutation_actions == {
+        Action.ADMIN_SYSTEM_OPERATION,
+        Action.ADMIN_STORAGE_OPERATION,
+        Action.ADMIN_METADATA_OPERATION,
+    }
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

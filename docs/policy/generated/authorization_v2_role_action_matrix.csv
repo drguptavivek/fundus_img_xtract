@@ -13,8 +13,10 @@ ad_hoc_task.view,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 admin.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.lookup.manage,screen,admin_break_glass,masked,optional
+admin.metadata.operation,system_operation,scoped_role|admin_break_glass,masked,required
 admin.s3.manage,screen,admin_break_glass,masked,optional
 admin.security.view,screen,admin_break_glass,masked,optional
+admin.storage.operation,system_operation,scoped_role|admin_break_glass,masked,required
 admin.system.manage,screen,admin_break_glass,masked,optional
 admin.system.operation,system_operation,admin_break_glass,masked,required
 admin.system.status.view,screen,authenticated_screen|admin_break_glass,masked,optional

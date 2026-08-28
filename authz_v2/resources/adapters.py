@@ -552,7 +552,22 @@ PASSWORD_RESET_ADAPTER = ResourceAdapter(
 )
 
 _SYSTEM_OPERATIONS = frozenset(
-    {"cve_refresh", "package_updates_refresh", "sequences_refresh"}
+    {
+        "cve_refresh",
+        "package_updates_refresh",
+        "sequences_refresh",
+        "thumbnail_manual_maintenance",
+        "thumbnail_cleanup_orphaned",
+        "thumbnail_regenerate_missing",
+        "thumbnail_validate_integrity",
+        "thumbnail_full_maintenance",
+        "metadata_backfill",
+        "metadata_run_pii_queue",
+        "metadata_stop_all",
+        "metadata_clear_queued",
+        "metadata_clear_running",
+        "materialized_views_refresh",
+    }
 )
 
 

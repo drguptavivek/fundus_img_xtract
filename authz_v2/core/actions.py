@@ -155,6 +155,8 @@ ACTION_MIGRATION_MAP.update(
 _CANONICAL_ONLY = {
     "admin.system.operation",
     "admin.system.status.view",
+    "admin.storage.operation",
+    "admin.metadata.operation",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

@@ -1276,6 +1276,17 @@ pattern.
   literals, 72 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 229 actions.
 
+### Implemented vertical slice 43: task, upload, and audit workspaces
+
+- Task index, pending-task, uploaded-ZIP, and missing-capture-date audit pages
+  now have explicit workspace admission.
+- These screen contracts do not authorize returned task, upload, or encounter
+  rows. Their application filters remain transitional until registered Authz v2
+  SQL query policies replace them.
+- The reviewed inventory is now 573 v2 HTTP consumers, 39 legacy action
+  literals, 68 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 229 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

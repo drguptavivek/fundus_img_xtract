@@ -137,6 +137,12 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.ENCOUNTER_VIEWER_VIEW, "encounter"
     ),
     **{
+        endpoint: _screen(Action.TASKS_VIEW)
+        for endpoint in ("tasks.index", "tasks.pending")
+    },
+    "uploaded_zips.list_uploaded_zips": _screen(Action.UPLOAD_WORKSPACE_VIEW),
+    "audit.missing_capture_date": _screen(Action.AUDIT_DATA_QUALITY_VIEW),
+    **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (
             "fundus_api.get_eligible_lab_units",

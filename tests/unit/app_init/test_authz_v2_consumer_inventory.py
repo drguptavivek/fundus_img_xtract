@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 569,
+        "authz_v2": 573,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 72,
+        "legacy_unmapped": 68,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1263,6 +1263,26 @@ def test_remaining_analytics_views_separate_admission_and_exact_media():
     )
     for endpoint, resolver in exact.items():
         assert ROUTE_POLICIES[endpoint].resolver == resolver
+
+
+def test_task_upload_and_audit_workspaces_are_explicit():
+    names = {
+        "tasks.index",
+        "tasks.pending",
+        "uploaded_zips.list_uploaded_zips",
+        "audit.missing_capture_date",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        and ROUTE_POLICIES[endpoint].resolver is None
+        for endpoint in names
+    )
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

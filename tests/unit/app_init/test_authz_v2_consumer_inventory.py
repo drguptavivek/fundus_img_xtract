@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 452,
+        "authz_v2": 471,
         "legacy_action_literal": 41,
-        "legacy_unmapped": 187,
+        "legacy_unmapped": 168,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "a714b78fc04b6015af199ce06d8a751d2a17350ef5dc6cdf51bc59d30f46055b"
+        == "bd47c535b8c8e92efd632accf8252aaf56354aab2630a873331a1ce13f5ddde1"
     )
 
 
@@ -735,6 +735,37 @@ def test_admin_remidio_operations_slice_is_classified():
     cleanup = ROUTE_POLICIES["admin.cleanup_stuck_remidio_uploads"]
     assert cleanup.action is Action.ADMIN_SYSTEM_OPERATION
     assert cleanup.mode is EndpointMode.PROTECTED
+
+
+def test_remidio_disease_verification_routes_are_exactly_classified():
+    sources = {
+        "verify_remedio_dr/routes.py",
+        "verify_remedio_glaucoma/routes.py",
+        "verify_remedio_nodr/routes.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 19
+    assert {row.classification for row in family} == {"authz_v2"}
+
+    for endpoint in (
+        "verify_remedio_dr.verify_dr_edit",
+        "verify_remedio_glaucoma.glaucoma_edit",
+        "verify_remedio_nodr.nodr_edit",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert isinstance(policy, dict)
+        assert policy["GET"].action is Action.VERIFICATION_REMIDIO_VIEW
+        assert policy["POST"].action is Action.VERIFICATION_REMIDIO_UPDATE
+        assert policy["POST"].resolver == "encounter"
+
+    clean = ROUTE_POLICIES["verify_remedio_glaucoma.glaucoma_clean_workflow"]
+    assert isinstance(clean, dict)
+    assert clean["GET"].mode is EndpointMode.SCREEN
+    assert clean["POST"].action is Action.ADMIN_SYSTEM_OPERATION
+    assert clean["POST"].resolver == "system_operation"
 
 
 def test_admin_executable_configuration_slice_is_classified():

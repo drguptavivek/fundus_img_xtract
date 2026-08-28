@@ -1056,6 +1056,20 @@ pattern.
   delete, share, or export transitions belong to the dataset application service.
   Authz no longer derives or evaluates those workflow rules.
 
+### Implemented vertical slice 25: Remidio disease verification
+
+- All 19 DR, glaucoma, and no-DR verification endpoints now have explicit
+  method-specific contracts.
+- Detail and edit reads require an exact encounter; edit, verify, unverify, and
+  eye-status mutations require the exact encounter update action. List and
+  results pages are screen admission only and do not authorize returned rows.
+- The glaucoma cleaning GET is screen admission, while its POST requires an
+  exact administrative system-operation target. Cleaning and disease-specific
+  verification rules remain application-domain logic.
+- The reviewed inventory is now 471 v2 HTTP consumers, 41 legacy action
+  literals, 168 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

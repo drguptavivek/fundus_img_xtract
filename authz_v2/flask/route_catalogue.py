@@ -1101,6 +1101,51 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "verify_remedio.unverify_encounter",
         )
     },
+    **{
+        endpoint: _screen(Action.PREPROCESS_DASHBOARD_VIEW)
+        for endpoint in (
+            "verify_remedio_dr.verify_dr_list",
+            "verify_remedio_glaucoma.glaucoma_results",
+            "verify_remedio_glaucoma.glaucoma_list",
+            "verify_remedio_nodr.nodr_list",
+        )
+    },
+    "verify_remedio_glaucoma.glaucoma_clean_workflow": {
+        "GET": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    **{
+        endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
+        for endpoint in (
+            "verify_remedio_dr.verify_dr_detail",
+            "verify_remedio_glaucoma.glaucoma_detail",
+        )
+    },
+    **{
+        endpoint: {
+            "GET": _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter"),
+            "POST": _exact(Action.VERIFICATION_REMIDIO_UPDATE, "encounter"),
+        }
+        for endpoint in (
+            "verify_remedio_dr.verify_dr_edit",
+            "verify_remedio_glaucoma.glaucoma_edit",
+            "verify_remedio_nodr.nodr_edit",
+        )
+    },
+    **{
+        endpoint: _exact(Action.VERIFICATION_REMIDIO_UPDATE, "encounter")
+        for endpoint in (
+            "verify_remedio_dr.verify_dr_mark_eye",
+            "verify_remedio_dr.verify_dr_unverify",
+            "verify_remedio_dr.verify_dr_verify",
+            "verify_remedio_glaucoma.glaucoma_mark_eye",
+            "verify_remedio_glaucoma.glaucoma_unverify",
+            "verify_remedio_glaucoma.glaucoma_verify",
+            "verify_remedio_nodr.nodr_mark_eye",
+            "verify_remedio_nodr.nodr_unverify",
+            "verify_remedio_nodr.nodr_verify",
+        )
+    },
 }
 
 

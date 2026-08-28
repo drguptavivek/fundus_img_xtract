@@ -90,6 +90,16 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "account.password_changed": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
     **{
+        endpoint: _exact(Action.ACCOUNT_VIEWER_PREFERENCES_MANAGE, "user")
+        for endpoint in (
+            "fundus_api.get_viewer_settings",
+            "fundus_api.save_viewer_settings",
+            "fundus_api.get_viewer_presets",
+            "fundus_api.save_viewer_preset",
+            "fundus_api.delete_viewer_preset",
+        )
+    },
+    **{
         endpoint: _mobile_entry(Action.GLAUCOMA_AI_UPLOADS_LIST)
         for endpoint in (
             "fundus_api.list_recent_glaucoma_ai_uploads",

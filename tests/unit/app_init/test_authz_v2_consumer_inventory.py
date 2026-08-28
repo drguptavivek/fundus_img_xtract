@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 511,
+        "authz_v2": 516,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 130,
+        "legacy_unmapped": 125,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "a714b78fc04b6015af199ce06d8a751d2a17350ef5dc6cdf51bc59d30f46055b"
+        == "613a96633e5f0b5aa4e515524f3745e2107c77a165f30f7c97c1e01b28176a3a"
     )
 
 
@@ -980,6 +980,28 @@ def test_iitk_integration_api_is_exact_and_domain_neutral():
         "fundus_api.queue_iitk_sync",
     ):
         assert ROUTE_POLICIES[endpoint].resolver == "iitk_configuration"
+
+
+def test_viewer_preferences_api_is_exact_self_service():
+    names = {
+        "fundus_api.get_viewer_settings",
+        "fundus_api.save_viewer_settings",
+        "fundus_api.get_viewer_presets",
+        "fundus_api.save_viewer_preset",
+        "fundus_api.delete_viewer_preset",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].action
+        is Action.ACCOUNT_VIEWER_PREFERENCES_MANAGE
+        and ROUTE_POLICIES[endpoint].resolver == "user"
+        for endpoint in names
+    )
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

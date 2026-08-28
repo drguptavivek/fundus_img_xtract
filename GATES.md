@@ -1,21 +1,21 @@
-# Authz v2 slice 31: core domain-boundary hardening
+# Authz v2 slice 32: viewer preferences API
 
-- [x] G1 Authz adapters do not decide S3 retry status, grading-repair workflow state, or dataset-finalization lifecycle.
-  CHECK: ! rg -n 'sync\.status|task\.state|dataset\.is_finalized' authz_v2
+- [x] G1 All five viewer settings and preset routes have explicit exact-self contracts.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_viewer_preferences_api_is_exact_self_service -q'
   EXPECT: exit 0
-  EVIDENCE: Source sweep finds none of sync.status, task.state, or dataset.is_finalized under authz_v2; owning application routes/services retain these checks.
+  EVIDENCE: Viewer-family test passes; all five routes use account.viewer_preferences.manage with the exact user resolver.
 
-- [x] G2 Exact resource identity, scope, ownership, credentials, delegation, disclosure, and authorization-policy flags remain fail-closed.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2 -q'
+- [x] G2 Viewer values, filters, ranges, and preset slots remain application validation.
+  CHECK: ! rg -n 'loupe|brightness|contrast|slot_number|_VIEWER_FILTERS' authz_v2
   EXPECT: exit 0
-  EVIDENCE: Complete Authz v2 unit suite passed: 1155 tests, 3 warnings.
+  EVIDENCE: Source search finds no loupe, brightness, contrast, slot_number, or viewer-filter rules under authz_v2.
 
-- [x] G3 A regression test explicitly enforces the domain boundary.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py -q'
+- [x] G3 Inventory baseline and fingerprint are current.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
   EXPECT: exit 0
-  EVIDENCE: Two new boundary tests pass and prohibit workflow/content tokens plus unexpected domain_valid producer modules.
+  EVIDENCE: Inventory test passes at 516 explicit routes, 125 unmapped routes, and fingerprint 613a96633e5f0b5aa4e515524f3745e2107c77a165f30f7c97c1e01b28176a3a.
 
-- [x] G4 Boundary behavior and rationale are documented without moving application validation into Authz.
-  CHECK: rg -n 'Domain boundary|application services|authorization facts' docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md
+- [x] G4 Documentation records the exact-self boundary and measured inventory.
+  CHECK: rg -n 'viewer preferences API|exact self-service|516 v2 HTTP' docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md
   EXPECT: exit 0
-  EVIDENCE: Plan slice 31 enumerates allowed authorization facts and application-owned S3, grading, dataset, clinical metadata, and upload-field rules.
+  EVIDENCE: Plan slice 32 documents exact self-service and application-owned preference validation.

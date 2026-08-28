@@ -1152,6 +1152,16 @@ pattern.
   scope, relationship, credential, or authorization-policy fact required by an
   action; application facts are validated separately by the owning service.
 
+### Implemented vertical slice 32: viewer preferences API
+
+- All five viewer settings and preset endpoints now use the existing exact
+  self-service viewer-preferences action against the authenticated user.
+- Viewer filter names, numeric ranges, preset slot limits, and preference
+  payload validation remain in the viewer-settings application module.
+- The reviewed inventory is now 516 v2 HTTP consumers, 39 legacy action
+  literals, 125 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 219 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

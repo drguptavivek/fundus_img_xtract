@@ -1410,6 +1410,19 @@ pattern.
   literals, 37 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 238 actions.
 
+### Implemented vertical slice 54: disease and EncounterSet lists
+
+- The global disease/grading catalogue has explicit lookup admission. The
+  unverified EncounterSet list uses the identifier-bearing EncounterSet
+  workspace admission because its response contains patient identifiers.
+- Admission does not authorize returned rows. Exact registered query policies
+  must constrain EncounterSets before identifier serialization at cutover.
+- Disease-specific grading APIs remain denied until their typed disease binding
+  is supplied; disease/grading contents remain application-domain data.
+- The reviewed inventory is now 606 v2 HTTP consumers, 39 legacy action
+  literals, 35 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 238 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

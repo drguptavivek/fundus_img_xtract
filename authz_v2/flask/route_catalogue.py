@@ -194,6 +194,10 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     "ad_hoc_tasks.detail": _exact(Action.AD_HOC_TASK_VIEW, "ad_hoc_task"),
+    "fundus_api.get_diseases_with_gradings": _screen(Action.API_LOOKUPS_VIEW),
+    "fundus_api.list_unverified_encounter_sets": _screen(
+        Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW_PII
+    ),
     **{
         endpoint: _exact(Action.REVIEW_DISCREPANCY_HISTORY, "user")
         for endpoint in (

@@ -153,6 +153,14 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.upload_profiles.update`
+
+Authorize admin.upload_profiles.update.
+
+Resource: `upload_profile`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.users.manage`
 
 Authorize admin.users.manage.
@@ -1003,7 +1011,7 @@ Authorize project.uploaders.manage.
 
 Resource: `project`; disclosure: `masked`; audit: `required`.
 
-- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=project_admin; allow_system=False)
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=project_admin,project_pi,site_pi; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `project.view`

@@ -53,6 +53,7 @@ from models import (
     User,
 )
 from project_configuration.models import ProjectLabUnit
+from upload_profiles.models import UploadProfile
 
 
 @dataclass(frozen=True)
@@ -463,6 +464,9 @@ JOB_ADAPTER = _model_adapter(
 UPLOAD_JOB_ADAPTER = _model_adapter(
     "upload_job", Job, owner_attr="uploader_user_id", requester_attr="uploader_user_id"
 )
+UPLOAD_PROFILE_ADAPTER = _model_adapter(
+    "upload_profile", UploadProfile, allow_system_scope=True
+)
 INTRA_RATER_BATCH_ADAPTER = _model_adapter(
     "intra_rater_batch", IntraRaterBatch, owner_attr="created_by_user_id"
 )
@@ -590,5 +594,6 @@ RESOURCE_ADAPTERS = (
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
     UPLOAD_JOB_ADAPTER,
+    UPLOAD_PROFILE_ADAPTER,
     UPLOAD_TARGET_ADAPTER,
 )

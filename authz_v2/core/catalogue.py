@@ -733,6 +733,13 @@ _resource(
     domain_condition=True,
 )
 _resource(
+    "admin.upload_profiles.update",
+    "upload_profile",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_resource(
     "api.mobile.session.manage", "mobile_session", USER_ADMIN, domain_condition=True
 )
 _resource(
@@ -923,7 +930,9 @@ for _name, _type, _roles, _disclosure, _domain in (
     (
         "project.uploaders.manage",
         "project",
-        frozenset({Role.ADMIN, Role.PROJECT_ADMIN}),
+        frozenset(
+            {Role.ADMIN, Role.PROJECT_PI, Role.SITE_PI, Role.PROJECT_ADMIN}
+        ),
         DisclosureClass.MASKED,
         True,
     ),

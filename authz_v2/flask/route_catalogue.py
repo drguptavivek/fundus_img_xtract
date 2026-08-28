@@ -49,6 +49,54 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    # Upload-profile governance. Body-only project references must be resolved
+    # to the stored project before any assignment or relationship mutation.
+    "fundus_api.create_upload_profile_project": _screen(
+        Action.ADMIN_UPLOAD_PROFILES_MANAGE
+    ),
+    "fundus_api.update_upload_profile_project": _exact(
+        Action.PROJECT_ACCESS_MANAGE, "project"
+    ),
+    "fundus_api.project_referral_diseases": {
+        "GET": _exact(Action.PROJECT_VIEW, "project"),
+        "POST": _exact(Action.PROJECT_ACCESS_MANAGE, "project"),
+        "PUT": _exact(Action.PROJECT_ACCESS_MANAGE, "project"),
+    },
+    "fundus_api.project_encounter_set_permissions": {
+        "GET": _exact(Action.PROJECT_VIEW, "project"),
+        "POST": _exact(Action.PROJECT_ACCESS_MANAGE, "project"),
+        "PUT": _exact(Action.PROJECT_ACCESS_MANAGE, "project"),
+    },
+    "fundus_api.add_upload_profile_investigator": _exact(
+        Action.PROJECT_ACCESS_MANAGE, "project"
+    ),
+    "fundus_api.assign_upload_profile_user": _exact(
+        Action.PROJECT_UPLOADERS_MANAGE, "project"
+    ),
+    "fundus_api.remove_upload_profile_user": _exact(
+        Action.PROJECT_UPLOADERS_MANAGE, "project"
+    ),
+    "fundus_api.enable_upload_profile_for_project": _exact(
+        Action.PROJECT_UPLOADERS_MANAGE, "project"
+    ),
+    "fundus_api.activate_project_upload_profile": _exact(
+        Action.PROJECT_UPLOADERS_MANAGE, "project"
+    ),
+    "fundus_api.deactivate_project_upload_profile": _exact(
+        Action.PROJECT_UPLOADERS_MANAGE, "project"
+    ),
+    "fundus_api.create_upload_profile": _screen(
+        Action.ADMIN_UPLOAD_PROFILES_MANAGE
+    ),
+    **{
+        endpoint: _exact(Action.ADMIN_UPLOAD_PROFILES_UPDATE, "upload_profile")
+        for endpoint in (
+            "fundus_api.update_upload_profile",
+            "fundus_api.activate_upload_profile",
+            "fundus_api.deactivate_upload_profile",
+            "fundus_api.duplicate_upload_profile",
+        )
+    },
     # Direct-upload workspaces use method-specific contracts so a GET page
     # decision can never authorize POST mutations handled by the same view.
     "direct_uploads.upload_index": _screen(Action.UPLOAD_WORKSPACE_VIEW),

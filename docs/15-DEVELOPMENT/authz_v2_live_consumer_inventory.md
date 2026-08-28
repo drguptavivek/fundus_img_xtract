@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 130 | 46 | 504 |
+| Flask/API route rules | 680 | 145 | 46 | 489 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 130 | 46 | 1,529 |
+| Total | 1,705 | 145 | 46 | 1,514 |
 
-Reviewed identity fingerprint: `4437bd33de527f7ed3a32c943f4b24fb33b8cfa77fac10a6966a853ec786e03f`.
+Reviewed identity fingerprint: `00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -52,6 +52,10 @@ All 13 Remidio API upload/workspace routes now have explicit contracts. Browser 
 
 All 13 direct-upload routes now have explicit contracts. The central catalogue supports complete method-specific policies, so GET workspace admission cannot authorize POST mutations in combined handlers. Individual upload reads and mutations bind the exact stored upload, job polling binds the exact stored job, bulk mutations bind a bounded same-Lab-Unit or same-hospital resource set, and upload/pregraded submissions retain the complete upload-target/profile requirement. Upload option APIs use the self upload-options decision; application code still validates the requested Lab Unit against the returned profile-authorized options. Missing method contracts, upload IDs, batch members, job identity, or upload-target facts deny.
 
+### Vertical slice 7: upload-profile governance
+
+All 15 upload-profile governance routes now have explicit contracts. Global reusable-profile creation is Admin-only and stored-profile changes bind the exact System-scoped profile. Project configuration, investigator, profile enablement, and uploader assignment operations bind the governing stored project, including body-only mapping or assignment references that must resolve back to that project. Mixed project settings endpoints separate exact project view from mutation authority. Project PI, Site PI, and Project Admin may manage uploaders only through their own scoped project grants; no role name alone establishes scope.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -78,4 +82,4 @@ All 13 direct-upload routes now have explicit contracts. The central catalogue s
 
 ## Remaining cutover work
 
-The remaining 551 explicitly unmapped runtime consumers (504 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 536 explicitly unmapped runtime consumers (489 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

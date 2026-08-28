@@ -120,3 +120,22 @@ def test_cross_site_and_cross_project_scope_do_not_contain_target():
     other_project = ScopeDTO(ScopeType.PROJECT, 41, project_id=41)
     assert not other_site.contains(SITE)
     assert not other_project.contains(SITE)
+
+
+def test_project_upload_manager_roles_cannot_cross_project_or_site_scope():
+    action = Action.PROJECT_UPLOADERS_MANAGE
+    for role in (Role.PROJECT_PI, Role.SITE_PI, Role.PROJECT_ADMIN):
+        assert decide(action, facts(action, role)).allowed
+
+        value = facts(action, role)
+        other_project = ScopeDTO(ScopeType.PROJECT, 41, project_id=41)
+        crossed = EvaluationFactsDTO(
+            value.principal,
+            resource=value.resource,
+            active_roles=value.active_roles,
+            role_grants=(RoleGrantDTO(2, role, other_project),),
+            reachable_scopes=ScopeSetDTO(frozenset({other_project})),
+            exact_resource=True,
+            domain_valid=True,
+        )
+        assert not decide(action, crossed).allowed

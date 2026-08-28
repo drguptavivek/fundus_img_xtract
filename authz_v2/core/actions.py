@@ -153,6 +153,7 @@ ACTION_MIGRATION_MAP.update(
 # Reset completion is a distinct credential-bearing action. It has no legacy
 # equivalent because the former route used one action for request and consume.
 _CANONICAL_ONLY = {
+    "admin.upload_profiles.update",
     "auth.mobile.logout",
     "auth.mobile.refresh",
     "auth.password_reset.complete",

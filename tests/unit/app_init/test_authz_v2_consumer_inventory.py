@@ -21,15 +21,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 130,
+        "authz_v2": 145,
         "legacy_action_literal": 46,
-        "legacy_unmapped": 504,
+        "legacy_unmapped": 489,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "4437bd33de527f7ed3a32c943f4b24fb33b8cfa77fac10a6966a853ec786e03f"
+        == "00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64"
     )
 
 
@@ -128,6 +128,20 @@ def test_direct_upload_mixed_routes_separate_get_from_post_authority():
         assert policies["GET"].mode is EndpointMode.SCREEN
         assert policies["POST"].action.value == "upload.pregraded.create"
         assert policies["POST"].resolver == "upload_target"
+
+
+def test_upload_profile_governance_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/upload_profiles.py"
+    ]
+    assert len(family) == 15
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(row.canonical_actions for row in family)
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

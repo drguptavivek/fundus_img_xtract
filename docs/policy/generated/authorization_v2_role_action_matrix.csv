@@ -11,6 +11,8 @@ ad_hoc_task.create,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 ad_hoc_task.delete,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 ad_hoc_task.view,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 admin.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
+admin.database.export,system_operation,admin_break_glass,masked,required
+admin.database.restore,system_operation,admin_break_glass,masked,required
 admin.email_settings.manage,email_settings_config,admin_break_glass,identifier_in_place,required
 admin.email_settings.view,email_settings_config,admin_break_glass,identifier_in_place,optional
 admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,masked,optional

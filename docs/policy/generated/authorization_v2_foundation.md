@@ -104,6 +104,22 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 - `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=local_admin), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.database.export`
+
+Authorize admin.database.export.
+
+Resource: `system_operation`; disclosure: `masked`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.database.restore`
+
+Authorize admin.database.restore.
+
+Resource: `system_operation`; disclosure: `masked`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.email_settings.manage`
 
 Authorize admin.email_settings.manage.

@@ -575,6 +575,11 @@ _SYSTEM_OPERATIONS = frozenset(
         "s3_config_test_candidate",
         "app_settings_update",
         "upload_settings_update",
+        "database_dump_export",
+        "database_excel_export",
+        "database_restore_upload",
+        "database_restore_execute",
+        "database_restore_cancel",
     }
 )
 

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 226,
+        "authz_v2": 234,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 409,
+        "legacy_unmapped": 401,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -271,6 +271,31 @@ def test_admin_configuration_slice_is_classified_and_method_specific():
         policy = ROUTE_POLICIES[endpoint]
         assert isinstance(policy, dict)
         assert policy["POST"].mode is EndpointMode.PROTECTED
+
+
+def test_admin_database_movement_slice_is_classified_and_exact():
+    sources = {
+        "admin/database_dump.py",
+        "admin/database_excel_export.py",
+        "admin/database_restore.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 8
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["admin.database_dump"]["POST"].action is (
+        Action.ADMIN_DATABASE_EXPORT
+    )
+    for endpoint in (
+        "admin.database_restore.upload_file",
+        "admin.database_restore.restore_database",
+        "admin.database_restore.cancel_restore",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.ADMIN_DATABASE_RESTORE
+        assert policy.mode is EndpointMode.PROTECTED
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

@@ -196,6 +196,25 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
         "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
     },
+    "admin.database_dump": {
+        "GET": _screen(Action.ADMIN_SECURITY_VIEW),
+        "POST": _exact(Action.ADMIN_DATABASE_EXPORT, "system_operation"),
+    },
+    "admin.database_excel_export": {
+        "GET": _screen(Action.ADMIN_SECURITY_VIEW),
+        "POST": _exact(Action.ADMIN_DATABASE_EXPORT, "system_operation"),
+    },
+    "admin.get_database_info": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.get_database_tables": _screen(Action.ADMIN_SECURITY_VIEW),
+    "admin.database_restore.index": _screen(Action.ADMIN_SECURITY_VIEW),
+    **{
+        endpoint: _exact(Action.ADMIN_DATABASE_RESTORE, "system_operation")
+        for endpoint in (
+            "admin.database_restore.upload_file",
+            "admin.database_restore.restore_database",
+            "admin.database_restore.cancel_restore",
+        )
+    },
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

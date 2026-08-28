@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 594,
+        "authz_v2": 598,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 47,
+        "legacy_unmapped": 43,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1414,6 +1414,32 @@ def test_self_context_and_bulk_notification_routes_use_exact_current_user():
     for endpoint, action in expected.items():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is action
+        assert policy.resolver == "user"
+
+
+def test_discrepancy_review_lists_separate_admission_and_self_history():
+    screens = {
+        "review.discrepancy_review": Action.REVIEW_DISCREPANCY_LIST,
+        "review.regrade_task_creator": Action.REVIEW_REGRADE_CREATOR_VIEW,
+    }
+    history = {
+        "review.my_discrepancy_reviews",
+        "fundus_api.get_my_discrepancy_reviews",
+    }
+    names = set(screens) | history
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, action in screens.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.SCREEN
+        assert policy.action is action
+    for endpoint in history:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.REVIEW_DISCREPANCY_HISTORY
         assert policy.resolver == "user"
 
 

@@ -179,6 +179,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "notifications.mark_all_notifications_read": _exact(
         Action.ACCOUNT_NOTIFICATIONS_UPDATE, "user"
     ),
+    "review.discrepancy_review": _screen(Action.REVIEW_DISCREPANCY_LIST),
+    "review.regrade_task_creator": _screen(Action.REVIEW_REGRADE_CREATOR_VIEW),
+    **{
+        endpoint: _exact(Action.REVIEW_DISCREPANCY_HISTORY, "user")
+        for endpoint in (
+            "review.my_discrepancy_reviews",
+            "fundus_api.get_my_discrepancy_reviews",
+        )
+    },
     "fundus_api.get_project_annotation_policy": _exact(
         Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
     ),

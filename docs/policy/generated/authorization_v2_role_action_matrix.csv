@@ -204,9 +204,12 @@ reports.list,screen,authenticated_screen|admin_break_glass,masked,optional
 reports.view,report,scoped_role|admin_break_glass,masked,optional
 review.discrepancy.export,discrepancy,scoped_role|admin_break_glass,masked,required
 review.discrepancy.export_identifiers,discrepancy,scoped_role|admin_break_glass,identifier_release,required
+review.discrepancy.history,user,self,masked,optional
+review.discrepancy.list,screen,authenticated_screen|admin_break_glass,masked,optional
 review.discrepancy.view,discrepancy,scoped_role|admin_break_glass,masked,optional
 review.regrade.adjudicate,grading_task,scoped_role|admin_break_glass,masked,optional
 review.regrade_creator.manage,grading_task,scoped_role|admin_break_glass,masked,optional
+review.regrade_creator.view,screen,authenticated_screen|admin_break_glass,masked,optional
 review.task.submit,grading_task,scoped_role|admin_break_glass,masked,optional
 review.task.view,grading_task,scoped_role|admin_break_glass,masked,optional
 screenings.delete,encounter,scoped_role|admin_break_glass,identifier_in_place,optional

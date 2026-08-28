@@ -1370,6 +1370,20 @@ pattern.
   literals, 47 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 233 actions.
 
+### Implemented vertical slice 51: discrepancy review lists
+
+- The discrepancy queue and regrade-creator page now have distinct workspace
+  admission actions. Browser and JSON current-reviewer history routes require
+  one exact self action.
+- Screen admission does not authorize task rows. Query composition, review
+  filters, disease selection, queue state, and history pagination remain review
+  application logic pending registered SQL policy enforcement.
+- Bulk discrepancy export remains denied until its scoped export target and
+  identifier-release facts are bound exactly.
+- The reviewed inventory is now 598 v2 HTTP consumers, 39 legacy action
+  literals, 43 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 236 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

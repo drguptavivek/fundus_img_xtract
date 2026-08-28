@@ -130,44 +130,62 @@ def test_engine():
         poolclass=NullPool,  # No connection pooling for tests
         echo=False,  # Set to True for SQL debugging
     )
+    # Every pytest process targets the same dedicated database by default.
+    # Hold a PostgreSQL session lock for this fixture's complete lifecycle so
+    # another process cannot reset or tear down ``public`` during this run.
+    lock_connection = engine.connect()
+    lock_connection.execute(
+        text(
+            "SELECT pg_advisory_lock("
+            "hashtext('fundus_img_xtract_pytest'), hashtext(current_database()))"
+        )
+    )
 
-    # Drop and recreate schema for a clean slate at session start.
-    # Using raw SQL with CASCADE to handle materialized views and dependencies.
-    # This ensures idempotent test runs even if previous session crashed.
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
-
-    # Run Alembic migrations to create schema and seed core data
-    alembic_cfg = Config()
-    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
-    alembic_cfg.set_main_option("script_location", str(project_root / "migrations"))
-
-    from alembic import command
     try:
-        # Force Alembic env.py to target the test database
-        os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-        # Run all migrations from scratch (schema was just recreated)
-        # Use "heads" to support multiple heads in test-only context.
-        command.upgrade(alembic_cfg, "heads")
+        # Drop and recreate schema for a clean slate at session start.
+        # Using raw SQL with CASCADE handles materialized views and dependencies.
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
 
-        print("✅ Test database migrations applied successfully")
-    except Exception as e:
-        print(f"❌ Error running migrations: {e}")
-        # Fallback to metadata.create_all if migrations fail
-        # NOTE: This creates empty tables without seed data - tests may fail
-        Base.metadata.create_all(bind=engine)
-        print("⚠️  Fell back to metadata.create_all() - seed data NOT available!")
+        # Run Alembic migrations to create schema and seed core data.
+        alembic_cfg = Config()
+        alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+        alembic_cfg.set_main_option("script_location", str(project_root / "migrations"))
 
-    yield engine
+        from alembic import command
+        try:
+            # Force Alembic env.py to target the test database.
+            os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+            command.upgrade(alembic_cfg, "heads")
+            print("✅ Test database migrations applied successfully")
+        except Exception as e:
+            print(f"❌ Error running migrations: {e}")
+            # Fallback creates empty tables without migration seed data.
+            Base.metadata.create_all(bind=engine)
+            print("⚠️  Fell back to metadata.create_all() - seed data NOT available!")
 
-    # Cleanup: Drop schema with CASCADE to handle materialized views
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
-    engine.dispose()
+        yield engine
+    finally:
+        try:
+            # Reset only while the same cross-process lock remains held.
+            with engine.connect() as conn:
+                conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+                conn.execute(text("CREATE SCHEMA public"))
+                conn.commit()
+        finally:
+            try:
+                lock_connection.execute(
+                    text(
+                        "SELECT pg_advisory_unlock("
+                        "hashtext('fundus_img_xtract_pytest'), "
+                        "hashtext(current_database()))"
+                    )
+                )
+            finally:
+                lock_connection.close()
+                engine.dispose()
 
 
 # ==============================================================================

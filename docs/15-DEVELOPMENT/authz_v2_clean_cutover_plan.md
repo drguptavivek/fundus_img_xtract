@@ -1300,6 +1300,17 @@ pattern.
   literals, 65 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 232 actions.
 
+### Implemented vertical slice 45: public analytics surface
+
+- The public analytics page and both aggregate-data APIs are explicitly
+  classified with the existing public analytics action.
+- This classification reflects the application's deliberate unauthenticated
+  transparency surface. Aggregate selection, calculations, cache behavior, and
+  disclosure content remain application-domain responsibilities.
+- The reviewed inventory is now 579 v2 HTTP consumers, 39 legacy action
+  literals, 62 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 232 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

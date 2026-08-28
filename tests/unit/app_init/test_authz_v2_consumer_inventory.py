@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 576,
+        "authz_v2": 579,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 65,
+        "legacy_unmapped": 62,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1301,6 +1301,24 @@ def test_project_annotation_policy_routes_use_exact_admin_project_actions():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is action
         assert policy.resolver == "project"
+
+
+def test_public_analytics_family_is_explicitly_public():
+    names = {
+        "public.public_analytics",
+        "public.api_analytics_kpi",
+        "public.api_analytics_chart_data",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 3
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in names:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.PUBLIC
+        assert policy.action is Action.PUBLIC_ANALYTICS_VIEW
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

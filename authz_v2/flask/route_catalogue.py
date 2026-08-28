@@ -80,6 +80,14 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "help.index": EndpointPolicy(EndpointMode.PUBLIC, Action.HELP_VIEW),
     "help.view_document": EndpointPolicy(EndpointMode.PUBLIC, Action.HELP_VIEW),
     **{
+        endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.PUBLIC_ANALYTICS_VIEW)
+        for endpoint in (
+            "public.public_analytics",
+            "public.api_analytics_kpi",
+            "public.api_analytics_chart_data",
+        )
+    },
+    **{
         endpoint: _screen(Action.ANALYTICS_UPLOAD_STATS_VIEW)
         for endpoint in (
             "fundus_api.upload_stats_today",

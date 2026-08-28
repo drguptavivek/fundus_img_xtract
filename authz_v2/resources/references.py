@@ -63,6 +63,14 @@ class GradingConfigRef:
 
 
 @dataclass(frozen=True)
+class GradingSchemeGradeRef:
+    """Grade identity bound to its grading-scheme path parent."""
+
+    scheme_id: int
+    grade_id: int
+
+
+@dataclass(frozen=True)
 class ExecutableConfigRef:
     """Typed identity for AI and scheduler configuration records."""
 

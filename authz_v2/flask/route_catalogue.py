@@ -104,6 +104,29 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.create_encounter_remote_inference_job": _exact(
         Action.PROJECT_REMOTE_INFERENCE_BATCH_RUN, "remote_inference_batch"
     ),
+    "fundus_api.list_grading_schemes": _screen(
+        Action.ADMIN_GRADING_ELIGIBILITY_MANAGE
+    ),
+    "fundus_api.create_grading_scheme": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    "fundus_api.get_grading_scheme": _exact(
+        Action.ADMIN_GRADING_CONFIG_VIEW, "grading_config_record"
+    ),
+    **{
+        endpoint: _exact(
+            Action.ADMIN_GRADING_CONFIG_MANAGE, "grading_config_record"
+        )
+        for endpoint in (
+            "fundus_api.update_grading_scheme",
+            "fundus_api.duplicate_grading_scheme",
+            "fundus_api.delete_grading_scheme",
+            "fundus_api.create_grading_scheme_grade",
+            "fundus_api.update_grading_scheme_grade",
+            "fundus_api.activate_grading_scheme_grade",
+            "fundus_api.deactivate_grading_scheme_grade",
+        )
+    },
     "fundus_api.get_active_workbench_sessions": _screen(
         Action.GRADING_WORKBENCH_SESSIONS_LIST
     ),

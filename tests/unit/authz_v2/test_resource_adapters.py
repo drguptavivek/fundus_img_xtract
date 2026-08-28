@@ -36,6 +36,7 @@ from authz_v2.resources.references import (
     AutomationTargetRef,
     ExecutableConfigRef,
     GradingConfigRef,
+    GradingSchemeGradeRef,
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
@@ -265,6 +266,20 @@ def test_grading_config_records_reject_ambiguous_or_unknown_references():
     assert resolve_grading_config(db, 1) is None
     assert resolve_grading_config(db, GradingConfigRef("unknown", 1)) is None
     assert resolve_grading_config(db, GradingConfigRef("grading_scheme", 0)) is None
+    assert resolve_grading_config(db, GradingSchemeGradeRef(0, 1)) is None
+    assert resolve_grading_config(db, GradingSchemeGradeRef(1, 0)) is None
+
+
+def test_grading_scheme_grade_reference_enforces_path_parent_lineage():
+    class Database:
+        def get(self, _model, _record_id):
+            return SimpleNamespace(id=9, disease_id=4)
+
+    db = Database()
+    assert resolve_grading_config(db, GradingSchemeGradeRef(3, 9)) is None
+    target = resolve_grading_config(db, GradingSchemeGradeRef(4, 9))
+    assert target is not None
+    assert target.context.resource_id == "grading_scheme_grade:4:9"
 
 
 def test_executable_config_records_require_closed_typed_references():

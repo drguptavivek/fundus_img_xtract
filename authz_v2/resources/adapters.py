@@ -22,6 +22,7 @@ from authz_v2.resources.references import (
     AutomationTargetRef,
     ExecutableConfigRef,
     GradingConfigRef,
+    GradingSchemeGradeRef,
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
@@ -699,6 +700,7 @@ _SYSTEM_OPERATIONS = frozenset(
         "lookup_create_camera",
         "lookup_create_area",
         "disease_grading_create",
+        "grading_scheme_create",
         "linked_grading_create",
         "linked_grading_hierarchy_update",
         "remidio_stuck_upload_cleanup",
@@ -1444,6 +1446,24 @@ _GRADING_CONFIG_MODELS = {
 
 
 def resolve_grading_config(db, reference: object) -> ResourceTarget | None:
+    if isinstance(reference, GradingSchemeGradeRef):
+        if not is_positive_int(reference.scheme_id) or not is_positive_int(
+            reference.grade_id
+        ):
+            return None
+        value = db.get(DiseaseGrading, reference.grade_id)
+        if value is None or value.disease_id != reference.scheme_id:
+            return None
+        return ResourceTarget(
+            value,
+            ResourceContextDTO(
+                "grading_config_record",
+                f"grading_scheme_grade:{reference.scheme_id}:{value.id}",
+                ScopeDTO(ScopeType.SYSTEM),
+                state={"domain_valid": True},
+                resolved=True,
+            ),
+        )
     if not isinstance(reference, GradingConfigRef):
         return None
     model = _GRADING_CONFIG_MODELS.get(reference.kind)

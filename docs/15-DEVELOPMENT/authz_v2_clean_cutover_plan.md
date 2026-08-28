@@ -914,6 +914,19 @@ pattern.
   literals, 251 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 14: grading-scheme API
+
+- All ten grading-scheme APIs are classified as screen admission, one closed
+  create operation, exact scheme read, or exact scheme/grade mutation.
+- Scheme records resolve as persisted system configuration. Grade mutations
+  bind both path identifiers and deny when the grade does not belong to the
+  declared scheme, preventing cross-scheme identifier substitution.
+- Core-scheme protection, linkage/use blockers, field validation, sanitization,
+  feature replacement, and activation rules remain grading-scheme domain logic.
+- The reviewed inventory is now 395 v2 HTTP consumers, 44 legacy action
+  literals, 241 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

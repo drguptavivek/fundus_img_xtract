@@ -1138,6 +1138,20 @@ pattern.
   literals, 130 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 219 actions.
 
+### Core hardening slice 31: domain boundary
+
+- Authz v2 authorization facts are limited to identity, exact resource and
+  scope, active grants and principals, delegation, ownership/participation,
+  signed or automation credentials, disclosure/PII authority, upload-profile
+  assignment, and explicit project-site authorization-policy switches.
+- Application services retain all business eligibility and content rules. In
+  particular, S3 retry status, grading-repair workflow state, dataset
+  finalization, disease/kind/camera/area/mydriatic semantics, and upload-field
+  value validation are not Authz predicates.
+- Missing authorization facts still deny. A caller must supply every identity,
+  scope, relationship, credential, or authorization-policy fact required by an
+  action; application facts are validated separately by the owning service.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

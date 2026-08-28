@@ -355,12 +355,8 @@ def resolve_dataset_share(db, resource_id: object) -> ResourceTarget | None:
             resource_id=share.id,
             owner_id=share.created_by_user_id,
             state={
-                "target_active": bool(
-                    share.is_active and dataset.is_active and dataset.is_finalized
-                ),
-                "domain_valid": bool(
-                    share.is_active and dataset.is_active and dataset.is_finalized
-                ),
+                "target_active": bool(share.is_active and dataset.is_active),
+                "domain_valid": bool(share.is_active and dataset.is_active),
             },
         ),
     )
@@ -987,7 +983,9 @@ def resolve_s3_sync_record(db, reference: object) -> ResourceTarget | None:
             "s3_sync_record",
             sync.id,
             scope,
-            state={"domain_valid": sync.status == "failed"},
+            # Retry eligibility is an S3 workflow rule enforced by its service.
+            # Authorization owns only the persisted record and hospital scope.
+            state={"domain_valid": True},
             resolved=True,
         ),
     )
@@ -1696,7 +1694,7 @@ def resolve_grading_repair_batch(db, reference: object) -> ResourceTarget | None
     tasks = tuple(
         db.execute(select(GradingTask).where(GradingTask.id.in_(ids))).scalars()
     )
-    if len(tasks) != len(ids) or any(task.state != "resident2_done" for task in tasks):
+    if len(tasks) != len(ids):
         return None
     return ResourceTarget(
         tasks,

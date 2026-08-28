@@ -90,6 +90,7 @@ authorization.grants.view,screen,authenticated_screen|admin_break_glass,masked,o
 authorization.me.capabilities.view,user,self,masked,optional
 authorization.me.upload_options.view,user,self,masked,optional
 authorization.me.workspaces.view,user,self,masked,optional
+dashboard.hospital.view,lookup_record,scoped_role|admin_break_glass,identifier_in_place,optional
 dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 dataset.curation.image.update,image,scoped_role|admin_break_glass,identifier_in_place,optional
 dataset.curation.update,dataset,scoped_role|admin_break_glass,masked,optional

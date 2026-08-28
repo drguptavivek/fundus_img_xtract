@@ -1638,6 +1638,12 @@ _resource(
     disclosure=DisclosureClass.MASKED,
 )
 _resource(
+    "dashboard.hospital.view",
+    "lookup_record",
+    CLINICAL_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
     "inference.wai.run.retry",
     "inference_result",
     frozenset({Role.ADMIN, Role.LOCAL_ADMIN, Role.DATA_MANAGER}),

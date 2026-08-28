@@ -87,6 +87,13 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     **{
+        endpoint: _screen(Action.DASHBOARD_VIEW)
+        for endpoint in ("dashboard.hospital_dashboard", "dashboard.image_list")
+    },
+    "dashboard.hospital_detail": _exact(
+        Action.DASHBOARD_HOSPITAL_VIEW, "lookup_record"
+    ),
+    **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (
             "fundus_api.get_eligible_lab_units",

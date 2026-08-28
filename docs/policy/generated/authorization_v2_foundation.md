@@ -764,6 +764,15 @@ Resource: `user`; disclosure: `masked`; audit: `optional`.
 
 - `self`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
 
+### `dashboard.hospital.view`
+
+Authorize dashboard.hospital.view.
+
+Resource: `lookup_record`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `dashboard.view`
 
 Authorize dashboard.view.

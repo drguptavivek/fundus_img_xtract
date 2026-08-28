@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 549,
+        "authz_v2": 552,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 92,
+        "legacy_unmapped": 89,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1163,6 +1163,26 @@ def test_help_upload_stats_and_eligible_lab_routes_are_explicit():
             Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW
         )
         assert ROUTE_POLICIES[endpoint].resolver == "user"
+
+
+def test_legacy_dashboard_separates_admission_from_exact_hospital():
+    names = {
+        "dashboard.hospital_dashboard",
+        "dashboard.hospital_detail",
+        "dashboard.image_list",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 3
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in ("dashboard.hospital_dashboard", "dashboard.image_list"):
+        assert ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        assert ROUTE_POLICIES[endpoint].resolver is None
+    detail = ROUTE_POLICIES["dashboard.hospital_detail"]
+    assert detail.action is Action.DASHBOARD_HOSPITAL_VIEW
+    assert detail.resolver == "lookup_record"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

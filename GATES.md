@@ -1,20 +1,20 @@
-# Gates: Authorization v2 vertical slice 10b - Remidio operational authorization
+# Gates: Authorization v2 vertical slice 11a - grading workbench sessions
 
-- [x] G1: All 32 Remidio API routes have explicit contracts.
-  CHECK: complete Remidio API inventory family test
-  EVIDENCE: inventory is 351 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All eight self-list and durable-session lifecycle routes have explicit contracts.
+  CHECK: grading-workbench session inventory family test
+  EVIDENCE: inventory is 359 Authz v2 HTTP routes; all eight reviewed routes classify v2
 
-- [x] G2: Attachment OCR reads and mutations use distinct exact authorities.
-  CHECK: method-specific route contract and attachment adapter tests
-  EVIDENCE: GET resolves view action; POST resolves process action through persisted encounter scope
+- [x] G2: Session UUIDs alone never authorize credential-bearing operations.
+  CHECK: workbench session adapter and catalogue truth tables
+  EVIDENCE: view, heartbeat, release, draft, and submit require owner, active lease, token, and generation
 
-- [x] G3: Project sync proves the complete active route set and every uploader assignment.
-  CHECK: project-sync resolver and relationship provider
-  EVIDENCE: missing, empty, duplicate, stale, partial, or widened Lab Unit facts deny
+- [x] G3: Session scope is the common persisted scope of every leased target.
+  CHECK: workbench session resolver
+  EVIDENCE: missing tasks, unresolved scope, or mixed-scope target sets deny
 
-- [x] G4: Project-sync job controls require exact job ownership or scoped admin authority.
-  CHECK: job route contracts and existing ownership facts provider
-  EVIDENCE: pause, resume, and cancel all resolve the persisted job before decision
+- [x] G4: Clinical grading sessions have no administrator break-glass path.
+  CHECK: generated catalogue and role/action matrix
+  EVIDENCE: session paths require scoped grading qualification and persisted ownership
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md

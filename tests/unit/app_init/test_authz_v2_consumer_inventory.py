@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 351,
+        "authz_v2": 359,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 284,
+        "legacy_unmapped": 276,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "edebb94cc747bd835d3246d4f1a19cfbdf951c8fc87bab017ea7e3b583509135"
+        == "782b79e10afe4f5f0bcb25f0409dcf869a36a06bad6e37df640c21bc2804b4a4"
     )
 
 
@@ -126,6 +126,31 @@ def test_remidio_api_operational_slice_is_exact_and_method_specific():
     assert ROUTE_POLICIES[
         "fundus_api.pause_remidio_api_project_sync_job"
     ].resolver == "job"
+
+
+def test_grading_workbench_session_slice_is_credential_bound():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    classified = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.source == "api/grading_workbench.py"
+        and row.classification == "authz_v2"
+    ]
+    assert len(classified) == 8
+    for endpoint in (
+        "fundus_api.get_workbench_session",
+        "fundus_api.resume_workbench_session",
+        "fundus_api.heartbeat_workbench_session",
+        "fundus_api.release_workbench_session",
+        "fundus_api.save_workbench_session_draft",
+        "fundus_api.submit_workbench_session",
+    ):
+        assert ROUTE_POLICIES[endpoint].resolver == "workbench_session"
+    submit = ROUTE_POLICIES["fundus_api.submit_workbench_session"]
+    assert submit.action is Action.GRADING_WORKBENCH_SESSION_SUBMIT
 
 
 def test_high_risk_media_slice_has_no_unmapped_route():

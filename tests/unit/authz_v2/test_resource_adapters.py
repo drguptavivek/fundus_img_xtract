@@ -24,6 +24,7 @@ from authz_v2.resources.adapters import (
     resolve_sensitive_audit_event,
     resolve_system_operation,
     resolve_task_backfill_target,
+    resolve_workbench_session,
 )
 from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
@@ -38,6 +39,7 @@ from authz_v2.resources.references import (
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
+    WorkbenchSessionRef,
 )
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
 from authz_v2.resources.scoping import scope_model_query
@@ -310,3 +312,5 @@ def test_scope_sensitive_admin_targets_fail_closed_before_database_access():
     assert resolve_remidio_project_sync(
         db, RemidioProjectSyncRef(1, (2, 2))
     ) is None
+    assert resolve_workbench_session(db, None) is None
+    assert resolve_workbench_session(db, WorkbenchSessionRef("")) is None

@@ -819,6 +819,70 @@ Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
 - `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', False)); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', True)); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
+### `grading.workbench.session.draft`
+
+Authorize grading.workbench.session.draft.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_credentialed_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.session.heartbeat`
+
+Authorize grading.workbench.session.heartbeat.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_credentialed_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.session.release`
+
+Authorize grading.workbench.session.release.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_credentialed_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.session.resume`
+
+Authorize grading.workbench.session.resume.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_active_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.session.submit`
+
+Authorize grading.workbench.session.submit.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_credentialed_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.session.view`
+
+Authorize grading.workbench.session.view.
+
+Resource: `workbench_session`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `owned_credentialed_session`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.sessions.list`
+
+Authorize grading.workbench.sessions.list.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=field_ophthalmologist,ophthalmologist), GrantSourceRequirement(sources=authorization_grant)
+
+### `grading.workbench.submissions.list`
+
+Authorize grading.workbench.submissions.list.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=field_ophthalmologist,ophthalmologist), GrantSourceRequirement(sources=authorization_grant)
+
 ### `help.view`
 
 Authorize help.view.

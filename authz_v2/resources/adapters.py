@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+import hashlib
+import hmac
 
 from sqlalchemy import false, select
 
@@ -27,6 +29,7 @@ from authz_v2.resources.references import (
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
+    WorkbenchSessionRef,
     is_positive_int,
     is_stable_resource_id,
 )
@@ -47,6 +50,7 @@ from authz_v2.resources.scoping import resolve_scope, scope_model_query
 from authz_v2.resources.upload_targets import resolve_classical_upload_target
 from encounter_set_types.models import EncounterSetType
 from encounter_sets.models import EncounterSetAttachment
+from grading.workbench.models import GradingWorkbenchSession
 from models import (
     AIInferenceRun,
     AIModel,
@@ -1055,6 +1059,86 @@ REMIDIO_PROJECT_SYNC_ADAPTER = ResourceAdapter(
     remidio_project_sync_facts,
 )
 
+
+def resolve_workbench_session(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, WorkbenchSessionRef) or not is_stable_resource_id(
+        reference.session_uuid
+    ):
+        return None
+    session = db.execute(
+        select(GradingWorkbenchSession).where(
+            GradingWorkbenchSession.uuid == reference.session_uuid
+        )
+    ).scalar_one_or_none()
+    if session is None or not session.targets:
+        return None
+    tasks = tuple(db.get(GradingTask, target.task_id) for target in session.targets)
+    if any(task is None for task in tasks):
+        return None
+    scopes = tuple(
+        resolve_scope(db, project_id=task.project_id, lab_unit_id=task.lab_unit_id)
+        for task in tasks
+    )
+    if any(scope is None for scope in scopes) or len(set(scopes)) != 1:
+        return None
+    now = datetime.now(UTC)
+    active = bool(
+        session.status == "active"
+        and session.idle_expires_at > now
+        and session.absolute_expires_at > now
+    )
+    credential_valid = bool(
+        reference.raw_token
+        and is_positive_int(reference.token_generation)
+        and reference.token_generation == session.token_generation
+        and hmac.compare_digest(
+            session.token_hash,
+            hashlib.sha256(reference.raw_token.encode("utf-8")).hexdigest(),
+        )
+    )
+    return ResourceTarget(
+        session,
+        ResourceContextDTO(
+            "workbench_session",
+            session.uuid,
+            scopes[0],
+            owner_id=session.user_id,
+            state={
+                "domain_valid": active,
+                "credential_valid": credential_valid,
+            },
+            resolved=True,
+        ),
+    )
+
+
+def workbench_session_facts(_db, principal, _action, target, facts):
+    facts = ownership_facts(_db, principal, _action, target, facts)
+    credential_valid = target.context.state["credential_valid"]
+    evidence = RelationshipEvidenceDTO(
+        GrantSource.SIGNED_CREDENTIAL,
+        target.context.resource_id,
+        principal.user_id,
+        target.context.resource_type,
+        target.context.resource_id,
+        credential_valid,
+        target.context.scope,
+    )
+    return replace(
+        facts,
+        relationships=(*facts.relationships, evidence),
+        credential_valid=credential_valid,
+        domain_valid=target.context.state["domain_valid"],
+    )
+
+
+WORKBENCH_SESSION_ADAPTER = ResourceAdapter(
+    "workbench_session",
+    resolve_workbench_session,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    workbench_session_facts,
+)
+
 _LOOKUP_MODELS = {
     "hospital": Hospital,
     "lab_unit": LabUnit,
@@ -1313,4 +1397,5 @@ RESOURCE_ADAPTERS = (
     UPLOAD_JOB_ADAPTER,
     UPLOAD_PROFILE_ADAPTER,
     UPLOAD_TARGET_ADAPTER,
+    WORKBENCH_SESSION_ADAPTER,
 )

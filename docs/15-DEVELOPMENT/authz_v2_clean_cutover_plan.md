@@ -849,6 +849,21 @@ pattern.
   literals, 284 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 11a: grading-workbench session lifecycle
+
+- Eight grading-workbench endpoints now distinguish self-only session/history
+  listings from exact session view, resume, heartbeat, release, draft, and
+  submission actions.
+- The workbench-session resolver loads every leased grading target and denies
+  missing targets or mixed scopes. Scope is derived only from persisted tasks.
+- All session operations require the persisted owner and active lease. Every
+  operation except token rotation on resume also requires the exact bearer
+  token and current token generation using constant-time hash comparison.
+- Clinical workbench actions have no administrator break-glass path.
+- The reviewed inventory is now 359 v2 HTTP consumers, 45 legacy action
+  literals, 276 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

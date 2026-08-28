@@ -49,6 +49,30 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    "fundus_api.get_active_workbench_sessions": _screen(
+        Action.GRADING_WORKBENCH_SESSIONS_LIST
+    ),
+    "fundus_api.get_my_workbench_submissions": _screen(
+        Action.GRADING_WORKBENCH_SUBMISSIONS_LIST
+    ),
+    "fundus_api.get_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_SESSION_VIEW, "workbench_session"
+    ),
+    "fundus_api.resume_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_SESSION_RESUME, "workbench_session"
+    ),
+    "fundus_api.heartbeat_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_SESSION_HEARTBEAT, "workbench_session"
+    ),
+    "fundus_api.release_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_SESSION_RELEASE, "workbench_session"
+    ),
+    "fundus_api.save_workbench_session_draft": _exact(
+        Action.GRADING_WORKBENCH_SESSION_DRAFT, "workbench_session"
+    ),
+    "fundus_api.submit_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_SESSION_SUBMIT, "workbench_session"
+    ),
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

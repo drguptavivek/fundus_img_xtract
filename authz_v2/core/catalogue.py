@@ -203,6 +203,11 @@ MANDATORY_AUDIT = frozenset(
         "project.remidio.attachment_ocr.process",
         "project.remidio.sync",
         "project.remidio.sync_job.manage",
+        "grading.workbench.session.resume",
+        "grading.workbench.session.heartbeat",
+        "grading.workbench.session.release",
+        "grading.workbench.session.draft",
+        "grading.workbench.session.submit",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -738,6 +743,8 @@ for _name, _roles in (
     ("project.upload.workspace.view", PROJECT_READ),
     ("upload.workspace.view", CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN, Role.OPHTHALMOLOGIST})),
     ("upload.pregraded.workspace.view", PREGRADING_UPLOADERS | ADMIN),
+    ("grading.workbench.sessions.list", GRADING_QUALIFICATIONS),
+    ("grading.workbench.submissions.list", GRADING_QUALIFICATIONS),
 ):
     _screen(_name, _roles)
 _screen(
@@ -862,6 +869,54 @@ _owned_resource(
     CAPTURE_UPLOADERS | ADMIN,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_store(
+    "grading.workbench.session.resume",
+    resource_type="workbench_session",
+    requires_resource=True,
+    paths=(
+        (
+            "owned_active_session",
+            all_of(
+                active_principal(),
+                scoped_roles(*GRADING_QUALIFICATIONS),
+                fact(BooleanFact.EXACT_RESOURCE),
+                relationship(GrantSource.OWNERSHIP),
+                fact(BooleanFact.DOMAIN_VALID),
+                name="owned_active_session",
+            ),
+        ),
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    break_glass=BreakGlassMode.NEVER,
+)
+for _name in (
+    "grading.workbench.session.view",
+    "grading.workbench.session.heartbeat",
+    "grading.workbench.session.release",
+    "grading.workbench.session.draft",
+    "grading.workbench.session.submit",
+):
+    _store(
+        _name,
+        resource_type="workbench_session",
+        requires_resource=True,
+        paths=(
+            (
+                "owned_credentialed_session",
+                all_of(
+                    active_principal(),
+                    scoped_roles(*GRADING_QUALIFICATIONS),
+                    fact(BooleanFact.EXACT_RESOURCE),
+                    relationship(GrantSource.OWNERSHIP),
+                    relationship(SIGNED),
+                    fact(BooleanFact.DOMAIN_VALID),
+                    name="owned_credentialed_session",
+                ),
+            ),
+        ),
+        disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+        break_glass=BreakGlassMode.NEVER,
+    )
 _resource(
     "admin.executable_config.view",
     "executable_config_record",

@@ -95,6 +95,14 @@ grading.arbitrator.submit,grading_task,qualified_slot,masked,optional
 grading.grades.view,grading_task,participant|admin_break_glass,masked,optional
 grading.resident.submit,grading_task,qualified_slot,masked,optional
 grading.resident2.submit,grading_task,qualified_slot,masked,optional
+grading.workbench.session.draft,workbench_session,owned_credentialed_session,identifier_in_place,required
+grading.workbench.session.heartbeat,workbench_session,owned_credentialed_session,identifier_in_place,required
+grading.workbench.session.release,workbench_session,owned_credentialed_session,identifier_in_place,required
+grading.workbench.session.resume,workbench_session,owned_active_session,identifier_in_place,required
+grading.workbench.session.submit,workbench_session,owned_credentialed_session,identifier_in_place,required
+grading.workbench.session.view,workbench_session,owned_credentialed_session,identifier_in_place,optional
+grading.workbench.sessions.list,screen,authenticated_screen,masked,optional
+grading.workbench.submissions.list,screen,authenticated_screen,masked,optional
 help.view,public,public,masked,optional
 inference.wai.retrospective.run,inference_target,scoped_role|admin_break_glass|stored_automation_rule,masked,optional
 inference.wai.retry,job,scoped_role|admin_break_glass|stored_automation_rule,masked,required

@@ -17,7 +17,6 @@ from flask_login import current_user, login_required
 
 from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
 from authz.telemetry import record_authorization_decision
-from authz_v2.flask import EndpointMode, authorization_endpoint
 from db_transaction_manager import transaction_scope
 from media.authorization import (
     IMAGE_SOURCE_TYPES,
@@ -67,12 +66,6 @@ audit_logger = logging.getLogger("security.audit")
 
 
 @bp.route("/<uuid_str>", methods=["GET"])
-@authorization_endpoint(
-    EndpointMode.SIGNED_RESOURCE,
-    "media.image.view",
-    action_variants=("media.pdf.view",),
-    binding="media_source",
-)
 @rate_limit("4000 per hour; 400 per minute", methods=["GET"], per_method=True)
 def serve_media_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
@@ -84,9 +77,6 @@ def serve_media_with_hmac(uuid_str: str):
 
 
 @bp.route("/<uuid_str>/edited", methods=["GET"])
-@authorization_endpoint(
-    EndpointMode.SIGNED_RESOURCE, "media.image.view", resolver="image"
-)
 @rate_limit("2000 per hour; 100 per minute", methods=["GET"], per_method=True)
 def serve_media_edited_with_hmac(uuid_str: str):
     return _serve_authorized_hmac(
@@ -102,9 +92,6 @@ def serve_media_edited_with_hmac(uuid_str: str):
 
 
 @bp.route("/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(
-    EndpointMode.SIGNED_RESOURCE, "media.image.view", resolver="image"
-)
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute", methods=["GET"], per_method=True
 )
@@ -255,7 +242,6 @@ def _reject_signed_media(status_code: int, description: str) -> NoReturn:
 
 
 @bp.route("/encounter/img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "4000 per hour; 200 per minute",
@@ -268,7 +254,6 @@ def _encounterImageByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "2000 per hour; 200 per minute",
@@ -281,7 +266,6 @@ def _directImgOrigByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "2000 per hour; 100 per minute",
@@ -294,7 +278,6 @@ def _directImgEdByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "4000 per hour; 200 per minute",
@@ -307,7 +290,6 @@ def _directImgFinalByUUID(uuid_str: str):
 
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "1000 per hour; 300 per minute",
@@ -320,9 +302,6 @@ def _imgForGradingByUUID(uuid_str: str):
 
 
 @bp.route("/encounter/pdf/<uuid_str>", methods=["GET"])
-@authorization_endpoint(
-    EndpointMode.PROTECTED, "media.pdf.view", resolver="encounter_file"
-)
 @login_required
 @rate_limit(
     "4000 per hour; 400 per minute",
@@ -338,7 +317,6 @@ def _encounterPDFByUUID(uuid_str: str):
 
 
 @bp.route("/encounter/img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -352,7 +330,6 @@ def _encounterImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/org_img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -366,7 +343,6 @@ def _directImgOrigThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/ed_img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -380,7 +356,6 @@ def _directImgEdThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/direct_upload/fn_img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -394,7 +369,6 @@ def _directImgFinalThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -411,7 +385,6 @@ def _universalImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "4000 per hour; 200 per minute",
@@ -425,7 +398,6 @@ def _encounterSetImageByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/thumbnail", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit_with_feedback(
     "4000 per hour; 500 per minute",
@@ -439,7 +411,6 @@ def _encounterSetImageThumbnailByUUID(uuid_str: str):
 
 
 @bp.route("/encounter_set/img/<uuid_str>/edited", methods=["GET"])
-@authorization_endpoint(EndpointMode.PROTECTED, "media.image.view", resolver="image")
 @login_required
 @rate_limit(
     "4000 per hour; 200 per minute",

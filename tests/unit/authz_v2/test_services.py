@@ -25,6 +25,7 @@ from authz_v2.resources.registry import (
     ResourceRegistry,
     ResourceTarget,
 )
+from authz_v2.resources.references import ResourceSetRef
 from authz_v2.resources.users import USER_ADAPTER
 from authz_v2.services.choices import list_choices
 from authz_v2.services.decision import AuthorizationDecisionService
@@ -121,6 +122,22 @@ def dataset_adapter() -> ResourceAdapter:
     )
 
 
+def dataset_set_adapter() -> ResourceAdapter:
+    def resolve(_db, resource_id):
+        if resource_id not in {10, 11}:
+            return None
+        return ResourceTarget(
+            {"id": resource_id},
+            ResourceContextDTO("dataset", resource_id, LAB_SCOPE, resolved=True),
+        )
+
+    return ResourceAdapter(
+        "dataset",
+        resolve,
+        lambda _db, _principal, _action, _grants, query: query,
+    )
+
+
 def service(
     repository: FakeRepository, *adapters: ResourceAdapter
 ) -> AuthorizationDecisionService:
@@ -189,6 +206,36 @@ def test_identifier_release_requires_additive_pii_grant_at_runtime():
         None, principal(), Action.DATASET_EXPORT_DOWNLOAD_IDENTIFIERS, 10
     )
     assert with_pii.allowed
+
+
+def test_bounded_resource_set_requires_every_distinct_member():
+    grant = GrantRecord(7, 1, Role.DATASET_CREATOR, LAB_SCOPE, True)
+    authz = service(FakeRepository(grants=(grant,)), dataset_set_adapter())
+
+    receipts = authz.require(
+        None,
+        principal(),
+        Action.DATASET_CURATION_VIEW,
+        ResourceSetRef((10, 11)),
+    )
+    assert tuple(receipt.resource_id for receipt in receipts) == (10, 11)
+
+    for members in ((), (10, 10), (10, 999)):
+        with pytest.raises(AuthorizationError):
+            authz.require_all(
+                None,
+                principal(),
+                Action.DATASET_CURATION_VIEW,
+                ResourceSetRef(members),
+            )
+
+    with pytest.raises(AuthorizationError):
+        authz.require_all(
+            None,
+            principal(),
+            Action.DATASET_CURATION_VIEW,
+            ResourceSetRef(tuple(range(1, 502))),
+        )
 
 
 def test_unknown_action_resource_and_inactive_principal_deny_closed():

@@ -1550,6 +1550,19 @@ pattern.
   flattened first-value view; a binder either resolves the complete exact
   authorization target or the central guard denies before the handler runs.
 
+### Implemented foundation hardening: bounded exact resource sets
+
+- A route may bind a non-empty set of at most 500 exact resource references to
+  one declared action. Every member is independently server-resolved and must
+  pass the same policy; one missing, unauthorized, or duplicate resolved
+  member denies the entire handler before execution.
+- Decisions are completed for the whole set before mandatory allow-audit
+  receipts are emitted, preventing an early member from being recorded as an
+  allowed operation when a later member denies the request.
+- The primitive contains only authorization resource references. Selection
+  rules, grading values, disease and imaging metadata, clinical state, and
+  export-content validation remain in their application modules.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

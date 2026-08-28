@@ -19,7 +19,6 @@ from authz_v2.domain.models import PasswordResetCredential
 from authz_v2.resources.registry import ResourceTarget
 from authz_v2.resources.relationships import (
     automation_rule_facts,
-    dataset_state_facts,
     grading_slot_facts,
     ownership_facts,
     participation_facts,
@@ -30,7 +29,6 @@ from authz_v2.resources.relationships import (
 )
 from authz_v2.resources.upload_targets import ResolvedUploadTarget
 from models import (
-    CuratedDataset,
     GradingTask,
     MobileAuthSession,
     ProjectAutomatedRemoteInferenceRule,
@@ -287,16 +285,6 @@ def test_site_policy_is_default_closed_and_action_specific():
     ).domain_valid
 
 
-def test_dataset_lifecycle_is_loaded_independently_of_scope_binding():
-    principal, facts = _facts("dataset")
-    facts = replace(facts, domain_valid=True)
-    finalized = CuratedDataset(id=7, is_active=True, is_finalized=True)
-    target = ResourceTarget((finalized, object()), facts.resource)
-    assert dataset_state_facts(
-        None, principal, Action.DATASET_EXPORT_CREATE, target, facts
-    ).domain_valid
-
-
 def test_image_disclosure_provider_never_overrides_an_invalid_target_state():
     principal, facts = _facts("image")
     target = ResourceTarget(SimpleNamespace(is_pii=False), facts.resource)
@@ -318,11 +306,6 @@ def test_image_disclosure_provider_never_overrides_an_invalid_target_state():
         pii_target,
         replace(verifier, active_roles=frozenset()),
     ).domain_valid
-    assert not dataset_state_facts(
-        None, principal, Action.DATASET_CURATION_UPDATE, target, facts
-    ).domain_valid
-
-
 def test_automation_requires_exact_bound_rule_for_non_project_target():
     session = SessionContextDTO(
         "worker-1",

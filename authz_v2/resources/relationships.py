@@ -426,31 +426,6 @@ def site_policy_facts(db, _principal, action, target, facts):
     return replace(facts, domain_valid=facts.domain_valid and allowed)
 
 
-def dataset_state_facts(_db, _principal, action, target, facts):
-    """Resolve dataset lifecycle from the dataset row, never its scope binding."""
-    value = target.value
-    dataset = value[0] if isinstance(value, tuple) else None
-    if not isinstance(dataset, CuratedDataset):
-        return replace(facts, domain_valid=False)
-    if action in {
-        Action.DATASET_EXPORT_CREATE,
-        Action.DATASET_EXPORT_DOWNLOAD,
-        Action.DATASET_EXPORT_DOWNLOAD_IDENTIFIERS,
-        Action.DATASET_EXPORT_GRADES,
-        Action.DATASET_SHARE_MANAGE,
-    }:
-        valid = dataset.is_active and dataset.is_finalized
-    elif action in {
-        Action.DATASET_CURATION_UPDATE,
-        Action.DATASET_FINALIZE,
-        Action.DATASET_DELETE,
-    }:
-        valid = dataset.is_active and not dataset.is_finalized
-    else:
-        valid = dataset.is_active
-    return replace(facts, domain_valid=facts.domain_valid and bool(valid))
-
-
 def pii_image_facts(_db, _principal, action, target, facts):
     """Withhold identifier-flagged images from masked image delivery."""
     if action is not Action.MEDIA_IMAGE_VIEW:

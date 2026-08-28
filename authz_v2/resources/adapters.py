@@ -44,7 +44,6 @@ from authz_v2.resources.registry import ResourceAdapter, ResourceTarget
 from authz_v2.resources.relationships import (
     automation_rule_facts,
     compose_facts,
-    dataset_state_facts,
     grading_slot_facts,
     ownership_facts,
     participation_facts,
@@ -380,9 +379,7 @@ def resolve_dataset(db, resource_id: object) -> ResourceTarget | None:
             state={
                 **target.context.state,
                 "target_active": bool(dataset.is_active and binding.active),
-                "domain_valid": bool(
-                    dataset.is_active and binding.active and binding.domain_valid
-                ),
+                "domain_valid": bool(binding.active and binding.domain_valid),
             },
         ),
     )
@@ -672,7 +669,6 @@ DATASET_ADAPTER = replace(
     resolver=resolve_dataset,
     facts_provider=compose_facts(
         _DATASET_BASE_ADAPTER.facts_provider,
-        dataset_state_facts,
         site_policy_facts,
     ),
 )

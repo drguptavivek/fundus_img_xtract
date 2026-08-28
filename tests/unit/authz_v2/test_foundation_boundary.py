@@ -27,6 +27,7 @@ def test_grading_workflow_rules_do_not_leak_into_authz_v2():
         "no_conflict",
         "no_duplicate",
         "_ACCEPTED_STATE",
+        "dataset_state_facts",
     )
     sources = "\n".join(
         path.read_text(encoding="utf-8")

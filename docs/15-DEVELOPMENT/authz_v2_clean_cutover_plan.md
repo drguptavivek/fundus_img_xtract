@@ -1048,6 +1048,14 @@ pattern.
   grading-domain rules enforced by the grading application service. They are no
   longer facts or predicates in `authz_v2`.
 
+### Implemented vertical slice 24: dataset authorization/domain boundary
+
+- Dataset project/site policy enablement and exact scope remain authorization
+  facts and continue to fail closed.
+- Dataset active/finalized lifecycle and the legality of curate, finalize,
+  delete, share, or export transitions belong to the dataset application service.
+  Authz no longer derives or evaluates those workflow rules.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -927,6 +927,18 @@ pattern.
   literals, 241 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 15: encounter-set-type API
+
+- All nine encounter-set-type APIs are classified as screen admission, one
+  closed create operation, exact record reads/exports, or exact mutations.
+- Every existing-record operation resolves the persisted Encounter Set Type as
+  system grading configuration; missing identifiers deny.
+- Schema generation, configuration-shape validation, activation/deactivation,
+  delete blockers, and safe export filenames remain application-domain rules.
+- The reviewed inventory is now 404 v2 HTTP consumers, 44 legacy action
+  literals, 232 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

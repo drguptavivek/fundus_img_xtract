@@ -127,6 +127,31 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "fundus_api.deactivate_grading_scheme_grade",
         )
     },
+    "fundus_api.list_encounter_set_types": _screen(
+        Action.ADMIN_GRADING_ELIGIBILITY_MANAGE
+    ),
+    "fundus_api.create_encounter_set_type": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    **{
+        endpoint: _exact(Action.ADMIN_GRADING_CONFIG_VIEW, "grading_config_record")
+        for endpoint in (
+            "fundus_api.get_encounter_set_type",
+            "fundus_api.export_encounter_set_type_schema",
+        )
+    },
+    **{
+        endpoint: _exact(
+            Action.ADMIN_GRADING_CONFIG_MANAGE, "grading_config_record"
+        )
+        for endpoint in (
+            "fundus_api.update_encounter_set_type",
+            "fundus_api.activate_encounter_set_type",
+            "fundus_api.deactivate_encounter_set_type",
+            "fundus_api.delete_encounter_set_type",
+            "fundus_api.delete_encounter_set_type_rest",
+        )
+    },
     "fundus_api.get_active_workbench_sessions": _screen(
         Action.GRADING_WORKBENCH_SESSIONS_LIST
     ),

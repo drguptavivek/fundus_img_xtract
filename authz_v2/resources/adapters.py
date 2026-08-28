@@ -701,6 +701,7 @@ _SYSTEM_OPERATIONS = frozenset(
         "lookup_create_area",
         "disease_grading_create",
         "grading_scheme_create",
+        "encounter_set_type_create",
         "linked_grading_create",
         "linked_grading_hierarchy_update",
         "remidio_stuck_upload_cleanup",

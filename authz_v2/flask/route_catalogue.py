@@ -49,6 +49,50 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
+            "fundus_api.list_remidio_connections",
+            "fundus_api.list_remidio_routing_rules",
+            "fundus_api.list_remidio_api_source_rules",
+            "fundus_api.list_remidio_api_bindings",
+            "fundus_api.list_remidio_api_routing_profiles",
+            "fundus_api.list_remidio_api_routing_rules",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation")
+        for endpoint in (
+            "fundus_api.create_remidio_connection",
+            "fundus_api.upsert_remidio_routing_rule",
+            "fundus_api.upsert_remidio_api_source_rule",
+            "fundus_api.upsert_remidio_api_binding",
+            "fundus_api.upsert_remidio_api_routing_profile",
+            "fundus_api.create_remidio_api_routing_profile_with_route",
+            "fundus_api.upsert_remidio_api_routing_rule",
+        )
+    },
+    **{
+        endpoint: _exact(
+            Action.ADMIN_REMIDIO_API_CONFIG_MANAGE, "remidio_config_record"
+        )
+        for endpoint in (
+            "fundus_api.patch_remidio_connection",
+            "fundus_api.refresh_remidio_token",
+            "fundus_api.sync_remidio_sites",
+            "fundus_api.patch_remidio_site",
+            "fundus_api.delete_remidio_api_routing_profile",
+            "fundus_api.set_remidio_api_routing_rule_status",
+            "fundus_api.delete_remidio_api_routing_rule",
+            "fundus_api.sync_remidio_api_routing_profile",
+            "fundus_api.pull_remidio_exams_by_date",
+            "fundus_api.pull_remidio_latest_patient_exam",
+            "fundus_api.ingest_remidio_staged_files",
+        )
+    },
+    "fundus_api.list_remidio_sites": _exact(
+        Action.ADMIN_REMIDIO_API_CONFIG_VIEW, "remidio_config_record"
+    ),
     "admin.sensitive_operations_audit": _screen(Action.ADMIN_SENSITIVE_AUDIT_VIEW),
     "admin.sensitive_operation_details": _exact(
         Action.ADMIN_SENSITIVE_AUDIT_DETAIL_VIEW, "sensitive_audit_event"

@@ -818,6 +818,21 @@ pattern.
   literals, 316 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 10a: Remidio API configuration administration
+
+- Twenty-five administrator-only Remidio API endpoints are explicitly
+  classified as list admission, closed creation/upsert operations, or exact
+  persisted configuration records.
+- Connection, site, legacy routing rule, API source rule, API binding, and API
+  routing profile identifiers are typed and resolved through persisted lineage;
+  bare or unknown identifiers deny.
+- Project-owned records resolve to project scope, while genuinely global
+  connections resolve to system scope. Active-state transition rules remain in
+  the Remidio configuration domain service.
+- The reviewed inventory is now 344 v2 HTTP consumers, 45 legacy action
+  literals, 291 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

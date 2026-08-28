@@ -92,6 +92,14 @@ class TaskBackfillTargetRef:
     lab_unit_ids: tuple[int, ...]
 
 
+@dataclass(frozen=True)
+class RemidioConfigRef:
+    """Typed identity for one persisted Remidio integration record."""
+
+    kind: str
+    record_id: int
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

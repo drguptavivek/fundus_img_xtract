@@ -27,6 +27,8 @@ admin.lookup.manage,screen,admin_break_glass,masked,optional
 admin.lookup_record.manage,lookup_record,admin_break_glass,masked,required
 admin.lookup_record.view,lookup_record,admin_break_glass,masked,optional
 admin.metadata.operation,system_operation,scoped_role|admin_break_glass,masked,required
+admin.remidio_api_config.manage,remidio_config_record,admin_break_glass,identifier_in_place,required
+admin.remidio_api_config.view,remidio_config_record,admin_break_glass,identifier_in_place,optional
 admin.s3.manage,screen,admin_break_glass,masked,optional
 admin.s3_config.manage,s3_config,admin_break_glass,identifier_in_place,required
 admin.s3_config.view,s3_config,admin_break_glass,identifier_in_place,optional

@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 319,
+        "authz_v2": 344,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 316,
+        "legacy_unmapped": 291,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "9786657c7636f9f46c3f995ff0bf47a53a0f692abaf097876bccd2e13f0a02a3"
+        == "676c1242cf5ef11afa708914ab170240634a2cdaaa65793b741a10e92c0bcfdd"
     )
 
 
@@ -63,6 +63,37 @@ def test_final_admin_scope_sensitive_slice_is_classified_and_exact():
         ROUTE_POLICIES["admin.task_backfill_run"].resolver
         == "task_backfill_target"
     )
+
+
+def test_remidio_api_configuration_slice_is_classified():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.source == "api/remidio_api_integration.py"
+        and row.name
+        not in {
+            "fundus_api.queue_encounter_set_attachment_ocr",
+            "fundus_api.queue_project_pending_encounter_set_attachment_ocr",
+            "fundus_api.sync_remidio_api_project",
+            "fundus_api.sync_selected_remidio_api_project",
+            "fundus_api.pause_remidio_api_project_sync_job",
+            "fundus_api.resume_remidio_api_project_sync_job",
+            "fundus_api.cancel_remidio_api_project_sync_job",
+        }
+    ]
+    assert len(family) == 25
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "fundus_api.patch_remidio_connection",
+        "fundus_api.patch_remidio_site",
+        "fundus_api.delete_remidio_api_routing_profile",
+        "fundus_api.delete_remidio_api_routing_rule",
+    ):
+        assert ROUTE_POLICIES[endpoint].resolver == "remidio_config_record"
 
 
 def test_high_risk_media_slice_has_no_unmapped_route():

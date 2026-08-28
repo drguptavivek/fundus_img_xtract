@@ -198,6 +198,7 @@ MANDATORY_AUDIT = frozenset(
         "admin.grading_repair.reset_batch",
         "admin.s3_sync.retry",
         "admin.task_backfill.run",
+        "admin.remidio_api_config.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -777,6 +778,19 @@ _resource(
     "admin.task_backfill.run",
     "task_backfill_target",
     ADMIN_SITE,
+    domain_condition=True,
+)
+_resource(
+    "admin.remidio_api_config.view",
+    "remidio_config_record",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.remidio_api_config.manage",
+    "remidio_config_record",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
     domain_condition=True,
 )
 _resource(

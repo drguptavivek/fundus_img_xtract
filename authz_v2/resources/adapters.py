@@ -21,6 +21,7 @@ from authz_v2.resources.references import (
     GradingConfigRef,
     GradingRepairBatchRef,
     LookupRecordRef,
+    RemidioConfigRef,
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
@@ -71,12 +72,20 @@ from models import (
     MobileAuthSession,
     PatientEncounters,
     ProjectGraderAllocation,
+    RemidioConnection,
+    RemidioRoutingRule,
+    RemidioSite,
     S3Config,
     S3SyncStatus,
     SensitiveOperationAudit,
     User,
 )
 from project_configuration.models import ProjectLabUnit
+from remidio_api_integration.models import (
+    ProjectUploadProfileRemidioApiBinding,
+    RemidioApiRoutingProfile,
+    RemidioApiSourceRule,
+)
 from upload_profiles.models import UploadProfile
 
 
@@ -613,6 +622,13 @@ _SYSTEM_OPERATIONS = frozenset(
         "celery_schedule_create",
         "rate_limit_clear_one",
         "rate_limit_clear_all",
+        "remidio_connection_create",
+        "remidio_routing_rule_upsert",
+        "remidio_api_source_rule_upsert",
+        "remidio_api_binding_upsert",
+        "remidio_api_routing_profile_upsert",
+        "remidio_api_routing_profile_route_create",
+        "remidio_api_routing_rule_upsert",
     }
 )
 
@@ -839,6 +855,71 @@ SENSITIVE_AUDIT_EVENT_ADAPTER = ResourceAdapter(
 )
 TASK_BACKFILL_TARGET_ADAPTER = ResourceAdapter(
     "task_backfill_target", resolve_task_backfill_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+
+_REMIDIO_CONFIG_MODELS = {
+    "connection": RemidioConnection,
+    "site": RemidioSite,
+    "routing_rule": RemidioRoutingRule,
+    "source_rule": RemidioApiSourceRule,
+    "binding": ProjectUploadProfileRemidioApiBinding,
+    "routing_profile": RemidioApiRoutingProfile,
+}
+
+
+def resolve_remidio_config(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, RemidioConfigRef):
+        return None
+    model = _REMIDIO_CONFIG_MODELS.get(reference.kind)
+    if model is None or not is_positive_int(reference.record_id):
+        return None
+    value = db.get(model, reference.record_id)
+    if value is None:
+        return None
+
+    project_id = getattr(value, "project_id", None)
+    if isinstance(value, RemidioSite):
+        connection = db.get(RemidioConnection, value.remidio_connection_id)
+        if connection is None:
+            return None
+        project_id = connection.project_id
+    elif isinstance(value, RemidioApiSourceRule):
+        connection = db.get(RemidioConnection, value.remidio_connection_id)
+        if connection is None:
+            return None
+        project_id = connection.project_id
+    elif isinstance(value, ProjectUploadProfileRemidioApiBinding):
+        project_profile = value.project_profile
+        if project_profile is None:
+            return None
+        project_id = project_profile.project_id
+
+    scope = (
+        resolve_scope(db, project_id=project_id)
+        if project_id is not None
+        else ScopeDTO(ScopeType.SYSTEM)
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "remidio_config_record",
+            f"{reference.kind}:{value.id}",
+            scope,
+            # Active/inactive transitions are configuration-domain validation;
+            # authorization owns the persisted record identity and scope.
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+REMIDIO_CONFIG_ADAPTER = ResourceAdapter(
+    "remidio_config_record",
+    resolve_remidio_config,
     lambda _db, _principal, _action, _grants, query: query.where(false()),
     _admin_domain_facts,
 )
@@ -1089,6 +1170,7 @@ RESOURCE_ADAPTERS = (
     PROJECT_ALLOCATION_TARGET_ADAPTER,
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
+    REMIDIO_CONFIG_ADAPTER,
     S3_CONFIG_ADAPTER,
     S3_SYNC_QUERY_ADAPTER,
     S3_SYNC_RECORD_ADAPTER,

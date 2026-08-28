@@ -180,6 +180,8 @@ _CANONICAL_ONLY = {
     "admin.s3_sync.retry",
     "admin.task_backfill.view",
     "admin.task_backfill.run",
+    "admin.remidio_api_config.view",
+    "admin.remidio_api_config.manage",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

@@ -708,6 +708,8 @@ for _name, _roles in (
         PROJECT_READ - frozenset({Role.COLLABORATOR, Role.ANALYTICS_VIEWER}),
     ),
     ("project.upload.workspace.view", PROJECT_READ),
+    ("upload.workspace.view", CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN, Role.OPHTHALMOLOGIST})),
+    ("upload.pregraded.workspace.view", PREGRADING_UPLOADERS | ADMIN),
 ):
     _screen(_name, _roles)
 _screen(
@@ -800,6 +802,20 @@ for _name, _type, _roles, _disclosure in (
         domain_condition=_name.endswith(("delete", "update", "create")),
     )
 _owned_resource("jobs.result.view", "job", JOBS)
+_resource(
+    "upload.direct.batch.update",
+    "direct_upload_batch",
+    CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN}),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_resource(
+    "upload.direct.update",
+    "direct_image_upload",
+    CAPTURE_UPLOADERS | ADMIN_DATA | frozenset({Role.LOCAL_ADMIN}),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
 
 # Upload submissions always require both a grant role and an exact profile.
 for _name, _type in (

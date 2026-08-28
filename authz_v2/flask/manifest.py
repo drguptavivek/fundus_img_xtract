@@ -32,20 +32,29 @@ def build_route_manifest(app) -> tuple[RouteAuthorizationDTO, ...]:
     for rule in app.url_map.iter_rules():
         if rule.endpoint == "static":
             continue
-        policy: EndpointPolicy | None = endpoint_policy_for_app(app, rule.endpoint)
-        definition = CATALOGUE[policy.action] if policy else None
-        actions = (policy.action, *policy.action_variants) if policy else ()
+        methods = tuple(sorted(set(rule.methods or ()) - {"HEAD", "OPTIONS"}))
+        policies = tuple(
+            endpoint_policy_for_app(app, rule.endpoint, method) for method in methods
+        )
+        policy: EndpointPolicy | None = policies[0] if policies and all(policies) else None
+        declared_actions = []
+        for item in policies:
+            if item:
+                declared_actions.extend((item.action, *item.action_variants))
+        actions = tuple(dict.fromkeys(declared_actions))
+        definition = CATALOGUE[actions[0]] if actions else None
+        uniform = policy if policy and all(item == policy for item in policies) else None
         rows.append(
             RouteAuthorizationDTO(
                 endpoint=rule.endpoint,
-                methods=tuple(sorted(set(rule.methods or ()) - {"HEAD", "OPTIONS"})),
+                methods=methods,
                 path=str(rule),
-                mode=policy.mode.value if policy else None,
-                action=policy.action.value if policy else None,
+                mode=(uniform.mode.value if uniform else "method_specific" if policy else None),
+                action=actions[0].value if policy and actions else None,
                 actions=tuple(action.value for action in actions),
-                enforcement=policy.enforcement if policy else None,
-                resolver=policy.resolver if policy else None,
-                binding=policy.binding if policy else None,
+                enforcement=uniform.enforcement if uniform else "method_specific" if policy else None,
+                resolver=uniform.resolver if uniform else None,
+                binding=uniform.binding if uniform else None,
                 resource_type=definition.resource_type if definition else None,
                 resource_types=tuple(
                     CATALOGUE[action].resource_type for action in actions

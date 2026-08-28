@@ -15,18 +15,18 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 117 | 47 | 516 |
+| Flask/API route rules | 680 | 130 | 46 | 504 |
 | Celery tasks | 47 | 0 | 0 | 47 |
-| Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 0 | 977 |
-| Total | 1,704 | 117 | 47 | 1,540 |
+| Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
+| Total | 1,705 | 130 | 46 | 1,529 |
 
-Reviewed identity fingerprint: `6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3`.
+Reviewed identity fingerprint: `4437bd33de527f7ed3a32c943f4b24fb33b8cfa77fac10a6966a853ec786e03f`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
 The query candidates are intentionally over-inclusive: they include ordinary domain and lookup materialization as well as authorization-sensitive lists. This prevents helper/service queries from disappearing from the audit surface. The table below records the relationship/state-dependent live sets already proven to require Authz policy; each remaining candidate must be marked scope-only, action-specific, choice-only, exact-only, or non-authorization filtering as its vertical slice is migrated.
 
-Largest remaining unmapped HTTP families include `fundus_api` (195), `admin` (164), `analytics` (14), and `direct_uploads` (12). Media, grading, encounter verification, and mobile APIs are now explicitly classified. These counts define the route-migration workload; they are not authorization approvals.
+Largest remaining unmapped HTTP families include `fundus_api` (195), `admin` (164), and `analytics` (14). Media, grading, encounter verification, mobile APIs, Remidio workspaces, and direct uploads are now explicitly classified. These counts define the route-migration workload; they are not authorization approvals.
 
 ### Vertical slice 1: clinical media delivery
 
@@ -47,6 +47,10 @@ All 27 mobile API routes now have explicit contracts. Login is the sole public r
 ### Vertical slice 5: Remidio workspaces and job control
 
 All 13 Remidio API upload/workspace routes now have explicit contracts. Browser and sync collections use dedicated screen-admission actions; they cannot authorize returned rows. Attachment and no-PII archive delivery resolve the exact parent encounter set with distinct disclosure actions. Wadhwani pages use summary admission, execution uses a closed project/target action selector based on the stored workflow, and job pages/status require the exact job action. Missing project, encounter-set, workflow, attachment lineage, or job facts deny.
+
+### Vertical slice 6: direct uploads
+
+All 13 direct-upload routes now have explicit contracts. The central catalogue supports complete method-specific policies, so GET workspace admission cannot authorize POST mutations in combined handlers. Individual upload reads and mutations bind the exact stored upload, job polling binds the exact stored job, bulk mutations bind a bounded same-Lab-Unit or same-hospital resource set, and upload/pregraded submissions retain the complete upload-target/profile requirement. Upload option APIs use the self upload-options decision; application code still validates the requested Lab Unit against the returned profile-authorized options. Missing method contracts, upload IDs, batch members, job identity, or upload-target facts deny.
 
 ## Authorization-sensitive list/query classification
 
@@ -74,4 +78,4 @@ All 13 Remidio API upload/workspace routes now have explicit contracts. Browser 
 
 ## Remaining cutover work
 
-The remaining 563 explicitly unmapped runtime consumers (516 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 551 explicitly unmapped runtime consumers (504 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

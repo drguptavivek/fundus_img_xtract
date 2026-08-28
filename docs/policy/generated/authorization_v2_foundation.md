@@ -1185,6 +1185,15 @@ Resource: `upload_target`; disclosure: `identifier_in_place`; audit: `optional`.
 - `scoped_upload_profile`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=fileUploader,optometrist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=admin; allow_system=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
 
+### `upload.direct.batch.update`
+
+Authorize upload.direct.batch.update.
+
+Resource: `direct_upload_batch`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `upload.direct.edit_image`
 
 Authorize upload.direct.edit_image.
@@ -1193,6 +1202,15 @@ Resource: `image`; disclosure: `identifier_in_place`; audit: `optional`.
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=fileUploader,optometrist; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `upload.direct.update`
+
+Authorize upload.direct.update.
+
+Resource: `direct_image_upload`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `upload.direct.view`
 
@@ -1211,6 +1229,24 @@ Resource: `upload_target`; disclosure: `identifier_in_place`; audit: `optional`.
 
 - `scoped_upload_profile`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=pregraded_uploader; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=admin; allow_system=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
+
+### `upload.pregraded.workspace.view`
+
+Authorize upload.pregraded.workspace.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=pregraded_uploader), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `upload.workspace.view`
+
+Authorize upload.workspace.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
 ### `upload.zip.view`
 

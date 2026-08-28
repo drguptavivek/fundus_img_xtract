@@ -85,6 +85,11 @@ def test_every_resource_adapter_rejects_missing_or_non_positive_references():
             is None
         )
 
+    batch = resources.require("direct_upload_batch").resolver
+    assert batch(db, []) is None
+    assert batch(db, [1, 0]) is None
+    assert batch(db, list(range(1, 52))) is None
+
 
 def test_sql_scoper_never_uses_non_admin_system_grant_as_global_bypass():
     principal = PrincipalDTO(1, True, True)

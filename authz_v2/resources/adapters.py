@@ -407,6 +407,51 @@ ENCOUNTER_SET_ADAPTER = _model_adapter("encounter_set", PatientEncounters)
 DIRECT_IMAGE_ADAPTER = _model_adapter(
     "direct_image_upload", DirectImageUpload, owner_attr="uploader_id"
 )
+
+
+def _resolve_direct_upload_batch(db, reference: object) -> ResourceTarget | None:
+    """Resolve a bounded batch only when it has one authoritative scope."""
+    if not isinstance(reference, (tuple, list)) or not reference:
+        return None
+    if len(reference) > 50 or any(not is_positive_int(value) for value in reference):
+        return None
+    ids = tuple(dict.fromkeys(reference))
+    rows = db.execute(
+        select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
+    ).scalars().all()
+    if len(rows) != len(ids):
+        return None
+    lab_units = {row.lab_unit_id for row in rows}
+    hospitals = {row.hospital_id for row in rows}
+    if len(lab_units) == 1:
+        scope = resolve_scope(db, lab_unit_id=next(iter(lab_units)))
+    elif len(hospitals) == 1:
+        scope = resolve_scope(db, hospital_id=next(iter(hospitals)))
+    else:
+        return None
+    if scope is None:
+        return None
+    owners = {row.uploader_id for row in rows}
+    return ResourceTarget(
+        tuple(rows),
+        ResourceContextDTO(
+            "direct_upload_batch",
+            ",".join(str(value) for value in ids),
+            scope,
+            owner_id=next(iter(owners)) if len(owners) == 1 else None,
+            state={"target_active": True, "domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+DIRECT_UPLOAD_BATCH_ADAPTER = ResourceAdapter(
+    "direct_upload_batch",
+    _resolve_direct_upload_batch,
+    lambda _db, _principal, _action, grants, query: scope_model_query(
+        DirectImageUpload, grants, query
+    ),
+)
 GRADING_TASK_ADAPTER = _model_adapter("grading_task", GradingTask)
 JOB_ADAPTER = _model_adapter(
     "job",
@@ -526,6 +571,7 @@ RESOURCE_ADAPTERS = (
     DATASET_ADAPTER,
     DATASET_SHARE_ADAPTER,
     DIRECT_IMAGE_ADAPTER,
+    DIRECT_UPLOAD_BATCH_ADAPTER,
     DISCREPANCY_ADAPTER,
     ENCOUNTER_ADAPTER,
     ENCOUNTER_FILE_ADAPTER,

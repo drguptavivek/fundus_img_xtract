@@ -188,6 +188,10 @@ _CANONICAL_ONLY = {
     "project.upload.workspace.view",
     "public.analytics.view",
     "upload.create",
+    "upload.direct.batch.update",
+    "upload.direct.update",
+    "upload.pregraded.workspace.view",
+    "upload.workspace.view",
     "verification.encounter_set.view",
 }
 _CANONICAL_NAMES = sorted(set(ACTION_MIGRATION_MAP.values()) | _CANONICAL_ONLY)

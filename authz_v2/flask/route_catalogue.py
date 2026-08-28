@@ -4,6 +4,8 @@ from authz_v2.core.actions import Action
 
 from .contracts import EndpointMode, EndpointPolicy
 
+EndpointPolicies = EndpointPolicy | dict[str, EndpointPolicy]
+
 
 def _screen(action: Action = Action.TASKS_VIEW) -> EndpointPolicy:
     return EndpointPolicy(EndpointMode.SCREEN, action, enforcement="screen_entry")
@@ -46,7 +48,46 @@ def _wai_project(binding: str) -> EndpointPolicy:
     )
 
 
-ROUTE_POLICIES: dict[str, EndpointPolicy] = {
+ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    # Direct-upload workspaces use method-specific contracts so a GET page
+    # decision can never authorize POST mutations handled by the same view.
+    "direct_uploads.upload_index": _screen(Action.UPLOAD_WORKSPACE_VIEW),
+    "direct_uploads.upload": _screen(Action.UPLOAD_WORKSPACE_VIEW),
+    "direct_uploads.dashboard": {
+        "GET": _screen(Action.UPLOAD_WORKSPACE_VIEW),
+        "POST": _exact(Action.UPLOAD_DIRECT_BATCH_UPDATE, "direct_upload_batch"),
+    },
+    "direct_uploads.edit_upload": {
+        "GET": _exact(Action.VERIFICATION_DIRECT_VIEW, "direct_image_upload"),
+        "POST": _exact(Action.UPLOAD_DIRECT_UPDATE, "direct_image_upload"),
+    },
+    "direct_uploads.edit_image": _exact(
+        Action.VERIFICATION_DIRECT_VIEW, "direct_image_upload"
+    ),
+    "direct_uploads.restore_original": _exact(
+        Action.UPLOAD_DIRECT_UPDATE, "direct_image_upload"
+    ),
+    "direct_uploads.save_edited_image": _exact(
+        Action.UPLOAD_DIRECT_UPDATE, "direct_image_upload"
+    ),
+    "direct_uploads.api_upload_status": _exact(Action.JOBS_RESULT_VIEW, "job"),
+    "direct_uploads.pregraded_upload": {
+        "GET": _screen(Action.UPLOAD_PREGRADED_WORKSPACE_VIEW),
+        "POST": _exact(Action.UPLOAD_PREGRADED_CREATE, "upload_target"),
+    },
+    "direct_uploads.pregraded_grades": {
+        "GET": _screen(Action.UPLOAD_PREGRADED_WORKSPACE_VIEW),
+        "POST": _exact(Action.UPLOAD_PREGRADED_CREATE, "upload_target"),
+    },
+    "direct_uploads.recent_pregraded_grades": _screen(
+        Action.UPLOAD_PREGRADED_WORKSPACE_VIEW
+    ),
+    "direct_uploads.get_lab_units": _exact(
+        Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user"
+    ),
+    "direct_uploads.get_hospital": _exact(
+        Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user"
+    ),
     # Remidio project workspaces. Collection pages are admission only; file,
     # archive, mutation and job routes bind exact stored resources.
     **{
@@ -277,5 +318,20 @@ ROUTE_POLICIES: dict[str, EndpointPolicy] = {
 }
 
 
-def catalogued_endpoint_policy(endpoint: str | None) -> EndpointPolicy | None:
-    return ROUTE_POLICIES.get(endpoint) if endpoint else None
+def catalogued_endpoint_policy(
+    endpoint: str | None, method: str | None = None
+) -> EndpointPolicy | None:
+    if not endpoint:
+        return None
+    configured = ROUTE_POLICIES.get(endpoint)
+    if isinstance(configured, dict):
+        return configured.get(method.upper()) if method else None
+    return configured
+
+
+def catalogued_endpoint_policies(endpoint: str | None) -> dict[str, EndpointPolicy]:
+    """Return method-specific policies, or a wildcard policy for all methods."""
+    configured = ROUTE_POLICIES.get(endpoint) if endpoint else None
+    if isinstance(configured, dict):
+        return dict(configured)
+    return {"*": configured} if configured else {}

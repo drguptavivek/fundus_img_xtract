@@ -4,8 +4,10 @@ from flask import Flask, jsonify
 from authz_v2.core.actions import Action
 from authz_v2.core.catalogue import CATALOGUE
 from authz_v2.flask import EndpointMode, authorization_endpoint, install_default_deny
+from authz_v2.flask.contracts import EndpointPolicy
 from authz_v2.flask.hooks import unclassified_endpoints
 from authz_v2.flask.manifest import build_route_manifest
+from authz_v2.flask.route_catalogue import ROUTE_POLICIES
 from authz_v2.telemetry.metrics import snapshot
 
 
@@ -137,3 +139,26 @@ def test_route_manifest_projects_catalogue_security_metadata():
     assert manifest["screen"].disclosure_class == "masked"
     assert manifest["screen"].methods == ("GET",)
     assert manifest["unclassified"].action is None
+
+
+def test_method_specific_catalogue_never_uses_get_policy_for_post():
+    app = Flask(__name__)
+
+    @app.route("/mixed", methods=["GET", "POST"], endpoint="test.mixed")
+    def mixed():
+        return "ok"
+
+    ROUTE_POLICIES["test.mixed"] = {
+        "GET": EndpointPolicy(
+            EndpointMode.SCREEN,
+            Action.DASHBOARD_VIEW,
+            enforcement="screen_entry",
+        )
+    }
+    try:
+        assert unclassified_endpoints(app) == ("test.mixed",)
+        manifest = build_route_manifest(app)[0]
+        assert manifest.action is None
+        assert manifest.mode is None
+    finally:
+        ROUTE_POLICIES.pop("test.mixed")

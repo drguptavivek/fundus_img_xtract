@@ -21,15 +21,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 117,
-        "legacy_action_literal": 47,
-        "legacy_unmapped": 516,
+        "authz_v2": 130,
+        "legacy_action_literal": 46,
+        "legacy_unmapped": 504,
         "automation_unmapped": 47,
-        "query_candidate_unmapped": 977,
+        "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3"
+        == "4437bd33de527f7ed3a32c943f4b24fb33b8cfa77fac10a6966a853ec786e03f"
     )
 
 
@@ -97,6 +97,37 @@ def test_high_risk_remidio_upload_workspace_slice_has_no_unmapped_route():
     assert len(family) == 13
     assert {row.classification for row in family} == {"authz_v2"}
     assert all(row.canonical_actions for row in family)
+
+
+def test_high_risk_direct_upload_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source.startswith("direct_uploads/")
+    ]
+    assert len(family) == 13
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(row.canonical_actions for row in family)
+
+
+def test_direct_upload_mixed_routes_separate_get_from_post_authority():
+    dashboard = ROUTE_POLICIES["direct_uploads.dashboard"]
+    edit = ROUTE_POLICIES["direct_uploads.edit_upload"]
+    pregraded = ROUTE_POLICIES["direct_uploads.pregraded_upload"]
+    grades = ROUTE_POLICIES["direct_uploads.pregraded_grades"]
+
+    assert set(dashboard) == {"GET", "POST"}
+    assert dashboard["GET"].mode is EndpointMode.SCREEN
+    assert dashboard["POST"].resolver == "direct_upload_batch"
+    assert edit["GET"].action.value == "verification.direct.view"
+    assert edit["POST"].action.value == "upload.direct.update"
+    for policies in (pregraded, grades):
+        assert policies["GET"].mode is EndpointMode.SCREEN
+        assert policies["POST"].action.value == "upload.pregraded.create"
+        assert policies["POST"].resolver == "upload_target"
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

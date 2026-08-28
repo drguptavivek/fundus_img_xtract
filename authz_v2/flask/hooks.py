@@ -49,12 +49,12 @@ def _record_unclassified_endpoint() -> None:
         return
 
 
-def endpoint_policy(endpoint: str | None) -> EndpointPolicy | None:
+def endpoint_policy(endpoint: str | None, method: str | None = None) -> EndpointPolicy | None:
     if not endpoint:
         return None
     view = current_app.view_functions.get(endpoint)
     decorated = getattr(view, "__authz_endpoint_policy__", None) if view else None
-    return decorated or catalogued_endpoint_policy(endpoint)
+    return decorated or catalogued_endpoint_policy(endpoint, method or request.method)
 
 
 def unclassified_endpoints(app) -> tuple[str, ...]:
@@ -64,15 +64,20 @@ def unclassified_endpoints(app) -> tuple[str, ...]:
             rule.endpoint
             for rule in app.url_map.iter_rules()
             if rule.endpoint != "static"
-            and endpoint_policy_for_app(app, rule.endpoint) is None
+            and any(
+                endpoint_policy_for_app(app, rule.endpoint, method) is None
+                for method in set(rule.methods or ()) - {"HEAD", "OPTIONS"}
+            )
         )
     )
 
 
-def endpoint_policy_for_app(app, endpoint: str) -> EndpointPolicy | None:
+def endpoint_policy_for_app(
+    app, endpoint: str, method: str | None = None
+) -> EndpointPolicy | None:
     view = app.view_functions.get(endpoint)
     decorated = getattr(view, "__authz_endpoint_policy__", None) if view else None
-    return decorated or catalogued_endpoint_policy(endpoint)
+    return decorated or catalogued_endpoint_policy(endpoint, method)
 
 
 def install_default_deny(
@@ -91,7 +96,7 @@ def install_default_deny(
     def _authorization_default_deny():
         if request.endpoint == "static":
             return None
-        policy = endpoint_policy(request.endpoint)
+        policy = endpoint_policy(request.endpoint, request.method)
         if policy is None:
             _record_unclassified_endpoint()
             return jsonify({"error": "not_authorized"}), 403

@@ -17,6 +17,8 @@ from authz_v2.resources.adapters import (
     resolve_lookup_record,
     resolve_mobile_session,
     resolve_remidio_config,
+    resolve_remidio_attachment,
+    resolve_remidio_project_sync,
     resolve_s3_sync_query,
     resolve_s3_sync_record,
     resolve_sensitive_audit_event,
@@ -32,6 +34,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     RemidioConfigRef,
+    RemidioProjectSyncRef,
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
@@ -301,3 +304,9 @@ def test_scope_sensitive_admin_targets_fail_closed_before_database_access():
     assert resolve_remidio_config(db, 1) is None
     assert resolve_remidio_config(db, RemidioConfigRef("unknown", 1)) is None
     assert resolve_remidio_config(db, RemidioConfigRef("connection", 0)) is None
+    assert resolve_remidio_attachment(db, 0) is None
+    assert resolve_remidio_project_sync(db, None) is None
+    assert resolve_remidio_project_sync(db, RemidioProjectSyncRef(1, ())) is None
+    assert resolve_remidio_project_sync(
+        db, RemidioProjectSyncRef(1, (2, 2))
+    ) is None

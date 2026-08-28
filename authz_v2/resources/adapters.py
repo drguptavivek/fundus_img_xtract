@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import false, select
 
+from authz_v2.core.principals import GrantSource, RelationshipEvidenceDTO
 from authz_v2.core.resources import DisclosureClass, ResourceContextDTO, ScopeDTO
 from authz_v2.core.roles import ScopeType
 from authz_v2.domain.models import (
@@ -22,6 +23,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     RemidioConfigRef,
+    RemidioProjectSyncRef,
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
@@ -44,6 +46,7 @@ from authz_v2.resources.relationships import (
 from authz_v2.resources.scoping import resolve_scope, scope_model_query
 from authz_v2.resources.upload_targets import resolve_classical_upload_target
 from encounter_set_types.models import EncounterSetType
+from encounter_sets.models import EncounterSetAttachment
 from models import (
     AIInferenceRun,
     AIModel,
@@ -71,6 +74,7 @@ from models import (
     LinkedDiseaseGrading,
     MobileAuthSession,
     PatientEncounters,
+    Project,
     ProjectGraderAllocation,
     RemidioConnection,
     RemidioRoutingRule,
@@ -86,7 +90,7 @@ from remidio_api_integration.models import (
     RemidioApiRoutingProfile,
     RemidioApiSourceRule,
 )
-from upload_profiles.models import UploadProfile
+from upload_profiles.models import ProjectUploadProfileAssignment, UploadProfile
 
 
 @dataclass(frozen=True)
@@ -924,6 +928,133 @@ REMIDIO_CONFIG_ADAPTER = ResourceAdapter(
     _admin_domain_facts,
 )
 
+
+def resolve_remidio_attachment(db, reference: object) -> ResourceTarget | None:
+    if not is_positive_int(reference):
+        return None
+    attachment = db.get(EncounterSetAttachment, reference)
+    if attachment is None:
+        return None
+    encounter = db.get(PatientEncounters, attachment.patient_encounter_id)
+    if encounter is None:
+        return None
+    scope = resolve_scope(
+        db, project_id=encounter.project_id, lab_unit_id=encounter.lab_unit_id
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        attachment,
+        ResourceContextDTO(
+            "remidio_attachment",
+            attachment.id,
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+REMIDIO_ATTACHMENT_ADAPTER = ResourceAdapter(
+    "remidio_attachment",
+    resolve_remidio_attachment,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _admin_domain_facts,
+)
+
+
+def resolve_remidio_project_sync(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, RemidioProjectSyncRef):
+        return None
+    ids = reference.lab_unit_ids
+    if (
+        not is_positive_int(reference.project_id)
+        or not ids
+        or len(ids) > 500
+        or len(set(ids)) != len(ids)
+        or any(not is_positive_int(value) for value in ids)
+    ):
+        return None
+    project = db.get(Project, reference.project_id)
+    if project is None or not project.active:
+        return None
+    bindings = tuple(
+        db.execute(
+            select(ProjectUploadProfileRemidioApiBinding)
+            .join(
+                RemidioApiRoutingProfile,
+                RemidioApiRoutingProfile.id
+                == ProjectUploadProfileRemidioApiBinding.routing_profile_id,
+            )
+            .where(
+                RemidioApiRoutingProfile.project_id == project.id,
+                RemidioApiRoutingProfile.active.is_(True),
+                ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            )
+        ).scalars()
+    )
+    active_lab_ids = {binding.lab_unit_id for binding in bindings}
+    if not bindings or active_lab_ids != set(ids):
+        return None
+    return ResourceTarget(
+        bindings,
+        ResourceContextDTO(
+            "remidio_project_sync_target",
+            f"{project.id}:" + ":".join(str(value) for value in sorted(ids)),
+            ScopeDTO(ScopeType.PROJECT, project.id, project_id=project.id),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def remidio_project_sync_facts(db, principal, _action, target, facts):
+    if principal.user_id is None or not target.value:
+        return facts
+    assignment_ids: list[int] = []
+    for binding in target.value:
+        assignment = (
+            db.execute(
+                select(ProjectUploadProfileAssignment).where(
+                    ProjectUploadProfileAssignment.user_id == principal.user_id,
+                    ProjectUploadProfileAssignment.project_upload_profile_id
+                    == binding.project_upload_profile_id,
+                    ProjectUploadProfileAssignment.lab_unit_id == binding.lab_unit_id,
+                    ProjectUploadProfileAssignment.active.is_(True),
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if assignment is None:
+            return replace(facts, domain_valid=True)
+        assignment_ids.append(assignment.id)
+    evidence = RelationshipEvidenceDTO(
+        GrantSource.UPLOAD_PROFILE,
+        ":".join(str(value) for value in sorted(assignment_ids)),
+        principal.user_id,
+        target.context.resource_type,
+        target.context.resource_id,
+        True,
+        target.context.scope,
+        (("target_active", True),),
+    )
+    return replace(
+        facts,
+        relationships=(*facts.relationships, evidence),
+        upload_profile_matches=True,
+        target_active=True,
+        domain_valid=True,
+    )
+
+
+REMIDIO_PROJECT_SYNC_ADAPTER = ResourceAdapter(
+    "remidio_project_sync_target",
+    resolve_remidio_project_sync,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    remidio_project_sync_facts,
+)
+
 _LOOKUP_MODELS = {
     "hospital": Hospital,
     "lab_unit": LabUnit,
@@ -1171,6 +1302,8 @@ RESOURCE_ADAPTERS = (
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
     REMIDIO_CONFIG_ADAPTER,
+    REMIDIO_ATTACHMENT_ADAPTER,
+    REMIDIO_PROJECT_SYNC_ADAPTER,
     S3_CONFIG_ADAPTER,
     S3_SYNC_QUERY_ADAPTER,
     S3_SYNC_RECORD_ADAPTER,

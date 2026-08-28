@@ -93,6 +93,33 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.list_remidio_sites": _exact(
         Action.ADMIN_REMIDIO_API_CONFIG_VIEW, "remidio_config_record"
     ),
+    "fundus_api.queue_encounter_set_attachment_ocr": {
+        "GET": _exact(Action.REMIDIO_ATTACHMENT_OCR_VIEW, "remidio_attachment"),
+        "POST": _exact(
+            Action.REMIDIO_ATTACHMENT_OCR_PROCESS, "remidio_attachment"
+        ),
+    },
+    "fundus_api.queue_project_pending_encounter_set_attachment_ocr": {
+        "GET": _exact(Action.PROJECT_REMIDIO_ATTACHMENT_OCR_VIEW, "project"),
+        "POST": _exact(Action.PROJECT_REMIDIO_ATTACHMENT_OCR_PROCESS, "project"),
+    },
+    **{
+        endpoint: _exact(
+            Action.PROJECT_REMIDIO_SYNC, "remidio_project_sync_target"
+        )
+        for endpoint in (
+            "fundus_api.sync_remidio_api_project",
+            "fundus_api.sync_selected_remidio_api_project",
+        )
+    },
+    **{
+        endpoint: _exact(Action.PROJECT_REMIDIO_SYNC_JOB_MANAGE, "job")
+        for endpoint in (
+            "fundus_api.pause_remidio_api_project_sync_job",
+            "fundus_api.resume_remidio_api_project_sync_job",
+            "fundus_api.cancel_remidio_api_project_sync_job",
+        )
+    },
     "admin.sensitive_operations_audit": _screen(Action.ADMIN_SENSITIVE_AUDIT_VIEW),
     "admin.sensitive_operation_details": _exact(
         Action.ADMIN_SENSITIVE_AUDIT_DETAIL_VIEW, "sensitive_audit_event"

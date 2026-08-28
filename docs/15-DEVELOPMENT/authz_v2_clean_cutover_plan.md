@@ -833,6 +833,22 @@ pattern.
   literals, 291 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 10b: Remidio OCR, project sync, and job control
+
+- The remaining seven Remidio API routes now use distinct attachment-read,
+  attachment-process, project-batch, project-sync, and owned-job actions.
+- Single-attachment OCR resolves the attachment through its persisted encounter
+  and project/Lab Unit lineage. GET and POST no longer share one authority.
+- Project sync requires the caller to provide the complete non-empty active Lab
+  Unit set. The resolver rejects duplicates, missing projects, empty routing,
+  and any set that differs from persisted active routing; non-admin execution
+  additionally requires an active upload-profile assignment for every route.
+- Pause, resume, and cancel require the exact persisted job plus ownership or
+  an independently scoped administrator grant.
+- The reviewed inventory is now 351 v2 HTTP consumers, 45 legacy action
+  literals, 284 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

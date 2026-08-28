@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 344,
+        "authz_v2": 351,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 291,
+        "legacy_unmapped": 284,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "676c1242cf5ef11afa708914ab170240634a2cdaaa65793b741a10e92c0bcfdd"
+        == "edebb94cc747bd835d3246d4f1a19cfbdf951c8fc87bab017ea7e3b583509135"
     )
 
 
@@ -94,6 +94,38 @@ def test_remidio_api_configuration_slice_is_classified():
         "fundus_api.delete_remidio_api_routing_rule",
     ):
         assert ROUTE_POLICIES[endpoint].resolver == "remidio_config_record"
+
+
+def test_remidio_api_operational_slice_is_exact_and_method_specific():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.source == "api/remidio_api_integration.py"
+    ]
+    assert len(family) == 32
+    assert {row.classification for row in family} == {"authz_v2"}
+    attachment = ROUTE_POLICIES["fundus_api.queue_encounter_set_attachment_ocr"]
+    assert attachment["GET"].action is Action.REMIDIO_ATTACHMENT_OCR_VIEW
+    assert attachment["POST"].action is Action.REMIDIO_ATTACHMENT_OCR_PROCESS
+    project_attachment = ROUTE_POLICIES[
+        "fundus_api.queue_project_pending_encounter_set_attachment_ocr"
+    ]
+    assert project_attachment["GET"].action is Action.PROJECT_REMIDIO_ATTACHMENT_OCR_VIEW
+    assert (
+        project_attachment["POST"].action
+        is Action.PROJECT_REMIDIO_ATTACHMENT_OCR_PROCESS
+    )
+    assert (
+        ROUTE_POLICIES["fundus_api.sync_remidio_api_project"].resolver
+        == "remidio_project_sync_target"
+    )
+    assert ROUTE_POLICIES[
+        "fundus_api.pause_remidio_api_project_sync_job"
+    ].resolver == "job"
 
 
 def test_high_risk_media_slice_has_no_unmapped_route():

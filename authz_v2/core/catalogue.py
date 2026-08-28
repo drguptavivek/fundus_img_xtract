@@ -199,6 +199,10 @@ MANDATORY_AUDIT = frozenset(
         "admin.s3_sync.retry",
         "admin.task_backfill.run",
         "admin.remidio_api_config.manage",
+        "remidio.attachment_ocr.process",
+        "project.remidio.attachment_ocr.process",
+        "project.remidio.sync",
+        "project.remidio.sync_job.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -792,6 +796,71 @@ _resource(
     ADMIN,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
     domain_condition=True,
+)
+_resource(
+    "remidio.attachment_ocr.view",
+    "remidio_attachment",
+    CLINICAL_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "remidio.attachment_ocr.process",
+    "remidio_attachment",
+    CLINICAL_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_resource(
+    "project.remidio.attachment_ocr.view",
+    "project",
+    CLINICAL_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "project.remidio.attachment_ocr.process",
+    "project",
+    CLINICAL_READ,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    domain_condition=True,
+)
+_store(
+    "project.remidio.sync",
+    resource_type="remidio_project_sync_target",
+    requires_resource=True,
+    paths=(
+        (
+            "scoped_upload_profile",
+            all_of(
+                active_principal(),
+                scoped_roles(*CAPTURE_UPLOADERS),
+                fact(BooleanFact.EXACT_RESOURCE),
+                relationship(
+                    UPLOAD_PROFILE,
+                    attributes=(("target_active", True),),
+                ),
+                fact(BooleanFact.DOMAIN_VALID),
+                name="scoped_upload_profile",
+            ),
+        ),
+        (
+            "admin_break_glass",
+            all_of(
+                active_principal(),
+                scoped_roles(Role.ADMIN, allow_system=True),
+                fact(BooleanFact.EXACT_RESOURCE),
+                fact(BooleanFact.DOMAIN_VALID),
+                name="admin_break_glass",
+            ),
+        ),
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    break_glass=BreakGlassMode.ADMIN,
+)
+_owned_resource(
+    "project.remidio.sync_job.manage",
+    "job",
+    CAPTURE_UPLOADERS | ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
 _resource(
     "admin.executable_config.view",

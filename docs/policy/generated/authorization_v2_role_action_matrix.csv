@@ -142,6 +142,10 @@ project.grader_allocations.enforcement.manage,project,scoped_role|admin_break_gl
 project.grader_allocations.manage,project_allocation_target,scoped_role|admin_break_glass,masked,optional
 project.grader_allocations.view,project_allocation_plan,scoped_role|admin_break_glass,masked,optional
 project.grants.view,project,scoped_role|admin_break_glass,masked,optional
+project.remidio.attachment_ocr.process,project,scoped_role|admin_break_glass,identifier_in_place,required
+project.remidio.attachment_ocr.view,project,scoped_role|admin_break_glass,identifier_in_place,optional
+project.remidio.sync,remidio_project_sync_target,scoped_upload_profile|admin_break_glass,identifier_in_place,required
+project.remidio.sync_job.manage,job,owner|scoped_role|admin_break_glass,identifier_in_place,required
 project.site_policy.manage,project_site_policy,scoped_role|admin_break_glass,masked,optional
 project.upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
 project.upload.pregraded,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
@@ -152,6 +156,8 @@ project.wai.results,project,scoped_role|admin_break_glass,masked,optional
 project.wai.run,project,scoped_role|admin_break_glass|stored_automation_rule,masked,optional
 public.analytics.view,public,public,masked,optional
 public.view,public,public,masked,optional
+remidio.attachment_ocr.process,remidio_attachment,scoped_role|admin_break_glass,identifier_in_place,required
+remidio.attachment_ocr.view,remidio_attachment,scoped_role|admin_break_glass,identifier_in_place,optional
 reports.view,report,scoped_role|admin_break_glass,masked,optional
 review.discrepancy.export,discrepancy,scoped_role|admin_break_glass,masked,required
 review.discrepancy.export_identifiers,discrepancy,scoped_role|admin_break_glass,identifier_release,required

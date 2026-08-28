@@ -1240,6 +1240,43 @@ Resource: `project`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=local_admin,project_admin,project_pi,site_pi,user_manager; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.remidio.attachment_ocr.process`
+
+Authorize project.remidio.attachment_ocr.process.
+
+Resource: `project`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `project.remidio.attachment_ocr.view`
+
+Authorize project.remidio.attachment_ocr.view.
+
+Resource: `project`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `project.remidio.sync`
+
+Authorize project.remidio.sync.
+
+Resource: `remidio_project_sync_target`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `scoped_upload_profile`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=fileUploader,optometrist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=admin; allow_system=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `project.remidio.sync_job.manage`
+
+Authorize project.remidio.sync_job.manage.
+
+Resource: `job`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owner`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), AnyRoleRequirement(roles=admin,fileUploader,optometrist), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False)
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=fileUploader,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `project.site_policy.manage`
 
 Authorize project.site_policy.manage.
@@ -1328,6 +1365,24 @@ Authorize public.view.
 Resource: `public`; disclosure: `masked`; audit: `optional`.
 
 - `public`: PublicRequirement()
+
+### `remidio.attachment_ocr.process`
+
+Authorize remidio.attachment_ocr.process.
+
+Resource: `remidio_attachment`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `remidio.attachment_ocr.view`
+
+Authorize remidio.attachment_ocr.view.
+
+Resource: `remidio_attachment`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `reports.view`
 

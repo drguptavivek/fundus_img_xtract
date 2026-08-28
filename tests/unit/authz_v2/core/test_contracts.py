@@ -262,7 +262,7 @@ def test_legacy_manifest_maps_every_action_exactly_once():
     assert len(ACTION_MIGRATION_MAP) == 121
     assert set(ACTION_MIGRATION_MAP.values()) <= ACTION_MANIFEST
     assert set(CATALOGUE) == set(Action)
-    assert len(CATALOGUE) == len(ACTION_MANIFEST) == 182
+    assert len(CATALOGUE) == len(ACTION_MANIFEST) == 188
 
 
 @pytest.mark.parametrize("action", list(Action), ids=lambda action: action.value)

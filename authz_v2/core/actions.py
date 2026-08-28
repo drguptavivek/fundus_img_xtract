@@ -180,6 +180,7 @@ _CANONICAL_ONLY = {
     "admin.s3_config.manage",
     "admin.database.export",
     "admin.database.restore",
+    "admin.ai_models.view",
     "admin.upload_quota.manage",
     "admin.lookup_record.view",
     "admin.lookup_record.manage",

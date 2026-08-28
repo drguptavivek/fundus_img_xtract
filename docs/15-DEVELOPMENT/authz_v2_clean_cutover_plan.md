@@ -1384,6 +1384,18 @@ pattern.
   literals, 43 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 236 actions.
 
+### Implemented vertical slice 52: review options and AI model list
+
+- The discrepancy filter-options API shares the discrepancy workspace
+  admission action. The admin AI-model catalogue has a distinct admin-only
+  workspace action rather than reusing a broader lookup permission.
+- Admission does not authorize returned rows. Project/Lab Unit option scoping
+  and AI-model serialization remain application behavior pending registered
+  list query policies.
+- The reviewed inventory is now 600 v2 HTTP consumers, 39 legacy action
+  literals, 41 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 237 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

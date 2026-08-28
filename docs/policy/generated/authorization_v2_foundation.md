@@ -95,6 +95,14 @@ Resource: `ad_hoc_task`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.ai_models.view`
+
+Authorize admin.ai_models.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `admin.dashboard.view`
 
 Authorize admin.dashboard.view.

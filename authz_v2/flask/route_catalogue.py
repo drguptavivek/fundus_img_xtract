@@ -181,6 +181,10 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     ),
     "review.discrepancy_review": _screen(Action.REVIEW_DISCREPANCY_LIST),
     "review.regrade_task_creator": _screen(Action.REVIEW_REGRADE_CREATOR_VIEW),
+    "fundus_api.discrepancy_review_filter_options": _screen(
+        Action.REVIEW_DISCREPANCY_LIST
+    ),
+    "fundus_api.get_ai_models": _screen(Action.ADMIN_AI_MODELS_VIEW),
     **{
         endpoint: _exact(Action.REVIEW_DISCREPANCY_HISTORY, "user")
         for endpoint in (

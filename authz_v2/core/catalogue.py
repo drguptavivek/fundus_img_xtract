@@ -703,6 +703,7 @@ _self("mobile.session.revoke", "mobile_session", channels=(SessionChannel.MOBILE
 
 # Screen admission only. Panels, rows, and mutations use exact actions below.
 for _name, _roles in (
+    ("admin.ai_models.view", ADMIN),
     ("admin.dashboard.view", ADMIN_SITE),
     ("admin.security.view", ADMIN),
     ("admin.system.manage", ADMIN),

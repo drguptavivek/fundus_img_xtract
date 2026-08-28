@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 598,
+        "authz_v2": 600,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 43,
+        "legacy_unmapped": 41,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1441,6 +1441,23 @@ def test_discrepancy_review_lists_separate_admission_and_self_history():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is Action.REVIEW_DISCREPANCY_HISTORY
         assert policy.resolver == "user"
+
+
+def test_discrepancy_options_and_ai_model_list_have_explicit_admission():
+    expected = {
+        "fundus_api.discrepancy_review_filter_options": Action.REVIEW_DISCREPANCY_LIST,
+        "fundus_api.get_ai_models": Action.ADMIN_AI_MODELS_VIEW,
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in expected]
+    assert len(family) == 2
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, action in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.SCREEN
+        assert policy.action is action
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

@@ -173,6 +173,30 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         ),
     },
     "admin.linked_task_inconsistencies": _screen(Action.ADMIN_SECURITY_VIEW),
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
+            "rate_limit_admin.index",
+            "rate_limit_admin.status",
+            "rate_limit_admin.get_my_key",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation")
+        for endpoint in (
+            "rate_limit_admin.clear_limit",
+            "rate_limit_admin.clear_limit_ajax",
+            "rate_limit_admin.clear_all",
+        )
+    },
+    "admin.upload_profiles_admin": _screen(Action.ADMIN_UPLOAD_PROFILES_MANAGE),
+    "admin.upload_project_create_workspace": _screen(
+        Action.ADMIN_UPLOAD_PROFILES_MANAGE
+    ),
+    "admin.upload_projects_admin": _screen(Action.AUTHORIZATION_GRANTS_VIEW),
+    "admin.upload_project_workspace": _exact(Action.PROJECT_VIEW, "project"),
+    "admin.upload_metadata_fields_admin": _screen(Action.ADMIN_LOOKUP_MANAGE),
+    "admin.upload_metadata_fields_list": _screen(Action.ADMIN_LOOKUP_MANAGE),
     "admin.s3_configs_list": _screen(Action.ADMIN_S3_MANAGE),
     "admin.s3_configs_api_list": _screen(Action.ADMIN_S3_MANAGE),
     "admin.s3_config_create": {

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 298,
+        "authz_v2": 310,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 337,
+        "legacy_unmapped": 325,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -424,6 +424,36 @@ def test_admin_grading_repair_slice_is_classified_and_exact():
     assert isinstance(mixed, dict)
     assert mixed["GET"].mode is EndpointMode.SCREEN
     assert mixed["POST"].resolver == "grading_repair_batch"
+
+
+def test_admin_global_rate_limit_and_upload_config_slice_is_classified():
+    names = {
+        "rate_limit_admin.index",
+        "rate_limit_admin.status",
+        "rate_limit_admin.get_my_key",
+        "rate_limit_admin.clear_limit",
+        "rate_limit_admin.clear_limit_ajax",
+        "rate_limit_admin.clear_all",
+        "admin.upload_profiles_admin",
+        "admin.upload_project_create_workspace",
+        "admin.upload_projects_admin",
+        "admin.upload_project_workspace",
+        "admin.upload_metadata_fields_admin",
+        "admin.upload_metadata_fields_list",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 12
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["admin.upload_project_workspace"].resolver == "project"
+    for endpoint in (
+        "rate_limit_admin.clear_limit",
+        "rate_limit_admin.clear_limit_ajax",
+        "rate_limit_admin.clear_all",
+    ):
+        assert ROUTE_POLICIES[endpoint].action is Action.ADMIN_SYSTEM_OPERATION
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

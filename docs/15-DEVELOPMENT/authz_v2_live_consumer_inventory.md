@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 298 | 45 | 337 |
+| Flask/API route rules | 680 | 310 | 45 | 325 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 298 | 45 | 1,362 |
+| Total | 1,705 | 310 | 45 | 1,350 |
 
 Reviewed identity fingerprint: `31b252b8a8cf8196a470a0f9c3a4655e837793535687f7e6e38841b3490a6f4a`.
 
@@ -108,6 +108,10 @@ All eight AI-model and Celery-schedule routes now have method-aware contracts. L
 
 All four grading inconsistency diagnostics and repair routes now have explicit contracts. Diagnostic pages use Admin/Data Manager or Admin-only screen admission. Applying a review as final binds the exact stored grading task and its resolved Lab Unit scope. Bulk state reset requires a bounded, duplicate-free set of at most 100 existing tasks, and every member must still be in `resident2_done`; any missing, malformed, duplicate, oversized, or stale-state member denies the entire authorization target.
 
+### Vertical slice 9m: global rate limits and upload configuration entry
+
+All 12 rate-limit and upload-configuration entry routes now have explicit contracts. Rate-limit reads are Admin-only admission and clear-one/clear-all mutations require closed exact operations. Upload-profile and metadata entry pages retain their specific screen actions. Project upload lists use grant-view admission, while a project upload workspace binds the exact stored project; page admission cannot authorize its downstream mutations.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -134,4 +138,4 @@ All four grading inconsistency diagnostics and repair routes now have explicit c
 
 ## Remaining cutover work
 
-The remaining 384 explicitly unmapped runtime consumers (337 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 372 explicitly unmapped runtime consumers (325 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

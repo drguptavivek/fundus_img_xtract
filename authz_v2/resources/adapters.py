@@ -607,6 +607,8 @@ _SYSTEM_OPERATIONS = frozenset(
         "remidio_stuck_upload_cleanup",
         "ai_model_create",
         "celery_schedule_create",
+        "rate_limit_clear_one",
+        "rate_limit_clear_all",
     }
 )
 

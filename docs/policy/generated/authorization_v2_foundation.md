@@ -1565,6 +1565,15 @@ Resource: `encounter_set`; disclosure: `identifier_in_place`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.encountersets.export_identifiers`
+
+Authorize project.encountersets.export_identifiers.
+
+Resource: `project`; disclosure: `identifier_release`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `project.encountersets.workspace.view`
 
 Authorize project.encountersets.workspace.view.

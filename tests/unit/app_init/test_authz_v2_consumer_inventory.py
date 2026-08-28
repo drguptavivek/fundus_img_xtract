@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 632,
+        "authz_v2": 633,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 9,
+        "legacy_unmapped": 8,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1664,6 +1664,18 @@ def test_user_notification_mutations_require_exact_recipient_relationships():
     mark = ROUTE_POLICIES["notifications.mark_notification_read"]
     assert mark.action is Action.NOTIFICATIONS_ITEM_READ
     assert mark.resolver == "notification"
+
+
+def test_encounter_set_identifier_export_binds_the_exact_project():
+    endpoint = "fundus_api.export_encounter_sets"
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    row = next(row for row in rows if row.kind == "http" and row.name == endpoint)
+    assert row.classification == "authz_v2"
+    policy = ROUTE_POLICIES[endpoint]
+    assert policy.action is Action.PROJECT_ENCOUNTERSETS_EXPORT_IDENTIFIERS
+    assert policy.resolver == "project"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

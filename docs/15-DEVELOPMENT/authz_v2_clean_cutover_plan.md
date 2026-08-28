@@ -1512,6 +1512,16 @@ pattern.
   legacy action literals, 9 unmapped HTTP consumers, 47 unmapped workers, and
   979 query candidates. The canonical catalogue contains 246 actions.
 
+### Implemented vertical slice 61: EncounterSet identifier export
+
+- EncounterSet XLSX export binds the exact requested project and is classified
+  as identifier release. Ordinary project authority is insufficient: the
+  additive scoped `PII_EXPORTER` grant is required before serialization.
+- Month parsing, workbook content, clinical fields, and filename construction
+  remain application logic. The reviewed inventory is now 633 v2 HTTP
+  consumers, 39 legacy action literals, 8 unmapped HTTP consumers, 47 unmapped
+  workers, and 979 query candidates. The catalogue contains 247 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -222,6 +222,7 @@ MANDATORY_AUDIT = frozenset(
         "dataset.delete",
         "dataset.export.create",
         "dataset.export.download_identifiers",
+        "project.encountersets.export_identifiers",
         "dataset.share.manage",
         "review.discrepancy.export",
         "review.discrepancy.export_identifiers",
@@ -1695,6 +1696,20 @@ _resource(
     "encounter",
     CLINICAL_READ | PROJECT_OVERSIGHT,
     disclosure=DisclosureClass.MASKED,
+)
+_resource(
+    "project.encountersets.export_identifiers",
+    "project",
+    frozenset(
+        {
+            Role.ADMIN,
+            Role.LOCAL_ADMIN,
+            Role.DATA_MANAGER,
+            Role.FILE_UPLOADER,
+            Role.OPTOMETRIST,
+        }
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_RELEASE,
 )
 _resource(
     "encounter.source.refresh",

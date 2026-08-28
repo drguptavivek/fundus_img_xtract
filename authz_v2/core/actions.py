@@ -279,6 +279,7 @@ _CANONICAL_ONLY = {
     "project.annotation_policy.view",
     "project.encountersets.workspace.view",
     "project.encountersets.workspace.view_pii",
+    "project.encountersets.export_identifiers",
     "project.site_policy.manage",
     "project.upload.create",
     "project.upload.workspace.view",

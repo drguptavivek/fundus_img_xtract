@@ -259,6 +259,9 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.get_encounter_set_details": _exact(
         Action.PROJECT_ENCOUNTERSETS_BROWSE_PII, "encounter_set"
     ),
+    "fundus_api.export_encounter_sets": _exact(
+        Action.PROJECT_ENCOUNTERSETS_EXPORT_IDENTIFIERS, "project"
+    ),
     "fundus_api.patch_encounter_set_monocular_status": _exact(
         Action.VERIFICATION_ENCOUNTER_SET_UPDATE, "encounter"
     ),

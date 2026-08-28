@@ -103,6 +103,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "screenings.delete_reports",
         )
     },
+    "reports.glaucoma_results_redirect": _screen(Action.REPORTS_LIST),
+    **{
+        endpoint: _exact(Action.REPORTS_VIEW, "report")
+        for endpoint in (
+            "reports.serve_dr_pdf_by_uuid",
+            "reports.serve_glaucoma_pdf_by_uuid",
+        )
+    },
+    "fundus_api.encounter_viewer_encounter": _exact(
+        Action.ENCOUNTER_VIEWER_VIEW, "encounter"
+    ),
+    "fundus_api.encounter_viewer_image": _exact(Action.TASKS_VIEWER_VIEW, "image"),
     **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 557,
+        "authz_v2": 562,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 84,
+        "legacy_unmapped": 79,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1209,6 +1209,31 @@ def test_screenings_routes_use_exact_encounters_for_reads_and_mutations():
     for endpoint, action in expected.items():
         assert ROUTE_POLICIES[endpoint].action is action
         assert ROUTE_POLICIES[endpoint].resolver == "encounter"
+
+
+def test_report_and_encounter_viewers_use_exact_resources():
+    names = {
+        "reports.glaucoma_results_redirect",
+        "reports.serve_dr_pdf_by_uuid",
+        "reports.serve_glaucoma_pdf_by_uuid",
+        "fundus_api.encounter_viewer_encounter",
+        "fundus_api.encounter_viewer_image",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["reports.glaucoma_results_redirect"].mode is (
+        EndpointMode.SCREEN
+    )
+    assert ROUTE_POLICIES["reports.serve_dr_pdf_by_uuid"].resolver == "report"
+    assert ROUTE_POLICIES["reports.serve_glaucoma_pdf_by_uuid"].resolver == "report"
+    assert ROUTE_POLICIES["fundus_api.encounter_viewer_encounter"].resolver == (
+        "encounter"
+    )
+    assert ROUTE_POLICIES["fundus_api.encounter_viewer_image"].resolver == "image"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

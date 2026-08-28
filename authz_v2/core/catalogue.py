@@ -735,6 +735,7 @@ for _name, _roles in (
     ("intra_rater.batch.view", ADMIN_DATA),
     ("project.review.list", PROJECT_READ),
     ("screenings.list", VERIFIERS),
+    ("reports.list", VERIFIERS),
     ("intra_rater.kpi.view", ADMIN_DATA | frozenset({Role.OPHTHALMOLOGIST})),
     (
         "intra_rater.tasks.list",
@@ -1643,6 +1644,12 @@ _resource(
     "lookup_record",
     CLINICAL_READ,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "encounter.viewer.view",
+    "encounter",
+    CLINICAL_READ | PROJECT_OVERSIGHT,
+    disclosure=DisclosureClass.MASKED,
 )
 _resource(
     "inference.wai.run.retry",

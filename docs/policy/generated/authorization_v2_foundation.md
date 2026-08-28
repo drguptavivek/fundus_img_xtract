@@ -888,6 +888,15 @@ Resource: `public`; disclosure: `masked`; audit: `optional`.
 
 - `public`: PublicRequirement()
 
+### `encounter.viewer.view`
+
+Authorize encounter.viewer.view.
+
+Resource: `encounter`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=collaborator,data_manager,fileUploader,local_admin,ophthalmologist,optometrist,project_admin,project_pi,site_pi; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `glaucoma_ai.mobile_upload.create`
 
 Authorize glaucoma_ai.mobile_upload.create.
@@ -1689,6 +1698,15 @@ Resource: `remidio_attachment`; disclosure: `identifier_in_place`; audit: `optio
 
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `reports.list`
+
+Authorize reports.list.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
 ### `reports.view`
 

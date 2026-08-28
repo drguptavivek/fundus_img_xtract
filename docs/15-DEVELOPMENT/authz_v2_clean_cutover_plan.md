@@ -1253,6 +1253,17 @@ pattern.
   literals, 84 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 227 actions.
 
+### Implemented vertical slice 41: report and encounter viewers
+
+- DR and glaucoma PDF delivery now authorize the exact typed report. Encounter
+  and image viewer APIs authorize the exact encounter or typed image. The
+  glaucoma-results redirect uses explicit report-list admission.
+- Viewer presentation, selected-image membership, serialization, and UI launch
+  behavior remain in the encounter-viewer application layer.
+- The reviewed inventory is now 562 v2 HTTP consumers, 39 legacy action
+  literals, 79 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 229 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

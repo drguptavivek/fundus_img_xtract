@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 147 | 46 | 487 |
+| Flask/API route rules | 680 | 154 | 46 | 480 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 147 | 46 | 1,512 |
+| Total | 1,705 | 154 | 46 | 1,505 |
 
 Reviewed identity fingerprint: `00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64`.
 
@@ -60,6 +60,10 @@ All 15 upload-profile governance routes now have explicit contracts. Global reus
 
 Both project role-grant API routes now have complete method-specific contracts. Listing requires exact project-scoped grant-view authority, while create, update, and delete require an exact grant target. The delegation lattice is enforced centrally: only Admin may delegate Project PI or Site PI; Project PI and Site PI may delegate Project Admin only within a scope contained by their own grant; Project Admin cannot self-delegate or create those leadership roles. Body/path project mismatches, unknown roles, invalid scopes, and missing target facts deny.
 
+### Vertical slice 9a: admin user and security reads
+
+Seven admin user/security read-workspace routes now have explicit contracts. User collections and activity use Admin/Local Admin screen admission only; their SQL remains responsible for reproducing hospital scoping and a screen receipt cannot authorize an individual row. User detail binds the exact stored user. Role definitions, role usage, and route diagnostics remain Admin-only security screens and convey no role-mutation authority.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -86,4 +90,4 @@ Both project role-grant API routes now have complete method-specific contracts. 
 
 ## Remaining cutover work
 
-The remaining 534 explicitly unmapped runtime consumers (487 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 527 explicitly unmapped runtime consumers (480 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

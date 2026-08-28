@@ -49,6 +49,23 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
+            "admin.manage_roles",
+            "admin.role_usage",
+            "admin.routes_by_role",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ADMIN_USERS_WORKSPACE_VIEW)
+        for endpoint in (
+            "admin.users_list",
+            "admin.user_created",
+            "fundus_api.api_admin_users_activity",
+        )
+    },
+    "admin.user_detail": _exact(Action.ADMIN_USERS_VIEW, "user"),
     "fundus_api.project_role_grants": {
         "GET": _exact(Action.PROJECT_GRANTS_VIEW, "project"),
         "POST": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),

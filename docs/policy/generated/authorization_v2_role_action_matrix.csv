@@ -20,6 +20,7 @@ admin.upload_profiles.manage,screen,admin_break_glass,masked,optional
 admin.upload_profiles.update,upload_profile,admin_break_glass,identifier_in_place,optional
 admin.users.manage,user,scoped_role|admin_break_glass,identifier_in_place,required
 admin.users.view,user,scoped_role|admin_break_glass,identifier_in_place,optional
+admin.users.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional
 analytics.encounters.view,screen,authenticated_screen|admin_break_glass,masked,optional
 analytics.hospital_dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 analytics.kpi.direct_files.rows,direct_image_upload,scoped_role|admin_break_glass,masked,optional

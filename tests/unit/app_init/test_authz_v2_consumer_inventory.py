@@ -21,9 +21,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 147,
+        "authz_v2": 154,
         "legacy_action_literal": 46,
-        "legacy_unmapped": 487,
+        "legacy_unmapped": 480,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -154,6 +154,24 @@ def test_project_role_grant_slice_has_no_unmapped_route():
         if row.kind == "http" and row.source == "api/project_role_grants.py"
     ]
     assert len(family) == 2
+    assert {row.classification for row in family} == {"authz_v2"}
+
+
+def test_admin_user_security_read_slice_is_classified():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    names = {
+        "admin.manage_roles",
+        "admin.role_usage",
+        "admin.routes_by_role",
+        "admin.users_list",
+        "admin.user_created",
+        "admin.user_detail",
+        "fundus_api.api_admin_users_activity",
+    }
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 7
     assert {row.classification for row in family} == {"authz_v2"}
 
 

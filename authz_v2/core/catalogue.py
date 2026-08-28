@@ -681,6 +681,7 @@ for _name, _roles in (
     ("admin.lookup.manage", ADMIN),
     ("admin.grading_eligibility.manage", ADMIN_DATA),
     ("admin.upload_profiles.manage", ADMIN),
+    ("admin.users.workspace.view", ADMIN_SITE),
     ("authorization.catalogue.view", ADMIN),
     (
         "authorization.grants.view",

@@ -52,10 +52,45 @@ def decide(action: Action, value: EvaluationFactsDTO):
     return check_action(action, value, resource_type=definition.resource_type)
 
 
+def screen_facts(role: Role) -> EvaluationFactsDTO:
+    scope = (
+        ScopeDTO(ScopeType.SYSTEM)
+        if role is Role.ADMIN
+        else ScopeDTO(ScopeType.HOSPITAL, 10, hospital_id=10)
+    )
+    grant = RoleGrantDTO(1, role, scope)
+    return EvaluationFactsDTO(
+        PrincipalDTO(1, True, True),
+        active_roles=frozenset({role}),
+        role_grants=(grant,),
+        reachable_scopes=ScopeSetDTO(frozenset({scope})),
+    )
+
+
 def test_verification_is_not_inherited_by_data_manager():
     action = Action.VERIFICATION_DIRECT_UPDATE
     assert decide(action, facts(action, Role.VERIFIER)).allowed
     assert not decide(action, facts(action, Role.DATA_MANAGER)).allowed
+
+
+def test_admin_security_diagnostics_are_admin_only():
+    action = Action.ADMIN_SECURITY_VIEW
+    assert decide(action, screen_facts(Role.ADMIN)).allowed
+    for role in (
+        Role.LOCAL_ADMIN,
+        Role.PROJECT_PI,
+        Role.SITE_PI,
+        Role.PROJECT_ADMIN,
+    ):
+        assert not decide(action, screen_facts(role)).allowed
+
+
+def test_admin_user_workspace_admits_only_admin_and_local_admin():
+    action = Action.ADMIN_USERS_WORKSPACE_VIEW
+    assert decide(action, screen_facts(Role.ADMIN)).allowed
+    assert decide(action, screen_facts(Role.LOCAL_ADMIN)).allowed
+    for role in (Role.PROJECT_PI, Role.SITE_PI, Role.PROJECT_ADMIN):
+        assert not decide(action, screen_facts(role)).allowed
 
 
 def test_pregraded_upload_is_distinct_from_capture_upload():

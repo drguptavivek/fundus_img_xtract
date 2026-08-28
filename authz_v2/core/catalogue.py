@@ -734,6 +734,7 @@ for _name, _roles in (
     ("inference.wai.summary", PROJECT_READ),
     ("intra_rater.batch.view", ADMIN_DATA),
     ("project.review.list", PROJECT_READ),
+    ("screenings.list", VERIFIERS),
     ("intra_rater.kpi.view", ADMIN_DATA | frozenset({Role.OPHTHALMOLOGIST})),
     (
         "intra_rater.tasks.list",

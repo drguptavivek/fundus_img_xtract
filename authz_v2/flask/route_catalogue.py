@@ -93,6 +93,16 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "dashboard.hospital_detail": _exact(
         Action.DASHBOARD_HOSPITAL_VIEW, "lookup_record"
     ),
+    "screenings.list_screenings": _screen(Action.SCREENINGS_LIST),
+    "screenings.screening_detail": _exact(Action.SCREENINGS_VIEW, "encounter"),
+    "screenings.reprocess_pdf": _exact(Action.SCREENINGS_REPROCESS, "encounter"),
+    **{
+        endpoint: _exact(Action.SCREENINGS_DELETE, "encounter")
+        for endpoint in (
+            "screenings.delete_encounter",
+            "screenings.delete_reports",
+        )
+    },
     **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (

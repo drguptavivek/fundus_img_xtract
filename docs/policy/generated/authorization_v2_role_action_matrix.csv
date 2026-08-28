@@ -204,6 +204,7 @@ review.regrade_creator.manage,grading_task,scoped_role|admin_break_glass,masked,
 review.task.submit,grading_task,scoped_role|admin_break_glass,masked,optional
 review.task.view,grading_task,scoped_role|admin_break_glass,masked,optional
 screenings.delete,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
+screenings.list,screen,authenticated_screen|admin_break_glass,masked,optional
 screenings.reprocess,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
 screenings.view,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
 search.view,screen,authenticated_screen|admin_break_glass,masked,optional

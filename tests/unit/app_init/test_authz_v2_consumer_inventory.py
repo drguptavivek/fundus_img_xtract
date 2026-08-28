@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 552,
+        "authz_v2": 557,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 89,
+        "legacy_unmapped": 84,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1183,6 +1183,32 @@ def test_legacy_dashboard_separates_admission_from_exact_hospital():
     detail = ROUTE_POLICIES["dashboard.hospital_detail"]
     assert detail.action is Action.DASHBOARD_HOSPITAL_VIEW
     assert detail.resolver == "lookup_record"
+
+
+def test_screenings_routes_use_exact_encounters_for_reads_and_mutations():
+    names = {
+        "screenings.list_screenings",
+        "screenings.screening_detail",
+        "screenings.reprocess_pdf",
+        "screenings.delete_encounter",
+        "screenings.delete_reports",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["screenings.list_screenings"].mode is EndpointMode.SCREEN
+    expected = {
+        "screenings.screening_detail": Action.SCREENINGS_VIEW,
+        "screenings.reprocess_pdf": Action.SCREENINGS_REPROCESS,
+        "screenings.delete_encounter": Action.SCREENINGS_DELETE,
+        "screenings.delete_reports": Action.SCREENINGS_DELETE,
+    }
+    for endpoint, action in expected.items():
+        assert ROUTE_POLICIES[endpoint].action is action
+        assert ROUTE_POLICIES[endpoint].resolver == "encounter"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

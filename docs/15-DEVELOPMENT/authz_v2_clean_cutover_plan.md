@@ -1242,6 +1242,17 @@ pattern.
   literals, 89 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 226 actions.
 
+### Implemented vertical slice 40: screenings routes
+
+- The screenings list now has explicit admission. Detail, PDF reprocessing,
+  encounter deletion, and report deletion authorize the exact persisted
+  encounter and its resolved scope.
+- OCR flags, report presence, grading-task state, filesystem cleanup, and other
+  mutation eligibility remain in the screenings application workflow.
+- The reviewed inventory is now 557 v2 HTTP consumers, 39 legacy action
+  literals, 84 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 227 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 600,
+        "authz_v2": 604,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 41,
+        "legacy_unmapped": 37,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1458,6 +1458,28 @@ def test_discrepancy_options_and_ai_model_list_have_explicit_admission():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.mode is EndpointMode.SCREEN
         assert policy.action is action
+
+
+def test_ad_hoc_task_reads_separate_list_admission_and_exact_batch():
+    list_routes = {
+        "ad_hoc_tasks.index",
+        "ad_hoc_tasks.list_batches",
+        "ad_hoc_tasks.search",
+    }
+    names = list_routes | {"ad_hoc_tasks.detail"}
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in list_routes:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.SCREEN
+        assert policy.action is Action.AD_HOC_TASK_LIST
+    detail = ROUTE_POLICIES["ad_hoc_tasks.detail"]
+    assert detail.action is Action.AD_HOC_TASK_VIEW
+    assert detail.resolver == "ad_hoc_task"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

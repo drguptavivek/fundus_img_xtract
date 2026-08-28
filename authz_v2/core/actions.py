@@ -181,6 +181,7 @@ _CANONICAL_ONLY = {
     "admin.database.export",
     "admin.database.restore",
     "admin.ai_models.view",
+    "ad_hoc_task.list",
     "admin.upload_quota.manage",
     "admin.lookup_record.view",
     "admin.lookup_record.manage",

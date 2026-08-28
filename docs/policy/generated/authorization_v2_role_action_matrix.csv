@@ -9,6 +9,7 @@ account.profile.view,user,self,masked,optional
 account.viewer_preferences.manage,user,self,masked,optional
 ad_hoc_task.create,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 ad_hoc_task.delete,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
+ad_hoc_task.list,screen,authenticated_screen|admin_break_glass,masked,optional
 ad_hoc_task.view,ad_hoc_task,scoped_role|admin_break_glass,masked,optional
 admin.ai_models.view,screen,admin_break_glass,masked,optional
 admin.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional

@@ -1396,6 +1396,20 @@ pattern.
   literals, 41 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 237 actions.
 
+### Implemented vertical slice 53: ad-hoc task reads
+
+- The ad-hoc task workspace, batch list, and image search now use a distinct
+  list-admission action. Batch detail requires the exact persisted ad-hoc task.
+- Admission does not authorize search results or batches; registered image and
+  batch query policies must replace application-only Lab Unit filters before
+  cutover.
+- Preview and create remain denied until every selected image and requested
+  target scope can be bound as a complete creation target. Disease expansion,
+  suitability, randomization, and other task rules remain application logic.
+- The reviewed inventory is now 604 v2 HTTP consumers, 39 legacy action
+  literals, 37 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 238 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

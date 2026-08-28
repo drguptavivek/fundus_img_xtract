@@ -186,6 +186,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     ),
     "fundus_api.get_ai_models": _screen(Action.ADMIN_AI_MODELS_VIEW),
     **{
+        endpoint: _screen(Action.AD_HOC_TASK_LIST)
+        for endpoint in (
+            "ad_hoc_tasks.index",
+            "ad_hoc_tasks.list_batches",
+            "ad_hoc_tasks.search",
+        )
+    },
+    "ad_hoc_tasks.detail": _exact(Action.AD_HOC_TASK_VIEW, "ad_hoc_task"),
+    **{
         endpoint: _exact(Action.REVIEW_DISCREPANCY_HISTORY, "user")
         for endpoint in (
             "review.my_discrepancy_reviews",

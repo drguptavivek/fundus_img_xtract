@@ -86,6 +86,15 @@ Resource: `ad_hoc_task`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=data_manager; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `ad_hoc_task.list`
+
+Authorize ad_hoc_task.list.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_manager), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `ad_hoc_task.view`
 
 Authorize ad_hoc_task.view.

@@ -812,6 +812,8 @@ _SYSTEM_OPERATIONS = frozenset(
         "metadata_clear_queued",
         "metadata_clear_running",
         "materialized_views_refresh",
+        "notification_broadcast",
+        "notification_system_send",
         "email_settings_create",
         "s3_config_create",
         "s3_config_test_candidate",

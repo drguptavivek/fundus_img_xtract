@@ -1488,6 +1488,17 @@ pattern.
   literals, 13 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 242 actions.
 
+### Implemented vertical slice 59: administrator notification sends
+
+- Broadcast and system notification pages use screen-entry admission only for
+  GET. Each POST binds a distinct closed system-operation identifier and is
+  audited as an exact administrator mutation.
+- Notification title, message, type, recipient expansion, and delivery remain
+  application-domain behavior.
+- The reviewed inventory is now 630 v2 HTTP consumers, 39 legacy action
+  literals, 11 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 242 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

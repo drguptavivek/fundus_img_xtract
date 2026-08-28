@@ -194,6 +194,14 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "notifications.mark_all_notifications_read": _exact(
         Action.ACCOUNT_NOTIFICATIONS_UPDATE, "user"
     ),
+    "notifications.broadcast_notification": {
+        "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "notifications.system_notification": {
+        "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
     "review.discrepancy_review": _screen(Action.REVIEW_DISCREPANCY_LIST),
     "review.regrade_task_creator": _screen(Action.REVIEW_REGRADE_CREATOR_VIEW),
     "fundus_api.discrepancy_review_filter_options": _screen(

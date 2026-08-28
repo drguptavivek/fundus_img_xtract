@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 628,
+        "authz_v2": 630,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 13,
+        "legacy_unmapped": 11,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1623,6 +1623,24 @@ def test_dataset_download_routes_require_the_exact_signed_share_credential():
         assert policy.mode is EndpointMode.SIGNED_RESOURCE
         assert policy.action is Action.DATASET_PUBLIC_DOWNLOAD
         assert policy.resolver == "dataset_share"
+
+
+def test_admin_notification_forms_separate_screen_entry_from_exact_send():
+    names = {
+        "notifications.broadcast_notification",
+        "notifications.system_notification",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert {row.name for row in family} == names
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in names:
+        policies = ROUTE_POLICIES[endpoint]
+        assert policies["GET"].mode is EndpointMode.SCREEN
+        assert policies["POST"].action is Action.ADMIN_SYSTEM_OPERATION
+        assert policies["POST"].resolver == "system_operation"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

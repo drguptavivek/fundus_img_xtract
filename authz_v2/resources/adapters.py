@@ -30,6 +30,7 @@ from authz_v2.resources.references import (
     SystemOperationRef,
     TaskBackfillTargetRef,
     WorkbenchSessionRef,
+    WorkbenchAcquisitionRef,
     is_positive_int,
     is_stable_resource_id,
 )
@@ -65,11 +66,13 @@ from models import (
     Disease,
     DiseaseGrading,
     EmailSettings,
+    EncounterSetGradingPackage,
     EncounterFile,
     EncounterFilePDF,
     EncounterSetImage,
     GlaucomaReport,
     GradingTask,
+    Grade,
     Hospital,
     IntraRaterBatch,
     IntraRaterTask,
@@ -87,6 +90,7 @@ from models import (
     S3SyncStatus,
     SensitiveOperationAudit,
     User,
+    UserDiseaseUnitRole,
 )
 from project_configuration.models import ProjectLabUnit
 from remidio_api_integration.models import (
@@ -1139,6 +1143,177 @@ WORKBENCH_SESSION_ADAPTER = ResourceAdapter(
     workbench_session_facts,
 )
 
+
+@dataclass(frozen=True)
+class ResolvedWorkbenchAcquisition:
+    kind: str
+    role_slot: str
+    disease_ids: tuple[int, ...]
+    lab_unit_id: int
+    tasks: tuple[GradingTask, ...] = ()
+
+
+def resolve_workbench_acquisition(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, WorkbenchAcquisitionRef):
+        return None
+    if reference.kind not in {"next", "linked", "task", "revision", "package"}:
+        return None
+    if reference.role_slot is not None and reference.role_slot not in {
+        "resident",
+        "resident2",
+        "arbitrator",
+    }:
+        return None
+
+    tasks: tuple[GradingTask, ...] = ()
+    owner_id = None
+    role_slot = reference.role_slot
+    if reference.kind == "task":
+        if not is_stable_resource_id(reference.identifier) or role_slot is None:
+            return None
+        task = db.execute(
+            select(GradingTask).where(GradingTask.uuid == reference.identifier)
+        ).scalar_one_or_none()
+        if task is None:
+            return None
+        tasks = (task,)
+    elif reference.kind == "revision":
+        if not is_positive_int(reference.identifier):
+            return None
+        grade = db.get(Grade, reference.identifier)
+        if grade is None or grade.role_slot not in {
+            "resident",
+            "resident2",
+            "arbitrator",
+        }:
+            return None
+        if role_slot is not None and role_slot != grade.role_slot:
+            return None
+        role_slot = grade.role_slot
+        task = db.get(GradingTask, grade.task_id)
+        if task is None:
+            return None
+        tasks = (task,)
+        owner_id = grade.grader_user_id
+    elif reference.kind == "package":
+        if not is_stable_resource_id(reference.identifier) or role_slot is None:
+            return None
+        package = db.execute(
+            select(EncounterSetGradingPackage).where(
+                EncounterSetGradingPackage.uuid == reference.identifier
+            )
+        ).scalar_one_or_none()
+        if package is None or not package.tasks:
+            return None
+        tasks = tuple(package.tasks)
+    else:
+        expected_count = 1 if reference.kind == "next" else 2
+        if (
+            reference.identifier is not None
+            or role_slot is None
+            or not is_positive_int(reference.lab_unit_id)
+            or len(reference.disease_ids) != expected_count
+            or len(set(reference.disease_ids)) != expected_count
+            or any(not is_positive_int(value) for value in reference.disease_ids)
+        ):
+            return None
+        if db.get(LabUnit, reference.lab_unit_id) is None:
+            return None
+        if any(db.get(Disease, disease_id) is None for disease_id in reference.disease_ids):
+            return None
+
+    if tasks:
+        lab_unit_ids = {task.lab_unit_id for task in tasks}
+        project_ids = {task.project_id for task in tasks}
+        if len(lab_unit_ids) != 1 or len(project_ids) != 1:
+            return None
+        lab_unit_id = next(iter(lab_unit_ids))
+        project_id = next(iter(project_ids))
+        disease_ids = tuple(sorted({task.disease_id for task in tasks}))
+        if reference.lab_unit_id is not None and reference.lab_unit_id != lab_unit_id:
+            return None
+        if reference.disease_ids and set(reference.disease_ids) != set(disease_ids):
+            return None
+    else:
+        lab_unit_id = reference.lab_unit_id
+        project_id = None
+        disease_ids = tuple(sorted(reference.disease_ids))
+    scope = resolve_scope(db, project_id=project_id, lab_unit_id=lab_unit_id)
+    if scope is None or role_slot is None:
+        return None
+    value = ResolvedWorkbenchAcquisition(
+        reference.kind, role_slot, disease_ids, lab_unit_id, tasks
+    )
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "workbench_acquisition_target",
+            f"{reference.kind}:{reference.identifier or '-'}:{role_slot}:{lab_unit_id}",
+            scope,
+            owner_id=owner_id,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def workbench_acquisition_facts(db, principal, _action, target, facts):
+    value = target.value
+    if principal.user_id is None or not isinstance(value, ResolvedWorkbenchAcquisition):
+        return facts
+    slot_columns = {
+        "resident": (UserDiseaseUnitRole.can_grade_resident, UserDiseaseUnitRole.can_grade_resident2),
+        "resident2": (UserDiseaseUnitRole.can_grade_resident2,),
+        "arbitrator": (UserDiseaseUnitRole.can_arbitrate,),
+    }
+    eligibility_ids: list[int] = []
+    for disease_id in value.disease_ids:
+        rows = tuple(
+            db.execute(
+                select(UserDiseaseUnitRole).where(
+                    UserDiseaseUnitRole.user_id == principal.user_id,
+                    UserDiseaseUnitRole.disease_id == disease_id,
+                    UserDiseaseUnitRole.lab_unit_id == value.lab_unit_id,
+                    UserDiseaseUnitRole.active.is_(True),
+                )
+            ).scalars()
+        )
+        eligible = next(
+            (
+                row
+                for row in rows
+                if any(bool(getattr(row, column.key)) for column in slot_columns[value.role_slot])
+            ),
+            None,
+        )
+        if eligible is None:
+            return replace(facts, domain_valid=True)
+        eligibility_ids.append(eligible.id)
+    facts = ownership_facts(db, principal, _action, target, facts)
+    evidence = RelationshipEvidenceDTO(
+        GrantSource.GRADING_SLOT,
+        ":".join(str(value) for value in sorted(eligibility_ids)),
+        principal.user_id,
+        target.context.resource_type,
+        target.context.resource_id,
+        True,
+        target.context.scope,
+    )
+    return replace(
+        facts,
+        relationships=(*facts.relationships, evidence),
+        grading_slot_matches=True,
+        domain_valid=True,
+    )
+
+
+WORKBENCH_ACQUISITION_ADAPTER = ResourceAdapter(
+    "workbench_acquisition_target",
+    resolve_workbench_acquisition,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    workbench_acquisition_facts,
+)
+
 _LOOKUP_MODELS = {
     "hospital": Hospital,
     "lab_unit": LabUnit,
@@ -1398,4 +1573,5 @@ RESOURCE_ADAPTERS = (
     UPLOAD_PROFILE_ADAPTER,
     UPLOAD_TARGET_ADAPTER,
     WORKBENCH_SESSION_ADAPTER,
+    WORKBENCH_ACQUISITION_ADAPTER,
 )

@@ -819,6 +819,22 @@ Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
 - `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', False)); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('workflow_accepts', True), ('no_conflict', True), ('no_duplicate', True), ('allocation_enforced', True)); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
+### `grading.workbench.acquire`
+
+Authorize grading.workbench.acquire.
+
+Resource: `workbench_acquisition_target`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `qualified_exact_acquisition`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
+### `grading.workbench.revision.acquire`
+
+Authorize grading.workbench.revision.acquire.
+
+Resource: `workbench_acquisition_target`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `owned_qualified_revision`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(); require_subject=True; require_scope=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=True), BooleanRequirement(fact=domain_valid; expected=True)
+
 ### `grading.workbench.session.draft`
 
 Authorize grading.workbench.session.draft.

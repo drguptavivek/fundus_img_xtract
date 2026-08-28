@@ -74,6 +74,21 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.GRADING_WORKBENCH_SESSION_SUBMIT, "workbench_session"
     ),
     **{
+        endpoint: _exact(
+            Action.GRADING_WORKBENCH_ACQUIRE, "workbench_acquisition_target"
+        )
+        for endpoint in (
+            "fundus_api.acquire_workbench_session",
+            "fundus_api.acquire_linked_followup_workbench_session",
+            "fundus_api.acquire_task_workbench_session",
+            "fundus_api.acquire_package_workbench_session",
+        )
+    },
+    "fundus_api.acquire_revision_workbench_session": _exact(
+        Action.GRADING_WORKBENCH_REVISION_ACQUIRE,
+        "workbench_acquisition_target",
+    ),
+    **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (
             "fundus_api.list_remidio_connections",

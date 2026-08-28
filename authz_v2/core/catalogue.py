@@ -208,6 +208,8 @@ MANDATORY_AUDIT = frozenset(
         "grading.workbench.session.release",
         "grading.workbench.session.draft",
         "grading.workbench.session.submit",
+        "grading.workbench.acquire",
+        "grading.workbench.revision.acquire",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -917,6 +919,47 @@ for _name in (
         disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
         break_glass=BreakGlassMode.NEVER,
     )
+_store(
+    "grading.workbench.acquire",
+    resource_type="workbench_acquisition_target",
+    requires_resource=True,
+    paths=(
+        (
+            "qualified_exact_acquisition",
+            all_of(
+                active_principal(),
+                scoped_roles(*GRADING_QUALIFICATIONS),
+                fact(BooleanFact.EXACT_RESOURCE),
+                relationship(GRADING_SLOT),
+                fact(BooleanFact.DOMAIN_VALID),
+                name="qualified_exact_acquisition",
+            ),
+        ),
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    break_glass=BreakGlassMode.NEVER,
+)
+_store(
+    "grading.workbench.revision.acquire",
+    resource_type="workbench_acquisition_target",
+    requires_resource=True,
+    paths=(
+        (
+            "owned_qualified_revision",
+            all_of(
+                active_principal(),
+                scoped_roles(*GRADING_QUALIFICATIONS),
+                fact(BooleanFact.EXACT_RESOURCE),
+                relationship(GRADING_SLOT),
+                relationship(GrantSource.OWNERSHIP),
+                fact(BooleanFact.DOMAIN_VALID),
+                name="owned_qualified_revision",
+            ),
+        ),
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    break_glass=BreakGlassMode.NEVER,
+)
 _resource(
     "admin.executable_config.view",
     "executable_config_record",

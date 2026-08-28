@@ -864,6 +864,22 @@ pattern.
   literals, 276 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 11b: grading-workbench acquisition
+
+- All five workbench acquisition routes require an exact typed acquisition
+  target. Queue selection requires an explicit Lab Unit, disease set, and role
+  slot; missing selection scope denies.
+- Task, revision, and package identifiers are resolved to persisted grading
+  tasks, and multi-task packages deny unless every task has one common scope.
+- Grading eligibility is reloaded for every disease in the target and attested
+  as one exact grading-slot relationship. Application workflow code continues
+  to validate task state, conflicts, package editability, and allocation detail.
+- Revision acquisition is separate and additionally requires ownership of the
+  persisted grade. No acquisition action has administrator break glass.
+- The reviewed inventory is now 364 v2 HTTP consumers, 45 legacy action
+  literals, 271 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -95,6 +95,8 @@ grading.arbitrator.submit,grading_task,qualified_slot,masked,optional
 grading.grades.view,grading_task,participant|admin_break_glass,masked,optional
 grading.resident.submit,grading_task,qualified_slot,masked,optional
 grading.resident2.submit,grading_task,qualified_slot,masked,optional
+grading.workbench.acquire,workbench_acquisition_target,qualified_exact_acquisition,identifier_in_place,required
+grading.workbench.revision.acquire,workbench_acquisition_target,owned_qualified_revision,identifier_in_place,required
 grading.workbench.session.draft,workbench_session,owned_credentialed_session,identifier_in_place,required
 grading.workbench.session.heartbeat,workbench_session,owned_credentialed_session,identifier_in_place,required
 grading.workbench.session.release,workbench_session,owned_credentialed_session,identifier_in_place,required

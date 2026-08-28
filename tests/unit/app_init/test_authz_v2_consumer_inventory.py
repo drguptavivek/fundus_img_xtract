@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 359,
+        "authz_v2": 364,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 276,
+        "legacy_unmapped": 271,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "782b79e10afe4f5f0bcb25f0409dcf869a36a06bad6e37df640c21bc2804b4a4"
+        == "2b3e963017242aa81cca1bb170e634b78cec333f4566453850068b3039605f49"
     )
 
 
@@ -139,7 +139,7 @@ def test_grading_workbench_session_slice_is_credential_bound():
         and row.source == "api/grading_workbench.py"
         and row.classification == "authz_v2"
     ]
-    assert len(classified) == 8
+    assert len(classified) == 13
     for endpoint in (
         "fundus_api.get_workbench_session",
         "fundus_api.resume_workbench_session",
@@ -151,6 +151,33 @@ def test_grading_workbench_session_slice_is_credential_bound():
         assert ROUTE_POLICIES[endpoint].resolver == "workbench_session"
     submit = ROUTE_POLICIES["fundus_api.submit_workbench_session"]
     assert submit.action is Action.GRADING_WORKBENCH_SESSION_SUBMIT
+
+
+def test_grading_workbench_family_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/grading_workbench.py"
+    ]
+    assert len(family) == 13
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "fundus_api.acquire_workbench_session",
+        "fundus_api.acquire_linked_followup_workbench_session",
+        "fundus_api.acquire_task_workbench_session",
+        "fundus_api.acquire_package_workbench_session",
+        "fundus_api.acquire_revision_workbench_session",
+    ):
+        assert (
+            ROUTE_POLICIES[endpoint].resolver == "workbench_acquisition_target"
+        )
+    assert (
+        ROUTE_POLICIES["fundus_api.acquire_revision_workbench_session"].action
+        is Action.GRADING_WORKBENCH_REVISION_ACQUIRE
+    )
 
 
 def test_high_risk_media_slice_has_no_unmapped_route():

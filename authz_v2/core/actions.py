@@ -196,6 +196,8 @@ _CANONICAL_ONLY = {
     "grading.workbench.session.release",
     "grading.workbench.session.draft",
     "grading.workbench.session.submit",
+    "grading.workbench.acquire",
+    "grading.workbench.revision.acquire",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

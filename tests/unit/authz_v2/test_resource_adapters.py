@@ -25,6 +25,7 @@ from authz_v2.resources.adapters import (
     resolve_system_operation,
     resolve_task_backfill_target,
     resolve_workbench_session,
+    resolve_workbench_acquisition,
 )
 from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
@@ -40,6 +41,7 @@ from authz_v2.resources.references import (
     SystemOperationRef,
     TaskBackfillTargetRef,
     WorkbenchSessionRef,
+    WorkbenchAcquisitionRef,
 )
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
 from authz_v2.resources.scoping import scope_model_query
@@ -314,3 +316,13 @@ def test_scope_sensitive_admin_targets_fail_closed_before_database_access():
     ) is None
     assert resolve_workbench_session(db, None) is None
     assert resolve_workbench_session(db, WorkbenchSessionRef("")) is None
+    assert resolve_workbench_acquisition(db, None) is None
+    assert resolve_workbench_acquisition(
+        db, WorkbenchAcquisitionRef("unknown", None, "resident")
+    ) is None
+    assert resolve_workbench_acquisition(
+        db, WorkbenchAcquisitionRef("next", None, "resident", (), 1)
+    ) is None
+    assert resolve_workbench_acquisition(
+        db, WorkbenchAcquisitionRef("linked", None, None, (1, 2), 3)
+    ) is None

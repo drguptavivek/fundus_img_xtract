@@ -117,6 +117,17 @@ class WorkbenchSessionRef:
     token_generation: int | None = None
 
 
+@dataclass(frozen=True)
+class WorkbenchAcquisitionRef:
+    """Complete target-selection facts for acquiring a grading lease."""
+
+    kind: str
+    identifier: int | str | None
+    role_slot: str | None
+    disease_ids: tuple[int, ...] = ()
+    lab_unit_id: int | None = None
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

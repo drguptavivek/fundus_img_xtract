@@ -9,11 +9,16 @@ from authz_v2.core.principals import EvaluationFactsDTO, PrincipalDTO, RoleGrant
 from authz_v2.core.resources import ResourceContextDTO, ScopeDTO, ScopeSetDTO
 from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
-from authz_v2.resources.adapters import TypedResourceRef, resolve_mobile_session
+from authz_v2.resources.adapters import (
+    TypedResourceRef,
+    resolve_mobile_session,
+    resolve_system_operation,
+)
 from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    SystemOperationRef,
 )
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
 from authz_v2.resources.scoping import scope_model_query
@@ -200,3 +205,13 @@ def test_admin_mobile_session_reference_rejects_path_user_mismatch():
 
     reference = AdminMobileSessionTargetRef(user_id=8, session_id="session-1")
     assert resolve_mobile_session(SessionOnlyDatabase(), reference) is None
+
+
+def test_system_operation_reference_is_closed_and_exact():
+    assert resolve_system_operation(None, "sequences_refresh") is None
+    assert resolve_system_operation(None, SystemOperationRef("unknown")) is None
+    target = resolve_system_operation(None, SystemOperationRef("sequences_refresh"))
+    assert target is not None
+    assert target.context.resource_type == "system_operation"
+    assert target.context.resource_id == "sequences_refresh"
+    assert target.context.resolved

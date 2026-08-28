@@ -181,6 +181,7 @@ MANDATORY_AUDIT = frozenset(
         "auth.password_reset.complete",
         "admin.users.create",
         "admin.users.manage",
+        "admin.system.operation",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -678,6 +679,7 @@ for _name, _roles in (
     ("admin.dashboard.view", ADMIN_SITE),
     ("admin.security.view", ADMIN),
     ("admin.system.manage", ADMIN),
+    ("admin.system.status.view", frozenset({Role.ADMIN, Role.DATA_MANAGER})),
     ("admin.s3.manage", ADMIN),
     ("admin.lookup.manage", ADMIN),
     ("admin.grading_eligibility.manage", ADMIN_DATA),
@@ -721,6 +723,12 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.system.operation",
+    "system_operation",
+    ADMIN,
+    domain_condition=True,
+)
 _resource(
     "admin.users.create",
     "user_creation_target",

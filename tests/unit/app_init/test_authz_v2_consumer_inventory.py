@@ -21,15 +21,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 161,
+        "authz_v2": 182,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 474,
+        "legacy_unmapped": 453,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "1f9ad56c816eb93e41613055b188422475f9b8d54a0f85ceae6e9c87fab3224f"
+        == "6c9903b072a21bf00a9f4ccda3ee860826342b5fa1a8ad66af0966d4d2c09f91"
     )
 
 
@@ -200,6 +200,28 @@ def test_admin_user_mutations_are_exact_and_method_specific():
             and policy["GET"].mode is EndpointMode.PROTECTED
         )
         assert policy["POST"].mode is EndpointMode.PROTECTED
+
+
+def test_admin_system_status_and_scanner_slice_is_classified():
+    sources = {
+        "admin/status.py",
+        "admin/cve_scanner.py",
+        "admin/package_updates.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 21
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "admin.api_cve_refresh",
+        "admin.api_package_updates_refresh",
+        "admin.refresh_sequences",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.PROTECTED
+        assert policy.resolver == "system_operation"
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

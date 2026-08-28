@@ -32,6 +32,13 @@ class AdminMobileSessionTargetRef:
     session_id: str
 
 
+@dataclass(frozen=True)
+class SystemOperationRef:
+    """Closed identifier for an exact system-maintenance mutation."""
+
+    operation: str
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

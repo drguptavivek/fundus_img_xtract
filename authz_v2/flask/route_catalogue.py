@@ -50,6 +50,47 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     **{
+        endpoint: _screen(Action.ADMIN_SYSTEM_STATUS_VIEW)
+        for endpoint in (
+            "admin.admin_status",
+            "admin.api_admin_status",
+            "admin.api_sequences_status",
+            "admin.api_celery_task_status",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ADMIN_DASHBOARD_VIEW)
+        for endpoint in (
+            "admin.cve_security_report",
+            "admin.api_cve_summary",
+            "admin.htmx_cve_packages",
+            "admin.htmx_cve_vulnerabilities",
+            "admin.htmx_cve_scan_history",
+            "admin.package_updates_report",
+            "admin.api_package_updates_summary",
+            "admin.htmx_package_list",
+            "admin.htmx_scan_history",
+            "admin.api_package_updates_yaml",
+            "admin.api_package_updates_instructions",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
+            "admin.cve_report_text",
+            "admin.api_cve_scan_history",
+            "admin.api_package_updates_scan_history",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation")
+        for endpoint in (
+            "admin.api_cve_refresh",
+            "admin.api_package_updates_refresh",
+            "admin.refresh_sequences",
+        )
+    },
+    **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (
             "admin.manage_roles",

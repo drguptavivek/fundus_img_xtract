@@ -16,6 +16,8 @@ admin.lookup.manage,screen,admin_break_glass,masked,optional
 admin.s3.manage,screen,admin_break_glass,masked,optional
 admin.security.view,screen,admin_break_glass,masked,optional
 admin.system.manage,screen,admin_break_glass,masked,optional
+admin.system.operation,system_operation,admin_break_glass,masked,required
+admin.system.status.view,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.upload_profiles.manage,screen,admin_break_glass,masked,optional
 admin.upload_profiles.update,upload_profile,admin_break_glass,identifier_in_place,optional
 admin.users.create,user_creation_target,scoped_role|admin_break_glass,identifier_in_place,required

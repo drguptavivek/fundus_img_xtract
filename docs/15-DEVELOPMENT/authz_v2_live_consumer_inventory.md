@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 161 | 45 | 474 |
+| Flask/API route rules | 680 | 182 | 45 | 453 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 161 | 45 | 1,499 |
+| Total | 1,705 | 182 | 45 | 1,478 |
 
-Reviewed identity fingerprint: `1f9ad56c816eb93e41613055b188422475f9b8d54a0f85ceae6e9c87fab3224f`.
+Reviewed identity fingerprint: `6c9903b072a21bf00a9f4ccda3ee860826342b5fa1a8ad66af0966d4d2c09f91`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -68,6 +68,10 @@ Seven admin user/security read-workspace routes now have explicit contracts. Use
 
 Seven admin mutation routes now separate page admission from exact mutation authority. User edits, activation changes, password resets, enrolment-code issue, and device status changes bind the exact stored user; session revocation binds the stored mobile session and requires the URL user/session pair to agree. Account creation has a dedicated exact target containing the hospital and every requested scoped grant. Missing role/scope facts, cross-hospital scope, roles outside their permitted scope types, and non-delegable grants deny. In particular, no caller can create another Admin grant, and only Admin can include Project PI or Site PI grants.
 
+### Vertical slice 9c: system status and dependency security
+
+All 21 system-status, CVE, and package-update routes now have explicit contracts. Read-only dashboards retain their deliberately distinct Admin/Data Manager, Admin/Local Admin, or Admin-only admission. Refreshing database sequences or dependency scan data cannot borrow a dashboard receipt: each mutation requires Admin plus an exact closed `system_operation` reference selected from the three supported operations. Raw strings, unknown operations, and missing operation facts deny.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -94,4 +98,4 @@ Seven admin mutation routes now separate page admission from exact mutation auth
 
 ## Remaining cutover work
 
-The remaining 521 explicitly unmapped runtime consumers (474 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 500 explicitly unmapped runtime consumers (453 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

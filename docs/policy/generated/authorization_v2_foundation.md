@@ -145,6 +145,23 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.system.operation`
+
+Authorize admin.system.operation.
+
+Resource: `system_operation`; disclosure: `masked`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.system.status.view`
+
+Authorize admin.system.status.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_manager), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `admin.upload_profiles.manage`
 
 Authorize admin.upload_profiles.manage.

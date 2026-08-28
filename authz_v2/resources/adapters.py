@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import false, select
 
-from authz_v2.core.resources import DisclosureClass, ResourceContextDTO
+from authz_v2.core.resources import DisclosureClass, ResourceContextDTO, ScopeDTO
+from authz_v2.core.roles import ScopeType
 from authz_v2.domain.models import (
     AuthorizationResourceScope,
     PasswordResetCredential,
@@ -15,6 +16,7 @@ from authz_v2.domain.models import (
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    SystemOperationRef,
     is_positive_int,
     is_stable_resource_id,
 )
@@ -548,6 +550,37 @@ PASSWORD_RESET_ADAPTER = ResourceAdapter(
     lambda _db, _principal, _action, _grants, query: query.where(false()),
     signed_credential_facts,
 )
+
+_SYSTEM_OPERATIONS = frozenset(
+    {"cve_refresh", "package_updates_refresh", "sequences_refresh"}
+)
+
+
+def resolve_system_operation(_db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, SystemOperationRef):
+        return None
+    if reference.operation not in _SYSTEM_OPERATIONS:
+        return None
+    return ResourceTarget(
+        reference.operation,
+        ResourceContextDTO(
+            "system_operation",
+            reference.operation,
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+SYSTEM_OPERATION_ADAPTER = ResourceAdapter(
+    "system_operation",
+    resolve_system_operation,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
 PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
     "project_allocation_target", ProjectGraderAllocation
 )
@@ -602,6 +635,7 @@ RESOURCE_ADAPTERS = (
     PROJECT_ALLOCATION_TARGET_ADAPTER,
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
+    SYSTEM_OPERATION_ADAPTER,
     UPLOAD_JOB_ADAPTER,
     UPLOAD_PROFILE_ADAPTER,
     UPLOAD_TARGET_ADAPTER,

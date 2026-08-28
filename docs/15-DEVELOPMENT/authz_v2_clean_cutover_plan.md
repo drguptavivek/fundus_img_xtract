@@ -1452,6 +1452,19 @@ pattern.
   details after authorization. Supplying them to an Authz decision cannot make
   an otherwise unauthorized decision pass.
 
+### Implemented vertical slice 56: exact configuration and metadata reads
+
+- Disease grading and feature reads bind a typed lookup record; image metadata
+  binds the exact polymorphic image; annotation context binds the exact grading
+  task and its participant relationship; and administrator eligibility reads
+  bind the exact target user.
+- Disease content, annotation slot syntax, image metadata extraction, and the
+  grading eligibility matrix remain application-domain behavior. Authz decides
+  only whether the resolved actor/resource relationship permits disclosure.
+- The reviewed inventory is now 617 v2 HTTP consumers, 39 legacy action
+  literals, 24 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 241 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

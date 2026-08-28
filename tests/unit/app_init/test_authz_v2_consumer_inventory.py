@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 611,
+        "authz_v2": 617,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 30,
+        "legacy_unmapped": 24,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1524,6 +1524,44 @@ def test_encounter_set_resource_routes_use_exact_project_encounter_and_image_tar
     rows = build_live_consumer_inventory(app, celery_app)
     family = [row for row in rows if row.kind == "http" and row.name in expected]
     assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, (action, resolver) in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is action
+        assert policy.resolver == resolver
+
+
+def test_remaining_exact_read_apis_bind_authorization_resources_not_domain_facts():
+    expected = {
+        "fundus_api.get_disease_grades": (
+            Action.API_LOOKUP_RECORD_VIEW,
+            "lookup_record",
+        ),
+        "fundus_api.get_disease_gradings_features": (
+            Action.API_LOOKUP_RECORD_VIEW,
+            "lookup_record",
+        ),
+        "fundus_api.get_image_metadata": (Action.MEDIA_IMAGE_VIEW, "image"),
+        "fundus_api.get_task_annotation_context": (
+            Action.GRADING_GRADES_VIEW,
+            "grading_task",
+        ),
+        "fundus_api.get_user_grading_eligibility": (
+            Action.ADMIN_GRADING_ELIGIBILITY_USER_VIEW,
+            "user",
+        ),
+        "fundus_api.get_user_grading_eligibility_details": (
+            Action.ADMIN_GRADING_ELIGIBILITY_USER_VIEW,
+            "user",
+        ),
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.name in expected
+    ]
+    assert {row.name for row in family} == set(expected)
     assert {row.classification for row in family} == {"authz_v2"}
     for endpoint, (action, resolver) in expected.items():
         policy = ROUTE_POLICIES[endpoint]

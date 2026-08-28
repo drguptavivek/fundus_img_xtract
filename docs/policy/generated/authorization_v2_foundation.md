@@ -203,6 +203,15 @@ Resource: `user`; disclosure: `identifier_in_place`; audit: `required`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=local_admin; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.grading_eligibility.user.view`
+
+Authorize admin.grading_eligibility.user.view.
+
+Resource: `user`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=local_admin; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.grading_repair.apply_review`
 
 Authorize admin.grading_repair.apply_review.
@@ -615,6 +624,15 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_manager,local_admin,ophthalmologist,project_admin,project_pi,site_pi), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `api.lookup_record.view`
+
+Authorize api.lookup_record.view.
+
+Resource: `lookup_record`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,fileUploader,local_admin,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `api.lookups.manage`
 

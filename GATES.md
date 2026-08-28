@@ -1,16 +1,21 @@
-# Authz v2 foundation: domain isolation
+# Authz v2 slice 56: exact configuration and metadata reads
 
-- [x] G1 Core policy code imports no application-domain modules.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py::test_authz_core_has_no_application_domain_imports -q'
+- [x] G1 Six read APIs bind exact lookup, image, grading-task, or user resources.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_remaining_exact_read_apis_bind_authorization_resources_not_domain_facts -q'
   EXPECT: exit 0
-  EVIDENCE: Passed in Docker as part of the 3-test domain-boundary suite.
+  EVIDENCE: Passed in the combined Docker run.
 
-- [x] G2 Authz sources contain no enumerated clinical, imaging, workflow, or upload-content fields.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py::test_authz_does_not_encode_application_workflow_or_content_rules -q'
+- [x] G2 Missing exact resources and required task relationships deny closed.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py -q'
   EXPECT: exit 0
-  EVIDENCE: Passed in Docker as part of the 3-test domain-boundary suite.
+  EVIDENCE: Full core contract suite passed in the combined Docker run.
 
-- [x] G3 Generic authorization-state facts remain limited to approved resource adapters.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py::test_domain_valid_is_limited_to_authorization_state_inputs -q'
+- [x] G3 Domain content remains outside Authz v2.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py -q'
   EXPECT: exit 0
-  EVIDENCE: Docker run passed all 3 domain-boundary tests in 6.55s.
+  EVIDENCE: All 3 domain-boundary tests passed in the combined Docker run.
+
+- [x] G4 Inventory and generated policy artifacts are current.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline tests/unit/authz_v2/test_generated_policy_docs.py -q'
+  EXPECT: exit 0
+  EVIDENCE: Combined Docker validation passed 1139 tests in 19.10s; inventory is 617 authz_v2 and 24 legacy_unmapped routes.

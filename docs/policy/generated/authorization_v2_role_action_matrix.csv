@@ -23,6 +23,7 @@ admin.grading_config.manage,grading_config_record,admin_break_glass,masked,requi
 admin.grading_config.view,grading_config_record,admin_break_glass,masked,optional
 admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.grading_eligibility.user.manage,user,scoped_role|admin_break_glass,identifier_in_place,required
+admin.grading_eligibility.user.view,user,scoped_role|admin_break_glass,identifier_in_place,optional
 admin.grading_repair.apply_review,grading_repair_target,admin_break_glass,masked,required
 admin.grading_repair.reset_batch,grading_repair_batch,admin_break_glass,masked,required
 admin.iitk.configuration.create,iitk_configuration_target,admin_break_glass,masked,optional
@@ -72,6 +73,7 @@ analytics.kpi.direct_files.rows,direct_image_upload,scoped_role|admin_break_glas
 analytics.kpi.encounter_files.rows,encounter_file,scoped_role|admin_break_glass,masked,optional
 analytics.kpi.view,screen,authenticated_screen|admin_break_glass,masked,optional
 analytics.upload_stats.view,screen,authenticated_screen|admin_break_glass,masked,optional
+api.lookup_record.view,lookup_record,scoped_role|admin_break_glass,masked,optional
 api.lookups.manage,screen,admin_break_glass,masked,optional
 api.lookups.view,screen,authenticated_screen|admin_break_glass,masked,optional
 api.mobile.session.manage,mobile_session,scoped_role|admin_break_glass,masked,required

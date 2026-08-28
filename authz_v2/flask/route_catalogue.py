@@ -195,6 +195,13 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "ad_hoc_tasks.detail": _exact(Action.AD_HOC_TASK_VIEW, "ad_hoc_task"),
     "fundus_api.get_diseases_with_gradings": _screen(Action.API_LOOKUPS_VIEW),
+    "fundus_api.get_disease_grades": _exact(
+        Action.API_LOOKUP_RECORD_VIEW, "lookup_record"
+    ),
+    "fundus_api.get_disease_gradings_features": _exact(
+        Action.API_LOOKUP_RECORD_VIEW, "lookup_record"
+    ),
+    "fundus_api.get_image_metadata": _exact(Action.MEDIA_IMAGE_VIEW, "image"),
     "fundus_api.list_unverified_encounter_sets": _screen(
         Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW_PII
     ),
@@ -229,6 +236,16 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.export_project_schema": _exact(
         Action.PROJECT_ANNOTATION_POLICY_EXPORT, "project"
     ),
+    "fundus_api.get_task_annotation_context": _exact(
+        Action.GRADING_GRADES_VIEW, "grading_task"
+    ),
+    **{
+        endpoint: _exact(Action.ADMIN_GRADING_ELIGIBILITY_USER_VIEW, "user")
+        for endpoint in (
+            "fundus_api.get_user_grading_eligibility",
+            "fundus_api.get_user_grading_eligibility_details",
+        )
+    },
     **{
         endpoint: _exact(Action.GRADING_DASHBOARD_VIEW, "user")
         for endpoint in (

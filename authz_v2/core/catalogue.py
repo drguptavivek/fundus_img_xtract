@@ -1048,11 +1048,22 @@ _resource(
     domain_condition=True,
 )
 _resource(
+    "admin.grading_eligibility.user.view",
+    "user",
+    ADMIN_SITE,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
     "admin.grading_eligibility.user.manage",
     "user",
     ADMIN_SITE,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
     domain_condition=True,
+)
+_resource(
+    "api.lookup_record.view",
+    "lookup_record",
+    CLINICAL_READ,
 )
 _resource(
     "admin.lookup_record.view",

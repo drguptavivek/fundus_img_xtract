@@ -723,6 +723,22 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "admin.cleanup_stuck_remidio_uploads": _exact(
         Action.ADMIN_SYSTEM_OPERATION, "system_operation"
     ),
+    "fundus_api.remidio_migration_projects": _screen(Action.ADMIN_SECURITY_VIEW),
+    **{
+        endpoint: _exact(Action.ADMIN_REMIDIO_ENCOUNTER_MIGRATION_VIEW, "project")
+        for endpoint in (
+            "fundus_api.remidio_migration_source_dates",
+            "fundus_api.remidio_migration_encounters",
+        )
+    },
+    "fundus_api.remidio_migration_preview": _exact(
+        Action.ADMIN_REMIDIO_ENCOUNTER_MIGRATION_PREVIEW,
+        "remidio_encounter_migration_target",
+    ),
+    "fundus_api.remidio_migration_apply": _exact(
+        Action.ADMIN_REMIDIO_ENCOUNTER_MIGRATION_APPLY,
+        "remidio_encounter_migration_target",
+    ),
     **{
         endpoint: _screen(Action.ADMIN_IITK_VIEW)
         for endpoint in (

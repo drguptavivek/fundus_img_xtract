@@ -307,6 +307,30 @@ Resource: `remidio_config_record`; disclosure: `identifier_in_place`; audit: `op
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.remidio_encounter_migration.apply`
+
+Authorize admin.remidio_encounter_migration.apply.
+
+Resource: `remidio_encounter_migration_target`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.remidio_encounter_migration.preview`
+
+Authorize admin.remidio_encounter_migration.preview.
+
+Resource: `remidio_encounter_migration_target`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.remidio_encounter_migration.view`
+
+Authorize admin.remidio_encounter_migration.view.
+
+Resource: `project`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.s3.manage`
 
 Authorize admin.s3.manage.

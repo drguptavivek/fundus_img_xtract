@@ -813,6 +813,22 @@ _resource(
     domain_condition=True,
 )
 _resource(
+    "admin.remidio_encounter_migration.view",
+    "project",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+for _remidio_migration_action in (
+    "admin.remidio_encounter_migration.preview",
+    "admin.remidio_encounter_migration.apply",
+):
+    _resource(
+        _remidio_migration_action,
+        "remidio_encounter_migration_target",
+        ADMIN,
+        disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    )
+_resource(
     "remidio.attachment_ocr.view",
     "remidio_attachment",
     CLINICAL_READ,

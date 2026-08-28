@@ -1185,6 +1185,18 @@ pattern.
   literals, 114 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 220 actions.
 
+### Implemented vertical slice 35: Remidio encounter migration API
+
+- All five migration endpoints now have explicit contracts. Project discovery
+  is screen admission; source-date and encounter reads resolve the exact source
+  project; preview and apply require both distinct active projects and the
+  complete bounded set of persisted encounters belonging to the source.
+- Capture-date selection, migration compatibility, preview fingerprint, and
+  confirmation-token validation remain in the encounter-migration service.
+- The reviewed inventory is now 532 v2 HTTP consumers, 39 legacy action
+  literals, 109 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 223 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

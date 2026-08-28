@@ -33,6 +33,7 @@ from authz_v2.resources.references import (
     UploadLabUnitRef,
     RemoteInferenceBatchRef,
     RemidioConfigRef,
+    RemidioEncounterMigrationRef,
     RemidioProjectSyncRef,
     S3SyncQueryRef,
     SystemOperationRef,
@@ -1270,6 +1271,61 @@ REMIDIO_PROJECT_SYNC_ADAPTER = ResourceAdapter(
 )
 
 
+def resolve_remidio_encounter_migration(
+    db, reference: object
+) -> ResourceTarget | None:
+    if not isinstance(reference, RemidioEncounterMigrationRef):
+        return None
+    ids = reference.encounter_ids
+    if (
+        not is_positive_int(reference.source_project_id)
+        or not is_positive_int(reference.target_project_id)
+        or reference.source_project_id == reference.target_project_id
+        or not ids
+        or len(ids) > 500
+        or len(set(ids)) != len(ids)
+        or any(not is_positive_int(value) for value in ids)
+    ):
+        return None
+    source = db.get(Project, reference.source_project_id)
+    target = db.get(Project, reference.target_project_id)
+    if source is None or target is None or not source.active or not target.active:
+        return None
+    encounters = tuple(
+        db.execute(
+            select(PatientEncounters).where(PatientEncounters.id.in_(ids))
+        ).scalars()
+    )
+    if len(encounters) != len(ids) or any(
+        encounter.project_id != source.id for encounter in encounters
+    ):
+        return None
+    identity = hashlib.sha256(
+        f"{source.id}:{target.id}:".encode()
+        + ",".join(str(value) for value in sorted(ids)).encode()
+    ).hexdigest()
+    return ResourceTarget(
+        (source, target, encounters),
+        ResourceContextDTO(
+            "remidio_encounter_migration_target",
+            identity,
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+REMIDIO_ENCOUNTER_MIGRATION_ADAPTER = ResourceAdapter(
+    "remidio_encounter_migration_target",
+    resolve_remidio_encounter_migration,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
+
+
 def resolve_workbench_session(db, reference: object) -> ResourceTarget | None:
     if not isinstance(reference, WorkbenchSessionRef) or not is_stable_resource_id(
         reference.session_uuid
@@ -1843,6 +1899,7 @@ RESOURCE_ADAPTERS = (
     PROJECT_SITE_POLICY_ADAPTER,
     REPORT_ADAPTER,
     REMIDIO_CONFIG_ADAPTER,
+    REMIDIO_ENCOUNTER_MIGRATION_ADAPTER,
     REMIDIO_ATTACHMENT_ADAPTER,
     REMIDIO_PROJECT_SYNC_ADAPTER,
     S3_CONFIG_ADAPTER,

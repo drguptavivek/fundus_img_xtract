@@ -117,6 +117,15 @@ class RemidioProjectSyncRef:
 
 
 @dataclass(frozen=True)
+class RemidioEncounterMigrationRef:
+    """Exact source, destination, and encounter identities for a migration."""
+
+    source_project_id: int
+    target_project_id: int
+    encounter_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class WorkbenchSessionRef:
     """Workbench lease identity and optional current bearer credential."""
 

@@ -22,6 +22,7 @@ from authz_v2.resources.adapters import (
     resolve_mobile_session,
     resolve_project_allocation_target,
     resolve_remidio_config,
+    resolve_remidio_encounter_migration,
     resolve_remidio_attachment,
     resolve_remidio_project_sync,
     resolve_remote_inference_batch,
@@ -50,6 +51,7 @@ from authz_v2.resources.references import (
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemidioConfigRef,
+    RemidioEncounterMigrationRef,
     RemidioProjectSyncRef,
     RemoteInferenceBatchRef,
     S3SyncQueryRef,
@@ -141,6 +143,24 @@ def test_every_resource_adapter_rejects_missing_or_non_positive_references():
     iitk_target = resources.require("iitk_configuration_target").resolver
     assert iitk_target(db, IITKConfigurationTargetRef(0, 1)) is None
     assert iitk_target(db, IITKConfigurationTargetRef(1, 0)) is None
+    assert (
+        resolve_remidio_encounter_migration(
+            db, RemidioEncounterMigrationRef(0, 2, (1,))
+        )
+        is None
+    )
+    assert (
+        resolve_remidio_encounter_migration(
+            db, RemidioEncounterMigrationRef(1, 1, (1,))
+        )
+        is None
+    )
+    assert (
+        resolve_remidio_encounter_migration(
+            db, RemidioEncounterMigrationRef(1, 2, ())
+        )
+        is None
+    )
 
 
 def test_sql_scoper_never_uses_non_admin_system_grant_as_global_bypass():

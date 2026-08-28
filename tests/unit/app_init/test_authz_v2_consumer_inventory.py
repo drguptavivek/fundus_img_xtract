@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 527,
+        "authz_v2": 532,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 114,
+        "legacy_unmapped": 109,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "613a96633e5f0b5aa4e515524f3745e2107c77a165f30f7c97c1e01b28176a3a"
+        == "bd47c535b8c8e92efd632accf8252aaf56354aab2630a873331a1ce13f5ddde1"
     )
 
 
@@ -1049,6 +1049,37 @@ def test_wai_statistics_routes_separate_admission_rows_and_retry():
     )
     assert ROUTE_POLICIES[retry].action is Action.INFERENCE_WAI_RUN_RETRY
     assert ROUTE_POLICIES[retry].resolver == "inference_result"
+
+
+def test_remidio_encounter_migration_routes_are_exact():
+    names = {
+        "fundus_api.remidio_migration_projects",
+        "fundus_api.remidio_migration_source_dates",
+        "fundus_api.remidio_migration_encounters",
+        "fundus_api.remidio_migration_preview",
+        "fundus_api.remidio_migration_apply",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["fundus_api.remidio_migration_projects"].mode is (
+        EndpointMode.SCREEN
+    )
+    for endpoint in (
+        "fundus_api.remidio_migration_source_dates",
+        "fundus_api.remidio_migration_encounters",
+    ):
+        assert ROUTE_POLICIES[endpoint].resolver == "project"
+    for endpoint in (
+        "fundus_api.remidio_migration_preview",
+        "fundus_api.remidio_migration_apply",
+    ):
+        assert ROUTE_POLICIES[endpoint].resolver == (
+            "remidio_encounter_migration_target"
+        )
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

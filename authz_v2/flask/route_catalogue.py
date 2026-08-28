@@ -318,6 +318,22 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (
+            "admin.remidio_admin",
+            "admin.remidio_workspace",
+            "admin.remidio_api_routing_dashboard",
+            "admin.remidio_api_routing_workspace",
+            "admin.stuck_remidio_uploads_status",
+            "admin.remidio_encounter_migration",
+            "admin.iitk_admin",
+            "admin.iitk_workspace",
+        )
+    },
+    "admin.cleanup_stuck_remidio_uploads": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    **{
+        endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
+        for endpoint in (
             "admin.manage_roles",
             "admin.role_usage",
             "admin.routes_by_role",

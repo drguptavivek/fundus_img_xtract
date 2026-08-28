@@ -600,6 +600,7 @@ _SYSTEM_OPERATIONS = frozenset(
         "disease_grading_create",
         "linked_grading_create",
         "linked_grading_hierarchy_update",
+        "remidio_stuck_upload_cleanup",
     }
 )
 

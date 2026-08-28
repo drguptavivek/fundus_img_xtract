@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 277,
+        "authz_v2": 286,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 358,
+        "legacy_unmapped": 349,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -362,6 +362,23 @@ def test_admin_grading_configuration_slice_is_classified():
         Action.ADMIN_GRADING_ELIGIBILITY_USER_MANAGE
     )
     assert eligibility["POST"].resolver == "user"
+
+
+def test_admin_remidio_operations_slice_is_classified():
+    sources = {
+        "admin/remidio.py",
+        "admin/remidio_encounter_migration.py",
+        "admin/iitk.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 9
+    assert {row.classification for row in family} == {"authz_v2"}
+    cleanup = ROUTE_POLICIES["admin.cleanup_stuck_remidio_uploads"]
+    assert cleanup.action is Action.ADMIN_SYSTEM_OPERATION
+    assert cleanup.mode is EndpointMode.PROTECTED
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

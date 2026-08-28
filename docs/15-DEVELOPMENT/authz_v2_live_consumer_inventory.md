@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 277 | 45 | 358 |
+| Flask/API route rules | 680 | 286 | 45 | 349 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 277 | 45 | 1,383 |
+| Total | 1,705 | 286 | 45 | 1,374 |
 
 Reviewed identity fingerprint: `0b9e8f20ffc6e7b756a1f45fb427db2714b2ca377d24520f471778c7cf5ddb70`.
 
@@ -96,6 +96,10 @@ All 15 hospital, Lab Unit, disease, camera, and area administration routes now h
 
 All 20 disease-grading, linked-grading, grading-scheme, encounter-set-type, and eligibility routes now have explicit contracts. Persisted grading definitions use typed exact configuration references; bare integers and unknown kinds deny. Creation and hierarchy-wide updates use distinct closed operations. Eligibility editing binds the exact stored user with Admin/Local Admin authority in the user's resolved hospital scope, while the requested disease/Lab Unit combinations remain application validation within that authorized user boundary.
 
+### Vertical slice 9j: Remidio operational administration
+
+All nine Remidio administration, encounter-migration, and IITK workspace routes now have explicit contracts. Dashboards, routing workspaces, migration entry, and status reads are Admin-only admission surfaces. Stuck-upload cleanup uses a distinct closed exact operation, so neither a dashboard receipt nor arbitrary operation text can trigger cleanup.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -122,4 +126,4 @@ All 20 disease-grading, linked-grading, grading-scheme, encounter-set-type, and 
 
 ## Remaining cutover work
 
-The remaining 405 explicitly unmapped runtime consumers (358 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 396 explicitly unmapped runtime consumers (349 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

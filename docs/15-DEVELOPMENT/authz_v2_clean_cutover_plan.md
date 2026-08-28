@@ -1025,6 +1025,20 @@ pattern.
   literals, 191 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 22: glaucoma AI browser workspace
+
+- All four browser form/workspace/recent-result routes are explicit upload
+  workspace screen admission.
+- Screen admission cannot authorize returned upload or inference rows. Those
+  lists remain self-filtered and must receive registered SQL query policies
+  before cutover; exact media/result routes use the owner-bound actions from
+  slice 21.
+- Profile option derivation, executable-model filtering, pagination, and
+  mydriatic-option presentation remain application logic.
+- The reviewed inventory is now 452 v2 HTTP consumers, 41 legacy action
+  literals, 187 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

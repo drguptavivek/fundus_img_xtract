@@ -112,6 +112,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.create_glaucoma_ai_upload_web": _exact(
         Action.GLAUCOMA_AI_UPLOAD_CREATE, "project_upload_target"
     ),
+    **{
+        endpoint: _screen(Action.UPLOAD_WORKSPACE_VIEW)
+        for endpoint in (
+            "glaucoma_ai.upload_form_partial",
+            "glaucoma_ai.recent_results_partial",
+            "glaucoma_ai.workspace_partial",
+            "glaucoma_ai.recent_results_json",
+        )
+    },
     "fundus_api.get_project_encounter_set_queues": _screen(Action.TASKS_VIEW),
     **{
         endpoint: _exact(

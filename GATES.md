@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 21 - glaucoma AI upload API
+# Gates: Authorization v2 vertical slice 22 - glaucoma AI browser workspace
 
-- [x] G1: All 7 glaucoma AI upload routes have explicit contracts.
-  CHECK: glaucoma AI API inventory family test
-  EVIDENCE: inventory is 448 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 4 glaucoma AI browser workspace routes have explicit contracts.
+  CHECK: browser workspace inventory family test
+  EVIDENCE: inventory is 452 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Mobile result and media reads require exact persisted ownership.
-  CHECK: UUID resolver and route-policy assertions
-  EVIDENCE: result, image, and thumbnail use direct_image_upload plus mobile owner action
+- [x] G2: Workspace admission cannot stand in for row authorization.
+  CHECK: endpoint mode assertions
+  EVIDENCE: every endpoint is SCREEN with screen_entry enforcement
 
-- [x] G3: Mobile and browser upload creation have distinct channel contracts.
-  CHECK: route mode/action assertions and catalogue construction
-  EVIDENCE: JWT route requires MOBILE_SESSION; browser route uses protected session upload action
+- [x] G3: Exact result/media authority remains separate.
+  CHECK: route catalogue separation
+  EVIDENCE: workspace uses upload.workspace.view while UUID routes retain owner-bound exact actions
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: disease/model/profile/camera/area/mydriatic/file/task/inference rules remain in application services
+  EVIDENCE: option derivation, executable-model filtering, pagination, and mydriatic presentation remain in application modules
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1144 tests; generated parity and inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1145 tests; inventory checks pass

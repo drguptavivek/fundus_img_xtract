@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 532,
+        "authz_v2": 540,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 109,
+        "legacy_unmapped": 101,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1080,6 +1080,36 @@ def test_remidio_encounter_migration_routes_are_exact():
         assert ROUTE_POLICIES[endpoint].resolver == (
             "remidio_encounter_migration_target"
         )
+
+
+def test_project_review_routes_are_project_exact():
+    lists = {"projects.index", "fundus_api.review_projects"}
+    exact = {
+        "projects.summary",
+        "projects.uploads",
+        "projects.gradings",
+        "fundus_api.project_review_summary",
+        "fundus_api.project_review_uploads",
+        "fundus_api.project_review_gradings",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.name in lists | exact
+    ]
+    assert len(family) == 8
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        and ROUTE_POLICIES[endpoint].resolver is None
+        for endpoint in lists
+    )
+    assert all(
+        ROUTE_POLICIES[endpoint].action is Action.PROJECT_REVIEW_VIEW
+        and ROUTE_POLICIES[endpoint].resolver == "project"
+        for endpoint in exact
+    )
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

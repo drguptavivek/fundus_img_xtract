@@ -90,6 +90,21 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "account.password_changed": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
     **{
+        endpoint: _screen(Action.PROJECT_REVIEW_LIST)
+        for endpoint in ("projects.index", "fundus_api.review_projects")
+    },
+    **{
+        endpoint: _exact(Action.PROJECT_REVIEW_VIEW, "project")
+        for endpoint in (
+            "projects.summary",
+            "projects.uploads",
+            "projects.gradings",
+            "fundus_api.project_review_summary",
+            "fundus_api.project_review_uploads",
+            "fundus_api.project_review_gradings",
+        )
+    },
+    **{
         endpoint: _exact(Action.ACCOUNT_VIEWER_PREFERENCES_MANAGE, "user")
         for endpoint in (
             "fundus_api.get_viewer_settings",

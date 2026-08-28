@@ -153,6 +153,8 @@ ACTION_MIGRATION_MAP.update(
 # Reset completion is a distinct credential-bearing action. It has no legacy
 # equivalent because the former route used one action for request and consume.
 _CANONICAL_ONLY = {
+    "project.review.list",
+    "project.review.view",
     "admin.remidio_encounter_migration.apply",
     "admin.remidio_encounter_migration.preview",
     "admin.remidio_encounter_migration.view",

@@ -733,6 +733,7 @@ for _name, _roles in (
     ("analytics.kpi.view", ANALYTICS),
     ("inference.wai.summary", PROJECT_READ),
     ("intra_rater.batch.view", ADMIN_DATA),
+    ("project.review.list", PROJECT_READ),
     ("intra_rater.kpi.view", ADMIN_DATA | frozenset({Role.OPHTHALMOLOGIST})),
     (
         "intra_rater.tasks.list",
@@ -1629,6 +1630,12 @@ _resource(
     "inference_result",
     INFERENCE_ROW_ROLES,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "project.review.view",
+    "project",
+    PROJECT_READ,
+    disclosure=DisclosureClass.MASKED,
 )
 _resource(
     "inference.wai.run.retry",

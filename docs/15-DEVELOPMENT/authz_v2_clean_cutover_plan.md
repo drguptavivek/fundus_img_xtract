@@ -1197,6 +1197,17 @@ pattern.
   literals, 109 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 223 actions.
 
+### Implemented vertical slice 36: project review workspaces
+
+- Both project-list routes now require project-review list admission. The six
+  HTML/API summary, upload, and grading reads resolve the exact active project.
+- List admission does not authorize returned projects or rows. Existing
+  project-capability filtering remains transitional until the matching Authz v2
+  SQL projections replace it during clean cutover.
+- The reviewed inventory is now 540 v2 HTTP consumers, 39 legacy action
+  literals, 101 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 225 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

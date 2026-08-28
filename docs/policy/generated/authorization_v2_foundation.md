@@ -1556,6 +1556,24 @@ Resource: `job`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=project_admin; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.review.list`
+
+Authorize project.review.list.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `project.review.view`
+
+Authorize project.review.view.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `project.site_policy.manage`
 
 Authorize project.site_policy.manage.

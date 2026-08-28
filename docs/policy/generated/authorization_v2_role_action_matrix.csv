@@ -180,6 +180,8 @@ project.remote_inference_batch.run,remote_inference_batch,scoped_role|admin_brea
 project.remote_inference_config.manage,project,scoped_role|admin_break_glass,masked,optional
 project.remote_inference_config.view,project,scoped_role|admin_break_glass,masked,optional
 project.remote_inference_job.resume,job,scoped_role|admin_break_glass,masked,optional
+project.review.list,screen,authenticated_screen|admin_break_glass,masked,optional
+project.review.view,project,scoped_role|admin_break_glass,masked,optional
 project.site_policy.manage,project_site_policy,scoped_role|admin_break_glass,masked,optional
 project.upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
 project.upload.pregraded,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional

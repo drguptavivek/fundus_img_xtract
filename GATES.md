@@ -1,21 +1,21 @@
-# Authz v2 slice 35: Remidio encounter migration API
+# Authz v2 slice 36: project review workspaces
 
-- [x] G1 All five encounter-migration routes have explicit contracts.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_remidio_encounter_migration_routes_are_exact -q'
+- [x] G1 All eight project-review page and API routes have explicit contracts.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_review_routes_are_project_exact -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes; all five routes classify as Authz v2.
+  EVIDENCE: Focused family test passes; all eight routes classify as Authz v2.
 
-- [x] G2 Preview/apply require source project, target project, and the complete bounded encounter set.
-  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_resource_adapters.py tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_remidio_encounter_migration_routes_are_exact -q'
+- [x] G2 Project-specific summary/upload/grading reads resolve the exact project.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py::test_legacy_manifest_maps_every_action_exactly_once tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_review_routes_are_project_exact -q'
   EXPECT: exit 0
-  EVIDENCE: Adapter/route tests pass for invalid, same-project, and empty targets; resolver source inspection verifies duplicate/oversized rejection, complete loading, active projects, and source-project ownership.
+  EVIDENCE: Six project-specific HTML/API reads use project.review.view with the exact project resolver.
 
-- [x] G3 Capture-date and confirmation-token semantics remain application logic.
-  CHECK: ! rg -n 'capture_date|confirmation_token' authz_v2
+- [x] G3 Project-list admission is distinct from SQL-scoped returned projects.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_review_routes_are_project_exact -q'
   EXPECT: exit 0
-  EVIDENCE: Source search finds neither capture_date nor confirmation_token under authz_v2.
+  EVIDENCE: Both list routes are screen mode without a resolver; documentation preserves separate SQL-projection work.
 
 - [x] G4 Inventory, generated catalogue artifacts, and documentation are current.
   CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_generated_policy_docs.py tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
   EXPECT: exit 0
-  EVIDENCE: Seven catalogue/adapter/doc/inventory tests plus two rerun inventory/family tests pass; inventory is 532 explicit and 109 unmapped; catalogue is 223.
+  EVIDENCE: Five catalogue/generated-doc/inventory/family tests pass; inventory is 540 explicit and 101 unmapped; catalogue is 225.

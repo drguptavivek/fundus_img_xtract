@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 606,
+        "authz_v2": 611,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 35,
+        "legacy_unmapped": 30,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1497,6 +1497,38 @@ def test_disease_catalogue_and_unverified_encounter_list_have_explicit_admission
         policy = ROUTE_POLICIES[endpoint]
         assert policy.mode is EndpointMode.SCREEN
         assert policy.action is action
+
+
+def test_encounter_set_resource_routes_use_exact_project_encounter_and_image_targets():
+    expected = {
+        "fundus_api.get_effective_encounter_set_grading_plan": (
+            Action.PROJECT_GRADER_ALLOCATIONS_VIEW,
+            "project_allocation_plan",
+        ),
+        "fundus_api.get_encounter_set_details": (
+            Action.PROJECT_ENCOUNTERSETS_BROWSE_PII,
+            "encounter_set",
+        ),
+        "fundus_api.patch_encounter_set_monocular_status": (
+            Action.VERIFICATION_ENCOUNTER_SET_UPDATE,
+            "encounter",
+        ),
+        "fundus_api.update_image_position": (Action.PREPROCESS_IMAGE_UPDATE, "image"),
+        "fundus_api.refresh_encounter_source": (
+            Action.ENCOUNTER_SOURCE_REFRESH,
+            "encounter",
+        ),
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in expected]
+    assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, (action, resolver) in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is action
+        assert policy.resolver == resolver
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

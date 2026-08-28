@@ -179,6 +179,7 @@ MANDATORY_AUDIT = frozenset(
         "account.profile.update",
         "account.notifications.update",
         "account.mobile_sessions.revoke",
+        "encounter.source.refresh",
         "auth.password_reset.complete",
         "admin.users.create",
         "admin.users.manage",
@@ -1680,6 +1681,22 @@ _resource(
     "encounter",
     CLINICAL_READ | PROJECT_OVERSIGHT,
     disclosure=DisclosureClass.MASKED,
+)
+_resource(
+    "encounter.source.refresh",
+    "encounter",
+    frozenset(
+        {
+            Role.ADMIN,
+            Role.LOCAL_ADMIN,
+            Role.DATA_MANAGER,
+            Role.FILE_UPLOADER,
+            Role.OPTOMETRIST,
+            Role.FIELD_OPTOMETRIST,
+            Role.FIELD_OPHTHALMOLOGIST,
+        }
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
 _resource(
     "inference.wai.run.retry",

@@ -154,6 +154,7 @@ ACTION_MIGRATION_MAP.update(
 # equivalent because the former route used one action for request and consume.
 _CANONICAL_ONLY = {
     "encounter.viewer.view",
+    "encounter.source.refresh",
     "reports.list",
     "screenings.list",
     "dashboard.hospital.view",

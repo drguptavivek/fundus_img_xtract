@@ -198,6 +198,21 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.list_unverified_encounter_sets": _screen(
         Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW_PII
     ),
+    "fundus_api.get_effective_encounter_set_grading_plan": _exact(
+        Action.PROJECT_GRADER_ALLOCATIONS_VIEW, "project_allocation_plan"
+    ),
+    "fundus_api.get_encounter_set_details": _exact(
+        Action.PROJECT_ENCOUNTERSETS_BROWSE_PII, "encounter_set"
+    ),
+    "fundus_api.patch_encounter_set_monocular_status": _exact(
+        Action.VERIFICATION_ENCOUNTER_SET_UPDATE, "encounter"
+    ),
+    "fundus_api.update_image_position": _exact(
+        Action.PREPROCESS_IMAGE_UPDATE, "image"
+    ),
+    "fundus_api.refresh_encounter_source": _exact(
+        Action.ENCOUNTER_SOURCE_REFRESH, "encounter"
+    ),
     **{
         endpoint: _exact(Action.REVIEW_DISCREPANCY_HISTORY, "user")
         for endpoint in (

@@ -1423,6 +1423,21 @@ pattern.
   literals, 35 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 238 actions.
 
+### Implemented vertical slice 55: EncounterSet exact resources
+
+- Effective project grading-plan reads bind the exact project allocation plan;
+  EncounterSet detail binds the exact identifier-bearing EncounterSet;
+  monocular-status and upstream refresh bind the exact encounter; and image
+  position updates bind the exact typed image.
+- Upstream refresh has a dedicated audited action. Monocular state, spatial
+  positions, source-provider throttling, refresh behavior, and grading-policy
+  calculation remain application-domain logic.
+- Frozen grading-record history remains denied until participant relationships
+  can be supplied for the exact encounter rather than inferred in the route.
+- The reviewed inventory is now 611 v2 HTTP consumers, 39 legacy action
+  literals, 30 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 239 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

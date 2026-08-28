@@ -905,6 +905,15 @@ Resource: `public`; disclosure: `masked`; audit: `optional`.
 
 - `public`: PublicRequirement()
 
+### `encounter.source.refresh`
+
+Authorize encounter.source.refresh.
+
+Resource: `encounter`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,field_ophthalmologist,field_optometrist,fileUploader,local_admin,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `encounter.viewer.view`
 
 Authorize encounter.viewer.view.

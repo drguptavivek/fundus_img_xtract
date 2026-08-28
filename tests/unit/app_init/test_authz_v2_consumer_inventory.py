@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 from app import create_app
+from authz_v2.flask.contracts import EndpointMode
 from authz_v2.flask.route_catalogue import ROUTE_POLICIES
 from celery_app import celery_app
 from celery_tasks.tasks import _import_all
@@ -20,9 +21,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 77,
+        "authz_v2": 104,
         "legacy_action_literal": 47,
-        "legacy_unmapped": 556,
+        "legacy_unmapped": 529,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 977,
     }
@@ -68,6 +69,42 @@ def test_high_risk_verification_slices_have_no_unmapped_route():
     ]
     assert len(verification_rows) == 30
     assert {row.classification for row in verification_rows} == {"authz_v2"}
+
+
+def test_high_risk_mobile_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    mobile_rows = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source.startswith("api/mobile/")
+    ]
+    assert len(mobile_rows) == 27
+    assert {row.classification for row in mobile_rows} == {"authz_v2"}
+    assert all(row.canonical_actions for row in mobile_rows)
+
+
+def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():
+    mobile = {
+        endpoint: policy
+        for endpoint, policy in ROUTE_POLICIES.items()
+        if endpoint.startswith("mobile_api.")
+    }
+    assert len(mobile) == 27
+    assert mobile["mobile_api.login"].mode is EndpointMode.PUBLIC
+    assert {
+        mobile["mobile_api.refresh"].mode,
+        mobile["mobile_api.logout"].mode,
+    } == {EndpointMode.SIGNED_RESOURCE}
+    assert all(
+        policy.mode is EndpointMode.MOBILE_SESSION
+        for endpoint, policy in mobile.items()
+        if endpoint
+        not in {"mobile_api.login", "mobile_api.refresh", "mobile_api.logout"}
+    )
+    assert mobile["mobile_api.refresh"].resolver == "mobile_session"
+    assert mobile["mobile_api.logout"].resolver == "mobile_session"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

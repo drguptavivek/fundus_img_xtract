@@ -75,6 +75,7 @@ MOBILE_UPLOADERS = frozenset(
         Role.OPTOMETRIST,
     }
 )
+MOBILE_FIELD_OPERATORS = MOBILE_UPLOADERS | frozenset({Role.ADMIN})
 VERIFIERS = frozenset({Role.ADMIN, Role.VERIFIER})
 GRADING_QUALIFICATIONS = frozenset({Role.OPHTHALMOLOGIST, Role.FIELD_OPHTHALMOLOGIST})
 INFERENCE_ROW_ROLES = frozenset(
@@ -396,6 +397,43 @@ def _self(
     )
 
 
+def _mobile_owned(
+    name: str, resource_type: str, *, domain_condition: bool = False
+) -> None:
+    common = [
+        active_principal(),
+        channels_any(SessionChannel.MOBILE),
+        fact(BooleanFact.EXACT_RESOURCE),
+        relationship(GrantSource.OWNERSHIP, require_scope=False),
+    ]
+    if domain_condition:
+        common.append(fact(BooleanFact.DOMAIN_VALID))
+    _store(
+        name,
+        resource_type=resource_type,
+        requires_resource=True,
+        paths=(
+            (
+                "mobile_owner",
+                all_of(
+                    *common,
+                    scoped_roles(*MOBILE_UPLOADERS),
+                    name="mobile_owner",
+                ),
+            ),
+            (
+                "admin_owner",
+                all_of(
+                    *common,
+                    scoped_roles(Role.ADMIN, allow_system=True),
+                    name="admin_owner",
+                ),
+            ),
+        ),
+        break_glass=BreakGlassMode.ADMIN,
+    )
+
+
 def _upload(
     name: str,
     resource_type: str = "upload_target",
@@ -608,6 +646,8 @@ for _name in (
     _public(_name)
 _credential("auth.password_reset.complete", "password_reset_credential")
 _credential("dataset.public_download", "dataset_share")
+_credential("auth.mobile.refresh", "mobile_session")
+_credential("auth.mobile.logout", "mobile_session")
 
 # Dynamic self relationships; admin never substitutes for the actor.
 for _name, _type in (
@@ -627,6 +667,10 @@ for _name, _type in (
 ):
     _self(_name, _type)
 _self("mobile.context.view", "user", channels=(SessionChannel.MOBILE,))
+_self("mobile.upload.options.view", "user", channels=(SessionChannel.MOBILE,))
+_self("mobile.session.list", "user", channels=(SessionChannel.MOBILE,))
+_self("mobile.session.detail.view", "mobile_session", channels=(SessionChannel.MOBILE,))
+_self("mobile.session.revoke", "mobile_session", channels=(SessionChannel.MOBILE,))
 
 # Screen admission only. Panels, rows, and mutations use exact actions below.
 for _name, _roles in (
@@ -661,8 +705,8 @@ for _name, _roles in (
 ):
     _screen(_name, _roles)
 _screen(
-    "mobile.field.project.view",
-    PROJECT_READ,
+    "mobile.field.projects.list",
+    MOBILE_FIELD_OPERATORS,
     channels=(SessionChannel.MOBILE,),
 )
 
@@ -763,6 +807,8 @@ _upload(
     "upload_target",
     roles=PREGRADING_UPLOADERS,
 )
+_mobile_owned("mobile.upload.view", "job")
+_mobile_owned("mobile.upload.inference.retry", "job", domain_condition=True)
 _upload(
     "project.upload.pregraded",
     "project_upload_target",
@@ -1083,6 +1129,19 @@ _resource(
 )
 
 # Mobile field actions are exact project-derived resources.
+_resource(
+    "mobile.field.project.view",
+    "project",
+    MOBILE_FIELD_OPERATORS,
+    channels=(SessionChannel.MOBILE,),
+)
+_resource(
+    "mobile.field.project.sync",
+    "project",
+    MOBILE_FIELD_OPERATORS,
+    domain_condition=True,
+    channels=(SessionChannel.MOBILE,),
+)
 for _name, _type in (
     ("mobile.field.encounter.view", "encounter"),
     ("mobile.field.encounter.capture", "encounter"),

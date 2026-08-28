@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 77 | 47 | 556 |
+| Flask/API route rules | 680 | 104 | 47 | 529 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 0 | 977 |
-| Total | 1,704 | 77 | 47 | 1,580 |
+| Total | 1,704 | 104 | 47 | 1,553 |
 
 Reviewed identity fingerprint: `6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3`.
 
@@ -26,7 +26,7 @@ An action literal is only a discovery hint. It can be a redirect, link, or helpe
 
 The query candidates are intentionally over-inclusive: they include ordinary domain and lookup materialization as well as authorization-sensitive lists. This prevents helper/service queries from disappearing from the audit surface. The table below records the relationship/state-dependent live sets already proven to require Authz policy; each remaining candidate must be marked scope-only, action-specific, choice-only, exact-only, or non-authorization filtering as its vertical slice is migrated.
 
-Largest unmapped HTTP families are `fundus_api` (195), `admin` (164), `grading` (27), `mobile_api` (27), `verify_encounter_set` (16), `analytics` (14), `verify_remedio` (14), and `direct_uploads` (12). The `media` family is now 17/17 explicitly classified. These counts define the route-migration workload; they are not authorization approvals.
+Largest remaining unmapped HTTP families include `fundus_api` (195), `admin` (164), `analytics` (14), and `direct_uploads` (12). Media, grading, encounter verification, and mobile APIs are now explicitly classified. These counts define the route-migration workload; they are not authorization approvals.
 
 ### Vertical slice 1: clinical media delivery
 
@@ -39,6 +39,10 @@ All 30 grading routes now have explicit contracts, including the 27 routes that 
 ### Vertical slice 3: encounter verification
 
 All 16 encounter-set and 14 Remidio verification routes now have explicit contracts. Encounter-set viewing has a distinct `verification.encounter_set.view` action so reads do not borrow mutation authority. Encounter and image mutations require exact stored resources; identifiers supplied only in request bodies must still be extracted and resolved by the central resolver, otherwise authorization denies before the handler.
+
+### Vertical slice 4: mobile clinical APIs
+
+All 27 mobile API routes now have explicit contracts. Login is the sole public route. Refresh and logout require an exact active refresh credential bound to its stored mobile session; access-token routes require the mobile session channel. Session detail/revocation are self-only, field reads and mutations bind exact project or encounter scope, upload creation retains the exact project-site/profile requirement, and upload status/inference/thumbnail access requires both current scoped authority and ownership of the persisted job. The central hook now presents path, query, form, and JSON facts to resolvers as separate namespaces, so a query value cannot overwrite a path or form fact; any required missing fact returns no resource and denies before the handler. Image UUID, report attachment, and other within-encounter details remain application lineage validation rather than new authorization dimensions.
 
 ## Authorization-sensitive list/query classification
 
@@ -66,4 +70,4 @@ All 16 encounter-set and 14 Remidio verification routes now have explicit contra
 
 ## Remaining cutover work
 
-The remaining 603 explicitly unmapped runtime consumers (556 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 576 explicitly unmapped runtime consumers (529 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

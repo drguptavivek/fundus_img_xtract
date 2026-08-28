@@ -126,3 +126,45 @@ def test_dynamic_binding_passes_the_selected_declared_action_and_resource():
     )
     assert app.test_client().get("/media/pdf-uuid").status_code == 200
     assert service.calls[0][2:4] == (Action.MEDIA_PDF_VIEW, "pdf-uuid")
+
+
+def test_resolver_receives_separate_transport_namespaces_and_missing_body_facts_deny():
+    app = Flask(__name__)
+    service = Service(True)
+
+    @app.post("/mobile/uploads/<path_marker>")
+    @authorization_endpoint(
+        EndpointMode.MOBILE_SESSION,
+        Action.MOBILE_UPLOAD_CREATE,
+        resolver="project_upload_target",
+    )
+    def create_upload(path_marker):
+        return jsonify(path_marker=path_marker)
+
+    def resolve(_db, values):
+        assert values["path_marker"] == "path-value"
+        assert values.query.get("project_lab_unit_id") == "query-value"
+        target_id = values.form.get("project_lab_unit_id")
+        profile_id = values.form.get("upload_profile_id")
+        return (target_id, profile_id) if target_id and profile_id else None
+
+    install_default_deny(
+        app,
+        authenticated=lambda: False,
+        principal=lambda: "mobile-principal",
+        database=lambda: "db",
+        decision_service=lambda _db: service,
+        resource_resolvers={"project_upload_target": resolve},
+    )
+    client = app.test_client()
+    denied = client.post(
+        "/mobile/uploads/path-value?project_lab_unit_id=query-value",
+        data={"project_lab_unit_id": "30"},
+    )
+    assert denied.status_code == 403
+    allowed = client.post(
+        "/mobile/uploads/path-value?project_lab_unit_id=query-value",
+        data={"project_lab_unit_id": "30", "upload_profile_id": "9"},
+    )
+    assert allowed.status_code == 200
+    assert service.calls[-1][3] == ("30", "9")

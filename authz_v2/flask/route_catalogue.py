@@ -13,6 +13,18 @@ def _exact(action: Action, resolver: str) -> EndpointPolicy:
     return EndpointPolicy(EndpointMode.PROTECTED, action, resolver=resolver)
 
 
+def _mobile(action: Action, resolver: str) -> EndpointPolicy:
+    return EndpointPolicy(EndpointMode.MOBILE_SESSION, action, resolver=resolver)
+
+
+def _mobile_entry(action: Action) -> EndpointPolicy:
+    return EndpointPolicy(EndpointMode.MOBILE_SESSION, action)
+
+
+def _signed(action: Action, resolver: str) -> EndpointPolicy:
+    return EndpointPolicy(EndpointMode.SIGNED_RESOURCE, action, resolver=resolver)
+
+
 def _grading_slot(binding: str) -> EndpointPolicy:
     return EndpointPolicy(
         EndpointMode.PROTECTED,
@@ -26,6 +38,76 @@ def _grading_slot(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicy] = {
+    # Mobile authentication keeps public credential issuance distinct from
+    # refresh-token rotation/revocation. The signed resolver must derive the
+    # exact stored session from the presented refresh token.
+    "mobile_api.login": EndpointPolicy(EndpointMode.PUBLIC, Action.AUTH_LOGIN),
+    "mobile_api.refresh": _signed(Action.AUTH_MOBILE_REFRESH, "mobile_session"),
+    "mobile_api.logout": _signed(Action.AUTH_MOBILE_LOGOUT, "mobile_session"),
+    # Access-token mobile session and self-service surfaces.
+    "mobile_api.get_mobile_context": _mobile(Action.MOBILE_CONTEXT_VIEW, "user"),
+    "mobile_api.get_mobile_upload_options": _mobile(
+        Action.MOBILE_UPLOAD_OPTIONS_VIEW, "user"
+    ),
+    "mobile_api.list_user_sessions": _mobile(Action.MOBILE_SESSION_LIST, "user"),
+    "mobile_api.get_user_session": _mobile(
+        Action.MOBILE_SESSION_DETAIL_VIEW, "mobile_session"
+    ),
+    "mobile_api.revoke_user_session": _mobile(
+        Action.MOBILE_SESSION_REVOKE, "mobile_session"
+    ),
+    # Field lists admit only a mobile-channel project screen. Every project,
+    # encounter and related media operation below resolves exact stored scope.
+    "mobile_api.field_projects": _mobile_entry(Action.MOBILE_FIELD_PROJECTS_LIST),
+    **{
+        endpoint: _mobile(Action.MOBILE_FIELD_PROJECT_VIEW, "project")
+        for endpoint in (
+            "mobile_api.field_encounter_dates",
+            "mobile_api.field_encounters",
+            "mobile_api.field_fetch_status",
+        )
+    },
+    **{
+        endpoint: _mobile(Action.MOBILE_FIELD_PROJECT_SYNC, "project")
+        for endpoint in (
+            "mobile_api.field_queue_fetch",
+            "mobile_api.field_retry_fetch",
+            "mobile_api.field_refetch_patient",
+        )
+    },
+    **{
+        endpoint: _mobile(Action.MOBILE_FIELD_ENCOUNTER_VIEW, "encounter")
+        for endpoint in (
+            "mobile_api.field_encounter_detail",
+            "mobile_api.field_encounter_image",
+            "mobile_api.field_encounter_image_thumbnail",
+            "mobile_api.field_encounter_report",
+        )
+    },
+    "mobile_api.field_request_inference": _mobile(
+        Action.MOBILE_FIELD_INFERENCE_RUN, "encounter"
+    ),
+    "mobile_api.field_refresh_encounter": _mobile(
+        Action.MOBILE_FIELD_ENCOUNTER_CAPTURE, "encounter"
+    ),
+    # Mobile upload creation resolves the project-site/profile tuple from the
+    # submitted form. Follow-up routes resolve the caller-owned persisted job;
+    # image UUID validation remains an application lineage check within it.
+    "mobile_api.create_upload": _mobile(
+        Action.MOBILE_UPLOAD_CREATE, "project_upload_target"
+    ),
+    **{
+        endpoint: _mobile(Action.MOBILE_UPLOAD_VIEW, "job")
+        for endpoint in (
+            "mobile_api.upload_status",
+            "mobile_api.upload_status_by_idempotency_key",
+            "mobile_api.upload_inference",
+            "mobile_api.upload_image_thumbnail",
+        )
+    },
+    "mobile_api.retry_upload_inference": _mobile(
+        Action.MOBILE_UPLOAD_INFERENCE_RETRY, "job"
+    ),
     # Grading dashboard and queue selection only admit the screen. Row/task
     # authorization remains exact through the action-specific queue policies.
     "grading.index": _screen(),

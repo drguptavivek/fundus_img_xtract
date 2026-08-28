@@ -32,6 +32,7 @@ from authz_v2.resources.upload_targets import ResolvedUploadTarget
 from models import (
     CuratedDataset,
     GradingTask,
+    MobileAuthSession,
     ProjectAutomatedRemoteInferenceRule,
     ProjectGradingAllocationPolicy,
     ProjectLabUnitAuthorizationPolicy,
@@ -191,6 +192,36 @@ def test_signed_credential_requires_exact_session_binding_and_expiry():
         target,
         EvaluationFactsDTO(principal, session=wrong_session, resource=facts.resource),
     )
+    assert not denied.relationships
+
+
+def test_mobile_refresh_credential_requires_exact_active_session_and_token_hash():
+    principal, facts = _facts("mobile_session", signed=True)
+    raw_token = "correct-mobile-refresh-token"
+    session = replace(principal.session, credential_proof=raw_token)
+    principal = replace(principal, session=session)
+    facts = replace(facts, principal=principal, session=session)
+    mobile_session = MobileAuthSession(
+        id="7",
+        user_id=1,
+        device_id="device-1",
+        device_name="phone",
+        refresh_token_hash=sha256(raw_token.encode()).hexdigest(),
+        refresh_token_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        is_revoked=False,
+    )
+    target = ResourceTarget(mobile_session, facts.resource)
+    allowed = signed_credential_facts(
+        None, principal, Action.AUTH_MOBILE_REFRESH, target, facts
+    )
+    assert allowed.credential_valid
+
+    revoked = replace(facts)
+    mobile_session.is_revoked = True
+    denied = signed_credential_facts(
+        None, principal, Action.AUTH_MOBILE_REFRESH, target, revoked
+    )
+    assert not denied.credential_valid
     assert not denied.relationships
 
 

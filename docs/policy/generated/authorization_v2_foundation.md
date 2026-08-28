@@ -284,6 +284,22 @@ Resource: `user`; disclosure: `masked`; audit: `optional`.
 
 - `self`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
 
+### `auth.mobile.logout`
+
+Authorize auth.mobile.logout.
+
+Resource: `mobile_session`; disclosure: `masked`; audit: `optional`.
+
+- `signed_credential`: SessionChannelRequirement(channels=signed), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=target_active; expected=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=False; require_scope=False)
+
+### `auth.mobile.refresh`
+
+Authorize auth.mobile.refresh.
+
+Resource: `mobile_session`; disclosure: `masked`; audit: `optional`.
+
+- `signed_credential`: SessionChannelRequirement(channels=signed), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=target_active; expected=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=False; require_scope=False)
+
 ### `auth.password_reset.complete`
 
 Authorize auth.password_reset.complete.
@@ -761,14 +777,56 @@ Resource: `encounter`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `mobile.field.project.sync`
+
+Authorize mobile.field.project.sync.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `mobile.field.project.view`
 
 Authorize mobile.field.project.view.
 
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `mobile.field.projects.list`
+
+Authorize mobile.field.projects.list.
+
 Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
-- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), AnyRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist), GrantSourceRequirement(sources=authorization_grant)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `mobile.session.detail.view`
+
+Authorize mobile.session.detail.view.
+
+Resource: `mobile_session`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
+### `mobile.session.list`
+
+Authorize mobile.session.list.
+
+Resource: `user`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
+### `mobile.session.revoke`
+
+Authorize mobile.session.revoke.
+
+Resource: `mobile_session`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
 
 ### `mobile.upload.create`
 
@@ -778,6 +836,32 @@ Resource: `project_upload_target`; disclosure: `identifier_in_place`; audit: `op
 
 - `scoped_upload_profile`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), ScopedRoleRequirement(roles=admin; allow_system=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
+
+### `mobile.upload.inference.retry`
+
+Authorize mobile.upload.inference.retry.
+
+Resource: `job`; disclosure: `masked`; audit: `optional`.
+
+- `mobile_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
+- `admin_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `mobile.upload.options.view`
+
+Authorize mobile.upload.options.view.
+
+Resource: `user`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
+### `mobile.upload.view`
+
+Authorize mobile.upload.view.
+
+Resource: `job`; disclosure: `masked`; audit: `optional`.
+
+- `mobile_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
+- `admin_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), ScopedRoleRequirement(roles=admin; allow_system=True)
 
 ### `notifications.send`
 

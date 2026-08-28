@@ -32,6 +32,7 @@ from models import (
     DatasetShare,
     Grade,
     GradingTask,
+    MobileAuthSession,
     PasswordResetCredential,
     ProjectAutomatedRemoteInferenceRule,
     ProjectGraderAllocation,
@@ -330,11 +331,16 @@ def signed_credential_facts(db, _principal, _action, target, facts):
     value = target.value
     now = datetime.now(UTC)
     supplied_hash = sha256(session.credential_proof.encode("utf-8")).hexdigest()
-    proof_valid = compare_digest(supplied_hash, value.token_hash)
+    stored_hash = getattr(value, "token_hash", None)
+    if isinstance(value, MobileAuthSession):
+        stored_hash = value.refresh_token_hash
+    proof_valid = bool(stored_hash) and compare_digest(supplied_hash, stored_hash)
     if isinstance(value, PasswordResetCredential):
         valid = value.consumed_at is None and value.expires_at > now
     elif isinstance(value, DatasetShare):
         valid = bool(value.is_active and value.expires_at > now)
+    elif isinstance(value, MobileAuthSession):
+        valid = bool(not value.is_revoked and value.refresh_token_expires_at > now)
     else:
         valid = False
     if not valid or not proof_valid:

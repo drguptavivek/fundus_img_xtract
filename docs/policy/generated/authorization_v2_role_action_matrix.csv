@@ -32,6 +32,8 @@ api.ocr.manage,screen,authenticated_screen|admin_break_glass,masked,optional
 audit.data_quality.view,screen,admin_break_glass,masked,optional
 auth.login,public,public,masked,optional
 auth.logout,user,self,masked,optional
+auth.mobile.logout,mobile_session,signed_credential,masked,optional
+auth.mobile.refresh,mobile_session,signed_credential,masked,optional
 auth.password_reset.complete,password_reset_credential,signed_credential,masked,required
 auth.password_reset.request,public,public,masked,optional
 auth.reauth,user,self,masked,optional
@@ -86,8 +88,16 @@ mobile.context.view,user,self,masked,optional
 mobile.field.encounter.capture,encounter,scoped_role|admin_break_glass,masked,optional
 mobile.field.encounter.view,encounter,scoped_role|admin_break_glass,masked,optional
 mobile.field.inference.run,encounter,scoped_role|admin_break_glass,masked,optional
-mobile.field.project.view,screen,authenticated_screen|admin_break_glass,masked,optional
+mobile.field.project.sync,project,scoped_role|admin_break_glass,masked,optional
+mobile.field.project.view,project,scoped_role|admin_break_glass,masked,optional
+mobile.field.projects.list,screen,authenticated_screen|admin_break_glass,masked,optional
+mobile.session.detail.view,mobile_session,self,masked,optional
+mobile.session.list,user,self,masked,optional
+mobile.session.revoke,mobile_session,self,masked,optional
 mobile.upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
+mobile.upload.inference.retry,job,mobile_owner|admin_owner,masked,optional
+mobile.upload.options.view,user,self,masked,optional
+mobile.upload.view,job,mobile_owner|admin_owner,masked,optional
 notifications.send,notification_target,admin_break_glass,masked,optional
 preprocess.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 preprocess.image.update,image,scoped_role|admin_break_glass,identifier_in_place,optional

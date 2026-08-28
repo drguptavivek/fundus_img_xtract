@@ -153,6 +153,8 @@ ACTION_MIGRATION_MAP.update(
 # Reset completion is a distinct credential-bearing action. It has no legacy
 # equivalent because the former route used one action for request and consume.
 _CANONICAL_ONLY = {
+    "auth.mobile.logout",
+    "auth.mobile.refresh",
     "auth.password_reset.complete",
     "authorization.catalogue.view",
     "authorization.grants.manage",
@@ -167,6 +169,14 @@ _CANONICAL_ONLY = {
     "dataset.export.grades",
     "inference.wai.retrospective.run",
     "media.metadata.raw.read",
+    "mobile.field.project.sync",
+    "mobile.field.projects.list",
+    "mobile.session.detail.view",
+    "mobile.session.list",
+    "mobile.session.revoke",
+    "mobile.upload.inference.retry",
+    "mobile.upload.options.view",
+    "mobile.upload.view",
     "notifications.send",
     "project.grader_allocations.enforcement.manage",
     "project.grader_allocations.manage",

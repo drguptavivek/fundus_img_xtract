@@ -262,7 +262,7 @@ def test_legacy_manifest_maps_every_action_exactly_once():
     assert len(ACTION_MIGRATION_MAP) == 121
     assert set(ACTION_MIGRATION_MAP.values()) <= ACTION_MANIFEST
     assert set(CATALOGUE) == set(Action)
-    assert len(CATALOGUE) == len(ACTION_MANIFEST) == 132
+    assert len(CATALOGUE) == len(ACTION_MANIFEST) == 142
 
 
 @pytest.mark.parametrize("action", list(Action), ids=lambda action: action.value)
@@ -563,11 +563,19 @@ def test_identifier_release_requires_additive_pii_role():
     "action",
     [
         Action.MOBILE_CONTEXT_VIEW,
+        Action.MOBILE_FIELD_PROJECTS_LIST,
         Action.MOBILE_FIELD_PROJECT_VIEW,
+        Action.MOBILE_FIELD_PROJECT_SYNC,
         Action.MOBILE_FIELD_ENCOUNTER_VIEW,
         Action.MOBILE_FIELD_ENCOUNTER_CAPTURE,
         Action.MOBILE_FIELD_INFERENCE_RUN,
+        Action.MOBILE_SESSION_LIST,
+        Action.MOBILE_SESSION_DETAIL_VIEW,
+        Action.MOBILE_SESSION_REVOKE,
         Action.MOBILE_UPLOAD_CREATE,
+        Action.MOBILE_UPLOAD_OPTIONS_VIEW,
+        Action.MOBILE_UPLOAD_VIEW,
+        Action.MOBILE_UPLOAD_INFERENCE_RETRY,
     ],
 )
 def test_mobile_actions_require_mobile_session_channel(action: Action):
@@ -589,7 +597,39 @@ def test_mobile_actions_require_mobile_session_channel(action: Action):
 
 @pytest.mark.parametrize(
     "action",
-    [Action.AUTH_PASSWORD_RESET_COMPLETE, Action.DATASET_PUBLIC_DOWNLOAD],
+    [
+        Action.MOBILE_FIELD_PROJECTS_LIST,
+        Action.MOBILE_FIELD_PROJECT_VIEW,
+        Action.MOBILE_FIELD_PROJECT_SYNC,
+    ],
+)
+def test_project_oversight_roles_do_not_imply_mobile_field_operation(action: Action):
+    definition = CATALOGUE[action]
+    allowed = _positive_facts(action)
+    pi_only = replace(
+        allowed,
+        active_roles=frozenset({Role.PROJECT_PI}),
+        role_grants=tuple(
+            replace(grant, role=Role.PROJECT_PI) for grant in allowed.role_grants[:1]
+        ),
+    )
+    assert not check_action(
+        action,
+        pi_only,
+        resource_type=definition.resource_type
+        if definition.requires_resource
+        else None,
+    ).allowed
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        Action.AUTH_PASSWORD_RESET_COMPLETE,
+        Action.DATASET_PUBLIC_DOWNLOAD,
+        Action.AUTH_MOBILE_REFRESH,
+        Action.AUTH_MOBILE_LOGOUT,
+    ],
 )
 def test_signed_credentials_cannot_be_replayed_from_a_web_session(action: Action):
     definition = CATALOGUE[action]

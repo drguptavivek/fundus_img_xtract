@@ -482,6 +482,7 @@ MOBILE_SESSION_ADAPTER = ResourceAdapter(
     "mobile_session",
     resolve_mobile_session,
     lambda _db, _principal, _action, _grants, query: query.where(false()),
+    compose_facts(ownership_facts, signed_credential_facts),
 )
 PASSWORD_RESET_ADAPTER = ResourceAdapter(
     "password_reset_credential",

@@ -2,13 +2,44 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any
 
 from flask import current_app, g, jsonify, request
 
 from authz_v2.flask.contracts import EndpointMode, EndpointPolicy
 from authz_v2.flask.route_catalogue import catalogued_endpoint_policy
 from authz_v2.telemetry.metrics import increment
+
+
+@dataclass(frozen=True)
+class RequestAuthorizationInput(Mapping[str, object]):
+    """Transport facts available to a named resolver without merging namespaces."""
+
+    path: Mapping[str, object]
+    query: Mapping[str, str]
+    form: Mapping[str, str]
+    json: Mapping[str, Any]
+
+    def __getitem__(self, key: str) -> object:
+        return self.path[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.path)
+
+    def __len__(self) -> int:
+        return len(self.path)
+
+
+def _request_authorization_input() -> RequestAuthorizationInput:
+    payload = request.get_json(silent=True)
+    return RequestAuthorizationInput(
+        path=dict(request.view_args or {}),
+        query=request.args.to_dict(flat=True),
+        form=request.form.to_dict(flat=True),
+        json=dict(payload) if isinstance(payload, dict) else {},
+    )
 
 
 def _record_unclassified_endpoint() -> None:
@@ -85,7 +116,9 @@ def install_default_deny(
             return jsonify({"error": "not_authorized"}), 403
         try:
             db = database()
-            resolved = resolver(db, dict(request.view_args or {})) if resolver else None
+            resolved = (
+                resolver(db, _request_authorization_input()) if resolver else None
+            )
             if policy.binding:
                 selected_action, resource = resolved
                 allowed_actions = {policy.action, *policy.action_variants}

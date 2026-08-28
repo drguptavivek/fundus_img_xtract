@@ -13,6 +13,7 @@ from authz_v2.resources.adapters import (
     TypedResourceRef,
     resolve_executable_config,
     resolve_grading_config,
+    resolve_grading_repair_batch,
     resolve_lookup_record,
     resolve_mobile_session,
     resolve_system_operation,
@@ -23,6 +24,7 @@ from authz_v2.resources.references import (
     AutomationTargetRef,
     ExecutableConfigRef,
     GradingConfigRef,
+    GradingRepairBatchRef,
     LookupRecordRef,
     SystemOperationRef,
 )
@@ -254,3 +256,17 @@ def test_executable_config_records_require_closed_typed_references():
     assert resolve_executable_config(db, 1) is None
     assert resolve_executable_config(db, ExecutableConfigRef("unknown", 1)) is None
     assert resolve_executable_config(db, ExecutableConfigRef("ai_model", 0)) is None
+
+
+def test_grading_repair_batch_rejects_missing_duplicate_and_oversized_ids():
+    class NoDatabaseCalls:
+        def execute(self, *_args):
+            raise AssertionError("invalid repair batch reached the database")
+
+    db = NoDatabaseCalls()
+    assert resolve_grading_repair_batch(db, ()) is None
+    assert resolve_grading_repair_batch(db, GradingRepairBatchRef(())) is None
+    assert resolve_grading_repair_batch(db, GradingRepairBatchRef((1, 1))) is None
+    assert resolve_grading_repair_batch(
+        db, GradingRepairBatchRef(tuple(range(1, 102)))
+    ) is None

@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 294 | 45 | 341 |
+| Flask/API route rules | 680 | 298 | 45 | 337 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 294 | 45 | 1,366 |
+| Total | 1,705 | 298 | 45 | 1,362 |
 
-Reviewed identity fingerprint: `dd972628daffc08a5c46071ba65663e594ab24850ea2329aebc871f00ff6797a`.
+Reviewed identity fingerprint: `31b252b8a8cf8196a470a0f9c3a4655e837793535687f7e6e38841b3490a6f4a`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -104,6 +104,10 @@ All nine Remidio administration, encounter-migration, and IITK workspace routes 
 
 All eight AI-model and Celery-schedule routes now have method-aware contracts. Lists and blank creation flows are Admin-only admission; creation requires distinct closed operations. Editing, deletion, health testing, and schedule updates bind a typed exact persisted AI-model or schedule record. Bare IDs, unknown record kinds, missing rows, and undeclared operations deny.
 
+### Vertical slice 9l: grading inconsistency repair
+
+All four grading inconsistency diagnostics and repair routes now have explicit contracts. Diagnostic pages use Admin/Data Manager or Admin-only screen admission. Applying a review as final binds the exact stored grading task and its resolved Lab Unit scope. Bulk state reset requires a bounded, duplicate-free set of at most 100 existing tasks, and every member must still be in `resident2_done`; any missing, malformed, duplicate, oversized, or stale-state member denies the entire authorization target.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -130,4 +134,4 @@ All eight AI-model and Celery-schedule routes now have method-aware contracts. L
 
 ## Remaining cutover work
 
-The remaining 388 explicitly unmapped runtime consumers (341 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 384 explicitly unmapped runtime consumers (337 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

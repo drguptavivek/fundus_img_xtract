@@ -19,6 +19,7 @@ from authz_v2.resources.references import (
     AutomationTargetRef,
     ExecutableConfigRef,
     GradingConfigRef,
+    GradingRepairBatchRef,
     LookupRecordRef,
     SystemOperationRef,
     is_positive_int,
@@ -824,6 +825,70 @@ EXECUTABLE_CONFIG_ADAPTER = ResourceAdapter(
         facts, domain_valid=True
     ),
 )
+
+
+def resolve_grading_repair_target(db, reference: object) -> ResourceTarget | None:
+    if not is_positive_int(reference):
+        return None
+    task = db.get(GradingTask, reference)
+    if task is None:
+        return None
+    scope = resolve_scope(db, lab_unit_id=task.lab_unit_id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        task,
+        ResourceContextDTO(
+            "grading_repair_target",
+            task.id,
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def resolve_grading_repair_batch(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, GradingRepairBatchRef):
+        return None
+    ids = reference.task_ids
+    if not ids or len(ids) > 100 or len(set(ids)) != len(ids):
+        return None
+    if any(not is_positive_int(task_id) for task_id in ids):
+        return None
+    tasks = tuple(
+        db.execute(select(GradingTask).where(GradingTask.id.in_(ids))).scalars()
+    )
+    if len(tasks) != len(ids) or any(task.state != "resident2_done" for task in tasks):
+        return None
+    return ResourceTarget(
+        tasks,
+        ResourceContextDTO(
+            "grading_repair_batch",
+            ":".join(str(task_id) for task_id in sorted(ids)),
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+def _repair_facts(_db, _principal, _action, _target, facts):
+    return replace(facts, domain_valid=True)
+
+
+GRADING_REPAIR_TARGET_ADAPTER = ResourceAdapter(
+    "grading_repair_target",
+    resolve_grading_repair_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _repair_facts,
+)
+GRADING_REPAIR_BATCH_ADAPTER = ResourceAdapter(
+    "grading_repair_batch",
+    resolve_grading_repair_batch,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    _repair_facts,
+)
 PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
     "project_allocation_target", ProjectGraderAllocation
 )
@@ -868,6 +933,8 @@ RESOURCE_ADAPTERS = (
     ENCOUNTER_SET_ADAPTER,
     EXECUTABLE_CONFIG_ADAPTER,
     GRADING_CONFIG_ADAPTER,
+    GRADING_REPAIR_BATCH_ADAPTER,
+    GRADING_REPAIR_TARGET_ADAPTER,
     GRADING_TASK_ADAPTER,
     IMAGE_ADAPTER,
     INFERENCE_RESULT_ADAPTER,

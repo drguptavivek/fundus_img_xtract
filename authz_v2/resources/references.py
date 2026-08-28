@@ -70,6 +70,13 @@ class ExecutableConfigRef:
     record_id: int
 
 
+@dataclass(frozen=True)
+class GradingRepairBatchRef:
+    """Bounded exact set of grading tasks selected for one repair."""
+
+    task_ids: tuple[int, ...]
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

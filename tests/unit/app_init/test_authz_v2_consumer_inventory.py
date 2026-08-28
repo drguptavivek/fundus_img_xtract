@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 294,
+        "authz_v2": 298,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 341,
+        "legacy_unmapped": 337,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "dd972628daffc08a5c46071ba65663e594ab24850ea2329aebc871f00ff6797a"
+        == "31b252b8a8cf8196a470a0f9c3a4655e837793535687f7e6e38841b3490a6f4a"
     )
 
 
@@ -403,6 +403,27 @@ def test_admin_executable_configuration_slice_is_classified():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is Action.ADMIN_EXECUTABLE_CONFIG_MANAGE
         assert policy.resolver == "executable_config_record"
+
+
+def test_admin_grading_repair_slice_is_classified_and_exact():
+    sources = {
+        "admin/task_review_inconsistency.py",
+        "admin/grading_state_inconsistencies.py",
+        "admin/linked_task_inconsistencies.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["admin.apply_review_as_final"].resolver == (
+        "grading_repair_target"
+    )
+    mixed = ROUTE_POLICIES["admin.grading_state_inconsistencies"]
+    assert isinstance(mixed, dict)
+    assert mixed["GET"].mode is EndpointMode.SCREEN
+    assert mixed["POST"].resolver == "grading_repair_batch"
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

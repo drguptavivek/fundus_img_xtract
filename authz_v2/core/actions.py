@@ -171,6 +171,8 @@ _CANONICAL_ONLY = {
     "admin.grading_eligibility.user.manage",
     "admin.executable_config.view",
     "admin.executable_config.manage",
+    "admin.grading_repair.apply_review",
+    "admin.grading_repair.reset_batch",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

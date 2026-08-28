@@ -162,6 +162,17 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "admin.send_sample_email",
         )
     },
+    "admin.task_review_inconsistency": _screen(Action.ADMIN_SYSTEM_STATUS_VIEW),
+    "admin.apply_review_as_final": _exact(
+        Action.ADMIN_GRADING_REPAIR_APPLY_REVIEW, "grading_repair_target"
+    ),
+    "admin.grading_state_inconsistencies": {
+        "GET": _screen(Action.ADMIN_SECURITY_VIEW),
+        "POST": _exact(
+            Action.ADMIN_GRADING_REPAIR_RESET_BATCH, "grading_repair_batch"
+        ),
+    },
+    "admin.linked_task_inconsistencies": _screen(Action.ADMIN_SECURITY_VIEW),
     "admin.s3_configs_list": _screen(Action.ADMIN_S3_MANAGE),
     "admin.s3_configs_api_list": _screen(Action.ADMIN_S3_MANAGE),
     "admin.s3_config_create": {

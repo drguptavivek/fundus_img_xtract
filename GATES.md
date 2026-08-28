@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 9k - executable configuration
+# Gates: Authorization v2 vertical slice 9l - grading inconsistency repair
 
-- [x] G1: All eight AI-model and Celery-schedule routes have method-aware contracts.
-  CHECK: executable-configuration inventory family test
-  EVIDENCE: inventory is 294 Authz v2 HTTP routes; both source families classify Authz v2
+- [x] G1: All four grading inconsistency diagnostics and repair routes have explicit contracts.
+  CHECK: grading-repair inventory family test
+  EVIDENCE: inventory is 298 Authz v2 HTTP routes; all three source families classify Authz v2
 
-- [x] G2: Stored executable configuration requires typed exact identity.
-  CHECK: executable-config adapter regression
-  EVIDENCE: bare IDs, unknown kinds, invalid IDs, and missing rows deny
+- [x] G2: Applying review consensus binds the exact grading task.
+  CHECK: grading-repair target resolver
+  EVIDENCE: missing/invalid task IDs and unresolved Lab Unit scope deny
 
-- [x] G3: List and creation access cannot authorize row mutation.
-  CHECK: method-specific route contracts
-  EVIDENCE: lists use screen admission, creates use closed operations, edits/deletes use exact records
+- [x] G3: Bulk reset is atomic at authorization and bounded.
+  CHECK: grading-repair batch regression
+  EVIDENCE: empty, duplicate, malformed, oversized, missing, or stale-state member denies the complete target
 
-- [x] G4: Health testing and scheduler mutation bind persisted targets.
-  CHECK: exact action contracts
-  EVIDENCE: health, update, and delete routes require executable_config_record resolution
+- [x] G4: Diagnostic screen admission cannot authorize repair.
+  CHECK: method-specific inconsistency contract
+  EVIDENCE: GET is screen-only and POST requires exact grading_repair_batch
 
 - [x] G5: Full Authz/app-init tests, generated parity, static/security checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: 947 tests pass; Ruff, Bandit, generated parity, and git diff checks pass
+  EVIDENCE: 959 tests pass; Ruff, Bandit, generated parity, and git diff checks pass

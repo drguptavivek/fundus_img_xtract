@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 242,
+        "authz_v2": 257,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 393,
+        "legacy_unmapped": 378,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "9546c039ff076711e0ae4f4add4a4eb7498f318b31d04a7f5543e486529941d7"
+        == "856341934705047d177e122bbc34616a976ec2b1dba4d552bbe37475eb9c4fcb"
     )
 
 
@@ -316,6 +316,30 @@ def test_admin_operational_storage_slice_is_classified():
     assert quota.resolver == "user"
     for endpoint in ("admin.delete_duplicates", "admin.delete_old_processed_zips"):
         assert ROUTE_POLICIES[endpoint].action is Action.ADMIN_SYSTEM_OPERATION
+
+
+def test_admin_lookup_governance_slice_is_classified_and_exact():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source.startswith("admin/lookups/")
+    ]
+    assert len(family) == 15
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "admin.edit_hospital",
+        "admin.edit_lab_unit",
+        "admin.edit_disease",
+        "admin.edit_camera",
+        "admin.edit_area",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert isinstance(policy, dict)
+        assert policy["GET"].action is Action.ADMIN_LOOKUP_RECORD_VIEW
+        assert policy["POST"].action is Action.ADMIN_LOOKUP_RECORD_MANAGE
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

@@ -11,6 +11,7 @@ from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
 from authz_v2.resources.adapters import (
     TypedResourceRef,
+    resolve_lookup_record,
     resolve_mobile_session,
     resolve_system_operation,
 )
@@ -18,6 +19,7 @@ from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    LookupRecordRef,
     SystemOperationRef,
 )
 from authz_v2.resources.registry import ResourceRegistry, ResourceTarget
@@ -215,3 +217,14 @@ def test_system_operation_reference_is_closed_and_exact():
     assert target.context.resource_type == "system_operation"
     assert target.context.resource_id == "sequences_refresh"
     assert target.context.resolved
+
+
+def test_lookup_records_require_a_closed_kind_and_typed_identifier():
+    class NoDatabaseCalls:
+        def get(self, *_args):
+            raise AssertionError("invalid lookup reference reached the database")
+
+    db = NoDatabaseCalls()
+    assert resolve_lookup_record(db, 1) is None
+    assert resolve_lookup_record(db, LookupRecordRef("unknown", 1)) is None
+    assert resolve_lookup_record(db, LookupRecordRef("area", 0)) is None

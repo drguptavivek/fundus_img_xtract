@@ -153,6 +153,22 @@ Resource: `screen`; disclosure: `masked`; audit: `optional`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
+### `admin.lookup_record.manage`
+
+Authorize admin.lookup_record.manage.
+
+Resource: `lookup_record`; disclosure: `masked`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.lookup_record.view`
+
+Authorize admin.lookup_record.view.
+
+Resource: `lookup_record`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.metadata.operation`
 
 Authorize admin.metadata.operation.

@@ -46,6 +46,14 @@ class ActiveConfigurationRef:
     kind: str
 
 
+@dataclass(frozen=True)
+class LookupRecordRef:
+    """Typed lookup identity; bare integers are intentionally ambiguous."""
+
+    kind: str
+    record_id: int
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

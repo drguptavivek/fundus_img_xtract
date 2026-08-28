@@ -17,6 +17,7 @@ from authz_v2.resources.references import (
     ActiveConfigurationRef,
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    LookupRecordRef,
     SystemOperationRef,
     is_positive_int,
     is_stable_resource_id,
@@ -39,19 +40,24 @@ from authz_v2.resources.upload_targets import resolve_classical_upload_target
 from models import (
     AIInferenceRun,
     AMDReport,
+    Area,
+    Camera,
     CuratedDataset,
     DatasetShare,
     DiabeticRetinopathyReport,
     DirectImageUpload,
+    Disease,
     EmailSettings,
     EncounterFile,
     EncounterFilePDF,
     EncounterSetImage,
     GlaucomaReport,
     GradingTask,
+    Hospital,
     IntraRaterBatch,
     IntraRaterTask,
     Job,
+    LabUnit,
     MobileAuthSession,
     PatientEncounters,
     ProjectGraderAllocation,
@@ -582,6 +588,11 @@ _SYSTEM_OPERATIONS = frozenset(
         "database_restore_cancel",
         "disk_delete_duplicates",
         "disk_delete_processed_zips",
+        "lookup_create_hospital",
+        "lookup_create_lab_unit",
+        "lookup_create_disease",
+        "lookup_create_camera",
+        "lookup_create_area",
     }
 )
 
@@ -677,6 +688,55 @@ S3_CONFIG_ADAPTER = ResourceAdapter(
         facts, domain_valid=True
     ),
 )
+
+_LOOKUP_MODELS = {
+    "hospital": Hospital,
+    "lab_unit": LabUnit,
+    "disease": Disease,
+    "camera": Camera,
+    "area": Area,
+}
+
+
+def resolve_lookup_record(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, LookupRecordRef):
+        return None
+    model = _LOOKUP_MODELS.get(reference.kind)
+    if model is None or not is_positive_int(reference.record_id):
+        return None
+    value = db.get(model, reference.record_id)
+    if value is None:
+        return None
+    if reference.kind == "hospital":
+        scope = resolve_scope(db, hospital_id=value.id)
+    elif reference.kind == "lab_unit":
+        scope = resolve_scope(
+            db, hospital_id=value.hospital_id, lab_unit_id=value.id
+        )
+    else:
+        scope = ScopeDTO(ScopeType.SYSTEM)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "lookup_record",
+            f"{reference.kind}:{value.id}",
+            scope,
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+LOOKUP_RECORD_ADAPTER = ResourceAdapter(
+    "lookup_record",
+    resolve_lookup_record,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
 PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
     "project_allocation_target", ProjectGraderAllocation
 )
@@ -713,9 +773,9 @@ RESOURCE_ADAPTERS = (
     DATASET_ADAPTER,
     DATASET_SHARE_ADAPTER,
     DIRECT_IMAGE_ADAPTER,
-    EMAIL_SETTINGS_ADAPTER,
     DIRECT_UPLOAD_BATCH_ADAPTER,
     DISCREPANCY_ADAPTER,
+    EMAIL_SETTINGS_ADAPTER,
     ENCOUNTER_ADAPTER,
     ENCOUNTER_FILE_ADAPTER,
     ENCOUNTER_SET_ADAPTER,
@@ -726,6 +786,7 @@ RESOURCE_ADAPTERS = (
     INTRA_RATER_BATCH_ADAPTER,
     INTRA_RATER_TASK_ADAPTER,
     JOB_ADAPTER,
+    LOOKUP_RECORD_ADAPTER,
     MOBILE_SESSION_ADAPTER,
     NOTIFICATION_TARGET_ADAPTER,
     PASSWORD_RESET_ADAPTER,

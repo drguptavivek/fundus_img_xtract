@@ -17,6 +17,8 @@ admin.email_settings.manage,email_settings_config,admin_break_glass,identifier_i
 admin.email_settings.view,email_settings_config,admin_break_glass,identifier_in_place,optional
 admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,masked,optional
 admin.lookup.manage,screen,admin_break_glass,masked,optional
+admin.lookup_record.manage,lookup_record,admin_break_glass,masked,required
+admin.lookup_record.view,lookup_record,admin_break_glass,masked,optional
 admin.metadata.operation,system_operation,scoped_role|admin_break_glass,masked,required
 admin.s3.manage,screen,admin_break_glass,masked,optional
 admin.s3_config.manage,s3_config,admin_break_glass,identifier_in_place,required

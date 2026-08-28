@@ -228,6 +228,42 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "admin.upload_quota_redirect": _screen(Action.ADMIN_SYSTEM_STATUS_VIEW),
     "admin.update_upload_quota": _exact(Action.ADMIN_UPLOAD_QUOTA_MANAGE, "user"),
     **{
+        endpoint: {
+            "GET": _screen(Action.ADMIN_LOOKUP_MANAGE),
+            "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+        }
+        for endpoint in (
+            "admin.list_hospitals",
+            "admin.list_lab_units",
+            "admin.list_diseases",
+            "admin.list_cameras",
+            "admin.list_areas",
+        )
+    },
+    **{
+        endpoint: {
+            "GET": _exact(Action.ADMIN_LOOKUP_RECORD_VIEW, "lookup_record"),
+            "POST": _exact(Action.ADMIN_LOOKUP_RECORD_MANAGE, "lookup_record"),
+        }
+        for endpoint in (
+            "admin.edit_hospital",
+            "admin.edit_lab_unit",
+            "admin.edit_disease",
+            "admin.edit_camera",
+            "admin.edit_area",
+        )
+    },
+    **{
+        endpoint: _exact(Action.ADMIN_LOOKUP_RECORD_MANAGE, "lookup_record")
+        for endpoint in (
+            "admin.delete_hospital",
+            "admin.delete_lab_unit",
+            "admin.delete_disease",
+            "admin.delete_camera",
+            "admin.delete_area",
+        )
+    },
+    **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (
             "admin.manage_roles",

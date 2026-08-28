@@ -164,6 +164,8 @@ _CANONICAL_ONLY = {
     "admin.database.export",
     "admin.database.restore",
     "admin.upload_quota.manage",
+    "admin.lookup_record.view",
+    "admin.lookup_record.manage",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

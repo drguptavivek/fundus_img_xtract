@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 242 | 45 | 393 |
+| Flask/API route rules | 680 | 257 | 45 | 378 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 242 | 45 | 1,418 |
+| Total | 1,705 | 257 | 45 | 1,403 |
 
-Reviewed identity fingerprint: `9546c039ff076711e0ae4f4add4a4eb7498f318b31d04a7f5543e486529941d7`.
+Reviewed identity fingerprint: `856341934705047d177e122bbc34616a976ec2b1dba4d552bbe37475eb9c4fcb`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -88,6 +88,10 @@ All eight database dump, Excel export, and restore routes now have explicit meth
 
 All eight log, malicious-upload, disk-usage, and upload-quota routes now have explicit contracts. Logs, quarantine listings, and disk reports remain read-only admission surfaces. Duplicate and processed-ZIP deletion require distinct closed Admin system operations. Quota changes bind the exact stored user and use a dedicated Admin/Data Manager action, so list access cannot authorize a quota mutation and a forged or missing user ID denies.
 
+### Vertical slice 9h: lookup governance
+
+All 15 hospital, Lab Unit, disease, camera, and area administration routes now have method-aware contracts. Collection GETs remain lookup-screen admission; collection POSTs require a closed typed creation operation. Edits and deletes bind a typed exact persisted lookup row, never a bare ambiguous integer. Hospital and Lab Unit records resolve authoritative organizational scope, while global clinical lookup records resolve System scope. Unknown kinds, missing rows, invalid identifiers, or missing lineage deny.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -114,4 +118,4 @@ All eight log, malicious-upload, disk-usage, and upload-quota routes now have ex
 
 ## Remaining cutover work
 
-The remaining 440 explicitly unmapped runtime consumers (393 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 425 explicitly unmapped runtime consumers (378 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

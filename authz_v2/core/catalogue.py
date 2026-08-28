@@ -189,6 +189,7 @@ MANDATORY_AUDIT = frozenset(
         "admin.database.export",
         "admin.database.restore",
         "admin.upload_quota.manage",
+        "admin.lookup_record.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -730,6 +731,17 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.lookup_record.view",
+    "lookup_record",
+    ADMIN,
+)
+_resource(
+    "admin.lookup_record.manage",
+    "lookup_record",
+    ADMIN,
+    domain_condition=True,
+)
 _resource(
     "admin.upload_quota.manage",
     "user",

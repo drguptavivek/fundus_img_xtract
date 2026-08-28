@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 437,
-        "legacy_action_literal": 44,
-        "legacy_unmapped": 199,
+        "authz_v2": 441,
+        "legacy_action_literal": 43,
+        "legacy_unmapped": 196,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -185,6 +185,25 @@ def test_api_documentation_routes_are_explicitly_public():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.mode is EndpointMode.PUBLIC
         assert policy.action is Action.DOCS_API_VIEW
+
+
+def test_account_profile_and_password_routes_are_exact_self_actions():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.source == "account/routes.py"
+    ]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    profile = ROUTE_POLICIES["account.profile"]
+    assert profile["GET"].action is Action.ACCOUNT_PROFILE_VIEW
+    assert profile["POST"].action is Action.ACCOUNT_PROFILE_UPDATE
+    for endpoint in (
+        "account.change_password_self",
+        "account.change_password_submit",
+    ):
+        assert ROUTE_POLICIES[endpoint].resolver == "user"
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

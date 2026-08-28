@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 19 - API documentation surfaces
+# Gates: Authorization v2 vertical slice 20 - self-service account routes
 
-- [x] G1: All 6 documentation routes have explicit contracts.
-  CHECK: documentation inventory family test
-  EVIDENCE: inventory is 437 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 4 account routes have explicit contracts.
+  CHECK: account route inventory family test
+  EVIDENCE: inventory is 441 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Public access is declared per endpoint.
-  CHECK: endpoint mode assertions
-  EVIDENCE: every docs/routes.py and docs/swagger_ui.py endpoint uses PUBLIC mode
+- [x] G2: Profile read and update are method-specific.
+  CHECK: profile action assertions
+  EVIDENCE: GET uses account.profile.view and POST uses account.profile.update
 
-- [x] G3: Documentation uses its dedicated canonical action.
-  CHECK: endpoint action assertions
-  EVIDENCE: every route uses docs.api.view rather than generic path inference
+- [x] G3: Password operations resolve only the current user.
+  CHECK: password endpoint resolver assertions
+  EVIDENCE: both password routes use the user resolver and self-only action
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: Markdown rendering, OpenAPI construction, Swagger assets, and formatting remain in docs modules
+  EVIDENCE: input validation, password verification/strength/history, session rotation, and messaging remain in account code
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1128 tests; inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1129 tests; inventory checks pass

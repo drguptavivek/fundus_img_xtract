@@ -995,6 +995,18 @@ pattern.
   literals, 199 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 20: self-service account routes
+
+- All four profile and browser password-change routes resolve the exact current
+  user and use self-only catalogue paths without administrator substitution.
+- Profile GET and POST are method-specific read and update actions; password
+  form, submission, and confirmation surfaces cannot target another user.
+- Email/phone/timezone validation, current-password verification, password
+  strength/history, session rotation, and messaging remain account-domain logic.
+- The reviewed inventory is now 441 v2 HTTP consumers, 43 legacy action
+  literals, 196 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

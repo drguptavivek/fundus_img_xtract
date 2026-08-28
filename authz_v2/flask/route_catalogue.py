@@ -77,6 +77,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "docs.swagger_json",
         )
     },
+    "account.profile": {
+        "GET": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
+        "POST": _exact(Action.ACCOUNT_PROFILE_UPDATE, "user"),
+    },
+    **{
+        endpoint: _exact(Action.ACCOUNT_PASSWORD_CHANGE, "user")
+        for endpoint in (
+            "account.change_password_self",
+            "account.change_password_submit",
+        )
+    },
+    "account.password_changed": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
     "fundus_api.get_project_encounter_set_queues": _screen(Action.TASKS_VIEW),
     **{
         endpoint: _exact(

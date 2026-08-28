@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 16 - application utility routes
+# Gates: Authorization v2 vertical slice 17 - project grader allocations
 
-- [x] G1: All 13 application-root route rules have explicit contracts.
-  CHECK: app.py utility route inventory family test
-  EVIDENCE: inventory is 417 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 7 project grader-allocation routes have explicit contracts.
+  CHECK: grading-allocation inventory family test
+  EVIDENCE: inventory is 424 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Every route is explicitly public rather than path-prefix inferred.
-  CHECK: per-endpoint mode and action assertions
-  EVIDENCE: every distinct endpoint uses PUBLIC mode and public.view
+- [x] G2: Proposed allocations bind an existing user to one persisted project site.
+  CHECK: project-allocation target resolver tests
+  EVIDENCE: missing users and unknown project-site scopes deny
 
-- [x] G3: Duplicate mobile PWA rules share one reviewed endpoint contract.
-  CHECK: runtime inventory and endpoint-name set
-  EVIDENCE: both /mobile/ URL rules classify through _mobile_pwa
+- [x] G3: Existing allocation mutations bind both route identifiers.
+  CHECK: project-allocation target resolver tests
+  EVIDENCE: an allocation whose persisted project differs from the route project denies
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: file containment, redirects, rate limiting, health checks, sitemap generation, and rendering remain app.py rules
+  EVIDENCE: capacity/scope compatibility, grader eligibility, derived targets, coverage, and activation remain in grading_allocation
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1118 tests; inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1120 tests; inventory checks pass

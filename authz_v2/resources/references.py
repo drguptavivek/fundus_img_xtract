@@ -151,6 +151,16 @@ class JobTokenRef:
     token: str
 
 
+@dataclass(frozen=True)
+class ProjectAllocationTargetRef:
+    """Existing allocation or proposed project-site/user allocation target."""
+
+    project_id: int
+    allocation_id: int | None = None
+    lab_unit_id: int | None = None
+    user_id: int | None = None
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

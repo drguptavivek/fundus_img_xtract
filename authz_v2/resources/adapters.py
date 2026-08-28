@@ -26,6 +26,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
+    ProjectAllocationTargetRef,
     RemoteInferenceBatchRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
@@ -1593,8 +1594,62 @@ GRADING_REPAIR_BATCH_ADAPTER = ResourceAdapter(
     lambda _db, _principal, _action, _grants, query: query.where(false()),
     _repair_facts,
 )
-PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
-    "project_allocation_target", ProjectGraderAllocation
+def resolve_project_allocation_target(
+    db, reference: object
+) -> ResourceTarget | None:
+    if not isinstance(reference, ProjectAllocationTargetRef) or not is_positive_int(
+        reference.project_id
+    ):
+        return None
+    if reference.allocation_id is not None:
+        if (
+            not is_positive_int(reference.allocation_id)
+            or reference.lab_unit_id is not None
+            or reference.user_id is not None
+        ):
+            return None
+        allocation = db.get(ProjectGraderAllocation, reference.allocation_id)
+        if allocation is None or allocation.project_id != reference.project_id:
+            return None
+        lab_unit_id = allocation.lab_unit_id
+        value = allocation
+        resource_id = f"existing:{allocation.id}"
+    else:
+        if not is_positive_int(reference.lab_unit_id) or not is_positive_int(
+            reference.user_id
+        ):
+            return None
+        if db.get(User, reference.user_id) is None:
+            return None
+        lab_unit_id = reference.lab_unit_id
+        value = reference
+        resource_id = (
+            f"proposed:{reference.project_id}:{lab_unit_id}:{reference.user_id}"
+        )
+    scope = resolve_scope(
+        db, project_id=reference.project_id, lab_unit_id=lab_unit_id
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "project_allocation_target",
+            resource_id,
+            scope,
+            state={"target_active": True, "domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+PROJECT_ALLOCATION_TARGET_ADAPTER = ResourceAdapter(
+    "project_allocation_target",
+    resolve_project_allocation_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
 )
 PROJECT_SITE_POLICY_ADAPTER = _model_adapter("project_site_policy", ProjectLabUnit)
 

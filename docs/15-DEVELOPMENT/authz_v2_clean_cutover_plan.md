@@ -952,6 +952,22 @@ pattern.
   literals, 219 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 17: project grader allocations
+
+- All seven grader-allocation APIs distinguish queue screen admission,
+  project-plan reads, exact allocation mutations, and project enforcement-policy
+  management.
+- Creating an allocation requires the exact persisted target user and a
+  persisted active project/Lab Unit relationship. Existing mutations bind the
+  allocation identifier to the project identifier in the route and deny
+  cross-project substitution.
+- Allocation capacity/scope compatibility, grader-role eligibility, derived
+  grading targets, coverage warnings, and activation behavior remain in the
+  grading-allocation domain service.
+- The reviewed inventory is now 424 v2 HTTP consumers, 44 legacy action
+  literals, 212 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

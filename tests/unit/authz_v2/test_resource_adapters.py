@@ -18,6 +18,7 @@ from authz_v2.resources.adapters import (
     resolve_lookup_record,
     resolve_job,
     resolve_mobile_session,
+    resolve_project_allocation_target,
     resolve_remidio_config,
     resolve_remidio_attachment,
     resolve_remidio_project_sync,
@@ -40,6 +41,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
+    ProjectAllocationTargetRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
     RemoteInferenceBatchRef,
@@ -419,3 +421,49 @@ def test_remote_inference_batch_requires_one_persisted_project_lab_scope(monkeyp
     assert target is not None
     assert target.context.scope.project_id == 7
     assert target.context.scope.lab_unit_id == 3
+
+
+def test_project_allocation_target_binds_project_site_user_and_existing_id(
+    monkeypatch,
+):
+    scope = ScopeDTO(
+        ScopeType.PROJECT_LAB_UNIT,
+        99,
+        project_id=7,
+        lab_unit_id=3,
+        project_lab_unit_id=99,
+    )
+    monkeypatch.setattr(
+        resource_adapters,
+        "resolve_scope",
+        lambda _db, *, project_id, lab_unit_id: (
+            scope if (project_id, lab_unit_id) == (7, 3) else None
+        ),
+    )
+
+    class Database:
+        def get(self, model, resource_id):
+            if model.__name__ == "User" and resource_id == 5:
+                return SimpleNamespace(id=5)
+            if model.__name__ == "ProjectGraderAllocation" and resource_id == 11:
+                return SimpleNamespace(
+                    id=11, project_id=7, lab_unit_id=3, active=False
+                )
+            return None
+
+    db = Database()
+    assert resolve_project_allocation_target(db, None) is None
+    assert resolve_project_allocation_target(
+        db, ProjectAllocationTargetRef(7, lab_unit_id=3, user_id=6)
+    ) is None
+    assert resolve_project_allocation_target(
+        db, ProjectAllocationTargetRef(8, allocation_id=11)
+    ) is None
+    proposed = resolve_project_allocation_target(
+        db, ProjectAllocationTargetRef(7, lab_unit_id=3, user_id=5)
+    )
+    existing = resolve_project_allocation_target(
+        db, ProjectAllocationTargetRef(7, allocation_id=11)
+    )
+    assert proposed is not None and existing is not None
+    assert proposed.context.scope == existing.context.scope == scope

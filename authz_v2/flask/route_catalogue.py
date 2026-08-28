@@ -66,6 +66,30 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "healthz",
         )
     },
+    "fundus_api.get_project_encounter_set_queues": _screen(Action.TASKS_VIEW),
+    **{
+        endpoint: _exact(
+            Action.PROJECT_GRADER_ALLOCATIONS_VIEW, "project_allocation_plan"
+        )
+        for endpoint in (
+            "fundus_api.get_project_grader_allocation_candidates",
+            "fundus_api.get_project_grader_allocations",
+        )
+    },
+    **{
+        endpoint: _exact(
+            Action.PROJECT_GRADER_ALLOCATIONS_MANAGE,
+            "project_allocation_target",
+        )
+        for endpoint in (
+            "fundus_api.create_project_grader_allocation",
+            "fundus_api.update_project_grader_allocation",
+            "fundus_api.deactivate_project_grader_allocation",
+        )
+    },
+    "fundus_api.update_project_grader_allocation_policy": _exact(
+        Action.PROJECT_GRADER_ALLOCATIONS_ENFORCEMENT_MANAGE, "project"
+    ),
     # Browser authentication. CAPTCHA generation and validation, reset workflow
     # rules, and password policy remain application concerns. Authz classifies
     # only public entry, exact signed reset credentials, and the current user.

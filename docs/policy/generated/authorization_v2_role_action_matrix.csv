@@ -112,6 +112,7 @@ glaucoma_ai.upload.view,direct_image_upload,mobile_owner,identifier_in_place,opt
 glaucoma_ai.uploads.list,screen,authenticated_screen,masked,optional
 glaucoma_ai.workspace.view,project,scoped_role|admin_break_glass,masked,optional
 grading.arbitrator.submit,grading_task,qualified_slot,masked,optional
+grading.dashboard.view,user,self,masked,optional
 grading.grades.view,grading_task,participant|admin_break_glass,masked,optional
 grading.resident.submit,grading_task,qualified_slot,masked,optional
 grading.resident2.submit,grading_task,qualified_slot,masked,optional

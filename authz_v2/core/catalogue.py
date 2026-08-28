@@ -682,6 +682,7 @@ for _name, _type in (
     ("account.password.change", "user"),
     ("account.notifications.view", "user"),
     ("account.notifications.update", "user"),
+    ("grading.dashboard.view", "user"),
     ("account.mobile_sessions.view", "user"),
     ("account.mobile_sessions.revoke", "mobile_session"),
     ("account.viewer_preferences.manage", "user"),

@@ -160,6 +160,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.PROJECT_ANNOTATION_POLICY_EXPORT, "project"
     ),
     **{
+        endpoint: _exact(Action.GRADING_DASHBOARD_VIEW, "user")
+        for endpoint in (
+            "fundus_api.get_my_grading_eligibility",
+            "fundus_api.get_my_grading_queues",
+            "fundus_api.get_my_grading_queue",
+            "fundus_api.get_my_grading_history",
+        )
+    },
+    **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (
             "fundus_api.get_eligible_lab_units",

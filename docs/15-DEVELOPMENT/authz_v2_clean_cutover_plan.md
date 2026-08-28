@@ -1311,6 +1311,17 @@ pattern.
   literals, 62 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 232 actions.
 
+### Implemented vertical slice 46: grader self-service dashboard
+
+- The current grader's eligibility, queue overview, disease queue card, and
+  grading history APIs now require an exact self relationship through the
+  dedicated `grading.dashboard.view` action.
+- Disease eligibility, queue composition, dates, history types, pagination,
+  and other clinical/workflow filters remain in grading application services.
+- The reviewed inventory is now 583 v2 HTTP consumers, 39 legacy action
+  literals, 58 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 233 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

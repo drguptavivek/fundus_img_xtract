@@ -218,6 +218,7 @@ _CANONICAL_ONLY = {
     "grading.workbench.session.draft",
     "grading.workbench.session.submit",
     "grading.workbench.acquire",
+    "grading.dashboard.view",
     "grading.workbench.revision.acquire",
     "glaucoma_ai.mobile_upload.create",
     "glaucoma_ai.upload.view",

@@ -1,21 +1,21 @@
-# Authz v2 slice 45: public analytics surface
+# Authz v2 slice 46: grader self-service dashboard
 
-- [x] G1 All three intended public analytics routes are explicit.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_public_analytics_family_is_explicitly_public -q'
+- [x] G1 All four grader dashboard APIs require the exact current user.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_grading_dashboard_family_uses_exact_self_authorization -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes for the page and both aggregate APIs.
+  EVIDENCE: Family test passes for all four APIs with user resolvers.
 
-- [x] G2 Public classification uses only the dedicated public action.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_public_analytics_family_is_explicitly_public -q'
+- [x] G2 The new action enforces self without admin substitution.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py -q'
   EXPECT: exit 0
-  EVIDENCE: Family test asserts PUBLIC mode and public.analytics.view for every route.
+  EVIDENCE: Full core contract suite passes within the 1106-test combined run.
 
-- [x] G3 Analytics calculations and disclosed content remain outside Authz.
+- [x] G3 Clinical and workflow filters stay outside Authz.
   CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py -q'
   EXPECT: exit 0
-  EVIDENCE: Both domain-boundary tests pass; no analytics facts entered Authz.
+  EVIDENCE: Both domain-boundary tests pass; no disease or queue state facts were added.
 
-- [x] G4 Inventory and documentation are current.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
+- [x] G4 Inventory and generated policy artifacts are current.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline tests/unit/authz_v2/test_generated_policy_docs.py -q'
   EXPECT: exit 0
-  EVIDENCE: Inventory test passes at 579 explicit and 62 unmapped routes; slice 45 is documented.
+  EVIDENCE: Combined run passes 1106 tests at 583 explicit/58 unmapped; generated artifacts match.

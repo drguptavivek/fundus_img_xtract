@@ -957,6 +957,14 @@ Resource: `grading_task`; disclosure: `masked`; audit: `optional`.
 
 - `qualified_slot`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=field_ophthalmologist,ophthalmologist; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', False),); require_subject=True; require_scope=True), RelationshipRequirement(source=grading_slot; attributes=(('allocation_enforced', True),); require_subject=True; require_scope=True), RelationshipRequirement(source=project_allocation; attributes=(); require_subject=True; require_scope=True)
 
+### `grading.dashboard.view`
+
+Authorize grading.dashboard.view.
+
+Resource: `user`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
 ### `grading.grades.view`
 
 Authorize grading.grades.view.

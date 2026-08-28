@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 579,
+        "authz_v2": 583,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 62,
+        "legacy_unmapped": 58,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1319,6 +1319,25 @@ def test_public_analytics_family_is_explicitly_public():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.mode is EndpointMode.PUBLIC
         assert policy.action is Action.PUBLIC_ANALYTICS_VIEW
+
+
+def test_grading_dashboard_family_uses_exact_self_authorization():
+    names = {
+        "fundus_api.get_my_grading_eligibility",
+        "fundus_api.get_my_grading_queues",
+        "fundus_api.get_my_grading_queue",
+        "fundus_api.get_my_grading_history",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 4
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in names:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.GRADING_DASHBOARD_VIEW
+        assert policy.resolver == "user"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

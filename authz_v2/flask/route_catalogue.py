@@ -49,6 +49,33 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    # Browser authentication. CAPTCHA generation and validation, reset workflow
+    # rules, and password policy remain application concerns. Authz classifies
+    # only public entry, exact signed reset credentials, and the current user.
+    **{
+        endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.AUTH_LOGIN)
+        for endpoint in (
+            "auth.login",
+            "auth.refresh_captcha",
+            "auth.captcha_audio",
+            "auth.check_session",
+        )
+    },
+    "auth.forgot_password": EndpointPolicy(
+        EndpointMode.PUBLIC, Action.AUTH_PASSWORD_RESET_REQUEST
+    ),
+    "auth.reset_password": _signed(
+        Action.AUTH_PASSWORD_RESET_COMPLETE, "password_reset_credential"
+    ),
+    **{
+        endpoint: _signed(
+            Action.AUTH_PASSWORD_RESET_STATUS, "password_reset_credential"
+        )
+        for endpoint in ("auth.email_sse", "auth.check_email_status")
+    },
+    "auth.logout": _exact(Action.AUTH_LOGOUT, "user"),
+    "auth.ping": _exact(Action.AUTH_SESSION_KEEPALIVE, "user"),
+    "auth.confirm_password": _exact(Action.AUTH_REAUTH, "user"),
     "fundus_api.get_active_workbench_sessions": _screen(
         Action.GRADING_WORKBENCH_SESSIONS_LIST
     ),

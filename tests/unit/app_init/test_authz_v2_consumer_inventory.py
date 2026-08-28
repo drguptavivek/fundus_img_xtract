@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 364,
-        "legacy_action_literal": 45,
-        "legacy_unmapped": 271,
+        "authz_v2": 375,
+        "legacy_action_literal": 44,
+        "legacy_unmapped": 261,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -32,6 +32,23 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
         inventory["identity_fingerprint"]
         == "2b3e963017242aa81cca1bb170e634b78cec333f4566453850068b3039605f49"
     )
+
+
+def test_browser_authentication_family_is_classified_by_security_boundary():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "auth/routes.py"
+    ]
+    assert len(family) == 11
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in ("auth.reset_password", "auth.email_sse", "auth.check_email_status"):
+        assert ROUTE_POLICIES[endpoint].resolver == "password_reset_credential"
+    for endpoint in ("auth.logout", "auth.ping", "auth.confirm_password"):
+        assert ROUTE_POLICIES[endpoint].resolver == "user"
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

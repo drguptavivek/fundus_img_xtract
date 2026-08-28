@@ -204,6 +204,8 @@ _CANONICAL_ONLY = {
     "auth.mobile.logout",
     "auth.mobile.refresh",
     "auth.password_reset.complete",
+    "auth.password_reset.status",
+    "auth.session.keepalive",
     "authorization.catalogue.view",
     "authorization.grants.manage",
     "authorization.grants.view",

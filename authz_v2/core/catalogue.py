@@ -675,6 +675,7 @@ for _name in (
 ):
     _public(_name)
 _credential("auth.password_reset.complete", "password_reset_credential")
+_credential("auth.password_reset.status", "password_reset_credential")
 _credential("dataset.public_download", "dataset_share")
 _credential("auth.mobile.refresh", "mobile_session")
 _credential("auth.mobile.logout", "mobile_session")
@@ -691,6 +692,7 @@ for _name, _type in (
     ("account.viewer_preferences.manage", "user"),
     ("auth.logout", "user"),
     ("auth.reauth", "user"),
+    ("auth.session.keepalive", "user"),
     ("authorization.me.capabilities.view", "user"),
     ("authorization.me.workspaces.view", "user"),
     ("authorization.me.upload_options.view", "user"),

@@ -586,9 +586,25 @@ Resource: `public`; disclosure: `masked`; audit: `optional`.
 
 - `public`: PublicRequirement()
 
+### `auth.password_reset.status`
+
+Authorize auth.password_reset.status.
+
+Resource: `password_reset_credential`; disclosure: `masked`; audit: `optional`.
+
+- `signed_credential`: SessionChannelRequirement(channels=signed), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=target_active; expected=True), RelationshipRequirement(source=signed_credential; attributes=(); require_subject=False; require_scope=False)
+
 ### `auth.reauth`
 
 Authorize auth.reauth.
+
+Resource: `user`; disclosure: `masked`; audit: `optional`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
+### `auth.session.keepalive`
+
+Authorize auth.session.keepalive.
 
 Resource: `user`; disclosure: `masked`; audit: `optional`.
 

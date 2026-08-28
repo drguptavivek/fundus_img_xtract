@@ -880,6 +880,22 @@ pattern.
   literals, 271 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 12: browser authentication boundary
+
+- All eleven browser-authentication routes are explicitly classified as public
+  entry, signed password-reset credential use, or exact current-user actions.
+- Login, CAPTCHA presentation, session redirection, and reset-request entry are
+  public authorization surfaces. CAPTCHA validation, OTP issuance, password
+  policy, throttling, and reset workflow transitions remain in application code.
+- Reset completion and reset-status polling require the exact persisted,
+  unconsumed, unexpired password-reset credential. Missing credential identity
+  or signed-channel evidence denies.
+- Logout, keepalive, and password reconfirmation resolve the exact current user;
+  one authenticated user cannot supply another user's target.
+- The reviewed inventory is now 375 v2 HTTP consumers, 44 legacy action
+  literals, 261 unmapped HTTP consumers, 47 unmapped workers, and 978 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

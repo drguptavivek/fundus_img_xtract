@@ -68,7 +68,9 @@ auth.mobile.logout,mobile_session,signed_credential,masked,optional
 auth.mobile.refresh,mobile_session,signed_credential,masked,optional
 auth.password_reset.complete,password_reset_credential,signed_credential,masked,required
 auth.password_reset.request,public,public,masked,optional
+auth.password_reset.status,password_reset_credential,signed_credential,masked,optional
 auth.reauth,user,self,masked,optional
+auth.session.keepalive,user,self,masked,optional
 authorization.catalogue.view,screen,admin_break_glass,masked,optional
 authorization.grants.manage,grant_target,scoped_role|admin_break_glass,masked,required
 authorization.grants.view,screen,authenticated_screen|admin_break_glass,masked,optional

@@ -173,6 +173,9 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "fundus_api.get_user_hospital_context": _exact(
         Action.AUTHORIZATION_ME_CAPABILITIES_VIEW, "user"
     ),
+    "fundus_api.check_operation_scope": _exact(
+        Action.AUTHORIZATION_ME_CAPABILITIES_VIEW, "user"
+    ),
     "notifications.notifications": _exact(
         Action.ACCOUNT_NOTIFICATIONS_VIEW, "user"
     ),
@@ -185,6 +188,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.REVIEW_DISCREPANCY_LIST
     ),
     "fundus_api.get_ai_models": _screen(Action.ADMIN_AI_MODELS_VIEW),
+    "fundus_api.infer_wadhwani_glaucoma_task": _exact(
+        Action.INFERENCE_WADHWANI_TASK_RUN, "grading_task"
+    ),
+    "fundus_api.get_madhunetra_dr_dme_integration": _exact(
+        Action.ADMIN_EXECUTABLE_CONFIG_VIEW, "executable_config_record"
+    ),
+    "fundus_api.save_madhunetra_dr_dme_integration": _exact(
+        Action.ADMIN_EXECUTABLE_CONFIG_MANAGE, "executable_config_record"
+    ),
     **{
         endpoint: _screen(Action.AD_HOC_TASK_LIST)
         for endpoint in (

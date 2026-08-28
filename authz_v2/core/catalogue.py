@@ -1715,6 +1715,20 @@ _resource(
     frozenset({Role.ADMIN, Role.LOCAL_ADMIN, Role.DATA_MANAGER}),
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_resource(
+    "inference.wadhwani.task.run",
+    "grading_task",
+    frozenset(
+        {
+            Role.ADMIN,
+            Role.VERIFIER,
+            Role.OPTOMETRIST,
+            Role.FIELD_OPTOMETRIST,
+            Role.FIELD_OPHTHALMOLOGIST,
+        }
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
 
 _resource(
     "notifications.send",

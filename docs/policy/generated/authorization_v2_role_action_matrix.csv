@@ -132,6 +132,7 @@ grading.workbench.session.view,workbench_session,owned_credentialed_session,iden
 grading.workbench.sessions.list,screen,authenticated_screen,masked,optional
 grading.workbench.submissions.list,screen,authenticated_screen,masked,optional
 help.view,public,public,masked,optional
+inference.wadhwani.task.run,grading_task,scoped_role|admin_break_glass,identifier_in_place,optional
 inference.wai.retrospective.run,inference_target,scoped_role|admin_break_glass|stored_automation_rule,masked,optional
 inference.wai.retry,job,scoped_role|admin_break_glass|stored_automation_rule,masked,required
 inference.wai.rows,inference_result,scoped_role|admin_break_glass,identifier_in_place,optional

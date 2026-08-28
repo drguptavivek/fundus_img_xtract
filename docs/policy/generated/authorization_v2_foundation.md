@@ -1122,6 +1122,15 @@ Resource: `public`; disclosure: `masked`; audit: `optional`.
 
 - `public`: PublicRequirement()
 
+### `inference.wadhwani.task.run`
+
+Authorize inference.wadhwani.task.run.
+
+Resource: `grading_task`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,optometrist,verifier; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `inference.wai.retrospective.run`
 
 Authorize inference.wai.retrospective.run.

@@ -1465,6 +1465,18 @@ pattern.
   literals, 24 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 241 actions.
 
+### Implemented vertical slice 57: scoped context and AI execution
+
+- Operation-scope UI context binds the current user. MadhuNetrAI integration
+  reads and updates bind the exact stored AI integration configuration.
+- Interactive Wadhwani task inference has a separate audited browser action
+  bound to the exact grading task; it no longer reuses the automation-channel
+  action. Provider behavior, force/reuse rules, and inference outcomes remain
+  application logic.
+- The reviewed inventory is now 621 v2 HTTP consumers, 39 legacy action
+  literals, 20 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 242 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

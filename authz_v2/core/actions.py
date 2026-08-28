@@ -164,6 +164,7 @@ _CANONICAL_ONLY = {
     "admin.remidio_encounter_migration.preview",
     "admin.remidio_encounter_migration.view",
     "inference.wai.run.retry",
+    "inference.wadhwani.task.run",
     "admin.iitk.configuration.create",
     "admin.iitk.configuration.manage",
     "admin.iitk.configuration.sync",

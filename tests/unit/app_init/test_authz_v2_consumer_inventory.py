@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 617,
+        "authz_v2": 621,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 24,
+        "legacy_unmapped": 20,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "bd47c535b8c8e92efd632accf8252aaf56354aab2630a873331a1ce13f5ddde1"
+        == "7b20c17015c3392a17b3873713e809d1139b8e331109cd887fef465e43caad73"
     )
 
 
@@ -1553,6 +1553,39 @@ def test_remaining_exact_read_apis_bind_authorization_resources_not_domain_facts
         "fundus_api.get_user_grading_eligibility_details": (
             Action.ADMIN_GRADING_ELIGIBILITY_USER_VIEW,
             "user",
+        ),
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.name in expected
+    ]
+    assert {row.name for row in family} == set(expected)
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, (action, resolver) in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is action
+        assert policy.resolver == resolver
+
+
+def test_scoping_and_ai_integration_routes_bind_exact_authorization_targets():
+    expected = {
+        "fundus_api.check_operation_scope": (
+            Action.AUTHORIZATION_ME_CAPABILITIES_VIEW,
+            "user",
+        ),
+        "fundus_api.infer_wadhwani_glaucoma_task": (
+            Action.INFERENCE_WADHWANI_TASK_RUN,
+            "grading_task",
+        ),
+        "fundus_api.get_madhunetra_dr_dme_integration": (
+            Action.ADMIN_EXECUTABLE_CONFIG_VIEW,
+            "executable_config_record",
+        ),
+        "fundus_api.save_madhunetra_dr_dme_integration": (
+            Action.ADMIN_EXECUTABLE_CONFIG_MANAGE,
+            "executable_config_record",
         ),
     }
     _import_all()

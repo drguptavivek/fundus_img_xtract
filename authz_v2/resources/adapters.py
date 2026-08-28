@@ -63,6 +63,7 @@ from grading.workbench.models import GradingWorkbenchSession
 from models import (
     AIInferenceRun,
     AIModel,
+    AIModelIntegration,
     AMDReport,
     Area,
     Camera,
@@ -1683,6 +1684,7 @@ GRADING_CONFIG_ADAPTER = ResourceAdapter(
 
 _EXECUTABLE_CONFIG_MODELS = {
     "ai_model": AIModel,
+    "ai_model_integration": AIModelIntegration,
     "celery_schedule": CeleryBeatSchedule,
 }
 

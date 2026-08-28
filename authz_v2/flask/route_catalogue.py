@@ -77,6 +77,22 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "docs.swagger_json",
         )
     },
+    "help.index": EndpointPolicy(EndpointMode.PUBLIC, Action.HELP_VIEW),
+    "help.view_document": EndpointPolicy(EndpointMode.PUBLIC, Action.HELP_VIEW),
+    **{
+        endpoint: _screen(Action.ANALYTICS_UPLOAD_STATS_VIEW)
+        for endpoint in (
+            "fundus_api.upload_stats_today",
+            "fundus_api.upload_stats_last_7_days",
+        )
+    },
+    **{
+        endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
+        for endpoint in (
+            "fundus_api.get_eligible_lab_units",
+            "fundus_api.get_eligible_lab_units_currentUser",
+        )
+    },
     "account.profile": {
         "GET": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
         "POST": _exact(Action.ACCOUNT_PROFILE_UPDATE, "user"),

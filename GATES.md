@@ -1,21 +1,21 @@
-# Authz v2 slice 37: project Lab Unit configuration API
+# Authz v2 slice 38: help and self-scoped utility reads
 
-- [x] G1 Both project Lab Unit configuration routes resolve the exact project.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_lab_unit_configuration_is_project_exact -q'
+- [x] G1 Help routes are explicitly public and utility reads are explicitly protected.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_help_upload_stats_and_eligible_lab_routes_are_explicit -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes; both routes are Authz v2 and use the project resolver.
+  EVIDENCE: Family test passes for all seven URL rules across six endpoints.
 
-- [x] G2 Read and mutation use distinct project actions.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_lab_unit_configuration_is_project_exact -q'
+- [x] G2 Eligible Lab Unit APIs authorize the exact current user.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_help_upload_stats_and_eligible_lab_routes_are_explicit -q'
   EXPECT: exit 0
-  EVIDENCE: GET uses project.view; POST/PUT uses project.access.manage.
+  EVIDENCE: Both APIs use authorization.me.upload_options.view with the exact user resolver.
 
-- [x] G3 Lab Unit selection and replacement validation remain application logic.
-  CHECK: ! rg -n 'lab_unit_ids must be a list|replace_project_lab_units' authz_v2
+- [x] G3 Upload-stat admission is distinct from row-scoped SQL.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_help_upload_stats_and_eligible_lab_routes_are_explicit -q'
   EXPECT: exit 0
-  EVIDENCE: Authz source contains neither the payload validation message nor the replacement service call.
+  EVIDENCE: Both statistics endpoints are screen mode without a resolver; plan records pending query-policy work.
 
 - [x] G4 Inventory and documentation are current.
   CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
   EXPECT: exit 0
-  EVIDENCE: Inventory/family tests pass at 542 explicit and 99 unmapped routes; plan slice 37 records the boundary.
+  EVIDENCE: Inventory/family tests pass at 549 explicit and 92 unmapped routes; plan slice 38 records the classifications.

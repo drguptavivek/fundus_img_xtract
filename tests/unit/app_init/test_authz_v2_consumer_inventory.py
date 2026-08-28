@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 542,
+        "authz_v2": 549,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 99,
+        "legacy_unmapped": 92,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1130,6 +1130,39 @@ def test_project_lab_unit_configuration_is_project_exact():
         Action.PROJECT_ACCESS_MANAGE
     )
     assert all(ROUTE_POLICIES[name].resolver == "project" for name in names)
+
+
+def test_help_upload_stats_and_eligible_lab_routes_are_explicit():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    names = {
+        "help.index",
+        "help.view_document",
+        "fundus_api.upload_stats_today",
+        "fundus_api.upload_stats_last_7_days",
+        "fundus_api.get_eligible_lab_units",
+        "fundus_api.get_eligible_lab_units_currentUser",
+    }
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 7  # help.index owns both /help and /help/ rules
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["help.index"].mode is EndpointMode.PUBLIC
+    assert ROUTE_POLICIES["help.view_document"].mode is EndpointMode.PUBLIC
+    for endpoint in (
+        "fundus_api.upload_stats_today",
+        "fundus_api.upload_stats_last_7_days",
+    ):
+        assert ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        assert ROUTE_POLICIES[endpoint].resolver is None
+    for endpoint in (
+        "fundus_api.get_eligible_lab_units",
+        "fundus_api.get_eligible_lab_units_currentUser",
+    ):
+        assert ROUTE_POLICIES[endpoint].action is (
+            Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW
+        )
+        assert ROUTE_POLICIES[endpoint].resolver == "user"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

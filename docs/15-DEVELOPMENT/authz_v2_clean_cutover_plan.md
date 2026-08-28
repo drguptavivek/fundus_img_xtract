@@ -1219,6 +1219,17 @@ pattern.
   literals, 99 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 225 actions.
 
+### Implemented vertical slice 38: help and self-scoped utility reads
+
+- Both help endpoints (covering three URL rules) are explicitly public rather
+  than accidentally falling through the default guard.
+- The two eligible-Lab-Unit APIs require exact self identity. The two upload
+  statistics APIs require explicit analytics admission; their SQL row scoping
+  remains a separate query-policy migration requirement.
+- The reviewed inventory is now 549 v2 HTTP consumers, 39 legacy action
+  literals, 92 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 225 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

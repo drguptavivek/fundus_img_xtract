@@ -782,6 +782,7 @@ for _name, _type in (
     ("verification.remidio.view", "encounter"),
     ("verification.remidio.update", "encounter"),
     ("verification.encounter_set.update", "encounter"),
+    ("verification.encounter_set.view", "encounter"),
 ):
     _resource(
         _name,

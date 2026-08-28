@@ -175,6 +175,7 @@ _CANONICAL_ONLY = {
     "project.upload.create",
     "public.analytics.view",
     "upload.create",
+    "verification.encounter_set.view",
 }
 _CANONICAL_NAMES = sorted(set(ACTION_MIGRATION_MAP.values()) | _CANONICAL_ONLY)
 

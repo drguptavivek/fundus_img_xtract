@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 47 | 47 | 586 |
+| Flask/API route rules | 680 | 77 | 47 | 556 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 0 | 977 |
-| Total | 1,704 | 47 | 47 | 1,610 |
+| Total | 1,704 | 77 | 47 | 1,580 |
 
 Reviewed identity fingerprint: `6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3`.
 
@@ -35,6 +35,10 @@ All 17 media routes now declare exact `media.image.view` or `media.pdf.view` con
 ### Vertical slice 2: grading and regrading
 
 All 30 grading routes now have explicit contracts, including the 27 routes that were previously unmapped and three former action-literal hints. Dashboard, queue, and workbench entry routes are screen admission only. Task opens, submissions, feature geometry, intra-rater work, regrade decisions, inference runs, and job results bind exact stored resources. Slot-bearing grading routes use a closed Resident/Resident2/Arbitrator action selector; the resolver cannot select another action. Relationship-aware queue materialization remains governed by the action-specific SQL policies rather than screen admission.
+
+### Vertical slice 3: encounter verification
+
+All 16 encounter-set and 14 Remidio verification routes now have explicit contracts. Encounter-set viewing has a distinct `verification.encounter_set.view` action so reads do not borrow mutation authority. Encounter and image mutations require exact stored resources; identifiers supplied only in request bodies must still be extracted and resolved by the central resolver, otherwise authorization denies before the handler.
 
 ## Authorization-sensitive list/query classification
 
@@ -62,4 +66,4 @@ All 30 grading routes now have explicit contracts, including the 27 routes that 
 
 ## Remaining cutover work
 
-The remaining 633 explicitly unmapped runtime consumers (586 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 603 explicitly unmapped runtime consumers (556 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

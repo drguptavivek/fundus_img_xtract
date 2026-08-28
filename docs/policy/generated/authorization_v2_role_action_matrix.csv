@@ -128,5 +128,6 @@ upload.zip.view,upload_job,scoped_role|admin_break_glass,identifier_in_place,opt
 verification.direct.update,direct_image_upload,scoped_role|admin_break_glass,identifier_in_place,optional
 verification.direct.view,direct_image_upload,scoped_role|admin_break_glass,identifier_in_place,optional
 verification.encounter_set.update,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
+verification.encounter_set.view,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
 verification.remidio.update,encounter,scoped_role|admin_break_glass,identifier_in_place,optional
 verification.remidio.view,encounter,scoped_role|admin_break_glass,identifier_in_place,optional

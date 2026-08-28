@@ -20,9 +20,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 47,
+        "authz_v2": 77,
         "legacy_action_literal": 47,
-        "legacy_unmapped": 586,
+        "legacy_unmapped": 556,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 977,
     }
@@ -54,6 +54,20 @@ def test_high_risk_grading_slice_has_no_unmapped_route():
     assert len(grading_rows) == 30
     assert {row.classification for row in grading_rows} == {"authz_v2"}
     assert all(row.canonical_actions for row in grading_rows)
+
+
+def test_high_risk_verification_slices_have_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    verification_rows = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.source.startswith(("verify_encounter_set/", "verify_remedio/"))
+    ]
+    assert len(verification_rows) == 30
+    assert {row.classification for row in verification_rows} == {"authz_v2"}
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

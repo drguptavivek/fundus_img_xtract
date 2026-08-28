@@ -78,6 +78,67 @@ ROUTE_POLICIES: dict[str, EndpointPolicy] = {
     "grading.grader_statistics": _screen(),
     "grading.inter_rater_compare": _screen(),
     "grading.inter_rater_viewer": _exact(Action.MEDIA_IMAGE_VIEW, "image"),
+    # Encounter-set verification.
+    "verify_encounter_set.index": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
+    "verify_encounter_set.verify_encounter": _exact(
+        Action.VERIFICATION_ENCOUNTER_SET_VIEW, "encounter"
+    ),
+    "verify_encounter_set.verify_panel": _exact(
+        Action.VERIFICATION_ENCOUNTER_SET_VIEW, "encounter"
+    ),
+    "verify_encounter_set.edit_image": _exact(Action.MEDIA_IMAGE_VIEW, "image"),
+    "verify_encounter_set.save_edit": _exact(Action.PREPROCESS_IMAGE_UPDATE, "image"),
+    "verify_encounter_set.mark_anonymized": _exact(
+        Action.PREPROCESS_IMAGE_UPDATE, "image"
+    ),
+    "verify_encounter_set.mark_all_anonymized": _exact(
+        Action.VERIFICATION_ENCOUNTER_SET_UPDATE, "encounter"
+    ),
+    "verify_encounter_set.restore_original": _exact(
+        Action.PREPROCESS_IMAGE_UPDATE, "image"
+    ),
+    "verify_encounter_set.mark_not_gradable": _exact(
+        Action.PREPROCESS_IMAGE_UPDATE, "image"
+    ),
+    "verify_encounter_set.undo_not_gradable": _exact(
+        Action.PREPROCESS_IMAGE_UPDATE, "image"
+    ),
+    **{
+        endpoint: _exact(Action.VERIFICATION_ENCOUNTER_SET_UPDATE, "encounter")
+        for endpoint in (
+            "verify_encounter_set.update_metadata",
+            "verify_encounter_set.update_position",
+            "verify_encounter_set.mark_reviewed",
+            "verify_encounter_set.exclude_encounter_set",
+            "verify_encounter_set.reopen_verification",
+            "verify_encounter_set.finalize_verification",
+        )
+    },
+    # Remidio encounter verification.
+    "verify_remedio.verify_index": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
+    "verify_remedio.verify_list": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
+    "verify_remedio.kpi_trend": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
+    **{
+        endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
+        for endpoint in (
+            "verify_remedio.verify_detail",
+            "verify_remedio.verify_edit",
+            "verify_remedio.viewer_panel",
+        )
+    },
+    **{
+        endpoint: _exact(Action.VERIFICATION_REMIDIO_UPDATE, "encounter")
+        for endpoint in (
+            "verify_remedio.verify_save",
+            "verify_remedio.mark_eye",
+            "verify_remedio.verify_dr",
+            "verify_remedio.unverify_dr",
+            "verify_remedio.verify_glaucoma",
+            "verify_remedio.unverify_glaucoma",
+            "verify_remedio.verify_encounter",
+            "verify_remedio.unverify_encounter",
+        )
+    },
 }
 
 

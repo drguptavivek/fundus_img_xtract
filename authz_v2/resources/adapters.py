@@ -27,6 +27,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
+    IntraRaterBatchTargetRef,
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemoteInferenceBatchRef,
@@ -79,7 +80,6 @@ from models import (
     GradingTask,
     Grade,
     Hospital,
-    IntraRaterBatch,
     IntraRaterTask,
     Job,
     LabUnit,
@@ -656,8 +656,29 @@ UPLOAD_JOB_ADAPTER = _model_adapter(
 UPLOAD_PROFILE_ADAPTER = _model_adapter(
     "upload_profile", UploadProfile, allow_system_scope=True
 )
-INTRA_RATER_BATCH_ADAPTER = _model_adapter(
-    "intra_rater_batch", IntraRaterBatch, owner_attr="created_by_user_id"
+def resolve_intra_rater_batch_target(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, IntraRaterBatchTargetRef) or not is_positive_int(
+        reference.lab_unit_id
+    ):
+        return None
+    scope = resolve_scope(db, lab_unit_id=reference.lab_unit_id)
+    if scope is None:
+        return None
+    return ResourceTarget(
+        reference,
+        ResourceContextDTO(
+            "intra_rater_batch_target",
+            f"lab:{reference.lab_unit_id}",
+            scope,
+            resolved=True,
+        ),
+    )
+
+
+INTRA_RATER_BATCH_TARGET_ADAPTER = ResourceAdapter(
+    "intra_rater_batch_target",
+    resolve_intra_rater_batch_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
 )
 INTRA_RATER_TASK_ADAPTER = _model_adapter(
     "intra_rater_task", IntraRaterTask, owner_attr="grader_user_id"
@@ -1761,7 +1782,7 @@ RESOURCE_ADAPTERS = (
     IMAGE_ADAPTER,
     INFERENCE_RESULT_ADAPTER,
     INFERENCE_TARGET_ADAPTER,
-    INTRA_RATER_BATCH_ADAPTER,
+    INTRA_RATER_BATCH_TARGET_ADAPTER,
     INTRA_RATER_TASK_ADAPTER,
     JOB_ADAPTER,
     LOOKUP_RECORD_ADAPTER,

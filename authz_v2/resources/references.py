@@ -170,6 +170,13 @@ class UploadLabUnitRef:
 
 
 @dataclass(frozen=True)
+class IntraRaterBatchTargetRef:
+    """Exact lab-unit authorization target for creating one batch."""
+
+    lab_unit_id: int
+
+
+@dataclass(frozen=True)
 class DirectImageUuidRef:
     """Opaque UUID identity for one persisted direct-image upload."""
 

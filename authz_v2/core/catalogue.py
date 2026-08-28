@@ -734,6 +734,10 @@ for _name, _roles in (
     ("inference.wai.summary", PROJECT_READ),
     ("intra_rater.batch.view", ADMIN_DATA),
     ("intra_rater.kpi.view", ADMIN_DATA | frozenset({Role.OPHTHALMOLOGIST})),
+    (
+        "intra_rater.tasks.list",
+        frozenset({Role.OPHTHALMOLOGIST, Role.ADMIN, Role.DATA_MANAGER}),
+    ),
     ("project.encountersets.workspace.view", PROJECT_READ),
     (
         "project.encountersets.workspace.view_pii",
@@ -1459,7 +1463,7 @@ for _name, _type, _roles, _domain in (
         frozenset({Role.ADMIN, Role.REGRADE_ADJUDICATOR}),
         True,
     ),
-    ("intra_rater.batch.create", "intra_rater_batch", ADMIN_DATA, True),
+    ("intra_rater.batch.create", "intra_rater_batch_target", ADMIN_DATA, False),
     (
         "intra_rater.task.view",
         "intra_rater_task",

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 471,
+        "authz_v2": 479,
         "legacy_action_literal": 41,
-        "legacy_unmapped": 168,
+        "legacy_unmapped": 160,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -766,6 +766,29 @@ def test_remidio_disease_verification_routes_are_exactly_classified():
     assert clean["GET"].mode is EndpointMode.SCREEN
     assert clean["POST"].action is Action.ADMIN_SYSTEM_OPERATION
     assert clean["POST"].resolver == "system_operation"
+
+
+def test_intra_rater_route_family_has_exact_mutation_contracts():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "tasks/route_intra_rater.py"
+    ]
+    assert len(family) == 8
+    assert {row.classification for row in family} == {"authz_v2"}
+
+    create = ROUTE_POLICIES["tasks.create_intra_rater_batch"]
+    assert create.action is Action.INTRA_RATER_BATCH_CREATE
+    assert create.resolver == "intra_rater_batch_target"
+    viewer = ROUTE_POLICIES["tasks.intra_rater_viewer"]
+    assert viewer.action is Action.TASKS_VIEWER_VIEW
+    assert viewer.resolver == "image"
+    submit = ROUTE_POLICIES["tasks.submit_intra_rater_grade"]
+    assert submit.action is Action.INTRA_RATER_TASK_SUBMIT
+    assert submit.resolver == "intra_rater_task"
 
 
 def test_admin_executable_configuration_slice_is_classified():

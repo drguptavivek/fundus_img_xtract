@@ -116,11 +116,12 @@ inference.wai.retry,job,scoped_role|admin_break_glass|stored_automation_rule,mas
 inference.wai.rows,inference_result,scoped_role|admin_break_glass,identifier_in_place,optional
 inference.wai.run,inference_target,scoped_role|admin_break_glass|stored_automation_rule,masked,optional
 inference.wai.summary,screen,authenticated_screen|admin_break_glass,masked,optional
-intra_rater.batch.create,intra_rater_batch,scoped_role|admin_break_glass,masked,optional
+intra_rater.batch.create,intra_rater_batch_target,scoped_role|admin_break_glass,masked,optional
 intra_rater.batch.view,screen,authenticated_screen|admin_break_glass,masked,optional
 intra_rater.kpi.view,screen,authenticated_screen|admin_break_glass,masked,optional
 intra_rater.task.submit,intra_rater_task,scoped_role,masked,optional
 intra_rater.task.view,intra_rater_task,scoped_role|admin_break_glass,masked,optional
+intra_rater.tasks.list,screen,authenticated_screen|admin_break_glass,masked,optional
 jobs.regenerate,job,scoped_role|admin_break_glass,masked,required
 jobs.result.view,job,owner|scoped_role|admin_break_glass,masked,optional
 jobs.view,screen,authenticated_screen|admin_break_glass,masked,optional

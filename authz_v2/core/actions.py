@@ -225,6 +225,7 @@ _CANONICAL_ONLY = {
     "dataset.curation.image.update",
     "dataset.export.grades",
     "inference.wai.retrospective.run",
+    "intra_rater.tasks.list",
     "media.metadata.raw.read",
     "mobile.field.project.sync",
     "mobile.field.projects.list",

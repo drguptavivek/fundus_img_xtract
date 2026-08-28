@@ -1070,6 +1070,20 @@ pattern.
   literals, 168 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 26: intra-rater workflows
+
+- All eight intra-rater endpoints now have explicit contracts. Dashboard,
+  batch/task lists, and KPI reads are screen admission only; their returned rows
+  remain subject to self/scope SQL-policy migration.
+- Batch creation requires a dedicated exact lab-unit target. An omitted or
+  invalid lab unit cannot be inferred from broad role membership and denies.
+- The viewer requires an exact image resource and grade submission requires the
+  exact assigned intra-rater task. Disease, normal-grade, cooldown, sampling,
+  and submission-state validation remain in the intra-rater application service.
+- The reviewed inventory is now 479 v2 HTTP consumers, 41 legacy action
+  literals, 160 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

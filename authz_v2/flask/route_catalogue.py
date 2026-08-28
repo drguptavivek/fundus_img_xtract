@@ -1114,6 +1114,23 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         "GET": _screen(Action.PREPROCESS_DASHBOARD_VIEW),
         "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
     },
+    "tasks.create_intra_rater_batch": _exact(
+        Action.INTRA_RATER_BATCH_CREATE, "intra_rater_batch_target"
+    ),
+    **{
+        endpoint: _screen(action)
+        for endpoint, action in (
+            ("tasks.list_intra_rater_batches", Action.INTRA_RATER_BATCH_VIEW),
+            ("tasks.list_my_intra_rater_tasks", Action.INTRA_RATER_TASKS_LIST),
+            ("tasks.get_intra_rater_kpi_data", Action.INTRA_RATER_KPI_VIEW),
+            ("tasks.intra_rater_dashboard", Action.INTRA_RATER_TASKS_LIST),
+            ("tasks.intra_rater_admin", Action.INTRA_RATER_BATCH_VIEW),
+        )
+    },
+    "tasks.intra_rater_viewer": _exact(Action.TASKS_VIEWER_VIEW, "image"),
+    "tasks.submit_intra_rater_grade": _exact(
+        Action.INTRA_RATER_TASK_SUBMIT, "intra_rater_task"
+    ),
     **{
         endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
         for endpoint in (

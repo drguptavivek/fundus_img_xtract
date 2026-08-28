@@ -18,6 +18,7 @@ from authz_v2.resources.adapters import (
     resolve_grading_repair_batch,
     resolve_lookup_record,
     resolve_job,
+    resolve_intra_rater_batch_target,
     resolve_mobile_session,
     resolve_project_allocation_target,
     resolve_remidio_config,
@@ -44,6 +45,7 @@ from authz_v2.resources.references import (
     GradingRepairBatchRef,
     LookupRecordRef,
     JobTokenRef,
+    IntraRaterBatchTargetRef,
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemidioConfigRef,
@@ -515,6 +517,25 @@ def test_upload_lab_unit_requires_explicit_valid_project_context(monkeypatch):
         resolve_upload_lab_unit(db, UploadLabUnitRef(3)).context.scope
         == classical_scope
     )
+
+
+def test_intra_rater_batch_target_requires_exact_lab_unit(monkeypatch):
+    scope = ScopeDTO(ScopeType.LAB_UNIT, 3, hospital_id=2, lab_unit_id=3)
+    monkeypatch.setattr(
+        resource_adapters,
+        "resolve_scope",
+        lambda _db, *, lab_unit_id: scope if lab_unit_id == 3 else None,
+    )
+    assert resolve_intra_rater_batch_target(None, 3) is None
+    assert resolve_intra_rater_batch_target(
+        None, IntraRaterBatchTargetRef(0)
+    ) is None
+    target = resolve_intra_rater_batch_target(
+        None, IntraRaterBatchTargetRef(3)
+    )
+    assert target is not None
+    assert target.context.scope == scope
+    assert target.context.resource_id == "lab:3"
 
 
 def test_direct_image_uuid_reference_rejects_missing_and_unknown_images():

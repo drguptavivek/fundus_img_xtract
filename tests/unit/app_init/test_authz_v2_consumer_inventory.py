@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 633,
+        "authz_v2": 634,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 8,
+        "legacy_unmapped": 7,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "5d70129e910b8c291434eee095c63bc7e66081b319789efced14e1623da153f6"
+        == "a714b78fc04b6015af199ce06d8a751d2a17350ef5dc6cdf51bc59d30f46055b"
     )
 
 
@@ -1676,6 +1676,18 @@ def test_encounter_set_identifier_export_binds_the_exact_project():
     policy = ROUTE_POLICIES[endpoint]
     assert policy.action is Action.PROJECT_ENCOUNTERSETS_EXPORT_IDENTIFIERS
     assert policy.resolver == "project"
+
+
+def test_ocr_batch_requires_one_exact_bounded_image_batch():
+    endpoint = "fundus_api.api_ocr_pii_batch"
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    row = next(row for row in rows if row.kind == "http" and row.name == endpoint)
+    assert row.classification == "authz_v2"
+    policy = ROUTE_POLICIES[endpoint]
+    assert policy.action is Action.MEDIA_OCR_PII_BATCH_READ
+    assert policy.resolver == "image_batch"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

@@ -1617,6 +1617,12 @@ for _name, _type, _roles, _disclosure in (
     ),
     ("media.metadata.process", "image", VERIFIERS, DisclosureClass.MASKED),
     ("media.ocr_pii.read", "image", VERIFIERS, DisclosureClass.IDENTIFIER_IN_PLACE),
+    (
+        "media.ocr_pii.batch.read",
+        "image_batch",
+        VERIFIERS,
+        DisclosureClass.IDENTIFIER_IN_PLACE,
+    ),
     ("media.ocr_pii.process", "image", VERIFIERS, DisclosureClass.IDENTIFIER_IN_PLACE),
 ):
     _resource(

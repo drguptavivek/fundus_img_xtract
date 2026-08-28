@@ -1522,6 +1522,18 @@ pattern.
   consumers, 39 legacy action literals, 8 unmapped HTTP consumers, 47 unmapped
   workers, and 979 query candidates. The catalogue contains 247 actions.
 
+### Implemented vertical slice 62: bounded multi-image OCR reads
+
+- OCR batch reads bind a non-empty, duplicate-free set of at most 500 stable
+  image UUIDs. Every UUID must resolve unambiguously to one persisted image and
+  every member must share the same authoritative scope; otherwise resolution
+  fails closed before the handler.
+- The audit identity is a SHA-256 digest of the sorted UUID set, not a leaked
+  list of image identifiers. OCR status, variants, and detection content remain
+  application logic. The reviewed inventory is now 634 v2 HTTP consumers, 39
+  legacy action literals, 7 unmapped HTTP consumers, 47 unmapped workers, and
+  979 query candidates. The catalogue contains 248 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

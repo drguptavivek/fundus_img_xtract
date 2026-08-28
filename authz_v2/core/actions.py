@@ -257,6 +257,7 @@ _CANONICAL_ONLY = {
     "inference.wai.retrospective.run",
     "intra_rater.tasks.list",
     "media.metadata.raw.read",
+    "media.ocr_pii.batch.read",
     "mobile.field.project.sync",
     "mobile.field.projects.list",
     "mobile.session.detail.view",

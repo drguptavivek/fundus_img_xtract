@@ -250,6 +250,9 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.API_LOOKUP_RECORD_VIEW, "lookup_record"
     ),
     "fundus_api.get_image_metadata": _exact(Action.MEDIA_IMAGE_VIEW, "image"),
+    "fundus_api.api_ocr_pii_batch": _exact(
+        Action.MEDIA_OCR_PII_BATCH_READ, "image_batch"
+    ),
     "fundus_api.list_unverified_encounter_sets": _screen(
         Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW_PII
     ),

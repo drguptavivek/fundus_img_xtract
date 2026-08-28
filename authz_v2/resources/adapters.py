@@ -29,6 +29,7 @@ from authz_v2.resources.references import (
     JobTokenRef,
     IntraRaterBatchTargetRef,
     IITKConfigurationTargetRef,
+    ImageBatchRef,
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemoteInferenceBatchRef,
@@ -805,6 +806,58 @@ IMAGE_ADAPTER = _polymorphic_adapter(
 IMAGE_ADAPTER = replace(
     IMAGE_ADAPTER,
     facts_provider=compose_facts(IMAGE_ADAPTER.facts_provider, pii_image_facts),
+)
+
+
+def resolve_image_batch(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, ImageBatchRef):
+        return None
+    uuids = reference.image_uuids
+    if (
+        not uuids
+        or len(uuids) > 500
+        or len(set(uuids)) != len(uuids)
+        or any(not is_stable_resource_id(value) for value in uuids)
+    ):
+        return None
+    targets = []
+    for uuid in uuids:
+        matches = []
+        for kind, model in (
+            ("direct", DirectImageUpload),
+            ("encounter_file", EncounterFile),
+            ("encounter_set_image", EncounterSetImage),
+        ):
+            row = db.execute(select(model).where(model.uuid == uuid)).scalar_one_or_none()
+            if row is not None:
+                matches.append((kind, row.id))
+        if len(matches) != 1:
+            return None
+        kind, row_id = matches[0]
+        target = IMAGE_ADAPTER.resolver(db, TypedResourceRef(kind, row_id))
+        if target is None:
+            return None
+        targets.append(target)
+    scopes = {target.context.scope for target in targets}
+    if len(scopes) != 1:
+        return None
+    scope = next(iter(scopes))
+    return ResourceTarget(
+        tuple(target.value for target in targets),
+        ResourceContextDTO(
+            "image_batch",
+            "sha256:" + hashlib.sha256("\n".join(sorted(uuids)).encode()).hexdigest(),
+            scope,
+            disclosure_class=DisclosureClass.IDENTIFIER_IN_PLACE,
+            resolved=True,
+        ),
+    )
+
+
+IMAGE_BATCH_ADAPTER = ResourceAdapter(
+    "image_batch",
+    resolve_image_batch,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
 )
 ENCOUNTER_FILE_ADAPTER = _polymorphic_adapter(
     "encounter_file", {"image": EncounterFile, "pdf": EncounterFilePDF}
@@ -1932,6 +1985,7 @@ RESOURCE_ADAPTERS = (
     GRADING_REPAIR_TARGET_ADAPTER,
     GRADING_TASK_ADAPTER,
     IMAGE_ADAPTER,
+    IMAGE_BATCH_ADAPTER,
     INFERENCE_RESULT_ADAPTER,
     INFERENCE_TARGET_ADAPTER,
     INTRA_RATER_BATCH_TARGET_ADAPTER,

@@ -152,6 +152,7 @@ media.image.view,image,scoped_role|admin_break_glass|signed_credential,masked,op
 media.metadata.process,image,scoped_role|admin_break_glass,masked,optional
 media.metadata.raw.read,image,scoped_role|admin_break_glass,identifier_in_place,optional
 media.metadata.read,image,scoped_role|admin_break_glass,masked,optional
+media.ocr_pii.batch.read,image_batch,scoped_role|admin_break_glass,identifier_in_place,optional
 media.ocr_pii.process,image,scoped_role|admin_break_glass,identifier_in_place,optional
 media.ocr_pii.read,image,scoped_role|admin_break_glass,identifier_in_place,optional
 media.pdf.view,encounter_file,scoped_role|admin_break_glass|signed_credential,identifier_in_place,optional

@@ -49,6 +49,23 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    **{
+        endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.PUBLIC_VIEW)
+        for endpoint in (
+            "_favicon",
+            "_robots",
+            "_mobile_pwa_no_slash",
+            "_mobile_android_apk_download",
+            "_mobile_android_aab_download",
+            "_mobile_pwa",
+            "sitemap",
+            "homepage",
+            "home.index",
+            "style_guide",
+            "test_rate_limit",
+            "healthz",
+        )
+    },
     # Browser authentication. CAPTCHA generation and validation, reset workflow
     # rules, and password policy remain application concerns. Authz classifies
     # only public entry, exact signed reset credentials, and the current user.

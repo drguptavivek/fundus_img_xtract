@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 404,
+        "authz_v2": 417,
         "legacy_action_literal": 44,
-        "legacy_unmapped": 232,
+        "legacy_unmapped": 219,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -111,6 +111,19 @@ def test_encounter_set_type_api_family_has_exact_configuration_contracts():
         "fundus_api.delete_encounter_set_type_rest",
     ):
         assert ROUTE_POLICIES[endpoint].resolver == "grading_config_record"
+
+
+def test_application_utility_route_family_is_explicitly_public():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source == "app.py"]
+    assert len(family) == 13
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in {row.name for row in family}:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.PUBLIC
+        assert policy.action is Action.PUBLIC_VIEW
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

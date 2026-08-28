@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 15 - encounter-set-type API
+# Gates: Authorization v2 vertical slice 16 - application utility routes
 
-- [x] G1: All 9 encounter-set-type API routes have explicit contracts.
-  CHECK: encounter-set-type inventory family test
-  EVIDENCE: inventory is 404 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 13 application-root route rules have explicit contracts.
+  CHECK: app.py utility route inventory family test
+  EVIDENCE: inventory is 417 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Every existing record read and mutation resolves the persisted type.
-  CHECK: route resolver assertions and grading-config adapter tests
-  EVIDENCE: get, schema export, update, state changes, and both delete forms use the grading-config resolver
+- [x] G2: Every route is explicitly public rather than path-prefix inferred.
+  CHECK: per-endpoint mode and action assertions
+  EVIDENCE: every distinct endpoint uses PUBLIC mode and public.view
 
-- [x] G3: Creation is a closed named system operation.
-  CHECK: system-operation reference registry and route contract
-  EVIDENCE: encounter_set_type_create is the only accepted creation reference for this route
+- [x] G3: Duplicate mobile PWA rules share one reviewed endpoint contract.
+  CHECK: runtime inventory and endpoint-name set
+  EVIDENCE: both /mobile/ URL rules classify through _mobile_pwa
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: schema generation, validation, state transitions, delete blockers, and filename safety remain application-service rules
+  EVIDENCE: file containment, redirects, rate limiting, health checks, sitemap generation, and rendering remain app.py rules
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1117 tests; inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1118 tests; inventory checks pass

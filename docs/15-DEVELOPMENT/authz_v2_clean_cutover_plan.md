@@ -939,6 +939,19 @@ pattern.
   literals, 232 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 16: application utility/public routes
+
+- All thirteen application-root utility rules are explicitly public, including
+  static discovery files, mobile PWA/download entry, homepage aliases, style
+  guide, rate-limit probe, and health endpoint.
+- The two mobile PWA URL rules share one reviewed endpoint contract rather than
+  being inferred from path prefixes.
+- File containment, redirect targets, rate limiting, health probing, sitemap
+  construction, and homepage rendering remain application concerns.
+- The reviewed inventory is now 417 v2 HTTP consumers, 44 legacy action
+  literals, 219 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

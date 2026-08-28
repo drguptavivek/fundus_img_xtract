@@ -25,12 +25,6 @@ def test_remidio_post_processing_dispatches_every_workflow(monkeypatch):
         "_queue_encounter_set_ai_inference",
         lambda result, *, user_id: calls.append(("ai", result, user_id)) or {"wadhwani_tasks_queued": 3},
     )
-    monkeypatch.setattr(
-        service,
-        "_bump_field_cache_for_ingest",
-        lambda result: calls.append(("cache", result, None)),
-    )
-
     queued = service._queue_remidio_api_post_processing(ingest_result, user_id=41)
 
     assert queued == {
@@ -42,7 +36,6 @@ def test_remidio_post_processing_dispatches_every_workflow(monkeypatch):
         ("images", ingest_result, 41),
         ("pdf", ingest_result, 41),
         ("ai", ingest_result, 41),
-        ("cache", ingest_result, None),
     ]
 
 

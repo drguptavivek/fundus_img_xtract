@@ -17,7 +17,6 @@ from services.encounter_set_ai_inference import enqueue_wadhwani_for_task_ids
 from utils.log_sanitize import sanitize_log_value
 
 from . import audit as field_audit
-from . import cache as field_cache
 from .dto import (
     SOURCE_IITK,
     SOURCE_REMIDIO,
@@ -67,10 +66,6 @@ def _ai_workflows(db, project_id: int) -> tuple[str, ...]:
     if project_allows_manual_wadhwani(db, project_id):
         out.append("glaucoma")
     return tuple(out)
-
-
-def _scope_fingerprint(scope) -> str:
-    return field_cache.scope_fingerprint(scope.role_names, scope.lab_unit_ids, scope.hospital_ids)
 
 
 def list_projects(db, *, user) -> list[FieldProjectDTO]:
@@ -157,16 +152,6 @@ def list_daily_encounters(db, *, user, project_id: int, date_value: str) -> list
     except (TypeError, ValueError) as exc:
         raise FieldConflict("date must be an ISO date (YYYY-MM-DD).", code="invalid_date") from exc
 
-    cache_key = field_cache.queue_cache_key(
-        project_id=project_id,
-        date_value=parsed.isoformat(),
-        user_id=user.id,
-        scope_fp=_scope_fingerprint(scope),
-    )
-    cached = field_cache.get_cached(cache_key)
-    if cached is not None:
-        return cached
-
     encounters = (
         _encounter_query(db, project_id=project_id, scope=scope)
         .filter(PatientEncounters.capture_date_dt == parsed)
@@ -197,7 +182,6 @@ def list_daily_encounters(db, *, user, project_id: int, date_value: str) -> list
         )
 
     payload = [row.to_dict() for row in rows]
-    field_cache.set_cached(cache_key, payload, field_cache.QUEUE_TTL_SECONDS)
     field_audit.record(
         db,
         user_id=user.id,
@@ -256,16 +240,6 @@ def _site_identifier(encounter) -> str | None:
 
 def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
     encounter, scope = load_encounter(db, user=user, encounter_uuid=encounter_uuid)
-    cache_key = field_cache.detail_cache_key(
-        encounter_id=encounter.id,
-        project_id=encounter.project_id,
-        user_id=user.id,
-        scope_fp=_scope_fingerprint(scope),
-    )
-    cached = field_cache.get_cached(cache_key)
-    if cached is not None:
-        return cached
-
     source = _source_of(encounter)
     metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
     patient = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
@@ -316,7 +290,6 @@ def get_encounter_detail(db, *, user, encounter_uuid: str) -> dict:
         ),
     )
     payload = detail.to_dict()
-    field_cache.set_cached(cache_key, payload, field_cache.DETAIL_TTL_SECONDS)
     field_audit.record(
         db,
         user_id=user.id,
@@ -352,9 +325,6 @@ def request_inference(db, *, user, encounter_uuid: str, workflows: list[str], re
         else:
             raise FieldConflict(f"Unknown workflow '{workflow}'.", code="unknown_workflow")
 
-    # Flip the client's next poll to the new state immediately rather than
-    # waiting out the cache TTL.
-    field_cache.bump_encounter(encounter.id, project_id)
     post_commit = [
         result.pop("_post_commit")
         for result in results.values()
@@ -494,7 +464,6 @@ def queue_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
     status = adapter.queue_fetch(
         db, project_id=project_id, user=user, scope=scope, remote_addr=remote_addr
     )
-    field_cache.bump_project(project_id)
     logger.info(
         "Field fetch requested project_id=%s source=%s user_id=%s running=%s",
         sanitize_log_value(project_id),
@@ -527,7 +496,6 @@ def retry_fetch(db, *, user, project_id: int, source: str, remote_addr: str | No
     status = adapter.retry_fetch(
         db, project_id=project_id, user=user, scope=scope, remote_addr=remote_addr
     )
-    field_cache.bump_project(project_id)
     field_audit.record(
         db,
         user_id=user.id,
@@ -562,7 +530,6 @@ def refetch_patient(db, *, user, project_id: int, mrn: str, source: str = SOURCE
         mrn=mrn,
         site_custom_identifier=site_custom_identifier,
     )
-    field_cache.bump_project(project_id)
     field_audit.record(
         db,
         user_id=user.id,
@@ -608,7 +575,6 @@ def refresh_encounter_from_source(db, *, user, encounter_uuid: str, remote_addr:
     db.refresh(encounter)
     after = len(encounter.encounter_set_images or [])
 
-    field_cache.bump_encounter(encounter.id, encounter.project_id)
     field_audit.record(
         db,
         user_id=user.id,

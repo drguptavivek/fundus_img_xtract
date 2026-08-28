@@ -6,7 +6,6 @@ import sqlalchemy as sa
 from flask import jsonify, render_template, request
 from flask_login import current_user
 
-from app_cache import cache
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
@@ -69,13 +68,6 @@ _NOT_GRADABLE_LABELS_SQL = (
 _NORMALIZED_NOT_GRADABLE_EXPR_SQL = (
     "lower(trim(regexp_replace(COALESCE(%s, ''), '\\s+', ' ', 'g')))"
 )
-
-_API_CACHE_TIMEOUT_SECONDS = 25 * 60
-
-
-def _api_cache_key(view_name: str) -> str:
-    return f"analytics:hospital-dashboard:{view_name}:u{current_user.id}:{request.query_string.decode('utf-8')}"
-
 
 @bp.route("/hospital-dashboard", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
@@ -170,10 +162,6 @@ def hospital_dashboard_page():
 
 @bp.route("/api/hospital-dashboard/disease-view", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
-@cache.cached(
-    timeout=_API_CACHE_TIMEOUT_SECONDS,
-    key_prefix=lambda: _api_cache_key("disease-view"),
-)
 def hospital_dashboard_disease_view():
     lab_unit_ids = _scoped_lab_unit_ids()
     if not lab_unit_ids:
@@ -261,10 +249,6 @@ def hospital_dashboard_disease_view():
 
 @bp.route("/api/hospital-dashboard/lab-disease-view", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
-@cache.cached(
-    timeout=_API_CACHE_TIMEOUT_SECONDS,
-    key_prefix=lambda: _api_cache_key("lab-disease-view"),
-)
 def hospital_dashboard_lab_disease_view():
     lab_unit_ids = _scoped_lab_unit_ids()
     if not lab_unit_ids:
@@ -363,10 +347,6 @@ def hospital_dashboard_lab_disease_view():
 
 @bp.route("/api/hospital-dashboard/user-view", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
-@cache.cached(
-    timeout=_API_CACHE_TIMEOUT_SECONDS,
-    key_prefix=lambda: _api_cache_key("user-view"),
-)
 def hospital_dashboard_user_view():
     lab_unit_ids = _scoped_lab_unit_ids()
     if not lab_unit_ids:
@@ -428,10 +408,6 @@ def hospital_dashboard_user_view():
 
 @bp.route("/api/hospital-dashboard/roster-view", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
-@cache.cached(
-    timeout=_API_CACHE_TIMEOUT_SECONDS,
-    key_prefix=lambda: _api_cache_key("roster-view"),
-)
 def hospital_dashboard_roster_view():
     lab_unit_ids = _scoped_lab_unit_ids()
     if not lab_unit_ids:
@@ -539,10 +515,6 @@ def hospital_dashboard_roster_view():
 
 @bp.route("/api/hospital-dashboard/encounter-view", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
-@cache.cached(
-    timeout=_API_CACHE_TIMEOUT_SECONDS,
-    key_prefix=lambda: _api_cache_key("encounter-view"),
-)
 def hospital_dashboard_encounter_view():
     lab_unit_ids = _scoped_lab_unit_ids()
     if not lab_unit_ids:

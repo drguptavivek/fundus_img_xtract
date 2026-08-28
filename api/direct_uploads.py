@@ -9,7 +9,7 @@ from db_transaction_manager import get_db_session, transaction_scope
 from . import api_bp
 
 # Import utility functions and models
-from auth.roles import global_uploader_or_project_assignment_required
+from auth.roles import roles_required
 from models import User, LabUnit, Job, JobItem
 from services.uploads.direct import (
     DirectUploadJobError,
@@ -26,7 +26,7 @@ from upload_profiles.service import UploadProfileError
 
 @api_bp.route('/users/<int:user_id>/lab-units', methods=['GET'])
 @login_required
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def get_lab_units(user_id):
     """Get lab units for a user."""
     with get_db_session() as db:
@@ -46,7 +46,7 @@ def get_lab_units(user_id):
 
 @api_bp.route('/lab-units/<int:lab_unit_id>/hospital', methods=['GET'])
 @login_required
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def get_hospital(lab_unit_id):
     """Get hospital for a lab unit."""
     with get_db_session() as db:
@@ -65,7 +65,7 @@ def get_hospital(lab_unit_id):
 
 @api_bp.route('/upload-jobs/<job_token>/status', methods=['GET'])
 @login_required
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with get_db_session() as db:
@@ -76,7 +76,7 @@ def get_upload_status(job_token):
 
 
 @api_bp.route("/direct-uploads/form", methods=["GET"])
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def direct_upload_form():
     """HTMX/JSON form options for browser direct uploads."""
     with get_db_session() as db:
@@ -88,7 +88,7 @@ def direct_upload_form():
 
 
 @api_bp.route("/direct-uploads/workspace", methods=["GET"])
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def direct_upload_workspace():
     """HTMX/JSON workspace for recent direct upload jobs."""
     with get_db_session() as db:
@@ -99,7 +99,7 @@ def direct_upload_workspace():
 
 
 @api_bp.route("/direct-uploads/uploads/web", methods=["POST"])
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def create_direct_upload_web():
     """Session-auth HTMX/JSON endpoint for browser direct uploads."""
     try:
@@ -150,7 +150,7 @@ def create_direct_upload_web():
 
 
 @api_bp.route("/direct-uploads/uploads/<job_token>/status", methods=["GET"])
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 def direct_upload_status(job_token: str):
     with get_db_session() as db:
         job = _scoped_job(db, job_token)

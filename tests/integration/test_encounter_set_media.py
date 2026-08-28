@@ -1,19 +1,27 @@
 import pytest
 import uuid
-from models import PatientEncounters, EncounterSetImage, Project, ProjectInvestigator
-from encounter_sets.models import ProjectEncounterSetPermission
+from data_authorization.models import ProjectRoleGrant
+from models import EncounterSetImage, PatientEncounters, Project, Role
+from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import UserFactory
 from datetime import date, datetime
 from utils.utilsImgServe import _serve_encounter_set_final_image
 
 
 def _grant_media_access(db_session, encounter_set_data, user, **capabilities):
-    row = ProjectEncounterSetPermission(
+    assert capabilities == {"can_browse": True}
+    role = db_session.query(Role).filter_by(name="collaborator").one_or_none()
+    if role is None:
+        role = Role(name="collaborator")
+        db_session.add(role)
+        db_session.flush()
+    row = ProjectRoleGrant(
         project_id=encounter_set_data["project"].id,
         user_id=user.id,
+        role_id=role.id,
+        scope_type="lab_unit",
         lab_unit_id=encounter_set_data["lab_unit"].id,
         active=True,
-        **capabilities,
     )
     db_session.add(row)
     db_session.flush()
@@ -30,6 +38,10 @@ def encounter_set_data(db_session, core_test_data):
     lab_unit = db_session.merge(core_test_data['lab_unit'])
     project = Project(title="Media Collaborator Project", code="MEDIA-COLLAB", active=True)
     db_session.add(project)
+    db_session.flush()
+    db_session.add(
+        ProjectLabUnit(project_id=project.id, lab_unit_id=lab_unit.id, active=True)
+    )
     db_session.flush()
     
     encounter = PatientEncounters(
@@ -131,14 +143,7 @@ def test_access_encounter_set_image_wrong_role(client, auth_client_factory, enco
 
 def test_access_encounter_set_thumbnail_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):
     user = UserFactory.create_by_role(db_session, "collaborator", username="media_project_collaborator")
-    db_session.add(
-        ProjectInvestigator(
-            project_id=encounter_set_data["project"].id,
-            user_id=user.id,
-            role="collaborator",
-            active=True,
-        )
-    )
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     db_session.commit()
     media_dir = tmp_path / "files" / "test_sets"
     media_dir.mkdir(parents=True)
@@ -191,14 +196,7 @@ def test_access_encounter_set_full_image_collaborator_without_project_membership
 
 def test_access_encounter_set_full_image_project_collaborator(auth_client_factory, encounter_set_data, db_session, monkeypatch, tmp_path):
     user = UserFactory.create_by_role(db_session, "collaborator", username="media_full_image_collaborator")
-    db_session.add(
-        ProjectInvestigator(
-            project_id=encounter_set_data["project"].id,
-            user_id=user.id,
-            role="collaborator",
-            active=True,
-        )
-    )
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     db_session.commit()
     media_dir = tmp_path / "files" / "test_sets"
     media_dir.mkdir(parents=True)
@@ -266,12 +264,7 @@ def test_universal_thumbnail_never_serves_stale_original_for_edited_set_image(
     user = UserFactory.create_by_role(
         db_session, "collaborator", username="edited_set_thumbnail_viewer"
     )
-    db_session.add(ProjectInvestigator(
-        project_id=encounter_set_data["project"].id,
-        user_id=user.id,
-        role="collaborator",
-        active=True,
-    ))
+    _grant_media_access(db_session, encounter_set_data, user, can_browse=True)
     image = encounter_set_data["image"]
     image.edited_filename = "edited_test_pos_1.jpg"
     image.thumbnail_filename = "thm_test_pos_1.jpg"

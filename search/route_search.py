@@ -18,7 +18,7 @@ from models import (
     LabUnit,
     Session as DBSession,
 )
-from authz import scope
+from authz.behaviors import clinical_lab_units
 
 @bp.route("/", methods=["GET"])
 @roles_required(
@@ -33,7 +33,7 @@ def search_route() -> str:
     with DBSession() as db:
         # Get allowed lab units via scoping
         lu_query = db.query(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'search.view')
+        lu_query = clinical_lab_units(db, lu_query, current_user)
         allowed_lab_units = [lu.id for lu in lu_query.all()]
     if not allowed_lab_units:
         flash("No lab unit access.", "warning")

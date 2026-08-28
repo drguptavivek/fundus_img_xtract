@@ -168,7 +168,7 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
     monkeypatch.setattr("remidio_api_uploads.wadhwani_inference.get_db_session", fake_session)
     monkeypatch.setattr(
         "remidio_api_uploads.wadhwani_inference.encounter_service.list_manual_projects",
-        lambda db, user, action=None: [{"id": 7, "title": "Vision Centre", "code": "VC"}],
+        lambda db, user, **kwargs: [{"id": 7, "title": "Vision Centre", "code": "VC"}],
     )
     monkeypatch.setattr(
         "remidio_api_uploads.wadhwani_inference.encounter_service.integration_context",

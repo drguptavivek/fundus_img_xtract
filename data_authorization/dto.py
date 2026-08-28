@@ -12,7 +12,6 @@ class ProjectRoleGrantInput:
     user_id: int
     role_name: str
     scope_type: str
-    hospital_id: int | None = None
     lab_unit_id: int | None = None
     active: bool = True
 

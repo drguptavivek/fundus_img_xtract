@@ -1,7 +1,0 @@
-[[actions]]
-name = "search.view"
-domain = "search"
-zone = "web"
-description = "Search scoped tasks, images, and image details."
-resource_type = "search_result"
-requires_resource = false

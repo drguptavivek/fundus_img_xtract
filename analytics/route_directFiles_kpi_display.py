@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Tuple
 from flask import current_app, render_template, request, url_for
 from flask_login import current_user
 from auth.roles import roles_required
-from app_cache import cache
 from db_transaction_manager import get_db_session
 
 from . import bp
@@ -108,10 +107,6 @@ def direct_uploads_kpi() -> str:
     )
 
 
-_CACHE_TIMEOUT = 15 * 60  # 15 minutes
-
-
-@cache.memoize(timeout=_CACHE_TIMEOUT)
 def _get_direct_files_page(
     user_id: int,
     params_key: Tuple[Tuple[str, str], ...],
@@ -120,9 +115,15 @@ def _get_direct_files_page(
     page: int,
     per_page: int,
 ) -> Tuple[str, List[Dict[str, Any]], int]:
-    """Return cached HTML/table data for direct files list for a user and filter set."""
+    """Return currently authorized HTML/table data for one request."""
     with get_db_session() as db:
-        df, _ = get_filtered_direct_image_dataframe(db, params, list(user_lab_unit_ids))
+        df, _ = get_filtered_direct_image_dataframe(
+            db,
+            params,
+            set(user_lab_unit_ids),
+            user_id=user_id,
+            project_role_names={"analytics_viewer"},
+        )
 
     total = len(df)
     start_idx = (page - 1) * per_page

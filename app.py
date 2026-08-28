@@ -187,7 +187,10 @@ def _register_csrf_protection(app: Flask) -> None:
     def csrf_protect():
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
-            if view_func and getattr(view_func, '_token_auth_applied', False):
+            if view_func and (
+                getattr(view_func, '_token_auth_applied', False)
+                or getattr(view_func, '_credential_auth_applied', False)
+            ):
                 return None
         auth_logger = logging.getLogger("auth")
         if not auth_logger.isEnabledFor(logging.DEBUG):
@@ -559,16 +562,47 @@ def _register_auth(app: Flask) -> None:
     login_manager.login_view = "auth.login"
 
 
+PUBLIC_SESSION_PATHS = frozenset(
+    {
+        "/",
+        "/login",
+        "/favicon.ico",
+        "/robots.txt",
+        "/mobile",
+        "/style_guide",
+        "/forgot-password",
+        "/reset-password",
+        "/healthz",
+        "/check-email-status",
+        "/email-sse",
+        "/test-rate-limit",
+        "/refresh-captcha",
+        "/captcha-audio",
+        "/analytics",
+        "/sitemap.xml",
+    }
+)
+PUBLIC_SESSION_PREFIXES = ("/static/", "/help")
+
+
 def _register_login_guard(app: Flask) -> None:
     @app.before_request
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
         path = request.path or "/"
 
+        # Unmatched URLs contain no callable application surface; preserve a
+        # real 404 instead of disguising it as an authentication redirect.
+        if request.endpoint is None:
+            return
+
         # Allow routes that handle their own authentication (e.g. via JWT)
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
-            if view_func and getattr(view_func, '_token_auth_applied', False):
+            if view_func and (
+                getattr(view_func, "_token_auth_applied", False)
+                or getattr(view_func, "_credential_auth_applied", False)
+            ):
                 return
 
         try:
@@ -584,30 +618,7 @@ def _register_login_guard(app: Flask) -> None:
             session.modified = True
             mark_session_ended(prior_session_id)
 
-        if (
-            path == "/"
-            or path == "/login"
-            or path.startswith("/static/")
-            or path == "/favicon.ico"
-            or path == "/robots.txt"
-            or path == "/mobile"
-            or path.startswith("/mobile/")
-            or path == "/style_guide"
-            or path == "/forgot-password"
-            or path == "/reset-password"
-            or path == "/healthz"
-            or path == "/check-email-status"
-            or path == "/email-sse"
-            or path == "/test-rate-limit"
-            or path == "/refresh-captcha"
-            or path == "/captcha-audio"
-            or path.startswith("/help")
-            or path == "/analytics"
-            or path == "/sitemap.xml"
-            or path.startswith("/api/analytics/")
-            or path.startswith("/api/mobile/v1/auth/")
-            or path.startswith("/datasets/download")
-        ):
+        if path in PUBLIC_SESSION_PATHS or path.startswith(PUBLIC_SESSION_PREFIXES):
             return
         if not current_user.is_authenticated:
             prior_session_id = getattr(session, "session_id", None)

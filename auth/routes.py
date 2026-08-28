@@ -20,8 +20,7 @@ from utils.emails import generate_otp
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
-from models import engine, User, Role, LabUnit, LoginAttempt, IpLock, PasswordResetAttempt, Session  # type: ignore
-from app_cache import cache
+from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt, Session  # type: ignore
 from server_side_session import mark_session_ended
 from db_transaction_manager import get_db_session, transaction_scope
 
@@ -43,62 +42,12 @@ LOCKOUT_HOURS = 4
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
-_USER_CACHE_TTL_SECONDS = 300
-
-def _serialize_user_for_cache(user: User) -> dict:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
-        "timezone": user.timezone,
-        "is_active": user.is_active,
-        "is_locked_until": user.is_locked_until,
-        "designation": user.designation,
-        "phone": user.phone,
-        "hospital_id": user.hospital_id,
-        "is_master_admin": getattr(user, "is_master_admin", False),
-        "roles": [role.name for role in (user.roles or [])],
-        "lab_units": [{"id": lu.id, "name": lu.name, "hospital_id": lu.hospital_id} for lu in (user.lab_units or [])],
-    }
-
-
-def _build_user_from_cache(payload: dict) -> User:
-    user = User()
-    user.id = payload.get("id")
-    user.username = payload.get("username")
-    user.email = payload.get("email")
-    user.full_name = payload.get("full_name")
-    user.timezone = payload.get("timezone")
-    user.is_active = payload.get("is_active", True)
-    user.is_locked_until = payload.get("is_locked_until")
-    user.designation = payload.get("designation")
-    user.phone = payload.get("phone")
-    user.hospital_id = payload.get("hospital_id")
-    user.is_master_admin = payload.get("is_master_admin", False)
-    roles = [Role(name=name) for name in payload.get("roles", [])]
-    user.roles = roles
-    
-    # Reconstruct lab units
-    lab_units = []
-    for lu_data in payload.get("lab_units", []):
-        lu = LabUnit(id=lu_data["id"], name=lu_data["name"], hospital_id=lu_data["hospital_id"])
-        lab_units.append(lu)
-    user.lab_units = lab_units
-    
-    return user
-
-
 @login_manager.user_loader
 def load_user(user_id: str):
-    cache_key = f"auth:user:{user_id}"
     try:
-        cached = cache.get(cache_key)
-    except Exception as e:
-        auth_logger.warning("Cache get failed: %s", sanitize_log_value(e))
-        cached = None
-    if cached:
-        return _build_user_from_cache(cached)
+        parsed_user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
 
     # Use shared session from the transaction manager
     from db_transaction_manager import get_db_session
@@ -113,14 +62,8 @@ def load_user(user_id: str):
                 joinedload(User.lab_units),
                 joinedload(User.hospital),
             )
-            .where(User.id == int(user_id))
+            .where(User.id == parsed_user_id, User.is_active.is_(True))
         ).unique().scalar_one_or_none()
-        
-        if user:
-            try:
-                cache.set(cache_key, _serialize_user_for_cache(user), timeout=_USER_CACHE_TTL_SECONDS)
-            except Exception as e:
-                auth_logger.warning("Cache set failed: %s", sanitize_log_value(e))
         if user:
             # Ensure the instance can be used safely outside this session.
             db.expunge(user)

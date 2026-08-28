@@ -12,9 +12,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, select
 
-from authz.predicates import scope_grades
-from authz.resolver import resolve_grants
-from models import DiseaseGrading, Grade, GradingTask, PatientEncounters, Role, User
+from authz import access_context
+from grading.access import scope_inter_rater_grades
+from models import (
+    DiseaseGrading,
+    Grade,
+    GradingTask,
+    PatientEncounters,
+    Role,
+    User,
+    UserDiseaseUnitRole,
+)
 
 
 def _role(db, name):
@@ -66,6 +74,18 @@ def world(db_session, core_test_data):
     disease = db.merge(core_test_data["dr"])
 
     me, peer, stranger = _user(db, "ophthalmologist"), _user(db, "ophthalmologist"), _user(db, "ophthalmologist")
+    for user in (me, peer, stranger):
+        user.lab_units.append(lab)
+        db.add(
+            UserDiseaseUnitRole(
+                user_id=user.id,
+                disease_id=disease.id,
+                lab_unit_id=lab.id,
+                can_grade_resident=True,
+                can_grade_resident2=True,
+                active=True,
+            )
+        )
     # AI grades are recorded against a dedicated model account, not a person.
     ai = _user(db)
     mine_task, other_task = _task(db, lab, disease), _task(db, lab, disease)
@@ -82,8 +102,9 @@ def world(db_session, core_test_data):
 
 
 def _visible(db, user, world):
-    resolved = resolve_grants(db, user)
-    ids = set(db.execute(scope_grades(select(Grade.id), resolved)).scalars())
+    context = access_context(db, user)
+    query = select(Grade.id).join(GradingTask, Grade.task_id == GradingTask.id)
+    ids = set(db.execute(scope_inter_rater_grades(query, context)).scalars())
     return {name for name, g in world["grades"].items() if g.id in ids}
 
 
@@ -125,3 +146,21 @@ def test_the_peer_sees_their_own_tasks_from_their_side(db_session, world):
     visible = _visible(db_session, world["peer"], world)
     assert visible == {"peer_on_my_task", "my_grade", "ai_on_my_task",
                        "peer_on_other_task", "ai_on_other_task"}
+
+
+def test_exact_cross_site_grading_role_is_sufficient_without_generic_lab_membership(db_session, world):
+    world["me"].lab_units.clear()
+    db_session.flush()
+    assert _visible(db_session, world["me"], world) == {
+        "my_grade", "peer_on_my_task", "ai_on_my_task",
+    }
+
+
+def test_admin_role_is_not_a_clinical_visibility_bypass(db_session, world):
+    admin = _user(db_session, "admin")
+    own_task = world["grades"]["my_grade"].task
+    grading = world["grades"]["my_grade"].label
+    world["grades"]["admin_grade"] = _grade(
+        db_session, own_task, grading, grader=admin, slot="resident"
+    )
+    assert _visible(db_session, admin, world) == set()

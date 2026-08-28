@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import get_db_session
 from review.discrepancy_scope import (
     DiscrepancyScopeError,
@@ -16,7 +15,7 @@ from . import api_bp
 
 
 @api_bp.route("/review/filter-options", methods=["GET"])
-@roles_or_project_grant_required("admin", "discrepancy_reviewer", "data_exporter")
+@login_required
 def discrepancy_review_filter_options():
     project_id = request.args.get("project_id", type=int)
     with get_db_session() as db:

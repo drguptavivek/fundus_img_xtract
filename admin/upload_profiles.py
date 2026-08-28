@@ -8,14 +8,9 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from data_authorization.exceptions import ProjectAuthorizationError
-from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, PROJECT_SCOPE
-from data_authorization.policy import (
-    ACTION_MANAGE_ACCESS,
-    ACTION_MANAGE_UPLOADERS,
-    PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES,
-    PROJECT_ASSIGNABLE_ROLE_NAMES,
-    user_can_project_action,
-)
+from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE
+from authz.project_access import can_manage_project_access, can_manage_project_uploaders
+from authz.project_roles import PROJECT_ASSIGNABLE_ROLES, PROJECT_OPERATIONAL_ROLES
 from data_authorization.service import list_project_role_grants
 from db_transaction_manager import transaction_scope
 from grading_allocation import service as grading_allocation_service
@@ -350,11 +345,11 @@ def upload_projects_admin():
 def upload_project_workspace(project_id: int):
     """Render one project management workspace fragment."""
     with transaction_scope() as db:
-        can_manage_access = user_can_project_action(
-            db, user=current_user, project_id=project_id, action=ACTION_MANAGE_ACCESS
+        can_manage_access = can_manage_project_access(
+            db, current_user, project_id=project_id
         )
-        can_manage_uploaders = user_can_project_action(
-            db, user=current_user, project_id=project_id, action=ACTION_MANAGE_UPLOADERS
+        can_manage_uploaders = can_manage_project_uploaders(
+            db, current_user, project_id=project_id
         )
         if not (can_manage_access or can_manage_uploaders):
             return render_template("admin/partials/project_detail_panel.html", selected_project=None), 403
@@ -387,9 +382,11 @@ def upload_project_workspace(project_id: int):
             grants = ()
         context["project_access_rows"] = _group_project_access_rows(grants)
         assignable_roles = (
-            PROJECT_ASSIGNABLE_ROLE_NAMES
+            PROJECT_ASSIGNABLE_ROLES
             if current_user.has_role("admin")
-            else PROJECT_ADMIN_ASSIGNABLE_ROLE_NAMES
+            else PROJECT_OPERATIONAL_ROLES
+            if can_manage_uploaders
+            else {"project_admin"}
         )
         context["project_role_options"] = tuple(sorted(
             db.execute(
@@ -441,8 +438,6 @@ def _group_project_access_rows(grants) -> list[dict]:
         row["grants"].sort(key=lambda grant: grant.role_name.lower())
         if row["scope_type"] == PROJECT_SCOPE:
             row["scope_label"] = "Project-wide"
-        elif row["scope_type"] == HOSPITAL_SCOPE:
-            row["scope_label"] = row["hospital_name"] or "Hospital"
         elif row["scope_type"] == LAB_UNIT_SCOPE:
             names = [name for name in (row["hospital_name"], row["lab_unit_name"]) if name]
             row["scope_label"] = " / ".join(names) or "Lab unit"
@@ -467,11 +462,10 @@ def _manageable_project_ids(db) -> set[int]:
     return {
         project_id
         for project_id in db.execute(select(Project.id).where(Project.active.is_(True))).scalars()
-        if user_can_project_action(
+        if can_manage_project_access(
             db,
-            user=current_user,
+            current_user,
             project_id=project_id,
-            action=ACTION_MANAGE_ACCESS,
         )
     }
 

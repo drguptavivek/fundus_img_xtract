@@ -1,8 +1,11 @@
-from flask import jsonify, request
+from flask import jsonify
 from flask_login import current_user, login_required
-from models import LabUnit, User, Hospital
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from authz.behaviors import clinical_hospitals, clinical_lab_units
+from models import Hospital, LabUnit
 from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.utils import get_db_session
 from . import api_bp
 
@@ -17,24 +20,14 @@ from . import api_bp
     "fileUploader",
 )
 def get_eligible_lab_units():
-    """API endpoint to get eligible lab units for the current user (hospital-aware)."""
-    from utils.hospital_scoping import get_user_lab_units_in_hospital
-    
+    """Return Lab Units visible through the route's clinical scope behaviour."""
     with get_db_session() as db:
-        user_id = current_user.id
-        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
-
-        # Admins get all assigned lab units; local_admin stays hospital-scoped.
-        lab_unit_ids = get_user_lab_units_in_hospital(
-            user_id=user_id,
-            hospital_id=hospital_id,
-            db=db
+        query = clinical_lab_units(
+            db,
+            select(LabUnit).options(selectinload(LabUnit.hospital)),
+            current_user,
         )
-        
-        # Get the lab unit details from the database
-        lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(lab_unit_ids))).all()
-        
-        # Format the results
+        lab_units = db.execute(query.order_by(LabUnit.name)).scalars().all()
         eligible_lab_units = [
             {
                 'id': lab_unit.id,
@@ -46,9 +39,9 @@ def get_eligible_lab_units():
         ]
         
         return jsonify({
-            'user_id': user_id,
-            'hospital_id': current_user.hospital_id if hospital_id is not None else None,
-            'is_master_admin': current_user.is_master_admin,
+            'user_id': current_user.id,
+            'hospital_id': None if current_user.has_role('admin') else current_user.hospital_id,
+            'is_master_admin': current_user.has_role('admin'),
             'eligible_lab_units': eligible_lab_units
         })
     
@@ -64,35 +57,17 @@ def get_eligible_lab_units():
     "fileUploader",
 )
 def get_eligible_lab_units_currentUser():
-    """API endpoint to get eligible lab units for the current user only (hospital-aware)."""
-    from utils.hospital_scoping import get_user_lab_units_in_hospital
-    
+    """Return the current actor's authorized Lab Unit and Hospital choices."""
     with get_db_session() as db:
-        # Always use the current user's ID, regardless of admin status
-        user_id = current_user.id
-        hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
-        
-        # Admins get all assigned lab units; local_admin stays hospital-scoped.
-        lab_unit_ids = get_user_lab_units_in_hospital(
-            user_id=user_id,
-            hospital_id=hospital_id,
-            db=db
+        lab_query = clinical_lab_units(
+            db,
+            select(LabUnit).options(selectinload(LabUnit.hospital)),
+            current_user,
         )
-        
-        # Get the lab unit details from the database
-        lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(lab_unit_ids))).all()
-        
-        # Get hospital details
-        # Master admin sees all hospitals, regular users see only their hospital
-        if current_user.has_role("admin"):
-            hospitals = db.query(Hospital).order_by(Hospital.name).all()
-        else:
-            if current_user.hospital_id:
-                hospitals = db.query(Hospital).filter_by(id=current_user.hospital_id).all()
-            else:
-                hospitals = []
-        
-        # Format the results
+        hospital_query = clinical_hospitals(db, select(Hospital), current_user)
+        lab_units = db.execute(lab_query.order_by(LabUnit.name)).scalars().all()
+        hospitals = db.execute(hospital_query.order_by(Hospital.name)).scalars().all()
+
         eligible_lab_units = [
             {
                 'id': lab_unit.id,
@@ -113,9 +88,9 @@ def get_eligible_lab_units_currentUser():
         ]
         
         return jsonify({
-            'user_id': user_id,
-            'hospital_id': current_user.hospital_id if hospital_id is not None else None,
-            'is_master_admin': current_user.is_master_admin,
+            'user_id': current_user.id,
+            'hospital_id': None if current_user.has_role('admin') else current_user.hospital_id,
+            'is_master_admin': current_user.has_role('admin'),
             'eligible_lab_units': eligible_lab_units,
             'eligible_hospitals': eligible_hospitals
         })

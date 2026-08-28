@@ -1,6 +1,9 @@
+from contextlib import contextmanager
+from types import SimpleNamespace
+
+from authz import RecordScope
 from services.wadhwani_glaucoma_inference import WadhwaniInferenceResult
 from upload_profiles.admin_service import MutationResult
-from data_authorization.policy import ProjectResourceScope
 
 
 def test_wadhwani_inference_api_returns_service_payload(client, login_user, monkeypatch):
@@ -24,13 +27,33 @@ def test_wadhwani_inference_api_returns_service_payload(client, login_user, monk
         ),
     )
     monkeypatch.setattr(
-        "api.ai_models.grading_task_project_scope",
-        lambda _db, task_id: ProjectResourceScope(
-            project_id=None,
-            hospital_id=None,
-            lab_unit_id=None,
+        "api.ai_models.task_record_scope",
+        lambda _context, _task: RecordScope.classical(lab_unit_id=1, hospital_id=1),
+    )
+    monkeypatch.setattr(
+        "api.ai_models.access_context",
+        lambda _db, _user: SimpleNamespace(
+            has_any_global_role=lambda _roles: False,
         ),
     )
+    monkeypatch.setattr(
+        "api.ai_models.admin_scope",
+        lambda _context: SimpleNamespace(allowed=True),
+    )
+    monkeypatch.setattr(
+        "api.ai_models.assigned_lab_scope",
+        lambda *_args: SimpleNamespace(allowed=False),
+    )
+    monkeypatch.setattr(
+        "api.ai_models.hospital_scope",
+        lambda *_args: SimpleNamespace(allowed=False),
+    )
+
+    @contextmanager
+    def fake_transaction():
+        yield SimpleNamespace(get=lambda _model, _task_id: SimpleNamespace(id=_task_id))
+
+    monkeypatch.setattr("api.ai_models.transaction_scope", fake_transaction)
 
     response = client.post("/api/ai-models/wadhwani-glaucoma/tasks/123/infer", json={"force": False})
 

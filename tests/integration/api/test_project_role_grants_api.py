@@ -1,4 +1,5 @@
 from models import Project, Role, User
+from project_configuration.models import ProjectLabUnit
 
 
 def _role(db_session, name: str) -> Role:
@@ -37,6 +38,8 @@ def test_project_role_grant_api_and_workspace_group_roles(
         active=True,
     )
     db_session.add_all([target, project])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id))
     db_session.flush()
 
     with app.test_client(user=admin) as client:
@@ -94,6 +97,8 @@ def test_remove_project_role_grant_api_deactivates_row(
         active=True,
     )
     db_session.add_all([target, project])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id))
     db_session.flush()
 
     with app.test_client(user=admin) as client:

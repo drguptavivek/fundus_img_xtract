@@ -8,7 +8,6 @@ from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app_cache import cache
 
 from . import bp
 from models import AIModel, Camera, Disease, DiseaseGrading, LabUnit
@@ -18,13 +17,12 @@ from utils.final_grade_basis import (
     normalize_final_grade_basis,
     sql_final_grade_expression,
 )
-from authz import scope
+from authz.behaviors import analytics_lab_units
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
 from db_transaction_manager import get_db_session
 
 import json
-import hashlib
 import random
 import re
 import math
@@ -277,71 +275,6 @@ def _build_threshold_range(
     if not thresholds:
         thresholds = [round(min_threshold, 3)]
     return thresholds, None
-
-
-def _build_threshold_cache_key(
-    disease_id: int,
-    ai_model_id: int,
-    reference_source: str,
-    upload_type: Optional[str],
-    camera_id: Optional[int],
-    class_definitions: Dict[str, List[str]],
-    positive_class: Optional[str],
-    lab_units: Sequence[int],
-    thresholds: Sequence[float],
-    sample_size: int,
-) -> str:
-    """Create a deterministic cache key for threshold explorer results."""
-    payload = {
-        "disease_id": disease_id,
-        "ai_model_id": ai_model_id,
-        "reference_source": reference_source,
-        "upload_type": upload_type,
-        "camera_id": camera_id,
-        "class_definitions": class_definitions,
-        "positive_class": positive_class,
-        "lab_units": sorted(set(lab_units)),
-        "thresholds": [round(t, 3) for t in thresholds],
-        "sample_size": sample_size,
-    }
-    serialized = json.dumps(payload, sort_keys=True)
-    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    return f"analytics:threshold-explorer:{digest}"
-
-
-def _build_performance_cache_key(
-    disease_id: int,
-    ai_model_id: int,
-    reference_source: str,
-    final_grade_basis: str,
-    upload_type: Optional[str],
-    camera_id: Optional[int],
-    class_definitions: Dict[str, List[str]],
-    positive_class: Optional[str],
-    threshold: float,
-    bootstrap_samples: int,
-    selected_lab_units: Sequence[int],
-    allowed_lab_units: Sequence[int],
-) -> str:
-    """Create a deterministic cache key for the main model performance analysis."""
-    normalized_classes = {cls: sorted(members) for cls, members in sorted(class_definitions.items())}
-    payload = {
-        "disease_id": disease_id,
-        "ai_model_id": ai_model_id,
-        "reference_source": reference_source,
-        "final_grade_basis": final_grade_basis,
-        "upload_type": upload_type,
-        "camera_id": camera_id,
-        "class_definitions": normalized_classes,
-        "positive_class": positive_class,
-        "threshold": round(threshold, 3),
-        "bootstrap_samples": bootstrap_samples,
-        "selected_lab_units": sorted(set(selected_lab_units)),
-        "allowed_lab_units": sorted(set(allowed_lab_units)),
-    }
-    serialized = json.dumps(payload, sort_keys=True)
-    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-    return f"analytics:model-performance:{digest}"
 
 
 def _apply_threshold_to_cases(
@@ -693,7 +626,7 @@ def model_performance() -> str:
         # Lab unit options respecting hospital access
         lu_query = db.query(LabUnit).order_by(LabUnit.name)
         # Apply hospital scoping for analytics context
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'analytics.encounters.view')
+        lu_query = analytics_lab_units(db, lu_query, current_user)
         lab_units = lu_query.all()
         user_lab_unit_ids = [lu.id for lu in lab_units]
         lab_units_payload = [{"id": lu.id, "name": lu.name} for lu in lab_units]
@@ -710,51 +643,6 @@ def model_performance() -> str:
             class_names = list(class_definitions.keys())
 
             if not error_message:
-                cache_key: Optional[str] = None
-                if not download:
-                    cache_key = _build_performance_cache_key(
-                        disease_id=disease_id,
-                        ai_model_id=ai_model_id,
-                        reference_source=reference_source,
-                        final_grade_basis=final_grade_basis,
-                        upload_type=upload_type,
-                        camera_id=camera_id,
-                        class_definitions=class_definitions,
-                        positive_class=positive_class,
-                        threshold=threshold,
-                        bootstrap_samples=bootstrap_samples,
-                        selected_lab_units=selected_lab_units,
-                        allowed_lab_units=user_lab_unit_ids or [],
-                    )
-                    cached_performance = cache.get(cache_key) if cache_key else None
-                    if cached_performance:
-                        performance = cached_performance
-                        return render_template(
-                            "analytics/model_performance.html",
-                            diseases=diseases_payload,
-                            ai_models=ai_models_payload,
-                            selected_disease_id=disease_id,
-                            selected_model_id=ai_model_id,
-                            selected_disease_name=selected_disease_name,
-                            selected_model_name=selected_model_name,
-                            selected_model_version=selected_model_version,
-                            performance=performance,
-                            error_message=error_message,
-                            labels_for_disease=labels_for_disease or [],
-                            reference_source=reference_source,
-                            final_grade_basis=final_grade_basis,
-                            final_grade_basis_label=final_grade_basis_label(final_grade_basis),
-                            positive_class=positive_class,
-                            threshold=threshold,
-                            bootstrap_samples=bootstrap_samples,
-                            lab_units=lab_units_payload,
-                            selected_lab_units=selected_lab_units,
-                            upload_type=upload_type,
-                            cameras=cameras_payload,
-                            selected_camera_id=camera_id,
-                            roc_points_json=json.dumps(performance.roc_points) if performance and performance.roc_points else "[]",
-                            class_map_json=json.dumps(class_definitions),
-                        )
                 mv_name = get_mv_name_for_disease(db, disease_id)
                 sql_parts = [
                     f"""
@@ -806,7 +694,7 @@ def model_performance() -> str:
                 elif user_lab_unit_ids:
                     sql_parts.append("AND task_lab_unit_id = ANY(:allowed_lab_unit_ids)")
                     params["allowed_lab_unit_ids"] = user_lab_unit_ids
-                elif not current_user.is_master_admin:
+                elif not current_user.has_role("admin"):
                     sql_parts.append("AND 1=0")
 
                 sql_parts.append("ORDER BY task_created_at DESC")
@@ -1109,13 +997,6 @@ def model_performance() -> str:
                         unresolved_excluded_count=unresolved_excluded_count,
                     )
 
-                    if cache_key:
-                        try:
-                            cache.set(cache_key, performance, timeout=60 * 60)
-                        except Exception:
-                            # Fail open; caching should not break response
-                            pass
-
                     if download and analyzed_rows:
                         buf = _render_excel(analyzed_rows)
                         if buf:
@@ -1283,7 +1164,7 @@ def threshold_explorer() -> object:
                 placeholders.append(f":{key}")
             if placeholders:
                 sql_parts.append(f"AND task_lab_unit_id IN ({', '.join(placeholders)})")
-        elif not current_user.is_master_admin:
+        elif not current_user.has_role("admin"):
             # Zero lab units means no reach, not unrestricted reach. The GET
             # route already fails closed here; this one aggregated over every
             # hospital instead.
@@ -1383,22 +1264,6 @@ def threshold_explorer() -> object:
             return jsonify({"error": "No cases available for the selected filters."}), 400
 
         sample_size = len(cases_raw)
-        cache_key = _build_threshold_cache_key(
-            disease_id=disease_id,
-            ai_model_id=ai_model_id,
-            reference_source=reference_source,
-            upload_type=upload_type,
-            camera_id=camera_id,
-            class_definitions=class_definitions,
-            positive_class=positive_class,
-            lab_units=selected_lab_units or [],
-            thresholds=thresholds,
-            sample_size=sample_size,
-        )
-
-        cached = cache.get(cache_key) if cache else None
-        if cached:
-            return jsonify(cached)
 
         results: List[Dict[str, object]] = []
         for thr in thresholds:
@@ -1434,9 +1299,6 @@ def threshold_explorer() -> object:
             "positive_class": positive_class,
             "probabilities_present": probabilities_present,
         }
-
-        if cache:
-            cache.set(cache_key, response_payload, timeout=60 * 60)  # 1 hour
 
         return jsonify(response_payload)
     reference_source = "final"

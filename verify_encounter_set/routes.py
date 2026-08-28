@@ -1,6 +1,6 @@
 from flask import after_this_request, render_template, abort, current_app, flash, make_response, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
-from auth.roles import roles_or_project_grant_required
+from auth.roles import roles_required
 from auth.utils import utcnow
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
@@ -21,14 +21,10 @@ from models import (
     ImageMetadata,
     ImagePiiVerification,
     User,
-    user_lab_units,
 )
 from encounter_sets.models import EncounterSetAttachment
 from encounter_sets.permissions import (
-    CAPABILITY_ROLES,
-    CAPABILITY_VERIFY,
     apply_classical_or_project_permission_scope,
-    is_project_permission_admin,
 )
 from encounter_sets.grading_policy import (
     EncounterSetPackagePolicyDTO,
@@ -58,27 +54,31 @@ from services.project_referral_diseases import (
     list_project_positive_disease_options,
 )
 
+VERIFY_ROLES = frozenset(
+    {
+        "verifier",
+        "local_admin",
+        "data_manager",
+        "fileUploader",
+        "optometrist",
+        "field_optometrist",
+        "field_ophthalmologist",
+    }
+)
+
 
 def _apply_verification_scope(query):
     return apply_classical_or_project_permission_scope(
         query,
         PatientEncounters,
         current_user,
-        CAPABILITY_VERIFY,
+        VERIFY_ROLES,
         classical_operation="upload",
     )
 
 
 def _apply_verification_mutation_scope(query):
-    """Preserve established lab access while adding project-only grants."""
-    if is_project_permission_admin(current_user):
-        return query
-    if current_user.has_role(*CAPABILITY_ROLES[CAPABILITY_VERIFY]):
-        return query.filter(PatientEncounters.lab_unit_id.in_(
-            select(user_lab_units.c.lab_unit_id).where(
-                user_lab_units.c.user_id == current_user.id
-            )
-        ))
+    """Mutations use the same exact classical/project scope as reads."""
     return _apply_verification_scope(query)
 
 
@@ -151,7 +151,6 @@ def validate_s3_config_access(image, current_user, db):
 
 @bp.route("/")
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def index():
     """List encounter sets pending verification."""
     with transaction_scope() as db:
@@ -174,7 +173,6 @@ def index():
 
 @bp.route("/verify/<uuid>")
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def verify_encounter(uuid):
     """View and manage a specific encounter set for verification."""
     with transaction_scope() as db:
@@ -193,7 +191,6 @@ def verify_encounter(uuid):
 
 @bp.route("/verify/<uuid>/panel/<panel>")
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def verify_panel(uuid, panel):
     """Render one EncounterSet verification panel for HTMX loading."""
     if panel not in {"patient", "image", "document", "summary"}:
@@ -232,7 +229,6 @@ def verify_panel(uuid, panel):
 
 @bp.route("/metadata/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def update_metadata(uuid):
     """Persist EncounterSet verification metadata fields allowed by the EncounterSetType."""
     with transaction_scope() as db:
@@ -448,7 +444,6 @@ def update_metadata(uuid):
 
 @bp.route("/mark_reviewed/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_reviewed(uuid):
     """Mark an EncounterSet image as reviewed without implying anonymization."""
     with transaction_scope() as db:
@@ -529,7 +524,7 @@ def _verification_context(db, uuid: str) -> dict:
 
 
 def _can_reopen_verification(db) -> bool:
-    """Mirror reopen_verification's own @roles_or_project_grant_required('admin') gate."""
+    """Mirror reopen_verification's own explicit Admin gate."""
     if current_user.has_role("admin"):
         return True
     from data_authorization.service import user_has_any_project_role
@@ -947,7 +942,6 @@ def _parse_first_float(value) -> float | None:
 
 @bp.route("/update_position", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def update_position():
     """Update the spatial position of an image in an encounter set."""
     data = request.json
@@ -996,7 +990,6 @@ def update_position():
 
 @bp.route("/exclude/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def exclude_encounter_set(uuid):
     """Exclude an EncounterSet from verification and downstream task creation."""
     from auth.utils import utcnow
@@ -1043,7 +1036,7 @@ def exclude_encounter_set(uuid):
 
 @bp.route("/reopen/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin")
+@roles_required("admin")
 def reopen_verification(uuid):
     """Reopen a verified EncounterSet for correction, if no grading has started."""
     from verify_encounter_set.models import EncounterVerificationHistory
@@ -1174,7 +1167,6 @@ def reopen_verification(uuid):
 
 @bp.route("/finalize/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def finalize_verification(uuid):
     """Mark an encounter set as verified and trigger task creation."""
     from auth.utils import utcnow
@@ -1840,20 +1832,6 @@ def _enqueue_madhunetra_after_commit(encounter_id: int, *, user_id: int) -> None
             enqueue_automatic_encounters([encounter_id], user_id=user_id)
         except Exception as exc:  # noqa: BLE001
             current_app.logger.exception("Failed to enqueue EncounterSet MadhuNetrAI inference: %s", exc)
-        # Verification and reopen both change what the field surface reports, so
-        # the cached copy must not outlive the commit.
-        try:
-            from app_cache import init_cache
-            from db_transaction_manager import get_db_session
-            from field_workbench.cache import bump_encounter
-            from models import PatientEncounters as _PatientEncounters
-
-            init_cache()
-            with get_db_session() as db:
-                encounter = db.get(_PatientEncounters, encounter_id)
-                bump_encounter(encounter_id, encounter.project_id if encounter else None)
-        except Exception as exc:  # noqa: BLE001
-            current_app.logger.warning("Field cache invalidation failed after verification: %s", exc)
         return response
 
 
@@ -2180,7 +2158,6 @@ def _get_or_create_package_task(
 
 @bp.route("/edit/<uuid>", methods=["GET"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def edit_image(uuid):
     """Edit an encounter set image (crop/mask PII)."""
     from models import GradingTask
@@ -2234,7 +2211,6 @@ def edit_image(uuid):
 
 @bp.route("/save_edit/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def save_edit(uuid):
     """Save edited image data (crop/mask coordinates applied)."""
     from pathlib import Path
@@ -2374,7 +2350,6 @@ def save_edit(uuid):
 
 @bp.route("/mark_anonymized/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_anonymized(uuid):
     """Mark an image as anonymized (PII masked)."""
 
@@ -2415,7 +2390,6 @@ def mark_anonymized(uuid):
 
 @bp.route("/mark_all_anonymized/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_all_anonymized(uuid):
     """Mark all images in an encounter set as anonymized."""
     with transaction_scope() as db:
@@ -2451,7 +2425,6 @@ def mark_all_anonymized(uuid):
 
 @bp.route("/restore_original/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def restore_original(uuid):
     """Restore the original image (remove edited version)."""
     from pathlib import Path
@@ -2546,7 +2519,6 @@ def restore_original(uuid):
 
 @bp.route("/mark_not_gradable/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def mark_not_gradable(uuid):
     """Mark an image as not gradable with a reason."""
     data = request.json
@@ -2577,7 +2549,6 @@ def mark_not_gradable(uuid):
 
 @bp.route("/undo_not_gradable/<uuid>", methods=["POST"])
 @login_required
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
 def undo_not_gradable(uuid):
     """Undo the not gradable status for an image."""
     with transaction_scope() as db:

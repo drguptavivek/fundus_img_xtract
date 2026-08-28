@@ -12,7 +12,6 @@ from grading.dashboard_service import grader_eligibility_dto, grading_history_pa
 from grading.workbench.service import list_active_sessions
 from models import PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from grading.queue_cards import (
-    QUEUE_CARD_CACHE_TTL_SECONDS,
     disease_queue_card,
     gradable_disease_cards,
     project_encounter_set_cards,
@@ -170,7 +169,6 @@ def index():
         "grading/index.html",
         is_resident=is_resident,
         is_resident2=is_resident2,
-        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
         refresh=False,
         oob=False,
         user_eligibility=user_eligibility,
@@ -189,7 +187,7 @@ def disease_queue_fragment(disease_id: int):
     disease delays only its own card instead of the whole page. Mirrors
     ``GET /api/grading/me/queues/<disease_id>`` from the same service call.
 
-    ``?refresh=1`` bypasses the cached count and re-stores a fresh one.
+    ``?refresh=1`` is retained for the existing HTMX refresh contract.
     """
     refresh = request.args.get("refresh") == "1"
     with transaction_scope() as db:
@@ -231,7 +229,6 @@ def disease_queues_fragment():
         "grading/_disease_queues.html",
         queue_cards=queue_cards,
         refresh=refresh,
-        cache_ttl_seconds=QUEUE_CARD_CACHE_TTL_SECONDS,
     )
 
 

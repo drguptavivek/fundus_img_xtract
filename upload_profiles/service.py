@@ -24,6 +24,7 @@ from upload_profiles.models import (
     UploadProfileKind,
 )
 from project_configuration.models import ProjectLabUnit
+from upload_profiles.access import is_uploader_qualified
 
 UPLOAD_KIND_DIRECT_IMAGE = "direct_image"
 UPLOAD_KIND_PREGRADED = "pregraded"
@@ -173,6 +174,8 @@ def get_user_lab_unit_ids(user_id: int) -> set[int]:
 
 def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfileDTO]:
     """Return active upload profiles assigned to a user as detached-safe DTOs."""
+    if not is_uploader_qualified(db, user_id=user_id):
+        return []
     statement = (
         select(ProjectUploadProfileAssignment)
         .join(ProjectUploadProfile, ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id)

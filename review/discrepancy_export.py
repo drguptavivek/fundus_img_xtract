@@ -11,8 +11,10 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from auth.utils import utcnow
+from authz import access_context, role_scoped_rows
 from job_store import db_set_item_state, db_set_job_status
 from models import (
     BASE_DIR,
@@ -25,7 +27,12 @@ from models import (
     PatientEncounters,
     DirectImageUpload,
     DIRECT_UPLOAD_DIR,
+    CuratedDataset,
+    CuratedDatasetItem,
+    DatasetShare,
+    User,
 )
+from tasks.access import task_columns
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
 from utils.discrepancy_filters import build_discrepancy_filter_query
@@ -41,6 +48,7 @@ EXPORT_DIR = BASE_DIR / "files" / "exports"
 MAX_ROWS_PER_ZIP = 200
 MAX_BYTES_PER_ZIP = 200 * 1024 * 1024  # 200 MB
 EXPORT_RETENTION_HOURS = 24
+ARTIFACT_SCOPE_FILENAME = "authorized_task_ids.json"
 
 
 @dataclass
@@ -129,6 +137,14 @@ def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_con
     db_set_item_state(job_token, "discrepancy_export", "processing")
 
     try:
+        actor_id = user_context.get("user_id") if user_context else None
+        if not actor_id or filters.get("project_capability_user_id") != actor_id:
+            raise PermissionError("Export actor facts are missing or inconsistent")
+        with get_db_session() as db:
+            actor = db.get(User, int(actor_id))
+            if actor is None or not actor.is_active:
+                raise PermissionError("Export actor is inactive or missing")
+            filters = reauthorize_discrepancy_filters(db, actor, filters)
         _cleanup_old_exports()
         rows = _fetch_filtered_rows(filters)
         if not rows:
@@ -138,6 +154,13 @@ def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_con
 
         export_dir = EXPORT_DIR / job_token
         export_dir.mkdir(parents=True, exist_ok=True)
+        (export_dir / "filters.json").write_text(
+            json.dumps(filters, ensure_ascii=True), encoding="utf-8"
+        )
+        (export_dir / ARTIFACT_SCOPE_FILENAME).write_text(
+            json.dumps({"task_ids": sorted({row.task_id for row in rows})}),
+            encoding="utf-8",
+        )
 
         graded_rows = _build_task_payload(
             rows,
@@ -171,6 +194,69 @@ def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_con
         db_set_item_state(job_token, "discrepancy_export", "error", str(exc))
 
 
+def reauthorize_discrepancy_filters(
+    db, actor: User, requested_filters: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Replace queued scope claims with the actor's current persisted scope."""
+    from sqlalchemy import select
+
+    from authz.behaviors import role_lab_units
+    from models import LabUnit
+
+    query = role_lab_units(
+        db,
+        select(LabUnit),
+        actor,
+        lab_roles={"data_exporter", "data_manager"},
+        hospital_roles={"data_manager"},
+        project_roles={"data_exporter"},
+        allow_admin=True,
+    )
+    current_lab_ids = {
+        lab.id for lab in db.execute(query).scalars().unique().all()
+    }
+    requested_lab_ids = {
+        int(lab_id)
+        for lab_id in requested_filters.get("allowed_lab_units", ())
+        if lab_id is not None
+    }
+    allowed_lab_ids = requested_lab_ids & current_lab_ids
+    if not allowed_lab_ids:
+        raise PermissionError("Current export scope is empty")
+
+    refreshed = dict(requested_filters)
+    refreshed["allowed_lab_units"] = sorted(allowed_lab_ids)
+    refreshed["project_capability_user_id"] = actor.id
+    refreshed["project_capability_role_names"] = ["data_exporter"]
+    refreshed["allow_classical_capability"] = actor.has_role(
+        "data_exporter", "data_manager"
+    )
+    if not refreshed["allow_classical_capability"] and not actor.has_role("admin"):
+        # Project grants remain usable through the SQL predicate below, but a
+        # queued Boolean can never preserve classical authority.
+        refreshed["allow_classical_capability"] = False
+    return refreshed
+
+
+def reauthorize_discrepancy_artifact(
+    db,
+    actor: User,
+    requested_filters: Dict[str, Any],
+    artifact_task_ids: Sequence[int],
+) -> bool:
+    """Require every persisted artifact task to remain in the actor's exact scope."""
+    expected = {int(task_id) for task_id in artifact_task_ids if task_id}
+    if not expected:
+        return False
+    refreshed = reauthorize_discrepancy_filters(db, actor, requested_filters)
+    probe_filters = dict(refreshed)
+    probe_filters["task_ids"] = sorted(expected)
+    probe_filters["randomize_selection"] = False
+    probe_filters.pop("random_seed", None)
+    currently_authorized = {row.task_id for row in _fetch_filtered_rows(probe_filters)}
+    return currently_authorized == expected
+
+
 def run_dataset_export_job(
     job_token: str,
     dataset_id: int,
@@ -183,7 +269,14 @@ def run_dataset_export_job(
 
     try:
         _cleanup_old_exports()
-        rows = _fetch_rows_by_task_ids(task_ids, metadata.get("disease_id"))
+        authorized_task_ids = _authorized_dataset_task_ids(
+            dataset_id=dataset_id,
+            metadata=metadata,
+        )
+        rows = _fetch_rows_by_task_ids(
+            authorized_task_ids,
+            metadata.get("disease_id"),
+        )
         if not rows:
             db_set_job_status(job_token, "error", error="No tasks to export")
             db_set_item_state(job_token, "dataset_export", "error", "No tasks to export")
@@ -211,6 +304,70 @@ def run_dataset_export_job(
     except Exception as exc:
         db_set_job_status(job_token, "error", error=str(exc))
         db_set_item_state(job_token, "dataset_export", "error", str(exc))
+
+
+def _authorized_dataset_task_ids(
+    *,
+    dataset_id: int,
+    metadata: Dict[str, Any],
+) -> list[int]:
+    """Re-read the dataset and its exact authority inside the worker."""
+
+    with get_db_session() as db:
+        dataset = db.execute(
+            select(CuratedDataset).where(
+                CuratedDataset.id == dataset_id,
+                CuratedDataset.is_active.is_(True),
+                CuratedDataset.is_finalized.is_(True),
+            )
+        ).scalar_one_or_none()
+        if dataset is None:
+            raise PermissionError("Dataset is missing, inactive, or not finalized")
+
+        canonical_ids = list(
+            db.execute(
+                select(CuratedDatasetItem.task_id).where(
+                    CuratedDatasetItem.dataset_id == dataset_id,
+                    CuratedDatasetItem.include_in_export.is_(True),
+                )
+            ).scalars()
+        )
+        if not canonical_ids:
+            return []
+
+        share_id = metadata.get("share_id")
+        if share_id is not None:
+            share = db.get(DatasetShare, int(share_id))
+            if (
+                share is None
+                or share.dataset_id != dataset_id
+                or not share.is_active
+                or share.expires_at <= utcnow()
+                or share.terms_accepted_at is None
+            ):
+                raise PermissionError("Dataset share credential is no longer valid")
+            return canonical_ids
+
+        actor_id = metadata.get("user_id")
+        if actor_id is None:
+            raise PermissionError("Dataset export actor is required")
+        actor = db.get(User, int(actor_id))
+        if actor is None or not actor.is_active:
+            raise PermissionError("Dataset export actor is inactive or missing")
+
+        query = role_scoped_rows(
+            db.query(GradingTask.id).filter(GradingTask.id.in_(canonical_ids)),
+            access_context(db, actor),
+            task_columns(GradingTask),
+            lab_roles={"local_admin", "data_manager", "data_exporter", "dataset_creator"},
+            hospital_roles={"local_admin", "data_manager"},
+            project_roles={"data_exporter", "dataset_creator"},
+            allow_admin=True,
+        )
+        authorized_ids = {row[0] for row in query.all()}
+        if authorized_ids != set(canonical_ids):
+            raise PermissionError("Dataset contains tasks outside the actor's current scope")
+        return canonical_ids
 
 
 def _run_export_job(app, job_token: str, filters: Dict[str, Any], user_context: Dict[str, Any]) -> None:

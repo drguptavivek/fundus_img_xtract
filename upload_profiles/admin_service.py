@@ -9,11 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from authz.cache import schedule_authorization_invalidation
-from data_authorization.policy import ACTION_MANAGE_UPLOADERS, user_can_project_action
+from authz.project_access import can_manage_project_uploaders
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from encounter_sets.models import ProjectEncounterSetPermission
 from models import Disease, LabUnit, LinkedDiseaseGrading, Project, ProjectInvestigator, User
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -181,24 +179,6 @@ def _require_system_admin(db, manager_user_id: int) -> MutationResult | None:
     return None
 
 
-def _profile_authorization_scope(db, profile_id: int) -> tuple[set[int], set[int]]:
-    project_ids = set(db.execute(
-        select(ProjectUploadProfile.project_id).where(
-            ProjectUploadProfile.upload_profile_id == profile_id
-        )
-    ).scalars())
-    user_ids = set(db.execute(
-        select(ProjectUploadProfileAssignment.user_id)
-        .join(
-            ProjectUploadProfile,
-            ProjectUploadProfile.id
-            == ProjectUploadProfileAssignment.project_upload_profile_id,
-        )
-        .where(ProjectUploadProfile.upload_profile_id == profile_id)
-    ).scalars())
-    return project_ids, user_ids
-
-
 def create_project(manager_user_id: int, project_input: ProjectCreateInput) -> MutationResult:
     if not project_input.title or not project_input.code:
         return MutationResult(False, "Project title and code are required.", 400)
@@ -289,7 +269,6 @@ def enable_project_profile(manager_user_id: int, profile_input: ProjectProfileIn
             db.add(mapping)
         try:
             db.flush()
-            schedule_authorization_invalidation(db, project_ids={project.id})
             return MutationResult(True, "Upload profile enabled for project.", payload={"project_upload_profile_id": mapping.id})
         except IntegrityError:
             db.rollback()
@@ -305,7 +284,6 @@ def set_project_profile_active(manager_user_id: int, project_upload_profile_id: 
         if not mapping:
             return MutationResult(False, "Project upload profile mapping not found.", 404)
         mapping.active = active
-        schedule_authorization_invalidation(db, project_ids={mapping.project_id})
         return MutationResult(
             True,
             "Upload profile enabled for project." if active else "Upload profile disabled for project.",
@@ -324,11 +302,10 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
         manager = db.get(User, manager_user_id)
         if manager is None:
             return MutationResult(False, "Project manager was not found.", 403)
-        if not user_can_project_action(
+        if not can_manage_project_uploaders(
             db,
-            user=manager,
+            manager,
             project_id=project_profile.project_id,
-            action=ACTION_MANAGE_UPLOADERS,
         ):
             return MutationResult(False, "You cannot manage uploaders for this project.", 403)
         if project_profile.profile and project_profile.profile.automated_remidio_populated:
@@ -368,30 +345,9 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
                     active=True,
                 )
                 db.add(assignment)
-            permission = db.execute(
-                select(ProjectEncounterSetPermission).where(
-                    ProjectEncounterSetPermission.project_id == project_profile.project_id,
-                    ProjectEncounterSetPermission.user_id == assignment_input.user_id,
-                    ProjectEncounterSetPermission.lab_unit_id == lab_unit_id,
-                )
-            ).scalar_one_or_none()
-            if permission is None:
-                permission = ProjectEncounterSetPermission(
-                    project_id=project_profile.project_id,
-                    user_id=assignment_input.user_id,
-                    lab_unit_id=lab_unit_id,
-                )
-                db.add(permission)
-            permission.can_upload = True
-            permission.active = True
             last_assignment = assignment
         try:
             db.flush()
-            schedule_authorization_invalidation(
-                db,
-                user_ids={assignment_input.user_id},
-                project_ids={project_profile.project_id},
-            )
             return MutationResult(
                 True,
                 "User assigned to project upload profile.",
@@ -413,11 +369,10 @@ def remove_project_profile_assignment(manager_user_id: int, assignment_input: Pr
         manager = db.get(User, manager_user_id)
         if manager is None or project_profile is None:
             return MutationResult(False, "Project upload profile assignment not found.", 404)
-        can_manage = user_can_project_action(
+        can_manage = can_manage_project_uploaders(
             db,
-            user=manager,
+            manager,
             project_id=project_profile.project_id,
-            action=ACTION_MANAGE_UPLOADERS,
         )
         configured_lab_ids = configured_project_lab_unit_ids(
             db, project_id=project_profile.project_id
@@ -425,45 +380,6 @@ def remove_project_profile_assignment(manager_user_id: int, assignment_input: Pr
         if not can_manage or assignment.lab_unit_id not in configured_lab_ids:
             return MutationResult(False, "Project upload profile assignment not found in your project scope.", 404)
         assignment.active = False
-        remaining = db.execute(
-            select(ProjectUploadProfileAssignment.id)
-            .join(
-                ProjectUploadProfile,
-                ProjectUploadProfileAssignment.project_upload_profile_id == ProjectUploadProfile.id,
-            )
-            .where(
-                ProjectUploadProfile.project_id == project_profile.project_id,
-                ProjectUploadProfileAssignment.user_id == assignment.user_id,
-                ProjectUploadProfileAssignment.lab_unit_id == assignment.lab_unit_id,
-                ProjectUploadProfileAssignment.id != assignment.id,
-                ProjectUploadProfileAssignment.active.is_(True),
-            )
-            .limit(1)
-        ).scalar_one_or_none()
-        if remaining is None:
-            permission = db.execute(
-                select(ProjectEncounterSetPermission).where(
-                    ProjectEncounterSetPermission.project_id == project_profile.project_id,
-                    ProjectEncounterSetPermission.user_id == assignment.user_id,
-                    ProjectEncounterSetPermission.lab_unit_id == assignment.lab_unit_id,
-                )
-            ).scalar_one_or_none()
-            if permission:
-                permission.can_upload = False
-                permission.active = any((
-                    permission.can_browse,
-                    permission.can_verify,
-                    permission.can_review_discrepancies,
-                    permission.can_export_data,
-                    permission.can_view_analytics,
-                    permission.can_create_datasets,
-                    permission.can_adjudicate_regrades,
-                ))
-        schedule_authorization_invalidation(
-            db,
-            user_ids={assignment.user_id},
-            project_ids={project_profile.project_id},
-        )
         return MutationResult(True, "User removed from project upload profile.", payload={"assignment_id": assignment.id})
 
 
@@ -497,10 +413,6 @@ def update_profile(manager_user_id: int, profile_id: int, profile_input: UploadP
             validation_error = _apply_profile_input(db, profile, profile_input)
             if validation_error:
                 return MutationResult(False, validation_error, 400)
-            project_ids, user_ids = _profile_authorization_scope(db, profile.id)
-            schedule_authorization_invalidation(
-                db, user_ids=user_ids, project_ids=project_ids
-            )
             return MutationResult(True, "Upload profile updated.", payload={"profile_id": profile.id})
         except IntegrityError:
             db.rollback()
@@ -607,10 +519,6 @@ def set_profile_active(manager_user_id: int, profile_id: int, active: bool) -> M
         if not profile:
             return MutationResult(False, "Upload profile not found.", 404)
         profile.active = active
-        project_ids, user_ids = _profile_authorization_scope(db, profile.id)
-        schedule_authorization_invalidation(
-            db, user_ids=user_ids, project_ids=project_ids
-        )
         return MutationResult(True, "Upload profile activated." if active else "Upload profile deactivated.", payload={"profile_id": profile.id})
 
 

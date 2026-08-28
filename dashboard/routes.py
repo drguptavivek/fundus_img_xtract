@@ -4,64 +4,30 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from db_transaction_manager import get_db_session
 from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport, Grade, GradingTask, DiseaseGrading
-from authz import ResourceRef, authorize, resolve_grants
+from authz.behaviors import clinical_hospitals, clinical_lab_units
 import pandas as pd
 import io
 from pathlib import Path
 
 
-# These routes previously carried no authorization at all. The application-wide
-# guard establishes authentication only, so any active account could read and
-# export image and facility data for every hospital. Both halves are needed: the
-# action decides whether the dashboard may be opened, the scope decides what it
-# may contain.
-ACTION_DASHBOARD_VIEW = "dashboard.view"
-
-
 def _dashboard_scope() -> tuple[set[int], set[int]]:
-    """Resolve the lab units and hospitals this caller may see on the dashboard.
-
-    The engine decides per lab unit rather than once for the page, because
-    dashboard.view is a classically scoped action: its grants carry a lab unit,
-    and a grant only matches a resource that names the same one. Asking without
-    a resource can never match, so the scope is exactly the set of lab units the
-    engine allows, and admin/hospital/lab grants each fall out of it naturally.
-
-    Returns ``(lab_unit_ids, hospital_ids)``. Fails closed: a caller the engine
-    allows nowhere gets 403 rather than an unfiltered view. Every query in this
-    module must be constrained by the returned sets before it renders or
-    exports anything.
-    """
+    """Resolve dashboard Lab Units and hospitals through the clinical behaviour."""
     if not getattr(current_user, "is_authenticated", False):
         # The app-wide guard normally handles this, but the scope must fail
         # closed on its own rather than depending on an upstream check.
         abort(401)
 
     with get_db_session() as db:
-        resolved = resolve_grants(db, current_user)
-        lab_unit_ids: set[int] = set()
-        hospital_ids: set[int] = set()
-        for lab_unit_id, hospital_id in db.execute(
-            select(LabUnit.id, LabUnit.hospital_id)
-        ).all():
-            allowed = authorize(
-                resolved.actor,
-                ACTION_DASHBOARD_VIEW,
-                ResourceRef(
-                    type="lab_unit",
-                    id=lab_unit_id,
-                    attributes={
-                        "lab_unit_id": lab_unit_id,
-                        "hospital_id": hospital_id,
-                        "project_id": None,
-                    },
-                ),
-                grants=resolved.grants,
-            ).allowed
-            if allowed:
-                lab_unit_ids.add(lab_unit_id)
-                if hospital_id is not None:
-                    hospital_ids.add(hospital_id)
+        lab_unit_ids = set(
+            db.execute(
+                clinical_lab_units(db, select(LabUnit.id), current_user)
+            ).scalars()
+        )
+        hospital_ids = set(
+            db.execute(
+                clinical_hospitals(db, select(Hospital.id), current_user)
+            ).scalars()
+        )
 
         if not lab_unit_ids:
             # An empty scope means "no access", never "no filter".

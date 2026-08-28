@@ -6,13 +6,23 @@ import logging
 
 from db_transaction_manager import transaction_scope
 from encounter_sets.permissions import (
-    CAPABILITY_VERIFY,
     apply_classical_or_project_permission_scope,
 )
 from models import PatientEncounters
 
 
 audit_logger = logging.getLogger("security.audit")
+VERIFY_ROLES = frozenset(
+    {
+        "verifier",
+        "local_admin",
+        "data_manager",
+        "fileUploader",
+        "optometrist",
+        "field_optometrist",
+        "field_ophthalmologist",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -35,7 +45,7 @@ def update_monocular_status(*, encounter_uuid: str, is_monocular: bool, user) ->
             query,
             PatientEncounters,
             user,
-            CAPABILITY_VERIFY,
+            VERIFY_ROLES,
             classical_operation="upload",
         )
         encounter = query.first()

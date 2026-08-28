@@ -24,7 +24,8 @@ from auth.utils import utcnow
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
-from authz import scope
+from authz.behaviors import upload_lab_units, upload_rows
+from services.uploads.access import upload_columns
 from utils.rate_limiter import rate_limit
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
@@ -187,7 +188,9 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                q = scope(db_session, q, DirectImageUpload, current_user, 'upload.direct.view')
+                q = upload_rows(
+                    db_session, q, current_user, upload_columns(DirectImageUpload)
+                )
 
                 if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
@@ -207,7 +210,11 @@ def dashboard():
                     
                     # Validate new lab unit - check if it's within user's scope
                     lu_check = db_session.execute(
-                        scope(db_session, select(LabUnit).where(LabUnit.id == new_lab_unit_id_int), LabUnit, current_user, 'upload.direct.view')
+                        upload_lab_units(
+                            db_session,
+                            select(LabUnit).where(LabUnit.id == new_lab_unit_id_int),
+                            current_user,
+                        )
                     ).scalar_one_or_none()
                     if not lu_check:
                         flash("You cannot assign uploads to that lab unit.", "danger")
@@ -447,7 +454,9 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                q = scope(db_session, q, DirectImageUpload, current_user, 'upload.direct.view')
+                q = upload_rows(
+                    db_session, q, current_user, upload_columns(DirectImageUpload)
+                )
 
                 if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
@@ -693,7 +702,9 @@ def dashboard():
             page = 1
 
         q = select(DirectImageUpload)
-        q = scope(db_session, q, DirectImageUpload, current_user, 'upload.direct.view')
+        q = upload_rows(
+            db_session, q, current_user, upload_columns(DirectImageUpload)
+        )
         
         # Date filters
         if f_date_from:
@@ -817,7 +828,9 @@ def dashboard():
         # Full lists for filters - use scoped query to determine what user can see
         # Build a scoped query to get all accessible lab units and hospitals
         scoped_lab_units_q = select(LabUnit)
-        scoped_lab_units_q = scope(db_session, scoped_lab_units_q, LabUnit, current_user, 'upload.direct.view')
+        scoped_lab_units_q = upload_lab_units(
+            db_session, scoped_lab_units_q, current_user
+        )
         all_lab_units = db_session.execute(scoped_lab_units_q.order_by(LabUnit.name)).scalars().all()
         
         # Get hospitals from accessible lab units

@@ -15,8 +15,6 @@ from typing import NoReturn
 from flask import abort, redirect, request
 from flask_login import current_user, login_required
 
-from authz.cache import get_hmac_validation, set_hmac_validation, token_digest
-from authz.telemetry import record_authorization_decision
 from db_transaction_manager import transaction_scope
 from media.authorization import (
     IMAGE_SOURCE_TYPES,
@@ -126,44 +124,14 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
             _reject_signed_media(403, "Invalid or expired media token")
         if resource.hospital_id is None:
             _reject_signed_media(403, "Invalid or expired media token")
-        digest = token_digest(token)
-        valid = get_hmac_validation(
-            token_hash=digest,
-            media_uuid=uuid_str,
-            hospital_id=resource.hospital_id,
-            expires=expires_int,
+        valid = validate_media_token(
+            uuid_str, token, expires_int, resource.hospital_id
         )
-        if not valid:
-            valid = validate_media_token(
-                uuid_str, token, expires_int, resource.hospital_id
-            )
-            if valid:
-                set_hmac_validation(
-                    token_hash=digest,
-                    media_uuid=uuid_str,
-                    hospital_id=resource.hospital_id,
-                    expires=expires_int,
-                )
         if not valid:
             _reject_signed_media(403, "Invalid or expired media token")
 
-        action = (
-            "media.pdf.view"
-            if resource.source_type == MediaSourceType.ENCOUNTER_FILE_PDF
-            else "media.thumbnail.view"
-            if variant == "thumbnail"
-            else "media.image.view"
-        )
         try:
-            authorize_signed_media_source(resource=resource, action=action)
-            if current_user.is_authenticated:
-                authorize_media_source(
-                    db,
-                    user=current_user,
-                    media_uuid=uuid_str,
-                    action=action,
-                    expected_sources=expected_sources,
-                )
+            authorize_signed_media_source(resource=resource)
         except (MediaAccessDenied, MediaResolutionError):
             abort(404)
 
@@ -226,12 +194,7 @@ def _serve_authorized_hmac(uuid_str: str, *, variant: str, expected_sources):
 
 
 def _reject_signed_media(status_code: int, description: str) -> NoReturn:
-    """Emit resource-blind credential telemetry, then stop signed delivery."""
-    record_authorization_decision(
-        action="media.signed.validate",
-        allowed=False,
-        actor_id=getattr(current_user, "id", None),
-    )
+    """Stop signed delivery without revealing whether the resource exists."""
     abort(status_code, description=description)
 
 

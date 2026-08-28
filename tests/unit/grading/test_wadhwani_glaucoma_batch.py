@@ -48,10 +48,9 @@ def test_wadhwani_batch_page_renders_for_admin(client, login_user, db_session):
     assert b"Maximum 100 tasks" in response.data
     assert b"Project-based Inference" in response.data
 
+    # Global administration does not imply project clinical authority.
     project_response = client.get("/uploads/encountersets/wadhwani_inference")
-
-    assert project_response.status_code == 200
-    assert b"Image-based Inference" in project_response.data
+    assert project_response.status_code == 403
 
 
 def test_wadhwani_job_pages_poll_every_five_seconds(client, login_user):
@@ -64,8 +63,8 @@ def test_wadhwani_job_pages_poll_every_five_seconds(client, login_user):
 
     assert image_job.status_code == 200
     assert b'hx-trigger="load, every 5s"' in image_job.data
-    assert project_job.status_code == 200
-    assert b'hx-trigger="load, every 5s"' in project_job.data
+    # Project jobs require an existing job plus current project authority.
+    assert project_job.status_code == 404
 
 
 def test_wadhwani_batch_submit_creates_job_and_enqueues_task(client, login_user, db_session, monkeypatch):

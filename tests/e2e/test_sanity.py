@@ -1,4 +1,8 @@
-from playwright.sync_api import Page, expect
+import pytest
+
+playwright = pytest.importorskip("playwright.sync_api")
+Page = playwright.Page
+expect = playwright.expect
 
 def test_home_page_loads(page: Page, base_url: str):
     """

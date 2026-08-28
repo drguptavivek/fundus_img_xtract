@@ -28,7 +28,8 @@ from models import (
     DirectImageUpload,
     UserDiseaseUnitRole
 )
-from authz import scope
+from authz.behaviors import clinical_rows
+from tasks.access import task_columns
 from utils.log_sanitize import escape_like
 
 
@@ -74,7 +75,7 @@ def get_task_summary(
     )
     
     # Apply scoping based on user's lab units or admin override
-    query = scope(db_session, query, Task, current_user, 'tasks.view')
+    query = clinical_rows(db_session, query, current_user, task_columns(Task))
     
     # Apply optional filters
     if status_filter:
@@ -159,7 +160,9 @@ def get_task_detail(db_session, task_id: int, mask_pii_override: bool = False) -
     from sqlalchemy.orm import joinedload
     from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
     # Apply scoping to ensure task belongs to user's hospital/lab units
-    query = scope(db_session, db_session.query(Task), Task, current_user, 'tasks.view')
+    query = clinical_rows(
+        db_session, db_session.query(Task), current_user, task_columns(Task)
+    )
     task = query.filter(Task.id == task_id).options(
         joinedload(Task.consensus),  # Load consensus information
         joinedload(Task.grades)
@@ -325,7 +328,7 @@ def get_tasks_by_status(
     query = db_session.query(Task).join(LabUnit).join(Disease).outerjoin(Image, Task.encounter_file_id == Image.id).outerjoin(DirectImageUpload, Task.direct_image_upload_id == DirectImageUpload.id)
     
     # Apply scoping based on user's lab units or admin override
-    query = scope(db_session, query, Task, current_user, 'tasks.view')
+    query = clinical_rows(db_session, query, current_user, task_columns(Task))
     
     # Apply status filter (state in the case of GradingTask)
     query = query.filter(Task.state == status)
@@ -377,7 +380,7 @@ def get_task_stats(db_session, lab_unit_ids: Optional[List[int]] = None) -> Dict
     query = db_session.query(Task)
     
     # Apply scoping based on user's lab units or admin override
-    query = scope(db_session, query, Task, current_user, 'tasks.view')
+    query = clinical_rows(db_session, query, current_user, task_columns(Task))
     
     # Count all tasks
     total_tasks = query.count()
@@ -455,7 +458,7 @@ def get_tasks_for_user(
     )
     
     # Apply scoping based on current user's lab units or admin override
-    query = scope(db_session, query, Task, current_user, 'tasks.view')
+    query = clinical_rows(db_session, query, current_user, task_columns(Task))
     
     # Apply optional status filter
     if status_filter:

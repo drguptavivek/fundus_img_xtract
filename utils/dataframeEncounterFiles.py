@@ -14,7 +14,8 @@ from models import (
     LabUnit, Hospital, User, GradingTask, Grade, Consensus, Job, JobItem
 )
 from db_transaction_manager import get_db_session
-from authz import scope
+from authz.behaviors import analytics_rows
+from services.uploads.access import encounter_columns
 
 
 def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
@@ -54,7 +55,7 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
     # fact about that lab's throughput. Callers returning rows or an export
     # pass the matching .rows action, which is project-gated.
     if user:
-        query = scope(db, query, PatientEncounters, user, action)
+        query = analytics_rows(db, query, user, encounter_columns(PatientEncounters))
         
     query = query.options(
         joinedload(PatientEncounters.zip_file),

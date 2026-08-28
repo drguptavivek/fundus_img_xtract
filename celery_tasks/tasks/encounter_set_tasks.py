@@ -246,26 +246,6 @@ def process_encounter_set_attachment_pdf_ocr_task(
                 exc_info=True,
             )
 
-        # OCR completing changes what the field detail shows, so drop the cached
-        # copy that still reports the report as pending.
-        try:
-            from app_cache import init_cache
-            from field_workbench.cache import bump_encounter
-            from models import PatientEncounters as _PatientEncounters
-
-            init_cache()
-            encounter = session.get(_PatientEncounters, record.patient_encounter_id)
-            bump_encounter(
-                record.patient_encounter_id,
-                encounter.project_id if encounter else None,
-            )
-        except Exception as exc:  # noqa: BLE001 - cache state must not fail OCR
-            logger.warning(
-                "Field cache invalidation failed after OCR id=%s error=%s",
-                sanitize_log_value(attachment_id),
-                sanitize_log_value(exc),
-            )
-
         logger.info(
             "EncounterSet attachment PDF OCR complete id=%s filename=%s user=%s status=%s",
             sanitize_log_value(attachment_id),

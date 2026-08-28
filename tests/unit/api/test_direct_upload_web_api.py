@@ -6,7 +6,6 @@ from itertools import count
 import pytest
 from PIL import Image
 
-from encounter_sets.models import ProjectEncounterSetPermission
 from models import Area, Camera, Hospital, Job, JobItem, LabUnit, Project
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
@@ -190,15 +189,6 @@ def direct_upload_web_data(db_session, core_test_data):
             project_upload_profile_id=project_profile.id,
             user_id=uploader.id,
             lab_unit_id=lab.id,
-            active=True,
-        )
-    )
-    db_session.add(
-        ProjectEncounterSetPermission(
-            project_id=project.id,
-            user_id=uploader.id,
-            lab_unit_id=lab.id,
-            can_upload=True,
             active=True,
         )
     )

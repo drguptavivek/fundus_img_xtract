@@ -75,19 +75,16 @@ def _get_user_hospitals() -> list[int]:
     return []
 
 
-def _is_master_admin() -> bool:
+def _is_system_admin() -> bool:
     """
-    Check if current user is master admin.
+    Check whether the current user has the explicit Admin role.
 
-    Master admin is reported for UI metadata only.
+    The legacy template field name is retained as UI metadata only.
     """
     if not current_user or not current_user.is_authenticated:
         return False
 
-    if hasattr(current_user, 'roles'):
-        return "master_admin" in current_user.roles
-
-    return False
+    return current_user.has_role("admin")
 
 
 # ============================================================================
@@ -117,7 +114,7 @@ def s3_configs_list():
         "admin/s3_configs.html",
         configs_by_hospital={},  # Empty, data loaded via JS
         user_hospitals=hospitals_list,
-        is_master_admin=_is_master_admin()
+        is_master_admin=_is_system_admin()
     )
 
 
@@ -128,7 +125,7 @@ def s3_config_create():
     """
     with get_db_session() as db:
         user_hospitals = _get_user_hospitals()
-        is_master = _is_master_admin()
+        is_master = _is_system_admin()
 
         if request.method == "POST":
             # Get form data
@@ -322,7 +319,7 @@ def s3_config_edit(s3_config_id: int):
             flash("You don't have permission to access this configuration.", "danger")
             return redirect(url_for("admin.s3_configs_list"))
 
-        is_master = _is_master_admin()
+        is_master = _is_system_admin()
 
         if request.method == "POST":
             # Get form data
@@ -629,7 +626,7 @@ def s3_configs_api_list():
     """
     with get_db_session() as db:
         user_hospitals = _get_user_hospitals()
-        is_master = _is_master_admin()
+        is_master = _is_system_admin()
 
         # Query configs based on hospital access
         if is_master and len(user_hospitals) > 10:

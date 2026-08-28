@@ -15,7 +15,6 @@ from sqlalchemy.orm import joinedload
 from auth.roles import roles_required
 from auth.security import validate_email
 from auth.utils import utcnow
-from app_cache import cache
 from job_store import db_create_job
 from models import (
     AIModel,
@@ -37,7 +36,8 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from utils.final_grade_basis import final_grade_basis_label, normalize_final_grade_basis
-from authz import scope
+from authz.behaviors import dataset_lab_units, dataset_rows
+from tasks.access import task_columns
 from utils.dataset_share import generate_share_otp, generate_share_token, hash_share_otp, hash_share_token
 from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
 from . import bp
@@ -133,16 +133,13 @@ def _filters_with_allowed(filters: Dict[str, Any], allowed_lab_units: Iterable[i
     project-wide grant, so authority over one lab of a project does not
     extend to the project's data as a whole.
 
-    This mirrors the ``dataset.curation.*`` policies in ``authz.policies``;
+    This mirrors the named dataset row-scope behaviour;
     the curation screen reads a materialized view through raw SQL, so the
     same rule is expressed here rather than through the ORM predicate.
     """
     merged = dict(filters)
     merged["allowed_lab_units"] = list(allowed_lab_units)
-    is_admin = current_user.has_role("admin") or current_user.is_master_admin
-    # Legacy per-lab capability rows never conferred curation at project
-    # scope; the project role grant is now the only route in.
-    merged["project_capability_columns"] = []
+    is_admin = current_user.has_role("admin")
     merged["project_capability_role_names"] = [] if is_admin else ["dataset_creator"]
     merged["project_capability_require_project_scope"] = True
     merged["allow_classical_capability"] = True
@@ -165,7 +162,7 @@ def _fetch_options(db: Session, user: Any) -> Tuple[List[Disease], List[LabUnit]
     
     lab_units_query = db.query(LabUnit)
     # Apply hospital scoping for dataset creation options
-    lab_units_query = scope(db, lab_units_query, LabUnit, user, 'dataset.curation.view')
+    lab_units_query = dataset_lab_units(db, lab_units_query, user)
     
     lab_units = (
         lab_units_query
@@ -324,9 +321,6 @@ def _build_screen_page_rows(
     return screen_rows
 
 
-_SCREEN_CACHE_TIMEOUT = 10 * 60  # 10 minutes
-
-
 def _apply_pii_filter(query, pii_filter: str):
     if pii_filter != "detected":
         return query
@@ -414,8 +408,7 @@ def _count_dataset_items_by_export_state(
     return int(total or 0)
 
 
-@cache.memoize(timeout=_SCREEN_CACHE_TIMEOUT)
-def _get_dataset_screen_page_cached(
+def _get_dataset_screen_page(
     dataset_id: int,
     disease_id: int,
     final_grade_basis: str,
@@ -425,7 +418,7 @@ def _get_dataset_screen_page_cached(
     pii_filter: str,
     color_filter: str,
 ) -> list[dict]:
-    """Return paginated screen rows cached in Redis."""
+    """Return a live, authorized page of dataset screen rows."""
     if screen_sort == "added_desc":
         order_by = CuratedDatasetItem.selected_at.desc()
     elif screen_sort == "added_asc":
@@ -452,12 +445,6 @@ def _get_dataset_screen_page_cached(
         query = _apply_color_filter(query, color_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
     return _build_screen_page_rows(db, items, disease_id, final_grade_basis, offset)
-
-
-def _clear_dataset_screen_cache() -> None:
-    cache.delete_memoized(_get_dataset_screen_page_cached)
-
-
 def _ai_summary(row: ExportTaskRow) -> str:
     """Return concise AI info: grade, probability, model, review statuses/comments."""
     grade = None
@@ -506,7 +493,7 @@ def dataset_curation():
         diseases, lab_units, grade_options, ai_models = _fetch_options(db, current_user)
         allowed_lab_units = [lu.id for lu in lab_units]
         
-        if not allowed_lab_units and not current_user.is_master_admin:
+        if not allowed_lab_units and not current_user.has_role("admin"):
             flash("No lab units are available for dataset curation.", "error")
             return redirect(url_for("dashboard.hospital_dashboard"))
 
@@ -562,7 +549,7 @@ def dataset_curation():
         # every hospital's dataset names, purposes and uuids -- and the uuids
         # are what those routes take as input.
         def _dataset_visible(ds) -> bool:
-            if current_user.is_master_admin:
+            if current_user.has_role("admin"):
                 return True
             if ds.created_by_user_id == current_user.id:
                 return True
@@ -644,7 +631,7 @@ def dataset_detail(dataset_uuid: str):
     """Manual screening page for a curated dataset."""
     with get_db_session() as db:
         # Get allowed lab units via scoped query
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
         dataset = (
@@ -706,7 +693,7 @@ def dataset_detail(dataset_uuid: str):
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
 
-        screen_rows = _get_dataset_screen_page_cached(
+        screen_rows = _get_dataset_screen_page(
             dataset.id,
             dataset.disease_id,
             normalize_final_grade_basis(filters.get("final_grade_basis")),
@@ -729,9 +716,11 @@ def dataset_detail(dataset_uuid: str):
                 # The task id is attacker-controllable. Without these two
                 # checks any task in any hospital could be added to a dataset
                 # and then read out through the export.
-                task = scope(
-                    db, db.query(GradingTask).filter(GradingTask.id == task_id),
-                    GradingTask, current_user, 'dataset.curation.view',
+                task = dataset_rows(
+                    db,
+                    db.query(GradingTask).filter(GradingTask.id == task_id),
+                    current_user,
+                    task_columns(GradingTask),
                 ).first()
                 if not task or task.disease_id != dataset.disease_id:
                     abort(404)
@@ -759,7 +748,6 @@ def dataset_detail(dataset_uuid: str):
                         )
                     )
                 db.commit()
-                _clear_dataset_screen_cache()
                 decided_task_ids.add(task_id)
                 flash("Decision saved.", "success")
                 return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
@@ -783,7 +771,9 @@ def dataset_detail(dataset_uuid: str):
                     .filter(GradingTask.id == selected_task_id)
                     .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
                 )
-                task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
+                task_query = dataset_rows(
+                    db, task_query, current_user, task_columns(GradingTask)
+                )
                 selected_task = task_query.first()
                 if selected_task:
                     selected_image = selected_task.encounter_file or selected_task.direct_image
@@ -840,12 +830,12 @@ def dataset_detail(dataset_uuid: str):
         )
         total_downloads = int(total_downloads or 0)
         now = datetime.now(timezone.utc)
-        can_finalize = ("dataset_creator" in user_roles or "admin" in user_roles or current_user.is_master_admin) and not dataset.is_finalized
+        can_finalize = ("dataset_creator" in user_roles or "admin" in user_roles) and not dataset.is_finalized
         can_unfinalize = False
         override_required = False
         within_window = False
         is_creator = False
-        is_admin = "admin" in user_roles or current_user.is_master_admin
+        is_admin = "admin" in user_roles
         if dataset.is_finalized and dataset.finalized_at:
             within_window = (now - dataset.finalized_at) <= timedelta(minutes=30)
             is_creator = dataset.finalized_by_user_id == current_user.id
@@ -914,11 +904,11 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = {lu.id for lu in lab_units_query.all()}
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.has_role("admin"):
             return ("Forbidden", 403)
 
         query = (
@@ -933,7 +923,7 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = scope(db, query, GradingTask, current_user, 'dataset.curation.view')
+        query = dataset_rows(db, query, current_user, task_columns(GradingTask))
         task = query.first()
         if not task:
             return ("Not found", 404)
@@ -1046,11 +1036,11 @@ def dataset_screen_gallery(dataset_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             return ("Forbidden", 403)
 
         total = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
@@ -1127,18 +1117,18 @@ def dataset_screen_list(dataset_uuid: str):
         if not dataset:
             abort(404)
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             return ("Forbidden", 403)
 
         total_screen = _count_dataset_items(db, dataset.id, pii_filter, color_filter)
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
 
-        screen_rows = _get_dataset_screen_page_cached(
+        screen_rows = _get_dataset_screen_page(
             dataset.id,
             dataset.disease_id,
             normalize_final_grade_basis(stored_filters.get("final_grade_basis")),
@@ -1188,7 +1178,7 @@ def dataset_toggle_item(dataset_uuid: str):
         # do. The scoped task lookup below also has to precede the mutation:
         # get_db_session commits on a normal exit, so the 404 early-return
         # used to persist the flip it was rejecting.
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
@@ -1203,7 +1193,7 @@ def dataset_toggle_item(dataset_uuid: str):
             .filter(GradingTask.id == task_id)
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        task_query = scope(db, task_query, GradingTask, current_user, 'dataset.curation.view')
+        task_query = dataset_rows(db, task_query, current_user, task_columns(GradingTask))
         task = task_query.first()
         if not task:
             return ("Not found", 404)
@@ -1284,8 +1274,6 @@ def dataset_toggle_item(dataset_uuid: str):
             "selected_at": item.selected_at,
             "selection_method": item.selection_method,
         }
-        _clear_dataset_screen_cache()
-
         if (request.headers.get("HX-Target") or "").startswith("datasetScreenThumb-"):
             page_value = request.form.get("page")
             try:
@@ -1351,11 +1339,11 @@ def dataset_add_more(dataset_uuid: str):
             flash("Dataset is finalized and cannot be edited.", "warning")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have access to the lab units for this dataset.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
@@ -1387,7 +1375,6 @@ def dataset_add_more(dataset_uuid: str):
             )
         )
         flash("Added one more task to the dataset.", "success")
-        _clear_dataset_screen_cache()
         if request.headers.get("HX-Request") == "true":
             screen_sort = request.form.get("sort") or "task_asc"
             if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
@@ -1472,10 +1459,10 @@ def dataset_export(dataset_uuid: str):
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         # Get allowed lab units via scoped query
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
-        if not allowed_lab_units and not current_user.is_master_admin:
+        if not allowed_lab_units and not current_user.has_role("admin"):
             flash("You are not allowed to export datasets.", "error")
             return redirect(url_for("analytics.dataset_curation"))
             
@@ -1484,7 +1471,7 @@ def dataset_export(dataset_uuid: str):
         # Holding dataset_creator is not itself authority over another
         # hospital's dataset; the role exemption that used to sit here let any
         # dataset_creator export any dataset uuid.
-        if not current_user.is_master_admin:
+        if not current_user.has_role("admin"):
             if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
                 flash("You do not have access to the lab units for this dataset.", "error")
                 return redirect(url_for("analytics.dataset_curation"))
@@ -1502,9 +1489,12 @@ def dataset_export(dataset_uuid: str):
         task_ids = [item.task_id for item in items]
         if task_ids:
             task_ids = [
-                tid for (tid,) in scope(
-                    db, db.query(GradingTask.id).filter(GradingTask.id.in_(task_ids)),
-                    GradingTask, current_user, 'dataset.curation.view',
+                tid
+                for (tid,) in dataset_rows(
+                    db,
+                    db.query(GradingTask.id).filter(GradingTask.id.in_(task_ids)),
+                    current_user,
+                    task_columns(GradingTask),
                 ).all()
             ]
         if not task_ids:
@@ -1567,11 +1557,11 @@ def dataset_share_create(dataset_uuid: str):
             flash("Finalize the dataset before sharing.", "warning")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to share this dataset.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
@@ -1737,11 +1727,11 @@ def dataset_finalize(dataset_uuid: str):
             flash("Dataset is already finalized.", "info")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to finalize this dataset.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
@@ -1776,18 +1766,18 @@ def dataset_unfinalize(dataset_uuid: str):
             flash("Dataset is not finalized.", "info")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to unfinalize this dataset.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         now = datetime.now(timezone.utc)
         within_window = bool(dataset.finalized_at and (now - dataset.finalized_at) <= timedelta(minutes=30))
         is_creator = dataset.finalized_by_user_id == current_user.id
-        is_admin = current_user.has_role("admin") or current_user.is_master_admin
+        is_admin = current_user.has_role("admin")
         if not ((within_window and is_creator) or is_admin):
             flash("Unfinalize window expired. Contact an admin.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
@@ -1826,10 +1816,10 @@ def dataset_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "dataset_export").first()
         if not job:
             abort(404)
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
-        if job.lab_unit_id is None and job.uploader_user_id != current_user.id and not current_user.is_master_admin:
+        if job.lab_unit_id is None and job.uploader_user_id != current_user.id and not current_user.has_role("admin"):
             abort(404)
         if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
             abort(404)
@@ -1863,13 +1853,13 @@ def dataset_delete(dataset_uuid: str):
             abort(404)
 
         # Access control: user must have access to the dataset's lab units
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
 
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
 
-        if not current_user.is_master_admin:
+        if not current_user.has_role("admin"):
             if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
                 flash("You do not have permission to delete this dataset.", "error")
                 return redirect(url_for("analytics.dataset_curation"))

@@ -5,9 +5,12 @@ Test script to verify NaT handling fix in KPI endpoints
 
 import sys
 import os
+import pytest
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from tests.test_auth_helpers import login_as_test_admin, make_authenticated_request
+from tests.integration.auth.test_auth_helpers import login_as_test_admin, make_authenticated_request
+
+pytestmark = pytest.mark.skip(reason="manual live-server regression script")
 
 def test_nat_fix():
     """Test that NaT values are handled properly in KPI endpoints"""

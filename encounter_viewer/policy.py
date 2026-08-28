@@ -4,36 +4,44 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from data_authorization.service import project_role_names_for_scope
-from encounter_sets.permissions import (
-    CAPABILITY_ANALYTICS_VIEW,
-    CAPABILITY_DATASET_CREATION,
-    CAPABILITY_DATA_EXPORT,
-    CAPABILITY_DISCREPANCY_REVIEW,
-    CAPABILITY_REGRADE_ADJUDICATION,
-    CAPABILITY_VERIFY,
-    apply_project_permission_scope,
-    is_project_permission_admin,
-    legacy_project_capabilities_for_scope,
-    user_is_legacy_project_collaborator,
+from authz import (
+    AuthorizationDenied,
+    access_context,
+    admin_scope,
+    assigned_lab_scope,
+    hospital_scope,
+    project_scope,
+    require_any,
 )
 from models import PatientEncounters
-from authz import scope
+from services.uploads.access import encounter_record_scope
 
 
-RESULT_CAPABILITIES = frozenset({
-    CAPABILITY_ANALYTICS_VIEW,
-    CAPABILITY_DISCREPANCY_REVIEW,
-    CAPABILITY_DATA_EXPORT,
-    CAPABILITY_DATASET_CREATION,
-    CAPABILITY_REGRADE_ADJUDICATION,
-})
 VERIFY_ROLE_NAMES = frozenset({
     "verifier",
     "admin",
     "local_admin",
     "data_manager",
     "fileUploader",
+})
+
+ACCESS_ROLE_NAMES = frozenset({
+    "local_admin",
+    "data_manager",
+    "fileUploader",
+    "ophthalmologist",
+    "optometrist",
+    "verifier",
+})
+
+PROJECT_ACCESS_ROLE_NAMES = frozenset({
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
+    "verifier",
+    "field_optometrist",
+    "field_ophthalmologist",
 })
 
 RESULT_ROLE_NAMES = frozenset({
@@ -49,64 +57,36 @@ RESULT_ROLE_NAMES = frozenset({
 
 
 def can_access_encounter(db: Session, *, user, encounter: PatientEncounters) -> bool:
-    if encounter.project_id is None:
-        query = db.query(PatientEncounters.id).filter(PatientEncounters.id == encounter.id)
-        # Clinical-result authorization is decided separately below.  This is
-        # only the classical hospital/lab media scope, so it must not invoke
-        # the analytics capability filter used for project EncounterSets.
-        return apply_scoping(query, PatientEncounters, user, "viewer").first() is not None
-    if is_project_permission_admin(user):
-        return True
-    hospital_id = encounter.lab_unit.hospital_id if encounter.lab_unit else None
-    roles = project_role_names_for_scope(
-        db,
-        user_id=user.id,
-        project_id=encounter.project_id,
-        hospital_id=hospital_id,
-        lab_unit_id=encounter.lab_unit_id,
-    )
-    capabilities = legacy_project_capabilities_for_scope(
-        db,
-        user_id=user.id,
-        project_id=encounter.project_id,
-        lab_unit_id=encounter.lab_unit_id,
-    ) if encounter.lab_unit_id else frozenset()
-    return bool(
-        roles
-        or capabilities
-        or user_is_legacy_project_collaborator(
-            db, user_id=user.id, project_id=encounter.project_id
+    context = access_context(db, user)
+    try:
+        record = encounter_record_scope(context, encounter)
+        require_any(
+            admin_scope(context),
+            assigned_lab_scope(context, ACCESS_ROLE_NAMES, record),
+            hospital_scope(context, ACCESS_ROLE_NAMES, record),
+            project_scope(context, PROJECT_ACCESS_ROLE_NAMES, record),
         )
-    )
+        return True
+    except AuthorizationDenied:
+        return False
 
 
 def can_view_results(db: Session, *, user, encounter: PatientEncounters | None, project_id: int | None,
                      hospital_id: int | None, lab_unit_id: int | None) -> bool:
-    if is_project_permission_admin(user):
+    if encounter is None:
+        return False
+    context = access_context(db, user)
+    try:
+        record = encounter_record_scope(context, encounter)
+        require_any(
+            admin_scope(context),
+            assigned_lab_scope(context, RESULT_ROLE_NAMES, record),
+            hospital_scope(context, RESULT_ROLE_NAMES, record),
+            project_scope(context, RESULT_ROLE_NAMES, record),
+        )
         return True
-    if project_id is None:
-        if not user.has_role(*RESULT_ROLE_NAMES):
-            return False
-        if encounter is None:
-            return True
-        query = db.query(PatientEncounters.id).filter(PatientEncounters.id == encounter.id)
-        return apply_scoping(query, PatientEncounters, user, "viewer").first() is not None
-    roles = project_role_names_for_scope(
-        db,
-        user_id=user.id,
-        project_id=project_id,
-        hospital_id=hospital_id,
-        lab_unit_id=lab_unit_id,
-    )
-    if roles & RESULT_ROLE_NAMES:
-        return True
-    capabilities = legacy_project_capabilities_for_scope(
-        db,
-        user_id=user.id,
-        project_id=project_id,
-        lab_unit_id=lab_unit_id,
-    ) if lab_unit_id else frozenset()
-    return bool(capabilities & RESULT_CAPABILITIES)
+    except AuthorizationDenied:
+        return False
 
 
 def can_verify_encounter(db: Session, *, user, encounter: PatientEncounters) -> bool:
@@ -120,17 +100,15 @@ def can_verify_encounter(db: Session, *, user, encounter: PatientEncounters) -> 
     """
     if not encounter.is_set_based:
         return False
-    if encounter.project_id is None:
-        query = db.query(PatientEncounters.id).filter(PatientEncounters.id == encounter.id)
-        return scope(
-            db, query, PatientEncounters, user, "verification.encounter_set.update"
-        ).first() is not None
-    if is_project_permission_admin(user):
+    context = access_context(db, user)
+    try:
+        record = encounter_record_scope(context, encounter)
+        require_any(
+            admin_scope(context),
+            assigned_lab_scope(context, VERIFY_ROLE_NAMES, record),
+            hospital_scope(context, VERIFY_ROLE_NAMES, record),
+            project_scope(context, VERIFY_ROLE_NAMES, record),
+        )
         return True
-    roles = project_role_names_for_scope(
-        db,
-        user_id=user.id,
-        project_id=encounter.project_id,
-        lab_unit_id=encounter.lab_unit_id,
-    )
-    return bool(roles & VERIFY_ROLE_NAMES)
+    except AuthorizationDenied:
+        return False

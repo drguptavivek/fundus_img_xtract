@@ -10,7 +10,6 @@ import pytest
 
 from models import Role, User
 from services.wai_api_statistics import (
-    ACTION_WAI_ROWS,
     WaiStatsFilters,
     get_encounter_results,
     get_image_results,
@@ -51,15 +50,16 @@ def test_row_endpoints_execute_for_a_scoped_user(db_session, core_test_data):
 
 def test_admin_is_unrestricted(db_session):
     admin = UserFactory.create_admin(db_session, username=f"wai_admin_{uuid4().hex[:6]}")
-    assert _scope_clause(db_session, admin, {}, ACTION_WAI_ROWS) == []
+    joined = " ".join(_scope_clause(db_session, admin))
+    assert "WHERE true" in joined
 
 
 def test_a_user_with_no_lab_units_gets_a_restricting_clause(db_session, core_test_data):
-    """The old rule fell back to `hospital_id = X`, i.e. the whole hospital."""
-    user = _user(db_session, "data_manager", hospital=db_session.merge(core_test_data["hospital"]))
-    clauses = _scope_clause(db_session, user, {}, ACTION_WAI_ROWS)
+    """A Lab-scoped role with no Lab assignments receives no data."""
+    user = _user(db_session, "analytics_viewer", hospital=db_session.merge(core_test_data["hospital"]))
+    clauses = _scope_clause(db_session, user)
     assert clauses, "a non-admin must always be restricted"
     joined = " ".join(clauses)
     assert "inference_row_key IN" in joined
-    # The specific regression: no bare hospital-wide escape hatch.
-    assert "hospital_id = :scope_hospital_id" not in joined
+    assert "WHERE true" not in joined
+    assert "project_role_grants.user_id" in joined

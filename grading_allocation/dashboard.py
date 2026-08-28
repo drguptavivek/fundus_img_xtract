@@ -15,8 +15,8 @@ from grading_allocation.dtos import (
     ProjectEncounterSetQueueDTO,
     TargetIdentity,
 )
-from grading_allocation.eligibility import eligible_enforced_project_task_contexts
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.eligibility import eligible_project_task_contexts
+from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.targets import derive_project_targets
 from models import (
     EncounterSetGradingPackage,
@@ -43,7 +43,7 @@ def list_project_encounter_set_queues(
     user_id: int,
     reconcile: bool = True,
 ) -> tuple[ProjectEncounterSetQueueDTO, ...]:
-    """Return pending enforced-project EncounterSet packages eligible for a user.
+    """Return pending project EncounterSet packages eligible for a user.
 
     ``reconcile=False`` skips the package-state reconciliation below. Only pass
     it when the caller has already reconciled in this request - the read is
@@ -52,11 +52,13 @@ def list_project_encounter_set_queues(
     """
     project_rows = db.execute(
         select(Project)
-        .join(
-            ProjectGradingAllocationPolicy,
-            ProjectGradingAllocationPolicy.project_id == Project.id,
+        .join(ProjectGraderAllocation, ProjectGraderAllocation.project_id == Project.id)
+        .where(
+            Project.active.is_(True),
+            ProjectGraderAllocation.user_id == user_id,
+            ProjectGraderAllocation.active.is_(True),
         )
-        .where(ProjectGradingAllocationPolicy.enforcement_enabled.is_(True))
+        .distinct()
         .order_by(Project.title, Project.id)
     ).scalars().all()
     projects = {project.id: project for project in project_rows}
@@ -126,11 +128,11 @@ def list_project_encounter_set_queues(
         )
         if slot is not None and (task.id, slot) not in tracker_keys:
             task_slots.append((task, slot))
-    eligible_contexts = eligible_enforced_project_task_contexts(
+    eligible_contexts = eligible_project_task_contexts(
         db,
         user_id=user_id,
         task_slots=task_slots,
-        enforced_project_ids=set(projects),
+        project_ids=set(projects),
     )
     grouped: dict[tuple[int, object], dict[str, object]] = {}
 
@@ -234,25 +236,21 @@ def _frozen_package_target(
     )
 
 
-def exclude_enforced_project_encounter_set_tasks(query, task_entity=GradingTask):
-    """Exclude tasks owned by EncounterSet packages in enforced projects."""
-    enforced_task = (
+def exclude_project_encounter_set_tasks(query, task_entity=GradingTask):
+    """Exclude project-owned EncounterSet tasks from classical queues."""
+    project_task = (
         select(EncounterSetGradingPackage.id)
         .join(
             PatientEncounters,
             PatientEncounters.id == EncounterSetGradingPackage.patient_encounter_id,
         )
-        .join(
-            ProjectGradingAllocationPolicy,
-            ProjectGradingAllocationPolicy.project_id == PatientEncounters.project_id,
-        )
         .where(
             EncounterSetGradingPackage.id == task_entity.encounter_set_package_id,
-            ProjectGradingAllocationPolicy.enforcement_enabled.is_(True),
+            PatientEncounters.project_id.is_not(None),
         )
         .correlate(task_entity)
     )
-    return query.filter(~exists(enforced_task))
+    return query.filter(~exists(project_task))
 
 def exclude_unallocated_project_tasks(
     query,
@@ -366,16 +364,6 @@ def exact_allocation_predicate(task_entity, package, *, user_id: int, capacity: 
     return and_(target_resolvable, exists(allocation_match))
 
 
-def project_enforces_allocation(task_entity):
-    """Whether this task's owning project has allocation enforcement enabled."""
-    return exists(
-        select(ProjectGradingAllocationPolicy.project_id).where(
-            ProjectGradingAllocationPolicy.project_id == task_entity.project_id,
-            ProjectGradingAllocationPolicy.enforcement_enabled.is_(True),
-        )
-    )
-
-
 def filter_to_exact_allocation(
     query,
     *,
@@ -398,7 +386,6 @@ def filter_to_exact_allocation(
     return query.filter(
         or_(
             task_entity.project_id.is_(None),
-            ~project_enforces_allocation(task_entity),
             exact_allocation_predicate(
                 task_entity, package, user_id=user_id, capacity=capacity
             ),

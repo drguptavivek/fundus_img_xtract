@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from flask import jsonify, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from auth.roles import roles_or_project_grant_required
 from db_transaction_manager import transaction_scope
 from review.queues import MAX_CSV_BYTES, ReviewQueueError, create_review_queue
 
@@ -12,7 +11,7 @@ from . import api_bp
 
 
 @api_bp.route("/review/queues", methods=["POST"])
-@roles_or_project_grant_required("admin", "discrepancy_reviewer")
+@login_required
 def create_discrepancy_review_queue():
     upload = request.files.get("file")
     if upload is None or not upload.filename:

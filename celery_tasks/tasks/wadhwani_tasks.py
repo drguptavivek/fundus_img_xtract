@@ -117,58 +117,8 @@ def run_wadhwani_glaucoma_batch_task(
     else:
         db_set_job_status(job_token, "done")
 
-    _bump_field_cache_for_encounters(_encounter_ids_for_tasks(task_ids))
-
     if not refresh_ai_inference_runs_materialized_view():
         logger.warning("Wadhwani batch %s completed, but ai_inference_runs_mv refresh failed", job_token)
-
-
-def _bump_field_cache_for_encounters(encounter_ids) -> None:
-    """Invalidate cached field reads once a screening reaches a terminal state.
-
-    Called on the failure path too: a run that fails without invalidating leaves
-    the field app showing "running" until the entry expires.
-    """
-    if not encounter_ids:
-        return
-    try:
-        from app_cache import init_cache
-        from db_transaction_manager import get_db_session
-        from field_workbench.cache import bump_encounter
-        from models import PatientEncounters
-
-        init_cache()
-        with get_db_session() as db:
-            rows = (
-                db.query(PatientEncounters.id, PatientEncounters.project_id)
-                .filter(PatientEncounters.id.in_(list(encounter_ids)))
-                .all()
-            )
-        for encounter_id, project_id in rows:
-            bump_encounter(encounter_id, project_id)
-    except Exception as exc:  # noqa: BLE001 - never fail a run over cache state
-        logger.warning("Field cache invalidation failed: %s", sanitize_log_value(exc))
-
-
-def _encounter_ids_for_tasks(task_ids) -> list[int]:
-    if not task_ids:
-        return []
-    try:
-        from db_transaction_manager import get_db_session
-        from models import EncounterSetImage, GradingTask
-
-        with get_db_session() as db:
-            return [
-                row[0]
-                for row in db.query(EncounterSetImage.patient_encounter_id)
-                .join(GradingTask, GradingTask.encounter_set_image_id == EncounterSetImage.id)
-                .filter(GradingTask.id.in_(list(task_ids)))
-                .distinct()
-                .all()
-            ]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Field cache encounter lookup failed: %s", sanitize_log_value(exc))
-        return []
 
 
 @celery_app.task(name="celery_tasks.tasks.wadhwani_tasks.run_madhunetra_dr_dme_batch_task", bind=True, acks_late=True)
@@ -237,5 +187,3 @@ def run_madhunetra_dr_dme_batch_task(
         db_set_job_status(job_token, "partial")
     else:
         db_set_job_status(job_token, "done")
-
-    _bump_field_cache_for_encounters(encounter_ids)

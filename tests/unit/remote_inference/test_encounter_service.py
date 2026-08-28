@@ -59,6 +59,7 @@ def test_manual_job_uses_scalar_encounter_snapshot_after_session_closes(monkeypa
     monkeypatch.setattr(encounter_service, "db_create_job", lambda *_args, **_kwargs: "job-token")
     queued = []
     monkeypatch.setattr(encounter_service, "enqueue_task", lambda *args, **kwargs: queued.append((args, kwargs)))
+    monkeypatch.setattr("authz.project_access.can_run_wai", lambda *args, **kwargs: True)
 
     result = encounter_service.create_manual_job(
         encounter_ids=[42],

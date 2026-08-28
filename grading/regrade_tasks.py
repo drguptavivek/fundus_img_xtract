@@ -14,10 +14,10 @@ from db_transaction_manager import transaction_scope
 from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
 from grading.workbench.revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
 from encounter_sets.permissions import (
-    CAPABILITY_REGRADE_ADJUDICATION,
     project_task_capability_clause,
     user_has_task_capability,
 )
+REGRADE_ROLES = frozenset({"regrade_adjudicator"})
 from models import (
     Consensus,
     Disease,
@@ -42,7 +42,7 @@ from project_annotations.service import (
     resolve_task_annotation_context,
     validate_geometry_policy,
 )
-from authz import scope
+from authz.behaviors import role_lab_units
 from utils.log_sanitize import sanitize_log_value
 from utils.masterUtils import fetch_active_disease_gradings
 
@@ -52,7 +52,14 @@ regrade_logger = logging.getLogger("regrade_grading")
 
 def _fetch_allowed_lab_units(db):
     lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
-    lu_query = scope(db, lu_query, LabUnit, current_user, 'review.regrade.adjudicate')
+    lu_query = role_lab_units(
+        db,
+        lu_query,
+        current_user,
+        lab_roles={"regrade_adjudicator"},
+        project_roles={"regrade_adjudicator"},
+        allow_admin=True,
+    )
     lab_units = db.execute(lu_query).scalars().all()
     allowed_lab_unit_ids = {lu.id for lu in lab_units}
     return lab_units, allowed_lab_unit_ids
@@ -82,7 +89,7 @@ def _fetch_regrade_task(db, regrade_task_id: int, allowed_lab_unit_ids: set[int]
         db,
         user=current_user,
         task_id=row.source_task_id,
-        capability=CAPABILITY_REGRADE_ADJUDICATION,
+        roles=REGRADE_ROLES,
     ):
         return None
     return row
@@ -156,7 +163,7 @@ def regrade_tasks():
             .group_by(RegradeTask.disease_id)
         )
         pending_query = pending_query.where(project_task_capability_clause(
-            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            RegradeTask.source_task_id, current_user, REGRADE_ROLES
         ))
         if not is_admin:
             pending_query = pending_query.where(RegradeTask.assigned_to_user_id == current_user.id)
@@ -182,7 +189,7 @@ def regrade_tasks():
             .where(Grade.grader_user_id == current_user.id)
             .where(Grade.role_slot == "regrade_adj")
             .where(project_task_capability_clause(
-                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+                RegradeTask.source_task_id, current_user, REGRADE_ROLES
             ))
         ).scalar() or 0
 
@@ -197,7 +204,7 @@ def regrade_tasks():
             .where(Grade.grader_user_id == current_user.id)
             .where(Grade.role_slot == "regrade_adj")
             .where(project_task_capability_clause(
-                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+                RegradeTask.source_task_id, current_user, REGRADE_ROLES
             ))
             .order_by(Grade.created_at.desc())
             .offset(offset)
@@ -256,7 +263,7 @@ def regrade_tasks_reassign():
             .order_by(func.count(RegradeTask.id).desc())
         )
         counts_query = counts_query.where(project_task_capability_clause(
-            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            RegradeTask.source_task_id, current_user, REGRADE_ROLES
         ))
         assignee_counts = db.execute(counts_query).all()
         total_pending = sum(row[1] for row in assignee_counts)
@@ -286,7 +293,7 @@ def regrade_tasks_reassign():
             .order_by(RegradeTask.id.desc())
         )
         tasks_query = tasks_query.where(project_task_capability_clause(
-            RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+            RegradeTask.source_task_id, current_user, REGRADE_ROLES
         ))
         if assignee_id_raw == "unassigned":
             tasks_query = tasks_query.where(RegradeTask.assigned_to_user_id.is_(None))
@@ -343,7 +350,7 @@ def regrade_tasks_reassign():
                 .filter(RegradeTask.status == "regrade_pending")
                 .filter(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
                 .filter(project_task_capability_clause(
-                    RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+                    RegradeTask.source_task_id, current_user, REGRADE_ROLES
                 ))
                 .all()
             )
@@ -378,7 +385,7 @@ def regrade_tasks_reassign():
                     db,
                     user=target_user,
                     task_id=task.source_task_id,
-                    capability=CAPABILITY_REGRADE_ADJUDICATION,
+                    roles=REGRADE_ROLES,
                 )
                 for task in tasks_to_update
             ):
@@ -428,7 +435,7 @@ def start_random_regrade_task():
             .where(RegradeTask.status == "regrade_pending")
             .where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
             .where(project_task_capability_clause(
-                RegradeTask.source_task_id, current_user, CAPABILITY_REGRADE_ADJUDICATION
+                RegradeTask.source_task_id, current_user, REGRADE_ROLES
             ))
         )
         if disease_id:

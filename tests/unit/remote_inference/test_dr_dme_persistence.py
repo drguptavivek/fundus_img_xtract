@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from contextlib import contextmanager
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -75,6 +76,11 @@ class Client:
 
 
 class AdminUser:
+    id = 1
+    is_active = True
+    roles = (SimpleNamespace(name="admin"),)
+    lab_units = ()
+
     @staticmethod
     def has_role(role_name):
         return role_name == "admin"

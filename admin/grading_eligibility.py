@@ -74,7 +74,7 @@ def manage_eligibility_users():
         query = select(User).order_by(User.username.asc())
 
         # Local admins can only manage users in their hospital
-        if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+        if current_user.has_role("local_admin") and not current_user.has_role("admin"):
             if not getattr(current_user, "hospital_id", None):
                 users = []
             else:
@@ -96,14 +96,14 @@ def edit_eligibility(user_id):
             return redirect(url_for("admin.manage_eligibility_users"))
 
         # Local admins can only manage users in their hospital
-        if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+        if current_user.has_role("local_admin") and not current_user.has_role("admin"):
             if not getattr(current_user, "hospital_id", None) or user.hospital_id != current_user.hospital_id:
                 flash("You do not have permission to manage grading eligibility for this user.", "danger")
                 return redirect(url_for("admin.manage_eligibility_users"))
         
         if request.method == 'GET':
             diseases = db.execute(select(Disease).order_by(Disease.name.asc())).scalars().all()
-            if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+            if current_user.has_role("local_admin") and not current_user.has_role("admin"):
                 lab_units = db.execute(
                     select(LabUnit)
                     .where(LabUnit.hospital_id == current_user.hospital_id)
@@ -138,7 +138,7 @@ def edit_eligibility(user_id):
                     return redirect(url_for("admin.manage_eligibility_users"))
 
                 # Local admins can only manage users in their hospital
-                if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+                if current_user.has_role("local_admin") and not current_user.has_role("admin"):
                     if not getattr(current_user, "hospital_id", None) or user.hospital_id != current_user.hospital_id:
                         flash("You do not have permission to manage grading eligibility for this user.", "danger")
                         return redirect(url_for("admin.manage_eligibility_users"))
@@ -206,7 +206,7 @@ def edit_eligibility(user_id):
                         return redirect(url_for("admin.edit_eligibility", user_id=user_id))
 
                     # Local admins can only assign lab units in their hospital
-                    if current_user.has_role("local_admin") and not current_user.has_role("admin") and not getattr(current_user, "is_master_admin", False):
+                    if current_user.has_role("local_admin") and not current_user.has_role("admin"):
                         if not getattr(current_user, "hospital_id", None) or lab_unit.hospital_id != current_user.hospital_id:
                             flash("You can only assign grading eligibility within your hospital.", "danger")
                             return redirect(url_for("admin.edit_eligibility", user_id=user_id))

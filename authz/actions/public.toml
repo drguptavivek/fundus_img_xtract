@@ -1,7 +1,0 @@
-[[actions]]
-name = "public.view"
-domain = "public"
-zone = "public"
-description = "Public application pages that do not require authentication."
-resource_type = "public_page"
-requires_resource = false

@@ -4,11 +4,10 @@ import json
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import abort, jsonify, render_template, request, send_file
-from flask_login import current_user
-import sqlalchemy as sa
+from flask_login import current_user, login_required
 from sqlalchemy import text
 
-from auth.roles import roles_or_project_grant_required, roles_required
+from auth.roles import roles_required
 from job_store import db_create_job
 from models import (
     AIModel,
@@ -23,10 +22,7 @@ from models import (
 from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
-from authz import scope
 from encounter_sets.permissions import (
-    CAPABILITY_DATA_EXPORT,
-    CAPABILITY_DISCREPANCY_REVIEW,
     capability_lab_unit_ids,
 )
 from utils.discrepancy_filters import (
@@ -38,7 +34,12 @@ from utils.final_grade_basis import (
     normalize_final_grade_basis,
     sql_final_grade_expression,
 )
-from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
+from .discrepancy_export import (
+    ARTIFACT_SCOPE_FILENAME,
+    EXPORT_DIR,
+    enqueue_discrepancy_export,
+    reauthorize_discrepancy_artifact,
+)
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
 from .queues import ReviewQueueError, load_review_queue
@@ -52,19 +53,9 @@ AI_REVIEW_STATUS_FILTER_LABELS = {
     **AI_REVIEW_STATUS_LABELS,
     AI_REVIEW_STATUS_MISSING: "Missing",
 }
-
-
-def _project_listing_capabilities() -> list[str]:
-    if current_user.has_role("admin") or current_user.is_master_admin:
-        return []
-    columns: list[str] = []
-    if current_user.has_role("discrepancy_reviewer") or current_user.has_role("local_admin"):
-        columns.append("can_review_discrepancies")
-    if current_user.has_role("data_exporter", "data_manager"):
-        columns.append("can_export_data")
-    if current_user.has_role("dataset_creator"):
-        columns.append("can_create_datasets")
-    return columns
+EXPORT_ROLES = frozenset(
+    {"local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"}
+)
 
 
 def _review_lab_unit_ids(db) -> set[int]:
@@ -286,7 +277,6 @@ def render_discrepancy_review(
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": allowed_lab_units,
-            "project_capability_columns": _project_listing_capabilities(),
             "project_capability_role_names": ["discrepancy_reviewer", "data_exporter"],
             "project_capability_user_id": current_user.id,
             "allow_classical_capability": current_user.has_role(
@@ -470,7 +460,7 @@ def render_discrepancy_review(
 
 
 @bp.route("/discrepancy-review", methods=["GET"])
-@roles_or_project_grant_required("admin", "discrepancy_reviewer", "data_exporter")
+@login_required
 def discrepancy_review():
     """Render the live discrepancy queue from the current MV snapshot.
 
@@ -482,7 +472,7 @@ def discrepancy_review():
 
 
 @bp.route("/discrepancy-export", methods=["POST"])
-@roles_or_project_grant_required("admin", "data_manager", "data_exporter")
+@login_required
 def discrepancy_export():
     with get_db_session() as db:
         review_queue = None
@@ -497,7 +487,7 @@ def discrepancy_export():
         allowed_lab_unit_ids = capability_lab_unit_ids(
             db,
             user=current_user,
-            capability=CAPABILITY_DATA_EXPORT,
+            roles=EXPORT_ROLES,
         )
 
         if not allowed_lab_unit_ids:
@@ -554,12 +544,7 @@ def discrepancy_export():
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": list(allowed_lab_unit_ids),
-            "project_capability_columns": (
-                []
-                if current_user.has_role("admin") or current_user.is_master_admin
-                else ["can_export_data"]
-            ),
-            "project_capability_role_names": ["data_manager", "data_exporter"],
+            "project_capability_role_names": ["data_exporter"],
             "project_capability_user_id": current_user.id,
             "task_ids": list(review_queue.task_ids) if review_queue else [],
             "allow_classical_capability": current_user.has_role(
@@ -583,35 +568,34 @@ def discrepancy_export():
             upload_type="discrepancy_export",
         )
         from flask import current_app, flash, redirect, url_for
-        export_dir = (EXPORT_DIR / job_token).resolve()
-        try:
-            export_dir.mkdir(parents=True, exist_ok=True)
-            filters_path = export_dir / "filters.json"
-            filters_path.write_text(json.dumps(filters, ensure_ascii=True), encoding="utf-8")
-        except Exception:
-            pass
 
         enqueue_discrepancy_export(current_app._get_current_object(), job_token, filters, {"user_id": current_user.id})
         flash("Export queued. You can monitor progress in Jobs.", "info")
         return redirect(url_for("jobs.job_status_page", job_token=job_token))
 
 @bp.route("/discrepancy-export/<job_token>/<path:filename>", methods=["GET"])
-@roles_or_project_grant_required("admin", "data_manager", "data_exporter")
+@login_required
 def discrepancy_export_download(job_token: str, filename: str):
     """Serve generated export artifacts (Excel or zip) for authorized users."""
     with Session() as db:
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "discrepancy_export").first()
         if not job:
             abort(404)
-            
-        # Standard scoping check for job access
-        lu_query = sa.select(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'review.discrepancy.export')
-        allowed_lab_unit_ids = {lu.id for lu in db.execute(lu_query).scalars().all()}
-        
-        if job.lab_unit_id is None and job.uploader_user_id != current_user.id:
+        if job.status != "done" or job.uploader_user_id != current_user.id:
             abort(404)
-        if job.lab_unit_id and job.lab_unit_id not in allowed_lab_unit_ids and job.uploader_user_id != current_user.id:
+        filters_path = (EXPORT_DIR / job_token / "filters.json").resolve()
+        scope_path = (EXPORT_DIR / job_token / ARTIFACT_SCOPE_FILENAME).resolve()
+        try:
+            requested_filters = json.loads(filters_path.read_text(encoding="utf-8"))
+            scope_manifest = json.loads(scope_path.read_text(encoding="utf-8"))
+            if not reauthorize_discrepancy_artifact(
+                db,
+                current_user,
+                requested_filters,
+                scope_manifest.get("task_ids", ()),
+            ):
+                abort(404)
+        except (OSError, ValueError, PermissionError):
             abort(404)
 
     export_dir = (EXPORT_DIR / job_token).resolve()

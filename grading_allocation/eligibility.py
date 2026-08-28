@@ -7,18 +7,15 @@ from typing import TypeAlias
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app_cache import cache
-from authz.policies import CLINICIAN_ROLE
 from grading_allocation.constants import AllocationCapacity, capacity_for_role_slot
 from grading_allocation.dtos import TaskAllocationContext
 from grading_allocation.exceptions import AllocationContextError
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.resolver import resolve_task_allocation_context
 from models import Grade, GradingTask, Role, User, UserDiseaseUnitRole, UserRole
 from utils.linkedGradingUtils import get_primary_disease_id
 
 
-ELIGIBILITY_CACHE_TTL_SECONDS = 300
 AllocationKey: TypeAlias = tuple[int, int, str, int | None, int | None, str]
 EligibilitySnapshot: TypeAlias = tuple[frozenset[str], frozenset[AllocationKey]]
 
@@ -30,11 +27,11 @@ def is_user_eligible_for_task(
     task: GradingTask,
     role_slot: str,
 ) -> bool:
-    """Apply project allocation when enabled, otherwise preserve legacy eligibility."""
+    """Apply classical eligibility or mandatory exact project allocation."""
     capacity = capacity_for_role_slot(role_slot)
     if capacity is None:
         return False
-    snapshot = _cached_user_eligibility_snapshot(db, user_id=user_id)
+    snapshot = _current_user_eligibility_snapshot(db, user_id=user_id)
     if snapshot is None:
         return False
     role_names, allocation_keys = snapshot
@@ -47,7 +44,7 @@ def is_user_eligible_for_task(
     except AllocationContextError:
         return False
 
-    if context.project_id is None or not _project_enforcement_enabled(db, context.project_id):
+    if context.project_id is None:
         return _legacy_eligible(db, user_id=user_id, task=task, capacity=capacity)
     if context.target is None:
         return False
@@ -58,35 +55,11 @@ def is_user_eligible_for_task(
     ) in allocation_keys
 
 
-def invalidate_user_eligibility_cache(user_id: int) -> None:
-    """Invalidate stable grading authorization inputs for one user."""
-    try:
-        cache.delete(_eligibility_cache_key(user_id))
-    except Exception:  # Cache is an optimization; authorization falls back to SQL.
-        # Domain services and unit tests may run without a Flask app/cache.
-        pass
-
-
-def _eligibility_cache_key(user_id: int) -> str:
-    return f"grading-allocation:eligibility:v1:user:{user_id}"
-
-
-def _cached_user_eligibility_snapshot(
+def _current_user_eligibility_snapshot(
     db: Session,
     *,
     user_id: int,
 ) -> EligibilitySnapshot | None:
-    cache_key = _eligibility_cache_key(user_id)
-    try:
-        cached = cache.get(cache_key)
-    except Exception:  # Cache is an optimization; authorization falls back to SQL.
-        cached = None
-    if isinstance(cached, dict) and "roles" in cached and "allocations" in cached:
-        return (
-            frozenset(str(role_name) for role_name in cached["roles"]),
-            frozenset(tuple(key) for key in cached["allocations"]),
-        )
-
     role_names = frozenset(
         db.execute(
             select(Role.name)
@@ -110,36 +83,26 @@ def _cached_user_eligibility_snapshot(
             )
         ).scalars()
     )
-    try:
-        cache.set(
-            cache_key,
-            {
-                "roles": sorted(role_names),
-                "allocations": [list(key) for key in sorted(allocation_keys, key=repr)],
-            },
-            timeout=ELIGIBILITY_CACHE_TTL_SECONDS,
-        )
-    except Exception:  # Cache is an optimization; authorization falls back to SQL.
-        pass
     return role_names, allocation_keys
 
 
-def eligible_enforced_project_task_contexts(
+def eligible_project_task_contexts(
     db: Session,
     *,
     user_id: int,
     task_slots: list[tuple[GradingTask, str]],
-    enforced_project_ids: set[int],
+    project_ids: set[int],
 ) -> dict[tuple[int, str], TaskAllocationContext]:
-    """Bulk equivalent of enforced-project task eligibility for dashboards.
+    """Bulk equivalent of project task eligibility for dashboards.
 
-    The caller has already selected tasks from projects whose allocation policy
-    is enabled. User roles, conflicting grades, and allocations are therefore
-    loaded once instead of once per task.
+    Every project-owned task requires an exact allocation. User roles,
+    conflicting grades, and allocations are loaded once instead of once per
+    task. ``project_ids`` is retained as the caller's selected project
+    set; it no longer represents an optional policy switch.
     """
-    if not task_slots or not enforced_project_ids:
+    if not task_slots or not project_ids:
         return {}
-    snapshot = _cached_user_eligibility_snapshot(db, user_id=user_id)
+    snapshot = _current_user_eligibility_snapshot(db, user_id=user_id)
     if snapshot is None:
         return {}
     role_names, allocation_keys = snapshot
@@ -171,7 +134,7 @@ def eligible_enforced_project_task_contexts(
         except AllocationContextError:
             continue
         if (
-            context.project_id not in enforced_project_ids
+            context.project_id not in project_ids
             or context.target is None
         ):
             continue
@@ -243,30 +206,14 @@ def eligible_lab_unit_ids(
         )
     )
     project_lab_ids = db.execute(
-        select(ProjectGraderAllocation.lab_unit_id)
-        .join(
-            ProjectGradingAllocationPolicy,
-            ProjectGradingAllocationPolicy.project_id == ProjectGraderAllocation.project_id,
-        )
-        .where(
+        select(ProjectGraderAllocation.lab_unit_id).where(
             ProjectGraderAllocation.user_id == user_id,
             ProjectGraderAllocation.capacity == capacity.value,
             ProjectGraderAllocation.active.is_(True),
-            ProjectGradingAllocationPolicy.enforcement_enabled.is_(True),
         )
     ).scalars().all()
     lab_ids.update(project_lab_ids)
     return sorted(lab_ids) or None
-
-
-def _project_enforcement_enabled(db: Session, project_id: int) -> bool:
-    return bool(
-        db.execute(
-            select(ProjectGradingAllocationPolicy.enforcement_enabled).where(
-                ProjectGradingAllocationPolicy.project_id == project_id
-            )
-        ).scalar_one_or_none()
-    )
 
 
 def _has_conflicting_grade(
@@ -343,7 +290,7 @@ def _role_names_have_capacity(
     qualification to grade, whichever slot is being filled, is the
     ``ophthalmologist`` role.
     """
-    return CLINICIAN_ROLE in role_names
+    return "ophthalmologist" in role_names
 
 
 def _allocation_key(

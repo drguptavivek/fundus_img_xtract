@@ -12,8 +12,8 @@
         {% if user.is_locked_until %}
           <span class="badge text-bg-warning">Locked</span>
         {% endif %}
-        {% if user.is_master_admin %}
-          <span class="badge text-bg-dark">Master Admin</span>
+        {% if user.has_role('admin') %}
+          <span class="badge text-bg-dark">Admin</span>
         {% endif %}
       </div>
       <div class="text-muted">

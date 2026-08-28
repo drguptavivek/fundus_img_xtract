@@ -8,7 +8,6 @@ from grading_allocation.constants import AllocationScope
 from grading_allocation.dtos import TargetIdentity, TaskAllocationContext
 from grading_allocation.exceptions import AllocationContextError
 from models import GradingTask
-from upload_profiles.models import UploadProfileEncounterSetTypeGradingPackage
 
 
 def resolve_task_allocation_context(db: Session, task: GradingTask) -> TaskAllocationContext:
@@ -62,18 +61,6 @@ def _encounter_set_target(db: Session, task: GradingTask) -> TargetIdentity | No
     if package is None:
         return None
     encounter_set_type_id = package.encounter_set_type_id
-    config = None
-    if encounter_set_type_id is None and package.upload_profile_est_grading_package_id:
-        # Legacy compatibility only. Native packages freeze this identity and
-        # remain resolvable after their mutable profile policy is deactivated.
-        config = db.get(
-            UploadProfileEncounterSetTypeGradingPackage,
-            package.upload_profile_est_grading_package_id,
-        )
-        if config is not None:
-            encounter_set_type_id = (
-                config.profile_encounter_set_type.encounter_set_type_id
-            )
     if encounter_set_type_id is None:
         return None
     if package.grading_mode == "unified":
@@ -83,16 +70,6 @@ def _encounter_set_target(db: Session, task: GradingTask) -> TargetIdentity | No
         )
 
     context_disease_id = package.root_scope_disease_id
-    if context_disease_id is None:
-        context_disease_id = (package.policy_snapshot_json or {}).get("package", {}).get(
-            "root_scope_disease_id"
-        )
-    if context_disease_id is None and config is not None:
-        context_disease_id = config.default_image_grading_scheme_id
-    if context_disease_id is None and config is not None:
-        active_image_schemes = [row for row in config.image_grading_schemes if row.active]
-        if len(active_image_schemes) == 1:
-            context_disease_id = active_image_schemes[0].disease_id
     if context_disease_id is None:
         return None
     return TargetIdentity(

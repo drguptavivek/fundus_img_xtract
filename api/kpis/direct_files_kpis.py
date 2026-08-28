@@ -14,7 +14,6 @@ from sqlalchemy.orm import joinedload, selectinload
 
 # Import blueprint and utilities
 from .. import api_bp
-from app_cache import cache
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
@@ -56,8 +55,8 @@ def get_filtered_direct_image_dataframe(
     params: Dict,
     user_lab_unit_ids: Set[int],
     *,
-    project_gated: bool = False,
-    user_id: int | None = None,
+    user_id: int,
+    project_role_names: Set[str],
 ) -> tuple[pd.DataFrame, Dict]:
     """
     Generate direct uploads data using the materialized view for performance.
@@ -66,11 +65,8 @@ def get_filtered_direct_image_dataframe(
         db: Database session.
         params: Filter parameters.
         user_lab_unit_ids: Lab unit IDs user can access.
-        project_gated: When True, a project-owned image is included only if
-            the user holds a project role grant covering it. Aggregate callers
-            leave this False - a count of a lab's throughput is a fact about
-            that lab - while callers returning rows or an export set it True.
-        user_id: Required when project_gated is True.
+        user_id: Authenticated actor whose persisted grants are checked.
+        project_role_names: Exact project roles accepted by this route.
 
     Returns:
         Tuple of (filtered pandas DataFrame, filters_applied dictionary)
@@ -170,35 +166,53 @@ def get_filtered_direct_image_dataframe(
             clauses.append("di.hospital_id = ANY(:hospital_ids)")
             params_sql["hospital_ids"] = list(hospital_ids)
 
-        # An empty set means this user reaches no lab unit, which must deny
-        # rather than drop the filter. get_user_permissions also returns an
-        # empty set when its lookup raises, so failing open here would hand a
-        # transient error every direct upload in every hospital.
-        clauses.append("di.lab_unit_id = ANY(:user_lab_unit_ids)")
-        params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
+        if not user_id:
+            raise ValueError("user_id is required")
+        if not project_role_names:
+            raise ValueError("project_role_names is required")
 
-        if project_gated:
-            if user_id is None:
-                raise ValueError("project_gated requires user_id")
-            # Rows outside every project keep the lab rule above. A row owned
-            # by a project needs an explicit project role grant covering it,
-            # at project scope or narrowed to this hospital or lab unit.
-            clauses.append("""(
+        # Classical rows use the actor's Lab Units. Project rows use only an
+        # exact role grant at project or Project-Lab scope. Admin authority is
+        # verified from persisted roles rather than trusted from route input.
+        clauses.append("""(
+            EXISTS (
+                SELECT 1
+                FROM user_roles actor_role_link
+                JOIN roles actor_role ON actor_role.id = actor_role_link.role_id
+                WHERE actor_role_link.user_id = :project_user_id
+                  AND actor_role.name = 'admin'
+            )
+            OR (
                 di.project_id IS NULL
-                OR EXISTS (
-                    SELECT 1
-                    FROM project_role_grants prg
-                    WHERE prg.user_id = :project_user_id
-                      AND prg.project_id = di.project_id
-                      AND prg.active = TRUE
-                      AND (
-                        prg.scope_type = 'project'
-                        OR (prg.scope_type = 'lab_unit' AND prg.lab_unit_id = di.lab_unit_id)
-                        OR (prg.scope_type = 'hospital' AND prg.hospital_id = di.hospital_id)
-                      )
-                )
-            )""")
-            params_sql["project_user_id"] = int(user_id)
+                AND di.lab_unit_id = ANY(:user_lab_unit_ids)
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM project_role_grants prg
+                JOIN roles project_role ON project_role.id = prg.role_id
+                WHERE prg.user_id = :project_user_id
+                  AND prg.project_id = di.project_id
+                  AND prg.active = TRUE
+                  AND project_role.name = ANY(:project_role_names)
+                  AND EXISTS (
+                      SELECT 1
+                      FROM project_lab_units active_project_lab
+                      WHERE active_project_lab.project_id = prg.project_id
+                        AND active_project_lab.lab_unit_id = di.lab_unit_id
+                        AND active_project_lab.active = TRUE
+                  )
+                  AND (
+                    prg.scope_type = 'project'
+                    OR (
+                        prg.scope_type = 'lab_unit'
+                        AND prg.lab_unit_id = di.lab_unit_id
+                    )
+                  )
+            )
+        )""")
+        params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
+        params_sql["project_user_id"] = int(user_id)
+        params_sql["project_role_names"] = sorted(project_role_names)
 
         if clauses:
             base_sql += " AND " + " AND ".join(clauses)
@@ -298,7 +312,6 @@ def get_filtered_direct_image_dataframe(
 @api_bp.route('/kpis/direct-files/filtered-dataframe', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
-@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:filtered:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_filtered_direct_dataframe():
     """
     Returns the filtered direct dataframe as JSON for use in app templates.
@@ -331,7 +344,8 @@ def get_filtered_direct_dataframe():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_direct_image_dataframe(
                 db, params, user_lab_unit_ids,
-                project_gated=True, user_id=current_user.id,
+                user_id=current_user.id,
+                project_role_names={"analytics_viewer"},
             )
             
             # Trim to minimal columns for browser payload
@@ -414,7 +428,6 @@ def get_filtered_direct_dataframe():
 @api_bp.route('/kpis/direct-files/filtered-dataframe-excel', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
-@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:filtered-excel:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_filtered_direct_dataframe_excel():
     """
     Returns the filtered direct dataframe as Excel file for download.
@@ -447,7 +460,8 @@ def get_filtered_direct_dataframe_excel():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_direct_image_dataframe(
                 db, params, user_lab_unit_ids,
-                project_gated=True, user_id=current_user.id,
+                user_id=current_user.id,
+                project_role_names={"data_exporter"},
             )
             
             # Handle NaT values to prevent JSON serialization errors
@@ -505,7 +519,6 @@ def get_filtered_direct_dataframe_excel():
 @api_bp.route('/kpis/direct-files/upload-metrics', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
-@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:upload-metrics:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_upload_metrics():
         """
         KPI 1.1: Total DirectImages Uploads with breakdown by hospital/lab unit.
@@ -538,7 +551,13 @@ def get_upload_metrics():
                 user_lab_unit_ids = get_user_permissions(current_user.id)
                 
                 # Get filtered dataframe using common function
-                df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
+                df, filters_applied = get_filtered_direct_image_dataframe(
+                    db,
+                    params,
+                    user_lab_unit_ids,
+                    user_id=current_user.id,
+                    project_role_names={"analytics_viewer"},
+                )
                 
                 # Handle empty dataframe
                 if not validate_dataframe_not_empty(df, "upload_metrics"):

@@ -78,16 +78,15 @@ def encounter_set_attachment(uuid: str):
         if not attachment or not attachment.folder_rel or not attachment.stored_filename:
             abort(404)
         encounter = db.get(PatientEncounters, attachment.patient_encounter_id)
-        from data_authorization.policy import ACTION_BROWSE_PII, user_can_project_action
+        from authz.project_access import can_browse_project_pii
 
         if (
             encounter is None
             or encounter.project_id is None
-            or not user_can_project_action(
+            or not can_browse_project_pii(
                 db,
-                user=current_user,
+                current_user,
                 project_id=encounter.project_id,
-                action=ACTION_BROWSE_PII,
                 lab_unit_id=encounter.lab_unit_id,
             )
         ):

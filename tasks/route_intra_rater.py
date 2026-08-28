@@ -33,7 +33,8 @@ from services.intra_rater_service import (
 from services.intra_rater_service import get_default_cooldown_days
 from flask_wtf.csrf import generate_csrf
 from utils.intraraterKPIs import get_disease_summary, generate_cross_tabulation
-from utils.hospital_scoping import apply_scoping
+from authz.behaviors import clinical_rows
+from tasks.access import task_columns
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
@@ -173,7 +174,7 @@ def intra_rater_viewer(image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = apply_scoping(query, GradingTask, current_user, "view")
+        query = clinical_rows(db, query, current_user, task_columns(GradingTask))
         task = query.first()
         if not task:
             return ("Not found", 404)

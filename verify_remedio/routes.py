@@ -17,7 +17,6 @@ from models import (
     PatientEncounters,
 )
 from auth.utils import utcnow
-from app_cache import cache
 from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
 from utils.log_sanitize import sanitize_log_value
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
@@ -475,7 +474,6 @@ def verify_list():
 
 @bp.route("/kpi_trend", methods=["GET"])
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
-@cache.cached(timeout=5 * 60, key_prefix=lambda: f"verify-remedio:kpi-trend:{current_user.id}:{request.query_string.decode('utf-8')}")
 def kpi_trend():
     days = request.args.get("days", default=7, type=int) or 7
     days = min(max(days, 1), 31)

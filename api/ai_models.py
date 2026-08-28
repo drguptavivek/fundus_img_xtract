@@ -3,22 +3,22 @@ from flask_login import login_required
 from flask_login import current_user
 from sqlalchemy.orm import selectinload
 
-from models import AIModel
+from models import AIModel, GradingTask
 from auth.roles import roles_required
 from utils.utils import get_db_session
 from services.wadhwani_glaucoma_inference import run_task_inference
 from remote_inference import encounter_service
-from data_authorization.policy import (
-    ACTION_WAI_RUN,
-    grading_task_project_scope,
-    user_can_project_action,
+from authz import (
+    RecordWorld,
+    access_context,
+    admin_scope,
+    assigned_lab_scope,
+    hospital_scope,
 )
+from authz.project_access import can_run_wai
 from db_transaction_manager import transaction_scope
 from . import api_bp
-from authz import ResourceRef, authorize
-from authz.resolver import resolve_grants
-
-ACTION_INFERENCE_RUN = "inference.wai.run"
+from tasks.access import task_record_scope
 
 
 @api_bp.route("/ai-models", methods=["GET"])
@@ -57,37 +57,27 @@ def get_ai_models():
 @login_required
 def infer_wadhwani_glaucoma_task(task_id: int):
     with transaction_scope() as db:
-        scope = grading_task_project_scope(db, task_id=task_id)
-        if scope is None:
+        task = db.get(GradingTask, task_id)
+        if task is None:
             abort(404)
-        if scope.project_id is None:
-            # Holding the role was the whole test here, with no lab scoping at
-            # all, so any verifier or optometrist could spend an inference call
-            # on any classical task in any hospital. The engine applies the
-            # same lab-unit rule the project branch below already had.
-            resolved = resolve_grants(db, current_user)
-            allowed = authorize(
-                resolved.actor,
-                ACTION_INFERENCE_RUN,
-                ResourceRef(
-                    type="grading_task",
-                    id=task_id,
-                    attributes={
-                        "project_id": None,
-                        "hospital_id": scope.hospital_id,
-                        "lab_unit_id": scope.lab_unit_id,
-                    },
-                ),
-                grants=resolved.grants,
-            ).allowed
+        record = task_record_scope(access_context(db, current_user), task)
+        if record.world == RecordWorld.CLASSICAL:
+            context = access_context(db, current_user)
+            roles = {"verifier", "optometrist", "field_optometrist", "field_ophthalmologist"}
+            allowed = any(
+                check.allowed
+                for check in (
+                    admin_scope(context),
+                    assigned_lab_scope(context, roles, record),
+                    hospital_scope(context, roles, record),
+                )
+            )
         else:
-            allowed = user_can_project_action(
+            allowed = can_run_wai(
                 db,
-                user=current_user,
-                project_id=scope.project_id,
-                action=ACTION_WAI_RUN,
-                hospital_id=scope.hospital_id,
-                lab_unit_id=scope.lab_unit_id,
+                current_user,
+                project_id=record.project_id,
+                lab_unit_id=record.lab_unit_id,
             )
         if not allowed:
             abort(403)

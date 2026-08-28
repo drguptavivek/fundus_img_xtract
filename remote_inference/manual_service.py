@@ -184,7 +184,7 @@ def workflow_keys_from_values(values: Iterable[str]) -> list[ManualRemoteInferen
 
 
 def list_manual_wadhwani_projects(
-    db, user: Any, *, action: str = "project.wai.run"
+    db, user: Any, *, results_only: bool = False
 ) -> list[dict[str, Any]]:
     """List active, scoped projects enabled for manual EncounterSet Wadhwani inference."""
     query = (
@@ -205,14 +205,14 @@ def list_manual_wadhwani_projects(
         .order_by(Project.title.asc())
         .distinct()
     )
-    from data_authorization.policy import user_can_project_action
+    from authz.project_access import can_run_wai, can_view_wai_results
+
+    check = can_view_wai_results if results_only else can_run_wai
 
     return [
         {"id": project.id, "title": project.title, "code": project.code}
         for project in query.all()
-        if user_can_project_action(
-            db, user=user, project_id=project.id, action=action
-        )
+        if check(db, user, project_id=project.id)
     ]
 
 

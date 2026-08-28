@@ -1,23 +1,35 @@
 from datetime import date
 
 from encounter_sets.permissions import (
-    CAPABILITY_BROWSE,
-    CAPABILITY_DATA_EXPORT,
-    CAPABILITY_DISCREPANCY_REVIEW,
-    CAPABILITY_REGRADE_ADJUDICATION,
-    CAPABILITY_VERIFY,
-    ProjectEncounterSetPermissionInput,
     apply_classical_or_project_permission_scope,
     apply_project_permission_scope,
     apply_task_capability_scope,
     capability_lab_unit_ids,
     project_task_capability_clause,
-    set_project_permission,
 )
 from data_authorization.models import ProjectRoleGrant
 from project_configuration.models import ProjectLabUnit
 from models import Disease, GradingTask, PatientEncounters, Project, RegradeTask, Role, User
 from tests.helpers.factories import UserFactory
+
+BROWSE_ROLES = frozenset(
+    {
+        "local_admin", "data_manager", "fileUploader", "optometrist",
+        "field_optometrist", "field_ophthalmologist", "project_pi", "site_pi",
+        "project_admin", "collaborator",
+    }
+)
+VERIFY_ROLES = frozenset(
+    {
+        "verifier", "local_admin", "data_manager", "fileUploader", "optometrist",
+        "field_optometrist", "field_ophthalmologist",
+    }
+)
+EXPORT_ROLES = frozenset(
+    {"local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"}
+)
+DISCREPANCY_ROLES = frozenset({"discrepancy_reviewer"})
+REGRADE_ROLES = frozenset({"regrade_adjudicator"})
 
 
 def _encounter(db, *, project, lab_unit, suffix):
@@ -47,12 +59,24 @@ def _encounter(db, *, project, lab_unit, suffix):
     return row
 
 
+def _grant(db, *, project, user, role_name, lab_unit):
+    role = db.query(Role).filter_by(name=role_name).one()
+    row = ProjectRoleGrant(
+        project_id=project.id,
+        user_id=user.id,
+        role_id=role.id,
+        scope_type="lab_unit",
+        lab_unit_id=lab_unit.id,
+        active=True,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
 def test_project_resources_require_explicit_project_allow_list(db_session, core_test_data):
     hospital = db_session.merge(core_test_data["hospital"])
     lab_unit = db_session.merge(core_test_data["lab_unit"])
-    manager = UserFactory.create_with_hospital(
-        db_session, "local_admin", hospital.id, [lab_unit.id], username="permission_manager"
-    )
     user = UserFactory.create_with_hospital(
         db_session, "optometrist", hospital.id, [lab_unit.id], username="permission_verifier"
     )
@@ -64,46 +88,38 @@ def test_project_resources_require_explicit_project_allow_list(db_session, core_
     second_encounter = _encounter(db_session, project=second, lab_unit=lab_unit, suffix="TWO")
 
     unconfigured_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_BROWSE
+        db_session.query(PatientEncounters), PatientEncounters, user, BROWSE_ROLES
     ).all()
     assert first_encounter.id not in {row.id for row in unconfigured_rows}
     assert second_encounter.id not in {row.id for row in unconfigured_rows}
 
-    set_project_permission(
+    _grant(
         db_session,
-        manager_user_id=manager.id,
-        project_id=first.id,
-        data=ProjectEncounterSetPermissionInput(
-            user_id=user.id,
-            lab_unit_id=lab_unit.id,
-            can_browse=True,
-            can_verify=False,
-        ),
+        project=first,
+        user=user,
+        role_name="collaborator",
+        lab_unit=lab_unit,
     )
 
     browse_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_BROWSE
+        db_session.query(PatientEncounters), PatientEncounters, user, BROWSE_ROLES
     ).all()
     verify_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_VERIFY
+        db_session.query(PatientEncounters), PatientEncounters, user, VERIFY_ROLES
     ).all()
     assert first_encounter.id in {row.id for row in browse_rows}
     assert second_encounter.id not in {row.id for row in browse_rows}
     assert first_encounter.id not in {row.id for row in verify_rows}
 
-    set_project_permission(
+    _grant(
         db_session,
-        manager_user_id=manager.id,
-        project_id=first.id,
-        data=ProjectEncounterSetPermissionInput(
-            user_id=user.id,
-            lab_unit_id=lab_unit.id,
-            can_browse=True,
-            can_verify=True,
-        ),
+        project=first,
+        user=user,
+        role_name="verifier",
+        lab_unit=lab_unit,
     )
     verify_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_VERIFY
+        db_session.query(PatientEncounters), PatientEncounters, user, VERIFY_ROLES
     ).all()
     assert first_encounter.id in {row.id for row in verify_rows}
     assert second_encounter.id not in {row.id for row in verify_rows}
@@ -168,13 +184,13 @@ def test_project_only_reviewer_gets_only_granted_project_tasks(
         db_session.query(GradingTask),
         GradingTask,
         reviewer,
-        CAPABILITY_DISCREPANCY_REVIEW,
+        DISCREPANCY_ROLES,
     ).all()
 
     assert capability_lab_unit_ids(
         db_session,
         user=reviewer,
-        capability=CAPABILITY_DISCREPANCY_REVIEW,
+        roles=DISCREPANCY_ROLES,
     ) == {lab.id}
     assert {task.id for task in scoped} == {tasks[0].id}
 
@@ -182,9 +198,6 @@ def test_project_only_reviewer_gets_only_granted_project_tasks(
 def test_removing_last_permission_does_not_restore_legacy_access(db_session, core_test_data):
     hospital = db_session.merge(core_test_data["hospital"])
     lab_unit = db_session.merge(core_test_data["lab_unit"])
-    manager = UserFactory.create_with_hospital(
-        db_session, "local_admin", hospital.id, [lab_unit.id], username="permission_remove_manager"
-    )
     user = UserFactory.create_with_hospital(
         db_session, "optometrist", hospital.id, [lab_unit.id], username="permission_removed_user"
     )
@@ -192,21 +205,8 @@ def test_removing_last_permission_does_not_restore_legacy_access(db_session, cor
     db_session.add(project)
     db_session.flush()
     encounter = _encounter(db_session, project=project, lab_unit=lab_unit, suffix="REMOVE")
-    set_project_permission(
-        db_session,
-        manager_user_id=manager.id,
-        project_id=project.id,
-        data=ProjectEncounterSetPermissionInput(
-            user_id=user.id,
-            lab_unit_id=lab_unit.id,
-            can_browse=False,
-            can_verify=False,
-            active=False,
-        ),
-    )
-
     rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_BROWSE
+        db_session.query(PatientEncounters), PatientEncounters, user, BROWSE_ROLES
     ).all()
     assert encounter.id not in {row.id for row in rows}
 
@@ -214,9 +214,6 @@ def test_removing_last_permission_does_not_restore_legacy_access(db_session, cor
 def test_each_project_capability_is_independent(db_session, core_test_data):
     hospital = db_session.merge(core_test_data["hospital"])
     lab_unit = db_session.merge(core_test_data["lab_unit"])
-    manager = UserFactory.create_with_hospital(
-        db_session, "local_admin", hospital.id, [lab_unit.id], username="capability_manager"
-    )
     user = UserFactory.create_with_hospital(
         db_session, "data_exporter", hospital.id, [lab_unit.id], username="capability_exporter"
     )
@@ -225,24 +222,19 @@ def test_each_project_capability_is_independent(db_session, core_test_data):
     db_session.flush()
     encounter = _encounter(db_session, project=project, lab_unit=lab_unit, suffix="CAPABILITY")
 
-    set_project_permission(
+    _grant(
         db_session,
-        manager_user_id=manager.id,
-        project_id=project.id,
-        data=ProjectEncounterSetPermissionInput(
-            user_id=user.id,
-            lab_unit_id=lab_unit.id,
-            can_browse=False,
-            can_verify=False,
-            can_export_data=True,
-        ),
+        project=project,
+        user=user,
+        role_name="data_exporter",
+        lab_unit=lab_unit,
     )
 
     export_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_DATA_EXPORT
+        db_session.query(PatientEncounters), PatientEncounters, user, EXPORT_ROLES
     ).all()
     browse_rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, user, CAPABILITY_BROWSE
+        db_session.query(PatientEncounters), PatientEncounters, user, BROWSE_ROLES
     ).all()
     assert encounter.id in {row.id for row in export_rows}
     assert encounter.id not in {row.id for row in browse_rows}
@@ -260,7 +252,7 @@ def test_admin_role_bypasses_project_capability_rows(db_session, core_test_data)
     encounter = _encounter(db_session, project=project, lab_unit=lab_unit, suffix="ADMIN")
 
     rows = apply_project_permission_scope(
-        db_session.query(PatientEncounters), PatientEncounters, admin, CAPABILITY_VERIFY
+        db_session.query(PatientEncounters), PatientEncounters, admin, VERIFY_ROLES
     ).all()
     assert encounter.id in {row.id for row in rows}
 
@@ -320,7 +312,7 @@ def test_combined_scope_uses_project_grants_and_preserves_classical_non_project_
             db_session.query(PatientEncounters),
             PatientEncounters,
             user,
-            CAPABILITY_VERIFY,
+            VERIFY_ROLES,
             classical_operation="upload",
         ).all()
         return {row.id for row in rows}
@@ -334,9 +326,6 @@ def test_combined_scope_uses_project_grants_and_preserves_classical_non_project_
 def test_regrade_query_clause_requires_matching_project_capability(db_session, core_test_data):
     hospital = db_session.merge(core_test_data["hospital"])
     lab_unit = db_session.merge(core_test_data["lab_unit"])
-    manager = UserFactory.create_with_hospital(
-        db_session, "local_admin", hospital.id, [lab_unit.id], username="regrade_scope_manager"
-    )
     user = UserFactory.create_with_hospital(
         db_session,
         "regrade_adjudicator",
@@ -369,20 +358,15 @@ def test_regrade_query_clause_requires_matching_project_capability(db_session, c
     db_session.flush()
 
     scoped_query = db_session.query(RegradeTask).filter(project_task_capability_clause(
-        RegradeTask.source_task_id, user, CAPABILITY_REGRADE_ADJUDICATION
+        RegradeTask.source_task_id, user, REGRADE_ROLES
     ))
     assert regrade.id not in {row.id for row in scoped_query.all()}
 
-    set_project_permission(
+    _grant(
         db_session,
-        manager_user_id=manager.id,
-        project_id=project.id,
-        data=ProjectEncounterSetPermissionInput(
-            user_id=user.id,
-            lab_unit_id=lab_unit.id,
-            can_browse=False,
-            can_verify=False,
-            can_adjudicate_regrades=True,
-        ),
+        project=project,
+        user=user,
+        role_name="regrade_adjudicator",
+        lab_unit=lab_unit,
     )
     assert regrade.id in {row.id for row in scoped_query.all()}

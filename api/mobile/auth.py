@@ -5,6 +5,7 @@ import os
 
 from flask import current_app, jsonify, request
 
+from auth.credentials import credential_authenticated
 from auth.utils import get_client_ip
 from db_transaction_manager import transaction_scope
 from services.mobile.auth_sessions import (
@@ -24,6 +25,7 @@ logger = logging.getLogger("api.mobile.auth")
 
 
 @mobile_api_bp.route("/auth/login", methods=["POST"])
+@credential_authenticated
 @auth_rate_limit("10 per minute", key_func=get_login_rate_limit_key)
 def login():
     payload = request.get_json(silent=True) or {}
@@ -63,6 +65,7 @@ def login():
 
 
 @mobile_api_bp.route("/auth/refresh", methods=["POST"])
+@credential_authenticated
 @rate_limit("30 per minute")
 def refresh():
     payload = request.get_json(silent=True) or {}
@@ -79,6 +82,7 @@ def refresh():
 
 
 @mobile_api_bp.route("/auth/logout", methods=["POST"])
+@credential_authenticated
 @rate_limit("30 per minute")
 def logout():
     payload = request.get_json(silent=True) or {}

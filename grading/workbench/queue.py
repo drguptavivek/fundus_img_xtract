@@ -15,7 +15,6 @@ from sqlalchemy.orm import aliased
 from grading_allocation.constants import capacity_for_role_slot
 from grading_allocation.dashboard import (
     exact_allocation_predicate,
-    project_enforces_allocation,
 )
 from grading_allocation.eligibility import (
     eligible_lab_unit_ids,
@@ -168,10 +167,10 @@ def _apply_sql_eligibility(
 
     * a conflicting grade by this user disqualifies the task, whatever the
       owning project;
-    * a task owned by an enforcing project needs an exact allocation match;
-    * anything else falls back to legacy disease/lab eligibility.
+    * every project-owned task needs an exact allocation match;
+    * only classical tasks fall back to disease/lab eligibility.
 
-    ``eligible_lab_unit_ids`` returns the union of legacy labs and enforced
+    ``eligible_lab_unit_ids`` returns the union of legacy labs and project
     project-allocation labs, so a lab in ``labs`` does not by itself imply
     legacy eligibility. The legacy branch is therefore re-narrowed to the
     legacy subset here.
@@ -201,17 +200,21 @@ def _apply_sql_eligibility(
     query = query.outerjoin(
         package, package.id == GradingTask.encounter_set_package_id
     )
-    enforcing = project_enforces_allocation(GradingTask)
     exact = exact_allocation_predicate(
         GradingTask, package, user_id=user_id, capacity=capacity.value
     )
 
     legacy_branch = (
-        and_(~enforcing, GradingTask.lab_unit_id.in_(legacy_labs))
+        and_(
+            GradingTask.project_id.is_(None),
+            GradingTask.lab_unit_id.in_(legacy_labs),
+        )
         if legacy_labs
         else sa_false()
     )
-    return query.filter(or_(legacy_branch, and_(enforcing, exact)))
+    return query.filter(
+        or_(legacy_branch, and_(GradingTask.project_id.is_not(None), exact))
+    )
 
 
 def _lock_available_candidate(db, task_id: int, role_slot: str):

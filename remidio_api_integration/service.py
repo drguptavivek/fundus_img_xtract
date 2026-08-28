@@ -47,9 +47,7 @@ from models import (
     User,
 )
 from upload_profiles.models import ProjectUploadProfile
-from upload_profiles.service import manager_lab_unit_ids
 from utils.encryption import decrypt_password_with_salt, encrypt_password_with_salt, generate_salt
-from utils.hospital_scoping import apply_scoping
 from utils.log_sanitize import sanitize_log_value
 from iitk_api_integration.models import IITKApiSessionLink
 
@@ -63,6 +61,7 @@ from .models import (
     RemidioApiSourceRule,
 )
 from .persistence import upsert_exam_payloads, upsert_sites
+from .routing import active_remidio_api_bindings
 from .schemas import RemidioExamPayload, RemidioSecrets, UpsertSummary
 from .validation import (
     extract_exam_payloads,
@@ -206,7 +205,7 @@ def _encounter_set_browser_projects(db: Session, user, *, no_pii: bool = False) 
 
 
 def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool = False):
-    from data_authorization.policy import ACTION_BROWSE, ACTION_BROWSE_PII, ACTION_ROLE_NAMES
+    from authz.project_roles import PROJECT_ASSIGNABLE_ROLES
     from project_configuration.models import ProjectLabUnit
 
     project_boundary = exists().where(
@@ -216,20 +215,10 @@ def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool
     )
     if user.has_role("admin"):
         return query.filter(project_boundary)
-    action = ACTION_BROWSE if no_pii else ACTION_BROWSE_PII
-    role_names = set(ACTION_ROLE_NAMES[action])
-    if "project_pi" in role_names:
-        role_names.add("principal_investigator")
-    legacy_membership = exists().where(
-        ProjectInvestigator.project_id == model_class.project_id,
-        ProjectInvestigator.user_id == user.id,
-        ProjectInvestigator.role.in_((
-            "principal_investigator",
-            "collaborator",
-            "co_investigator",
-            "coordinator",
-        ) if no_pii else ("principal_investigator",)),
-        ProjectInvestigator.active.is_(True),
+    role_names = (
+        PROJECT_ASSIGNABLE_ROLES
+        if no_pii
+        else PROJECT_ASSIGNABLE_ROLES - {"collaborator"}
     )
     project_grant = project_role_grant_exists_clause(
         user_id=user.id,
@@ -237,7 +226,7 @@ def _apply_encounter_set_browser_scope(query, model_class, user, *, no_pii: bool
         role_names=role_names,
         lab_unit_id=getattr(model_class, "lab_unit_id", None),
     )
-    return query.filter(project_boundary, or_(legacy_membership, project_grant))
+    return query.filter(project_boundary, project_grant)
 
 
 def count_project_pending_attachment_ocr(db: Session, user, project_id: int) -> int:
@@ -1199,24 +1188,17 @@ def refetch_patient_for_project(
     if not mrn:
         raise RemidioConfigError("mrn is required.")
 
-    rules = (
-        db.query(RemidioApiSourceRule)
-        .join(
-            ProjectUploadProfileRemidioApiBinding,
-            ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == RemidioApiSourceRule.id,
+    bindings = (
+        active_remidio_api_bindings(db)
+        .options(
+            selectinload(
+                ProjectUploadProfileRemidioApiBinding.source_rule
+            )
         )
-        .join(
-            RemidioApiRoutingProfile,
-            RemidioApiRoutingProfile.id == ProjectUploadProfileRemidioApiBinding.routing_profile_id,
-        )
-        .filter(
-            RemidioApiRoutingProfile.project_id == project_id,
-            RemidioApiRoutingProfile.active.is_(True),
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
-            RemidioApiSourceRule.active.is_(True),
-        )
+        .filter(ProjectUploadProfile.project_id == project_id)
         .all()
     )
+    rules = [binding.source_rule for binding in bindings]
     if not rules:
         raise RemidioConfigError("No active Remidio API routes are available for this project.")
 
@@ -1322,13 +1304,17 @@ def create_routing_profile_sync_job(
     requested_by_username: str | None = None,
 ) -> dict[str, Any]:
     routing_profile = _load_routing_profile_for_sync(db, routing_profile_id)
-    _require_sync_lab_scope(db, routing_profile, requested_by_user_id)
-    if not any(route.active and route.source_rule and route.source_rule.active for route in routing_profile.routes):
-        raise RemidioConfigError("No active Remidio API routes are available for this routing profile.")
+    requested_route_ids = _optional_int_list(payload.get("route_ids"))
+    routes = _require_routing_profile_sync_authority(
+        db,
+        routing_profile,
+        requested_by_user_id,
+        selected_route_ids=requested_route_ids,
+    )
     start_date = normalize_date(_required_string(payload, "start_date"))
     end_date = normalize_date(_required_string(payload, "end_date"))
     limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
-    route_ids = _optional_int_list(payload.get("route_ids"))
+    route_ids = sorted(route.id for route in routes)
     dry_run = _optional_bool(payload.get("dry_run"), default=False)
 
     job = Job(
@@ -1371,7 +1357,7 @@ def enqueue_routing_profile_sync_job(job_id: int, *, user_id: int | None = None,
     if celery_enabled():
         enqueue_task(REMIDIO_API_SYNC_TASK_NAME, job_id, user_id=user_id, hospital_id=hospital_id)
         return
-    run_routing_profile_sync_job(job_id)
+    run_routing_profile_sync_job(job_id, expected_user_id=user_id)
 
 
 def create_project_sync_job(
@@ -1382,11 +1368,17 @@ def create_project_sync_job(
     requested_by_user_id: int | None = None,
     requested_by_username: str | None = None,
     skip_active_duplicates: bool = False,
+    system_principal: bool = False,
 ) -> dict[str, Any]:
     project = db.get(Project, project_id)
     if project is None or not project.active:
         raise RemidioConfigError("Project was not found or inactive.")
-    _require_project_sync_lab_scope(db, project_id, requested_by_user_id)
+    _require_project_sync_lab_scope(
+        db,
+        project_id,
+        requested_by_user_id,
+        allow_system=system_principal,
+    )
 
     start_date = _parse_date(_required_string(payload, "start_date"))
     end_date = _parse_date(_required_string(payload, "end_date"))
@@ -1479,6 +1471,7 @@ def create_prospective_project_sync_jobs() -> dict[str, Any]:
                     project_id=project_id,
                     payload=payload,
                     skip_active_duplicates=True,
+                    system_principal=True,
                 )
                 queued.append(result)
             except RemidioConfigError as exc:
@@ -1561,11 +1554,31 @@ def cancel_project_sync_job(db: Session, job_id: int) -> dict[str, Any]:
     return {"job_id": job.id, "status": job.status, "cancelled_items": len(pending_items)}
 
 
-def run_project_sync_job(job_id: int) -> dict[str, Any]:
+def run_project_sync_job(
+    job_id: int, *, expected_user_id: int | None = None
+) -> dict[str, Any]:
     with get_db_session() as db:
         job = db.get(Job, job_id)
         if job is None:
             return {"job_id": job_id, "status": "missing"}
+        if (
+            expected_user_id is not None
+            and job.uploader_user_id != expected_user_id
+        ):
+            job.status = "failed"
+            job.error = "Queued actor does not match the persisted job actor."
+            db.add(job)
+            db.commit()
+            return {"job_id": job_id, "status": "failed", "error": job.error}
+        try:
+            _reauthorize_project_sync_job(db, job)
+        except RemidioConfigError as exc:
+            job.status = "failed"
+            job.error = str(exc)
+            job.updated_at = utcnow()
+            db.add(job)
+            db.commit()
+            return {"job_id": job_id, "status": "failed", "error": job.error}
         items = (
             db.query(JobItem)
             .filter(JobItem.job_id == job.id, JobItem.source_type == REMIDIO_API_PROJECT_SYNC_ITEM_SOURCE)
@@ -1594,6 +1607,22 @@ def run_project_sync_job(job_id: int) -> dict[str, Any]:
             job = db.get(Job, job_id)
             if job and job.status in {"paused", "cancelled"}:
                 return {"job_id": job_id, "status": job.status, "items": results}
+            if job is None:
+                return {"job_id": job_id, "status": "missing", "items": results}
+            try:
+                _reauthorize_project_sync_job(db, job)
+            except RemidioConfigError as exc:
+                job.status = "failed"
+                job.error = str(exc)
+                job.updated_at = utcnow()
+                db.add(job)
+                db.commit()
+                return {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error": job.error,
+                    "items": results,
+                }
         result = _run_project_sync_item(job_id, item_id)
         results.append(result)
         if result.get("status") == "failed":
@@ -1635,16 +1664,15 @@ def list_project_sync_dashboard(
 ) -> dict[str, Any]:
     projects = _projects_with_routing(db)
     if user is not None:
-        from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+        from authz.project_access import can_sync_remidio
 
         projects = [
             project
             for project in projects
-            if user_can_project_action(
+            if can_sync_remidio(
                 db,
-                user=user,
+                user,
                 project_id=project["id"],
-                action=ACTION_REMIDIO_SYNC,
             )
         ]
     allowed_project_ids = {project["id"] for project in projects}
@@ -1680,7 +1708,9 @@ def list_project_sync_dashboard(
     }
 
 
-def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
+def run_routing_profile_sync_job(
+    job_id: int, *, expected_user_id: int | None = None
+) -> dict[str, Any]:
     with get_db_session() as db:
         job = db.get(Job, job_id)
         if job is None:
@@ -1706,6 +1736,25 @@ def run_routing_profile_sync_job(job_id: int) -> dict[str, Any]:
             item.detail = f"Invalid Remidio API sync payload: {sanitize_log_value(exc)}"
             item.finished_at = utcnow()
             job.error = item.detail
+            job.updated_at = utcnow()
+            db.add_all([job, item])
+            db.commit()
+            return {"job_id": job_id, "status": "failed", "error": job.error}
+
+        try:
+            _reauthorize_routing_profile_sync_job(
+                db,
+                job=job,
+                item=item,
+                payload=payload,
+                expected_user_id=expected_user_id,
+            )
+        except RemidioConfigError as exc:
+            job.status = "failed"
+            item.state = "failed"
+            item.detail = str(exc)
+            item.finished_at = utcnow()
+            job.error = str(exc)
             job.updated_at = utcnow()
             db.add_all([job, item])
             db.commit()
@@ -1784,17 +1833,17 @@ def _run_routing_profile_sync_payload(
     start_date = _required_string(payload, "start_date")
     end_date = _required_string(payload, "end_date")
     limit = min(max(_optional_int(payload.get("limit")) or 20, 1), 200)
-    route_ids = set(_optional_int_list(payload.get("route_ids")) or [])
+    requested_route_ids = _required_sync_route_ids(payload)
     dry_run = _optional_bool(payload.get("dry_run"), default=False)
 
     summaries: list[dict[str, Any]] = []
     with get_db_session() as db:
         routing_profile = _load_routing_profile_for_sync(db, routing_profile_id)
-        routes = [route for route in routing_profile.routes if route.active and route.source_rule and route.source_rule.active]
-        if route_ids:
-            routes = [route for route in routes if route.id in route_ids]
-        if not routes:
-            raise RemidioConfigError("No active Remidio API routes are available for this routing profile.")
+        routes = _load_exact_active_sync_routes(
+            db,
+            routing_profile_id=routing_profile.id,
+            selected_route_ids=requested_route_ids,
+        )
 
         grouped: dict[tuple[int, str], list[ProjectUploadProfileRemidioApiBinding]] = {}
         for route in routes:
@@ -2006,31 +2055,7 @@ def _queue_remidio_api_post_processing(result: dict[str, Any], *, user_id: int |
     image_result = _queue_encounter_set_image_post_processing(result, user_id=user_id)
     pdf_result = _queue_encounter_set_attachment_pdf_ocr(result, user_id=user_id)
     ai_result = _queue_encounter_set_ai_inference(result, user_id=user_id)
-    _bump_field_cache_for_ingest(result)
     return {**image_result, **pdf_result, **ai_result}
-
-
-def _bump_field_cache_for_ingest(result: dict[str, Any]) -> None:
-    """Invalidate cached field queues once newly fetched encounters land."""
-    try:
-        from app_cache import init_cache
-        from field_workbench.cache import bump_encounter
-        from services.encounter_set_ai_inference import encounter_ids_from_ingest_result
-
-        encounter_ids = encounter_ids_from_ingest_result(result)
-        if not encounter_ids:
-            return
-        init_cache()
-        with get_db_session() as db:
-            rows = (
-                db.query(PatientEncounters.id, PatientEncounters.project_id)
-                .filter(PatientEncounters.id.in_(list(encounter_ids)))
-                .all()
-            )
-        for encounter_id, project_id in rows:
-            bump_encounter(encounter_id, project_id)
-    except Exception as exc:  # noqa: BLE001 - cache state must not break ingestion
-        LOGGER.warning("Field cache invalidation failed: %s", sanitize_log_value(exc))
 
 
 def _queue_encounter_set_ai_inference(result: dict[str, Any], *, user_id: int | None = None) -> dict[str, int]:
@@ -2138,34 +2163,36 @@ def _downloaded_encounter_set_attachment_ids(result: dict[str, Any]) -> list[int
 
 
 def _project_route_groups(db: Session, project_id: int) -> list[dict[str, Any]]:
-    profiles = (
-        db.query(RemidioApiRoutingProfile)
+    routes = (
+        active_remidio_api_bindings(db)
         .options(
-            selectinload(RemidioApiRoutingProfile.routes)
-            .selectinload(ProjectUploadProfileRemidioApiBinding.source_rule),
+            selectinload(ProjectUploadProfileRemidioApiBinding.routing_profile),
         )
-        .filter(
-            RemidioApiRoutingProfile.project_id == project_id,
-            RemidioApiRoutingProfile.active.is_(True),
+        .filter(ProjectUploadProfile.project_id == project_id)
+        .order_by(
+            RemidioApiRoutingProfile.name.asc(),
+            ProjectUploadProfileRemidioApiBinding.id.asc(),
         )
-        .order_by(RemidioApiRoutingProfile.name.asc())
         .all()
     )
+    by_profile: dict[int, dict[str, Any]] = {}
+    for route in routes:
+        profile = route.routing_profile
+        if profile is None:
+            continue
+        group = by_profile.setdefault(
+            profile.id,
+            {
+                "routing_profile_id": profile.id,
+                "routing_profile_name": profile.name,
+                "route_ids": [],
+            },
+        )
+        group["route_ids"].append(route.id)
     groups: list[dict[str, Any]] = []
-    for profile in profiles:
-        route_ids = [
-            route.id
-            for route in profile.routes
-            if route.active and route.source_rule and route.source_rule.active
-        ]
-        if route_ids:
-            groups.append(
-                {
-                    "routing_profile_id": profile.id,
-                    "routing_profile_name": profile.name,
-                    "route_ids": sorted(route_ids),
-                }
-            )
+    for group in by_profile.values():
+        group["route_ids"].sort()
+        groups.append(group)
     return groups
 
 
@@ -2248,14 +2275,10 @@ def _daily_slices_newest_first(start_date: date, end_date: date) -> list[tuple[d
 
 def _eligible_project_ids_for_auto_sync(db: Session) -> list[int]:
     rows = (
-        db.query(RemidioApiRoutingProfile.project_id)
-        .join(ProjectUploadProfileRemidioApiBinding, ProjectUploadProfileRemidioApiBinding.routing_profile_id == RemidioApiRoutingProfile.id)
-        .filter(
-            RemidioApiRoutingProfile.active.is_(True),
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
-        )
+        active_remidio_api_bindings(db)
+        .with_entities(ProjectUploadProfile.project_id)
         .distinct()
-        .order_by(RemidioApiRoutingProfile.project_id.asc())
+        .order_by(ProjectUploadProfile.project_id.asc())
         .all()
     )
     return [int(row[0]) for row in rows]
@@ -2300,10 +2323,18 @@ def _project_sync_job_for_action(db: Session, job_id: int) -> Job:
     return job
 
 
-def _require_project_sync_lab_scope(db: Session, project_id: int, user_id: int | None) -> None:
+def _require_project_sync_lab_scope(
+    db: Session,
+    project_id: int,
+    user_id: int | None,
+    *,
+    allow_system: bool = False,
+) -> None:
     if user_id is None:
-        return
-    from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+        if allow_system:
+            return
+        raise RemidioConfigError("A current user or explicit system principal is required.")
+    from authz.project_access import can_sync_remidio
 
     user = db.get(User, user_id)
     if user is None:
@@ -2321,37 +2352,70 @@ def _require_project_sync_lab_scope(db: Session, project_id: int, user_id: int |
     }
     if route_lab_ids:
         allowed = all(
-            user_can_project_action(
+            can_sync_remidio(
                 db,
-                user=user,
+                user,
                 project_id=project_id,
-                action=ACTION_REMIDIO_SYNC,
                 lab_unit_id=lab_unit_id,
             )
             for lab_unit_id in route_lab_ids
         )
     else:
-        allowed = user_can_project_action(
+        allowed = can_sync_remidio(
             db,
-            user=user,
+            user,
             project_id=project_id,
-            action=ACTION_REMIDIO_SYNC,
         )
     if not allowed:
         raise RemidioConfigError("You cannot sync Remidio API routes outside your project scope.")
 
 
+def _reauthorize_project_sync_job(db: Session, job: Job) -> None:
+    """Reload current human authority or validate the scheduled-system boundary."""
+    if job.project_id is None:
+        raise RemidioConfigError("The sync job is missing its project scope.")
+    if job.uploader_user_id is not None:
+        _require_project_sync_lab_scope(
+            db,
+            job.project_id,
+            job.uploader_user_id,
+        )
+        return
+
+    items = (
+        db.query(JobItem.detail)
+        .filter(
+            JobItem.job_id == job.id,
+            JobItem.source_type == REMIDIO_API_PROJECT_SYNC_ITEM_SOURCE,
+        )
+        .all()
+    )
+    modes: set[str] = set()
+    for (detail,) in items:
+        try:
+            payload = json.loads(detail or "{}")
+        except json.JSONDecodeError as exc:
+            raise RemidioConfigError("Scheduled sync job facts are invalid.") from exc
+        modes.add(str(payload.get("mode") or ""))
+    eligible_projects = set(_eligible_project_ids_for_auto_sync(db))
+    if modes != {"prospective_hourly"} or job.project_id not in eligible_projects:
+        raise RemidioConfigError(
+            "The scheduled-system sync boundary is no longer active."
+        )
+
+
 def _projects_with_routing(db: Session) -> list[dict[str, Any]]:
+    active_project_ids = (
+        active_remidio_api_bindings(db)
+        .with_entities(ProjectUploadProfile.project_id)
+        .distinct()
+    )
     rows = (
         db.query(Project)
-        .join(RemidioApiRoutingProfile, RemidioApiRoutingProfile.project_id == Project.id)
-        .join(ProjectUploadProfileRemidioApiBinding, ProjectUploadProfileRemidioApiBinding.routing_profile_id == RemidioApiRoutingProfile.id)
         .filter(
             Project.active.is_(True),
-            RemidioApiRoutingProfile.active.is_(True),
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            Project.id.in_(active_project_ids),
         )
-        .distinct()
         .order_by(Project.title.asc())
         .all()
     )
@@ -2360,7 +2424,7 @@ def _projects_with_routing(db: Session) -> list[dict[str, Any]]:
 
 def _project_route_summaries(db: Session, project_id: int) -> list[dict[str, Any]]:
     rows = (
-        db.query(ProjectUploadProfileRemidioApiBinding)
+        active_remidio_api_bindings(db)
         .options(
             selectinload(ProjectUploadProfileRemidioApiBinding.routing_profile),
             selectinload(ProjectUploadProfileRemidioApiBinding.source_rule).selectinload(RemidioApiSourceRule.connection),
@@ -2368,12 +2432,7 @@ def _project_route_summaries(db: Session, project_id: int) -> list[dict[str, Any
             selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
             selectinload(ProjectUploadProfileRemidioApiBinding.camera),
         )
-        .join(RemidioApiRoutingProfile, RemidioApiRoutingProfile.id == ProjectUploadProfileRemidioApiBinding.routing_profile_id)
-        .filter(
-            RemidioApiRoutingProfile.project_id == project_id,
-            RemidioApiRoutingProfile.active.is_(True),
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
-        )
+        .filter(ProjectUploadProfile.project_id == project_id)
         .order_by(RemidioApiRoutingProfile.name.asc(), ProjectUploadProfileRemidioApiBinding.id.asc())
         .all()
     )
@@ -2793,13 +2852,97 @@ def _load_routing_profile_for_sync(db: Session, routing_profile_id: int) -> Remi
     return routing_profile
 
 
-def _require_sync_lab_scope(db: Session, routing_profile: RemidioApiRoutingProfile, user_id: int | None) -> None:
+def _require_routing_profile_sync_authority(
+    db: Session,
+    routing_profile: RemidioApiRoutingProfile,
+    user_id: int | None,
+    *,
+    selected_route_ids: list[int] | None,
+) -> list[ProjectUploadProfileRemidioApiBinding]:
+    """Require a current active System Admin and complete active route lineage."""
     if user_id is None:
-        return
-    scoped_lab_ids = manager_lab_unit_ids(user_id)
-    route_lab_ids = {route.lab_unit_id for route in routing_profile.routes if route.active}
-    if route_lab_ids and not route_lab_ids.issubset(scoped_lab_ids):
-        raise RemidioConfigError("You cannot sync Remidio API routes outside your lab-unit scope.")
+        raise RemidioConfigError("A human sync actor is required.")
+    actor = db.execute(
+        select(User).options(selectinload(User.roles)).where(
+            User.id == user_id,
+            User.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if actor is None or not actor.has_role("admin"):
+        raise RemidioConfigError("Current System Admin authority is required.")
+    if routing_profile.project is None or not routing_profile.project.active:
+        raise RemidioConfigError("The routing profile project is missing or inactive.")
+    if selected_route_ids:
+        return _load_exact_active_sync_routes(
+            db,
+            routing_profile_id=routing_profile.id,
+            selected_route_ids=set(selected_route_ids),
+        )
+    routes = active_remidio_api_bindings(
+        db,
+        routing_profile_id=routing_profile.id,
+    ).all()
+    if not routes:
+        raise RemidioConfigError("No complete active Remidio API route is available.")
+    return routes
+
+
+def _required_sync_route_ids(payload: dict[str, Any]) -> set[int]:
+    route_ids = set(_optional_int_list(payload.get("route_ids")) or [])
+    if not route_ids:
+        raise RemidioConfigError("The queued selected route facts are missing.")
+    return route_ids
+
+
+def _load_exact_active_sync_routes(
+    db: Session,
+    *,
+    routing_profile_id: int,
+    selected_route_ids: set[int],
+) -> list[ProjectUploadProfileRemidioApiBinding]:
+    """Load every selected route only when its full current lineage is active."""
+    if not selected_route_ids:
+        raise RemidioConfigError("The selected route facts are missing.")
+    routes = active_remidio_api_bindings(
+        db,
+        routing_profile_id=routing_profile_id,
+        route_ids=selected_route_ids,
+    ).all()
+    if {route.id for route in routes} != selected_route_ids:
+        raise RemidioConfigError(
+            "Every selected Remidio API route must belong to the routing profile "
+            "and have complete active lineage."
+        )
+    return routes
+
+
+def _reauthorize_routing_profile_sync_job(
+    db: Session,
+    *,
+    job: Job,
+    item: JobItem,
+    payload: dict[str, Any],
+    expected_user_id: int | None,
+) -> None:
+    """Re-check actor identity and profile lineage immediately before execution."""
+    if expected_user_id is None or job.uploader_user_id != expected_user_id:
+        raise RemidioConfigError("The queued sync actor does not match the job owner.")
+    try:
+        routing_profile_id = int(payload["routing_profile_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RemidioConfigError("The queued routing profile fact is missing.") from exc
+    if item.source_id != routing_profile_id:
+        raise RemidioConfigError("The queued routing profile lineage does not match.")
+    routing_profile = _load_routing_profile_for_sync(db, routing_profile_id)
+    if job.project_id != routing_profile.project_id:
+        raise RemidioConfigError("The queued project and routing profile do not match.")
+    selected_route_ids = _required_sync_route_ids(payload)
+    _require_routing_profile_sync_authority(
+        db,
+        routing_profile,
+        job.uploader_user_id,
+        selected_route_ids=sorted(selected_route_ids),
+    )
 
 
 def _dry_run_summary(payloads: list[RemidioExamPayload]) -> UpsertSummary:

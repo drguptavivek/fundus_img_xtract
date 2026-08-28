@@ -12,11 +12,11 @@ from db_transaction_manager import transaction_scope
 from models import LabUnit, RegradeTask, Role, User, user_lab_units
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.final_grade_basis import normalize_final_grade_basis
-from authz import scope
+from authz.behaviors import role_lab_units
 from encounter_sets.permissions import (
-    CAPABILITY_REGRADE_ADJUDICATION,
     user_has_task_capability,
 )
+REGRADE_ROLES = frozenset({"regrade_adjudicator"})
 from . import bp
 from .route_discrepancy_review import (
     AI_REVIEW_STATUS_FILTER_LABELS,
@@ -29,7 +29,15 @@ from .route_discrepancy_review import (
 def create_regrade_tasks():
     with transaction_scope() as db:
         lu_query = sa.select(LabUnit)
-        lu_query = scope(db, lu_query, LabUnit, current_user, 'review.regrade_creator.manage')
+        lu_query = role_lab_units(
+            db,
+            lu_query,
+            current_user,
+            lab_roles={"data_manager"},
+            hospital_roles={"data_manager"},
+            project_roles={"discrepancy_reviewer"},
+            allow_admin=True,
+        )
         allowed_lab_units = db.execute(lu_query).scalars().all()
         allowed_lab_unit_ids = {lu.id for lu in allowed_lab_units}
         if not allowed_lab_unit_ids:
@@ -112,12 +120,9 @@ def create_regrade_tasks():
             "has_regrade": has_regrade,
             "regrade_grade": request.form.getlist("regrade_grade"),
             "allowed_lab_units": list(allowed_lab_unit_ids),
-            "project_capability_columns": (
-                []
-                if current_user.has_role("admin") or current_user.is_master_admin
-                else ["can_review_discrepancies"]
-            ),
+            "project_capability_role_names": ["discrepancy_reviewer"],
             "project_capability_user_id": current_user.id,
+            "allow_classical_capability": current_user.has_role("data_manager"),
         }
 
         mv_name, where_sql, params, _selected_ai_model_id = build_discrepancy_filter_query(db, filters)
@@ -144,7 +149,7 @@ def create_regrade_tasks():
                 db,
                 user=assigned_user,
                 task_id=row.task_id,
-                capability=CAPABILITY_REGRADE_ADJUDICATION,
+                roles=REGRADE_ROLES,
             )
             for row in rows
         ):

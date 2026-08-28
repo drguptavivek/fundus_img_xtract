@@ -9,7 +9,7 @@ from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dashboard import list_project_encounter_set_queues
 from grading_allocation.dtos import AllocationInputDTO, TargetIdentity, TaskAllocationContext
 from grading_allocation.eligibility import (
-    eligible_enforced_project_task_contexts,
+    eligible_project_task_contexts,
     is_user_eligible_for_task,
 )
 from grading_allocation.exceptions import AllocationConflictError
@@ -71,22 +71,6 @@ def _can_view_media(db, user, media_uuid: str) -> bool:
     except MediaAccessDenied:
         return False
     return True
-
-
-class _DictCache:
-    def __init__(self):
-        self.values = {}
-
-    def get(self, key):
-        return self.values.get(key)
-
-    def set(self, key, value, timeout=None):
-        self.values[key] = value
-        return True
-
-    def delete(self, key):
-        self.values.pop(key, None)
-        return True
 
 
 def _project_with_image_target(db_session, disease):
@@ -431,13 +415,16 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     separated_kpis = get_user_kpi_pending_task_count_data(
         db_session,
         resident.id,
-        exclude_enforced_project_encounter_sets=True,
+        exclude_project_encounter_sets=True,
     )
-    assert mixed_kpis[disease.name]["resident_pending"] == 2
+    # The disease KPI contains the image-scoped disease task only. The
+    # encounter-level task has its own encounter grading scheme, and the
+    # unconfigured task has no exact allocation target.
+    assert mixed_kpis[disease.name]["resident_pending"] == 1
     assert separated_kpis[disease.name]["resident_pending"] == 0
 
 
-def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_live(
+def test_bulk_eligibility_queries_are_bounded_without_authorization_cache(
     db_session,
     core_test_data,
     monkeypatch,
@@ -467,7 +454,6 @@ def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_liv
     lab_id = lab.id
     disease_id = disease.id
 
-    monkeypatch.setattr(eligibility_module, "cache", _DictCache())
     tasks = [SimpleNamespace(id=100_000 + index) for index in range(100)]
 
     def context_for_task(_db, task):
@@ -497,11 +483,11 @@ def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_liv
 
         event.listen(bind, "before_cursor_execute", count_query)
         try:
-            contexts = eligible_enforced_project_task_contexts(
+            contexts = eligible_project_task_contexts(
                 db_session,
                 user_id=resident.id,
                 task_slots=[(task, "resident") for task in tasks],
-                enforced_project_ids={project_id},
+                project_ids={project_id},
             )
         finally:
             event.remove(bind, "before_cursor_execute", count_query)
@@ -516,12 +502,12 @@ def test_bulk_eligibility_queries_are_bounded_and_warm_cache_keeps_conflicts_liv
         "FROM " + statement.replace("\n", " ").split(" FROM ", 1)[-1][:120]
         for statement in cold_statements
     ]
-    assert len(warm_statements) == 1, [
+    assert len(warm_statements) == 3, [
         statement.splitlines()[0] for statement in warm_statements
     ]
 
 
-def test_eligibility_snapshot_is_cached_and_invalidatable(
+def test_eligibility_snapshot_reflects_revocation_immediately(
     db_session,
     core_test_data,
     monkeypatch,
@@ -548,22 +534,24 @@ def test_eligibility_snapshot_is_cached_and_invalidatable(
     )
     db_session.flush()
 
-    fake_cache = _DictCache()
-    monkeypatch.setattr(eligibility_module, "cache", fake_cache)
-
-    first = eligibility_module._cached_user_eligibility_snapshot(
+    first = eligibility_module._current_user_eligibility_snapshot(
         db_session,
         user_id=resident.id,
     )
-    second = eligibility_module._cached_user_eligibility_snapshot(
+    allocation = db_session.query(ProjectGraderAllocation).filter_by(
+        project_id=project.id,
+        user_id=resident.id,
+    ).one()
+    allocation.active = False
+    db_session.flush()
+    second = eligibility_module._current_user_eligibility_snapshot(
         db_session,
         user_id=resident.id,
     )
 
-    assert first == second
-    assert len(fake_cache.values) == 1
-    eligibility_module.invalidate_user_eligibility_cache(resident.id)
-    assert fake_cache.values == {}
+    assert first != second
+    assert first[1]
+    assert second[1] == frozenset()
 
 
 def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data):
@@ -747,7 +735,7 @@ def test_prior_resident_grade_blocks_resident2_and_arbitrator_for_same_user(
     ) is False
 
 
-def test_disabled_project_policy_preserves_legacy_eligibility(db_session, core_test_data):
+def test_project_task_denies_legacy_eligibility_without_exact_allocation(db_session, core_test_data):
     disease = db_session.merge(core_test_data["dr"])
     lab = db_session.merge(core_test_data["lab_unit"])
     project, _profile = _project_with_image_target(db_session, disease)
@@ -774,7 +762,7 @@ def test_disabled_project_policy_preserves_legacy_eligibility(db_session, core_t
         user_id=resident.id,
         task=task,
         role_slot="resident",
-    ) is True
+    ) is False
 
 
 def test_service_creates_normalized_allocation_and_treats_arbitrator_as_optional(
@@ -832,6 +820,15 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
         lab_units=[],
     )
     task = _direct_task(db_session, core_test_data, admin, disease, project=project)
+    db_session.add(
+        UserDiseaseUnitRole(
+            user_id=resident.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            can_grade_resident=True,
+            active=True,
+        )
+    )
     create_or_reactivate_allocation(
         admin.id,
         project.id,

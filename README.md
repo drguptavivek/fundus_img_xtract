@@ -214,7 +214,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [EncounterSetType Policy and Direction](docs/01-Adding_Images/encounter_set_types.md) - Encounter-set schema, custody persistence, metadata contracts, and phased delivery model
 - [Upload Profiles API](docs/API/upload-profiles/README.md) - Project/lab upload profile source of truth, uploader assignment, profile options, and API contract
 - [Project Referral Diseases API](docs/API/referral-diseases/README.md) - Project-owned referral-only disease choices extending grading-scheme defaults
-- [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project, hospital, or lab-unit scope
+- [Project Role Grants API](docs/API/project-authorization/README.md) - Project membership using global application roles with project-wide or exact Project-Lab Unit scope
 - [Patient Media API](docs/API/media/README.md) - Central object authorization for images, thumbnails, PDFs, metadata, OCR, and signed delivery
 - [Encounter Evidence Viewer API](docs/API/encounter-viewer/README.md) - Shared JSON DTO and HTMX partial for authorized non-PII legacy, EncounterSet, and direct-image evidence
 - [Project Review API](docs/API/project-review/README.md) - Scoped non-PII project summary, upload inventory, and grading aggregates
@@ -336,10 +336,10 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
-- [Authorization Rules](docs/policy/authorizations.md) - Human-readable source of truth for action-level authorization rules before route wiring
+- [Authorization Rules](docs/policy/authorizations.md) - Plain-language role, relationship, delegation, and fail-closed rules
 - [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Who is allowed to do what at each step of the work, inside a project and outside one, without jargon. Also rendered at [authorization_in_plain_language.html](docs/policy/authorization_in_plain_language.html)
 - [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Which role reaches which project action and at what grant scope; governance and operational drawn separately. Same content rendered at [authorization_matrix.html](docs/policy/authorization_matrix.html)
-- [ReBAC Authorization Engine](docs/10-DEVELOP/authorizations_rebac_engine.md) - Implementation contract for the `authz` engine: grant sources, `authorize()` entry points, and registry domains
+- [Lean Authorization Cutover](docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md) - Named role-scope behaviours, lineage, delegation, worker reauthorization, and one-migration cutover contract
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation
 
 #### Master Data Utilities

@@ -15,6 +15,7 @@ from models import (
     User,
 )
 from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
+from project_configuration.models import ProjectLabUnit
 from encounter_sets.models import EncounterSetAttachment
 from encounter_set_types.models import EncounterSetType
 from upload_profiles.models import (
@@ -120,13 +121,18 @@ def encounter_set_data(db_session, core_test_data):
     )
     db_session.add_all([project, encounter_set_type, upload_profile])
     db_session.flush()
-    db_session.add(
+    db_session.add_all([
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=lab_unit.id,
+            active=True,
+        ),
         ProjectUploadProfile(
             project_id=project.id,
             upload_profile_id=upload_profile.id,
             active=True,
-        )
-    )
+        ),
+    ])
     db_session.flush()
     
     encounter = PatientEncounters(
@@ -560,11 +566,8 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
     lab_unit = encounter_set_data["lab_unit"]
-    manager = UserFactory.create_with_hospital(
+    manager = UserFactory.create_admin(
         db_session,
-        "local_admin",
-        lab_unit.hospital_id,
-        [lab_unit.id],
         username="encounter_permission_manager",
     )
     user = UserFactory.create_with_hospital(
@@ -575,26 +578,22 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
         username="encounter_permission_user",
     )
     manager_client = auth_client_factory(manager)
-    endpoint = (
-        f"/api/projects/{encounter_set_data['project'].id}/encounter-set-permissions"
-    )
+    endpoint = f"/api/projects/{encounter_set_data['project'].id}/role-grants"
     response = manager_client.post(
         endpoint,
-        data={
+        json={
             "user_id": user.id,
-            "lab_unit_id": lab_unit.id,
-            "can_browse": "true",
-            "active": "true",
+            "scope_key": f"lab_unit:{lab_unit.id}",
+            "role_names": ["collaborator"],
         },
         headers={"X-CSRFToken": csrf_token},
     )
     assert response.status_code == 200
-    assert response.get_json()["data"]["updated"]["can_verify"] is False
 
     manager_client.get("/logout")
     user_client = auth_client_factory(user)
     response = user_client.get(
-        f"/uploads/encountersets/browse?project_id={encounter_set_data['project'].id}"
+        f"/uploads/encountersets/browse-no-pii?project_id={encounter_set_data['project'].id}"
     )
     assert response.status_code == 200
     assert encounter_set_data["project"].title.encode() in response.data
@@ -607,12 +606,10 @@ def test_project_manager_controls_encounter_set_browse_and_verify_access(
     manager_client = auth_client_factory(manager)
     response = manager_client.post(
         endpoint,
-        data={
+        json={
             "user_id": user.id,
-            "lab_unit_id": lab_unit.id,
-            "can_browse": "true",
-            "can_verify": "true",
-            "active": "true",
+            "scope_key": f"lab_unit:{lab_unit.id}",
+            "role_names": ["collaborator", "verifier"],
         },
         headers={"X-CSRFToken": csrf_token},
     )
@@ -2049,7 +2046,7 @@ def test_verify_encounter_set_finalize(client, auth_client_factory, encounter_se
 def _project_only_verifier(db_session, encounter_set_data, *, username):
     from auth.security import hash_password
 
-    role = db_session.query(Role).filter_by(name="optometrist").one()
+    role = db_session.query(Role).filter_by(name="verifier").one()
     user = User(
         username=username,
         password_hash=hash_password("Test@2026"),
@@ -2152,16 +2149,13 @@ def test_verified_encounter_set_rejects_repeat_finalization(
     assert db_session.query(GradingTask).count() == original_task_count
 
 def test_verify_encounter_set_wrong_role(client, auth_client_factory, encounter_set_data, db_session):
-    """Test role restriction."""
-    # Create a resident user (who shouldn't have access to verification UI usually)
-    # Actually, residents ARE allowed in media routes, but let's check verification UI roles:
-    # @roles_required("admin", "optometrist", "data_manager")
-    
+    """A user without verification authority receives an empty scoped list."""
     user = UserFactory.create_by_role(db_session, "ophthalmologist", username="res_no_verify")
     auth_client = auth_client_factory(user)
-    
+
     response = auth_client.get("/verify_encounter_set/")
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert encounter_set_data["encounter"].name.encode() not in response.data
 def test_package_task_identity_does_not_reuse_another_package(
     db_session, encounter_set_data, core_test_data
 ):

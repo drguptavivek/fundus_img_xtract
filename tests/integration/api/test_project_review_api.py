@@ -307,7 +307,12 @@ def test_project_review_pages_and_api_are_scoped_and_non_pii(app, db_session, co
             ("Per-image", "Glaucoma", "Per-image grading scheme"),
             ("Linked disease", "Review Linked Image Disease", "Linked to Glaucoma"),
         ]
-        assert configuration["configured_users"][0]["roles"] == ["collaborator"]
+        assert configuration["configured_users"] == []
+        assert all(
+            label != "Authorised uploaders"
+            for source in configuration["sources"]
+            for label, _value in source["details"]
+        )
         assert "Hidden Disabled Intake" not in summary.get_data(as_text=True)
         summary_page = client.get(f"/projects/{project.id}/summary")
         assert summary_page.status_code == 200
@@ -351,3 +356,86 @@ def test_projects_navbar_is_available_to_project_only_members(app, db_session):
 
     assert response.status_code == 200
     assert 'href="/projects/"' in response.get_data(as_text=True)
+
+
+def test_upload_assignment_alone_does_not_grant_project_review(
+    app,
+    db_session,
+    core_test_data,
+):
+    lab = db_session.merge(core_test_data["lab_unit"])
+    user = User(
+        username="upload_only_project_user",
+        password_hash="x",
+        is_active=True,
+        roles=[_role(db_session, "fileUploader")],
+    )
+    project = Project(title="Upload-only project", code="UPLOAD_ONLY_REVIEW", active=True)
+    profile = UploadProfile(name="Upload-only profile", active=True)
+    db_session.add_all([user, project, profile])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
+    mapping = ProjectUploadProfile(
+        project_id=project.id,
+        upload_profile_id=profile.id,
+        active=True,
+    )
+    db_session.add(mapping)
+    db_session.flush()
+    db_session.add(
+        ProjectUploadProfileAssignment(
+            project_upload_profile_id=mapping.id,
+            user_id=user.id,
+            lab_unit_id=lab.id,
+            active=True,
+        )
+    )
+    db_session.commit()
+
+    with app.test_client(user=user) as client:
+        index = client.get("/projects/")
+        summary = client.get(f"/api/projects/{project.id}/review/summary")
+
+    assert index.status_code == 200
+    assert b"Upload-only project" not in index.data
+    assert summary.status_code == 404
+
+
+def test_legacy_file_uploader_project_grant_does_not_grant_project_review(
+    app,
+    db_session,
+    core_test_data,
+):
+    lab = db_session.merge(core_test_data["lab_unit"])
+    uploader_role = _role(db_session, "fileUploader")
+    user = User(
+        username="legacy_upload_grant_user",
+        password_hash="x",
+        is_active=True,
+    )
+    project = Project(
+        title="Legacy uploader grant project",
+        code="LEGACY_UPLOAD_GRANT",
+        active=True,
+    )
+    db_session.add_all([user, project])
+    db_session.flush()
+    db_session.add_all([
+        ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
+        ProjectRoleGrant(
+            project_id=project.id,
+            user_id=user.id,
+            role_id=uploader_role.id,
+            scope_type="lab_unit",
+            lab_unit_id=lab.id,
+            active=True,
+        ),
+    ])
+    db_session.commit()
+
+    with app.test_client(user=user) as client:
+        index = client.get("/projects/")
+        summary = client.get(f"/api/projects/{project.id}/review/summary")
+
+    assert b"Legacy uploader grant project" not in index.data
+    assert summary.status_code == 404

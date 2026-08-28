@@ -289,6 +289,7 @@ def regenerate_export(job_token: str):
                 db.flush()
 
             metadata = {
+                "user_id": current_user.id,
                 "dataset_name": dataset.name,
                 "dataset_purpose": dataset.purpose,
                 "disease_id": dataset.disease_id,

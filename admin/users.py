@@ -1,6 +1,5 @@
 from datetime import date
 from flask import (
-    after_this_request,
     current_app,
     flash,
     redirect,
@@ -55,9 +54,10 @@ from utils.timezone_choices import (
     TIMEZONE_LABELS,
     DEFAULT_TIMEZONE,
 )
-from app_cache import cache
-from grading_allocation.eligibility import invalidate_user_eligibility_cache
-from data_authorization.policy import PROJECT_ONLY_ROLE_NAMES
+from authz.project_roles import PROJECT_GOVERNANCE_ROLES
+
+
+PROJECT_ONLY_ROLE_NAMES = PROJECT_GOVERNANCE_ROLES | {"collaborator"}
 
 
 def _global_user_roles_statement():
@@ -600,15 +600,6 @@ def edit_user(user_id: int):
                 )
 
                 db.add(user)
-                cache_key = f"auth:user:{user.id}"
-                changed_user_id = user.id
-
-                @after_this_request
-                def invalidate_role_caches(response):
-                    cache.delete(cache_key)
-                    invalidate_user_eligibility_cache(changed_user_id)
-                    return response
-
                 flash("Roles updated.", "success")
                 if request.headers.get("HX-Request") or request.args.get("format") == "partial":
                     return redirect(url_for("admin.user_detail", user_id=user_id, format="shell"))

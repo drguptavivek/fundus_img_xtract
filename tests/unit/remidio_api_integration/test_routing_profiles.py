@@ -1,13 +1,15 @@
 from contextlib import contextmanager
 from datetime import date
 from io import BytesIO
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from PIL import Image
 
 from encounter_set_types.models import EncounterSetType
-from models import Disease, EncounterSetImage, PatientEncounters, Project, RemidioConnection, RemidioExam, RemidioSite
+from models import Disease, EncounterSetImage, JobItem, PatientEncounters, Project, RemidioConnection, RemidioExam, RemidioSite, Role, User
+from project_configuration.models import ProjectLabUnit
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError, RemidioRemoteError
 from remidio_api_integration.models import RemidioApiExamEncounter, RemidioApiSourceRule
@@ -450,6 +452,241 @@ def test_routing_profile_sync_fetches_and_saves_scoped_encounter_set(db_session,
     assert (tmp_path / image.folder_rel / image.original_filename).exists()
 
 
+def test_routing_profile_worker_reauthorizes_actor_and_exact_lineage(
+    db_session,
+    core_test_data,
+):
+    project = _project(db_session, "WORKER_AUTH")
+    connection = _connection(db_session)
+    automated_mapping = _automated_project_profile(
+        db_session, project, core_test_data
+    )
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {
+            "project_id": project.id,
+            "name": f"Worker auth {uuid4()}",
+            "active": True,
+        },
+    )
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_worker_auth",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": automated_mapping.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    admin_role = db_session.query(Role).filter_by(name="admin").one_or_none()
+    if admin_role is None:
+        admin_role = Role(name="admin")
+        db_session.add(admin_role)
+        db_session.flush()
+    actor = User(
+        username="routing_worker_admin",
+        password_hash="x",
+        is_active=True,
+        roles=[admin_role],
+    )
+    db_session.add(actor)
+    db_session.flush()
+    job = SimpleNamespace(
+        uploader_user_id=actor.id,
+        project_id=project.id,
+    )
+    item = SimpleNamespace(source_id=routing_profile.id)
+    payload = {
+        "routing_profile_id": routing_profile.id,
+        "route_ids": [route.id],
+    }
+
+    service._reauthorize_routing_profile_sync_job(
+        db_session,
+        job=job,
+        item=item,
+        payload=payload,
+        expected_user_id=actor.id,
+    )
+    with pytest.raises(RemidioConfigError, match="does not match"):
+        service._reauthorize_routing_profile_sync_job(
+            db_session,
+            job=job,
+            item=item,
+            payload=payload,
+            expected_user_id=actor.id + 1,
+        )
+
+    actor.is_active = False
+    db_session.flush()
+    with pytest.raises(RemidioConfigError, match="Admin authority"):
+        service._reauthorize_routing_profile_sync_job(
+            db_session,
+            job=job,
+            item=item,
+            payload=payload,
+            expected_user_id=actor.id,
+        )
+
+
+def test_routing_profile_worker_denies_any_incomplete_or_foreign_selected_route(
+    db_session,
+    core_test_data,
+):
+    project = _project(db_session, "WORKER_ROUTE_LINEAGE")
+    connection = _connection(db_session)
+    project_profile = _automated_project_profile(
+        db_session, project, core_test_data
+    )
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {
+            "project_id": project.id,
+            "name": f"Worker lineage {uuid4()}",
+            "active": True,
+        },
+    )
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_worker_lineage",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": project_profile.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    admin_role = db_session.query(Role).filter_by(name="admin").one()
+    actor = User(
+        username=f"routing_lineage_admin_{uuid4().hex[:8]}",
+        password_hash="x",
+        is_active=True,
+        roles=[admin_role],
+    )
+    db_session.add(actor)
+    db_session.flush()
+    job = SimpleNamespace(uploader_user_id=actor.id, project_id=project.id)
+    item = SimpleNamespace(source_id=routing_profile.id)
+
+    def reauthorize(route_ids):
+        return service._reauthorize_routing_profile_sync_job(
+            db_session,
+            job=job,
+            item=item,
+            payload={
+                "routing_profile_id": routing_profile.id,
+                "route_ids": route_ids,
+            },
+            expected_user_id=actor.id,
+        )
+
+    reauthorize([route.id])
+    with pytest.raises(RemidioConfigError, match="Every selected"):
+        reauthorize([route.id, route.id + 999_999])
+
+    project_profile.active = False
+    db_session.flush()
+    with pytest.raises(RemidioConfigError, match="Every selected"):
+        reauthorize([route.id])
+    project_profile.active = True
+
+    project_profile.profile.active = False
+    db_session.flush()
+    with pytest.raises(RemidioConfigError, match="Every selected"):
+        reauthorize([route.id])
+    project_profile.profile.active = True
+
+    project.active = False
+    db_session.flush()
+    with pytest.raises(RemidioConfigError, match="inactive"):
+        reauthorize([route.id])
+    project.active = True
+
+    project_lab = db_session.query(ProjectLabUnit).filter_by(
+        project_id=project.id,
+        lab_unit_id=route.lab_unit_id,
+    ).one()
+    project_lab.active = False
+    db_session.flush()
+    with pytest.raises(RemidioConfigError, match="Every selected"):
+        reauthorize([route.id])
+
+
+def test_routing_profile_job_persists_exact_validated_route_ids(
+    db_session,
+    core_test_data,
+):
+    project = _project(db_session, "QUEUED_ROUTE_FACTS")
+    connection = _connection(db_session)
+    project_profile = _automated_project_profile(
+        db_session, project, core_test_data
+    )
+    routing_profile = upsert_routing_profile(
+        db_session,
+        {
+            "project_id": project.id,
+            "name": f"Queued route facts {uuid4()}",
+            "active": True,
+        },
+    )
+    route = upsert_routing_profile_route(
+        db_session,
+        {
+            "routing_profile_id": routing_profile.id,
+            "remidio_connection_id": connection.id,
+            "site_custom_identifier": "rpc_queued_route_facts",
+            "remidio_device_type": "PRISTINE",
+            "project_upload_profile_id": project_profile.id,
+            "lab_unit_id": core_test_data["lab_unit"].id,
+            "camera_id": core_test_data["camera"].id,
+            "active_from_date": "2026-01-01",
+        },
+    )
+    admin_role = db_session.query(Role).filter_by(name="admin").one()
+    actor = User(
+        username=f"routing_queue_admin_{uuid4().hex[:8]}",
+        password_hash="x",
+        is_active=True,
+        roles=[admin_role],
+    )
+    db_session.add(actor)
+    db_session.flush()
+
+    result = service.create_routing_profile_sync_job(
+        db_session,
+        routing_profile_id=routing_profile.id,
+        payload={
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-02",
+        },
+        requested_by_user_id=actor.id,
+        requested_by_username=actor.username,
+    )
+    item = db_session.get(JobItem, result["job_item_id"])
+    assert item is not None
+    assert service._job_item_payload(item)["route_ids"] == [route.id]
+
+    with pytest.raises(RemidioConfigError, match="Every selected"):
+        service.create_routing_profile_sync_job(
+            db_session,
+            routing_profile_id=routing_profile.id,
+            payload={
+                "start_date": "2026-04-01",
+                "end_date": "2026-04-02",
+                "route_ids": [route.id, route.id + 999_999],
+            },
+            requested_by_user_id=actor.id,
+            requested_by_username=actor.username,
+        )
+
+
 def test_routing_profile_sync_continues_after_bad_site_identifier(db_session, core_test_data, tmp_path, monkeypatch):
     from remidio_api_integration import ingest as ingest_module
 
@@ -589,7 +826,14 @@ def _automated_project_profile(db_session, project: Project, core_test_data) -> 
         )
     )
     mapping = ProjectUploadProfile(project=project, profile=upload_profile, active=True)
-    db_session.add_all([encounter_scheme, encounter_set_type, upload_profile, mapping])
+    project_lab = ProjectLabUnit(
+        project_id=project.id,
+        lab_unit_id=core_test_data["lab_unit"].id,
+        active=True,
+    )
+    db_session.add_all(
+        [encounter_scheme, encounter_set_type, upload_profile, mapping, project_lab]
+    )
     db_session.flush()
     return mapping
 

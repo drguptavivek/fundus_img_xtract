@@ -7,7 +7,6 @@ from typing import Any, Iterable
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from authz.cache import schedule_authorization_invalidation
 from models import LabUnit, Project
 
 from .models import ProjectLabUnit
@@ -96,66 +95,19 @@ def replace_project_lab_units(
 
     # Remove latent access outside the new boundary. Rows are retained for audit
     # history and can be deliberately re-created if the Lab Unit is added later.
-    from data_authorization.models import HOSPITAL_SCOPE, LAB_UNIT_SCOPE, ProjectRoleGrant
-    from encounter_sets.models import ProjectEncounterSetPermission
+    from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
     from grading_allocation.models import ProjectGraderAllocation
     from iitk_api_integration.models import IITKApiProjectConfig
     from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding
     from upload_profiles.models import ProjectUploadProfile, ProjectUploadProfileAssignment
 
-    selected_hospital_ids = set(db.execute(
-        select(LabUnit.hospital_id).where(LabUnit.id.in_(selected_ids or {-1}))
-    ).scalars())
-    affected_user_ids = set(db.execute(
-        select(ProjectRoleGrant.user_id).where(
-            ProjectRoleGrant.project_id == project_id,
-            ProjectRoleGrant.active.is_(True),
-            or_(
-                (ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE)
-                & ProjectRoleGrant.lab_unit_id.not_in(selected_ids or {-1}),
-                (ProjectRoleGrant.scope_type == HOSPITAL_SCOPE)
-                & ProjectRoleGrant.hospital_id.not_in(selected_hospital_ids or {-1}),
-            ),
-        )
-    ).scalars())
-    affected_user_ids.update(db.execute(
-        select(ProjectUploadProfileAssignment.user_id)
-        .join(
-            ProjectUploadProfile,
-            ProjectUploadProfile.id
-            == ProjectUploadProfileAssignment.project_upload_profile_id,
-        )
-        .where(
-            ProjectUploadProfile.project_id == project_id,
-            ProjectUploadProfileAssignment.active.is_(True),
-            ProjectUploadProfileAssignment.lab_unit_id.not_in(selected_ids or {-1}),
-        )
-    ).scalars())
-    affected_user_ids.update(db.execute(
-        select(ProjectEncounterSetPermission.user_id).where(
-            ProjectEncounterSetPermission.project_id == project_id,
-            ProjectEncounterSetPermission.active.is_(True),
-            ProjectEncounterSetPermission.lab_unit_id.not_in(selected_ids or {-1}),
-        )
-    ).scalars())
-    affected_user_ids.update(db.execute(
-        select(ProjectGraderAllocation.user_id).where(
-            ProjectGraderAllocation.project_id == project_id,
-            ProjectGraderAllocation.active.is_(True),
-            ProjectGraderAllocation.lab_unit_id.not_in(selected_ids or {-1}),
-        )
-    ).scalars())
     db.execute(
         update(ProjectRoleGrant)
         .where(
             ProjectRoleGrant.project_id == project_id,
             ProjectRoleGrant.active.is_(True),
-            or_(
-                (ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE)
-                & ProjectRoleGrant.lab_unit_id.not_in(selected_ids or {-1}),
-                (ProjectRoleGrant.scope_type == HOSPITAL_SCOPE)
-                & ProjectRoleGrant.hospital_id.not_in(selected_hospital_ids or {-1}),
-            ),
+            ProjectRoleGrant.scope_type == LAB_UNIT_SCOPE,
+            ProjectRoleGrant.lab_unit_id.not_in(selected_ids or {-1}),
         )
         .values(active=False)
     )
@@ -170,7 +122,7 @@ def replace_project_lab_units(
         )
         .values(active=False)
     )
-    for model in (ProjectEncounterSetPermission, ProjectGraderAllocation, IITKApiProjectConfig):
+    for model in (ProjectGraderAllocation, IITKApiProjectConfig):
         db.execute(
             update(model)
             .where(
@@ -192,11 +144,6 @@ def replace_project_lab_units(
         .values(active=False)
     )
     db.flush()
-    schedule_authorization_invalidation(
-        db,
-        user_ids=affected_user_ids,
-        project_ids={project_id},
-    )
     return list_project_lab_units(db, project_id=project_id)
 
 

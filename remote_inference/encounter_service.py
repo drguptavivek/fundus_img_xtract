@@ -223,7 +223,7 @@ def save_integration(payload: dict[str, Any]) -> MutationResult:
 
 
 def list_manual_projects(
-    db, user: Any, *, action: str = "project.wai.run"
+    db, user: Any, *, results_only: bool = False
 ) -> list[dict[str, Any]]:
     """Return scoped projects whose encounter DR-DME manual workflow is enabled."""
     query = (
@@ -238,12 +238,14 @@ def list_manual_projects(
         .distinct()
         .order_by(Project.title, Project.id)
     )
-    from data_authorization.policy import user_can_project_action
+    from authz.project_access import can_run_wai, can_view_wai_results
+
+    check = can_view_wai_results if results_only else can_run_wai
 
     return [
         {"id": row.id, "title": row.title, "code": row.code}
         for row in query.all()
-        if user_can_project_action(db, user=user, project_id=row.id, action=action)
+        if check(db, user, project_id=row.id)
     ]
 
 
@@ -370,10 +372,10 @@ def create_manual_job(
     if count_error:
         return MutationResult(False, count_error, 400)
     with transaction_scope() as db:
-        from data_authorization.policy import ACTION_WAI_RUN, user_can_project_action
+        from authz.project_access import can_run_wai
 
-        if not user_can_project_action(
-            db, user=user, project_id=project_id, action=ACTION_WAI_RUN
+        if not can_run_wai(
+            db, user, project_id=project_id
         ):
             return MutationResult(False, "You cannot run WAI inference for this project.", 403)
         candidate_page = list_candidates(

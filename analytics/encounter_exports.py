@@ -23,7 +23,8 @@ from models import (
     PatientEncounters,
     User,
 )
-from authz import scope
+from authz.behaviors import analytics_lab_units, analytics_rows
+from services.uploads.access import encounter_columns
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,7 @@ def _workbook_bytes(wb: Workbook) -> bytes:
 
 def _scoped_lab_unit_ids(db: SASession, user: User, filters: EncounterExportFilters) -> list[int]:
     query = db.query(LabUnit.id)
-    query = scope(db, query, LabUnit, user, 'analytics.encounters.view')
+    query = analytics_lab_units(db, query, user)
     if filters.hospital_id is not None:
         query = query.filter(LabUnit.hospital_id == filters.hospital_id)
     if filters.lab_unit_id is not None:
@@ -116,7 +117,7 @@ def encounter_ids(
     # on its own it lets a project grant on lab L export everything in L --
     # other projects' encounters and classical ones alike. The row-level rule
     # is what separates them.
-    query = scope(db, query, PatientEncounters, user, 'analytics.encounters.view')
+    query = analytics_rows(db, query, user, encounter_columns(PatientEncounters))
     if filters.capture_date is not None:
         query = query.filter(PatientEncounters.capture_date_dt == filters.capture_date)
     if filters.start_date is not None:

@@ -1,6 +1,6 @@
 {# The Legacy & Image Grading panel.
 
-   Cards are rendered server-side on first paint, using the Redis-cached counts,
+   Cards are rendered server-side on first paint, using live authorized counts,
    so the page never shows placeholders that later resize. That matters when the
    browser restores scroll position on reload: a placeholder-then-card sequence
    moves content under the viewport and reads as flashing.

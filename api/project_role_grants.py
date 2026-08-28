@@ -44,30 +44,26 @@ def _grant_input(project_id: int) -> ProjectRoleGrantInput:
         user_id=_required_int(payload.get("user_id"), "user_id"),
         role_name=str(payload.get("role_name") or "").strip(),
         scope_type=str(payload.get("scope_type") or "").strip(),
-        hospital_id=_optional_int(payload.get("hospital_id")),
         lab_unit_id=_optional_int(payload.get("lab_unit_id")),
         active=active,
     )
 
 
-def _scope_values(payload) -> tuple[str, int | None, int | None]:
+def _scope_values(payload) -> tuple[str, int | None]:
     scope_key = str(payload.get("scope_key") or "").strip()
     if scope_key:
         if scope_key == "project":
-            return "project", None, None
+            return "project", None
         try:
             scope_type, raw_id = scope_key.split(":", 1)
             scope_id = int(raw_id)
         except (TypeError, ValueError) as exc:
             raise ProjectGrantValidationError("Select a valid project scope.") from exc
-        if scope_type == "hospital":
-            return scope_type, scope_id, None
         if scope_type == "lab_unit":
-            return scope_type, None, scope_id
+            return scope_type, scope_id
         raise ProjectGrantValidationError("Select a valid project scope.")
     return (
         str(payload.get("scope_type") or "").strip(),
-        _optional_int(payload.get("hospital_id")),
         _optional_int(payload.get("lab_unit_id")),
     )
 
@@ -85,7 +81,7 @@ def project_role_grants(project_id: int):
                 if role_names is not None:
                     if not isinstance(role_names, list):
                         raise ProjectGrantValidationError("role_names must be a list.")
-                    scope_type, hospital_id, lab_unit_id = _scope_values(payload)
+                    scope_type, lab_unit_id = _scope_values(payload)
                     updated = replace_project_role_grants(
                         db,
                         actor=current_user,
@@ -93,10 +89,8 @@ def project_role_grants(project_id: int):
                         user_id=_required_int(payload.get("user_id"), "user_id"),
                         role_names=role_names,
                         scope_type=scope_type,
-                        hospital_id=hospital_id,
                         lab_unit_id=lab_unit_id,
                         original_scope_type=(str(payload.get("original_scope_type") or "").strip() or None),
-                        original_hospital_id=_optional_int(payload.get("original_hospital_id")),
                         original_lab_unit_id=_optional_int(payload.get("original_lab_unit_id")),
                     )
                 else:

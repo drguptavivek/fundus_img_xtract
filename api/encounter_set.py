@@ -27,8 +27,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from auth.roles import roles_or_project_grant_required
-from utils.hospital_scoping import apply_scoping
+from authz import RecordColumns, access_context, role_scoped_rows
 from upload_profiles.service import (
     UPLOAD_KIND_ENCOUNTER_SET,
     UploadProfileError,
@@ -39,7 +38,7 @@ from encounter_sets.monocular_status import update_monocular_status
 
 
 @api_bp.route("/encounter-sets/<uuid>/monocular-status", methods=["PATCH"])
-@roles_or_project_grant_required("admin", "optometrist", "data_manager")
+@login_required
 def patch_encounter_set_monocular_status(uuid):
     """Correct canonical monocular status before or after verification."""
     payload = request.get_json(silent=True) or {}
@@ -287,7 +286,18 @@ def list_unverified_encounter_sets():
             )
         ).order_by(PatientEncounters.capture_date.desc())
         
-        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        query = role_scoped_rows(
+            query,
+            access_context(db, current_user),
+            RecordColumns(
+                project_id=PatientEncounters.project_id,
+                lab_unit_id=PatientEncounters.lab_unit_id,
+            ),
+            lab_roles={"local_admin", "optometrist"},
+            hospital_roles={"local_admin"},
+            project_roles={"project_pi", "site_pi", "project_admin", "optometrist", "verifier"},
+            allow_admin=True,
+        )
         encounters = db.execute(query).scalars().all()
         
         return jsonify([{
@@ -307,7 +317,18 @@ def get_encounter_set_details(uuid):
         query = select(PatientEncounters).where(PatientEncounters.uuid == uuid).options(
             selectinload(PatientEncounters.encounter_set_images)
         )
-        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        query = role_scoped_rows(
+            query,
+            access_context(db, current_user),
+            RecordColumns(
+                project_id=PatientEncounters.project_id,
+                lab_unit_id=PatientEncounters.lab_unit_id,
+            ),
+            lab_roles={"local_admin", "optometrist"},
+            hospital_roles={"local_admin"},
+            project_roles={"project_pi", "site_pi", "project_admin", "optometrist", "verifier"},
+            allow_admin=True,
+        )
         encounter = db.execute(query).scalar_one_or_none()
         
         if not encounter:
@@ -374,7 +395,18 @@ def update_image_position(uuid):
 
         # Scope check - verify user has access to this encounter
         enc_query = select(PatientEncounters).where(PatientEncounters.id == img.patient_encounter_id)
-        enc_query = apply_scoping(enc_query, PatientEncounters, current_user, "edit")
+        enc_query = role_scoped_rows(
+            enc_query,
+            access_context(db, current_user),
+            RecordColumns(
+                project_id=PatientEncounters.project_id,
+                lab_unit_id=PatientEncounters.lab_unit_id,
+            ),
+            lab_roles={"local_admin", "optometrist"},
+            hospital_roles={"local_admin"},
+            project_roles={"project_admin", "optometrist", "verifier"},
+            allow_admin=True,
+        )
         if not db.execute(enc_query).scalar_one_or_none():
             return jsonify({"error": "Access denied"}), 403
 

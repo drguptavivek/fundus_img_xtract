@@ -24,7 +24,13 @@ from .dto import (
 )
 
 
-def effective_configuration(db: Session, *, project_id: int, allowed_lab_ids: frozenset[int] | None) -> dict:
+def effective_configuration(
+    db: Session,
+    *,
+    project_id: int,
+    allowed_lab_ids: frozenset[int] | None,
+    include_people: bool,
+) -> dict:
     """Build currently enabled configuration. ``None`` means project-wide visibility."""
     mappings = db.execute(
         select(ProjectUploadProfile)
@@ -36,12 +42,22 @@ def effective_configuration(db: Session, *, project_id: int, allowed_lab_ids: fr
     ).scalars().all()
     mappings = [m for m in mappings if m.profile.active]
     return {
-        "sources": _sources(db, project_id, mappings, allowed_lab_ids),
+        "sources": _sources(
+            db,
+            project_id,
+            mappings,
+            allowed_lab_ids,
+            include_people=include_people,
+        ),
         "automated_analyses": _analyses(db, project_id),
         "grading_targets": _targets(db, mappings),
         "annotation": _annotation(db, project_id),
         "metadata_fields": _metadata(mappings),
-        "configured_users": _users(db, project_id, mappings, allowed_lab_ids),
+        "configured_users": (
+            _users(db, project_id, mappings, allowed_lab_ids)
+            if include_people
+            else ()
+        ),
         "allocation_enforced": bool(db.execute(select(ProjectGradingAllocationPolicy.enforcement_enabled).where(
             ProjectGradingAllocationPolicy.project_id == project_id
         )).scalar_one_or_none()),
@@ -49,7 +65,7 @@ def effective_configuration(db: Session, *, project_id: int, allowed_lab_ids: fr
     }
 
 
-def _sources(db, project_id, mappings, allowed_lab_ids):
+def _sources(db, project_id, mappings, allowed_lab_ids, *, include_people):
     rows = []
     for mapping in mappings:
         p = mapping.profile
@@ -62,8 +78,18 @@ def _sources(db, project_id, mappings, allowed_lab_ids):
             ("Dilation", _dilation(p)),
             ("EncounterSet types", _labels(x.encounter_set_type.name for x in p.encounter_set_types if x.active)),
             ("ZIP intake", _labels(x for x, enabled in (("Remidio ZIP", p.allow_remidio_zip_encounter_set), ("IITK ZIP", p.allow_iitk_zip_encounter_set)) if enabled)),
-            ("Authorised uploaders", _labels(f"{a.user.full_name or a.user.username} - {a.lab_unit.hospital.name} / {a.lab_unit.name}" for a in assignments)),
         ]
+        if include_people:
+            details.append(
+                (
+                    "Authorised uploaders",
+                    _labels(
+                        f"{a.user.full_name or a.user.username} - "
+                        f"{a.lab_unit.hospital.name} / {a.lab_unit.name}"
+                        for a in assignments
+                    ),
+                )
+            )
         rows.append(ProjectSourceDTO(
             id=f"profile-{mapping.id}", kind="Upload profile", name=p.name,
             summary=_labels(x.upload_kind for x in p.upload_kinds),
@@ -341,7 +367,7 @@ def _metadata(mappings):
 
 def _users(db, project_id, mappings, allowed_lab_ids):
     grants = db.execute(select(ProjectRoleGrant).options(selectinload(ProjectRoleGrant.user), selectinload(ProjectRoleGrant.role),
-        selectinload(ProjectRoleGrant.hospital), selectinload(ProjectRoleGrant.lab_unit)).where(
+        selectinload(ProjectRoleGrant.lab_unit)).where(
         ProjectRoleGrant.project_id == project_id, ProjectRoleGrant.active.is_(True))).scalars().all()
     grants = [g for g in grants if _grant_visible(g, allowed_lab_ids)]
     allocations = db.execute(select(ProjectGraderAllocation).options(selectinload(ProjectGraderAllocation.user),
@@ -352,9 +378,11 @@ def _users(db, project_id, mappings, allowed_lab_ids):
     by_user = defaultdict(lambda: {"user": None, "scopes": set(), "roles": set(), "uploads": set(), "allocations": set()})
     for g in grants:
         x = by_user[g.user_id]; x["user"] = g.user; x["roles"].add(g.role.name)
-        x["scopes"].add("Project-wide" if g.scope_type == "project" else
-            f"Hospital: {g.hospital.name}" if g.scope_type == "hospital" else
-            f"Lab unit: {g.lab_unit.hospital.name} / {g.lab_unit.name}")
+        x["scopes"].add(
+            "Project-wide"
+            if g.scope_type == "project"
+            else f"Lab unit: {g.lab_unit.hospital.name} / {g.lab_unit.name}"
+        )
     for mapping in mappings:
         for a in mapping.assignments:
             if a.active and _lab_visible(a.lab_unit_id, allowed_lab_ids):
@@ -409,8 +437,7 @@ def _referrals(db, project_id, mappings):
 def _lab_visible(lab_id, allowed): return allowed is None or lab_id in allowed
 def _grant_visible(grant, allowed):
     if allowed is None or grant.scope_type == "project": return True
-    if grant.scope_type == "lab_unit": return grant.lab_unit_id in allowed
-    return any(lab.hospital_id == grant.hospital_id for lab in grant.hospital.lab_units if lab.id in allowed)
+    return grant.scope_type == "lab_unit" and grant.lab_unit_id in allowed
 def _human(value): return str(value or "").replace("_", " ").strip().title()
 def _clean_text(value): return " ".join(str(value or "").split())
 def _labels(values):

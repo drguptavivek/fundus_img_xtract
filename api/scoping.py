@@ -32,7 +32,7 @@ def get_user_hospital_context():
     
     return jsonify({
         'user_id': current_user.id,
-        'is_master_admin': current_user.is_master_admin,
+        'is_master_admin': current_user.has_role('admin'),
         'hospital_id': current_user.hospital_id,
         'hospital_name': hospital_name,
         'can_access_multiple_hospitals': current_user.has_role('admin', 'local_admin'),
@@ -69,6 +69,6 @@ def check_operation_scope(operation_name):
     return jsonify({
         'operation': operation_name,
         'is_cross_hospital': is_cross,
-        'user_is_master_admin': current_user.is_master_admin,
+        'user_is_master_admin': current_user.has_role('admin'),
         'show_hospital_filter': show_filter,
     })

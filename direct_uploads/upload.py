@@ -7,7 +7,7 @@ from utils.env_loader import load_environment
 
 from . import bp
 from db_transaction_manager import get_db_session
-from auth.roles import global_uploader_or_project_assignment_required, roles_required
+from auth.roles import roles_required
 from utils.rate_limiter import upload_rate_limit
 
 from utils.upload_eligibility import get_user_uploadVerify_eligibility
@@ -31,7 +31,7 @@ def upload_index():
 
 
 @bp.route("/direct/upload", methods=["GET"])
-@global_uploader_or_project_assignment_required("direct_image")
+@roles_required("fileUploader")
 @upload_rate_limit("60 per minute")  # Reduced to prevent abuse while allowing reasonable uploads
 def upload():
     with get_db_session() as db_session:

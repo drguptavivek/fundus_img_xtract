@@ -15,6 +15,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
+from auth.credentials import credential_authenticated
 from auth.utils import get_client_ip, utcnow
 from auth.roles import roles_required
 from auth.security import validate_email
@@ -44,7 +45,8 @@ from utils.dataset_share import (
     verify_share_otp,
 )
 from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
-from authz import scope
+from authz.behaviors import dataset_lab_units, dataset_rows
+from tasks.access import task_columns
 from utils.dataset_share_security import clear_failures, is_locked_out, register_failure
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
@@ -153,7 +155,7 @@ def list_datasets():
             if not browse_dataset:
                 browse_message = "Dataset not found."
             else:
-                lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+                lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
                 allowed_lab_units = {lu.id for lu in lab_units_query.all()}
                 stored_filters = {}
                 try:
@@ -161,7 +163,7 @@ def list_datasets():
                 except Exception:
                     stored_filters = {}
                 stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-                if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+                if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.has_role("admin"):
                     browse_message = "You do not have permission to browse this dataset."
                 elif not browse_dataset.is_finalized:
                     browse_message = "Finalize the dataset before browsing."
@@ -220,7 +222,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
         if not dataset:
             return ("Not found", 404)
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.curation.view')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = {lu.id for lu in lab_units_query.all()}
         stored_filters = {}
         try:
@@ -228,7 +230,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
         except Exception:
             stored_filters = {}
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.has_role("admin"):
             return ("Forbidden", 403)
 
         query = (
@@ -244,7 +246,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
-        query = scope(db, query, GradingTask, current_user, 'dataset.curation.view')
+        query = dataset_rows(db, query, current_user, task_columns(GradingTask))
         task = query.first()
         if not task:
             return ("Not found", 404)
@@ -324,7 +326,7 @@ def share_dataset():
         if not dataset:
             abort(404)
 
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = {}
         try:
@@ -332,7 +334,7 @@ def share_dataset():
         except Exception:
             stored_filters = {}
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to view shares for this dataset.", "error")
             return redirect(url_for("datasets.list_datasets"))
 
@@ -572,11 +574,11 @@ def toggle_share_status(share_id: int):
             abort(404)
 
         dataset = share.dataset
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to update this share.", "error")
             return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
 
@@ -615,11 +617,11 @@ def regenerate_share_otp(share_id: int):
             abort(404)
 
         dataset = share.dataset
-        lab_units_query = scope(db, db.query(LabUnit), LabUnit, current_user, 'dataset.share.manage')
+        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
             flash("You do not have permission to update this share.", "error")
             return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
 
@@ -861,6 +863,7 @@ def _queue_dataset_export_job(db, share: DatasetShare, ip: str) -> Optional[str]
         except Exception:
             stored_filters = {}
         metadata = {
+            "share_id": share.id,
             "dataset_uuid": dataset.uuid,
             "dataset_name": dataset.name,
             "dataset_purpose": dataset.purpose,
@@ -884,6 +887,7 @@ def _queue_dataset_export_job(db, share: DatasetShare, ip: str) -> Optional[str]
 
 
 @bp.route("/download/<token>", methods=["GET"])
+@credential_authenticated
 @rate_limit("30 per minute")
 def download_welcome(token: str):
     ip = get_client_ip()
@@ -912,6 +916,7 @@ def download_welcome(token: str):
 
 
 @bp.route("/download/<token>/status", methods=["GET"])
+@credential_authenticated
 @rate_limit("30 per minute")
 def download_status(token: str):
     ip = get_client_ip()
@@ -955,6 +960,7 @@ def download_status(token: str):
 
 
 @bp.route("/download/<token>/verify", methods=["POST"])
+@credential_authenticated
 @rate_limit("10 per minute")
 def download_verify(token: str):
     ip = get_client_ip()
@@ -1004,6 +1010,7 @@ def download_verify(token: str):
 
 
 @bp.route("/download/<token>/generate", methods=["POST"])
+@credential_authenticated
 @rate_limit("5 per minute")
 def download_generate(token: str):
     ip = get_client_ip()
@@ -1057,6 +1064,7 @@ def download_generate(token: str):
 
 
 @bp.route("/download/<token>/regenerate", methods=["POST"])
+@credential_authenticated
 @rate_limit("2 per minute")
 def download_regenerate(token: str):
     ip = get_client_ip()
@@ -1123,6 +1131,7 @@ def download_regenerate(token: str):
 
 
 @bp.route("/download/<token>/accept", methods=["POST"])
+@credential_authenticated
 @rate_limit("10 per minute")
 def download_accept(token: str):
     ip = get_client_ip()
@@ -1164,6 +1173,7 @@ def download_accept(token: str):
 
 
 @bp.route("/download/<token>/file/<job_token>/<path:filename>", methods=["GET"])
+@credential_authenticated
 @rate_limit("30 per minute")
 def download_file(token: str, job_token: str, filename: str):
     ip = get_client_ip()

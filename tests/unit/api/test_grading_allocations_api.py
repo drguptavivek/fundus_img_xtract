@@ -179,7 +179,7 @@ def test_project_encounter_set_queue_api_returns_current_users_queues(
     )
     observed = {}
 
-    # The route now goes through the cached accessor in grading.queue_cards,
+    # The route now goes through the live accessor in grading.queue_cards,
     # which returns already-serialised dicts rather than DTOs.
     def _queues(_db, *, user_id, refresh=False):
         observed["user_id"] = user_id

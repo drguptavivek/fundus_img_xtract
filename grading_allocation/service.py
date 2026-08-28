@@ -23,7 +23,6 @@ from grading_allocation.exceptions import (
     AllocationNotFoundError,
     GradingAllocationError,
 )
-from grading_allocation.eligibility import invalidate_user_eligibility_cache
 from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
 from grading_allocation.targets import derive_project_targets, target_identity_set
 from models import LabUnit, Project, User
@@ -143,7 +142,6 @@ def create_or_reactivate_allocation(
             result = _allocation_dto(row)
     except IntegrityError as exc:
         raise AllocationConflictError("An equivalent grader allocation already exists.") from exc
-    invalidate_user_eligibility_cache(dto.user_id)
     return result
 
 
@@ -200,7 +198,6 @@ def set_allocation_active(
         db.flush()
         user_id = row.user_id
         result = _allocation_dto(row)
-    invalidate_user_eligibility_cache(user_id)
     return result
 
 

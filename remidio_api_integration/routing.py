@@ -4,13 +4,14 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from auth.utils import utcnow
 from encounter_set_types.models import EncounterSetType
 from models import Camera, LabUnit, Project, RemidioConnection, RemidioExam, RemidioSite
+from project_configuration.models import ProjectLabUnit
 from upload_profiles.models import (
     ProjectUploadProfile,
     UploadProfile,
@@ -448,7 +449,7 @@ def _active_bindings_for_date(
     route_date: date,
 ) -> list[ProjectUploadProfileRemidioApiBinding]:
     return (
-        db.query(ProjectUploadProfileRemidioApiBinding)
+        active_remidio_api_bindings(db, source_rule_id=source_rule_id)
         .options(
             selectinload(ProjectUploadProfileRemidioApiBinding.project_profile).selectinload(ProjectUploadProfile.project),
             selectinload(ProjectUploadProfileRemidioApiBinding.project_profile)
@@ -462,14 +463,7 @@ def _active_bindings_for_date(
             selectinload(ProjectUploadProfileRemidioApiBinding.lab_unit),
             selectinload(ProjectUploadProfileRemidioApiBinding.camera),
         )
-        .outerjoin(RemidioApiRoutingProfile, ProjectUploadProfileRemidioApiBinding.routing_profile_id == RemidioApiRoutingProfile.id)
         .filter(
-            ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id == source_rule_id,
-            ProjectUploadProfileRemidioApiBinding.active.is_(True),
-            or_(
-                ProjectUploadProfileRemidioApiBinding.routing_profile_id.is_(None),
-                RemidioApiRoutingProfile.active.is_(True),
-            ),
             ProjectUploadProfileRemidioApiBinding.active_from_date <= route_date,
             or_(
                 ProjectUploadProfileRemidioApiBinding.active_to_date.is_(None),
@@ -478,6 +472,78 @@ def _active_bindings_for_date(
         )
         .all()
     )
+
+
+def active_remidio_api_bindings(
+    db: Session,
+    *,
+    routing_profile_id: int | None = None,
+    source_rule_id: int | None = None,
+    route_ids: set[int] | None = None,
+):
+    """Build the one complete-lineage query used by routing and sync jobs."""
+    query = (
+        db.query(ProjectUploadProfileRemidioApiBinding)
+        .join(
+            RemidioApiSourceRule,
+            RemidioApiSourceRule.id
+            == ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id,
+        )
+        .join(
+            RemidioConnection,
+            RemidioConnection.id == RemidioApiSourceRule.remidio_connection_id,
+        )
+        .join(
+            ProjectUploadProfile,
+            ProjectUploadProfile.id
+            == ProjectUploadProfileRemidioApiBinding.project_upload_profile_id,
+        )
+        .join(UploadProfile, UploadProfile.id == ProjectUploadProfile.upload_profile_id)
+        .join(Project, Project.id == ProjectUploadProfile.project_id)
+        .join(
+            ProjectLabUnit,
+            and_(
+                ProjectLabUnit.project_id == ProjectUploadProfile.project_id,
+                ProjectLabUnit.lab_unit_id
+                == ProjectUploadProfileRemidioApiBinding.lab_unit_id,
+            ),
+        )
+        .outerjoin(
+            RemidioApiRoutingProfile,
+            RemidioApiRoutingProfile.id
+            == ProjectUploadProfileRemidioApiBinding.routing_profile_id,
+        )
+        .filter(
+            ProjectUploadProfileRemidioApiBinding.active.is_(True),
+            RemidioApiSourceRule.active.is_(True),
+            RemidioConnection.active.is_(True),
+            ProjectUploadProfile.active.is_(True),
+            UploadProfile.active.is_(True),
+            Project.active.is_(True),
+            ProjectLabUnit.active.is_(True),
+            or_(
+                ProjectUploadProfileRemidioApiBinding.routing_profile_id.is_(None),
+                and_(
+                    RemidioApiRoutingProfile.active.is_(True),
+                    RemidioApiRoutingProfile.project_id
+                    == ProjectUploadProfile.project_id,
+                ),
+            ),
+        )
+    )
+    if routing_profile_id is not None:
+        query = query.filter(
+            ProjectUploadProfileRemidioApiBinding.routing_profile_id
+            == routing_profile_id
+        )
+    if source_rule_id is not None:
+        query = query.filter(
+            ProjectUploadProfileRemidioApiBinding.remidio_api_source_rule_id
+            == source_rule_id
+        )
+    if route_ids is not None:
+        query = query.filter(ProjectUploadProfileRemidioApiBinding.id.in_(route_ids))
+    return query
 
 
 def _ensure_no_binding_overlap(

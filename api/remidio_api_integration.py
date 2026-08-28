@@ -16,7 +16,7 @@ from models import Job, PatientEncounters
 from remidio_api_integration import routing as api_routing
 from remidio_api_integration import service
 from remidio_api_integration.errors import RemidioConfigError, RemidioIntegrationError
-from utils.hospital_scoping import apply_scoping
+from authz import RecordColumns, access_context, role_scoped_rows
 from utils.log_sanitize import sanitize_log_value
 
 from . import api_bp
@@ -237,7 +237,18 @@ def queue_encounter_set_attachment_ocr(attachment_id: int):
                 .join(PatientEncounters, EncounterSetAttachment.patient_encounter_id == PatientEncounters.id)
                 .filter(EncounterSetAttachment.id == attachment_id)
             )
-            query = apply_scoping(query, PatientEncounters, current_user, "upload")
+            query = role_scoped_rows(
+                query,
+                access_context(db, current_user),
+                RecordColumns(
+                    project_id=PatientEncounters.project_id,
+                    lab_unit_id=PatientEncounters.lab_unit_id,
+                ),
+                lab_roles=REMIDIO_ATTACHMENT_OCR_ROLES,
+                hospital_roles={"local_admin", "data_manager"},
+                project_roles=REMIDIO_ATTACHMENT_OCR_ROLES,
+                allow_admin=True,
+            )
             attachment = query.first()
             if attachment is None:
                 return jsonify({"success": False, "error": "Attachment not found."}), 404
@@ -357,7 +368,18 @@ def _project_pdf_attachment_query(db, project_id: int):
             (EncounterSetAttachment.asset_kind == "pdf") | (EncounterSetAttachment.mime_type == "application/pdf"),
         )
     )
-    return apply_scoping(query, PatientEncounters, current_user, "upload")
+    return role_scoped_rows(
+        query,
+        access_context(db, current_user),
+        RecordColumns(
+            project_id=PatientEncounters.project_id,
+            lab_unit_id=PatientEncounters.lab_unit_id,
+        ),
+        lab_roles=REMIDIO_ATTACHMENT_OCR_ROLES,
+        hospital_roles={"local_admin", "data_manager"},
+        project_roles=REMIDIO_ATTACHMENT_OCR_ROLES,
+        allow_admin=True,
+    )
 
 
 def _project_ocr_counts(attachments: list[EncounterSetAttachment]) -> dict:
@@ -630,13 +652,12 @@ def _require_project_sync_job_action(db, job_id: int) -> None:
         raise RemidioConfigError("Remidio API project sync job was not found.")
     if current_user.has_role("admin"):
         return
-    from data_authorization.policy import ACTION_REMIDIO_SYNC, user_can_project_action
+    from authz.project_access import can_sync_remidio
 
-    if job.uploader_user_id != current_user.id or not user_can_project_action(
+    if job.uploader_user_id != current_user.id or not can_sync_remidio(
         db,
-        user=current_user,
+        current_user,
         project_id=job.project_id,
-        action=ACTION_REMIDIO_SYNC,
     ):
         raise RemidioConfigError("You cannot manage this Remidio API project sync job.")
 

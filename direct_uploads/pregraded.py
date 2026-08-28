@@ -18,7 +18,7 @@ from flask_login import current_user
 from sqlalchemy import select, func
 
 from . import bp
-from auth.roles import global_uploader_or_project_assignment_required
+from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
 from upload_profiles.service import (
@@ -60,7 +60,7 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 
 
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
-@global_uploader_or_project_assignment_required(UPLOAD_KIND_PREGRADED)
+@roles_required("fileUploader", "pregarded_uploader")
 def pregraded_upload():
     with get_db_session() as db_session:
         upload_options = get_user_upload_options_for_kind(db_session, current_user.id, UPLOAD_KIND_PREGRADED)

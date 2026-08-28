@@ -10,8 +10,7 @@ from typing import Any, Iterable
 from sqlalchemy import Column, Integer, MetaData, Table, Text, bindparam, select, text
 from sqlalchemy.orm import Session
 
-from authz.predicates import ScopeColumns, register_scope, scope_query
-from authz.resolver import resolve_grants
+from authz import RecordColumns, access_context, role_scoped_rows
 
 from job_store import db_create_job
 from utils.celery_helpers import enqueue_task
@@ -22,10 +21,6 @@ INFERENCE_STATUSES = ("success", "partial", "failed", "running", "queued")
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
 STATS_SOURCE = "wai_api_statistics_rows_v"
-
-ACTION_WAI_SUMMARY = "inference.wai.summary"
-ACTION_WAI_ROWS = "inference.wai.rows"
-ACTION_WAI_RETRY = "inference.wai.retry"
 
 # The statistics source is a database view, so it has no ORM model of its own.
 # This lightweight mapping exists purely so the authz predicate compiler can
@@ -42,14 +37,6 @@ WaiStatisticsRow = Table(
     Column("lab_unit_id", Integer),
     Column("hospital_id", Integer),
 )
-
-register_scope(WaiStatisticsRow, lambda: ScopeColumns(
-    project_id=WaiStatisticsRow.c.project_id,
-    hospital_id=WaiStatisticsRow.c.hospital_id,
-    lab_unit_id=WaiStatisticsRow.c.lab_unit_id,
-    row_id=WaiStatisticsRow.c.inference_row_key,
-))
-
 
 @dataclass(frozen=True)
 class WaiStatsFilters:
@@ -111,25 +98,29 @@ def build_filters(
     )
 
 
-def _scope_clause(db: Session, user: Any, params: dict[str, Any], action: str) -> list[str]:
-    """Restrict the view to the rows `action` authorizes for `user`.
-
-    The previous rule here was `hospital_id = X OR lab_unit_id IN (...)`, whose
-    OR made the lab filter decorative -- any row in the hospital matched -- and
-    which fell back to the whole hospital when the user had no lab units at all.
-    It also never looked at project_id, so a project's inference output was
-    visible on hospital membership alone.
-
-    Delegating to the predicate compiler gets the dual-branch rule, project
-    gating and upload profile assignments for free, and keeps this screen in
-    step with every other one.
-    """
-    if user.has_role("admin"):
-        return []
-
-    resolved = resolve_grants(db, user)
-    scoped = scope_query(
-        select(WaiStatisticsRow.c.inference_row_key), resolved, action, WaiStatisticsRow
+def _scope_clause(db: Session, user: Any, *, retry: bool = False) -> list[str]:
+    """Compile the explicit WAI role/scope paths for the statistics view."""
+    columns = RecordColumns(
+        project_id=WaiStatisticsRow.c.project_id,
+        hospital_id=WaiStatisticsRow.c.hospital_id,
+        lab_unit_id=WaiStatisticsRow.c.lab_unit_id,
+    )
+    scoped = role_scoped_rows(
+        select(WaiStatisticsRow.c.inference_row_key),
+        access_context(db, user),
+        columns,
+        lab_roles=(
+            {"local_admin", "data_manager", "optometrist"}
+            if retry
+            else {"local_admin", "data_manager", "analytics_viewer", "ophthalmologist"}
+        ),
+        hospital_roles={"local_admin", "data_manager"},
+        project_roles=(
+            {"verifier", "optometrist", "field_optometrist", "field_ophthalmologist"}
+            if retry
+            else {"project_pi", "site_pi", "project_admin", "optometrist"}
+        ),
+        allow_admin=True,
     )
     # Rendered with literal binds so the predicate can be spliced into the raw
     # SQL below without its parameter names colliding with the filter
@@ -142,9 +133,9 @@ def _scope_clause(db: Session, user: Any, params: dict[str, Any], action: str) -
     return [f"inference_row_key IN ({subquery})"]
 
 
-def _filter_clauses(db: Session, filters: WaiStatsFilters, user: Any, params: dict[str, Any], action: str) -> list[str]:
+def _filter_clauses(db: Session, filters: WaiStatsFilters, user: Any, params: dict[str, Any]) -> list[str]:
     clauses = ["is_latest_for_task_model IS TRUE"]
-    clauses.extend(_scope_clause(db, user, params, action))
+    clauses.extend(_scope_clause(db, user))
 
     if filters.disease_ids:
         clauses.append("disease_id IN :disease_ids")
@@ -184,13 +175,13 @@ def _statement(sql: str, params: dict[str, Any]):
     return stmt
 
 
-def _where_sql(db: Session, filters: WaiStatsFilters, user: Any, params: dict[str, Any], action: str) -> str:
-    return " AND ".join(_filter_clauses(db, filters, user, params, action))
+def _where_sql(db: Session, filters: WaiStatsFilters, user: Any, params: dict[str, Any]) -> str:
+    return " AND ".join(_filter_clauses(db, filters, user, params))
 
 
 def get_filter_options(db: Session, user: Any) -> dict[str, Any]:
     params: dict[str, Any] = {}
-    where_sql = " AND ".join(["is_latest_for_task_model IS TRUE", *_scope_clause(db, user, params, ACTION_WAI_SUMMARY)])
+    where_sql = " AND ".join(["is_latest_for_task_model IS TRUE", *_scope_clause(db, user)])
     sql = f"""
         SELECT
             COALESCE(
@@ -223,7 +214,7 @@ def get_filter_options(db: Session, user: Any) -> dict[str, Any]:
 
 def get_summary(db: Session, user: Any, filters: WaiStatsFilters) -> dict[str, Any]:
     params: dict[str, Any] = {}
-    where_sql = _where_sql(db, filters, user, params, ACTION_WAI_SUMMARY)
+    where_sql = _where_sql(db, filters, user, params)
     sql = f"""
         SELECT
             COUNT(DISTINCT image_uuid) FILTER (WHERE image_source <> 'encounter' AND image_uuid IS NOT NULL) AS images,
@@ -276,7 +267,7 @@ def get_image_results(db: Session, user: Any, filters: WaiStatsFilters, *, page:
     clean_page, clean_page_size = _normalize_page(page, page_size)
     offset = (clean_page - 1) * clean_page_size
     params: dict[str, Any] = {"limit": clean_page_size, "offset": offset}
-    where_sql = _where_sql(db, filters, user, params, ACTION_WAI_ROWS)
+    where_sql = _where_sql(db, filters, user, params)
     where_sql = f"{where_sql} AND image_source <> 'encounter' AND image_uuid IS NOT NULL"
 
     total = db.execute(
@@ -325,7 +316,7 @@ def get_encounter_results(db: Session, user: Any, filters: WaiStatsFilters, *, p
     clean_page, clean_page_size = _normalize_page(page, page_size)
     offset = (clean_page - 1) * clean_page_size
     params: dict[str, Any] = {"limit": clean_page_size, "offset": offset}
-    where_sql = _where_sql(db, filters, user, params, ACTION_WAI_ROWS)
+    where_sql = _where_sql(db, filters, user, params)
     where_sql = f"{where_sql} AND normalized_patient_encounter_id IS NOT NULL"
 
     grouped = f"""
@@ -398,7 +389,7 @@ def retry_failed_inference_run(
             "is_latest_for_task_model IS TRUE",
             "inference_status = 'failed'",
             "inference_kind = 'glaucoma_task'",
-            *_scope_clause(db, user, params, ACTION_WAI_RETRY),
+            *_scope_clause(db, user, retry=True),
         ]
     )
     sql = f"""

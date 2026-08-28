@@ -1455,6 +1455,39 @@ Resource: `job`; disclosure: `masked`; audit: `optional`.
 - `mobile_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), ScopedRoleRequirement(roles=field_ophthalmologist,field_optometrist,ophthalmologist,optometrist; allow_system=False)
 - `admin_owner`: ActivePrincipalRequirement(authenticated=True), SessionChannelRequirement(channels=mobile), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=ownership; attributes=(); require_subject=True; require_scope=False), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `notifications.compose.view`
+
+Authorize notifications.compose.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,data_manager,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,fileUploader,local_admin,ophthalmologist,optometrist,pii_exporter,pregraded_uploader,project_admin,project_pi,regrade_adjudicator,site_pi,user_manager,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `notifications.contact_admins.send`
+
+Authorize notifications.contact_admins.send.
+
+Resource: `user`; disclosure: `masked`; audit: `required`.
+
+- `self`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), BooleanRequirement(fact=self_identity; expected=True)
+
+### `notifications.item.read`
+
+Authorize notifications.item.read.
+
+Resource: `notification`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `relationship`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=notification_recipient; attributes=(); require_subject=True; require_scope=False)
+
+### `notifications.peer.send`
+
+Authorize notifications.peer.send.
+
+Resource: `user`; disclosure: `identifier_in_place`; audit: `required`.
+
+- `relationship`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=peer; attributes=(); require_subject=True; require_scope=False)
+
 ### `notifications.send`
 
 Authorize notifications.send.

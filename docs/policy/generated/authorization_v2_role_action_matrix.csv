@@ -169,6 +169,10 @@ mobile.upload.create,project_upload_target,scoped_upload_profile|admin_break_gla
 mobile.upload.inference.retry,job,mobile_owner|admin_owner,masked,optional
 mobile.upload.options.view,user,self,masked,optional
 mobile.upload.view,job,mobile_owner|admin_owner,masked,optional
+notifications.compose.view,screen,authenticated_screen|admin_break_glass,masked,optional
+notifications.contact_admins.send,user,self,masked,required
+notifications.item.read,notification,relationship,identifier_in_place,required
+notifications.peer.send,user,relationship,identifier_in_place,required
 notifications.send,notification_target,admin_break_glass,masked,optional
 preprocess.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 preprocess.image.update,image,scoped_role|admin_break_glass,identifier_in_place,optional

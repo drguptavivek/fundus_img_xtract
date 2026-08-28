@@ -7,6 +7,7 @@ from dataclasses import replace
 from sqlalchemy import false
 
 from authz_v2.core.resources import ResourceContextDTO, ScopeDTO
+from authz_v2.core.principals import GrantSource, RelationshipEvidenceDTO
 from authz_v2.core.roles import Role, ScopeType, may_delegate, role_accepts_scope
 from authz_v2.repositories.grants import GrantRepository
 from authz_v2.resources.references import UserCreationTargetRef, is_positive_int
@@ -47,8 +48,30 @@ def scope_users(_db, principal, _action, grants, query):
     return query.where(false())
 
 
-def user_facts(_db, _principal, _action, target, facts):
-    return replace(facts, domain_valid=bool(getattr(target.value, "is_active", False)))
+def user_facts(db, _principal, _action, target, facts):
+    updates = {"domain_valid": bool(getattr(target.value, "is_active", False))}
+    if (
+        _principal.user_id is not None
+        and target.value.id != _principal.user_id
+        and {
+            unit.id for unit in getattr(target.value, "lab_units", ())
+        }
+        & {
+            unit.id
+            for unit in getattr(db.get(User, _principal.user_id), "lab_units", ())
+        }
+    ):
+        evidence = RelationshipEvidenceDTO(
+            GrantSource.PEER,
+            f"{_principal.user_id}:{target.value.id}",
+            _principal.user_id,
+            target.context.resource_type,
+            target.context.resource_id,
+            True,
+            target.context.scope,
+        )
+        updates["relationships"] = (*facts.relationships, evidence)
+    return replace(facts, **updates)
 
 
 USER_ADAPTER = ResourceAdapter("user", resolve_user, scope_users, user_facts)

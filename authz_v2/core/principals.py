@@ -25,6 +25,8 @@ class GrantSource(StrEnum):
     PROJECT_ALLOCATION = "project_allocation"
     OWNERSHIP = "ownership"
     PARTICIPATION = "participation"
+    NOTIFICATION_RECIPIENT = "notification_recipient"
+    PEER = "peer"
     SIGNED_CREDENTIAL = "signed_credential"
     AUTOMATION_RULE = "automation_rule"
     PUBLIC = "public"

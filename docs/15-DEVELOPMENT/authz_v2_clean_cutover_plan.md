@@ -1499,6 +1499,19 @@ pattern.
   literals, 11 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 242 actions.
 
+### Implemented vertical slice 60: user notification relationships
+
+- Marking one notification read requires an exact active notification and a
+  persisted recipient relationship; a system-wide notification creates that
+  relationship for each authenticated reader without changing global state.
+- Compose GET is screen admission. Compose POST dynamically selects either the
+  current user's exact self-resource for contacting administrators or an exact
+  target user with a persisted shared-Lab-Unit peer relationship.
+- Message content, peer-list presentation, and notification delivery remain
+  application logic. The reviewed inventory is now 632 v2 HTTP consumers, 39
+  legacy action literals, 9 unmapped HTTP consumers, 47 unmapped workers, and
+  979 query candidates. The canonical catalogue contains 246 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 630,
+        "authz_v2": 632,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 11,
+        "legacy_unmapped": 9,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "7b20c17015c3392a17b3873713e809d1139b8e331109cd887fef465e43caad73"
+        == "5d70129e910b8c291434eee095c63bc7e66081b319789efced14e1623da153f6"
     )
 
 
@@ -1641,6 +1641,29 @@ def test_admin_notification_forms_separate_screen_entry_from_exact_send():
         assert policies["GET"].mode is EndpointMode.SCREEN
         assert policies["POST"].action is Action.ADMIN_SYSTEM_OPERATION
         assert policies["POST"].resolver == "system_operation"
+
+
+def test_user_notification_mutations_require_exact_recipient_relationships():
+    names = {
+        "notifications.compose_notification",
+        "notifications.mark_notification_read",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert {row.name for row in family} == names
+    assert {row.classification for row in family} == {"authz_v2"}
+    compose = ROUTE_POLICIES["notifications.compose_notification"]
+    assert compose["GET"].mode is EndpointMode.SCREEN
+    assert compose["POST"].binding == "notification_recipient"
+    assert set((compose["POST"].action, *compose["POST"].action_variants)) == {
+        Action.NOTIFICATIONS_CONTACT_ADMINS_SEND,
+        Action.NOTIFICATIONS_PEER_SEND,
+    }
+    mark = ROUTE_POLICIES["notifications.mark_notification_read"]
+    assert mark.action is Action.NOTIFICATIONS_ITEM_READ
+    assert mark.resolver == "notification"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

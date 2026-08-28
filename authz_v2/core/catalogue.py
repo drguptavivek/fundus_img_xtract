@@ -178,6 +178,9 @@ MANDATORY_AUDIT = frozenset(
         "account.password.change",
         "account.profile.update",
         "account.notifications.update",
+        "notifications.contact_admins.send",
+        "notifications.peer.send",
+        "notifications.item.read",
         "account.mobile_sessions.revoke",
         "encounter.source.refresh",
         "auth.password_reset.complete",
@@ -1736,6 +1739,30 @@ _resource(
     ADMIN,
     domain_condition=True,
 )
+_screen("notifications.compose.view", frozenset(Role))
+_self("notifications.contact_admins.send", "user")
+for _name, _source in (
+    ("notifications.peer.send", GrantSource.PEER),
+    ("notifications.item.read", GrantSource.NOTIFICATION_RECIPIENT),
+):
+    _store(
+        _name,
+        resource_type="user" if _source is GrantSource.PEER else "notification",
+        requires_resource=True,
+        paths=(
+            (
+                "relationship",
+                all_of(
+                    active_principal(),
+                    fact(BooleanFact.EXACT_RESOURCE),
+                    relationship(_source, require_scope=False),
+                    name="relationship",
+                ),
+            ),
+        ),
+        disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+        break_glass=BreakGlassMode.NEVER,
+    )
 
 # Mobile field actions are exact project-derived resources.
 _resource(

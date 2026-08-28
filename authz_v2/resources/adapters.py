@@ -88,6 +88,7 @@ from models import (
     LabUnit,
     LinkedDiseaseGrading,
     MobileAuthSession,
+    Notification,
     PatientEncounters,
     Project,
     ProjectGraderAllocation,
@@ -748,6 +749,49 @@ UPLOAD_TARGET_ADAPTER = replace(
     facts_provider=upload_profile_facts,
 )
 INFERENCE_TARGET_ADAPTER = _bound_adapter("inference_target")
+def resolve_notification(db, resource_id: object) -> ResourceTarget | None:
+    if not is_positive_int(resource_id):
+        return None
+    notification = db.get(Notification, resource_id)
+    if notification is None or not notification.is_active:
+        return None
+    return ResourceTarget(
+        notification,
+        ResourceContextDTO(
+            "notification",
+            notification.id,
+            ScopeDTO(ScopeType.SYSTEM),
+            owner_id=notification.recipient_user_id,
+            state={"target_active": True},
+            resolved=True,
+        ),
+    )
+
+
+def notification_recipient_facts(_db, principal, _action, target, facts):
+    notification = target.value
+    if principal.user_id is None or not isinstance(notification, Notification):
+        return facts
+    if notification.recipient_user_id not in {None, principal.user_id}:
+        return facts
+    evidence = RelationshipEvidenceDTO(
+        GrantSource.NOTIFICATION_RECIPIENT,
+        notification.id,
+        principal.user_id,
+        target.context.resource_type,
+        target.context.resource_id,
+        True,
+        target.context.scope,
+    )
+    return replace(facts, relationships=(*facts.relationships, evidence))
+
+
+NOTIFICATION_ADAPTER = ResourceAdapter(
+    "notification",
+    resolve_notification,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    notification_recipient_facts,
+)
 NOTIFICATION_TARGET_ADAPTER = _bound_adapter("notification_target")
 
 IMAGE_ADAPTER = _polymorphic_adapter(
@@ -1897,6 +1941,7 @@ RESOURCE_ADAPTERS = (
     JOB_ADAPTER,
     LOOKUP_RECORD_ADAPTER,
     MOBILE_SESSION_ADAPTER,
+    NOTIFICATION_ADAPTER,
     NOTIFICATION_TARGET_ADAPTER,
     PASSWORD_RESET_ADAPTER,
     PROJECT_ALLOCATION_TARGET_ADAPTER,

@@ -48,6 +48,15 @@ def _wai_project(binding: str) -> EndpointPolicy:
     )
 
 
+def _notification_recipient(binding: str) -> EndpointPolicy:
+    return EndpointPolicy(
+        EndpointMode.PROTECTED,
+        Action.NOTIFICATIONS_CONTACT_ADMINS_SEND,
+        action_variants=(Action.NOTIFICATIONS_PEER_SEND,),
+        binding=binding,
+    )
+
+
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     **{
         endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.PUBLIC_VIEW)
@@ -202,6 +211,13 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
         "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
     },
+    "notifications.compose_notification": {
+        "GET": _screen(Action.NOTIFICATIONS_COMPOSE_VIEW),
+        "POST": _notification_recipient("notification_recipient"),
+    },
+    "notifications.mark_notification_read": _exact(
+        Action.NOTIFICATIONS_ITEM_READ, "notification"
+    ),
     "review.discrepancy_review": _screen(Action.REVIEW_DISCREPANCY_LIST),
     "review.regrade_task_creator": _screen(Action.REVIEW_REGRADE_CREATOR_VIEW),
     "fundus_api.discrepancy_review_filter_options": _screen(

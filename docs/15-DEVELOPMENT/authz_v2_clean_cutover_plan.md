@@ -983,6 +983,18 @@ pattern.
   literals, 205 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 19: API documentation surfaces
+
+- All six Markdown, rendered HTML, OpenAPI, and Swagger documentation routes
+  are explicitly public under the dedicated documentation action.
+- Public status is declared endpoint by endpoint; no path-prefix inference or
+  legacy role decorator determines documentation access.
+- Markdown rendering, OpenAPI construction, Swagger assets, and response
+  formatting remain documentation application concerns.
+- The reviewed inventory is now 437 v2 HTTP consumers, 44 legacy action
+  literals, 199 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

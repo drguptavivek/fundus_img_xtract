@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 431,
+        "authz_v2": 437,
         "legacy_action_literal": 44,
-        "legacy_unmapped": 205,
+        "legacy_unmapped": 199,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -167,6 +167,24 @@ def test_direct_upload_api_family_has_exact_user_scope_upload_and_job_contracts(
         == "upload_target"
     )
     assert ROUTE_POLICIES["fundus_api.direct_upload_status"].resolver == "job"
+
+
+def test_api_documentation_routes_are_explicitly_public():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http"
+        and row.source in {"docs/routes.py", "docs/swagger_ui.py"}
+    ]
+    assert len(family) == 6
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in {row.name for row in family}:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.PUBLIC
+        assert policy.action is Action.DOCS_API_VIEW
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

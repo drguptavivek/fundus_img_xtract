@@ -66,6 +66,17 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "healthz",
         )
     },
+    **{
+        endpoint: EndpointPolicy(EndpointMode.PUBLIC, Action.DOCS_API_VIEW)
+        for endpoint in (
+            "docs.api_docs",
+            "docs.api_docs_html",
+            "docs.openapi_spec",
+            "docs.docs_index",
+            "docs.swagger_ui",
+            "docs.swagger_json",
+        )
+    },
     "fundus_api.get_project_encounter_set_queues": _screen(Action.TASKS_VIEW),
     **{
         endpoint: _exact(

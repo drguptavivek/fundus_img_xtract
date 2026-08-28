@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 18 - browser direct-upload API
+# Gates: Authorization v2 vertical slice 19 - API documentation surfaces
 
-- [x] G1: All 7 browser direct-upload API routes have explicit contracts.
-  CHECK: direct-upload API inventory family test
-  EVIDENCE: inventory is 431 Authz v2 HTTP routes; the complete family classifies v2
+- [x] G1: All 6 documentation routes have explicit contracts.
+  CHECK: documentation inventory family test
+  EVIDENCE: inventory is 437 Authz v2 HTTP routes; the complete family classifies v2
 
-- [x] G2: Lab Unit disclosure binds classical or explicit project context.
-  CHECK: upload Lab Unit resolver tests
-  EVIDENCE: invalid or unknown project context denies; valid classical and project-site scopes remain distinct
+- [x] G2: Public access is declared per endpoint.
+  CHECK: endpoint mode assertions
+  EVIDENCE: every docs/routes.py and docs/swagger_ui.py endpoint uses PUBLIC mode
 
-- [x] G3: Upload creation and job reads use exact target contracts.
-  CHECK: route resolver assertions
-  EVIDENCE: creation uses upload_target and status endpoints use job
+- [x] G3: Documentation uses its dedicated canonical action.
+  CHECK: endpoint action assertions
+  EVIDENCE: every route uses docs.api.view rather than generic path inference
 
 - [x] G4: Application-domain rules remain outside Authz v2.
   CHECK: catalogue and route-policy diff review
-  EVIDENCE: profile, camera, disease, area, mydriatic, file, quota, duplicate, and inference rules remain in services.uploads.direct
+  EVIDENCE: Markdown rendering, OpenAPI construction, Swagger assets, and formatting remain in docs modules
 
 - [x] G5: Authz/app-init tests, generated parity, diff checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: full Authz/app-init suite passes 1127 tests; generated parity and inventory checks pass
+  EVIDENCE: full Authz/app-init suite passes 1128 tests; inventory checks pass

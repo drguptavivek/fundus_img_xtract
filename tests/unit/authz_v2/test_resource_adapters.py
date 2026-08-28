@@ -13,6 +13,7 @@ from authz_v2.resources import adapters as resource_adapters
 from authz_v2.resources.adapters import (
     TypedResourceRef,
     resolve_executable_config,
+    resolve_direct_image,
     resolve_grading_config,
     resolve_grading_repair_batch,
     resolve_lookup_record,
@@ -35,6 +36,7 @@ from authz_v2.resources.adapters import (
 from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
+    DirectImageUuidRef,
     AutomationTargetRef,
     ExecutableConfigRef,
     GradingConfigRef,
@@ -513,3 +515,20 @@ def test_upload_lab_unit_requires_explicit_valid_project_context(monkeypatch):
         resolve_upload_lab_unit(db, UploadLabUnitRef(3)).context.scope
         == classical_scope
     )
+
+
+def test_direct_image_uuid_reference_rejects_missing_and_unknown_images():
+    class ScalarResult:
+        def scalar_one_or_none(self):
+            return None
+
+    class Database:
+        def execute(self, _statement):
+            return ScalarResult()
+
+        def get(self, *_args):
+            raise AssertionError("unknown UUID must not reach ID resolver")
+
+    db = Database()
+    assert resolve_direct_image(db, DirectImageUuidRef("")) is None
+    assert resolve_direct_image(db, DirectImageUuidRef("missing-uuid")) is None

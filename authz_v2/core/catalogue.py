@@ -756,6 +756,11 @@ _screen(
     MOBILE_FIELD_OPERATORS,
     channels=(SessionChannel.MOBILE,),
 )
+_screen(
+    "glaucoma_ai.uploads.list",
+    MOBILE_UPLOADERS,
+    channels=(SessionChannel.MOBILE,),
+)
 
 # Exact user administration.
 _resource(
@@ -1237,6 +1242,32 @@ _upload(
     "project_upload_target",
     roles=MOBILE_UPLOADERS,
     channels=(SessionChannel.MOBILE,),
+)
+_upload(
+    "glaucoma_ai.mobile_upload.create",
+    "project_upload_target",
+    roles=MOBILE_UPLOADERS,
+    channels=(SessionChannel.MOBILE,),
+)
+_store(
+    "glaucoma_ai.upload.view",
+    resource_type="direct_image_upload",
+    requires_resource=True,
+    paths=(
+        (
+            "mobile_owner",
+            all_of(
+                active_principal(),
+                channels_any(SessionChannel.MOBILE),
+                scoped_roles(*MOBILE_UPLOADERS),
+                fact(BooleanFact.EXACT_RESOURCE),
+                relationship(GrantSource.OWNERSHIP, require_scope=False),
+                name="mobile_owner",
+            ),
+        ),
+    ),
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    break_glass=BreakGlassMode.NEVER,
 )
 
 # Verification is identifier-in-place and uses exact current state.

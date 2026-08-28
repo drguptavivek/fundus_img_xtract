@@ -90,8 +90,11 @@ dataset.finalize,dataset,scoped_role|admin_break_glass,masked,required
 dataset.public_download,dataset_share,signed_credential,masked,optional
 dataset.share.manage,dataset,scoped_role|admin_break_glass,masked,required
 docs.api.view,public,public,masked,optional
+glaucoma_ai.mobile_upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
 glaucoma_ai.result.view,inference_result,scoped_role|admin_break_glass,masked,optional
 glaucoma_ai.upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
+glaucoma_ai.upload.view,direct_image_upload,mobile_owner,identifier_in_place,optional
+glaucoma_ai.uploads.list,screen,authenticated_screen,masked,optional
 glaucoma_ai.workspace.view,project,scoped_role|admin_break_glass,masked,optional
 grading.arbitrator.submit,grading_task,qualified_slot,masked,optional
 grading.grades.view,grading_task,participant|admin_break_glass,masked,optional

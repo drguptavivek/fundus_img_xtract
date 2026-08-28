@@ -21,6 +21,7 @@ from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
     ExecutableConfigRef,
+    DirectImageUuidRef,
     GradingConfigRef,
     GradingSchemeGradeRef,
     GradingRepairBatchRef,
@@ -465,6 +466,31 @@ ENCOUNTER_ADAPTER = _model_adapter("encounter", PatientEncounters)
 ENCOUNTER_SET_ADAPTER = _model_adapter("encounter_set", PatientEncounters)
 DIRECT_IMAGE_ADAPTER = _model_adapter(
     "direct_image_upload", DirectImageUpload, owner_attr="uploader_id"
+)
+_DIRECT_IMAGE_ID_RESOLVER = DIRECT_IMAGE_ADAPTER.resolver
+
+
+def resolve_direct_image(db, reference: object) -> ResourceTarget | None:
+    if isinstance(reference, DirectImageUuidRef):
+        if not is_stable_resource_id(reference.uuid):
+            return None
+        image_id = db.execute(
+            select(DirectImageUpload.id).where(
+                DirectImageUpload.uuid == reference.uuid
+            )
+        ).scalar_one_or_none()
+        if image_id is None:
+            return None
+        reference = image_id
+    return _DIRECT_IMAGE_ID_RESOLVER(db, reference)
+
+
+DIRECT_IMAGE_ADAPTER = replace(
+    DIRECT_IMAGE_ADAPTER,
+    resolver=resolve_direct_image,
+    facts_provider=compose_facts(
+        DIRECT_IMAGE_ADAPTER.facts_provider, ownership_facts
+    ),
 )
 
 

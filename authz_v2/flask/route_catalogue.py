@@ -89,6 +89,29 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     "account.password_changed": _exact(Action.ACCOUNT_PROFILE_VIEW, "user"),
+    **{
+        endpoint: _mobile_entry(Action.GLAUCOMA_AI_UPLOADS_LIST)
+        for endpoint in (
+            "fundus_api.list_recent_glaucoma_ai_uploads",
+            "fundus_api.list_recent_glaucoma_ai_upload_results",
+        )
+    },
+    **{
+        endpoint: _mobile(
+            Action.GLAUCOMA_AI_UPLOAD_VIEW, "direct_image_upload"
+        )
+        for endpoint in (
+            "fundus_api.get_glaucoma_ai_upload_result",
+            "fundus_api.get_glaucoma_ai_upload_image",
+            "fundus_api.get_glaucoma_ai_upload_thumbnail",
+        )
+    },
+    "fundus_api.create_glaucoma_ai_upload": _mobile(
+        Action.GLAUCOMA_AI_MOBILE_UPLOAD_CREATE, "project_upload_target"
+    ),
+    "fundus_api.create_glaucoma_ai_upload_web": _exact(
+        Action.GLAUCOMA_AI_UPLOAD_CREATE, "project_upload_target"
+    ),
     "fundus_api.get_project_encounter_set_queues": _screen(Action.TASKS_VIEW),
     **{
         endpoint: _exact(

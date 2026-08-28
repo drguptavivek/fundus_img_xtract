@@ -1007,6 +1007,24 @@ pattern.
   literals, 196 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 21: glaucoma AI upload API
+
+- All seven glaucoma-AI upload routes distinguish mobile list admission,
+  mobile exact-owner result/media reads, mobile upload creation, and browser
+  upload creation.
+- UUID media/result paths resolve one persisted Direct Image Upload and require
+  its stored uploader relationship. Administrator roles do not substitute for
+  ownership on the mobile result and media actions.
+- Mobile actions require the mobile session channel. Upload creation still
+  requires the exact project upload target and stored upload-profile
+  relationship.
+- Glaucoma disease selection, model/profile linkage, camera/area/mydriatic
+  validation, file handling, task creation, inference, and serialization remain
+  in glaucoma-AI and upload application services.
+- The reviewed inventory is now 448 v2 HTTP consumers, 41 legacy action
+  literals, 191 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

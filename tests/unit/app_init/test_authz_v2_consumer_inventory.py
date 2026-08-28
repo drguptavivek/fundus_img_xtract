@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 441,
-        "legacy_action_literal": 43,
-        "legacy_unmapped": 196,
+        "authz_v2": 448,
+        "legacy_action_literal": 41,
+        "legacy_unmapped": 191,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "15abaaa1ed04a22936f6715d9e361d95be57e9ab7e9a693ab5967ff2fdcc611d"
+        == "a714b78fc04b6015af199ce06d8a751d2a17350ef5dc6cdf51bc59d30f46055b"
     )
 
 
@@ -204,6 +204,29 @@ def test_account_profile_and_password_routes_are_exact_self_actions():
         "account.change_password_submit",
     ):
         assert ROUTE_POLICIES[endpoint].resolver == "user"
+
+
+def test_glaucoma_ai_api_is_mobile_channel_and_owner_bound():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.source == "api/glaucoma_ai.py"
+    ]
+    assert len(family) == 7
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "fundus_api.get_glaucoma_ai_upload_result",
+        "fundus_api.get_glaucoma_ai_upload_image",
+        "fundus_api.get_glaucoma_ai_upload_thumbnail",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.mode is EndpointMode.MOBILE_SESSION
+        assert policy.resolver == "direct_image_upload"
+    assert (
+        ROUTE_POLICIES["fundus_api.create_glaucoma_ai_upload"].mode
+        is EndpointMode.MOBILE_SESSION
+    )
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

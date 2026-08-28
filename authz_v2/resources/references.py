@@ -169,6 +169,13 @@ class UploadLabUnitRef:
     project_id: int | None = None
 
 
+@dataclass(frozen=True)
+class DirectImageUuidRef:
+    """Opaque UUID identity for one persisted direct-image upload."""
+
+    uuid: str
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

@@ -1183,6 +1183,17 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "fundus_api.get_upload_metrics",
         )
     },
+    **{
+        endpoint: _screen(Action.ANALYTICS_HOSPITAL_DASHBOARD_VIEW)
+        for endpoint in (
+            "analytics.hospital_dashboard_page",
+            "analytics.hospital_dashboard_disease_view",
+            "analytics.hospital_dashboard_lab_disease_view",
+            "analytics.hospital_dashboard_user_view",
+            "analytics.hospital_dashboard_roster_view",
+            "analytics.hospital_dashboard_encounter_view",
+        )
+    },
     "jobs.list_recent_jobs": _screen(Action.JOBS_VIEW),
     **{
         endpoint: _exact(Action.JOBS_RESULT_VIEW, "job")

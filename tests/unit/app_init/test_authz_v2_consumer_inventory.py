@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 516,
+        "authz_v2": 522,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 125,
+        "legacy_unmapped": 119,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1000,6 +1000,28 @@ def test_viewer_preferences_api_is_exact_self_service():
         ROUTE_POLICIES[endpoint].action
         is Action.ACCOUNT_VIEWER_PREFERENCES_MANAGE
         and ROUTE_POLICIES[endpoint].resolver == "user"
+        for endpoint in names
+    )
+
+
+def test_hospital_dashboard_routes_are_screen_admission_only():
+    names = {
+        "analytics.hospital_dashboard_page",
+        "analytics.hospital_dashboard_disease_view",
+        "analytics.hospital_dashboard_lab_disease_view",
+        "analytics.hospital_dashboard_user_view",
+        "analytics.hospital_dashboard_roster_view",
+        "analytics.hospital_dashboard_encounter_view",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == len(names) == 6
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        and ROUTE_POLICIES[endpoint].resolver is None
         for endpoint in names
     )
 

@@ -1162,6 +1162,17 @@ pattern.
   literals, 125 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 219 actions.
 
+### Implemented vertical slice 33: hospital analytics dashboard
+
+- All six hospital-dashboard page and JSON-read routes now require explicit
+  hospital-dashboard screen admission.
+- Screen admission does not authorize returned rows. The existing Lab Unit SQL
+  predicates remain transitional application scoping until the corresponding
+  Authz v2 query policy reproduces them before materialization.
+- The reviewed inventory is now 522 v2 HTTP consumers, 39 legacy action
+  literals, 119 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 219 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

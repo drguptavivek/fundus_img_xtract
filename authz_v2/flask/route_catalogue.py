@@ -162,6 +162,10 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         )
     },
     "preprocess.static": EndpointPolicy(EndpointMode.PUBLIC, Action.PUBLIC_VIEW),
+    "remedio_zip_uploads.upload_form": _screen(Action.PROJECT_UPLOAD_WORKSPACE_VIEW),
+    "remedio_zip_uploads.upload_files": _exact(
+        Action.PROJECT_UPLOAD_CREATE, "project_upload_target"
+    ),
     "fundus_api.get_project_annotation_policy": _exact(
         Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
     ),

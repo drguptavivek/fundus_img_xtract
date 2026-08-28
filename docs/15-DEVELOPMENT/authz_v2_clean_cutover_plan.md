@@ -1335,6 +1335,17 @@ pattern.
   literals, 53 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 233 actions.
 
+### Implemented vertical slice 48: Remidio ZIP upload
+
+- The ZIP upload form has explicit project-upload workspace admission. Upload
+  submission requires an exact project-site upload target derived from the
+  submitted project and Lab Unit; missing or inconsistent target facts deny.
+- ZIP format, ingest mode, camera support, archive limits, filenames, grading
+  schemes, and file processing remain upload application-domain validation.
+- The reviewed inventory is now 590 v2 HTTP consumers, 39 legacy action
+  literals, 51 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 233 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

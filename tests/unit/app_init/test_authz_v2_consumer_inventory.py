@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 588,
+        "authz_v2": 590,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 53,
+        "legacy_unmapped": 51,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1361,6 +1361,25 @@ def test_preprocess_family_separates_workspace_exact_images_and_static_assets():
         assert policy.action is Action.PREPROCESS_IMAGE_UPDATE
         assert policy.resolver == "image"
     assert ROUTE_POLICIES["preprocess.static"].mode is EndpointMode.PUBLIC
+
+
+def test_remidio_zip_upload_separates_workspace_and_exact_upload_target():
+    names = {
+        "remedio_zip_uploads.upload_form",
+        "remedio_zip_uploads.upload_files",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 2
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["remedio_zip_uploads.upload_form"].mode is (
+        EndpointMode.SCREEN
+    )
+    upload = ROUTE_POLICIES["remedio_zip_uploads.upload_files"]
+    assert upload.action is Action.PROJECT_UPLOAD_CREATE
+    assert upload.resolver == "project_upload_target"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

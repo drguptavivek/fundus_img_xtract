@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 562,
+        "authz_v2": 569,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 79,
+        "legacy_unmapped": 72,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1234,6 +1234,35 @@ def test_report_and_encounter_viewers_use_exact_resources():
         "encounter"
     )
     assert ROUTE_POLICIES["fundus_api.encounter_viewer_image"].resolver == "image"
+
+
+def test_remaining_analytics_views_separate_admission_and_exact_media():
+    admission = {
+        "analytics.direct_uploads_kpi",
+        "analytics.encounter_files",
+        "analytics.encounter_results_simple",
+        "analytics.threshold_explorer",
+        "analytics.wai_api_statistics",
+    }
+    exact = {
+        "analytics.view_direct_image": "direct_image_upload",
+        "analytics.view_encounter": "encounter",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row for row in rows if row.kind == "http" and row.name in admission | set(exact)
+    ]
+    assert len(family) == 7
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(
+        ROUTE_POLICIES[endpoint].mode is EndpointMode.SCREEN
+        and ROUTE_POLICIES[endpoint].resolver is None
+        for endpoint in admission
+    )
+    for endpoint, resolver in exact.items():
+        assert ROUTE_POLICIES[endpoint].resolver == resolver
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

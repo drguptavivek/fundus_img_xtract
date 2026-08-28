@@ -116,6 +116,27 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     ),
     "fundus_api.encounter_viewer_image": _exact(Action.TASKS_VIEWER_VIEW, "image"),
     **{
+        endpoint: _screen(Action.ANALYTICS_KPI_VIEW)
+        for endpoint in (
+            "analytics.direct_uploads_kpi",
+            "analytics.encounter_files",
+        )
+    },
+    **{
+        endpoint: _screen(Action.ANALYTICS_ENCOUNTERS_VIEW)
+        for endpoint in (
+            "analytics.encounter_results_simple",
+            "analytics.threshold_explorer",
+        )
+    },
+    "analytics.wai_api_statistics": _screen(Action.INFERENCE_WAI_SUMMARY),
+    "analytics.view_direct_image": _exact(
+        Action.UPLOAD_DIRECT_VIEW, "direct_image_upload"
+    ),
+    "analytics.view_encounter": _exact(
+        Action.ENCOUNTER_VIEWER_VIEW, "encounter"
+    ),
+    **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (
             "fundus_api.get_eligible_lab_units",

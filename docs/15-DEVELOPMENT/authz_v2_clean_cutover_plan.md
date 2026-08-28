@@ -1264,6 +1264,18 @@ pattern.
   literals, 79 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 229 actions.
 
+### Implemented vertical slice 42: remaining analytics views
+
+- Five KPI, encounter-summary, threshold-explorer, and WAI statistics routes
+  now require explicit analytics admission. Direct-image and encounter views
+  authorize the exact persisted resource.
+- Screen admission does not authorize analytical rows. Existing route/service
+  SQL remains transitional until equivalent registered Authz v2 query policies
+  apply before aggregation, pagination, or serialization.
+- The reviewed inventory is now 569 v2 HTTP consumers, 39 legacy action
+  literals, 72 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 229 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

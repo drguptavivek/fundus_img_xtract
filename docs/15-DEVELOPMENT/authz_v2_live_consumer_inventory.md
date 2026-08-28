@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 104 | 47 | 529 |
+| Flask/API route rules | 680 | 117 | 47 | 516 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 977 | 0 | 0 | 977 |
-| Total | 1,704 | 104 | 47 | 1,553 |
+| Total | 1,704 | 117 | 47 | 1,540 |
 
 Reviewed identity fingerprint: `6851094b619dd3800bdc2421d681f0b9dc97cc2c5d83ce11a047f8125680aba3`.
 
@@ -43,6 +43,10 @@ All 16 encounter-set and 14 Remidio verification routes now have explicit contra
 ### Vertical slice 4: mobile clinical APIs
 
 All 27 mobile API routes now have explicit contracts. Login is the sole public route. Refresh and logout require an exact active refresh credential bound to its stored mobile session; access-token routes require the mobile session channel. Session detail/revocation are self-only, field reads and mutations bind exact project or encounter scope, upload creation retains the exact project-site/profile requirement, and upload status/inference/thumbnail access requires both current scoped authority and ownership of the persisted job. The central hook now presents path, query, form, and JSON facts to resolvers as separate namespaces, so a query value cannot overwrite a path or form fact; any required missing fact returns no resource and denies before the handler. Image UUID, report attachment, and other within-encounter details remain application lineage validation rather than new authorization dimensions.
+
+### Vertical slice 5: Remidio workspaces and job control
+
+All 13 Remidio API upload/workspace routes now have explicit contracts. Browser and sync collections use dedicated screen-admission actions; they cannot authorize returned rows. Attachment and no-PII archive delivery resolve the exact parent encounter set with distinct disclosure actions. Wadhwani pages use summary admission, execution uses a closed project/target action selector based on the stored workflow, and job pages/status require the exact job action. Missing project, encounter-set, workflow, attachment lineage, or job facts deny.
 
 ## Authorization-sensitive list/query classification
 
@@ -70,4 +74,4 @@ All 27 mobile API routes now have explicit contracts. Login is the sole public r
 
 ## Remaining cutover work
 
-The remaining 576 explicitly unmapped runtime consumers (529 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 563 explicitly unmapped runtime consumers (516 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

@@ -1,28 +1,28 @@
-# Gates: Authorization v2 vertical slice 4 - mobile clinical APIs
+# Gates: Authorization v2 vertical slice 5 - Remidio workspaces and job control
 
-Scope: Migrate all 27 mobile API routes from the unmapped baseline with explicit credential-channel, self/session ownership, upload-profile, project/site lineage, and encounter/media binding.
+Scope: Migrate all 13 Remidio API upload/workspace routes with exact job, encounter-set, disclosure, and inference authority. Direct uploads remain the next independent slice because mixed GET/POST routes require separate exact-mutation handling.
 
-- [x] G1: All 27 mobile API routes have explicit endpoint contracts and none remains unmapped.
-  CHECK: docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache -T web uv run pytest tests/unit/app_init/test_authz_v2_consumer_inventory.py -q
-  EXPECT: mobile family 27/27 classified and legacy_unmapped reduced by 27
-  EVIDENCE: Inventory test requires 27/27 mobile routes classified; authz_v2=104 and legacy_unmapped=529.
+- [x] G1: All 13 routes have explicit endpoint contracts and none remains legacy-unmapped.
+  CHECK: targeted live-consumer inventory test
+  EXPECT: family 13/13 authz_v2 and legacy_unmapped reduced by 13
+  EVIDENCE: Inventory family test requires 13/13 classified; authz_v2=117 and legacy_unmapped=516.
 
-- [x] G2: Login is the only public mobile route; refresh/logout/session management require the correct credential or mobile session and exact self/session ownership, with missing or mismatched facts denied.
-  CHECK: targeted authz_v2 Flask/catalogue and mobile-session tests
-  EXPECT: cross-user session access and incomplete credential facts deny
-  EVIDENCE: Route contract and signed-credential tests cover public/signed/mobile separation, exact refresh hash/session binding, revocation, channel replay, and self-only session resources.
+- [x] G2: Browser and sync workspaces are screen admission only; selected encounter-set rows and downloads remain list-scoped or exactly authorized.
+  CHECK: route contract and catalogue truth-table tests
+  EXPECT: screen permission cannot authorize a row, attachment, or archive download
+  EVIDENCE: Dedicated masked/PII workspace actions are admission only; delivery routes use exact encounter-set actions.
 
-- [x] G3: Field project/encounter/image/report reads and inference requests enforce mobile channel plus exact project/site/encounter/media lineage; list routes scope before materialization.
-  CHECK: targeted catalogue, decision, binding, and list-scope tests
-  EXPECT: cross-project and cross-site cases deny; missing lineage denies
-  EVIDENCE: Exact project/encounter route contracts require mobile channel and scoped clinical roles; PROJECT_PI/SITE_PI oversight alone is explicitly denied mobile field operation. Within-encounter image/report lineage remains application validation.
+- [x] G3: Attachment/download and job status routes bind exact stored resources with correct disclosure and ownership/scope rules.
+  CHECK: exact-resource, disclosure, owner and cross-scope denial tests
+  EXPECT: forged IDs, cross-site resources, and missing lineage deny
+  EVIDENCE: Attachment/archive policies require exact parent encounter-set resolution; job page/status require exact job ownership/scope policy.
 
-- [x] G4: Upload create/status/inference/thumbnail routes require exact upload owner/session/profile facts, and no route relies on a body-only identifier unavailable to the authorization hook.
-  CHECK: targeted upload resource adapter and route-binding tests
-  EXPECT: mismatched owner/profile/session and missing facts deny
-  EVIDENCE: Create uses exact project-site/profile action; follow-up job actions require current scoped upload authority plus ownership. Resolver transport test proves separate path/query/form/JSON namespaces and missing form facts deny.
+- [x] G4: Wadhwani inference mutations use a closed exact project/target action binding; page/workspace admission cannot authorize execution.
+  CHECK: action/resolver mapping tests
+  EXPECT: mutation actions are distinct from screens and job views
+  EVIDENCE: Run route declares a closed project.wai.run/inference.wai.run binding; pages use summary admission and jobs use jobs.result.view.
 
 - [x] G5: Full Authz/app-init tests, generated policy parity, Ruff, Bandit, diff checks, direct adversarial review, Beads export, scoped commit, pull/rebase, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
   EXPECT: all gates checked with fresh evidence and no pending markers
-  EVIDENCE: 795 tests passed; generated artifacts match; Ruff, Bandit, and diff checks passed. Direct adversarial review tightened upload ownership/current scope and denied oversight-only mobile operation. Beads, commit, rebase, and push are recorded in repository history.
+  EVIDENCE: 805 tests passed; generated artifacts, Ruff, Bandit, diff checks, and direct adversarial review passed. Beads, commit, rebase, and push are recorded in repository history.

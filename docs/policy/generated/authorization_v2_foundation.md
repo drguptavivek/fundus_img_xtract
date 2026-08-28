@@ -916,6 +916,24 @@ Resource: `encounter_set`; disclosure: `identifier_in_place`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.encountersets.workspace.view`
+
+Authorize project.encountersets.workspace.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
+### `project.encountersets.workspace.view_pii`
+
+Authorize project.encountersets.workspace.view_pii.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `project.grader_allocations.enforcement.manage`
 
 Authorize project.grader_allocations.enforcement.manage.
@@ -969,6 +987,15 @@ Resource: `project_upload_target`; disclosure: `identifier_in_place`; audit: `op
 
 - `scoped_upload_profile`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=pregraded_uploader; allow_system=False), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), ScopedRoleRequirement(roles=admin; allow_system=True), BooleanRequirement(fact=exact_resource; expected=True), RelationshipRequirement(source=upload_profile; attributes=(('target_active', True),); require_subject=True; require_scope=True)
+
+### `project.upload.workspace.view`
+
+Authorize project.upload.workspace.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `authenticated_screen`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=analytics_viewer,collaborator,data_exporter,dataset_creator,discrepancy_reviewer,field_ophthalmologist,field_optometrist,ophthalmologist,optometrist,project_admin,project_pi,regrade_adjudicator,site_pi,verifier), GrantSourceRequirement(sources=authorization_grant)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
 
 ### `project.uploaders.manage`
 

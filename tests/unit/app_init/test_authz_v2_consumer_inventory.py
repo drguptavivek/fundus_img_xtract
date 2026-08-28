@@ -21,9 +21,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 104,
+        "authz_v2": 117,
         "legacy_action_literal": 47,
-        "legacy_unmapped": 529,
+        "legacy_unmapped": 516,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 977,
     }
@@ -83,6 +83,20 @@ def test_high_risk_mobile_slice_has_no_unmapped_route():
     assert len(mobile_rows) == 27
     assert {row.classification for row in mobile_rows} == {"authz_v2"}
     assert all(row.canonical_actions for row in mobile_rows)
+
+
+def test_high_risk_remidio_upload_workspace_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source.startswith("remidio_api_uploads/")
+    ]
+    assert len(family) == 13
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert all(row.canonical_actions for row in family)
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

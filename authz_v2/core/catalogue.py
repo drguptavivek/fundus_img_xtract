@@ -702,6 +702,12 @@ for _name, _roles in (
     ("inference.wai.summary", PROJECT_READ),
     ("intra_rater.batch.view", ADMIN_DATA),
     ("intra_rater.kpi.view", ADMIN_DATA | frozenset({Role.OPHTHALMOLOGIST})),
+    ("project.encountersets.workspace.view", PROJECT_READ),
+    (
+        "project.encountersets.workspace.view_pii",
+        PROJECT_READ - frozenset({Role.COLLABORATOR, Role.ANALYTICS_VIEWER}),
+    ),
+    ("project.upload.workspace.view", PROJECT_READ),
 ):
     _screen(_name, _roles)
 _screen(

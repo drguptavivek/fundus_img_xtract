@@ -104,12 +104,15 @@ preprocess.image.update,image,scoped_role|admin_break_glass,identifier_in_place,
 project.access.manage,project,scoped_role|admin_break_glass,masked,required
 project.encountersets.browse,encounter_set,scoped_role|admin_break_glass,masked,optional
 project.encountersets.browse_pii,encounter_set,scoped_role|admin_break_glass,identifier_in_place,optional
+project.encountersets.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional
+project.encountersets.workspace.view_pii,screen,authenticated_screen|admin_break_glass,masked,optional
 project.grader_allocations.enforcement.manage,project,scoped_role|admin_break_glass,masked,optional
 project.grader_allocations.manage,project_allocation_target,scoped_role|admin_break_glass,masked,optional
 project.grader_allocations.view,project_allocation_plan,scoped_role|admin_break_glass,masked,optional
 project.site_policy.manage,project_site_policy,scoped_role|admin_break_glass,masked,optional
 project.upload.create,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
 project.upload.pregraded,project_upload_target,scoped_upload_profile|admin_break_glass,identifier_in_place,optional
+project.upload.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional
 project.uploaders.manage,project,scoped_role|admin_break_glass,masked,required
 project.view,project,scoped_role|admin_break_glass,masked,optional
 project.wai.results,project,scoped_role|admin_break_glass,masked,optional

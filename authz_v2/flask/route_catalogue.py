@@ -37,7 +37,60 @@ def _grading_slot(binding: str) -> EndpointPolicy:
     )
 
 
+def _wai_project(binding: str) -> EndpointPolicy:
+    return EndpointPolicy(
+        EndpointMode.PROTECTED,
+        Action.PROJECT_WAI_RUN,
+        action_variants=(Action.INFERENCE_WAI_RUN,),
+        binding=binding,
+    )
+
+
 ROUTE_POLICIES: dict[str, EndpointPolicy] = {
+    # Remidio project workspaces. Collection pages are admission only; file,
+    # archive, mutation and job routes bind exact stored resources.
+    **{
+        endpoint: _screen(Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW_PII)
+        for endpoint in (
+            "remidio_api_uploads.encounter_set_browser",
+            "remidio_api_uploads.encounter_set_browser_workspace",
+        )
+    },
+    **{
+        endpoint: _screen(Action.PROJECT_ENCOUNTERSETS_WORKSPACE_VIEW)
+        for endpoint in (
+            "remidio_api_uploads.encounter_set_browser_no_pii",
+            "remidio_api_uploads.encounter_set_browser_no_pii_workspace",
+        )
+    },
+    "remidio_api_uploads.encounter_set_browser_no_pii_download": _exact(
+        Action.PROJECT_ENCOUNTERSETS_BROWSE, "encounter_set"
+    ),
+    "remidio_api_uploads.encounter_set_attachment": _exact(
+        Action.PROJECT_ENCOUNTERSETS_BROWSE_PII, "encounter_set"
+    ),
+    **{
+        endpoint: _screen(Action.INFERENCE_WAI_SUMMARY)
+        for endpoint in (
+            "remidio_api_uploads.encounter_set_wadhwani_inference",
+            "remidio_api_uploads.encounter_set_wadhwani_inference_workspace",
+        )
+    },
+    "remidio_api_uploads.encounter_set_wadhwani_inference_run": _wai_project(
+        "wai_workflow_project"
+    ),
+    "remidio_api_uploads.encounter_set_wadhwani_inference_job": _exact(
+        Action.JOBS_RESULT_VIEW, "job"
+    ),
+    "remidio_api_uploads.encounter_set_wadhwani_inference_job_status": _exact(
+        Action.JOBS_RESULT_VIEW, "job"
+    ),
+    "remidio_api_uploads.remidio_api_sync": _screen(
+        Action.PROJECT_UPLOAD_WORKSPACE_VIEW
+    ),
+    "remidio_api_uploads.remidio_api_sync_workspace": _screen(
+        Action.PROJECT_UPLOAD_WORKSPACE_VIEW
+    ),
     # Mobile authentication keeps public credential issuance distinct from
     # refresh-token rotation/revocation. The signed resolver must derive the
     # exact stored session from the presented refresh token.

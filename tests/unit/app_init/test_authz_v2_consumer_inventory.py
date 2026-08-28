@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 479,
-        "legacy_action_literal": 41,
-        "legacy_unmapped": 160,
+        "authz_v2": 491,
+        "legacy_action_literal": 39,
+        "legacy_unmapped": 150,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -789,6 +789,24 @@ def test_intra_rater_route_family_has_exact_mutation_contracts():
     submit = ROUTE_POLICIES["tasks.submit_intra_rater_grade"]
     assert submit.action is Action.INTRA_RATER_TASK_SUBMIT
     assert submit.resolver == "intra_rater_task"
+
+
+def test_kpi_api_routes_separate_screen_admission_from_row_scoping():
+    sources = {
+        "api/kpis/encounter_files_kpis.py",
+        "api/kpis/direct_files_kpis.py",
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 12
+    assert {row.classification for row in family} == {"authz_v2"}
+    for row in family:
+        policy = ROUTE_POLICIES[row.name]
+        assert policy.mode is EndpointMode.SCREEN
+        assert policy.action is Action.ANALYTICS_KPI_VIEW
+        assert policy.enforcement == "screen_entry"
 
 
 def test_admin_executable_configuration_slice_is_classified():

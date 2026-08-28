@@ -1084,6 +1084,19 @@ pattern.
   literals, 160 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 27: KPI API admission
+
+- All 12 encounter-file and direct-file KPI endpoints now use explicit
+  aggregate KPI screen admission.
+- Screen admission does not authorize any returned row or export member. The
+  dataframe builders retain distinct encounter-file/direct-file row actions,
+  which must be enforced by registered SQL query policies before serialization.
+- KPI filter parsing, aggregation, clinical result distributions, and dataframe
+  construction remain analytics application logic.
+- The reviewed inventory is now 491 v2 HTTP consumers, 39 legacy action
+  literals, 150 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

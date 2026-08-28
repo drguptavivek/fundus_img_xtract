@@ -1132,6 +1132,23 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
         Action.INTRA_RATER_TASK_SUBMIT, "intra_rater_task"
     ),
     **{
+        endpoint: _screen(Action.ANALYTICS_KPI_VIEW)
+        for endpoint in (
+            "fundus_api.get_filtered_dataframe",
+            "fundus_api.get_filtered_dataframe_excel",
+            "fundus_api.year_month_wise_uploads",
+            "fundus_api.dr_reports_count",
+            "fundus_api.glaucoma_reports_count",
+            "fundus_api.images_count",
+            "fundus_api.dr_results_distribution",
+            "fundus_api.glaucoma_results_distribution",
+            "fundus_api.vcdr_distribution",
+            "fundus_api.get_filtered_direct_dataframe",
+            "fundus_api.get_filtered_direct_dataframe_excel",
+            "fundus_api.get_upload_metrics",
+        )
+    },
+    **{
         endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
         for endpoint in (
             "verify_remedio_dr.verify_dr_detail",

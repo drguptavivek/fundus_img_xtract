@@ -1148,6 +1148,17 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
             "fundus_api.get_upload_metrics",
         )
     },
+    "jobs.list_recent_jobs": _screen(Action.JOBS_VIEW),
+    **{
+        endpoint: _exact(Action.JOBS_RESULT_VIEW, "job")
+        for endpoint in (
+            "jobs.job_status_json",
+            "jobs.job_status_page",
+            "jobs.upload_results",
+            "jobs.upload_processing",
+        )
+    },
+    "jobs.regenerate_export": _exact(Action.JOBS_REGENERATE, "job"),
     **{
         endpoint: _exact(Action.VERIFICATION_REMIDIO_VIEW, "encounter")
         for endpoint in (

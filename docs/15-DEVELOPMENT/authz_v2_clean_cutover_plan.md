@@ -1097,6 +1097,20 @@ pattern.
   literals, 150 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates.
 
+### Implemented vertical slice 28: browser job routes
+
+- All six job routes now have explicit contracts. The recent-job page is only
+  list admission; status JSON/page, upload results, and processing views require
+  an exact job resolved from its stable token or ID.
+- Export regeneration requires the exact `jobs.regenerate` action on that job.
+  Dataset/discrepancy export lifecycle and reproducibility checks remain in the
+  responsible application services.
+- Existing owner and scope relationships remain authoritative; a bearer token
+  alone is not job authorization.
+- The reviewed inventory is now 497 v2 HTTP consumers, 39 legacy action
+  literals, 144 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

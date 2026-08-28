@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 286,
+        "authz_v2": 294,
         "legacy_action_literal": 45,
-        "legacy_unmapped": 349,
+        "legacy_unmapped": 341,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "0b9e8f20ffc6e7b756a1f45fb427db2714b2ca377d24520f471778c7cf5ddb70"
+        == "dd972628daffc08a5c46071ba65663e594ab24850ea2329aebc871f00ff6797a"
     )
 
 
@@ -379,6 +379,30 @@ def test_admin_remidio_operations_slice_is_classified():
     cleanup = ROUTE_POLICIES["admin.cleanup_stuck_remidio_uploads"]
     assert cleanup.action is Action.ADMIN_SYSTEM_OPERATION
     assert cleanup.mode is EndpointMode.PROTECTED
+
+
+def test_admin_executable_configuration_slice_is_classified():
+    sources = {"admin/ai_models.py", "admin/celery_schedule.py"}
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.source in sources]
+    assert len(family) == 8
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint in (
+        "admin.edit_ai_model",
+        "admin.list_and_create_ai_model",
+    ):
+        assert isinstance(ROUTE_POLICIES[endpoint], dict)
+    for endpoint in (
+        "admin.delete_ai_model",
+        "admin.test_ai_model_health",
+        "admin.celery_schedule_update",
+        "admin.celery_schedule_delete",
+    ):
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.ADMIN_EXECUTABLE_CONFIG_MANAGE
+        assert policy.resolver == "executable_config_record"
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

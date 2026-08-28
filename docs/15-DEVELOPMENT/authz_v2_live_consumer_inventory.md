@@ -15,12 +15,12 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 286 | 45 | 349 |
+| Flask/API route rules | 680 | 294 | 45 | 341 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 286 | 45 | 1,374 |
+| Total | 1,705 | 294 | 45 | 1,366 |
 
-Reviewed identity fingerprint: `0b9e8f20ffc6e7b756a1f45fb427db2714b2ca377d24520f471778c7cf5ddb70`.
+Reviewed identity fingerprint: `dd972628daffc08a5c46071ba65663e594ab24850ea2329aebc871f00ff6797a`.
 
 An action literal is only a discovery hint. It can be a redirect, link, or helper argument and does not prove that the route authorizes the loaded object. Every row remains `legacy_*` or `automation_unmapped` until cutover adds an explicit endpoint/worker contract. The inventory deliberately exposes these as gaps instead of inferring authority from route names or role decorators.
 
@@ -100,6 +100,10 @@ All 20 disease-grading, linked-grading, grading-scheme, encounter-set-type, and 
 
 All nine Remidio administration, encounter-migration, and IITK workspace routes now have explicit contracts. Dashboards, routing workspaces, migration entry, and status reads are Admin-only admission surfaces. Stuck-upload cleanup uses a distinct closed exact operation, so neither a dashboard receipt nor arbitrary operation text can trigger cleanup.
 
+### Vertical slice 9k: executable configuration
+
+All eight AI-model and Celery-schedule routes now have method-aware contracts. Lists and blank creation flows are Admin-only admission; creation requires distinct closed operations. Editing, deletion, health testing, and schedule updates bind a typed exact persisted AI-model or schedule record. Bare IDs, unknown record kinds, missing rows, and undeclared operations deny.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -126,4 +130,4 @@ All nine Remidio administration, encounter-migration, and IITK workspace routes 
 
 ## Remaining cutover work
 
-The remaining 396 explicitly unmapped runtime consumers (349 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 388 explicitly unmapped runtime consumers (341 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

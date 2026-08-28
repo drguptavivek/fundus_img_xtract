@@ -17,6 +17,7 @@ from authz_v2.resources.references import (
     ActiveConfigurationRef,
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    ExecutableConfigRef,
     GradingConfigRef,
     LookupRecordRef,
     SystemOperationRef,
@@ -41,9 +42,11 @@ from authz_v2.resources.upload_targets import resolve_classical_upload_target
 from encounter_set_types.models import EncounterSetType
 from models import (
     AIInferenceRun,
+    AIModel,
     AMDReport,
     Area,
     Camera,
+    CeleryBeatSchedule,
     CuratedDataset,
     DatasetShare,
     DiabeticRetinopathyReport,
@@ -601,6 +604,8 @@ _SYSTEM_OPERATIONS = frozenset(
         "linked_grading_create",
         "linked_grading_hierarchy_update",
         "remidio_stuck_upload_cleanup",
+        "ai_model_create",
+        "celery_schedule_create",
     }
 )
 
@@ -783,6 +788,42 @@ GRADING_CONFIG_ADAPTER = ResourceAdapter(
         facts, domain_valid=True
     ),
 )
+
+_EXECUTABLE_CONFIG_MODELS = {
+    "ai_model": AIModel,
+    "celery_schedule": CeleryBeatSchedule,
+}
+
+
+def resolve_executable_config(db, reference: object) -> ResourceTarget | None:
+    if not isinstance(reference, ExecutableConfigRef):
+        return None
+    model = _EXECUTABLE_CONFIG_MODELS.get(reference.kind)
+    if model is None or not is_positive_int(reference.record_id):
+        return None
+    value = db.get(model, reference.record_id)
+    if value is None:
+        return None
+    return ResourceTarget(
+        value,
+        ResourceContextDTO(
+            "executable_config_record",
+            f"{reference.kind}:{value.id}",
+            ScopeDTO(ScopeType.SYSTEM),
+            state={"domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+EXECUTABLE_CONFIG_ADAPTER = ResourceAdapter(
+    "executable_config_record",
+    resolve_executable_config,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
 PROJECT_ALLOCATION_TARGET_ADAPTER = _model_adapter(
     "project_allocation_target", ProjectGraderAllocation
 )
@@ -825,6 +866,7 @@ RESOURCE_ADAPTERS = (
     ENCOUNTER_ADAPTER,
     ENCOUNTER_FILE_ADAPTER,
     ENCOUNTER_SET_ADAPTER,
+    EXECUTABLE_CONFIG_ADAPTER,
     GRADING_CONFIG_ADAPTER,
     GRADING_TASK_ADAPTER,
     IMAGE_ADAPTER,

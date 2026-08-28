@@ -331,6 +331,35 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "admin.cleanup_stuck_remidio_uploads": _exact(
         Action.ADMIN_SYSTEM_OPERATION, "system_operation"
     ),
+    "admin.list_and_create_ai_model": {
+        "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
+        "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),
+    },
+    "admin.edit_ai_model": {
+        "GET": _exact(Action.ADMIN_EXECUTABLE_CONFIG_VIEW, "executable_config_record"),
+        "POST": _exact(
+            Action.ADMIN_EXECUTABLE_CONFIG_MANAGE, "executable_config_record"
+        ),
+    },
+    **{
+        endpoint: _exact(
+            Action.ADMIN_EXECUTABLE_CONFIG_MANAGE, "executable_config_record"
+        )
+        for endpoint in ("admin.delete_ai_model", "admin.test_ai_model_health")
+    },
+    "admin.celery_schedule_list": _screen(Action.ADMIN_SYSTEM_MANAGE),
+    "admin.celery_schedule_create": _exact(
+        Action.ADMIN_SYSTEM_OPERATION, "system_operation"
+    ),
+    **{
+        endpoint: _exact(
+            Action.ADMIN_EXECUTABLE_CONFIG_MANAGE, "executable_config_record"
+        )
+        for endpoint in (
+            "admin.celery_schedule_update",
+            "admin.celery_schedule_delete",
+        )
+    },
     **{
         endpoint: _screen(Action.ADMIN_SECURITY_VIEW)
         for endpoint in (

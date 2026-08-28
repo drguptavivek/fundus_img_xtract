@@ -136,6 +136,22 @@ Resource: `email_settings_config`; disclosure: `identifier_in_place`; audit: `op
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.executable_config.manage`
+
+Authorize admin.executable_config.manage.
+
+Resource: `executable_config_record`; disclosure: `masked`; audit: `required`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.executable_config.view`
+
+Authorize admin.executable_config.view.
+
+Resource: `executable_config_record`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `admin.grading_config.manage`
 
 Authorize admin.grading_config.manage.

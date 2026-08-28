@@ -62,6 +62,14 @@ class GradingConfigRef:
     record_id: int
 
 
+@dataclass(frozen=True)
+class ExecutableConfigRef:
+    """Typed identity for AI and scheduler configuration records."""
+
+    kind: str
+    record_id: int
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

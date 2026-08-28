@@ -192,6 +192,7 @@ MANDATORY_AUDIT = frozenset(
         "admin.lookup_record.manage",
         "admin.grading_config.manage",
         "admin.grading_eligibility.user.manage",
+        "admin.executable_config.manage",
         "authorization.grants.manage",
         "api.mobile.session.manage",
         "project.access.manage",
@@ -733,6 +734,17 @@ _screen(
 )
 
 # Exact user administration.
+_resource(
+    "admin.executable_config.view",
+    "executable_config_record",
+    ADMIN,
+)
+_resource(
+    "admin.executable_config.manage",
+    "executable_config_record",
+    ADMIN,
+    domain_condition=True,
+)
 _resource(
     "admin.grading_config.view",
     "grading_config_record",

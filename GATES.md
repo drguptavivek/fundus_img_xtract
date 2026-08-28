@@ -1,21 +1,21 @@
-# Gates: Authorization v2 vertical slice 9j - Remidio operational administration
+# Gates: Authorization v2 vertical slice 9k - executable configuration
 
-- [x] G1: All nine Remidio admin, migration, and IITK routes have explicit contracts.
-  CHECK: admin Remidio operations inventory family test
-  EVIDENCE: inventory is 286 Authz v2 HTTP routes; all three source families classify Authz v2
+- [x] G1: All eight AI-model and Celery-schedule routes have method-aware contracts.
+  CHECK: executable-configuration inventory family test
+  EVIDENCE: inventory is 294 Authz v2 HTTP routes; both source families classify Authz v2
 
-- [x] G2: Remidio dashboards and status endpoints remain read-only admission.
-  CHECK: route catalogue screen contracts
-  EVIDENCE: eight routes use Admin-only security-screen authority
+- [x] G2: Stored executable configuration requires typed exact identity.
+  CHECK: executable-config adapter regression
+  EVIDENCE: bare IDs, unknown kinds, invalid IDs, and missing rows deny
 
-- [x] G3: Stuck-upload cleanup cannot borrow dashboard admission.
-  CHECK: cleanup exact route contract
-  EVIDENCE: POST requires admin.system.operation and exact system_operation resolution
+- [x] G3: List and creation access cannot authorize row mutation.
+  CHECK: method-specific route contracts
+  EVIDENCE: lists use screen admission, creates use closed operations, edits/deletes use exact records
 
-- [x] G4: Cleanup operation identity is closed and fail-closed.
-  CHECK: system-operation allowlist
-  EVIDENCE: remidio_stuck_upload_cleanup is explicit; arbitrary operation text denies
+- [x] G4: Health testing and scheduler mutation bind persisted targets.
+  CHECK: exact action contracts
+  EVIDENCE: health, update, and delete routes require executable_config_record resolution
 
 - [x] G5: Full Authz/app-init tests, generated parity, static/security checks, Beads export, commit, remote ancestry, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EVIDENCE: 935 tests pass; Ruff, Bandit, generated parity, and git diff checks pass
+  EVIDENCE: 947 tests pass; Ruff, Bandit, generated parity, and git diff checks pass

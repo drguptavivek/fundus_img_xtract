@@ -169,6 +169,8 @@ _CANONICAL_ONLY = {
     "admin.grading_config.view",
     "admin.grading_config.manage",
     "admin.grading_eligibility.user.manage",
+    "admin.executable_config.view",
+    "admin.executable_config.manage",
     "admin.users.create",
     "admin.users.workspace.view",
     "admin.upload_profiles.update",

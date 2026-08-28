@@ -11,6 +11,7 @@ from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
 from authz_v2.resources.adapters import (
     TypedResourceRef,
+    resolve_executable_config,
     resolve_grading_config,
     resolve_lookup_record,
     resolve_mobile_session,
@@ -20,6 +21,7 @@ from authz_v2.resources.composition import register_core_adapters
 from authz_v2.resources.references import (
     AdminMobileSessionTargetRef,
     AutomationTargetRef,
+    ExecutableConfigRef,
     GradingConfigRef,
     LookupRecordRef,
     SystemOperationRef,
@@ -241,3 +243,14 @@ def test_grading_config_records_reject_ambiguous_or_unknown_references():
     assert resolve_grading_config(db, 1) is None
     assert resolve_grading_config(db, GradingConfigRef("unknown", 1)) is None
     assert resolve_grading_config(db, GradingConfigRef("grading_scheme", 0)) is None
+
+
+def test_executable_config_records_require_closed_typed_references():
+    class NoDatabaseCalls:
+        def get(self, *_args):
+            raise AssertionError("invalid executable config reached the database")
+
+    db = NoDatabaseCalls()
+    assert resolve_executable_config(db, 1) is None
+    assert resolve_executable_config(db, ExecutableConfigRef("unknown", 1)) is None
+    assert resolve_executable_config(db, ExecutableConfigRef("ai_model", 0)) is None

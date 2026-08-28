@@ -1429,6 +1429,30 @@ Resource: `project`; disclosure: `masked`; audit: `required`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=project_admin; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.annotation_policy.export`
+
+Authorize project.annotation_policy.export.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `project.annotation_policy.manage`
+
+Authorize project.annotation_policy.manage.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `project.annotation_policy.view`
+
+Authorize project.annotation_policy.view.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `project.encountersets.browse`
 
 Authorize project.encountersets.browse.

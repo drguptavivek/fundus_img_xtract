@@ -1360,6 +1360,27 @@ _participation(
 for _name, _type, _roles, _disclosure, _domain in (
     ("project.view", "project", PROJECT_READ, DisclosureClass.MASKED, False),
     (
+        "project.annotation_policy.view",
+        "project",
+        ADMIN,
+        DisclosureClass.MASKED,
+        False,
+    ),
+    (
+        "project.annotation_policy.manage",
+        "project",
+        ADMIN,
+        DisclosureClass.MASKED,
+        False,
+    ),
+    (
+        "project.annotation_policy.export",
+        "project",
+        ADMIN,
+        DisclosureClass.MASKED,
+        False,
+    ),
+    (
         "project.grader_allocations.view",
         "project_allocation_plan",
         frozenset(

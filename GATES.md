@@ -1,21 +1,21 @@
-# Authz v2 slice 43: task, upload, and audit workspaces
+# Authz v2 slice 44: project annotation policy administration
 
-- [x] G1 Four task/upload/audit workspaces have explicit admission.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_task_upload_and_audit_workspaces_are_explicit -q'
+- [x] G1 Three policy endpoints use exact project authorization.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_project_annotation_policy_routes_use_exact_admin_project_actions -q'
   EXPECT: exit 0
-  EVIDENCE: Family test passes; all four routes classify as Authz v2.
+  EVIDENCE: Focused family test passes for all three routes and project resolvers.
 
-- [x] G2 Workspace admission is not represented as row authorization.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_task_upload_and_audit_workspaces_are_explicit -q'
+- [x] G2 The three new actions remain admin-only and resource exact.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/core/test_contracts.py -q'
   EXPECT: exit 0
-  EVIDENCE: All four routes are screen mode without an exact-resource resolver.
+  EVIDENCE: Full 1097-case core contract parametrization passes within the combined run.
 
-- [x] G3 Existing application filters remain transitional pending SQL policies.
-  CHECK: rg -n 'query-policy|SQL' docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md
+- [x] G3 Domain annotation rules remain outside Authz v2.
+  CHECK: make test PYTEST_ARGS='tests/unit/authz_v2/test_domain_boundary.py -q'
   EXPECT: exit 0
-  EVIDENCE: Plan explicitly records registered SQL query-policy replacement before cutover.
+  EVIDENCE: Both domain-boundary tests pass; policy structure and format remain app code.
 
-- [x] G4 Inventory and documentation are current.
-  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline -q'
+- [x] G4 Inventory and generated policy artifacts are current.
+  CHECK: make test PYTEST_ARGS='tests/unit/app_init/test_authz_v2_consumer_inventory.py::test_live_http_and_celery_inventory_matches_reviewed_baseline tests/unit/authz_v2/test_generated_policy_docs.py -q'
   EXPECT: exit 0
-  EVIDENCE: Inventory/family tests pass at 573 explicit and 68 unmapped routes; plan slice 43 is current.
+  EVIDENCE: Combined run passes 1101 tests; inventory is 576 explicit/65 unmapped and generated artifacts match.

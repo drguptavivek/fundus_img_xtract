@@ -166,6 +166,9 @@ notifications.send,notification_target,admin_break_glass,masked,optional
 preprocess.dashboard.view,screen,authenticated_screen|admin_break_glass,masked,optional
 preprocess.image.update,image,scoped_role|admin_break_glass,identifier_in_place,optional
 project.access.manage,project,scoped_role|admin_break_glass,masked,required
+project.annotation_policy.export,project,admin_break_glass,masked,optional
+project.annotation_policy.manage,project,admin_break_glass,masked,optional
+project.annotation_policy.view,project,admin_break_glass,masked,optional
 project.encountersets.browse,encounter_set,scoped_role|admin_break_glass,masked,optional
 project.encountersets.browse_pii,encounter_set,scoped_role|admin_break_glass,identifier_in_place,optional
 project.encountersets.workspace.view,screen,authenticated_screen|admin_break_glass,masked,optional

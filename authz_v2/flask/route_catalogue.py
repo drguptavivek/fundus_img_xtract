@@ -142,6 +142,15 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "uploaded_zips.list_uploaded_zips": _screen(Action.UPLOAD_WORKSPACE_VIEW),
     "audit.missing_capture_date": _screen(Action.AUDIT_DATA_QUALITY_VIEW),
+    "fundus_api.get_project_annotation_policy": _exact(
+        Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
+    ),
+    "fundus_api.put_project_annotation_policy": _exact(
+        Action.PROJECT_ANNOTATION_POLICY_MANAGE, "project"
+    ),
+    "fundus_api.export_project_schema": _exact(
+        Action.PROJECT_ANNOTATION_POLICY_EXPORT, "project"
+    ),
     **{
         endpoint: _exact(Action.AUTHORIZATION_ME_UPLOAD_OPTIONS_VIEW, "user")
         for endpoint in (

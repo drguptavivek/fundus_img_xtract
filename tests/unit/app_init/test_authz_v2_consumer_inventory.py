@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 573,
+        "authz_v2": 576,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 68,
+        "legacy_unmapped": 65,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1283,6 +1283,24 @@ def test_task_upload_and_audit_workspaces_are_explicit():
         and ROUTE_POLICIES[endpoint].resolver is None
         for endpoint in names
     )
+
+
+def test_project_annotation_policy_routes_use_exact_admin_project_actions():
+    expected = {
+        "fundus_api.get_project_annotation_policy": Action.PROJECT_ANNOTATION_POLICY_VIEW,
+        "fundus_api.put_project_annotation_policy": Action.PROJECT_ANNOTATION_POLICY_MANAGE,
+        "fundus_api.export_project_schema": Action.PROJECT_ANNOTATION_POLICY_EXPORT,
+    }
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in expected]
+    assert len(family) == 3
+    assert {row.classification for row in family} == {"authz_v2"}
+    for endpoint, action in expected.items():
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is action
+        assert policy.resolver == "project"
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

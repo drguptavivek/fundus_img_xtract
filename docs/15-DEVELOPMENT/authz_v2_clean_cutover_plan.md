@@ -1287,6 +1287,19 @@ pattern.
   literals, 68 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 229 actions.
 
+### Implemented vertical slice 44: project annotation policy administration
+
+- The project annotation-policy read, update, and schema-export endpoints now
+  require exact project resources through distinct admin-only Authz v2 actions.
+- Authz governs permission to access the project policy surface only. Annotation
+  policy structure, validation, conflict handling, and export-format rules remain
+  application-domain concerns and are not represented as authorization facts.
+- The grading-task annotation-context endpoint remains unclassified until its
+  slot-specific read contract is modeled without reusing submission authority.
+- The reviewed inventory is now 576 v2 HTTP consumers, 39 legacy action
+  literals, 65 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 232 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

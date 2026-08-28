@@ -22,15 +22,15 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 375,
+        "authz_v2": 385,
         "legacy_action_literal": 44,
-        "legacy_unmapped": 261,
+        "legacy_unmapped": 251,
         "automation_unmapped": 47,
-        "query_candidate_unmapped": 978,
+        "query_candidate_unmapped": 979,
     }
     assert (
         inventory["identity_fingerprint"]
-        == "2b3e963017242aa81cca1bb170e634b78cec333f4566453850068b3039605f49"
+        == "a49c3b313dc4baf1099b8b7343204d12c98e8f8fd19a2ea288a24d67862d3bda"
     )
 
 
@@ -49,6 +49,29 @@ def test_browser_authentication_family_is_classified_by_security_boundary():
         assert ROUTE_POLICIES[endpoint].resolver == "password_reset_credential"
     for endpoint in ("auth.logout", "auth.ping", "auth.confirm_password"):
         assert ROUTE_POLICIES[endpoint].resolver == "user"
+
+
+def test_remote_inference_family_has_exact_project_job_and_batch_contracts():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/remote_inference.py"
+    ]
+    assert len(family) == 10
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert (
+        ROUTE_POLICIES["fundus_api.create_encounter_remote_inference_job"].resolver
+        == "remote_inference_batch"
+    )
+    assert (
+        ROUTE_POLICIES[
+            "fundus_api.resume_interrupted_wadhwani_encounter_set_job"
+        ].resolver
+        == "job"
+    )
 
 
 def test_final_admin_scope_sensitive_slice_is_classified_and_exact():

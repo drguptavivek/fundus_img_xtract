@@ -873,6 +873,36 @@ _owned_resource(
     CAPTURE_UPLOADERS | ADMIN,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_resource(
+    "project.remote_inference_config.view",
+    "project",
+    frozenset({Role.ADMIN, Role.PROJECT_ADMIN}),
+    disclosure=DisclosureClass.MASKED,
+)
+_resource(
+    "project.remote_inference_config.manage",
+    "project",
+    frozenset({Role.ADMIN, Role.PROJECT_ADMIN}),
+    disclosure=DisclosureClass.MASKED,
+)
+_resource(
+    "project.remote_inference_batch.run",
+    "remote_inference_batch",
+    frozenset(
+        {
+            Role.ADMIN,
+            Role.VERIFIER,
+            Role.OPTOMETRIST,
+            Role.FIELD_OPTOMETRIST,
+            Role.FIELD_OPHTHALMOLOGIST,
+        }
+    ),
+)
+_resource(
+    "project.remote_inference_job.resume",
+    "job",
+    frozenset({Role.ADMIN, Role.PROJECT_ADMIN}),
+)
 _store(
     "grading.workbench.session.resume",
     resource_type="workbench_session",

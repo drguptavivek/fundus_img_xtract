@@ -24,6 +24,8 @@ from authz_v2.resources.references import (
     GradingConfigRef,
     GradingRepairBatchRef,
     LookupRecordRef,
+    JobTokenRef,
+    RemoteInferenceBatchRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
     S3SyncQueryRef,
@@ -499,12 +501,65 @@ def _resolve_direct_upload_batch(db, reference: object) -> ResourceTarget | None
     )
 
 
+def resolve_remote_inference_batch(db, reference: object) -> ResourceTarget | None:
+    """Resolve only a bounded, one-scope set of persisted project encounters."""
+    if not isinstance(reference, RemoteInferenceBatchRef):
+        return None
+    ids = reference.encounter_ids
+    if (
+        not is_positive_int(reference.project_id)
+        or not ids
+        or len(ids) > 100
+        or len(set(ids)) != len(ids)
+        or any(not is_positive_int(value) for value in ids)
+    ):
+        return None
+    rows = tuple(
+        db.execute(select(PatientEncounters).where(PatientEncounters.id.in_(ids)))
+        .scalars()
+        .all()
+    )
+    if len(rows) != len(ids) or any(
+        row.project_id != reference.project_id for row in rows
+    ):
+        return None
+    lab_unit_ids = {row.lab_unit_id for row in rows}
+    if len(lab_unit_ids) != 1:
+        return None
+    scope = resolve_scope(
+        db,
+        project_id=reference.project_id,
+        lab_unit_id=next(iter(lab_unit_ids)),
+    )
+    if scope is None:
+        return None
+    identity = hashlib.sha256(
+        f"{reference.project_id}:".encode()
+        + ",".join(str(value) for value in sorted(ids)).encode()
+    ).hexdigest()
+    return ResourceTarget(
+        rows,
+        ResourceContextDTO(
+            "remote_inference_batch",
+            identity,
+            scope,
+            state={"target_active": True, "domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
 DIRECT_UPLOAD_BATCH_ADAPTER = ResourceAdapter(
     "direct_upload_batch",
     _resolve_direct_upload_batch,
     lambda _db, _principal, _action, grants, query: scope_model_query(
         DirectImageUpload, grants, query
     ),
+)
+REMOTE_INFERENCE_BATCH_ADAPTER = ResourceAdapter(
+    "remote_inference_batch",
+    resolve_remote_inference_batch,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
 )
 GRADING_TASK_ADAPTER = _model_adapter("grading_task", GradingTask)
 JOB_ADAPTER = _model_adapter(
@@ -514,6 +569,23 @@ JOB_ADAPTER = _model_adapter(
     requester_attr="uploader_user_id",
     allow_system_scope=True,
 )
+_JOB_ID_RESOLVER = JOB_ADAPTER.resolver
+
+
+def resolve_job(db, reference: object) -> ResourceTarget | None:
+    if isinstance(reference, JobTokenRef):
+        if not is_stable_resource_id(reference.token):
+            return None
+        job_id = db.execute(
+            select(Job.id).where(Job.token == reference.token)
+        ).scalar_one_or_none()
+        if job_id is None:
+            return None
+        reference = job_id
+    return _JOB_ID_RESOLVER(db, reference)
+
+
+JOB_ADAPTER = replace(JOB_ADAPTER, resolver=resolve_job)
 UPLOAD_JOB_ADAPTER = _model_adapter(
     "upload_job", Job, owner_attr="uploader_user_id", requester_attr="uploader_user_id"
 )
@@ -1537,6 +1609,7 @@ RESOURCE_ADAPTERS = (
     DATASET_SHARE_ADAPTER,
     DIRECT_IMAGE_ADAPTER,
     DIRECT_UPLOAD_BATCH_ADAPTER,
+    REMOTE_INFERENCE_BATCH_ADAPTER,
     DISCREPANCY_ADAPTER,
     EMAIL_SETTINGS_ADAPTER,
     ENCOUNTER_ADAPTER,

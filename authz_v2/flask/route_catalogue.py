@@ -76,6 +76,34 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "auth.logout": _exact(Action.AUTH_LOGOUT, "user"),
     "auth.ping": _exact(Action.AUTH_SESSION_KEEPALIVE, "user"),
     "auth.confirm_password": _exact(Action.AUTH_REAUTH, "user"),
+    **{
+        endpoint: _exact(Action.PROJECT_REMOTE_INFERENCE_CONFIG_VIEW, "project")
+        for endpoint in (
+            "fundus_api.get_project_manual_remote_inference_workflows",
+            "fundus_api.get_project_automated_remote_inference_workflows",
+            "fundus_api.get_project_dr_dme_encounter_workflow",
+        )
+    },
+    **{
+        endpoint: _exact(Action.PROJECT_REMOTE_INFERENCE_CONFIG_MANAGE, "project")
+        for endpoint in (
+            "fundus_api.save_project_manual_remote_inference_workflows",
+            "fundus_api.save_project_automated_remote_inference_workflows",
+            "fundus_api.save_project_dr_dme_encounter_workflow",
+        )
+    },
+    "fundus_api.get_recent_project_wadhwani_encounter_set_jobs": _exact(
+        Action.PROJECT_WAI_RESULTS, "project"
+    ),
+    "fundus_api.resume_interrupted_wadhwani_encounter_set_job": _exact(
+        Action.PROJECT_REMOTE_INFERENCE_JOB_RESUME, "job"
+    ),
+    "fundus_api.get_encounter_remote_inference_candidates": _exact(
+        Action.PROJECT_WAI_RUN, "project"
+    ),
+    "fundus_api.create_encounter_remote_inference_job": _exact(
+        Action.PROJECT_REMOTE_INFERENCE_BATCH_RUN, "remote_inference_batch"
+    ),
     "fundus_api.get_active_workbench_sessions": _screen(
         Action.GRADING_WORKBENCH_SESSIONS_LIST
     ),

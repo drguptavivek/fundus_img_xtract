@@ -896,6 +896,24 @@ pattern.
   literals, 261 unmapped HTTP consumers, 47 unmapped workers, and 978 query
   candidates.
 
+### Implemented vertical slice 13: project remote inference
+
+- All ten project remote-inference APIs distinguish configuration read/manage,
+  project result/candidate admission, exact job resume, and exact batch launch.
+- Configuration authorization resolves the persisted project and permits only
+  scoped system administrators or project administrators. Workflow/model
+  compatibility and configuration validation remain in remote-inference
+  application services.
+- Manual launch requires a non-empty, unique batch of at most 100 persisted
+  encounters. Every encounter must belong to the declared project and one Lab
+  Unit scope; missing, cross-project, or mixed-scope batches deny.
+- The external job token is resolved to the exact persisted job before resume
+  authorization. Staleness, unfinished-item selection, and requeue behavior
+  remain job-service domain rules.
+- The reviewed inventory is now 385 v2 HTTP consumers, 44 legacy action
+  literals, 251 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

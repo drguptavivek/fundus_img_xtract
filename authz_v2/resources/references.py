@@ -128,6 +128,21 @@ class WorkbenchAcquisitionRef:
     lab_unit_id: int | None = None
 
 
+@dataclass(frozen=True)
+class RemoteInferenceBatchRef:
+    """Bounded project encounter set selected for one inference job."""
+
+    project_id: int
+    encounter_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class JobTokenRef:
+    """Disambiguated external token for one persisted job."""
+
+    token: str
+
+
 def is_positive_int(value: object) -> bool:
     """Accept database identifiers, never booleans, zero, or negative values."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0

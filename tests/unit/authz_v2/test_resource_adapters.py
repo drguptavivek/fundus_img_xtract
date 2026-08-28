@@ -9,16 +9,19 @@ from authz_v2.core.principals import EvaluationFactsDTO, PrincipalDTO, RoleGrant
 from authz_v2.core.resources import ResourceContextDTO, ScopeDTO, ScopeSetDTO
 from authz_v2.core.roles import Role, ScopeType
 from authz_v2.repositories.contracts import GrantRecord
+from authz_v2.resources import adapters as resource_adapters
 from authz_v2.resources.adapters import (
     TypedResourceRef,
     resolve_executable_config,
     resolve_grading_config,
     resolve_grading_repair_batch,
     resolve_lookup_record,
+    resolve_job,
     resolve_mobile_session,
     resolve_remidio_config,
     resolve_remidio_attachment,
     resolve_remidio_project_sync,
+    resolve_remote_inference_batch,
     resolve_s3_sync_query,
     resolve_s3_sync_record,
     resolve_sensitive_audit_event,
@@ -35,8 +38,10 @@ from authz_v2.resources.references import (
     GradingConfigRef,
     GradingRepairBatchRef,
     LookupRecordRef,
+    JobTokenRef,
     RemidioConfigRef,
     RemidioProjectSyncRef,
+    RemoteInferenceBatchRef,
     S3SyncQueryRef,
     SystemOperationRef,
     TaskBackfillTargetRef,
@@ -326,3 +331,76 @@ def test_scope_sensitive_admin_targets_fail_closed_before_database_access():
     assert resolve_workbench_acquisition(
         db, WorkbenchAcquisitionRef("linked", None, None, (1, 2), 3)
     ) is None
+    assert resolve_remote_inference_batch(db, None) is None
+    assert resolve_remote_inference_batch(
+        db, RemoteInferenceBatchRef(1, ())
+    ) is None
+    assert resolve_remote_inference_batch(
+        db, RemoteInferenceBatchRef(1, (2, 2))
+    ) is None
+    assert resolve_remote_inference_batch(
+        db, RemoteInferenceBatchRef(1, tuple(range(1, 102)))
+    ) is None
+    assert resolve_job(db, JobTokenRef("")) is None
+
+
+def test_remote_inference_batch_requires_one_persisted_project_lab_scope(monkeypatch):
+    class Result:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+    class Database:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def execute(self, _statement):
+            return Result(self.rows)
+
+    monkeypatch.setattr(
+        resource_adapters,
+        "resolve_scope",
+        lambda _db, *, project_id, lab_unit_id: ScopeDTO(
+            ScopeType.PROJECT_LAB_UNIT,
+            99,
+            project_id=project_id,
+            lab_unit_id=lab_unit_id,
+            project_lab_unit_id=99,
+        ),
+    )
+    reference = RemoteInferenceBatchRef(7, (11, 12))
+    assert resolve_remote_inference_batch(
+        Database(
+            (
+                SimpleNamespace(id=11, project_id=7, lab_unit_id=3),
+                SimpleNamespace(id=12, project_id=8, lab_unit_id=3),
+            )
+        ),
+        reference,
+    ) is None
+    assert resolve_remote_inference_batch(
+        Database(
+            (
+                SimpleNamespace(id=11, project_id=7, lab_unit_id=3),
+                SimpleNamespace(id=12, project_id=7, lab_unit_id=4),
+            )
+        ),
+        reference,
+    ) is None
+    target = resolve_remote_inference_batch(
+        Database(
+            (
+                SimpleNamespace(id=11, project_id=7, lab_unit_id=3),
+                SimpleNamespace(id=12, project_id=7, lab_unit_id=3),
+            )
+        ),
+        reference,
+    )
+    assert target is not None
+    assert target.context.scope.project_id == 7
+    assert target.context.scope.lab_unit_id == 3

@@ -1322,6 +1322,19 @@ pattern.
   literals, 58 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 233 actions.
 
+### Implemented vertical slice 47: image anonymization workspace
+
+- The anonymization dashboard now has explicit workspace admission; its edit,
+  PII override, and restore routes authorize the exact typed image. The
+  blueprint's static-asset endpoint is explicitly public.
+- OCR/PII state, verification state, image variants, file restoration, task
+  creation, and filter validation remain preprocess application logic.
+- Existing dashboard row filtering remains transitional until its registered
+  Authz v2 SQL query policy is enforced before pagination and rendering.
+- The reviewed inventory is now 588 v2 HTTP consumers, 39 legacy action
+  literals, 53 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 233 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 583,
+        "authz_v2": 588,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 58,
+        "legacy_unmapped": 53,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1338,6 +1338,29 @@ def test_grading_dashboard_family_uses_exact_self_authorization():
         policy = ROUTE_POLICIES[endpoint]
         assert policy.action is Action.GRADING_DASHBOARD_VIEW
         assert policy.resolver == "user"
+
+
+def test_preprocess_family_separates_workspace_exact_images_and_static_assets():
+    exact = {
+        "preprocess.anonymize_image",
+        "preprocess.pii_override",
+        "preprocess.restore_original_anonymized_image",
+    }
+    names = exact | {"preprocess.anonymization_dashboard", "preprocess.static"}
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [row for row in rows if row.kind == "http" and row.name in names]
+    assert len(family) == 5
+    assert {row.classification for row in family} == {"authz_v2"}
+    assert ROUTE_POLICIES["preprocess.anonymization_dashboard"].mode is (
+        EndpointMode.SCREEN
+    )
+    for endpoint in exact:
+        policy = ROUTE_POLICIES[endpoint]
+        assert policy.action is Action.PREPROCESS_IMAGE_UPDATE
+        assert policy.resolver == "image"
+    assert ROUTE_POLICIES["preprocess.static"].mode is EndpointMode.PUBLIC
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

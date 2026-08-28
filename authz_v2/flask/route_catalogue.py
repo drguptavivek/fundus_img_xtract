@@ -150,6 +150,18 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     },
     "uploaded_zips.list_uploaded_zips": _screen(Action.UPLOAD_WORKSPACE_VIEW),
     "audit.missing_capture_date": _screen(Action.AUDIT_DATA_QUALITY_VIEW),
+    "preprocess.anonymization_dashboard": _screen(
+        Action.PREPROCESS_DASHBOARD_VIEW
+    ),
+    **{
+        endpoint: _exact(Action.PREPROCESS_IMAGE_UPDATE, "image")
+        for endpoint in (
+            "preprocess.anonymize_image",
+            "preprocess.pii_override",
+            "preprocess.restore_original_anonymized_image",
+        )
+    },
+    "preprocess.static": EndpointPolicy(EndpointMode.PUBLIC, Action.PUBLIC_VIEW),
     "fundus_api.get_project_annotation_policy": _exact(
         Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
     ),

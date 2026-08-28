@@ -166,6 +166,10 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "remedio_zip_uploads.upload_files": _exact(
         Action.PROJECT_UPLOAD_CREATE, "project_upload_target"
     ),
+    "review.review_task_details": {
+        "GET": _exact(Action.REVIEW_TASK_VIEW, "grading_task"),
+        "POST": _exact(Action.REVIEW_TASK_SUBMIT, "grading_task"),
+    },
     "fundus_api.get_project_annotation_policy": _exact(
         Action.PROJECT_ANNOTATION_POLICY_VIEW, "project"
     ),

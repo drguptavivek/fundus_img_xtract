@@ -22,9 +22,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 590,
+        "authz_v2": 591,
         "legacy_action_literal": 39,
-        "legacy_unmapped": 51,
+        "legacy_unmapped": 50,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 979,
     }
@@ -1380,6 +1380,23 @@ def test_remidio_zip_upload_separates_workspace_and_exact_upload_target():
     upload = ROUTE_POLICIES["remedio_zip_uploads.upload_files"]
     assert upload.action is Action.PROJECT_UPLOAD_CREATE
     assert upload.resolver == "project_upload_target"
+
+
+def test_review_task_detail_uses_exact_method_specific_task_actions():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.name == "review.review_task_details"
+    ]
+    assert len(family) == 1
+    assert family[0].classification == "authz_v2"
+    policies = ROUTE_POLICIES["review.review_task_details"]
+    assert policies["GET"].action is Action.REVIEW_TASK_VIEW
+    assert policies["POST"].action is Action.REVIEW_TASK_SUBMIT
+    assert {policy.resolver for policy in policies.values()} == {"grading_task"}
 
 
 def test_every_inventory_row_has_a_traceable_runtime_identity():

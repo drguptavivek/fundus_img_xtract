@@ -1346,6 +1346,17 @@ pattern.
   literals, 51 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue remains 233 actions.
 
+### Implemented vertical slice 49: discrepancy task review
+
+- The combined discrepancy task-detail route now uses method-specific exact
+  grading-task actions: view for GET and submit for POST. Missing task identity,
+  scope, or review relationship denies before the handler.
+- Consensus methods, submitted grades/features, AI feedback, stale-request
+  detection, and next-task navigation remain review application-domain logic.
+- The reviewed inventory is now 591 v2 HTTP consumers, 39 legacy action
+  literals, 50 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue remains 233 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

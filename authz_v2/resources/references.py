@@ -177,6 +177,14 @@ class IntraRaterBatchTargetRef:
 
 
 @dataclass(frozen=True)
+class IITKConfigurationTargetRef:
+    """Exact project-site authorization target for a new IITK configuration."""
+
+    project_id: int
+    lab_unit_id: int
+
+
+@dataclass(frozen=True)
 class DirectImageUuidRef:
     """Opaque UUID identity for one persisted direct-image upload."""
 

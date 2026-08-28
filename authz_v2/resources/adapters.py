@@ -28,6 +28,7 @@ from authz_v2.resources.references import (
     LookupRecordRef,
     JobTokenRef,
     IntraRaterBatchTargetRef,
+    IITKConfigurationTargetRef,
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemoteInferenceBatchRef,
@@ -98,6 +99,7 @@ from models import (
     UserDiseaseUnitRole,
 )
 from project_configuration.models import ProjectLabUnit
+from iitk_api_integration.models import IITKApiProjectConfig
 from remidio_api_integration.models import (
     ProjectUploadProfileRemidioApiBinding,
     RemidioApiRoutingProfile,
@@ -688,6 +690,47 @@ INTRA_RATER_BATCH_TARGET_ADAPTER = ResourceAdapter(
 )
 INTRA_RATER_TASK_ADAPTER = _model_adapter(
     "intra_rater_task", IntraRaterTask, owner_attr="grader_user_id"
+)
+
+
+def resolve_iitk_configuration_target(
+    db, reference: object
+) -> ResourceTarget | None:
+    if not isinstance(reference, IITKConfigurationTargetRef):
+        return None
+    if not is_positive_int(reference.project_id) or not is_positive_int(
+        reference.lab_unit_id
+    ):
+        return None
+    scope = resolve_scope(
+        db,
+        project_id=reference.project_id,
+        lab_unit_id=reference.lab_unit_id,
+    )
+    if scope is None:
+        return None
+    return ResourceTarget(
+        reference,
+        ResourceContextDTO(
+            "iitk_configuration_target",
+            f"{reference.project_id}:{reference.lab_unit_id}",
+            scope,
+            state={"target_active": True, "domain_valid": True},
+            resolved=True,
+        ),
+    )
+
+
+IITK_CONFIGURATION_TARGET_ADAPTER = ResourceAdapter(
+    "iitk_configuration_target",
+    resolve_iitk_configuration_target,
+    lambda _db, _principal, _action, _grants, query: query.where(false()),
+    lambda _db, _principal, _action, _target, facts: replace(
+        facts, domain_valid=True
+    ),
+)
+IITK_CONFIGURATION_ADAPTER = _model_adapter(
+    "iitk_configuration", IITKApiProjectConfig
 )
 AD_HOC_TASK_ADAPTER = _bound_adapter("ad_hoc_task")
 _DATASET_BASE_ADAPTER = _bound_adapter("dataset")
@@ -1791,6 +1834,8 @@ RESOURCE_ADAPTERS = (
     INFERENCE_TARGET_ADAPTER,
     INTRA_RATER_BATCH_TARGET_ADAPTER,
     INTRA_RATER_TASK_ADAPTER,
+    IITK_CONFIGURATION_ADAPTER,
+    IITK_CONFIGURATION_TARGET_ADAPTER,
     JOB_ADAPTER,
     LOOKUP_RECORD_ADAPTER,
     MOBILE_SESSION_ADAPTER,

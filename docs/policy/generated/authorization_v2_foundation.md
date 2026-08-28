@@ -202,6 +202,62 @@ Resource: `grading_repair_batch`; disclosure: `masked`; audit: `required`.
 
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), BooleanRequirement(fact=domain_valid; expected=True), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `admin.iitk.configuration.create`
+
+Authorize admin.iitk.configuration.create.
+
+Resource: `iitk_configuration_target`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.configuration.manage`
+
+Authorize admin.iitk.configuration.manage.
+
+Resource: `iitk_configuration`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.configuration.sync`
+
+Authorize admin.iitk.configuration.sync.
+
+Resource: `iitk_configuration`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.configuration.view`
+
+Authorize admin.iitk.configuration.view.
+
+Resource: `iitk_configuration`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.project_configuration.manage`
+
+Authorize admin.iitk.project_configuration.manage.
+
+Resource: `project`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.project_configuration.view`
+
+Authorize admin.iitk.project_configuration.view.
+
+Resource: `project`; disclosure: `identifier_in_place`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
+### `admin.iitk.view`
+
+Authorize admin.iitk.view.
+
+Resource: `screen`; disclosure: `masked`; audit: `optional`.
+
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), AnyRoleRequirement(roles=admin), GrantSourceRequirement(sources=authorization_grant)
+
 ### `admin.lookup.manage`
 
 Authorize admin.lookup.manage.

@@ -713,6 +713,31 @@ ROUTE_POLICIES: dict[str, EndpointPolicies] = {
     "admin.cleanup_stuck_remidio_uploads": _exact(
         Action.ADMIN_SYSTEM_OPERATION, "system_operation"
     ),
+    **{
+        endpoint: _screen(Action.ADMIN_IITK_VIEW)
+        for endpoint in (
+            "fundus_api.list_iitk_configurations",
+            "fundus_api.list_iitk_site_mappings",
+        )
+    },
+    "fundus_api.get_iitk_project_configuration": _exact(
+        Action.ADMIN_IITK_PROJECT_CONFIGURATION_VIEW, "project"
+    ),
+    "fundus_api.save_iitk_project_configuration": _exact(
+        Action.ADMIN_IITK_PROJECT_CONFIGURATION_MANAGE, "project"
+    ),
+    "fundus_api.save_iitk_configuration": _exact(
+        Action.ADMIN_IITK_CONFIGURATION_CREATE, "iitk_configuration_target"
+    ),
+    "fundus_api.patch_iitk_configuration": _exact(
+        Action.ADMIN_IITK_CONFIGURATION_MANAGE, "iitk_configuration"
+    ),
+    "fundus_api.browse_iitk_sessions": _exact(
+        Action.ADMIN_IITK_CONFIGURATION_VIEW, "iitk_configuration"
+    ),
+    "fundus_api.queue_iitk_sync": _exact(
+        Action.ADMIN_IITK_CONFIGURATION_SYNC, "iitk_configuration"
+    ),
     "admin.list_and_create_ai_model": {
         "GET": _screen(Action.ADMIN_SYSTEM_MANAGE),
         "POST": _exact(Action.ADMIN_SYSTEM_OPERATION, "system_operation"),

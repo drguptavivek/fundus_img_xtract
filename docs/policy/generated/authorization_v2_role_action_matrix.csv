@@ -23,6 +23,13 @@ admin.grading_eligibility.manage,screen,authenticated_screen|admin_break_glass,m
 admin.grading_eligibility.user.manage,user,scoped_role|admin_break_glass,identifier_in_place,required
 admin.grading_repair.apply_review,grading_repair_target,admin_break_glass,masked,required
 admin.grading_repair.reset_batch,grading_repair_batch,admin_break_glass,masked,required
+admin.iitk.configuration.create,iitk_configuration_target,admin_break_glass,masked,optional
+admin.iitk.configuration.manage,iitk_configuration,admin_break_glass,identifier_in_place,optional
+admin.iitk.configuration.sync,iitk_configuration,admin_break_glass,identifier_in_place,optional
+admin.iitk.configuration.view,iitk_configuration,admin_break_glass,identifier_in_place,optional
+admin.iitk.project_configuration.manage,project,admin_break_glass,identifier_in_place,optional
+admin.iitk.project_configuration.view,project,admin_break_glass,identifier_in_place,optional
+admin.iitk.view,screen,admin_break_glass,masked,optional
 admin.lookup.manage,screen,admin_break_glass,masked,optional
 admin.lookup_record.manage,lookup_record,admin_break_glass,masked,required
 admin.lookup_record.view,lookup_record,admin_break_glass,masked,optional

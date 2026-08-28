@@ -1138,6 +1138,31 @@ _resource(
     ADMIN,
     disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
 )
+_screen("admin.iitk.view", ADMIN)
+_resource(
+    "admin.iitk.project_configuration.view",
+    "project",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource(
+    "admin.iitk.project_configuration.manage",
+    "project",
+    ADMIN,
+    disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+)
+_resource("admin.iitk.configuration.create", "iitk_configuration_target", ADMIN)
+for _iitk_action in (
+    "admin.iitk.configuration.view",
+    "admin.iitk.configuration.manage",
+    "admin.iitk.configuration.sync",
+):
+    _resource(
+        _iitk_action,
+        "iitk_configuration",
+        ADMIN,
+        disclosure=DisclosureClass.IDENTIFIER_IN_PLACE,
+    )
 _resource(
     "api.mobile.session.manage", "mobile_session", USER_ADMIN, domain_condition=True
 )

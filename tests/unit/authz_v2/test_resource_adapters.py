@@ -46,6 +46,7 @@ from authz_v2.resources.references import (
     LookupRecordRef,
     JobTokenRef,
     IntraRaterBatchTargetRef,
+    IITKConfigurationTargetRef,
     ProjectAllocationTargetRef,
     UploadLabUnitRef,
     RemidioConfigRef,
@@ -137,6 +138,9 @@ def test_every_resource_adapter_rejects_missing_or_non_positive_references():
     assert batch(db, []) is None
     assert batch(db, [1, 0]) is None
     assert batch(db, list(range(1, 52))) is None
+    iitk_target = resources.require("iitk_configuration_target").resolver
+    assert iitk_target(db, IITKConfigurationTargetRef(0, 1)) is None
+    assert iitk_target(db, IITKConfigurationTargetRef(1, 0)) is None
 
 
 def test_sql_scoper_never_uses_non_admin_system_grant_as_global_bypass():

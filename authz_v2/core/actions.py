@@ -153,6 +153,13 @@ ACTION_MIGRATION_MAP.update(
 # Reset completion is a distinct credential-bearing action. It has no legacy
 # equivalent because the former route used one action for request and consume.
 _CANONICAL_ONLY = {
+    "admin.iitk.configuration.create",
+    "admin.iitk.configuration.manage",
+    "admin.iitk.configuration.sync",
+    "admin.iitk.configuration.view",
+    "admin.iitk.project_configuration.manage",
+    "admin.iitk.project_configuration.view",
+    "admin.iitk.view",
     "admin.system.operation",
     "admin.system.status.view",
     "admin.storage.operation",

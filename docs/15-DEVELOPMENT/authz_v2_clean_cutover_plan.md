@@ -1124,6 +1124,20 @@ pattern.
   literals, 138 unmapped HTTP consumers, 47 unmapped workers, and 979 query
   candidates. The canonical catalogue contains 212 actions.
 
+### Implemented vertical slice 30: IITK integration API
+
+- All eight IITK configuration, source-browsing, and synchronization API
+  endpoints now have explicit contracts. Project connection reads and writes
+  resolve the exact project; persisted operations resolve the exact IITK
+  configuration; creation requires both project and Lab Unit identity.
+- Project-site membership is an authorization relationship and therefore
+  fails closed when either identifier or the active relationship is missing.
+  Remote URL, token, mapping, upload-profile, encounter-set, camera, sync-mode,
+  and payload validation remain in the IITK application service.
+- The reviewed inventory is now 511 v2 HTTP consumers, 39 legacy action
+  literals, 130 unmapped HTTP consumers, 47 unmapped workers, and 979 query
+  candidates. The canonical catalogue contains 219 actions.
+
 The redesign is complete only when all of the following are true:
 
 - one released `authz/` package exists and `authz_v2/` no longer exists;

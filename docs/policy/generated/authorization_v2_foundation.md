@@ -969,6 +969,15 @@ Resource: `project_allocation_plan`; disclosure: `masked`; audit: `optional`.
 - `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=data_manager,project_admin,project_pi,site_pi; allow_system=False)
 - `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
 
+### `project.grants.view`
+
+Authorize project.grants.view.
+
+Resource: `project`; disclosure: `masked`; audit: `optional`.
+
+- `scoped_role`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=local_admin,project_admin,project_pi,site_pi,user_manager; allow_system=False)
+- `admin_break_glass`: ActivePrincipalRequirement(authenticated=True), BooleanRequirement(fact=exact_resource; expected=True), IdentifierReleaseRequirement(), ScopedRoleRequirement(roles=admin; allow_system=True)
+
 ### `project.site_policy.manage`
 
 Authorize project.site_policy.manage.

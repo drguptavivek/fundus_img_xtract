@@ -182,6 +182,7 @@ _CANONICAL_ONLY = {
     "project.grader_allocations.enforcement.manage",
     "project.grader_allocations.manage",
     "project.grader_allocations.view",
+    "project.grants.view",
     "project.encountersets.workspace.view",
     "project.encountersets.workspace.view_pii",
     "project.site_policy.manage",

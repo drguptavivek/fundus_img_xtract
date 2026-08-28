@@ -15,10 +15,10 @@ The command enumerates the runtime Flask URL map and the full Celery task regist
 
 | Consumer | Count | Authz v2 contract | Direct action literal | Explicitly unmapped |
 |---|---:|---:|---:|---:|
-| Flask/API route rules | 680 | 145 | 46 | 489 |
+| Flask/API route rules | 680 | 147 | 46 | 487 |
 | Celery tasks | 47 | 0 | 0 | 47 |
 | Production list-materialization candidates (`all`, `paginate`, `yield_per`) | 978 | 0 | 0 | 978 |
-| Total | 1,705 | 145 | 46 | 1,514 |
+| Total | 1,705 | 147 | 46 | 1,512 |
 
 Reviewed identity fingerprint: `00962d43705fd54ce0e2b2cfe33cb128232574bb16d7871cb57c00fb28c12c64`.
 
@@ -56,6 +56,10 @@ All 13 direct-upload routes now have explicit contracts. The central catalogue s
 
 All 15 upload-profile governance routes now have explicit contracts. Global reusable-profile creation is Admin-only and stored-profile changes bind the exact System-scoped profile. Project configuration, investigator, profile enablement, and uploader assignment operations bind the governing stored project, including body-only mapping or assignment references that must resolve back to that project. Mixed project settings endpoints separate exact project view from mutation authority. Project PI, Site PI, and Project Admin may manage uploaders only through their own scoped project grants; no role name alone establishes scope.
 
+### Vertical slice 8: project role grants
+
+Both project role-grant API routes now have complete method-specific contracts. Listing requires exact project-scoped grant-view authority, while create, update, and delete require an exact grant target. The delegation lattice is enforced centrally: only Admin may delegate Project PI or Site PI; Project PI and Site PI may delegate Project Admin only within a scope contained by their own grant; Project Admin cannot self-delegate or create those leadership roles. Body/path project mismatches, unknown roles, invalid scopes, and missing target facts deny.
+
 ## Authorization-sensitive list/query classification
 
 | Live set consumer | Canonical decision | Classification | Authz v2 provider |
@@ -82,4 +86,4 @@ All 15 upload-profile governance routes now have explicit contracts. Global reus
 
 ## Remaining cutover work
 
-The remaining 536 explicitly unmapped runtime consumers (489 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.
+The remaining 534 explicitly unmapped runtime consumers (487 HTTP rules and 47 Celery tasks) must be assigned an endpoint or worker contract during vertical-slice migration. This inventory is the baseline that makes additions/removals visible; it does not activate `authz_v2`, retain a legacy fallback, or claim route-level cutover.

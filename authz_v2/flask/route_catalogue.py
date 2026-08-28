@@ -49,6 +49,15 @@ def _wai_project(binding: str) -> EndpointPolicy:
 
 
 ROUTE_POLICIES: dict[str, EndpointPolicies] = {
+    "fundus_api.project_role_grants": {
+        "GET": _exact(Action.PROJECT_GRANTS_VIEW, "project"),
+        "POST": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),
+        "PUT": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),
+    },
+    "fundus_api.remove_project_role_grant": {
+        "DELETE": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),
+        "POST": _exact(Action.AUTHORIZATION_GRANTS_MANAGE, "grant_target"),
+    },
     # Upload-profile governance. Body-only project references must be resolved
     # to the stored project before any assignment or relationship mutation.
     "fundus_api.create_upload_profile_project": _screen(

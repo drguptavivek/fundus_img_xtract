@@ -1,26 +1,26 @@
-# Gates: Authorization v2 vertical slice 7 - upload-profile governance
+# Gates: Authorization v2 vertical slice 8 - project role grants
 
-- [x] G1: All 15 upload-profile governance routes and methods have explicit contracts.
-  CHECK: targeted catalogue, manifest, and live-consumer inventory tests
-  EXPECT: all 15 routes classified, with complete per-method coverage
-  EVIDENCE: Inventory family test reports 15/15 authz_v2 and baseline moved to 145 classified HTTP routes.
+- [x] G1: Both project role-grant API routes have complete method-specific Authz v2 contracts.
+  CHECK: live inventory and method-policy tests
+  EXPECT: GET cannot authorize create/update/delete
+  EVIDENCE: Inventory reports both routes authz_v2; GET uses project.grants.view and all mutation methods use authorization.grants.manage.
 
-- [x] G2: Global profile mutation is Admin-only and binds the exact stored profile; missing or forged IDs deny.
-  CHECK: route guard and resolver adversarial tests
-  EXPECT: collection administration cannot authorize a missing or different profile
-  EVIDENCE: Global mutations use admin.upload_profiles.update with the exact System-scoped upload_profile adapter; invalid references deny before DB access.
+- [x] G2: Grant listing requires a containing project-scoped manager grant.
+  CHECK: project grant-view truth tables
+  EXPECT: cross-project and cross-site reads deny
+  EVIDENCE: project.grants.view is an exact project action governed by scoped roles and exact-resource containment.
 
-- [x] G3: Project profile, investigator, assignment, referral, and permission mutation binds the exact governing project and denies cross-project/site escalation.
-  CHECK: project role/scope truth tables and endpoint resolver tests
-  EXPECT: Project PI, Site PI, and Project Admin authority is limited to their own project/site grants
-  EVIDENCE: Project operations use exact project actions; adversarial truth tables prove all three manager roles deny against another project scope.
+- [x] G3: Create/update/delete bind an exact grant target and enforce delegable-by plus own-scope containment.
+  CHECK: delegation and grant-target adversarial tests
+  EXPECT: PI/Site PI cannot grant PROJECT_PI or SITE_PI, cannot grant outside own scope, and may grant PROJECT_ADMIN only inside own scope
+  EVIDENCE: Existing delegation service truth tables cover PI/Site PI Project Admin grants, cross-project/site denial, and leadership-role denial.
 
-- [x] G4: Mixed GET/mutation project settings routes use distinct view and manage actions, with incomplete request-body references denied.
-  CHECK: method-specific manifest and guard tests
-  EXPECT: GET authority cannot authorize POST/PUT and a missing body reference denies
-  EVIDENCE: Referral and permission endpoints declare complete GET/POST/PUT method maps with exact project view/manage separation.
+- [x] G4: Missing body facts, mismatched project/grant IDs, unknown roles, and invalid scopes deny.
+  CHECK: grant target resolver tests
+  EXPECT: incomplete or inconsistent targets never reach mutation handlers
+  EVIDENCE: Every mutation requires the exact grant_target resolver; unknown actions, invalid references, and incomplete resolver output fail closed.
 
-- [x] G5: Full Authz/app-init tests, generated policy parity, static checks, Beads export, scoped commit, rebase, and push succeed.
+- [x] G5: Full Authz/app-init tests, generated parity, static checks, Beads export, commit, rebase, and push succeed.
   CHECK: node /Users/vivekgupta/.agents/skills/unlazy/scripts/gate-check.mjs GATES.md
-  EXPECT: all gates checked with fresh evidence and no pending markers
-  EVIDENCE: 831 tests passed; generated policy parity, Ruff, Bandit, diff checks, Beads export, commit, rebase, and push completed.
+  EXPECT: all gates checked with fresh evidence
+  EVIDENCE: 837 full Authz/app-init tests passed; generated parity, Ruff, Bandit, diff checks, Beads, commit, rebase, and push passed.

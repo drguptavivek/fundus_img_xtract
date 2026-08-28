@@ -21,9 +21,9 @@ def test_live_http_and_celery_inventory_matches_reviewed_baseline():
     )
     inventory = json.loads(result.stdout)
     assert inventory["counts"] == {
-        "authz_v2": 145,
+        "authz_v2": 147,
         "legacy_action_literal": 46,
-        "legacy_unmapped": 489,
+        "legacy_unmapped": 487,
         "automation_unmapped": 47,
         "query_candidate_unmapped": 978,
     }
@@ -142,6 +142,19 @@ def test_upload_profile_governance_slice_has_no_unmapped_route():
     assert len(family) == 15
     assert {row.classification for row in family} == {"authz_v2"}
     assert all(row.canonical_actions for row in family)
+
+
+def test_project_role_grant_slice_has_no_unmapped_route():
+    _import_all()
+    app = create_app()
+    rows = build_live_consumer_inventory(app, celery_app)
+    family = [
+        row
+        for row in rows
+        if row.kind == "http" and row.source == "api/project_role_grants.py"
+    ]
+    assert len(family) == 2
+    assert {row.classification for row in family} == {"authz_v2"}
 
 
 def test_mobile_route_contracts_separate_public_signed_and_access_token_channels():

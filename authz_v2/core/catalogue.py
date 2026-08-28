@@ -900,6 +900,13 @@ for _name, _type, _roles, _disclosure, _domain in (
         False,
     ),
     (
+        "project.grants.view",
+        "project",
+        GRANT_MANAGERS,
+        DisclosureClass.MASKED,
+        False,
+    ),
+    (
         "project.grader_allocations.manage",
         "project_allocation_target",
         frozenset({Role.ADMIN, Role.PROJECT_ADMIN, Role.DATA_MANAGER}),

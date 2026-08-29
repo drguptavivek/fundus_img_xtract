@@ -288,6 +288,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 
 ### Task Creation
 - [Scoping](docs/03-Tasks/Scoping.md) - ABAC - Attribute-Based Access Control & RBAC for Uplaoding and HGrading  and access to app features
+- [Ad-hoc Task Creation](docs/03-Tasks/ad_hoc_task_creation.md) - Classical-only, global data-manager workflow for additional root-disease image targets
 - [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
 - [Comprehensive Task Management System](docs/03-Tasks/comprehensive_task_management_system.md) - Complete task creation, assignment, and management documentation
 - [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for retrieving and managing task information with proper scoping

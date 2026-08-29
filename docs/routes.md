@@ -112,12 +112,12 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 
 | Route Path | HTTP Methods | Function | Description |
 |------------|--------------|----------|-------------|
-| `/` | GET | ad_hoc_tasks.index | Ad-hoc task creation interface |
+| `/` | GET | ad_hoc_tasks.index | Web-only classical ad-hoc task creation for global `data_manager` |
 | `/list` | GET | ad_hoc_tasks.list_batches | List ad-hoc batches |
 | `/detail/<int:ad_hoc_id>` | GET | ad_hoc_tasks.detail | View ad-hoc batch details |
 | `/search` | GET | ad_hoc_tasks.search | Search images for ad-hoc tasks |
 | `/preview` | POST | ad_hoc_tasks.preview | Preview ad-hoc task candidates |
-| `/create` | POST | ad_hoc_tasks.create | Create ad-hoc tasks |
+| `/create` | POST | ad_hoc_tasks.create | Atomically create authorized classical root-disease tasks |
 
 ---
 

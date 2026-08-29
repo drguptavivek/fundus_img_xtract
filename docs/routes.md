@@ -273,9 +273,9 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/direct/upload/restore_original/<int:upload_id>` | POST | fileUploader, optometrist, data_manager, admin | direct_uploads.restore_original | Restore original image |
 | `/direct/upload/save_image/<int:upload_id>` | POST | fileUploader, optometrist, data_manager, admin | direct_uploads.save_edited_image | Save edited image |
 | `/direct/dashboard` | GET, POST | fileUploader, optometrist, data_manager, admin | direct_uploads.dashboard | Direct uploads dashboard |
-| `/direct/pregraded` | GET, POST | fileUploader, optometrist, data_manager, admin | direct_uploads.pregraded_upload | Pregraded upload interface |
-| `/direct/pregraded/grades` | GET, POST | fileUploader, optometrist, data_manager, admin | direct_uploads.pregraded_grades | Pregraded grades management |
-| `/direct/pregraded/grades/recent` | GET | fileUploader, optometrist, data_manager, admin | direct_uploads.recent_pregraded_grades | Recent pregraded grades |
+| `/direct/pregraded` | GET, POST | pregarded_uploader, admin | direct_uploads.pregraded_upload | Profile-authorized pregraded upload interface |
+| `/direct/pregraded/grades` | GET, POST | pregarded_uploader, admin | direct_uploads.pregraded_grades | Profile-authorized pregraded grades management |
+| `/direct/pregraded/grades/recent` | GET | pregarded_uploader, admin | direct_uploads.recent_pregraded_grades | Own recent pregraded grades; admin break-glass |
 | `/api/direct/upload/status/<job_token>` | GET | fileUploader, optometrist, data_manager, admin | direct_uploads.api_upload_status | Get upload status |
 | `/api/hospital/<int:lab_unit_id>` | GET | fileUploader, optometrist, data_manager, admin | direct_uploads.get_hospital | Get hospital by lab unit |
 | `/api/lab-units/<int:user_id>` | GET | fileUploader, optometrist, data_manager, admin | direct_uploads.get_lab_units | Get lab units for user |

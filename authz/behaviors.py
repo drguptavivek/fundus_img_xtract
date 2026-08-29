@@ -9,16 +9,14 @@ from __future__ import annotations
 from authz.context import access_context
 from authz.rows import (
     RecordColumns,
+    admin_rows,
     hospital_choice_rows,
     lab_unit_choice_rows,
-    role_scoped_rows,
-    admin_rows,
-    assigned_lab_rows,
     project_rows,
+    role_scoped_rows,
     self_rows,
     where_any,
 )
-
 
 CLINICAL_CLASSICAL_ROLES = frozenset(
     {"local_admin", "data_manager", "fileuploader", "ophthalmologist", "optometrist"}
@@ -199,7 +197,7 @@ def upload_rows(db, query, user, columns: RecordColumns):
 
 def upload_lab_units(db, query, user):
     """Lab Units available to uploaders or upload-management roles."""
-    from authz.rows import admin_rows, hospital_rows, project_rows
+    from authz.rows import admin_rows, hospital_rows
     from models import LabUnit
     from upload_profiles.access import upload_assignment_lab_clause
 
@@ -220,6 +218,9 @@ def upload_lab_units(db, query, user):
             upload_assignment_lab_clause(
                 user_id=context.user_id,
                 lab_unit_column=LabUnit.id,
+                qualification_roles=frozenset(
+                    {"fileUploader", "pregarded_uploader", "admin"}
+                ),
             )
         )
     return where_any(query, *predicates)

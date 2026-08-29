@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session as OrmSession, selectinload
+from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import get_db_session
 from models import Area, Camera, LabUnit, Project, User
+from project_configuration.models import ProjectLabUnit
+from upload_profiles.access import is_uploader_qualified
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -21,15 +24,14 @@ from upload_profiles.models import (
     UploadProfileEncounterSetTypeImageGradingScheme,
     UploadProfileEncounterSetTypePackageEncounterScheme,
     UploadProfileEncounterSetTypePackageImageScheme,
-    UploadProfileKind,
 )
-from project_configuration.models import ProjectLabUnit
-from upload_profiles.access import is_uploader_qualified
 
 UPLOAD_KIND_DIRECT_IMAGE = "direct_image"
 UPLOAD_KIND_PREGRADED = "pregraded"
 UPLOAD_KIND_REMIDIO = "remidio"
 UPLOAD_KIND_ENCOUNTER_SET = "encounter_set"
+PREGRADED_QUALIFICATION_ROLES = frozenset({"pregarded_uploader", "admin"})
+STANDARD_UPLOAD_QUALIFICATION_ROLES = frozenset({"fileUploader", "admin"})
 
 
 class UploadProfileError(ValueError):
@@ -172,9 +174,16 @@ def get_user_lab_unit_ids(user_id: int) -> set[int]:
         return {lab_unit.id for lab_unit in user.lab_units or []}
 
 
-def get_user_upload_profiles(db: OrmSession, user_id: int) -> list[UploadProfileDTO]:
+def get_user_upload_profiles(
+    db: OrmSession,
+    user_id: int,
+    *,
+    qualification_roles: frozenset[str] = STANDARD_UPLOAD_QUALIFICATION_ROLES,
+) -> list[UploadProfileDTO]:
     """Return active upload profiles assigned to a user as detached-safe DTOs."""
-    if not is_uploader_qualified(db, user_id=user_id):
+    if not is_uploader_qualified(
+        db, user_id=user_id, role_names=qualification_roles
+    ):
         return []
     statement = (
         select(ProjectUploadProfileAssignment)
@@ -263,7 +272,18 @@ def get_user_upload_options(db: OrmSession, user_id: int) -> UploadOptions:
 
 def get_user_upload_options_for_kind(db: OrmSession, user_id: int, upload_kind: str) -> UploadOptions:
     """Return UI-ready upload options for profiles that allow one upload kind."""
-    profiles = [profile for profile in get_user_upload_profiles(db, user_id) if upload_kind in profile.upload_kinds]
+    qualification_roles = (
+        PREGRADED_QUALIFICATION_ROLES
+        if upload_kind == UPLOAD_KIND_PREGRADED
+        else STANDARD_UPLOAD_QUALIFICATION_ROLES
+    )
+    profiles = [
+        profile
+        for profile in get_user_upload_profiles(
+            db, user_id, qualification_roles=qualification_roles
+        )
+        if upload_kind in profile.upload_kinds
+    ]
     return _build_upload_options(db, profiles)
 
 
@@ -428,9 +448,20 @@ def validate_upload_scope(
     upload_kind: str,
 ) -> UploadProfileDTO:
     """Validate a profile upload selection for an upload kind."""
+    qualification_roles = (
+        PREGRADED_QUALIFICATION_ROLES
+        if upload_kind == UPLOAD_KIND_PREGRADED
+        else STANDARD_UPLOAD_QUALIFICATION_ROLES
+    )
     candidates = [
         profile
-        for profile in _candidate_profiles(db, user_id, project_id=selection.project_id, lab_unit_id=selection.lab_unit_id)
+        for profile in _candidate_profiles(
+            db,
+            user_id,
+            project_id=selection.project_id,
+            lab_unit_id=selection.lab_unit_id,
+            qualification_roles=qualification_roles,
+        )
         if upload_kind in profile.upload_kinds
         and selection.disease_id in profile.disease_ids
         and selection.camera_id in profile.camera_ids
@@ -439,6 +470,15 @@ def validate_upload_scope(
     ]
     if not candidates:
         raise UploadProfileError("Selected upload profile, disease, camera, or site is not allowed.", code="profile_not_found")
+    if (
+        upload_kind == UPLOAD_KIND_PREGRADED
+        and selection.profile_id is None
+        and len(candidates) != 1
+    ):
+        raise UploadProfileError(
+            "More than one pregraded profile matches; select an exact profile.",
+            code="ambiguous_profile",
+        )
     profile = candidates[0]
     _validate_mydriatic(profile, selection.is_mydriatic)
     return profile
@@ -451,10 +491,19 @@ def resolve_default_upload_disease(profile: UploadProfileDTO) -> int:
     return profile.default_disease_id
 
 
-def _candidate_profiles(db: OrmSession, user_id: int, *, project_id: int, lab_unit_id: int) -> list[UploadProfileDTO]:
+def _candidate_profiles(
+    db: OrmSession,
+    user_id: int,
+    *,
+    project_id: int,
+    lab_unit_id: int,
+    qualification_roles: frozenset[str] = STANDARD_UPLOAD_QUALIFICATION_ROLES,
+) -> list[UploadProfileDTO]:
     return [
         profile
-        for profile in get_user_upload_profiles(db, user_id)
+        for profile in get_user_upload_profiles(
+            db, user_id, qualification_roles=qualification_roles
+        )
         if profile.project_id == project_id and profile.lab_unit_id == lab_unit_id
     ]
 

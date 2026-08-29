@@ -33,7 +33,11 @@ from models import (
 from auth.utils import utcnow
 from services.taskCreationServices import ensure_task
 from db_transaction_manager import get_db_session
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from pregraded_upload import PregradedUploadError, authorize_grade_import_targets
+from upload_profiles.service import (
+    UPLOAD_KIND_PREGRADED,
+    get_user_upload_options_for_kind,
+)
 from utils.jobUtils import get_recent_zip_uploads
 from utils.dualGradingConsensusUtils import (
     create_or_update_consensus,
@@ -127,8 +131,18 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
         raise ValueError(f"Missing required column(s): {', '.join(sorted(missing))}")
 
     rows: List[Dict[str, Optional[str]]] = []
-    for _, row in df.iterrows():
-        image_name = (str(row.get("image_name", "")).strip() or None)
+    normalized_targets: set[str] = set()
+    for row_number, (_, row) in enumerate(df.iterrows(), start=2):
+        image_value = row.get("image_name", "")
+        image_name = str(image_value).strip() if pd.notna(image_value) else ""
+        if not image_name:
+            raise ValueError(f"Workbook row {row_number} has no image_name.")
+        normalized_target = image_name.lower()
+        if normalized_target in normalized_targets:
+            raise ValueError(
+                f"Workbook contains duplicate image target '{image_name}'."
+            )
+        normalized_targets.add(normalized_target)
         grade_value = row.get(grade_col)
         grade_text = str(grade_value).strip() if pd.notna(grade_value) else ""
         remarks_value = row.get(remark_col, "")
@@ -138,8 +152,6 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
             probability_value = row.get(probability_col, "")
             if pd.notna(probability_value):
                 probability = str(probability_value).strip()
-        if image_name is None:
-            continue
         rows.append(
             {
                 "image_name": image_name,
@@ -277,18 +289,20 @@ def _find_upload(
     hospital_id: int,
     lab_unit_id: int,
     disease_id: int,
+    authorized_upload_id: int,
 ) -> Optional[DirectImageUpload]:
     normalized_name = image_name.strip().lower()
     stmt = (
         select(DirectImageUpload)
         .where(
+            DirectImageUpload.id == authorized_upload_id,
             func.lower(DirectImageUpload.original_filename) == normalized_name,
             DirectImageUpload.hospital_id == hospital_id,
             DirectImageUpload.lab_unit_id == lab_unit_id,
             DirectImageUpload.disease_id == disease_id,
             DirectImageUpload.is_pregraded.is_(True),
         )
-        .order_by(DirectImageUpload.created_at.desc())
+        .with_for_update()
     )
     uploads = db_session.execute(stmt).scalars().all()
     if not uploads:
@@ -300,14 +314,8 @@ def _find_upload(
             sanitize_log_value(disease_id),
         )
         return None
-    if len(uploads) > 1:
-        current_app.logger.warning(
-            "Multiple pre-graded uploads matched image_name=%s (hospital=%s lab=%s disease=%s); using most recent.",
-            sanitize_log_value(image_name),
-            sanitize_log_value(hospital_id),
-            sanitize_log_value(lab_unit_id),
-            sanitize_log_value(disease_id),
-        )
+    if len(uploads) != 1:
+        return None
     return uploads[0]
 
 
@@ -411,6 +419,7 @@ def _process_rows(
     mapping: Dict[str, int],
     job: Job,
     grade_options: Dict[int, DiseaseGrading],
+    authorized_upload_ids: dict[str, int],
 ) -> Tuple[int, int, List[JobItem]]:
     success = 0
     failures = 0
@@ -508,6 +517,9 @@ def _process_rows(
                 hospital_id=pending.hospital_id,
                 lab_unit_id=pending.lab_unit_id,
                 disease_id=pending.disease_id,
+                authorized_upload_id=authorized_upload_ids.get(
+                    filename.strip().lower(), 0
+                ),
             )
             if not upload:
                 # Log the error without traceback and continue processing
@@ -652,7 +664,12 @@ def _render_page(
     context: Optional[dict] = None,
 ):
     context = context or {}
-    allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+    upload_options = get_user_upload_options_for_kind(
+        db_session, current_user.id, UPLOAD_KIND_PREGRADED
+    )
+    allowed_lab_units = {item["id"] for item in upload_options.lab_units}
+    allowed_disease_ids = {item["id"] for item in upload_options.diseases}
+    allowed_area_ids = {item["id"] for item in upload_options.areas}
 
     lab_units = (
         db_session.execute(
@@ -673,8 +690,14 @@ def _render_page(
         else []
     )
 
-    diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
-    areas = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
+    diseases = db_session.execute(
+        select(Disease)
+        .where(Disease.id.in_(allowed_disease_ids))
+        .order_by(Disease.name)
+    ).scalars().all()
+    areas = db_session.execute(
+        select(Area).where(Area.id.in_(allowed_area_ids)).order_by(Area.name)
+    ).scalars().all()
 
     grade_options: Dict[int, List[DiseaseGrading]] = {}
     for disease in diseases:
@@ -710,7 +733,7 @@ def _render_page(
 
 
 @bp.route("/direct/pregraded/grades", methods=["GET", "POST"])
-@roles_required("fileUploader")
+@roles_required("pregarded_uploader", "admin")
 def pregraded_grades():
     with get_db_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
@@ -742,10 +765,29 @@ def pregraded_grades():
                 del session["pregraded_form_submission"]
             
             # Get recent pregraded grade uploads for display
-            recent_uploads = get_recent_zip_uploads(limit=5, job_type="resident excel")
+            recent_owner_id = (
+                None if current_user.has_role("admin") else current_user.id
+            )
+            recent_uploads = get_recent_zip_uploads(
+                limit=5,
+                job_type="resident excel",
+                uploader_user_id=recent_owner_id,
+            )
             # Also get resident2 and AI excel uploads
-            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="resident2 excel"))
-            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="ai excel"))
+            recent_uploads.extend(
+                get_recent_zip_uploads(
+                    limit=5,
+                    job_type="resident2 excel",
+                    uploader_user_id=recent_owner_id,
+                )
+            )
+            recent_uploads.extend(
+                get_recent_zip_uploads(
+                    limit=5,
+                    job_type="ai excel",
+                    uploader_user_id=recent_owner_id,
+                )
+            )
             # Sort by created_at date and take the top 5
             recent_uploads.sort(key=lambda x: x['job']['created_at'], reverse=True)
             recent_uploads = recent_uploads[:5]
@@ -792,8 +834,28 @@ def pregraded_grades():
                 )
                 flash("Invalid mapping payload.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
+            if not isinstance(mapping_payload, dict) or any(
+                not isinstance(key, str)
+                or isinstance(value, bool)
+                or not isinstance(value, int)
+                for key, value in mapping_payload.items()
+            ):
+                flash("Invalid mapping payload.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_grades"))
 
             grade_options = _grade_lookup(db_session, pending.disease_id)
+            try:
+                authorized_import = authorize_grade_import_targets(
+                    db_session,
+                    actor=current_user,
+                    hospital_id=pending.hospital_id,
+                    lab_unit_id=pending.lab_unit_id,
+                    disease_id=pending.disease_id,
+                    image_names=(row["image_name"] for row in pending.rows),
+                )
+            except PregradedUploadError as exc:
+                flash(exc.message, "danger")
+                return redirect(url_for("direct_uploads.pregraded_grades"))
             try:
                 final_mapping = _resolve_grade_mapping(pending, mapping_payload, grade_options)
             except ValueError as exc:
@@ -822,6 +884,7 @@ def pregraded_grades():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=pending.lab_unit_id,
+                project_id=authorized_import.project_id,
                 rejected_summary=summary,
                 excel_filename=excel_filename,
                 upload_type=upload_type,
@@ -835,6 +898,10 @@ def pregraded_grades():
                 mapping=final_mapping,
                 job=job,
                 grade_options=grade_options,
+                authorized_upload_ids={
+                    target.normalized_image_name: target.upload_id
+                    for target in authorized_import.targets
+                },
             )
             db_session.add_all(job_items)
             job.status = "completed" if failures == 0 else "error"
@@ -908,14 +975,43 @@ def pregraded_grades():
         if "pregraded_form_submission" in session:
             del session["pregraded_form_submission"]
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if lab_unit_id not in allowed_lab_units:
-            processing_logger.warning(
-                "User %s attempted grade import to unauthorized lab %s",
-                sanitize_log_value(current_user.id),
-                sanitize_log_value(lab_unit_id),
+        try:
+            df = _load_workbook(grades_file)
+            rows = _extract_rows(df, form_role)
+            processing_logger.info(
+                "Workbook parsed for role=%s rows=%s (mapping_token=%s)",
+                sanitize_log_value(form_role),
+                sanitize_log_value(len(rows)),
+                sanitize_log_value(mapping_token or ""),
             )
-            flash("You do not have access to the selected lab unit.", "danger")
+        except ValueError as exc:
+            processing_logger.warning(
+                "Workbook validation failed: %s",
+                sanitize_log_value(exc),
+            )
+            flash(str(exc), "danger")
+            return redirect(url_for("direct_uploads.pregraded_grades"))
+
+        try:
+            authorized_import = authorize_grade_import_targets(
+                db_session,
+                actor=current_user,
+                hospital_id=hospital_id,
+                lab_unit_id=lab_unit_id,
+                disease_id=disease_id,
+                image_names=(row["image_name"] for row in rows),
+            )
+        except PregradedUploadError as exc:
+            processing_logger.warning(
+                "Pregraded import authorization denied: %s",
+                sanitize_log_value(exc.message),
+            )
+            flash(exc.message, "danger")
+            return redirect(url_for("direct_uploads.pregraded_grades"))
+
+        grade_options = _grade_lookup(db_session, disease_id)
+        if not grade_options:
+            flash("No grading options defined for the selected disease.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         if form_role == ROLE_AI:
@@ -958,7 +1054,7 @@ def pregraded_grades():
                         description=ai_model_description or None,
                     )
                     db_session.add(model)
-                    db_session.commit()
+                    db_session.flush()
                     processing_logger.info(
                         "Created AI model id=%s name=%s version=%s",
                         sanitize_log_value(model.id),
@@ -1006,28 +1102,6 @@ def pregraded_grades():
                 return redirect(url_for("direct_uploads.pregraded_grades"))
             effective_grader_id = grader_user_id
 
-        try:
-            df = _load_workbook(grades_file)
-            rows = _extract_rows(df, form_role)
-            processing_logger.info(
-                "Workbook parsed for role=%s rows=%s (mapping_token=%s)",
-                sanitize_log_value(form_role),
-                sanitize_log_value(len(rows)),
-                sanitize_log_value(mapping_token or ""),
-            )
-        except ValueError as exc:
-            processing_logger.warning(
-                "Workbook validation failed: %s",
-                sanitize_log_value(exc),
-            )
-            flash(str(exc), "danger")
-            return redirect(url_for("direct_uploads.pregraded_grades"))
-
-        grade_options = _grade_lookup(db_session, disease_id)
-        if not grade_options:
-            flash("No grading options defined for the selected disease.", "danger")
-            return redirect(url_for("direct_uploads.pregraded_grades"))
-
         unique_values = sorted({row["grade_text"] for row in rows if row["grade_text"]})
         auto_mapping, unmapped_values = _auto_map_grade_values(grade_options, unique_values)
         processing_logger.info(
@@ -1069,6 +1143,7 @@ def pregraded_grades():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit_id,
+                project_id=authorized_import.project_id,
                 rejected_summary=summary,
                 excel_filename=excel_filename,
                 upload_type=upload_type,
@@ -1083,6 +1158,10 @@ def pregraded_grades():
                 mapping=auto_mapping,
                 job=job,
                 grade_options=grade_options,
+                authorized_upload_ids={
+                    target.normalized_image_name: target.upload_id
+                    for target in authorized_import.targets
+                },
             )
             db_session.add_all(job_items)
             job.status = "completed" if failures == 0 else "error"
@@ -1136,7 +1215,7 @@ def pregraded_grades():
 
 
 @bp.route("/direct/pregraded/grades/recent", methods=["GET"])
-@roles_required("fileUploader")
+@roles_required("pregarded_uploader", "admin")
 def recent_pregraded_grades():
     """Display a list of recent Excel grading files that were uploaded."""
     with get_db_session() as db_session:
@@ -1146,7 +1225,9 @@ def recent_pregraded_grades():
             db_session.query(Job)
             .filter(
                 Job.upload_type.like("%excel"),
-                Job.uploader_user_id == current_user.id if not current_user.has_role("admin", "data_manager") else True
+                Job.uploader_user_id == current_user.id
+                if not current_user.has_role("admin")
+                else True
             )
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
             .order_by(Job.created_at.desc())

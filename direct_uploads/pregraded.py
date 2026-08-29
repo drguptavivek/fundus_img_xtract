@@ -23,10 +23,12 @@ from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
 from upload_profiles.service import (
     UPLOAD_KIND_PREGRADED,
-    UploadProfileError,
-    UploadSelection,
     get_user_upload_options_for_kind,
-    validate_pregraded_upload_scope,
+)
+from pregraded_upload import (
+    PregradedImageSelection,
+    PregradedUploadError,
+    authorize_image_upload,
 )
 from utils.utils2 import uniquify
 from models import (
@@ -60,7 +62,7 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 
 
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
-@roles_required("fileUploader", "pregarded_uploader")
+@roles_required("pregarded_uploader", "admin")
 def pregraded_upload():
     with get_db_session() as db_session:
         upload_options = get_user_upload_options_for_kind(db_session, current_user.id, UPLOAD_KIND_PREGRADED)
@@ -77,7 +79,11 @@ def pregraded_upload():
             disease_id = _to_int(request.form.get("disease_id"))
             area_id = _to_int(request.form.get("area_id"))
             dataset_label = (request.form.get("dataset_label") or "").strip()
-            is_mydriatic = request.form.get("is_mydriatic") == "on"
+            raw_is_mydriatic = request.form.get("is_mydriatic")
+            if raw_is_mydriatic not in (None, "on"):
+                flash("Invalid mydriatic value.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
+            is_mydriatic = raw_is_mydriatic == "on"
             files = request.files.getlist("files")
 
             upload_settings = get_direct_upload_settings(db_session, user=current_user)
@@ -143,11 +149,12 @@ def pregraded_upload():
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
             try:
-                upload_profile = validate_pregraded_upload_scope(
+                upload_profile = authorize_image_upload(
                     db_session,
-                    current_user.id,
-                    UploadSelection(
+                    actor=current_user,
+                    selection=PregradedImageSelection.from_values(
                         project_id=project_id,
+                        hospital_id=hospital_id,
                         lab_unit_id=lab_unit.id,
                         disease_id=disease.id,
                         camera_id=camera.id,
@@ -155,7 +162,7 @@ def pregraded_upload():
                         is_mydriatic=is_mydriatic,
                     ),
                 )
-            except UploadProfileError as exc:
+            except PregradedUploadError as exc:
                 flash(exc.message, "danger")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
@@ -471,6 +478,9 @@ def pregraded_upload():
             limit=5,
             job_type="pregraded",
             include_null_types=True,  # include legacy jobs that lacked upload_type
+            uploader_user_id=(
+                None if current_user.has_role("admin") else current_user.id
+            ),
         )
 
         context.update({

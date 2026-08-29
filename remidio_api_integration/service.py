@@ -8,7 +8,7 @@ import logging
 import zipfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from uuid import uuid4
 
 import yaml
@@ -1844,6 +1844,10 @@ def _run_routing_profile_sync_payload(
             routing_profile_id=routing_profile.id,
             selected_route_ids=requested_route_ids,
         )
+        # Process groups in the caller's requested route order so queued
+        # syncs behave deterministically regardless of database row order.
+        route_order = {route_id: index for index, route_id in enumerate(requested_route_ids)}
+        routes = sorted(routes, key=lambda route: route_order.get(route.id, len(route_order)))
 
         grouped: dict[tuple[int, str], list[ProjectUploadProfileRemidioApiBinding]] = {}
         for route in routes:
@@ -2193,6 +2197,8 @@ def _project_route_groups(db: Session, project_id: int) -> list[dict[str, Any]]:
     for group in by_profile.values():
         group["route_ids"].sort()
         groups.append(group)
+    # Deterministic processing order regardless of database row order.
+    groups.sort(key=lambda group: (group.get("routing_profile_name") or "", group.get("routing_profile_id") or 0))
     return groups
 
 
@@ -2887,8 +2893,8 @@ def _require_routing_profile_sync_authority(
     return routes
 
 
-def _required_sync_route_ids(payload: dict[str, Any]) -> set[int]:
-    route_ids = set(_optional_int_list(payload.get("route_ids")) or [])
+def _required_sync_route_ids(payload: dict[str, Any]) -> list[int]:
+    route_ids = list(dict.fromkeys(_optional_int_list(payload.get("route_ids")) or []))
     if not route_ids:
         raise RemidioConfigError("The queued selected route facts are missing.")
     return route_ids
@@ -2898,7 +2904,7 @@ def _load_exact_active_sync_routes(
     db: Session,
     *,
     routing_profile_id: int,
-    selected_route_ids: set[int],
+    selected_route_ids: list[int],
 ) -> list[ProjectUploadProfileRemidioApiBinding]:
     """Load every selected route only when its full current lineage is active."""
     if not selected_route_ids:
@@ -2908,7 +2914,7 @@ def _load_exact_active_sync_routes(
         routing_profile_id=routing_profile_id,
         route_ids=selected_route_ids,
     ).all()
-    if {route.id for route in routes} != selected_route_ids:
+    if {route.id for route in routes} != set(selected_route_ids):
         raise RemidioConfigError(
             "Every selected Remidio API route must belong to the routing profile "
             "and have complete active lineage."

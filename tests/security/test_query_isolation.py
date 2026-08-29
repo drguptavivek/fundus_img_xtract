@@ -8,12 +8,20 @@ from tasks.access import task_columns
 
 @pytest.fixture
 def test_metadata(db_session, test_lab_units):
-    """Create basic metadata for images/tasks."""
-    camera = Camera(name="Test Camera")
-    disease = Disease(name="Test Disease")
-    area = Area(name="Test Area")
-    db_session.add_all([camera, disease, area])
-    db_session.commit()
+    """Get-or-create basic metadata (the names are seeded and unique)."""
+    camera = db_session.query(Camera).filter_by(name="Test Camera").first()
+    if camera is None:
+        camera = Camera(name="Test Camera")
+        db_session.add(camera)
+    disease = db_session.query(Disease).filter_by(name="Test Disease").first()
+    if disease is None:
+        disease = Disease(name="Test Disease")
+        db_session.add(disease)
+    area = db_session.query(Area).filter_by(name="Test Area").first()
+    if area is None:
+        area = Area(name="Test Area")
+        db_session.add(area)
+    db_session.flush()
     return {"camera": camera, "disease": disease, "area": area}
 
 @pytest.mark.security

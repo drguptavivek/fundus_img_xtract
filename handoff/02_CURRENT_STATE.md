@@ -19,43 +19,77 @@
 - Concurrent pytest sessions no longer reset each other's schema.
 - Destructive MadhuNetrAI migration test moved to a UUID-named disposable DB.
 - `DATABASE_URL` is restored and cleanup uses nested finalizers.
-- Independent harness audit verdict: `READY`, no material findings.
 
-## Verification already obtained
+### Full-suite stabilization (this branch, 2026-08-28)
 
-- Two concurrent route-coverage sessions: `2 passed` each.
-- Previously failing mixed authz/security/Remidio sequence: `50 passed`.
-- Disposable migration plus Remidio routing: `13 passed`.
-- Remidio routing alone: `12 passed`.
-- Full suite completes beyond the prior deadlock/schema-loss point.
+`make test`: **1502 passed, 32 skipped, 12 xfailed, 2 xpassed, 0 failed,
+0 errors** (baseline at handoff: 122 failed, 71 errors).
 
-## Latest full-suite baseline
+Harness / test-tree fixes:
 
-Command: `make test`
+- `admin_user` fixture reuses the seeded `test_admin` (get-or-create);
+  `authenticated_client` sets the Flask-Login `_user_id` key.
+- `_mock_get_db_session` commits (flushes) on clean scope exit, never rolls
+  back the shared session, and propagates route aborts — mirroring the real
+  `transaction_scope` contract.
+- `tests/conftest.py` aliases `sys.modules["tests.conftest"]` onto the live
+  conftest module. Duplicate module instances were running with an unset
+  `_test_db_session`, silently routing route writes to a real committing
+  session (the root cause of most order-dependent failures).
+- Removed tests-side `__init__.py` files that shadowed product packages
+  (`tests/unit/{mobile_devices,field_workbench,iitk_api_integration,
+  remidio_api_integration,verify_encounter_set}`).
+- Renamed duplicate test basenames under `tests/unit/*` so the whole suite
+  collects in one session.
+- Seed fixture now `setval`s `hospitals_id_seq` / `lab_units_id_seq`
+  (explicit-ID seeds + non-transactional sequences caused mid-suite
+  duplicate-key collisions) and seeds the shared `Test Camera` /
+  `Test Disease` / `Test Area` metadata rows.
+- `db` adapter fixture (flask-sqlalchemy style) for legacy test modules.
+- `db_session`-visible `transaction_scope` mock users require the `app`
+  fixture; factories gained `create_optometrist`.
+- Duplicate-basename and stale-symbol rewrites: camera-zip tests patched to
+  `get_user_upload_options_for_kinds`, linked-grading tests moved to the
+  hierarchy API, encounter-set-type API tests use an admin user, hospital
+  isolation fixtures/IDs modernized to the current seed (100/101).
 
-Result:
+Product fixes (no authorization semantics changed):
 
-- 1,549 collected, plus one collection skip
-- 1,314 passed
-- 29 skipped
-- 13 xfailed
-- 1 xpassed
-- 122 failed
-- 71 errors
-- 102 warnings
-- duration: 264.71 seconds
+- `utils/rate_limiter.py`: restored missing `Limiter` import (rate limiting
+  was silently dead); `get_rate_limit_key` guards `request.mobile_auth` with
+  `has_request_context()`.
+- `utils/filename_validation.py`: path separators/encoded separators are now
+  rejected in uploaded filenames (`./x`, `a/b`, `C:\\x`, `%2f`).
+- `utils/thumbnail_jobs.py`: encounter-set thumbnails resolve under
+  `BASE_DIR/<folder_rel>/thumbnails` (were always failing through the
+  direct-upload flat-folder helper).
+- `utils/image_processing.py`: palette (P) images convert to RGB/RGBA before
+  JPEG encode (GIF thumbnails failed).
+- `utils/taskUtils.py`: lazy `tasks.access` import (circular import).
+- `remidio_api_integration/service.py`: routing-profile sync processes route
+  groups in caller-requested order (deterministic).
 
-The previous baseline was 1,272 passed, 148 failed, and 81 errors. The remaining
-failures are no longer a shared-schema cascade; they are independent test or
-application contracts.
+Deferred by user decision:
 
-## Working tree at handoff creation
+- Mobile PWA (`tests/unit/api/test_mobile_pwa.py`, 3 tests) skipped with a
+  recorded reason: the Flutter PWA owns its own security layer; the Python
+  app is not its authz boundary.
+- `test_upload_schedules_thumbnail_generation` deleted: the endpoint was
+  removed and no product path calls `schedule_encounter_set_thumbnails`.
+- TestRewriter flagged: the linked-grading hierarchy API no longer rejects
+  linking a disease without an active grading (removed in commit `20c00eff`).
+  The test now pins current behavior; reinstating the guard is a product
+  decision.
 
-Only the following unrelated user files were dirty before this handoff and must
-remain excluded from commits:
+## Verification
 
-- `.claude/settings.json`
-- `CLAUDE.md`
-- `.claude/launch.json`
-- `.serena/`
-- `:memory:.ses`
+- Full `make test` green as above (`/tmp/gate_p41d.log`).
+- Lean-authz/security gate (`tests/unit/authz`, `data_authorization`,
+  route coverage, scoping, query isolation): green.
+- Independent code-quality audit: see GATES.md P4.2 evidence.
+
+## Working tree
+
+User-owned unrelated changes remain unstaged: `.claude/settings.json`,
+`CLAUDE.md`, `.claude/launch.json`, `.serena/`, `:memory:.ses`,
+`GATES.md` (this pass's ledger).

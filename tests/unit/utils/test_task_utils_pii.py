@@ -38,7 +38,7 @@ def mock_task():
     return task
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_global_admin_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 1: Global Admin Cross-Hospital
@@ -67,7 +67,7 @@ def test_get_task_detail_global_admin_cross_hospital(mock_scoping, mock_current_
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_global_admin_mixed_roles(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 2: Global Admin + Resident (Mixed Roles)
@@ -99,7 +99,7 @@ def test_get_task_detail_global_admin_mixed_roles(mock_scoping, mock_current_use
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_resident_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 3: Resident Cross-Hospital
@@ -127,7 +127,7 @@ def test_get_task_detail_resident_cross_hospital(mock_scoping, mock_current_user
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_resident_same_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 4: Resident Same-Hospital
@@ -155,7 +155,7 @@ def test_get_task_detail_resident_same_hospital(mock_scoping, mock_current_user,
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_data_manager_same_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 5: Data Manager Same-Hospital
@@ -183,7 +183,7 @@ def test_get_task_detail_data_manager_same_hospital(mock_scoping, mock_current_u
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_data_manager_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 6: Data Manager Cross-Hospital
@@ -211,7 +211,7 @@ def test_get_task_detail_data_manager_cross_hospital(mock_scoping, mock_current_
 
 
 @patch('utils.taskUtils.current_user')
-@patch('utils.taskUtils.scope')
+@patch('utils.taskUtils.clinical_rows')
 def test_get_task_detail_with_override_masks_for_admin(mock_scoping, mock_current_user, mock_db_session, mock_task):
     """
     Test Case 7: Global Admin with mask_pii_override=True

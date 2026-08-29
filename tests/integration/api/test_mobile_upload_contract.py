@@ -10,7 +10,8 @@ from PIL import Image
 
 from encounter_set_types.models import EncounterSetType
 from models import Area, Camera, Hospital, LabUnit, Project
-from tests.helpers.factories import UserFactory
+from project_configuration.models import ProjectLabUnit
+from tests.helpers.factories import UserFactory, approve_mobile_device
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -85,6 +86,11 @@ def mobile_upload_contract_data(db_session, core_test_data):
     project_profile = ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True)
     db_session.add(project_profile)
     db_session.flush()
+    # The profile lookup joins an active ProjectLabUnit for the lab unit.
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
+    db_session.flush()
+    # Mobile logins require an approved device for the uploader.
+    approve_mobile_device(db_session, uploader.id, f"device-{uploader.username}")
     db_session.add(
         ProjectUploadProfileAssignment(
             project_upload_profile_id=project_profile.id,

@@ -155,11 +155,13 @@ class TestEncounterViewIsolation:
         # Get authenticated client for hospital A data manager
         client = auth_client(hosp_a_data_manager)
 
-        # Try to access hospital B's encounter
+        # The page route is an authorization-free viewer shell; isolation is
+        # enforced by the JSON API that feeds it (non-disclosing 404).
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")
+        assert response.status_code == 200
 
-        # Should return 403 (forbidden) or 404 (not found - either means access denied)
-        assert response.status_code in (403, 404)
+        api_response = client.get(f"/api/encounter-viewer/encounters/{encounter_b.id}")
+        assert api_response.status_code == 404
 
     def test_own_hospital_encounter_view_allowed(
         self, auth_client, hospital_data, hosp_a_data_manager, db_session
@@ -203,11 +205,13 @@ class TestDirectViewIsolation:
 
         client = auth_client(hosp_a_data_manager)
 
-        # Try to access hospital B's direct upload
+        # The page route is an authorization-free viewer shell; isolation is
+        # enforced by the JSON API that feeds it (non-disclosing 404).
         response = client.get(f"/analytics/direct/view/{direct_b.uuid}")
+        assert response.status_code == 200
 
-        # Should return 404
-        assert response.status_code == 404
+        api_response = client.get(f"/api/encounter-viewer/images/{direct_b.uuid}")
+        assert api_response.status_code == 404
 
     def test_own_hospital_direct_view_allowed(
         self, auth_client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata

@@ -18,8 +18,8 @@ import logging
 from functools import wraps
 from typing import Callable, Optional, Union
 
-from flask import request, jsonify, current_app, g
-from flask_limiter import Limiter, ExemptionScope
+from flask import request, jsonify, current_app, g, has_request_context
+from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from db_transaction_manager import get_db_session
@@ -44,7 +44,14 @@ def get_rate_limit_key() -> str:
     """
     from flask_login import current_user
 
-    mobile_auth = getattr(request, "mobile_auth", None)
+    # The mobile_auth attribute only exists on a request; guard the read so
+    # callers without a request context (tests, startup paths) get the
+    # current_user / remote-address fallbacks instead of a proxy error here.
+    mobile_auth = (
+        getattr(request, "mobile_auth", None)
+        if has_request_context()
+        else None
+    )
     if isinstance(mobile_auth, dict):
         mobile_user_id = mobile_auth.get("user_id")
         if mobile_user_id:

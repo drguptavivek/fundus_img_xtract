@@ -13,7 +13,7 @@ def test_sensitive_operation_logging_masks_pii(db_session, app):
     """
     # Create a test user
     user = User(
-        username="test_admin",
+        username="sensitive_ops_admin",
         email="admin@example.com",
         password_hash="dummy_hash"
     )
@@ -27,7 +27,7 @@ def test_sensitive_operation_logging_masks_pii(db_session, app):
             
             mock_user.is_authenticated = True
             mock_user.id = user.id
-            mock_user.username = "test_admin"
+            mock_user.username = "sensitive_ops_admin"
             
             # Log operation with PII in details
             details_with_pii = {
@@ -97,7 +97,7 @@ def test_sensitive_operation_preserves_uuid_filenames(db_session, app):
     Verify that UUID-based filenames are preserved (they don't contain PII).
     """
     user = User(
-        username="test_admin",
+        username="sensitive_ops_admin",
         email="admin@example.com",
         password_hash="dummy_hash"
     )

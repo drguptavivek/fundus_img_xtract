@@ -243,8 +243,26 @@ def seed_test_database(test_engine):
 
             users[user_data['username']] = user
 
+        # ===== GENERIC TEST METADATA =====
+        # Security/analytics tests look these up by name; create them once so
+        # tests that query the rows directly (without the test_metadata
+        # fixture) still find them.
+        if not session.query(Camera).filter_by(name='Test Camera').first():
+            session.add(Camera(name='Test Camera'))
+        if not session.query(Disease).filter_by(name='Test Disease').first():
+            session.add(Disease(name='Test Disease'))
+        if not session.query(Area).filter_by(name='Test Area').first():
+            session.add(Area(name='Test Area'))
+        session.flush()
+
         # ===== SYNC SEQUENCES FOR TEST TABLES =====
+        # Seed rows use explicit high IDs (100+). PostgreSQL sequences are
+        # non-transactional: every rolled-back test still burns values, so
+        # without these setvals the sequences eventually reach the seeded
+        # IDs and cause duplicate-key errors mid-suite.
         session.execute(text("SELECT setval('ai_models_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ai_models))"))
+        session.execute(text("SELECT setval('hospitals_id_seq', (SELECT COALESCE(MAX(id), 1) FROM hospitals))"))
+        session.execute(text("SELECT setval('lab_units_id_seq', (SELECT COALESCE(MAX(id), 1) FROM lab_units))"))
 
         session.commit()
 

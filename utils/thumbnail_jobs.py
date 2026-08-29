@@ -13,7 +13,7 @@ from enum import Enum
 
 from models import (
     DirectImageUpload, EncounterFile, PatientEncounters, Job, JobItem,
-    Session, DirectImageVerify, EncounterSetImage
+    Session, DirectImageVerify, EncounterSetImage, BASE_DIR
 )
 from db_transaction_manager import transaction_scope
 from job_store import db_set_job_status, db_set_item_state, db_any_item_error
@@ -370,14 +370,19 @@ def _generate_encounter_set_thumbnail(ref: Dict[str, Any]) -> tuple[bool, str]:
             if not set_image:
                 return False, f"EncounterSetImage not found: {image_id}"
 
-            # Build source path - use folder_rel and original_filename
-            source_path = IMAGE_DIR / set_image.folder_rel / set_image.original_filename
+            # Encounter-set images live under BASE_DIR/<folder_rel> (the
+            # media routes serve both the original and the thumbnail from
+            # there); folder_rel may contain multiple path components, so
+            # the flat direct-upload helper cannot be used here.
+            source_path = BASE_DIR / set_image.folder_rel / set_image.original_filename
             if not source_path.exists():
                 return False, f"Source image not found: {source_path}"
 
-            # Generate thumbnail path using direct thumbnail pattern (same folder structure)
-            from utils.fileUtils import get_thumbnail_path_direct
-            thumbnail_path = get_thumbnail_path_direct(set_image.folder_rel, set_image.original_filename, "orig")
+            thumbnail_path = (
+                BASE_DIR / set_image.folder_rel / "thumbnails"
+                / get_thumbnail_filename(set_image.original_filename)
+            )
+            thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Generate thumbnail
             success = generate_thumbnail(source_path, thumbnail_path)

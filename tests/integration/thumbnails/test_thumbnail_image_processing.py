@@ -95,7 +95,7 @@ class TestImageProcessing:
         assert os.path.exists(output_path)
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (100, 100)
+            assert thumb.size == (100, 50)  # Aspect preserved within the 100px box
 
     def test_generate_thumbnail_custom_quality(self, sample_images, temp_dir):
         """Test thumbnail generation with custom quality."""
@@ -123,7 +123,7 @@ class TestImageProcessing:
         assert result is True
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Should be square
+            assert thumb.size == (90, 180)  # Aspect preserved within the 180px box
 
         # Test landscape image
         source_path = sample_images['landscape.jpg']['path']  # 1200x600
@@ -133,11 +133,19 @@ class TestImageProcessing:
         assert result is True
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Should be square
+            assert thumb.size == (180, 90)  # Aspect preserved within the 180px box
 
     def test_generate_thumbnail_various_formats(self, sample_images, temp_dir):
         """Test thumbnail generation from different image formats."""
-        formats_to_test = ['square.jpg', 'png_image.png', 'webp_image.webp', 'small.gif']
+        # Expected sizes preserve each source aspect within the 180px box;
+        # images smaller than the box are never upscaled.
+        expected_sizes = {
+            'square.jpg': (180, 180),
+            'png_image.png': (180, 120),   # 600x400
+            'webp_image.webp': (180, 180),
+            'small.gif': (50, 50),         # 50x50 stays as-is
+        }
+        formats_to_test = list(expected_sizes)
 
         for format_name in formats_to_test:
             source_path = sample_images[format_name]['path']
@@ -150,7 +158,7 @@ class TestImageProcessing:
 
             # Verify output is always JPEG for thumbnails
             with Image.open(output_path) as thumb:
-                assert thumb.size == (180, 180)
+                assert thumb.size == expected_sizes[format_name]
                 assert thumb.format == 'JPEG'
 
     def test_generate_thumbnail_transparent_png(self, sample_images, temp_dir):
@@ -164,7 +172,7 @@ class TestImageProcessing:
         assert os.path.exists(output_path)
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)
+            assert thumb.size == (180, 120)  # Aspect preserved within the 180px box
             assert thumb.mode == 'RGB'  # Should be converted to RGB
             assert thumb.format == 'JPEG'
 
@@ -285,7 +293,7 @@ class TestImageProcessing:
         assert os.path.exists(output_path)
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)  # Should still be 180x180
+            assert thumb.size == (1, 1)  # Never upscaled beyond the source
 
         # Create very large aspect ratio image
         wide_image = Image.new('RGB', (5000, 100), color='green')
@@ -299,7 +307,7 @@ class TestImageProcessing:
         assert os.path.exists(output_path)
 
         with Image.open(output_path) as thumb:
-            assert thumb.size == (180, 180)
+            assert thumb.size == (180, 4)  # Aspect preserved within the 180px box
 
     def test_generate_thumbnail_memory_efficiency(self, sample_images, temp_dir):
         """Test that thumbnail generation is memory efficient."""

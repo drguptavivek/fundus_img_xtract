@@ -28,8 +28,8 @@ def login_and_get_session():
         print(f"❌ Login failed: {e}")
         return None
 
-def test_endpoint(endpoint_name, cookies):
-    """Test a specific endpoint and return response."""
+def _check_endpoint(endpoint_name, cookies):
+    """Manual-script helper: not a pytest test (requires a live server)."""
     url = f"{BASE_URL}/{endpoint_name}"
     
     print(f"\n=== Testing {endpoint_name} ===")
@@ -76,7 +76,7 @@ def main():
     
     results = {}
     for endpoint in endpoints:
-        results[endpoint] = test_endpoint(endpoint, cookies)
+        results[endpoint] = _check_endpoint(endpoint, cookies)
     
     print("\n=== SUMMARY ===")
     for endpoint, success in results.items():

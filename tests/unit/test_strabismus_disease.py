@@ -141,10 +141,12 @@ def test_strabismus_task_creation_uses_encounter_scope(db_session, core_test_dat
     db_session.add(encounter)
     db_session.flush()
 
-    # Create task should work with encounter scope
+    # Create task should work with encounter scope; encounter-scoped tasks
+    # are created through the 'encounter_set' kind (the polymorphic check
+    # requires exactly one source reference).
     task = create_or_get_task(
         db_session,
-        kind='encounter',
+        kind='encounter_set',
         patient_encounter_id=encounter.id,
         disease_id=strabismus.id,
         lab_unit_id=lab_unit.id

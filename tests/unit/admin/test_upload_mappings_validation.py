@@ -6,7 +6,7 @@ from werkzeug.datastructures import MultiDict
 
 from api.upload_profiles import _encounter_set_packages_from_request
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, LinkedDiseaseGrading, Project, User
+from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, LinkedDiseaseGrading, Project, Role, User
 from upload_profiles import admin_service
 from upload_profiles.admin_service import (
     EncounterSetGradingPackageInput,
@@ -568,6 +568,8 @@ def test_remidio_zip_encounter_set_requires_explicit_profile_flag(db_session, mo
 
     manager = User(username="remidio_zip_manager", full_name="Remidio ZIP Manager", password_hash="x", is_active=True)
     uploader = User(username="remidio_zip_uploader", full_name="Remidio ZIP Uploader", password_hash="x", is_active=True)
+    # The lean upload gate requires the fileUploader qualification.
+    uploader.roles.append(db_session.query(Role).filter_by(name="fileUploader").one())
     hospital = Hospital(name="Remidio ZIP Hospital")
     lab = LabUnit(name="Remidio ZIP Lab", hospital=hospital)
     manager.lab_units.append(lab)
@@ -648,6 +650,7 @@ def test_generic_encounter_set_profile_does_not_allow_remidio_zip(db_session, mo
 
     manager = User(username="generic_est_manager", full_name="Generic EST Manager", password_hash="x", is_active=True)
     uploader = User(username="generic_est_uploader", full_name="Generic EST Uploader", password_hash="x", is_active=True)
+    uploader.roles.append(db_session.query(Role).filter_by(name="fileUploader").one())
     hospital = Hospital(name="Generic EST Hospital")
     lab = LabUnit(name="Generic EST Lab", hospital=hospital)
     manager.lab_units.append(lab)
@@ -728,6 +731,8 @@ def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monke
 
     manager = User(username="iitk_zip_manager", full_name="IITK ZIP Manager", password_hash="x", is_active=True)
     uploader = User(username="iitk_zip_uploader", full_name="IITK ZIP Uploader", password_hash="x", is_active=True)
+    # The lean upload gate requires the fileUploader qualification.
+    uploader.roles.append(db_session.query(Role).filter_by(name="fileUploader").one())
     hospital = Hospital(name="IITK ZIP Hospital")
     lab = LabUnit(name="IITK ZIP Lab", hospital=hospital)
     manager.lab_units.append(lab)
@@ -786,6 +791,11 @@ def test_iitk_zip_encounter_set_requires_explicit_profile_flag(db_session, monke
     )
     db_session.flush()
 
+    import upload_profiles.service as _ups
+    from models import UserRole
+    print("QUALIFIED:", _ups.is_uploader_qualified(db_session, user_id=uploader.id))
+    print("UPLOADER ID:", uploader.id, "ROLES:", [(r.id, r.name) for r in uploader.roles])
+    print("USERROLE ROWS:", db_session.query(UserRole).filter_by(user_id=uploader.id).all())
     resolved = validate_encounter_set_upload_scope(
         db_session,
         uploader.id,

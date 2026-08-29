@@ -49,8 +49,14 @@ def encounter_set_type_scope(db_session):
     profile.upload_kinds.append(UploadProfileKind(upload_kind=UPLOAD_KIND_ENCOUNTER_SET))
     db_session.add(profile)
     db_session.flush()
+    # The encounter-set-type API routes are admin-only by contract.
+    api_admin = User(username=f"est_admin_{suffix}", full_name="EST Admin", password_hash="x", is_active=True)
+    api_admin.roles.append(db_session.query(Role).filter_by(name="admin").one())
+    db_session.add(api_admin)
+    db_session.flush()
     return {
         "user": user,
+        "admin_user": api_admin,
         "project": project,
         "lab_id": lab.id,
         "image_scheme": image_scheme,
@@ -162,7 +168,7 @@ def test_create_encounter_set_type_scoped_to_manager_project(db_session, encount
 
 
 def test_encounter_set_type_api_create_and_get(client, db_session, encounter_set_type_scope):
-    user = encounter_set_type_scope["user"]
+    user = encounter_set_type_scope["admin_user"]
     with client.session_transaction() as sess:
         sess["_user_id"] = str(user.id)
         sess["_fresh"] = True
@@ -188,7 +194,7 @@ def test_encounter_set_type_api_create_and_get(client, db_session, encounter_set
 
 
 def test_encounter_set_type_api_rejects_invalid_schema(client, encounter_set_type_scope):
-    user = encounter_set_type_scope["user"]
+    user = encounter_set_type_scope["admin_user"]
     with client.session_transaction() as sess:
         sess["_user_id"] = str(user.id)
         sess["_fresh"] = True

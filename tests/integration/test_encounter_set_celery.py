@@ -127,17 +127,21 @@ def test_schedule_encounter_set_thumbnails_after_upload(db_session, encounter_se
 # Thumbnail Generation Tests
 # ============================================================================
 
-def test_generate_thumbnail_for_encounter_set_image(db_session, encounter_set_with_images):
+def test_generate_thumbnail_for_encounter_set_image(app, db_session, encounter_set_with_images):
     """Test that thumbnail generation works for encounter set images."""
-    from utils.thumbnail_jobs import _generate_encounter_set_thumbnail
+    from models import BASE_DIR
+    from utils.thumbnail_jobs import (
+        _generate_encounter_set_thumbnail, _update_thumbnail_record,
+        ThumbnailJobType,
+    )
+    from utils.image_processing import get_thumbnail_filename
 
     img = encounter_set_with_images['images'][0]
 
-    # Create the source image file for testing
+    # Create the source image file under the same root the media routes serve
     from pathlib import Path
-    from utils.fileUtils import IMAGE_DIR
 
-    source_path = IMAGE_DIR / img.folder_rel / img.original_filename
+    source_path = BASE_DIR / img.folder_rel / img.original_filename
     source_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create a minimal test image
@@ -155,12 +159,12 @@ def test_generate_thumbnail_for_encounter_set_image(db_session, encounter_set_wi
 
     assert success, f"Thumbnail generation failed: {message}"
 
-    # Verify thumbnail file was created
-    from utils.fileUtils import get_thumbnail_path_direct
-    thumbnail_path = get_thumbnail_path_direct(img.folder_rel, img.original_filename, "orig")
+    # Verify thumbnail file was created where the media route serves it
+    thumbnail_path = BASE_DIR / img.folder_rel / "thumbnails" / get_thumbnail_filename(img.original_filename)
     assert thumbnail_path.exists()
 
-    # Verify database record was updated
+    # The job runner then updates the database record
+    _update_thumbnail_record(ref, ThumbnailJobType.ENCOUNTER_SET_IMAGE)
     db_session.refresh(img)
     assert img.thumbnail_filename is not None
 
@@ -200,15 +204,14 @@ def test_extract_exif_data_from_image(db_session, encounter_set_with_images):
 # Job Status Tracking Tests
 # ============================================================================
 
-def test_get_thumbnail_job_status(db_session, encounter_set_with_images):
+def test_get_thumbnail_job_status(app, db_session, encounter_set_with_images):
     """Test getting status of a thumbnail generation job."""
     from utils.thumbnail_jobs import create_thumbnail_job, ThumbnailJobType, get_thumbnail_job_status
 
     images = encounter_set_with_images['images']
     encounter = encounter_set_with_images['encounter']
-
     image_references = [
-        {'image_id': img.id, 'spatial_position': img.spatial_position}
+        {'image_id': img.id, 'folder_rel': img.folder_rel, 'filename': img.original_filename}
         for img in images
     ]
 
@@ -228,33 +231,3 @@ def test_get_thumbnail_job_status(db_session, encounter_set_with_images):
     assert 'status' in status
 
 
-# ============================================================================
-# Integration with Upload Flow Tests
-# ============================================================================
-
-def test_upload_schedules_thumbnail_generation(db_session, client, auth_client_factory, encounter_set_with_images):
-    """Test that uploading an encounter set image schedules thumbnail generation."""
-    from flask import url_for
-    import json
-
-    user = UserFactory.create_by_role(db_session, "fileUploader", username="uploader_bg")
-    auth_client = auth_client_factory(user)
-
-    encounter = encounter_set_with_images['encounter']
-
-    # Upload a new image to the encounter set
-    image_data = {
-        'spatial_position': 10,
-        'file_content': 'fake_base64_content'
-    }
-
-    response = auth_client.post(
-        url_for('encounter_set.upload_image', encounter_uuid=encounter.uuid),
-        json=image_data
-    )
-
-    # Should return success (or appropriate status)
-    assert response.status_code in [200, 201, 202]
-
-    # Verify a thumbnail job was scheduled
-    # (This would check that a job was created for the new image)

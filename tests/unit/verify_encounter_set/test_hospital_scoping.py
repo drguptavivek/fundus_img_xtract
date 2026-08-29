@@ -5,27 +5,28 @@ Tests hospital-level isolation in verify_encounter_set routes to prevent
 cross-hospital data access/modification.
 
 Protected Routes:
-- GET /verify-encounter-set/ (index)
-- GET /verify-encounter-set/verify/<uuid>
-- POST /verify-encounter-set/update_position
-- GET /verify-encounter-set/edit/<uuid>
-- POST /verify-encounter-set/save_edit/<uuid>
+- GET /verify_encounter_set/ (index)
+- GET /verify_encounter_set/verify/<uuid>
+- POST /verify_encounter_set/update_position
+- GET /verify_encounter_set/edit/<uuid>
+- POST /verify_encounter_set/save_edit/<uuid>
 """
 
 import pytest
 from uuid import uuid4
+from auth.security import hash_password
 from auth.utils import utcnow
 
 
 class TestHospitalScopingVerifyIndex:
-    """Test hospital scoping on /verify-encounter-set/ index route"""
+    """Test hospital scoping on /verify_encounter_set/ index route"""
 
     @pytest.fixture
     def hospitals(self, db):
         """Create two separate hospitals"""
         from models import Hospital
-        hospital1 = Hospital(name="Hospital A", code="HOSP_A")
-        hospital2 = Hospital(name="Hospital B", code="HOSP_B")
+        hospital1 = Hospital(name=f"Hospital A {uuid4().hex[:8]}")
+        hospital2 = Hospital(name=f"Hospital B {uuid4().hex[:8]}")
         db.session.add_all([hospital1, hospital2])
         db.session.flush()
         return {"hospital1": hospital1, "hospital2": hospital2}
@@ -45,7 +46,7 @@ class TestHospitalScopingVerifyIndex:
         """Create optometrist for Hospital A"""
         from models import User, Role
         user = User(username="opt_a", email="opt_a@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -65,7 +66,7 @@ class TestHospitalScopingVerifyIndex:
         """Create optometrist for Hospital B"""
         from models import User, Role
         user = User(username="opt_b", email="opt_b@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_b"].hospital_id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -126,7 +127,7 @@ class TestHospitalScopingVerifyIndex:
             }, follow_redirects=True)
 
             # View index
-            response = test_client.get('/verify-encounter-set/')
+            response = test_client.get('/verify_encounter_set/')
 
             # Should succeed
             assert response.status_code == 200, "User should access verify index"
@@ -149,7 +150,7 @@ class TestHospitalScopingVerifyIndex:
             }, follow_redirects=True)
 
             # View index
-            response = test_client.get('/verify-encounter-set/')
+            response = test_client.get('/verify_encounter_set/')
 
             # Should succeed
             assert response.status_code == 200, "User should access verify index"
@@ -164,14 +165,14 @@ class TestHospitalScopingVerifyIndex:
 
 
 class TestHospitalScopingVerifyEncounter:
-    """Test hospital scoping on /verify-encounter-set/verify/<uuid> route"""
+    """Test hospital scoping on /verify_encounter_set/verify/<uuid> route"""
 
     @pytest.fixture
     def hospitals(self, db):
         """Create two separate hospitals"""
         from models import Hospital
-        hospital1 = Hospital(name="Hospital A", code="HOSP_A")
-        hospital2 = Hospital(name="Hospital B", code="HOSP_B")
+        hospital1 = Hospital(name=f"Hospital A {uuid4().hex[:8]}")
+        hospital2 = Hospital(name=f"Hospital B {uuid4().hex[:8]}")
         db.session.add_all([hospital1, hospital2])
         db.session.flush()
         return {"hospital1": hospital1, "hospital2": hospital2}
@@ -191,7 +192,7 @@ class TestHospitalScopingVerifyEncounter:
         """Create optometrist for Hospital A"""
         from models import User, Role
         user = User(username="opt_a", email="opt_a@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -249,7 +250,7 @@ class TestHospitalScopingVerifyEncounter:
             }, follow_redirects=True)
 
             # Access own hospital encounter
-            response = test_client.get(f'/verify-encounter-set/verify/{encounters_in_hospitals["enc_a"].uuid}')
+            response = test_client.get(f'/verify_encounter_set/verify/{encounters_in_hospitals["enc_a"].uuid}')
 
             # Should succeed (200 OK or 200 with page content)
             assert response.status_code == 200, "User should access own hospital encounter"
@@ -264,21 +265,21 @@ class TestHospitalScopingVerifyEncounter:
             }, follow_redirects=True)
 
             # Try to access Hospital B encounter
-            response = test_client.get(f'/verify-encounter-set/verify/{encounters_in_hospitals["enc_b"].uuid}')
+            response = test_client.get(f'/verify_encounter_set/verify/{encounters_in_hospitals["enc_b"].uuid}')
 
             # Should be blocked with 404
             assert response.status_code == 404, "User should NOT access cross-hospital encounter"
 
 
 class TestHospitalScopingUpdatePosition:
-    """Test hospital scoping on /verify-encounter-set/update_position route"""
+    """Test hospital scoping on /verify_encounter_set/update_position route"""
 
     @pytest.fixture
     def hospitals(self, db):
         """Create two separate hospitals"""
         from models import Hospital
-        hospital1 = Hospital(name="Hospital A", code="HOSP_A")
-        hospital2 = Hospital(name="Hospital B", code="HOSP_B")
+        hospital1 = Hospital(name=f"Hospital A {uuid4().hex[:8]}")
+        hospital2 = Hospital(name=f"Hospital B {uuid4().hex[:8]}")
         db.session.add_all([hospital1, hospital2])
         db.session.flush()
         return {"hospital1": hospital1, "hospital2": hospital2}
@@ -298,7 +299,7 @@ class TestHospitalScopingUpdatePosition:
         """Create optometrist for Hospital A"""
         from models import User, Role
         user = User(username="opt_a", email="opt_a@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -377,7 +378,7 @@ class TestHospitalScopingUpdatePosition:
 
             # Update own hospital image
             response = test_client.post(
-                '/verify-encounter-set/update_position',
+                '/verify_encounter_set/update_position',
                 json={
                     'image_uuid': str(images_in_hospitals["img_a"].uuid),
                     'position': '5'
@@ -399,7 +400,7 @@ class TestHospitalScopingUpdatePosition:
 
             # Try to update Hospital B image
             response = test_client.post(
-                '/verify-encounter-set/update_position',
+                '/verify_encounter_set/update_position',
                 json={
                     'image_uuid': str(images_in_hospitals["img_b"].uuid),
                     'position': '5'
@@ -412,14 +413,14 @@ class TestHospitalScopingUpdatePosition:
 
 
 class TestHospitalScopingEditImage:
-    """Test hospital scoping on /verify-encounter-set/edit/<uuid> route"""
+    """Test hospital scoping on /verify_encounter_set/edit/<uuid> route"""
 
     @pytest.fixture
     def hospitals(self, db):
         """Create two separate hospitals"""
         from models import Hospital
-        hospital1 = Hospital(name="Hospital A", code="HOSP_A")
-        hospital2 = Hospital(name="Hospital B", code="HOSP_B")
+        hospital1 = Hospital(name=f"Hospital A {uuid4().hex[:8]}")
+        hospital2 = Hospital(name=f"Hospital B {uuid4().hex[:8]}")
         db.session.add_all([hospital1, hospital2])
         db.session.flush()
         return {"hospital1": hospital1, "hospital2": hospital2}
@@ -439,7 +440,7 @@ class TestHospitalScopingEditImage:
         """Create optometrist for Hospital A"""
         from models import User, Role
         user = User(username="opt_a", email="opt_a@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -516,7 +517,7 @@ class TestHospitalScopingEditImage:
             }, follow_redirects=True)
 
             # Edit own hospital image
-            response = test_client.get(f'/verify-encounter-set/edit/{images_in_hospitals["img_a"].uuid}')
+            response = test_client.get(f'/verify_encounter_set/edit/{images_in_hospitals["img_a"].uuid}')
 
             # Should succeed (200 OK)
             assert response.status_code == 200, "User should edit own hospital image"
@@ -531,7 +532,7 @@ class TestHospitalScopingEditImage:
             }, follow_redirects=True)
 
             # Try to edit Hospital B image
-            response = test_client.get(f'/verify-encounter-set/edit/{images_in_hospitals["img_b"].uuid}')
+            response = test_client.get(f'/verify_encounter_set/edit/{images_in_hospitals["img_b"].uuid}')
 
             # Should be blocked with 404
             assert response.status_code == 404, "User should NOT edit cross-hospital image"

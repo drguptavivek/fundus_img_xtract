@@ -14,14 +14,23 @@ def site_admin_user():
     admin_role = MagicMock()
     admin_role.name = "local_admin"
     user.roles = [admin_role]
+    # Resolve roles like the real User.has_role so route branches that test
+    # for the global admin role behave on the mock.
+    user.has_role = lambda *names: any(
+        getattr(role, "name", None) in names for role in user.roles
+    )
     return user
 
 @pytest.fixture
-def local_mock_app():
+def local_mock_app(site_admin_user):
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'test'
     app.config['DEFAULT_DISPLAY_TIMEZONE'] = 'UTC' # Mock config needed for add_user
-    return app
+    # Route decorators call flask_login's login_required, which dereferences
+    # the real current_user proxy and expects a configured login manager on
+    # this bare app. Serve the mocked site admin instead.
+    with patch('flask_login.utils._get_user', return_value=site_admin_user):
+        yield app
 
 def test_users_list_site_admin_filtering(local_mock_app, site_admin_user):
     """Verify users_list filters by hospital_id for site admins"""

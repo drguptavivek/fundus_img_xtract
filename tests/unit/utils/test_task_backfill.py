@@ -129,7 +129,7 @@ def test_task_backfill_creates_missing_tasks(db_session, core_test_data):
     assert direct_task is not None
 
 
-def test_task_backfill_job_updates_status(db_session, core_test_data):
+def test_task_backfill_job_updates_status(app, db_session, core_test_data):
     lab_unit = db_session.merge(core_test_data["lab_a1"])
     glaucoma = db_session.merge(core_test_data["glaucoma"])
 

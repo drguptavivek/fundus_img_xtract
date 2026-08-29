@@ -18,7 +18,6 @@ class TestFilenameAnonymization:
         user.has_role.return_value = True
         return user
 
-    @pytest.mark.xfail(reason="Route-level integration test - decorators applied at import time. Unit tests for sanitize_export_filename already pass in test_filename_utils.py")
     def test_excel_export_filename_sanitization(self, client, mock_user_admin):
         """Test that Excel export generates sanitized filenames.
 

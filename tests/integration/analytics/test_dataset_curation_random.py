@@ -54,11 +54,55 @@ class TestDatasetCurationRandomSelection:
         Test that randomize_selection=True produces random selection.
         The selected tasks should be randomly distributed, not sequential by ID.
         """
-        user = db_session.query(User).filter_by(username='master_admin').first()
+        # Use the (disease, lab) pair that has a per-disease materialized
+        # view so the discrepancy filter query can resolve it.
+        disease = db_session.query(Disease).filter_by(name='Glaucoma').first()
+        lab_unit = db_session.query(LabUnit).filter_by(id=1).first()
+
+        # A lab-scoped data manager: classical rows are visible only to
+        # users with the matching lab assignment.
+        from tests.helpers.factories import UserFactory
+        user = UserFactory.create_by_role(
+            db_session, "data_manager", username="dataset_curator_dm",
+            lab_units=[lab_unit],
+        )
         client = auth_client_factory(user)
 
-        disease = db_session.query(Disease).first()
-        lab_unit = db_session.query(LabUnit).first()
+
+        # The curation query needs matching grading tasks to select from, and
+        # it reads a materialized-view snapshot, so refresh all of them.
+        from tests.helpers.test_factories import TestDataFactory
+        from sqlalchemy import text
+        from models import Consensus, DiseaseGrading
+        label = DiseaseGrading(
+            disease_id=disease.id,
+            impression="No glaucoma",
+            display_order=1,
+        )
+        db_session.add(label)
+        db_session.flush()
+        tasks = [
+            TestDataFactory.create_grading_task(
+                db_session,
+                lab_unit_id=lab_unit.id,
+                disease_id=disease.id,
+            )
+            for _ in range(12)
+        ]
+        db_session.flush()
+        for task in tasks:
+            db_session.add(Consensus(
+                task_id=task.id,
+                final_disease_grading_id=label.id,
+                method="match",
+            ))
+        db_session.flush()
+        refresh_stmts = db_session.execute(
+            text("SELECT format('REFRESH MATERIALIZED VIEW %I', matviewname) "
+                 "FROM pg_matviews WHERE schemaname = 'public'")
+        ).scalars().all()
+        for stmt in refresh_stmts:
+            db_session.execute(text(stmt))
 
         # Create dataset with randomize_selection enabled
         response = client.post("/analytics/dataset-curation", data={

@@ -25,15 +25,10 @@ the new authorization contract.
 6. [`handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md`](handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md)
 7. [`handoff/full_suite_failures.txt`](handoff/full_suite_failures.txt)
 
-## Immediate objective
+## Status (2026-08-28, this branch)
 
-Repair the remaining full-suite failures in dependency order:
-
-1. shared authentication/fixture/fixed-ID/project-Lab Unit contracts;
-2. authorization expectation classification, preserving fail-closed policy;
-3. encounter verification, mobile uploads, analytics/security isolation,
-   thumbnails, and utilities.
-
-For every failure, decide explicitly whether it is a harness defect, a stale
-test expectation, or a genuine product regression. Ask the user before changing
-any authorization or domain meaning.
+Full suite is GREEN: 1502 passed, 32 skipped, 12 xfailed, 2 xpassed,
+0 failed, 0 errors. All phases of `04_EXECUTION_PLAN.md` are complete; the
+gate ledger with evidence lives in `GATES.md`. Deferred items are recorded
+in `02_CURRENT_STATE.md` (PWA security boundary, linked-grading inactive
+disease guard, unwired encounter-set thumbnail scheduler).

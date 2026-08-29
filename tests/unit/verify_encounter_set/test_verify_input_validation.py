@@ -11,17 +11,18 @@ Tests that save_edit endpoint validates request data to prevent:
 import pytest
 from uuid import uuid4
 from auth.utils import utcnow
+from auth.security import hash_password
 
 
 class TestSaveEditInputValidation:
-    """Test input validation on /verify-encounter-set/save_edit endpoint"""
+    """Test input validation on /verify_encounter_set/save_edit endpoint"""
 
     @pytest.fixture
     def optometrist_user(self, db):
         """Create optometrist user"""
         from models import User, Role, LabUnit, Hospital
 
-        hospital = Hospital(name="Test Hospital", code="TEST")
+        hospital = Hospital(name="Test Hospital")
         db.session.add(hospital)
         db.session.flush()
 
@@ -30,7 +31,7 @@ class TestSaveEditInputValidation:
         db.session.flush()
 
         user = User(username="opt_user", email="opt@example.com")
-        user.set_password("password")
+        user.password_hash = hash_password("password")
         user.hospital_id = hospital.id
 
         role = db.query(Role).filter_by(name="optometrist").first()
@@ -48,8 +49,7 @@ class TestSaveEditInputValidation:
     def test_image(self, db, optometrist_user):
         """Create test image"""
         from models import PatientEncounters, EncounterSetImage, LabUnit
-
-        lab_unit = db.query(LabUnit).first()
+        lab_unit = db.query(LabUnit).filter_by(name="Test Lab").first()
 
         encounter = PatientEncounters(
             uuid=str(uuid4()),
@@ -89,7 +89,7 @@ class TestSaveEditInputValidation:
 
             # Valid crop coordinates
             response = test_client.post(
-                f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                f'/verify_encounter_set/save_edit/{test_image.uuid}',
                 json={
                     'crop': {
                         'x': 10,
@@ -115,7 +115,7 @@ class TestSaveEditInputValidation:
 
             # Missing crop data entirely
             response = test_client.post(
-                f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                f'/verify_encounter_set/save_edit/{test_image.uuid}',
                 json={}
             )
 
@@ -143,7 +143,7 @@ class TestSaveEditInputValidation:
 
             for invalid_data in invalid_cases:
                 response = test_client.post(
-                    f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                    f'/verify_encounter_set/save_edit/{test_image.uuid}',
                     json=invalid_data
                 )
 
@@ -161,7 +161,7 @@ class TestSaveEditInputValidation:
 
             # Send invalid JSON
             response = test_client.post(
-                f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                f'/verify_encounter_set/save_edit/{test_image.uuid}',
                 data='invalid {json',
                 content_type='application/json'
             )
@@ -180,7 +180,7 @@ class TestSaveEditInputValidation:
 
             # Include unexpected fields
             response = test_client.post(
-                f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                f'/verify_encounter_set/save_edit/{test_image.uuid}',
                 json={
                     'crop': {'x': 10, 'y': 20, 'width': 100, 'height': 100},
                     'unexpected_field': 'value',
@@ -210,7 +210,7 @@ class TestSaveEditInputValidation:
 
             for wrong_data in wrong_type_cases:
                 response = test_client.post(
-                    f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                    f'/verify_encounter_set/save_edit/{test_image.uuid}',
                     json=wrong_data
                 )
 
@@ -235,7 +235,7 @@ class TestSaveEditInputValidation:
 
             for boundary_data in boundary_cases:
                 response = test_client.post(
-                    f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                    f'/verify_encounter_set/save_edit/{test_image.uuid}',
                     json=boundary_data
                 )
 
@@ -253,7 +253,7 @@ class TestSaveEditInputValidation:
 
             # Send invalid data
             response = test_client.post(
-                f'/verify-encounter-set/save_edit/{test_image.uuid}',
+                f'/verify_encounter_set/save_edit/{test_image.uuid}',
                 json={'crop': 'invalid'}
             )
 

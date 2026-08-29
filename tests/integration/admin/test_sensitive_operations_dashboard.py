@@ -65,7 +65,6 @@ def test_dashboard_access_allowed_for_local_admin(app, client, db_session, site_
         assert len(kwargs['audit_logs']) >= 1
         assert kwargs['current_user'].id == site_admin_hospital_a.id
 
-@pytest.mark.xfail(reason="Email config setup error in test environment", raises=Exception)
 def test_dashboard_renders_logs(app, client, db_session, admin_user):
     """Verify that the dashboard queries logs correctly (Mocked View)."""
     app.config['SERVER_NAME'] = 'localhost'

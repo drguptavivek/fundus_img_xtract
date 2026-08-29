@@ -20,7 +20,7 @@ def hosp_a_file_uploader(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='fileUploader',
-        hospital_id=1,
+        hospital_id=100,
         lab_unit_ids=[lab_a1.id, lab_a2.id],  # All Hospital A labs
         username='hosp_a_file_uploader'
     )
@@ -34,7 +34,7 @@ def hosp_a_optometrist(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='optometrist',
-        hospital_id=1,
+        hospital_id=100,
         lab_unit_ids=[lab_a1.id, lab_a2.id],  # All Hospital A labs
         username='hosp_a_optometrist'
     )
@@ -48,7 +48,7 @@ def hosp_a_data_manager(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_manager',
-        hospital_id=1,
+        hospital_id=100,
         lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_data_manager'
     )
@@ -62,7 +62,7 @@ def hosp_a_data_exporter(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_exporter',
-        hospital_id=1,
+        hospital_id=100,
         lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_data_exporter'
     )
@@ -76,7 +76,7 @@ def hosp_a_analyst(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='analyst',
-        hospital_id=1,
+        hospital_id=100,
         lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_analyst'
     )
@@ -88,7 +88,7 @@ def hosp_a_site_admin(db_session, test_hospitals):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='local_admin',
-        hospital_id=1,
+        hospital_id=100,
         username='hosp_a_site_admin'
     )
 
@@ -105,7 +105,7 @@ def hosp_b_file_uploader(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='fileUploader',
-        hospital_id=2,
+        hospital_id=101,
         lab_unit_ids=[lab_b1.id, lab_b2.id],  # All Hospital B labs
         username='hosp_b_file_uploader'
     )
@@ -119,7 +119,7 @@ def hosp_b_optometrist(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='optometrist',
-        hospital_id=2,
+        hospital_id=101,
         lab_unit_ids=[lab_b1.id, lab_b2.id],  # All Hospital B labs
         username='hosp_b_optometrist'
     )
@@ -133,7 +133,7 @@ def hosp_b_data_manager(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_manager',
-        hospital_id=2,
+        hospital_id=101,
         lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_data_manager'
     )
@@ -147,7 +147,7 @@ def hosp_b_data_exporter(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_exporter',
-        hospital_id=2,
+        hospital_id=101,
         lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_data_exporter'
     )
@@ -161,7 +161,7 @@ def hosp_b_analyst(db_session, test_lab_units):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='analyst',
-        hospital_id=2,
+        hospital_id=101,
         lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_analyst'
     )
@@ -173,7 +173,7 @@ def hosp_b_site_admin(db_session, test_hospitals):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='local_admin',
-        hospital_id=2,
+        hospital_id=101,
         username='hosp_b_site_admin'
     )
 
@@ -188,7 +188,7 @@ def analytics_viewer_global(db_session):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='analytics_viewer',
-        hospital_id=1,  # Belongs to Hospital A but can view all
+        hospital_id=100,  # Belongs to Hospital A but can view all
         username='analytics_viewer_global'
     )
 
@@ -199,7 +199,7 @@ def dataset_creator_global(db_session):
     return UserFactory.create_with_hospital(
         db_session,
         role_name='dataset_creator',
-        hospital_id=1,
+        hospital_id=100,
         username='dataset_creator_global'
     )
 

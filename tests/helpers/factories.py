@@ -57,6 +57,38 @@ class UserFactory:
             db_session.flush()
         
         return user
+
+    @staticmethod
+    def create_optometrist(db_session, username='test_optometrist',
+                           password='Test@2026', lab_unit_id=None, lab_units=None):
+        """Create optometrist with optional lab unit assignment"""
+        opt_role = db_session.query(Role).filter_by(name='optometrist').first()
+        if not opt_role:
+            opt_role = Role(name='optometrist')
+            db_session.add(opt_role)
+            db_session.flush()
+
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            roles=[opt_role],
+            is_active=True,
+            full_name=f'Test Optometrist ({username})'
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        if lab_unit_id is not None:
+            lab_units = list(lab_units or [])
+            lab_unit = db_session.get(LabUnit, lab_unit_id)
+            if lab_unit is not None:
+                lab_units.append(lab_unit)
+        if lab_units:
+            user.lab_units.extend(lab_units)
+            db_session.flush()
+
+        return user
+
     
     @staticmethod
     def create_by_role(db_session, role_name, username=None, password='Test@2026', **kwargs):

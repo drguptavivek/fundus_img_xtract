@@ -20,11 +20,11 @@ class TestPositionCollisionPrevention:
     """Test that spatial position collisions are prevented by database constraint"""
 
     @pytest.fixture
-    def encounter_with_images(self, db):
+    def encounter_with_images(self, app, db):
         """Create encounter with 3 images at positions 1-3"""
         from models import PatientEncounters, EncounterSetImage, LabUnit, Hospital
 
-        hospital = Hospital(name="Test Hospital", code="TEST")
+        hospital = Hospital(name="Test Hospital")
         db.session.add(hospital)
         db.session.flush()
 
@@ -103,20 +103,19 @@ class TestPositionCollisionPrevention:
         with pytest.raises(IntegrityError):
             db.session.commit()
 
-    def test_position_range_validation_still_works(self, db, encounter_with_images):
-        """Test that position must be 1-9 (validation happens before constraint)"""
+    def test_position_positive_constraint_still_works(self, db, encounter_with_images):
+        """DB enforces spatial_position >= 1; the 1-9 range is route-level."""
         from db_transaction_manager import transaction_scope
 
         img = encounter_with_images["images"][0]
 
-        # Invalid position (out of range)
+        # Non-positive positions violate the CHECK constraint.
         with transaction_scope() as db_ctx:
             img_query = db_ctx.query(__import__('models', fromlist=['EncounterSetImage']).EncounterSetImage)\
                 .filter_by(uuid=img.uuid).first()
-            img_query.spatial_position = 10  # Invalid
+            img_query.spatial_position = 0  # Invalid
 
-            # Should fail (either validation or constraint)
-            with pytest.raises((ValueError, IntegrityError)):
+            with pytest.raises(IntegrityError):
                 db_ctx.commit()
 
     def test_swap_positions_works_with_constraint(self, db, encounter_with_images):
@@ -126,8 +125,8 @@ class TestPositionCollisionPrevention:
         img1 = encounter_with_images["images"][0]  # Position 1
         img2 = encounter_with_images["images"][1]  # Position 2
 
-        # Swap: img1 goes to pos 2, img2 goes to pos 1
-        # This requires atomic update (swap in single transaction)
+        # Swap: img1 goes to pos 2, img2 goes to pos 1. The unique constraint
+        # is immediate, so each intermediate step must be flushed in order.
         with transaction_scope() as db_ctx:
             # Fetch fresh
             img1_fresh = db_ctx.query(__import__('models', fromlist=['EncounterSetImage']).EncounterSetImage)\
@@ -137,7 +136,9 @@ class TestPositionCollisionPrevention:
 
             # Use temp position to avoid constraint violation
             img1_fresh.spatial_position = 99  # Temp
+            db_ctx.flush()
             img2_fresh.spatial_position = 1
+            db_ctx.flush()
             img1_fresh.spatial_position = 2
             db_ctx.commit()
 
@@ -150,11 +151,11 @@ class TestFinalizationAtomicity:
     """Test that finalization with image review checks is atomic"""
 
     @pytest.fixture
-    def encounter_for_finalization(self, db):
+    def encounter_for_finalization(self, app, db):
         """Create encounter with 3 images, all marked as reviewed"""
         from models import PatientEncounters, EncounterSetImage, LabUnit, Hospital
 
-        hospital = Hospital(name="Test Hospital", code="TEST")
+        hospital = Hospital(name="Test Hospital")
         db.session.add(hospital)
         db.session.flush()
 
@@ -305,11 +306,11 @@ class TestIntegrityErrorHandling:
     """Test proper error handling for constraint violations"""
 
     @pytest.fixture
-    def encounter_with_images(self, db):
+    def encounter_with_images(self, app, db):
         """Create test encounter"""
         from models import PatientEncounters, EncounterSetImage, LabUnit, Hospital
 
-        hospital = Hospital(name="Test Hospital", code="TEST")
+        hospital = Hospital(name="Test Hospital")
         db.session.add(hospital)
         db.session.flush()
 

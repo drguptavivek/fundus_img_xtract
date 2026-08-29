@@ -86,17 +86,15 @@ def generate_thumbnail(
                 )
                 raise ValueError(f"Unsupported image format: {img.format}")
 
-            # Convert RGBA to RGB if necessary (for JPEG output)
-            if img.mode in ('RGBA', 'LA', 'P'):
-                if img.mode == 'P' and 'transparency' in img.info:
-                    img = img.convert('RGBA')
-                if img.mode in ('RGBA', 'LA'):
-                    # Create black background for transparent images
-                    background = Image.new('RGB', img.size, (0, 0, 0))
-                    if img.mode == 'P':
-                        img = img.convert('RGBA')
-                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                    img = background
+            # Convert palette / alpha modes to RGB (JPEG output cannot encode
+            # mode P, and transparency is composited on black).
+            if img.mode == 'P':
+                img = img.convert('RGBA' if 'transparency' in img.info else 'RGB')
+            if img.mode in ('RGBA', 'LA'):
+                # Create black background for transparent images
+                background = Image.new('RGB', img.size, (0, 0, 0))
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
 
             # Generate thumbnail while preserving original aspect ratio.
             # The larger dimension is constrained to the requested size.

@@ -173,7 +173,7 @@ class TestAnonymizationWorkflow:
         
         client = auth_client(db_session.merge(self.optometrist))
         url = f'/preprocess/anonymize_image/{upload.uuid}'
-        resp = client.post(url, data={'remarks': 'Undo'}, follow_redirects=True)
+        resp = client.post(url, data={'status_override': 'unverified', 'remarks': 'Undo'}, follow_redirects=True)
         
         assert resp.status_code == 200
         
@@ -202,7 +202,7 @@ class TestAnonymizationWorkflow:
         client = auth_client(db_session.merge(self.optometrist))
         resp = client.post(
             f'/preprocess/anonymize_image/{upload.uuid}',
-            data={'verified_status': 'verified', 'remarks': 'Attempt verify'},
+            data={'status_override': 'verified', 'remarks': 'Attempt verify'},
             follow_redirects=True,
         )
 

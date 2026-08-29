@@ -339,6 +339,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Authorization Rules](docs/policy/authorizations.md) - Plain-language role, relationship, delegation, and fail-closed rules
 - [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Who is allowed to do what at each step of the work, inside a project and outside one, without jargon. Also rendered at [authorization_in_plain_language.html](docs/policy/authorization_in_plain_language.html)
 - [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Which role reaches which project action and at what grant scope; governance and operational drawn separately. Same content rendered at [authorization_matrix.html](docs/policy/authorization_matrix.html)
+- [Route Permissions & Roles Audit](docs/policy/route_permissions_audit.md) - Code-derived snapshot (2026-08-28): which role, in classical vs project context, can perform which action at which scope, organized by workflow from configuration through exports, with a divergences list.
 - [Lean Authorization Cutover](docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md) - Named role-scope behaviours, lineage, delegation, worker reauthorization, and one-migration cutover contract
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation
 

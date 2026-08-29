@@ -116,7 +116,9 @@ def test_export_contains_emr_fields_timezone_pdf_flags_and_all_ocr_columns(monke
         site_custom_identifier="SITE-DELHI",
         exam_date=None,
     )
-    monkeypatch.setattr(export_service, "_load_encounters", lambda *_args: [encounter])
+    monkeypatch.setattr(
+        export_service, "_load_encounters", lambda *_args, **_kwargs: [encounter]
+    )
     monkeypatch.setattr(export_service, "_load_remidio_exams", lambda *_args: {3477: exam})
 
     content = export_encounter_sets_xlsx(
@@ -124,6 +126,7 @@ def test_export_contains_emr_fields_timezone_pdf_flags_and_all_ocr_columns(monke
         user=object(),
         filters=EncounterSetExportFilters(project_id=3, month="2026-07"),
         timezone_name="Asia/Kolkata",
+        include_identifiers=True,
     )
     sheet = load_workbook(io.BytesIO(content), read_only=True).active
     headers = list(next(sheet.iter_rows(values_only=True)))
@@ -188,6 +191,7 @@ def test_non_remidio_flat_metadata_fills_demographics_and_capture_time():
         None,
         export_service._target_timezone("Asia/Kolkata"),
         {prefix: 0 for prefix, _model, _relationship in export_service._OCR_MODELS},
+        include_identifiers=True,
     )
 
     assert row["hospital_UHID"] == "IITK-9"

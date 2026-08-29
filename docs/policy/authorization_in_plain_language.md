@@ -247,16 +247,17 @@ inside the part of the project their own grant covers. A site-level manager allo
 and nowhere else. A hospital administrator who has no project grant cannot do it merely because
 the site is in their hospital.
 
-An investigator may see the allocation plan for the part of the project they oversee but cannot
-change it. A manager cannot allocate themselves; somebody else with the necessary authority must
-do that. The person selected must already be active, hold `ophthalmologist`, and hold the matching
-active grading slot. Removing any one of those makes the allocation ineffective without erasing
-its history.
+Project and Site PIs, the Project Admin and the project's data manager may make or withdraw
+allocations inside the part of the project their own grant covers. Each may allocate themselves
+or somebody else. The person selected must already be active, hold `ophthalmologist`, and hold
+the matching active grading slot. Removing any one of those makes the allocation ineffective
+without erasing its history.
 
 Switching allocation enforcement on or off affects the whole project, so it is narrower still:
-only a project-wide access manager may do it. A data manager or site-level access manager may
-arrange their own work but cannot change that project-wide rule. Enforcement cannot be switched
-on until every active grading target has effective reader coverage.
+only a project-wide Project Admin or the System Admin may do it. A PI, data manager or site-level
+Project Admin may arrange allocations inside their own scope but cannot change that project-wide
+rule. Enforcement cannot be switched on until every active grading target has effective reader
+coverage.
 
 The System Admin may use the emergency path for allocation management, but the override creates
 no clinical qualification. It never substitutes for `ophthalmologist`, the grading slot, a valid
@@ -270,10 +271,11 @@ regrade adjudicator settles regrades. They're different roles.
 Outside a project they cover their own sites. Inside one they cover the sites the project
 allocated to them, through a project grant for that same role.
 
-Exporting the review is a separate release action. The ordinary discrepancy export is masked and
-needs `data_exporter` or `data_manager` over the same tasks; seeing or reviewing the queue does
-not confer it. An export that includes patient identifiers is a different action and additionally
-needs `pii_exporter`. The PII permission never widens which tasks may be exported.
+Exporting the review is a separate release action. An ordinary masked export needs
+`data_exporter` over the same tasks. `pii_exporter` is a direct project export role: within its
+exact scope it may create either a masked or identifier-bearing export without also holding
+`data_exporter`. Mixed or missing scope denies the whole request rather than returning a partial
+file. Classical identifier export is System Admin break-glass only.
 
 ## Creating work is not doing it
 
@@ -372,9 +374,16 @@ the other.
 Inside a project, three things are decided per site: whether that site may take grades out,
 build datasets, or share them. **Everything starts off.**
 
-Building at a site needs the dataset-creation setting and the dataset-creator role. Sharing or
-releasing at a site needs the sharing setting and the data-exporter role. A setting removes a
-restriction; it never grants a role.
+Building at a site needs the dataset-creation setting and the dataset-creator role. This setting
+covers the complete lifecycle in the dedicated module that generates finalised shareable
+datasets: creating, selecting, screening, editing, finalising, reopening and deleting the set.
+It does not govern unrelated verification, record editing or analytics.
+
+Sharing or releasing at a site needs the sharing setting and an export role. That setting covers
+creating, activating, deactivating and regenerating a share and its export package. Turning it
+off immediately disables existing shares created under site authority, but retains them for
+audit. Re-enabling the setting does not reactivate them. A setting removes a restriction; it
+never grants a role, and project-wide grants are unaffected.
 
 A site always takes out its own encounters and its own pictures, whatever the settings say. That
 is its own record of its own work and nothing withholds it. What waits is the **grades** — the
@@ -384,8 +393,10 @@ what it captured. A site takes those out only when the project switches it on fo
 
 The same person holding grants at two sites may export grades at one and not the other.
 
-Letting a patient's name leave the building is its own separate permission, held on top of
-whatever allowed the data out.
+Letting a patient's name leave the building is the work of `pii_exporter`. It directly authorizes
+project export inside its exact grant scope; it is not held on top of `data_exporter`. A
+project-wide Project Admin may grant it project-wide or for one site. A site-level Project Admin
+cannot grant it. Classical identifier release is available only through System Admin break-glass.
 
 ## Downloading a shared dataset
 
@@ -395,8 +406,10 @@ authorize the download. A login session alone does not.
 
 The link reaches no other dataset and stops working when the share is disabled, expired or locked.
 The data was authorized for release when the share was created; the public token can never add
-patient identifiers that the release action did not authorize. A release containing identifiers
-therefore requires `pii_exporter` before the share is made available.
+patient identifiers that the release action did not authorize. A project release containing
+identifiers therefore requires `pii_exporter` before the share is made available. It also
+requires recent password confirmation and creates a sensitive-operation audit record without
+copying patient identifiers into the audit log.
 
 ## Patient names
 
@@ -434,8 +447,11 @@ Two kinds of person are specifically kept out: an outside collaborator, and some
 connection is that they were given a case to grade. **A grading assignment lets you see the
 image; it doesn't hand you the report with the name on it.**
 
-The people who do open them are the ones in the steps before grading — the verifier and the
-optometrist, and field staff, since they're the ones capturing.
+The people who open them are scoped uploaders and verifiers, through the designated encounter
+browser and verification routes. The source PDF is not masked, is never an export, and is not
+shown through later grading routes. The application does not infer a workflow stage for access:
+the designated route, uploader/verifier authority and exact encounter scope are the boundary.
+Reference-number and UUID viewers apply the same rule.
 
 A shared link opens exactly one document at one hospital. It isn't a key to the folder.
 
@@ -482,30 +498,34 @@ System administration belongs only to the `admin` role: system status and mainte
 storage, lookup tables, upload-profile definitions, grading configuration, AI configuration and
 Remidio routing. A hospital or project role does not open those controls.
 
-`user_manager` is the one narrow exception inside the administration area. It may create, view,
-edit, activate and deactivate ordinary users in its own hospital; assign their ordinary
-non-project roles, sites and grading slots; and manage their enrolled mobile devices and sessions.
-It cannot manage a System Admin or another user manager, grant either privileged role, change
-project grants or grader allocations, or reach users in another hospital. The System Admin may do
-the same work across hospitals through the explicit user-management actions.
+`user_manager` is the one narrow classical exception inside the administration area. Only a
+System Admin appoints or removes one. It may create, view, edit, activate and deactivate ordinary
+users in its own hospital; assign their ordinary non-project roles, sites and grading slots; and
+manage their enrolled mobile devices and sessions. It cannot manage itself, a System Admin,
+another user manager or a local administrator; cannot assign `admin`, `user_manager`,
+`local_admin`, `pii_exporter` or any project grant; and cannot reach another hospital. The System
+Admin appoints local administrators and may do the same work across hospitals through explicit
+user-management actions.
 
 `local_admin` remains a hospital-scoped operational role outside projects. It is not a system or
 user administrator. `data_manager` administers workflow, not accounts.
 
 ## Who hands out access
 
-Only a system administrator appoints the people who govern a project. Nobody else can hand that
-out, at any level.
+Only a System Admin appoints Project and Site PIs. A Project PI may appoint a Project Admin inside
+its project; a Site PI may appoint a site-scoped Project Admin only inside its own site.
 
-The project's access manager gives out the working roles and, together with the project's data
-manager, allocates already-qualified graders. Both act only within their own patch — somebody
-covering one site can't grant or allocate anything beyond that site. That single rule is what lets
-a small project keep one project-wide manager and a large one appoint managers per site, without
-the policy being any different.
+The Project Admin gives out working roles, including project `data_manager`, inside the exact
+scope it holds. A project-wide Project Admin may also grant `pii_exporter` project-wide or at one
+site; a site-level Project Admin may not grant that sensitive role. Revocation follows the same
+ceiling, nobody grants or revokes their own managerial authority, and changes take effect
+immediately. Project/Site PIs, Project Admins and project data managers may allocate already-
+qualified graders inside their own patch, including themselves and others.
 
-Investigators watch. They don't grade, verify, settle disagreements or upload anything. A
-project investigator covers the whole project. A site investigator covers their own sites and
-never the whole project.
+Investigators oversee rather than inherit clinical or operational roles: they do not grade,
+verify, settle disagreements or upload merely by being investigators. They may allocate
+qualified graders inside their scope. A Project PI covers the whole project. A Site PI covers
+its own sites and never the whole project.
 
 Some setup is never handed over: which upload profiles exist, the grading schemes, the automatic
 AI runs, the camera routing, and which sites belong to a project.
@@ -516,6 +536,39 @@ and may run more than one.
 Before project roles existed, individual people were handed individual capabilities on a project
 — this person may export, that one may build datasets. Those older grants still work in places
 and are being retired in favour of roles. Nothing new should be given out that way.
+
+## Enforcement details at route boundaries
+
+The route owns transport meaning: it parses and validates supplied project and Lab Unit filters,
+loads exact resources and calls the appropriate scope behaviour. The authorization module does
+not know route names or query strings. Omitting an optional Lab Unit means every Lab Unit the
+chosen action currently authorizes, not every Lab Unit in the system. Supplying a malformed or
+unauthorized ID denies; it is never ignored. Classical site reach never opens project rows, and
+counts and record lists remain different permissions.
+
+A verifier may reopen or correct verification only before downstream grading exists. Encounter-
+set image positions likewise change only while unverified and before downstream grading, through
+an exact-scope verifier or System Admin using a locked atomic mutation. The emergency path never
+waives these workflow invariants.
+
+Regular and field ophthalmologists grade by the same rule: the role alone is insufficient; the
+matching active disease/site/workflow slot is required, plus the matching project allocation for
+project work. `resident`, `resident2` and `arbitrator` name those workflow slots, not user roles.
+A field optometrist cannot grade.
+
+A data manager creates and reassigns regrade work only inside its classical or project scope.
+The selected adjudicator must be active, hold `regrade_adjudicator` and reach that exact task. A
+manager may select themselves only when those facts independently hold. An empty eligible scope
+denies rather than removing a filter.
+
+Broad backfills, bulk repair, historical recomputation and migration-style maintenance belong to
+System Admin alone. Recent password confirmation is required for identifier-bearing exports,
+database dump/bulk-export/restore, granting or revoking `admin` or `pii_exporter`, and destructive
+bulk maintenance.
+
+Dataset sharing has one authenticated management surface and one public token/OTP download
+surface. Duplicate route registrations and legacy authorization aliases are removed; an existing
+valid stored token continues through the canonical public route.
 
 ## The administrator's override
 

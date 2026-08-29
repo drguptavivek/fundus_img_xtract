@@ -49,9 +49,10 @@ class TestHospitalScopingVerifyIndex:
         user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
-        role = db.query(Role).filter_by(name="optometrist").first()
-        if role:
-            user.roles.append(role)
+        for role_name in ("optometrist", "verifier"):
+            role = db.query(Role).filter_by(name=role_name).first()
+            if role:
+                user.roles.append(role)
 
         db.session.add(user)
         db.session.flush()
@@ -302,9 +303,10 @@ class TestHospitalScopingUpdatePosition:
         user.password_hash = hash_password("password")
         user.hospital_id = lab_units["unit_a"].hospital_id
 
-        role = db.query(Role).filter_by(name="optometrist").first()
-        if role:
-            user.roles.append(role)
+        for role_name in ("optometrist", "verifier"):
+            role = db.query(Role).filter_by(name=role_name).first()
+            if role:
+                user.roles.append(role)
 
         db.session.add(user)
         db.session.flush()

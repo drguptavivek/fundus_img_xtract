@@ -20,17 +20,16 @@ meaning one of them. No role is promoted beyond the scope stored on its grant. H
 on a project role grant is retired; classical hospital scope, which `local_admin` uses outside
 any project, is untouched.
 
-**Scope filters rows; it decides the action only where the effect spans the project.** Most
-actions are reached by a tuple on either object, and the object the tuple sits on then
-determines which rows come back — that narrowing is enforcement, not a second decision. Where
-the effect cannot carry a scope of its own, only a tuple on the project satisfies it. A dataset
-is the clearest case: one drawn from part of a project is not a smaller project dataset, it is
-not one.
+**Scope filters rows.** Most actions are reached by a tuple on either object, and the object the
+tuple sits on determines which rows come back. Project-wide holders reach the project; site
+holders reach one configured site. Site settings may deliberately permit a contained site arm
+of the shareable-dataset generation and release workflow.
 
-**Authority is delegated downward or not at all.** An actor may write tuples only on objects
-its own tuples already reach. That single rule lets a small project keep one project-wide
-access manager and a large multi-site one appoint an access manager per site, without the
-policy differing between them.
+**Authority is delegated downward or not at all.** Admin appoints Project and Site PIs. A PI may
+appoint Project Admin only inside the PI's scope. Project Admin delegates working roles only
+inside its own scope. A project-wide Project Admin alone may delegate `pii_exporter`; a site-level
+Project Admin may not. Revocation follows the same ceiling and nobody grants or revokes their own
+managerial authority.
 
 **Each step's authority stops where the next step begins.** Uploading is not verifying,
 assembling a dataset is not releasing it, and creating regrade work is not adjudicating it.
@@ -54,7 +53,7 @@ grading slot itself, because the `admin` role does not stand in for the clinicia
 ## Governance
 
 Governance roles govern the project — who is on it, and oversight of what it produces. Only a
-System Admin may grant one; no access manager may delegate governance at any scope.
+System Admin grants either PI role. A PI may grant Project Admin within the PI's exact scope.
 
 **Oversight observes and does not act.** It grades nothing, verifies nothing, adjudicates nothing
 and ingests nothing. Those columns are omitted from this grid rather than drawn as a wall of
@@ -130,9 +129,10 @@ grant scope, and each is a filter over the rows its grant covers.
 | `ophthalmologist` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | ● | — | — | — | — | ● | ● |
 | `optometrist` | project · lab_unit | ● | ● | ● | ● | — | — | ● | — | ● | ● | — | — | — | — | — | — |
 | `analytics_viewer` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | ● | — | — | — | — | ● | ● |
-| `dataset_creator` | project · lab_unit | ● | ● | — | ● | — | — | — | — | — | — | ● | ⊕⚙ | — | — | — | — |
-| `data_exporter` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | — | ● | — | ⊕⚙ | ⊕⚙ | — | — |
-| `pii_exporter` | project · lab_unit | — | — | — | — | — | — | — | — | — | — | — | — | ✚ | ✚ | — | — |
+| `dataset_creator` | project · lab_unit | ● | ● | — | ● | — | — | — | — | — | — | ● | ●⚙ | — | — | — | — |
+| `data_exporter` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | — | ● | — | ●⚙ | ●⚙ | — | — |
+| `pii_exporter` | project · lab_unit | — | — | — | — | — | — | — | — | — | — | — | — | ●⚙ | ●⚙ | — | — |
+| `data_manager` | project · lab_unit | ● | ● | — | — | — | — | — | — | ● | ● | — | — | — | — | ● | ● |
 | `discrepancy_reviewer` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 | `regrade_adjudicator` | project · lab_unit | ● | ● | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 | **Capture** | |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |
@@ -147,19 +147,17 @@ grant scope, and each is a filter over the rows its grant covers.
 | Mark | Meaning |
 |:---:|:---|
 | ● | **Granted.** The grant's scope then filters which rows are reached. |
-| ⊕ | **Project scope only.** The effect spans the project, so a Lab Unit grant confers nothing, however many are held. |
 | ◈ | **Contained.** Tuples may be written only on objects the actor's own tuples already reach, never a broader one. |
 | ⚙ | **Site setting applies.** Withheld from a lab-unit-scoped holder until the project enables it for that Lab Unit. Off by default. |
-| ✚ | **Additive.** Held alongside the role that authorizes the release, never instead of it. |
 | — | **Not granted** at any scope. |
 
 ## Why the grid cuts where it does
 
 ### Governance is appointed; it observes and does not act
 
-Only a System Admin grants `project_pi`, `site_pi` or `project_admin`. No access manager may
-delegate governance at any scope. Oversight grades nothing, verifies nothing, adjudicates
-nothing and ingests nothing — hence the empty Ingest and Verify columns across all three.
+Only a System Admin grants `project_pi` or `site_pi`. A Project PI grants Project Admin inside
+its project; a Site PI grants only site-scoped Project Admin inside its site. Oversight does not
+itself confer grading, verification, adjudication or ingest authority.
 
 `project_pi` is granted at project scope only. `site_pi` at lab-unit scope only: it may hold
 several Lab Units within a project, because a site is not always one Lab Unit, but it may never
@@ -187,7 +185,8 @@ exports and administers shares. `dataset_creator` holds no release action at all
 The cut is egress. Assembling keeps patient data inside the system; exporting a file or minting
 a share link takes it out, which is a different risk and belongs to a different holder — the
 same reasoning that separated verification from uploading. Only a finalised dataset may be
-released, and release carries the project's whole scope, so a lab-unit grant confers nothing.
+released. A site-scoped holder may generate or share only its contained project-site arm and
+only when the matching site setting is enabled.
 
 Separating the work does not separate the people: one person may hold both roles. The control
 is that each action names the role it needs, so a holder of only one cannot reach past it.
@@ -232,12 +231,12 @@ management actions are deliberately separate because their effects have differen
 | Action | Ordinary holder | Required scope |
 |:---|:---|:---|
 | View the allocation plan | `project_pi`, `site_pi`, `project_admin`, `data_manager` | The grant filters the plan to the project or Lab Unit it names |
-| Create, reactivate or deactivate an allocation | `project_admin`, `data_manager` | Contained within the actor's project grant; never self-allocation |
+| Create, reactivate or deactivate an allocation | `project_pi`, `site_pi`, `project_admin`, `data_manager` | Contained within the actor's project grant; self- and other-allocation allowed |
 | Switch allocation enforcement | `project_admin` | Project scope only; every active target must already have effective reader coverage |
 
 `admin` is break-glass for all three, but it cannot make an unqualified person a grader or waive
-the target, role, slot or coverage checks. `local_admin` and classical Lab Unit assignment confer
-nothing on project allocations. Investigators observe the plan and never change it.
+the target, role, slot or coverage checks. `local_admin`, `user_manager` and classical Lab Unit
+assignment confer nothing on project allocations.
 
 ## Patient identifiers
 
@@ -272,10 +271,11 @@ This is a property of the action, not of the actor's roles. Deciding it from rol
 a grader who also happens to upload, on the grading screen itself. An action that has not been
 classified masks by default.
 
-`pii_exporter` is the one role that lets an identifier leave the system. Every other role that
-may read one may read it only in place. It is held alongside the role that authorizes the
-release itself, never instead of it, which is why its row is additive rather than a set of
-grants of its own.
+`pii_exporter` directly authorizes masked or identifier-bearing project export inside its exact
+project/site scope; it does not also need `data_exporter`. Missing or mixed-scope facts deny the
+whole identifier-bearing release. A project-wide Project Admin may grant it project-wide or at
+one site; a site-level Project Admin may not. Classical identifier release is System Admin
+break-glass only.
 
 ## What each site may do
 
@@ -287,15 +287,16 @@ holder is unaffected by any of them.
 
 | Setting | Governs | Also requires |
 |:---|:---|:---|
-| `sites_can_export_grades` | Export of the readings human graders produced | `data_exporter` |
-| `sites_can_create_datasets` | Dataset curation and finalisation | `dataset_creator` |
-| `sites_can_share_datasets` | Dataset sharing and release | `data_exporter` |
+| `sites_can_export_grades` | Human grades, review/adjudication, comments and grading features | `data_exporter` or `pii_exporter` |
+| `sites_can_create_datasets` | Whole lifecycle in the shareable-dataset generation module | `dataset_creator` |
+| `sites_can_share_datasets` | Whole share lifecycle; disabling invalidates active site-authorized shares | `data_exporter` or `pii_exporter` |
 
 A site always exports its own encounters, images and captured data — that is its own record and
 no setting withholds it. What is withheld by default is the **grades**: the project's clinical
 output rather than the site's account of what it captured. A site takes those out only when
-`sites_can_export_grades` is on **and** the holder has `data_exporter`. Neither alone suffices,
-and a setting that is off narrows nothing except the work named in the table.
+`sites_can_export_grades` is on **and** the holder has an export role. Neither alone suffices,
+and a setting that is off narrows nothing except the work named in the table. Project-wide
+holders are unaffected by site settings.
 
 ## Reserved to a System Admin
 
@@ -310,10 +311,11 @@ carries consequences across the whole project and is likewise never delegable to
 - Remidio API routing and connection bindings
 - Which Lab Units a project spans
 
-`user_manager` is the narrow exception inside the administration area. It manages ordinary user
-records, ordinary non-project roles, Lab Unit assignments, grading slots, enrolled devices and
-sessions in its own hospital. It cannot manage or grant `admin` or `user_manager`, change project
-grants or grader allocations, reach another hospital, or use any system-administration action.
+`user_manager` is the narrow classical exception inside the administration area and is appointed
+only by Admin. It manages ordinary user records, ordinary non-project roles, Lab Unit assignments,
+grading slots, enrolled devices and sessions in its own hospital. It cannot manage itself or a
+holder of `admin`, `user_manager` or `local_admin`; cannot assign those roles, `pii_exporter` or
+any project grant; cannot reach another hospital; and cannot use system-administration actions.
 
 ## Roles whose scope is classical
 

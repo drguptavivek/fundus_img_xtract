@@ -16,7 +16,7 @@ from utils.task_backfill import (
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def task_backfill_admin():
     with get_db_session() as db:
         hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
@@ -58,7 +58,7 @@ def task_backfill_admin():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def task_backfill_run():
     limit = request.form.get("limit", type=int)
 

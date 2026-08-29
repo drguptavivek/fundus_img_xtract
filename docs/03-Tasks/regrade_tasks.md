@@ -33,7 +33,8 @@ Entry points:
 - `GET /grading/regrade-tasks` (per-disease queue launcher + recent regrades)
 - `GET /grading/regrade-tasks/random` (random pending task for the user)
 - `GET /grading/regrade-task/<regrade_task_id>` (task view)
-- `POST /grading/regrade-task/<regrade_task_id>/submit` (submission)
+- `POST /api/regrade-tasks/<regrade_task_id>/submission` (shared HTMX/mobile submission API)
+- `POST /api/regrade-tasks` (shared HTMX/mobile queue-creation API)
 
 Regrade submissions:
 - Create or update a `Grade` with `role_slot = 'regrade_adj'`.

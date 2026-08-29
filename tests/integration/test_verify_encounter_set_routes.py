@@ -2387,10 +2387,10 @@ def test_reopen_verification_requires_verified_status(
     assert "Only a verified" in response.get_json()["message"]
 
 
-def test_reopen_verification_requires_admin_role(
+def test_reopen_verification_denies_non_verifier_without_disclosure(
     client, auth_client_factory, encounter_set_data, db_session, csrf_token
 ):
-    """Optometrist/data_manager can verify but not reopen - reopening is admin-only."""
+    """Ordinary clinical roles cannot reopen and receive nondisclosing 404."""
     _verify_and_create_tasks(encounter_set_data, db_session)
     optometrist = UserFactory.create_by_role(
         db_session, "optometrist", username="reopen_role_denied",
@@ -2403,7 +2403,7 @@ def test_reopen_verification_requires_admin_role(
         headers={"X-CSRFToken": csrf_token, "X-EncounterSet-Async": "1"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 def test_update_metadata_after_reopen_creates_audit_row(

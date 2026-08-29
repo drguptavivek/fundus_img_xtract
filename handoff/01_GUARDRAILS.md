@@ -25,6 +25,13 @@ These constraints are authoritative for the next session.
   self-escalating grants must deny.
 - Preserve inter-rater behavior: a grader can see their own grades and all
   grades attached to tasks they graded, but not unrelated tasks.
+- `pii_exporter` directly authorizes masked or identifier-bearing project
+  export within its exact grant scope; it does not also need `data_exporter`.
+  Classical identifier release is Admin break-glass only. Missing, malformed
+  or mixed-scope requests deny in full, and PII release requires step-up plus
+  a sensitive-operation audit record.
+- Follow `07_POLICY_DECISIONS.md`; do not restore contradictory additive-PII
+  or observer-only-PI language.
 
 ## Migration and persistence
 

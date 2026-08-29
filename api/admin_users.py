@@ -16,7 +16,7 @@ from . import api_bp
 
 @api_bp.route("/admin/users", methods=["GET"])
 @login_required
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def api_admin_users_activity():
     """Return paginated user activity for admin dashboards."""
     offset = request.args.get("offset", "0")

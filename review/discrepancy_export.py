@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 
 from auth.utils import utcnow
 from authz import access_context, role_scoped_rows
@@ -32,6 +32,9 @@ from models import (
     DatasetShare,
     User,
 )
+from data_authorization.models import ProjectRoleGrant
+from project_configuration.models import ProjectLabUnit
+from models import Role
 from tasks.access import task_columns
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
@@ -43,6 +46,72 @@ from utils.final_grade_basis import (
     sql_final_plus_review_expression,
 )
 from utils.mvw_image_listing_v2 import get_mv_name_for_disease
+
+
+def authorized_export_project_grant_ids(
+    db, *, actor: User, include_identifiers: bool
+) -> frozenset[int]:
+    """Resolve export grants with ORM; SQL consumers only receive opaque IDs."""
+    role_name = "pii_exporter" if include_identifiers else "data_exporter"
+    site_enabled = select(ProjectLabUnit.id).where(
+        ProjectLabUnit.project_id == ProjectRoleGrant.project_id,
+        ProjectLabUnit.lab_unit_id == ProjectRoleGrant.lab_unit_id,
+        ProjectLabUnit.active.is_(True),
+        ProjectLabUnit.sites_can_export_grades.is_(True),
+    ).exists()
+    return frozenset(
+        db.execute(
+            select(ProjectRoleGrant.id)
+            .join(Role, Role.id == ProjectRoleGrant.role_id)
+            .where(
+                ProjectRoleGrant.user_id == actor.id,
+                ProjectRoleGrant.active.is_(True),
+                Role.name == role_name,
+                or_(
+                    ProjectRoleGrant.scope_type == "project",
+                    and_(
+                        ProjectRoleGrant.scope_type == "lab_unit",
+                        ProjectRoleGrant.lab_unit_id.is_not(None),
+                        site_enabled,
+                    ),
+                ),
+            )
+        ).scalars().all()
+    )
+
+
+def authorized_export_project_lab_unit_ids(
+    db, *, actor: User, project_id: int, include_identifiers: bool
+) -> frozenset[int]:
+    """Return exact project Lab Units usable for one export action."""
+    configured = frozenset(
+        db.execute(
+            select(ProjectLabUnit.lab_unit_id).where(
+                ProjectLabUnit.project_id == project_id,
+                ProjectLabUnit.active.is_(True),
+            )
+        ).scalars().all()
+    )
+    if actor.has_role("admin"):
+        return configured
+    grant_ids = authorized_export_project_grant_ids(
+        db, actor=actor, include_identifiers=include_identifiers
+    )
+    if not grant_ids:
+        return frozenset()
+    grants = db.execute(
+        select(ProjectRoleGrant.scope_type, ProjectRoleGrant.lab_unit_id).where(
+            ProjectRoleGrant.id.in_(grant_ids),
+            ProjectRoleGrant.project_id == project_id,
+        )
+    ).all()
+    if any(scope_type == "project" for scope_type, _lab_id in grants):
+        return configured
+    return frozenset(
+        lab_id
+        for scope_type, lab_id in grants
+        if scope_type == "lab_unit" and lab_id in configured
+    )
 
 EXPORT_DIR = BASE_DIR / "files" / "exports"
 MAX_ROWS_PER_ZIP = 200
@@ -200,36 +269,59 @@ def reauthorize_discrepancy_filters(
     """Replace queued scope claims with the actor's current persisted scope."""
     from sqlalchemy import select
 
-    from authz.behaviors import role_lab_units
+    from authz.behaviors import identifier_release_lab_units, role_lab_units
     from models import LabUnit
 
-    query = role_lab_units(
-        db,
-        select(LabUnit),
-        actor,
-        lab_roles={"data_exporter", "data_manager"},
-        hospital_roles={"data_manager"},
-        project_roles={"data_exporter"},
-        allow_admin=True,
-    )
+    pii_action = requested_filters.get("authorization_action") == "pii_export"
+    if pii_action:
+        query = identifier_release_lab_units(db, select(LabUnit), actor)
+    else:
+        query = role_lab_units(
+            db,
+            select(LabUnit),
+            actor,
+            lab_roles={"data_exporter", "data_manager"},
+            hospital_roles={"data_manager"},
+            project_roles={"data_exporter"},
+            allow_admin=True,
+        )
     current_lab_ids = {
         lab.id for lab in db.execute(query).scalars().unique().all()
     }
+    project_id = requested_filters.get("project_id")
+    if project_id is not None:
+        current_lab_ids.intersection_update(
+            authorized_export_project_lab_unit_ids(
+                db,
+                actor=actor,
+                project_id=int(project_id),
+                include_identifiers=pii_action,
+            )
+        )
     requested_lab_ids = {
         int(lab_id)
         for lab_id in requested_filters.get("allowed_lab_units", ())
         if lab_id is not None
     }
-    allowed_lab_ids = requested_lab_ids & current_lab_ids
-    if not allowed_lab_ids:
-        raise PermissionError("Current export scope is empty")
+    if not requested_lab_ids or not requested_lab_ids.issubset(current_lab_ids):
+        raise PermissionError("Current export scope no longer covers the queued request")
+    allowed_lab_ids = requested_lab_ids
 
     refreshed = dict(requested_filters)
     refreshed["allowed_lab_units"] = sorted(allowed_lab_ids)
     refreshed["project_capability_user_id"] = actor.id
-    refreshed["project_capability_role_names"] = ["data_exporter"]
-    refreshed["allow_classical_capability"] = actor.has_role(
-        "data_exporter", "data_manager"
+    refreshed["project_capability_role_names"] = [
+        "pii_exporter" if pii_action else "data_exporter"
+    ]
+    refreshed["project_capability_grant_ids"] = sorted(
+        authorized_export_project_grant_ids(
+            db, actor=actor, include_identifiers=pii_action
+        )
+    )
+    refreshed["allow_classical_capability"] = (
+        actor.has_role("admin")
+        if pii_action
+        else actor.has_role("data_exporter", "data_manager")
     )
     if not refreshed["allow_classical_capability"] and not actor.has_role("admin"):
         # Project grants remain usable through the SQL predicate below, but a

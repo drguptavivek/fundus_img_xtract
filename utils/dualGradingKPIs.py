@@ -498,8 +498,8 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
     disease_names = {disease.id: disease.name for disease in diseases}
     
     # Check if user has the required roles
-    has_resident_role = user.has_role('resident')
-    has_resident2_role = user.has_role('ophthalmologist')
+    has_resident_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
+    has_resident2_role = has_resident_role
     
     # Get diseases where user has actually completed gradings
     user_graded_diseases = db.query(GradingTask.disease_id).join(Grade, Grade.task_id == GradingTask.id).filter(
@@ -654,8 +654,8 @@ def get_user_kpi_linked_followup_counts(
     if not user:
         return {}
 
-    has_resident_role = user.has_role('resident')
-    has_resident2_role = user.has_role('ophthalmologist')
+    has_resident_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
+    has_resident2_role = has_resident_role
     if not (has_resident_role or has_resident2_role):
         return {}
 

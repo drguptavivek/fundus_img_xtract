@@ -234,12 +234,20 @@ def seed_test_database(test_engine):
                 session.add(user)
                 session.flush()
 
-                if 'lab_units' in user_data:
-                    for lab_name in user_data['lab_units']:
-                        lab_unit = test_lab_units.get(lab_name)
-                        if lab_unit:
-                            user.lab_units.append(lab_unit)
-                    session.flush()
+            # The migration may already have created a named account. Seed
+            # fixtures must reconcile its declared authority instead of
+            # silently retaining stale legacy roles.
+            existing_role_names = {role.name for role in user.roles}
+            for role_name in user_data['roles']:
+                if role_name not in existing_role_names:
+                    user.roles.append(roles[role_name])
+            if 'lab_units' in user_data:
+                existing_lab_ids = {lab.id for lab in user.lab_units}
+                for lab_name in user_data['lab_units']:
+                    lab_unit = test_lab_units.get(lab_name)
+                    if lab_unit and lab_unit.id not in existing_lab_ids:
+                        user.lab_units.append(lab_unit)
+            session.flush()
 
             users[user_data['username']] = user
 

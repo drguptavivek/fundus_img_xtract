@@ -12,7 +12,7 @@ def site_admin_user():
     user.is_master_admin = False
     # Define roles list
     admin_role = MagicMock()
-    admin_role.name = "local_admin"
+    admin_role.name = "user_manager"
     user.roles = [admin_role]
     # Resolve roles like the real User.has_role so route branches that test
     # for the global admin role behave on the mock.
@@ -32,8 +32,8 @@ def local_mock_app(site_admin_user):
     with patch('flask_login.utils._get_user', return_value=site_admin_user):
         yield app
 
-def test_users_list_site_admin_filtering(local_mock_app, site_admin_user):
-    """Verify users_list filters by hospital_id for site admins"""
+def test_users_list_user_manager_filtering(local_mock_app, site_admin_user):
+    """Verify users_list filters by hospital_id for User Managers."""
     from admin.users import users_list
     
     with local_mock_app.test_request_context():
@@ -50,9 +50,8 @@ def test_users_list_site_admin_filtering(local_mock_app, site_admin_user):
             assert mock_session.execute.called
             assert getattr(site_admin_user, 'hospital_id')
 
-@pytest.mark.xfail(reason="Test order dependency - passes in isolation but fails in full test suite")
-def test_add_user_site_admin_enforces_hospital(local_mock_app, site_admin_user):
-    """Verify add_user forces new user to have same hospital_id as site admin"""
+def test_add_user_user_manager_enforces_hospital(local_mock_app, site_admin_user):
+    """Verify add_user forces a new user into the manager's hospital."""
     from admin.users import add_user
     
     with local_mock_app.test_request_context():
@@ -62,6 +61,7 @@ def test_add_user_site_admin_enforces_hospital(local_mock_app, site_admin_user):
              patch('admin.users.url_for'), \
              patch('admin.users.redirect'), \
              patch('admin.users.render_template'), \
+             patch('admin.users.send_email_sync', return_value=False), \
              patch('admin.users.transaction_scope') as mock_scope:
              
             # Setup POST request
@@ -98,7 +98,11 @@ def test_add_user_site_admin_enforces_hospital(local_mock_app, site_admin_user):
                  patch('admin.users.select') as mock_select:
                  
                  # Fix scalar call for role fetching
-                 mock_db.execute.return_value.scalars.return_value.all.return_value = [MagicMock()]
+                 scoped_row = MagicMock()
+                 scoped_row.hospital_id = 10
+                 scoped_row.name = "Scoped role or Lab Unit"
+                 mock_db.execute.return_value.scalars.return_value.all.return_value = [scoped_row]
+                 MockUser.return_value.hospital_id = 10
 
                  add_user()
                  
@@ -109,8 +113,8 @@ def test_add_user_site_admin_enforces_hospital(local_mock_app, site_admin_user):
                  # This assert will FAIL until we implement the fix
                  assert call_kwargs.get('hospital_id') == 10
 
-def test_add_user_site_admin_cannot_assign_admin(local_mock_app, site_admin_user):
-    """Verify site admin cannot assign 'admin' role"""
+def test_add_user_user_manager_cannot_assign_admin(local_mock_app, site_admin_user):
+    """Verify User Manager cannot assign the Admin role."""
     from admin.users import add_user
     
     with local_mock_app.test_request_context():
@@ -146,8 +150,8 @@ def test_add_user_site_admin_cannot_assign_admin(local_mock_app, site_admin_user
             # Should call error handler or flash
             assert mock_err.called
 
-def test_edit_user_site_admin_cannot_edit_ai_model(local_mock_app, site_admin_user):
-    """Verify site admin cannot edit AI model users (hospital_id=None)"""
+def test_edit_user_manager_cannot_edit_ai_model(local_mock_app, site_admin_user):
+    """Verify User Manager cannot edit system users without hospital lineage."""
     from admin.users import edit_user
     
     # Mock AI model user
@@ -180,7 +184,7 @@ def test_user_detail_renders_hub(local_mock_app, site_admin_user):
 
     payload = {
         "user": MagicMock(id=55, username="jane_doe", hospital_id=10),
-        "roles": ["resident"],
+        "roles": ["ophthalmologist"],
         "grouped_lab_units": [],
         "grading_rows": [],
         "investigator_rows": [],

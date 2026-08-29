@@ -12,6 +12,9 @@ from authz.rows import (
     hospital_choice_rows,
     lab_unit_choice_rows,
     role_scoped_rows,
+    admin_rows,
+    assigned_lab_rows,
+    project_rows,
     self_rows,
     where_any,
 )
@@ -29,6 +32,7 @@ ANALYTICS_CLASSICAL_ROLES = frozenset(
 DATASET_CLASSICAL_ROLES = frozenset(
     {"local_admin", "data_manager", "dataset_creator", "analytics_viewer", "data_exporter"}
 )
+EXPORT_CLASSICAL_ROLES = frozenset({"data_exporter"})
 HOSPITAL_MANAGER_ROLES = frozenset({"local_admin", "data_manager"})
 
 
@@ -78,6 +82,24 @@ def analytics_rows(db, query, user, columns: RecordColumns):
     )
 
 
+def identifier_release_rows(db, query, user, columns: RecordColumns):
+    """Rows directly authorized for identifier-bearing release."""
+    context = access_context(db, user)
+    return query.where(
+        admin_rows(context)
+        | project_rows(context, {"pii_exporter"}, columns)
+    )
+
+
+def identifier_release_lab_units(db, query, user):
+    return lab_unit_choice_rows(
+        query,
+        access_context(db, user),
+        project_roles={"pii_exporter"},
+        allow_admin=True,
+    )
+
+
 def analytics_lab_units(db, query, user):
     return lab_unit_choice_rows(
         query,
@@ -96,6 +118,28 @@ def analytics_hospitals(db, query, user):
         lab_roles=ANALYTICS_CLASSICAL_ROLES,
         hospital_roles=HOSPITAL_MANAGER_ROLES,
         project_roles=PROJECT_READ_ROLES,
+        allow_admin=True,
+    )
+
+
+def export_rows(db, query, user, columns: RecordColumns):
+    """Rows an actor may release through an ordinary masked export."""
+    return role_scoped_rows(
+        query,
+        access_context(db, user),
+        columns,
+        lab_roles=EXPORT_CLASSICAL_ROLES,
+        project_roles={"data_exporter", "pii_exporter"},
+        allow_admin=True,
+    )
+
+
+def export_lab_units(db, query, user):
+    return lab_unit_choice_rows(
+        query,
+        access_context(db, user),
+        lab_roles=EXPORT_CLASSICAL_ROLES,
+        project_roles={"data_exporter", "pii_exporter"},
         allow_admin=True,
     )
 

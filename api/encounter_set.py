@@ -275,7 +275,6 @@ def validate_image_file(file_obj):
 
 @api_bp.route('/v1/encounter-set/unverified', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def list_unverified_encounter_sets():
     """List set-based encounters that need verification."""
     with transaction_scope() as db:
@@ -293,9 +292,8 @@ def list_unverified_encounter_sets():
                 project_id=PatientEncounters.project_id,
                 lab_unit_id=PatientEncounters.lab_unit_id,
             ),
-            lab_roles={"local_admin", "optometrist"},
-            hospital_roles={"local_admin"},
-            project_roles={"project_pi", "site_pi", "project_admin", "optometrist", "verifier"},
+            lab_roles={"verifier"},
+            project_roles={"verifier"},
             allow_admin=True,
         )
         encounters = db.execute(query).scalars().all()
@@ -310,7 +308,6 @@ def list_unverified_encounter_sets():
 
 @api_bp.route('/v1/encounter-set/<uuid>/details', methods=['GET'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def get_encounter_set_details(uuid):
     """Get details and images for a specific encounter set."""
     with transaction_scope() as db:
@@ -324,9 +321,8 @@ def get_encounter_set_details(uuid):
                 project_id=PatientEncounters.project_id,
                 lab_unit_id=PatientEncounters.lab_unit_id,
             ),
-            lab_roles={"local_admin", "optometrist"},
-            hospital_roles={"local_admin"},
-            project_roles={"project_pi", "site_pi", "project_admin", "optometrist", "verifier"},
+            lab_roles={"verifier"},
+            project_roles={"verifier"},
             allow_admin=True,
         )
         encounter = db.execute(query).scalar_one_or_none()
@@ -354,7 +350,6 @@ def get_encounter_set_details(uuid):
 
 @api_bp.route('/v1/encounter-set/image/<uuid>/position', methods=['POST'])
 @login_required
-@roles_required("admin", "local_admin", "optometrist")
 def update_image_position(uuid):
     """Update the spatial position of an image."""
     # =========================================================================
@@ -383,55 +378,22 @@ def update_image_position(uuid):
             "message": "Must be between 1 and 9"
         }), 400
         
-    with transaction_scope() as db:
-        # Check permission via encounter scoping
-        query = select(EncounterSetImage).where(EncounterSetImage.uuid == uuid).options(
-            selectinload(EncounterSetImage.patient_encounter)
-        )
-        img = db.execute(query).scalar_one_or_none()
+    from encounter_sets.position_service import PositionMutationError, move_encounter_set_image
+    try:
+        with transaction_scope() as db:
+            move_encounter_set_image(
+                db, user=current_user, image_uuid=uuid, new_position=spatial_position
+            )
+    except PositionMutationError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
 
-        if not img:
-            return jsonify({"error": "Image not found"}), 404
+    logger.info(
+        "Image position updated",
+        extra={
+            'image_uuid': uuid,
+            'new_position': spatial_position,
+            'user_id': current_user.id
+        }
+    )
 
-        # Scope check - verify user has access to this encounter
-        enc_query = select(PatientEncounters).where(PatientEncounters.id == img.patient_encounter_id)
-        enc_query = role_scoped_rows(
-            enc_query,
-            access_context(db, current_user),
-            RecordColumns(
-                project_id=PatientEncounters.project_id,
-                lab_unit_id=PatientEncounters.lab_unit_id,
-            ),
-            lab_roles={"local_admin", "optometrist"},
-            hospital_roles={"local_admin"},
-            project_roles={"project_admin", "optometrist", "verifier"},
-            allow_admin=True,
-        )
-        if not db.execute(enc_query).scalar_one_or_none():
-            return jsonify({"error": "Access denied"}), 403
-
-        # Update position (P0.5: Handle race condition via database constraint)
-        img.spatial_position = spatial_position
-
-        try:
-            db.commit()
-        except IntegrityError as e:
-            # Unique constraint violation - another request took this position
-            if 'uq_encounter_set_image_position' in str(e):
-                return jsonify({
-                    "error": "Position already occupied",
-                    "message": "Another user moved an image to this position. Please try a different position."
-                }), 409
-            # Other integrity errors should be raised
-            raise
-
-        logger.info(
-            "Image position updated",
-            extra={
-                'image_uuid': uuid,
-                'new_position': spatial_position,
-                'user_id': current_user.id
-            }
-        )
-
-        return jsonify({"message": "Position updated"})
+    return jsonify({"message": "Position updated"})

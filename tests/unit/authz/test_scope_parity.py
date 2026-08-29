@@ -11,6 +11,7 @@ from authz import (
     project_scope,
     where_any,
 )
+from authz.behaviors import export_rows, identifier_release_rows
 from data_authorization.models import LAB_UNIT_SCOPE, PROJECT_SCOPE, ProjectRoleGrant
 from models import Project, Role, User
 from project_configuration.models import ProjectLabUnit
@@ -194,3 +195,84 @@ def test_project_wide_rows_require_an_active_configured_lab(db_session, core_tes
             project_id=project.id, lab_unit_id=unconfigured_lab.id
         ),
     ).allowed is False
+
+
+def test_identifier_release_is_direct_project_scope_authority(db_session, core_test_data):
+    lab_a = db_session.merge(core_test_data["lab_a1"])
+    lab_b = db_session.merge(core_test_data["lab_b1"])
+    project = Project(title="PII parity", code="AZ_PII_PARITY", active=True)
+    actor = User(username="lean_pii_export", password_hash="x", is_active=True)
+    actor.roles = [
+        _role(db_session, "data_manager"),
+        _role(db_session, "pii_exporter"),
+    ]
+    actor.lab_units = [lab_a]
+    db_session.add_all([project, actor])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab_a.id, active=True),
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab_b.id, active=True),
+            ProjectRoleGrant(
+                project_id=project.id,
+                user_id=actor.id,
+                role_id=_role(db_session, "data_exporter").id,
+                scope_type=PROJECT_SCOPE,
+                lab_unit_id=None,
+                active=True,
+            ),
+            ProjectRoleGrant(
+                project_id=project.id,
+                user_id=actor.id,
+                role_id=_role(db_session, "pii_exporter").id,
+                scope_type=LAB_UNIT_SCOPE,
+                lab_unit_id=lab_a.id,
+                active=True,
+            ),
+        ]
+    )
+    db_session.flush()
+
+    rows = union_all(
+        _row(1, None, lab_a.hospital_id, lab_a.id),
+        _row(2, None, lab_b.hospital_id, lab_b.id),
+        _row(3, project.id, lab_a.hospital_id, lab_a.id),
+        _row(4, project.id, lab_b.hospital_id, lab_b.id),
+    ).subquery()
+    columns = RecordColumns(
+        project_id=rows.c.project_id,
+        hospital_id=rows.c.hospital_id,
+        lab_unit_id=rows.c.lab_unit_id,
+    )
+    ordinary = export_rows(db_session, select(rows.c.id), actor, columns)
+    assert set(db_session.execute(ordinary).scalars()) == {3, 4}
+
+    identifier_bearing = identifier_release_rows(
+        db_session, select(rows.c.id), actor, columns
+    )
+    assert set(db_session.execute(identifier_bearing).scalars()) == {3}
+
+
+def test_pii_exporter_alone_grants_no_rows_and_admin_is_break_glass(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    pii_only = User(username="lean_pii_only", password_hash="x", is_active=True)
+    pii_only.roles = [_role(db_session, "pii_exporter")]
+    pii_only.lab_units = [lab]
+    admin = User(username="lean_pii_admin", password_hash="x", is_active=True)
+    admin.roles = [_role(db_session, "admin")]
+    db_session.add_all([pii_only, admin])
+    db_session.flush()
+    rows = _row(1, None, lab.hospital_id, lab.id).subquery()
+    columns = RecordColumns(
+        project_id=rows.c.project_id,
+        hospital_id=rows.c.hospital_id,
+        lab_unit_id=rows.c.lab_unit_id,
+    )
+
+    pii_only_query = export_rows(db_session, select(rows.c.id), pii_only, columns)
+    pii_only_query = identifier_release_rows(db_session, pii_only_query, pii_only, columns)
+    assert db_session.execute(pii_only_query).scalars().all() == []
+
+    admin_query = export_rows(db_session, select(rows.c.id), admin, columns)
+    admin_query = identifier_release_rows(db_session, admin_query, admin, columns)
+    assert db_session.execute(admin_query).scalars().all() == [1]

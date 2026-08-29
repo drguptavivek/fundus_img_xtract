@@ -243,6 +243,22 @@
         <hr class="my-4">
         <div class="row g-3">
           <div class="col-md-4">
+            <label class="form-label" for="contextKindSelect">Working context</label>
+            <select class="form-select" id="contextKindSelect" name="context_kind" required>
+              <option value="classical" {% if selected_context_kind == 'classical' %}selected{% endif %}>Classical</option>
+              <option value="project" {% if selected_context_kind == 'project' %}selected{% endif %}>Project</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="projectSelect">Project</label>
+            <select class="form-select" id="projectSelect" name="project_id">
+              <option value="">Select for project context</option>
+              {% for project in projects %}
+                <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>{{ project.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label">Dataset Name <span class="text-danger">*</span></label>
             <input type="text" class="form-control" name="dataset_name" required>
           </div>

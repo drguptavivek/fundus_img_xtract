@@ -24,6 +24,7 @@ from authz.project_roles import (
     PI_DELEGATORS,
     PROJECT_ADMIN_DELEGATORS,
     PROJECT_ASSIGNABLE_ROLES,
+    role_allows_scope,
 )
 from authz.privilege_escalation_mitigation import (
     DelegatorGrant,
@@ -456,6 +457,8 @@ def _validate_grant_input(
     role = db.execute(select(Role).where(Role.name == data.role_name)).scalar_one_or_none()
     if role is None or role.name not in PROJECT_ASSIGNABLE_ROLES:
         raise ProjectGrantValidationError("Select an assignable project role.")
+    if not role_allows_scope(role_name=role.name, scope_type=data.scope_type):
+        raise ProjectGrantValidationError("The selected role cannot use this scope type.")
 
     return project, target_user, role
 

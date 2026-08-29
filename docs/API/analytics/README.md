@@ -10,8 +10,6 @@ This folder documents the analytics pages and JSON endpoints.
 
 ## Media and KPI pages
 
-- `GET /analytics/encounter-files`
-- `GET /analytics/direct-uploads/kpi`
 - `GET /analytics/images`
 - `GET /analytics/encounters`
 - `GET /analytics/encounter/view/<int:encounter_id>`
@@ -88,7 +86,7 @@ required.
 - `POST /analytics/dataset-curation/<dataset_uuid>/toggle-item`
 - `POST /analytics/dataset-curation/<dataset_uuid>/add-more`
 - `POST /analytics/dataset-export/<dataset_uuid>`
-- `POST /analytics/dataset-curation/<dataset_uuid>/share`
+- Dataset sharing is managed by the canonical `POST /datasets/share` endpoint.
 - `POST /analytics/dataset-curation/<dataset_uuid>/finalize`
 - `POST /analytics/dataset-curation/<dataset_uuid>/unfinalize`
 - `GET /analytics/dataset-export/<job_token>/<path:filename>`

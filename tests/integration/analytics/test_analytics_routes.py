@@ -70,20 +70,6 @@ class TestAnalyticsRoutes:
             # Should be 403 Forbidden or 404 Not Found
             assert response.status_code in [403, 404]
 
-    def test_analytics_kpi_isolation(self, auth_client_factory, db_session):
-        """Verify isolation for KPI endpoints."""
-        from models import User
-        # Use ophthalmologist_a instead of site_admin_a because site_admin_a
-        # has no lab units assigned in seeded data, which causes redirect
-        user_a = db_session.query(User).filter_by(username='ophthalmologist_a').first()
-        client_a = auth_client_factory(user_a)
-
-        # Correct URL for encounter files KPI
-        response = client_a.get("/analytics/encounter-files")
-        assert response.status_code == 200
-        # Check for HTML content
-        assert b"table" in response.data or b"encounter-files-table" in response.data
-        
     def test_dataset_curation_access(self, auth_client_factory, db_session):
         """Test access to dataset curation tools."""
         from models import User
@@ -91,8 +77,10 @@ class TestAnalyticsRoutes:
         client_a = auth_client_factory(user_a)
         
         response = client_a.get("/analytics/dataset-curation")
-        assert response.status_code == 200
-        
+        # Site administration does not itself grant dataset lifecycle access.
+        assert response.status_code == 302
+        client_a.get("/logout")
+
         user_master = db_session.query(User).filter_by(username='master_admin').first()
         client_master = auth_client_factory(user_master)
         response_master = client_master.get("/analytics/dataset-curation")

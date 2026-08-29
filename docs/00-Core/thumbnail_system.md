@@ -105,7 +105,7 @@ UPLOAD_FOLDER=/app/uploads
 
 ### Admin Management API
 ```
-/admin/thumbnail_management                             - Admin dashboard
+/admin/thumbnail-management                            - Admin dashboard
 /api/admin/thumbnail_stats                              - Statistics endpoint
 /api/admin/maintenance_status                          - Maintenance status
 /api/admin/thumbnail/manual_maintenance                 - Manual task trigger

@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 
 from grading_allocation.models import ProjectGraderAllocation
 from models import Project
+from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import UserFactory
 from upload_profiles.models import (
     ProjectUploadProfile,
@@ -36,6 +37,7 @@ def test_project_workspace_renders_grader_allocation_editor(
     db_session.flush()
     db_session.add_all(
         [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
             ProjectUploadProfile(
                 project_id=project.id,
                 upload_profile_id=profile.id,

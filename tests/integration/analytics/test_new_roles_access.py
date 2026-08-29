@@ -20,8 +20,6 @@ class TestNewRolesAccess:
                 '/analytics/encounters-simple',
                 '/analytics/images',  # Fixed: was /analytics/image-results (404)
                 '/analytics/images-without-tasks',
-                '/analytics/encounter-files',  # Fixed: was /analytics/encounter-files/kpi
-                '/analytics/direct-uploads/kpi',
                 '/analytics/model-performance'
             ]
 

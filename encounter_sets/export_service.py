@@ -14,7 +14,15 @@ from openpyxl import Workbook
 from sqlalchemy.orm import Session, selectinload
 
 from encounter_sets.models import EncounterSetAttachment
-from encounter_sets.permissions import apply_project_permission_scope
+from authz.behaviors import (
+    export_lab_units,
+    export_rows,
+    identifier_release_lab_units,
+    identifier_release_rows,
+)
+from authz.context import access_context
+from authz.scopes import RecordScope, admin_scope, project_scope, require_any
+from services.uploads.access import encounter_columns
 from models import (
     AMDReport,
     DiabeticRetinopathyReport,
@@ -22,17 +30,14 @@ from models import (
     GlaucomaResultsCleaned,
     PatientEncounters,
     RemidioExam,
+    LabUnit,
 )
-
-EXPORT_ROLES = frozenset(
-    {"local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"}
-)
-
 
 @dataclass(frozen=True)
 class EncounterSetExportFilters:
-    project_id: int
+    project_id: int | None
     month: str
+    lab_unit_id: int | None = None
 
 
 class EncounterSetExportValidationError(ValueError):
@@ -86,11 +91,20 @@ def export_encounter_sets_xlsx(
     user,
     filters: EncounterSetExportFilters,
     timezone_name: str,
+    include_identifiers: bool = False,
 ) -> bytes:
-    """Build one flat EncounterSet sheet for a scoped project and month."""
+    """Build a masked sheet unless the explicit PII action was selected."""
 
     month_start, month_end = parse_export_month(filters.month)
-    encounters = _load_encounters(db, user, filters.project_id, month_start, month_end)
+    encounters = _load_encounters(
+        db,
+        user,
+        filters.project_id,
+        filters.lab_unit_id,
+        month_start,
+        month_end,
+        include_identifiers=include_identifiers,
+    )
     exams = _load_remidio_exams(db, encounters)
     target_timezone = _target_timezone(timezone_name)
     max_rows = {
@@ -106,7 +120,13 @@ def export_encounter_sets_xlsx(
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet("EncounterSet EMR Data")
     rows = (
-        _encounter_row(encounter, exams.get(encounter.id), target_timezone, max_rows)
+        _encounter_row(
+            encounter,
+            exams.get(encounter.id),
+            target_timezone,
+            max_rows,
+            include_identifiers=include_identifiers,
+        )
         for encounter in encounters
     )
     _write_sheet(sheet, headers, rows)
@@ -118,18 +138,66 @@ def export_encounter_sets_xlsx(
 def _load_encounters(
     db: Session,
     user,
-    project_id: int,
+    project_id: int | None,
+    lab_unit_id: int | None,
     month_start: date,
     month_end: date,
+    *,
+    include_identifiers: bool,
 ) -> list[PatientEncounters]:
-    query = (
-        db.query(PatientEncounters)
-        .filter(
-            PatientEncounters.is_set_based.is_(True),
-            PatientEncounters.project_id == project_id,
-            PatientEncounters.capture_date_dt >= month_start,
-            PatientEncounters.capture_date_dt < month_end,
+    context = access_context(db, user)
+    if project_id is not None:
+        requested_scope = RecordScope.project(
+            project_id=project_id, lab_unit_id=lab_unit_id
         )
+        require_any(
+            admin_scope(context),
+            project_scope(
+                context,
+                {"pii_exporter"} if include_identifiers else {"data_exporter", "pii_exporter"},
+                requested_scope,
+            ),
+        )
+    elif include_identifiers and not context.has_any_global_role(frozenset({"admin"})):
+        from authz.exceptions import AuthorizationDenied
+
+        raise AuthorizationDenied("classical_pii_export_requires_admin")
+
+    if lab_unit_id is not None:
+        lab_query = db.query(LabUnit.id).filter(LabUnit.id == lab_unit_id)
+        lab_query = (
+            identifier_release_lab_units(db, lab_query, user)
+            if include_identifiers
+            else export_lab_units(db, lab_query, user)
+        )
+        if lab_query.first() is None:
+            from authz.exceptions import AuthorizationDenied
+
+            raise AuthorizationDenied("export_lab_unit_unauthorized")
+
+    filters = (
+        PatientEncounters.is_set_based.is_(True),
+        PatientEncounters.project_id == project_id,
+        PatientEncounters.capture_date_dt >= month_start,
+        PatientEncounters.capture_date_dt < month_end,
+    )
+    columns = encounter_columns(PatientEncounters)
+    if lab_unit_id is not None:
+        filters = (*filters, PatientEncounters.lab_unit_id == lab_unit_id)
+    scoped_query = (
+        identifier_release_rows if include_identifiers else export_rows
+    )(
+        db,
+        db.query(PatientEncounters.id).filter(*filters),
+        user,
+        columns,
+    )
+    scoped_ids = [int(row[0]) for row in scoped_query.all()]
+    if not scoped_ids:
+        return []
+    return (
+        db.query(PatientEncounters)
+        .filter(PatientEncounters.id.in_(scoped_ids))
         .options(
             selectinload(PatientEncounters.encounter_set_images),
             selectinload(PatientEncounters.encounter_set_attachments),
@@ -139,11 +207,8 @@ def _load_encounters(
             selectinload(PatientEncounters.amd_reports),
         )
         .order_by(PatientEncounters.capture_date_dt.asc(), PatientEncounters.id.asc())
+        .all()
     )
-    query = apply_project_permission_scope(
-        query, PatientEncounters, user, EXPORT_ROLES
-    )
-    return query.all()
 
 
 def _load_remidio_exams(db: Session, encounters: list[PatientEncounters]) -> dict[int, RemidioExam]:
@@ -165,6 +230,8 @@ def _encounter_row(
     exam: RemidioExam | None,
     target_timezone: ZoneInfo,
     max_rows: dict[str, int],
+    *,
+    include_identifiers: bool,
 ) -> dict[str, Any]:
     metadata = encounter.metadata_json if isinstance(encounter.metadata_json, dict) else {}
     patient_metadata = metadata.get("patient") if isinstance(metadata.get("patient"), dict) else {}
@@ -216,6 +283,23 @@ def _encounter_row(
             value = values[index] if index < len(values) else None
             for column in model.__table__.columns:
                 row[f"{prefix}_{index + 1}_{column.name}"] = getattr(value, column.name) if value else ""
+    if not include_identifiers:
+        for key in tuple(row):
+            lowered = key.lower()
+            if any(
+                marker in lowered
+                for marker in (
+                    "patient_name",
+                    "patient_id",
+                    "uhid",
+                    "custom_identifier",
+                    "file_name",
+                    "filename",
+                    "metadata_json",
+                    "remarks",
+                )
+            ):
+                row[key] = "Anonymous" if "name" in lowered and "file" not in lowered else "masked"
     return row
 
 

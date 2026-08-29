@@ -1,0 +1,124 @@
+import json
+
+from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
+from datasets.authorization import (
+    can_manage_dataset,
+    can_share_dataset,
+    dataset_creation_lab_unit_ids,
+)
+from models import CuratedDataset, CuratedDatasetItem, Project, ProjectLabUnit, Role, User
+from tests.helpers.factories import UserFactory
+from tests.helpers.test_factories import TestDataFactory
+
+
+def _role(db, name):
+    role = db.query(Role).filter_by(name=name).one_or_none()
+    if role is None:
+        role = Role(name=name)
+        db.add(role)
+        db.flush()
+    return role
+
+
+def test_legacy_admin_managed_dataset_remains_active_but_admin_only(db_session, core_test_data):
+    disease = db_session.merge(core_test_data["glaucoma"])
+    actor = User(username="legacy_dataset_actor", password_hash="x", is_active=True)
+    actor.roles.append(_role(db_session, "dataset_creator"))
+    dataset = CuratedDataset(
+        name="Legacy classical",
+        purpose="Legacy",
+        filters_json=json.dumps({"allowed_lab_units": [core_test_data["lab_a1"].id]}),
+        disease_id=disease.id,
+        admin_managed=True,
+        context_kind="classical",
+    )
+    admin = UserFactory.create_admin(db_session, username="legacy_dataset_admin")
+    db_session.add_all([actor, dataset])
+    db_session.flush()
+
+    assert not can_manage_dataset(db_session, user=actor, dataset=dataset)
+    assert can_manage_dataset(db_session, user=admin, dataset=dataset)
+
+
+def test_classical_dataset_requires_every_task_in_classical_scope(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    actor = User(
+        username="classical_dataset_creator",
+        password_hash="x",
+        is_active=True,
+        roles=[_role(db_session, "dataset_creator")],
+        lab_units=[lab],
+    )
+    task = TestDataFactory.create_grading_task(db_session, lab_unit_id=lab.id, disease_id=disease.id)
+    dataset = CuratedDataset(
+        name="Classical scoped",
+        purpose="Scope test",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=disease.id,
+        created_by_user_id=None,
+        context_kind="classical",
+        admin_managed=False,
+    )
+    db_session.add_all([actor, dataset])
+    db_session.flush()
+    dataset.created_by_user_id = actor.id
+    db_session.add(CuratedDatasetItem(dataset_id=dataset.id, task_id=task.id, include_in_export=True))
+    db_session.flush()
+
+    assert can_manage_dataset(db_session, user=actor, dataset=dataset)
+    other_project = Project(title="Other dataset project", code="OTHER_DATASET", active=True)
+    db_session.add(other_project)
+    db_session.flush()
+    task.project_id = other_project.id
+    db_session.flush()
+    assert not can_manage_dataset(db_session, user=actor, dataset=dataset)
+
+
+def test_site_dataset_creator_needs_create_and_share_flags(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    project = Project(title="Dataset site project", code="DATASET_SITE", active=True)
+    actor = User(username="site_dataset_creator", password_hash="x", is_active=True)
+    db_session.add_all([project, actor])
+    db_session.flush()
+    role = _role(db_session, "dataset_creator")
+    db_session.add_all([
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=lab.id,
+            active=True,
+            sites_can_create_datasets=True,
+            sites_can_share_datasets=False,
+        ),
+        ProjectRoleGrant(
+            project_id=project.id,
+            user_id=actor.id,
+            role_id=role.id,
+            scope_type=LAB_UNIT_SCOPE,
+            lab_unit_id=lab.id,
+            active=True,
+        ),
+    ])
+    task = TestDataFactory.create_grading_task(db_session, lab_unit_id=lab.id, disease_id=disease.id)
+    task.project_id = project.id
+    dataset = CuratedDataset(
+        name="Project site dataset",
+        purpose="Site flags",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=disease.id,
+        created_by_user_id=actor.id,
+        context_kind="project",
+        project_id=project.id,
+        admin_managed=False,
+    )
+    db_session.add(dataset)
+    db_session.flush()
+    db_session.add(CuratedDatasetItem(dataset_id=dataset.id, task_id=task.id, include_in_export=True))
+    db_session.flush()
+
+    assert dataset_creation_lab_unit_ids(
+        db_session, user=actor, context_kind="project", project_id=project.id
+    ) == frozenset({lab.id})
+    assert can_manage_dataset(db_session, user=actor, dataset=dataset)
+    assert not can_share_dataset(db_session, user=actor, dataset=dataset)

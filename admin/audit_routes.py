@@ -12,7 +12,7 @@ from utils.log_sanitize import sanitize_log_value, escape_like
 
 logger = logging.getLogger('admin.audit')
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def sensitive_operations_audit():
     """View sensitive operations audit log."""
     page = request.args.get('page', 1, type=int)
@@ -121,7 +121,7 @@ def sensitive_operations_audit():
             unread_notification_count=unread_count
         )
 
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin")
 def sensitive_operation_details(log_id):
     """Get details for a specific audit log entry via AJAX."""
     with get_db_session() as db:

@@ -101,10 +101,12 @@
         </div>
         {% endif %}
 
-        <form method="post" action="{{ url_for('grading.regrade_task_submit', regrade_task_id=regrade_task.id) }}"
+        <form method="post" action="{{ url_for('fundus_api.submit_regrade_api', regrade_task_id=regrade_task.id) }}"
+          hx-post="{{ url_for('fundus_api.submit_regrade_api', regrade_task_id=regrade_task.id) }}" hx-swap="none"
           data-grading-form="true">
           {{ csrf_field() }}
           <input type="hidden" name="feature_geometry_json" id="feature-geometry-json">
+          <input type="hidden" name="selected_features_present" value="1">
 
           <div class="mb-2">
             <label class="form-label mt-2">Select a Grade for <strong class="mb-0">{{ regrade_task.disease.name if regrade_task.disease else '-' }}</strong></label>
@@ -189,6 +191,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="{{ url_for('static', filename='js/regrade-api.js', v=config.get('ASSETS_VERSION', '')) }}"></script>
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
 {% else %}

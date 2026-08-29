@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from auth.roles import roles_required
 from grading_allocation.constants import AllocationCapacity, AllocationScope
@@ -18,8 +18,7 @@ from db_transaction_manager import transaction_scope
 from . import api_bp
 
 
-MANAGER_ROLES = ("admin",)
-GRADER_ROLES = ("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
+GRADER_ROLES = ("ophthalmologist", "field_ophthalmologist")
 
 
 @api_bp.route("/grading/project-encounter-set-queues", methods=["GET"])
@@ -43,7 +42,7 @@ def get_project_encounter_set_queues():
     "/projects/<int:project_id>/grader-allocation-candidates",
     methods=["GET"],
 )
-@roles_required(*MANAGER_ROLES)
+@login_required
 def get_project_grader_allocation_candidates(project_id: int):
     """Return role-compatible users for one managed allocation lab/capacity."""
     try:
@@ -74,7 +73,7 @@ def get_project_grader_allocation_candidates(project_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/grader-allocations", methods=["GET"])
-@roles_required(*MANAGER_ROLES)
+@login_required
 def get_project_grader_allocations(project_id: int):
     """Return policy, derived targets, coverage, and project allocations."""
     try:
@@ -89,7 +88,7 @@ def get_project_grader_allocations(project_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/grader-allocations", methods=["POST"])
-@roles_required(*MANAGER_ROLES)
+@login_required
 def create_project_grader_allocation(project_id: int):
     """Create or reactivate one normalized project grader allocation."""
     try:
@@ -107,7 +106,7 @@ def create_project_grader_allocation(project_id: int):
     "/projects/<int:project_id>/grader-allocations/<int:allocation_id>",
     methods=["PATCH"],
 )
-@roles_required(*MANAGER_ROLES)
+@login_required
 def update_project_grader_allocation(project_id: int, allocation_id: int):
     """Activate or deactivate an existing allocation without deleting history."""
     try:
@@ -129,7 +128,7 @@ def update_project_grader_allocation(project_id: int, allocation_id: int):
     "/projects/<int:project_id>/grader-allocations/<int:allocation_id>",
     methods=["DELETE"],
 )
-@roles_required(*MANAGER_ROLES)
+@login_required
 def deactivate_project_grader_allocation(project_id: int, allocation_id: int):
     """Deactivate an allocation; historical rows are never deleted by the API."""
     try:
@@ -145,7 +144,7 @@ def deactivate_project_grader_allocation(project_id: int, allocation_id: int):
 
 
 @api_bp.route("/projects/<int:project_id>/grader-allocation-policy", methods=["PUT"])
-@roles_required(*MANAGER_ROLES)
+@login_required
 def update_project_grader_allocation_policy(project_id: int):
     """Atomically enable or disable project allocation enforcement."""
     try:

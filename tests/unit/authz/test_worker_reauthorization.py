@@ -122,7 +122,7 @@ def test_discrepancy_worker_denies_after_current_scope_revocation(
     actor.lab_units.clear()
     db_session.flush()
 
-    with pytest.raises(PermissionError, match="scope is empty"):
+    with pytest.raises(PermissionError, match="no longer covers"):
         discrepancy_export.reauthorize_discrepancy_filters(
             db_session,
             actor,

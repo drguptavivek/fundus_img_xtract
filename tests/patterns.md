@@ -123,7 +123,6 @@ def some_function(user_for_scoping=None):
 - Passing as parameter makes function more testable
 
 **Files Affected:**
-- `api/kpis/encounter_files_kpis.py` - Added `user_for_scoping` parameter to `get_filtered_encounter_dataframe()`
 - Updated 9 call sites to pass `user_for_scoping=current_user`
 
 ---
@@ -1438,4 +1437,3 @@ def test_encounter_path():
 
 **Files Affected:**
 - `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed path construction
-

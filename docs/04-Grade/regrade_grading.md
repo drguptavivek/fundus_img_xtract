@@ -15,7 +15,7 @@ Entry route:
 - `GET /grading/regrade-task/<regrade_task_id>`
 
 Submit route:
-- `POST /grading/regrade-task/<regrade_task_id>/submit`
+- `POST /api/regrade-tasks/<regrade_task_id>/submission` (JSON or HTMX; implemented by the deep `regrade` service)
 
 Submission steps:
 1. Validate regrade task and lab unit scope.

@@ -142,7 +142,7 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/api/thumbnail/manual_maintenance` | POST | admin.api_manual_maintenance | Manual thumbnail maintenance |
 | `/api/thumbnail/regenerate_missing` | POST | admin.api_regenerate_missing | Regenerate missing thumbnails |
 | `/api/thumbnail/validate_integrity` | POST | admin.api_validate_integrity | Validate thumbnail integrity |
-| `/admin/thumbnail_management` | GET | admin.thumbnail_management | Thumbnail management interface |
+| `/admin/thumbnail-management` | GET | admin.thumbnail_management | Thumbnail management interface |
 | `/api/email-settings/test-current` | GET | admin.api_test_current_email_config | Test current email config |
 | `/api/email-settings/send-sample` | POST | admin.send_sample_email | Send sample email |
 | `/email-settings` | GET | admin.email_settings_list | Email settings list |
@@ -211,7 +211,6 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | Route Path | HTTP Methods | Function | Description |
 |------------|--------------|----------|-------------|
 | `/direct-files` | GET | analytics.direct_files | Direct files analytics |
-| `/encounter-files` | GET | analytics.encounter_files | Encounter files analytics |
 | `/encounters` | GET | analytics.encounter_results | Encounter results analytics |
 | `/encounters-simple` | GET | analytics.encounter_results_simple | Simplified encounter results |
 | `/images` | GET | analytics.image_results | Image results analytics |
@@ -492,18 +491,6 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/viewer/presets` | GET | fundus_api.get_viewer_presets | Get viewer presets |
 | `/viewer/presets/<int:slot_number>` | POST, DELETE | fundus_api.save_viewer_preset | Save/delete viewer preset |
 | `/upload-jobs/<job_token>/status` | GET | fundus_api.get_upload_status | Get upload job status |
-| `/kpis/encounter-files/dr-reports-count` | GET | fundus_api.dr_reports_count | Get DR reports count |
-| `/kpis/encounter-files/dr-results-distribution` | GET | fundus_api.dr_results_distribution | Get DR results distribution |
-| `/kpis/encounter-files/glaucoma-reports-count` | GET | fundus_api.glaucoma_reports_count | Get glaucoma reports count |
-| `/kpis/encounter-files/glaucoma-results-distribution` | GET | fundus_api.glaucoma_results_distribution | Get glaucoma results distribution |
-| `/kpis/encounter-files/images-count` | GET | fundus_api.images_count | Get images count |
-| `/kpis/encounter-files/vcdr-distribution` | GET | fundus_api.vcdr_distribution | Get VCDR distribution |
-| `/kpis/encounter-files/year-month-wise-uploads` | GET | fundus_api.year_month_wise_uploads | Get year-month wise uploads |
-| `/kpis/encounter-files/filtered-dataframe` | GET | fundus_api.get_filtered_dataframe | Get filtered encounter dataframe |
-| `/kpis/encounter-files/filtered-dataframe-excel` | GET | fundus_api.get_filtered_dataframe_excel | Get filtered encounter dataframe as Excel |
-| `/kpis/direct-files/upload-metrics` | GET | fundus_api.get_upload_metrics | Get direct upload metrics |
-| `/kpis/direct-files/filtered-dataframe` | GET | fundus_api.get_filtered_direct_dataframe | Get filtered direct dataframe |
-| `/kpis/direct-files/filtered-dataframe-excel` | GET | fundus_api.get_filtered_direct_dataframe_excel | Get filtered direct dataframe as Excel |
 
 ---
 

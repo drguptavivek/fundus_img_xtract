@@ -3,7 +3,7 @@ title: Authorization Rules
 kind: policy
 authority: self
 status: authoritative
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 ---
 
 # Authorization rules
@@ -66,8 +66,76 @@ There is no hospital-scoped project grant.
   project scope.
 - A Project Admin assigns operational roles only within the Project Admin's
   own scope.
+- `data_manager` is an operational project role and may be project-wide or
+  Project-Lab-Unit scoped.
+- A project-wide Project Admin may grant `pii_exporter` project-wide or at one
+  configured site. A site-scoped Project Admin cannot grant `pii_exporter`.
 - Non-admin users cannot grant roles to themselves, cross a project/site
   boundary, widen a scope, or delegate a role they cannot assign.
+- Revocation authority mirrors grant authority and is effective immediately.
+
+Project PI and Site PI may allocate qualified graders within their own scope,
+including themselves and others. Project Admin and project `data_manager` may
+do the same. Only Admin and a project-wide Project Admin may switch allocation
+enforcement for the whole project.
+
+## Exports and patient identifiers
+
+`pii_exporter` is a direct project export role, not an additive qualifier. It
+may create masked or identifier-bearing exports within its exact project/site
+scope without also holding `data_exporter`. A project-wide Project Admin may
+grant it; a site-scoped Project Admin may not. Classical identifier export has
+no ordinary role path and is Admin break-glass only.
+
+Ordinary masked exports require `data_exporter` (or project `pii_exporter`) at
+the exact scope. Mixed-scope identifier requests deny in full rather than
+returning partial data. Identifier-bearing exports require recent password
+confirmation and an audit record containing scope, filters, row count and
+break-glass use but no patient identifiers.
+
+The three Project-Lab-Unit settings restrict only site-scoped grants and deny
+when missing or off. Project-wide grants are unaffected, and a setting never
+grants a role. `sites_can_export_grades` governs human grades, review,
+adjudication, comments and grading features. `sites_can_create_datasets`
+governs the complete lifecycle in the dedicated shareable-dataset generation
+module. `sites_can_share_datasets` governs the complete share lifecycle;
+turning it off immediately disables site-authorized shares without deleting
+their audit history.
+
+## User management
+
+`user_manager` is classical and hospital-scoped only, and only Admin may grant
+or revoke it. It manages ordinary users within its own hospital but cannot
+manage itself, users holding `admin`, `user_manager` or `local_admin`, or any
+user outside its hospital. It cannot assign `admin`, `user_manager`,
+`local_admin`, any project role/grant, or `pii_exporter`. `local_admin` is also
+Admin-appointed only.
+
+## Route and workflow boundaries
+
+Routes validate transport filters and exact requested resources; authorization
+helpers do not interpret route names or query strings. An omitted optional Lab
+Unit filter means all rows authorized for that route action. A supplied filter
+must be valid and contained, and cannot be silently ignored. Classical scope
+never reaches project rows. Counts and record lists use distinct permissions.
+
+`resident`, `resident2` and `arbitrator` are grading slots, never user roles.
+Regular and field ophthalmologists may grade only with the exact active slot;
+project work also requires the exact active allocation. Field optometrists do
+not grade. Verifiers may correct or reopen verification only before downstream
+grading exists, and may reorder encounter-set images only while unverified and
+before downstream grading, using an atomic locked mutation. Admin cannot waive
+those workflow invariants.
+
+Camera report PDFs are view-only patient records, not exports. Only scoped
+uploaders and verifiers (or Admin break-glass) reach them through designated
+encounter-browser or verification routes. No workflow-stage inference is made.
+Reference and UUID routes use the same parent-encounter authorization.
+
+Broad backfills, bulk repair, historical recomputation and migration-style
+maintenance are Admin only. Recent password confirmation is required for
+identifier-bearing exports, database dump/bulk export/restore, grant or
+revocation of `admin` or `pii_exporter`, and destructive bulk maintenance.
 
 These cross-cutting grant safeguards live in
 `authz/privilege_escalation_mitigation.py`. The file contains only delegation

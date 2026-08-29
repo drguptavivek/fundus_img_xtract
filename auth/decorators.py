@@ -1,10 +1,12 @@
-import os
-import jwt
 import logging
-from functools import wraps
-from flask import session, request, redirect, url_for, current_app, jsonify
-from flask_login import current_user
+import os
 import time
+from functools import wraps
+
+import jwt
+from flask import current_app, jsonify, redirect, request, session, url_for
+from flask_login import current_user
+
 from db_transaction_manager import get_db_session
 from services.mobile.auth_sessions import MobileAuthError, validate_access_session
 from utils.log_sanitize import sanitize_log_value
@@ -73,6 +75,22 @@ def token_auth_required(f):
     decorated._token_auth_applied = True
     return decorated
 
+
+def session_or_token_auth_required(f):
+    """Accept an authenticated web session or a validated mobile bearer session."""
+    token_wrapped = token_auth_required(f)
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if current_user.is_authenticated:
+            return f(*args, **kwargs)
+        return token_wrapped(*args, **kwargs)
+
+    # Hybrid routes retain CSRF/session checks for web requests while the app
+    # guard permits requests carrying a bearer token to reach this decorator.
+    decorated._session_or_token_auth_applied = True
+    return decorated
+
 def reauth_required(timeout=600):
     """
     Decorator to force re-authentication if the session's sensitive operation
@@ -93,3 +111,14 @@ def reauth_required(timeout=600):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def require_recent_reauthentication(timeout=600):
+    """Return a reauthentication response, or ``None`` when step-up is fresh."""
+    if not current_user.is_authenticated:
+        return current_app.login_manager.unauthorized()
+    last_sudo = session.get("last_sudo_time")
+    now = int(time.time())
+    if not last_sudo or (now - last_sudo) > timeout:
+        return redirect(url_for("auth.confirm_password", next=request.url))
+    return None

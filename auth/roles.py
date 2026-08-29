@@ -11,6 +11,7 @@ from db_transaction_manager import get_db_session
 
 ROLE_ADMIN = "admin"
 ROLE_LOCAL_ADMIN = "local_admin"  # Site Admin
+ROLE_USER_MANAGER = "user_manager"
 # There is deliberately no ROLE_RESIDENT. "resident" is a grading *slot*,
 # not a user-level role: the qualification to grade any slot is
 # ROLE_OPHTHALMOLOGIST, and which slot a clinician may fill comes from their
@@ -18,6 +19,7 @@ ROLE_LOCAL_ADMIN = "local_admin"  # Site Admin
 ROLE_OPHTHALMOLOGIST = "ophthalmologist"
 ROLE_OPTOMETRIST = "optometrist"
 ROLE_DATA_MANAGER = "data_manager"
+ROLE_PII_EXPORTER = "pii_exporter"
 ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"
@@ -38,12 +40,14 @@ FIELD_ROLE_NAMES = (ROLE_FIELD_OPTOMETRIST, ROLE_FIELD_OPHTHALMOLOGIST)
 DEFAULT_ROLES = [
     "admin",
     "local_admin",
+    ROLE_USER_MANAGER,
     "fileUploader",
     "ophthalmologist",
     "data_manager",
     "optometrist",
     "discrepancy_reviewer",
     "data_exporter",
+    ROLE_PII_EXPORTER,
     "pregarded_uploader",
     "regrade_adjudicator",
     ROLE_DATASET_CREATOR,

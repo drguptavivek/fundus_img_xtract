@@ -12,9 +12,10 @@ from typing import Iterable
 from authz.project_roles import (
     PI_DELEGATORS,
     PROJECT_ADMIN,
+    PROJECT_ADMIN_STANDARD_DELEGABLE_ROLES,
     PROJECT_ASSIGNABLE_ROLES,
-    PROJECT_OPERATIONAL_ROLES,
     PROJECT_PI,
+    PII_EXPORTER,
     SITE_PI,
 )
 
@@ -69,7 +70,14 @@ def delegable_project_roles(
     if contained_roles & PI_DELEGATORS:
         result.add(PROJECT_ADMIN)
     if PROJECT_ADMIN in contained_roles:
-        result.update(PROJECT_OPERATIONAL_ROLES)
+        result.update(PROJECT_ADMIN_STANDARD_DELEGABLE_ROLES)
+    if any(
+        grant.role_name == PROJECT_ADMIN
+        and grant.scope_type == PROJECT_SCOPE
+        and grant.lab_unit_id is None
+        for grant in delegator_grants
+    ):
+        result.add(PII_EXPORTER)
     return frozenset(result)
 
 

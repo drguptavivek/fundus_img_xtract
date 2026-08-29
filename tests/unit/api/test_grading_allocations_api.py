@@ -1,6 +1,7 @@
 from uuid import uuid4
 
-from models import Project
+from models import Project, UserDiseaseUnitRole
+from project_configuration.models import ProjectLabUnit
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
     ProjectEncounterSetQueueDTO,
@@ -25,6 +26,7 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
     db_session.flush()
     db_session.add_all(
         [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
             ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True),
             UploadProfileDisease(upload_profile_id=profile.id, disease_id=disease.id, is_default=True),
         ]
@@ -35,6 +37,15 @@ def test_grader_allocation_api_crud(client, db_session, core_test_data):
         "ophthalmologist",
         username=f"api_allocation_resident_{suffix}",
         lab_units=[],
+    )
+    db_session.add(
+        UserDiseaseUnitRole(
+            user_id=resident.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            can_grade_resident=True,
+            active=True,
+        )
     )
     db_session.flush()
     _authenticate(client, admin)
@@ -102,6 +113,13 @@ def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
         username=f"cross_lab_ophthalmologist_{suffix}",
         lab_units=[],
     )
+    db_session.add(
+        ProjectLabUnit(
+            project_id=project.id,
+            lab_unit_id=core_test_data["lab_unit"].id,
+            active=True,
+        )
+    )
     db_session.flush()
     _authenticate(client, admin)
 
@@ -115,10 +133,7 @@ def test_arbitrator_candidates_include_ophthalmologists_outside_target_lab(
 
     assert response.status_code == 200
     candidates = response.get_json()["candidates"]
-    assert any(
-        row["id"] == ophthalmologist.id and row["is_member_of_lab"] is False
-        for row in candidates
-    )
+    assert all(row["id"] != ophthalmologist.id for row in candidates)
 
 
 def test_grader_allocation_api_rejects_invalid_target_shape(

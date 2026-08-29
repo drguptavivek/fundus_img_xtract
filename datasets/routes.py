@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import List, Optional
 
 from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 import sqlalchemy as sa
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
@@ -50,6 +50,7 @@ from tasks.access import task_columns
 from utils.dataset_share_security import clear_failures, is_locked_out, register_failure
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
+from datasets.authorization import can_share_dataset, can_view_dataset, scope_dataset_task_query
 
 from . import bp
 
@@ -88,7 +89,7 @@ def _render_invalid(status_code: int = 404):
 
 
 @bp.route("/list", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+@login_required
 def list_datasets():
     """List curated datasets with summary details."""
     selected_dataset_uuid = (request.args.get("dataset_uuid") or "").strip()
@@ -100,13 +101,19 @@ def list_datasets():
             .first()
         )
         user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
-        can_share = bool(user_roles.intersection({"dataset_creator", "admin"}))
-
         datasets = (
             db.query(CuratedDataset)
             .filter(CuratedDataset.is_active.is_(True))
             .order_by(CuratedDataset.created_at.desc())
             .all()
+        )
+        datasets = [
+            dataset for dataset in datasets
+            if can_view_dataset(db, user=current_user, dataset=dataset)
+        ]
+        can_share = any(
+            can_share_dataset(db, user=current_user, dataset=dataset)
+            for dataset in datasets
         )
         dataset_ids = [ds.id for ds in datasets]
         counts = {}
@@ -154,6 +161,9 @@ def list_datasets():
             )
             if not browse_dataset:
                 browse_message = "Dataset not found."
+            elif not can_view_dataset(db, user=current_user, dataset=browse_dataset):
+                browse_dataset = None
+                browse_message = "Dataset not found."
             else:
                 lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
                 allowed_lab_units = {lu.id for lu in lab_units_query.all()}
@@ -163,9 +173,7 @@ def list_datasets():
                 except Exception:
                     stored_filters = {}
                 stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-                if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.has_role("admin"):
-                    browse_message = "You do not have permission to browse this dataset."
-                elif not browse_dataset.is_finalized:
+                if not browse_dataset.is_finalized:
                     browse_message = "Finalize the dataset before browsing."
                 else:
                     included_task_ids = [
@@ -205,7 +213,7 @@ def list_datasets():
 
 
 @bp.route("/list/viewer/<string:dataset_uuid>/<string:image_uuid>")
-@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+@login_required
 def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
     """Serve the dataset browse viewer card for an included image."""
     with get_db_session() as db:
@@ -221,6 +229,8 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
         )
         if not dataset:
             return ("Not found", 404)
+        if not can_view_dataset(db, user=current_user, dataset=dataset):
+            return ("Not found", 404)
 
         lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
         allowed_lab_units = {lu.id for lu in lab_units_query.all()}
@@ -230,9 +240,6 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
         except Exception:
             stored_filters = {}
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.has_role("admin"):
-            return ("Forbidden", 403)
-
         query = (
             db.query(GradingTask)
             .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
@@ -247,7 +254,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
         query = dataset_rows(db, query, current_user, task_columns(GradingTask))
-        task = query.first()
+        task = scope_dataset_task_query(query, dataset=dataset).first()
         if not task:
             return ("Not found", 404)
 
@@ -304,7 +311,7 @@ def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
 
 
 @bp.route("/share", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+@login_required
 def share_dataset():
     """Show and create share links for a dataset."""
     logger = logging.getLogger("audit")
@@ -334,7 +341,7 @@ def share_dataset():
         except Exception:
             stored_filters = {}
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
+        if not can_view_dataset(db, user=current_user, dataset=dataset):
             flash("You do not have permission to view shares for this dataset.", "error")
             return redirect(url_for("datasets.list_datasets"))
 
@@ -345,7 +352,7 @@ def share_dataset():
             .first()
         )
         user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
-        can_share = bool(user_roles.intersection({"dataset_creator", "admin"}))
+        can_share = can_share_dataset(db, user=current_user, dataset=dataset)
 
         if request.method == "POST":
             if not can_share:
@@ -559,7 +566,7 @@ def share_dataset():
 
 
 @bp.route("/share/<int:share_id>/toggle", methods=["POST"])
-@roles_required("dataset_creator", "admin")
+@login_required
 def toggle_share_status(share_id: int):
     """Toggle dataset share active status."""
     dataset_uuid = request.form.get("dataset_uuid")
@@ -578,7 +585,7 @@ def toggle_share_status(share_id: int):
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
+        if not can_share_dataset(db, user=current_user, dataset=dataset):
             flash("You do not have permission to update this share.", "error")
             return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
 
@@ -599,7 +606,7 @@ def toggle_share_status(share_id: int):
 
 
 @bp.route("/share/<int:share_id>/regenerate-otp", methods=["POST"])
-@roles_required("dataset_creator", "admin")
+@login_required
 def regenerate_share_otp(share_id: int):
     """Regenerate OTP for an existing dataset share."""
     dataset_uuid = request.form.get("dataset_uuid")
@@ -621,7 +628,7 @@ def regenerate_share_otp(share_id: int):
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.has_role("admin"):
+        if not can_share_dataset(db, user=current_user, dataset=dataset):
             flash("You do not have permission to update this share.", "error")
             return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
 

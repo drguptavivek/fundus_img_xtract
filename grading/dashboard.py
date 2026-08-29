@@ -154,7 +154,7 @@ def index():
                 break
         
         # is_resident means user has permission to do resident-level grading
-        is_resident = has_resident_eligibility and (current_user.has_role('resident') or current_user.has_role('ophthalmologist'))
+        is_resident = has_resident_eligibility and current_user.has_role('ophthalmologist', 'field_ophthalmologist')
         is_resident2 = current_user.has_role('ophthalmologist')
         
         # Which queue cards exist is answered from role rows alone. Their

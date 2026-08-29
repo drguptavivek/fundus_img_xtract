@@ -19,6 +19,7 @@ from authz import (
     project_scope,
     require_any,
     self_scope,
+    upload_scope,
 )
 from models import (
     DiabeticRetinopathyReport,
@@ -69,6 +70,7 @@ class AuthorizedMediaSource:
     lab_unit_id: int | None
     disease_id: int | None
     uploader_user_id: int | None = None
+    upload_profile_id: int | None = None
 
     def record_scope(self) -> RecordScope:
         """Return complete media lineage, denying ambiguous or missing facts."""
@@ -176,6 +178,25 @@ def authorize_media_source(
 
     context = access_context(db, user)
     record = resource.record_scope()
+    if resource.source_type in DOCUMENT_SOURCE_TYPES:
+        checks = [
+            admin_scope(context),
+            assigned_lab_scope(context, {"fileuploader", "pregarded_uploader"}, record),
+            assigned_lab_scope(context, {"verifier"}, record),
+            project_scope(context, {"verifier"}, record),
+            upload_scope(
+                context,
+                {"fileuploader", "pregarded_uploader"},
+                record,
+                upload_profile_id=resource.upload_profile_id,
+            ),
+        ]
+        try:
+            require_any(*checks)
+        except AuthorizationDenied as exc:
+            raise MediaAccessDenied("Media not found") from exc
+        return resource
+
     image_roles = {
         "local_admin", "data_manager", "fileUploader", "ophthalmologist",
         "optometrist", "verifier", "field_optometrist", "field_ophthalmologist",
@@ -245,6 +266,7 @@ def _from_encounter_child(db: Session, source_type: MediaSourceType, row) -> Aut
         lab_unit_id=lab_unit_id,
         disease_id=encounter.disease_id,
         uploader_user_id=None,
+        upload_profile_id=encounter.upload_profile_id,
     )
 
 

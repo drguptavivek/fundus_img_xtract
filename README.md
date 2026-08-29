@@ -233,6 +233,7 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 - [Comprehensive Clinical Search Deep-Module Plan](docs/15-DEVELOPMENT/clinical_search_deep_module_plan.md) - Shared task-boundary search, canonical grading and signal semantics, project-configured referral diseases, immutable selections, discrepancy integration, and test plan
 - [Grader Responsiveness and Performance Plan](docs/15-DEVELOPMENT/grader_responsiveness_performance_plan.md) - Plan and implementation record for keeping grader-facing latency flat as data grows. Delivered: denormalised task project ownership with guard triggers, allocation eligibility in SQL, index-driven queue acquisition and pending counts, per-disease dashboard hydration, and throttled session writes. Outstanding: server process model, image payload sizing under an authenticate-every-image constraint, and non-blocking materialized view refresh
 - [Grading Workbench API](docs/API/grading-workbench/README.md) - Durable acquisition, resumption, normalized workbench DTO, annotation, submission, and rapid next-work contracts
+- [Regrade API](docs/API/regrade/README.md) - Shared HTMX/mobile API for fail-closed regrade queue creation and assigned adjudication submission
 - [Discrepancy Review API](docs/API/discrepancy-review/README.md) - Project-aware task filters, permission-scoped study CSV queues, idempotent submissions, and MV-independent Save & Next ordering
 - [WAI API Statistics API](docs/API/wai-api-statistics/README.md) - JSON contract for Wadhwani AI inference statistics
 - [IITK/AIIMS Image Capture API Contract](docs/API/iitk/README.md) - Read-only upstream session/image contract, safe probe workflow, and candidate EncounterSet metadata mapping
@@ -337,8 +338,8 @@ Quick commands: [DOCKER-QUICKCMDS.MD](DOCKER-QUICKCMDS.MD)
 #### Upload Eligibility Utilities
 - [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
 - [Authorization Rules](docs/policy/authorizations.md) - Plain-language role, relationship, delegation, and fail-closed rules
-- [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Who is allowed to do what at each step of the work, inside a project and outside one, without jargon. Also rendered at [authorization_in_plain_language.html](docs/policy/authorization_in_plain_language.html)
-- [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Which role reaches which project action and at what grant scope; governance and operational drawn separately. Same content rendered at [authorization_matrix.html](docs/policy/authorization_matrix.html)
+- [Authorization In Plain Language](docs/policy/authorization_in_plain_language.md) - Current frozen policy in readable form; the older HTML rendering is marked as an archived snapshot.
+- [Project Authorization Matrix](docs/policy/authorization_matrix.md) - Current role/action/scope matrix; the older HTML rendering is marked as an archived snapshot.
 - [Route Permissions & Roles Audit](docs/policy/route_permissions_audit.md) - Code-derived snapshot (2026-08-28): which role, in classical vs project context, can perform which action at which scope, organized by workflow from configuration through exports, with a divergences list.
 - [Lean Authorization Cutover](docs/15-DEVELOPMENT/authz_v2_clean_cutover_plan.md) - Named role-scope behaviours, lineage, delegation, worker reauthorization, and one-migration cutover contract
 - [Upload Profiles, Projects, And Upload Rules](docs/01-Adding_Images/upload_profiles_projects_rules.md) - Current `upload_profiles.service` interfaces for project-scoped upload eligibility and validation

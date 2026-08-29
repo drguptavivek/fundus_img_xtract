@@ -225,6 +225,59 @@ def test_project_admin_delegates_operations_only_inside_own_scope(db_session, co
             upsert_project_role_grant(db_session, actor=project_admin, data=data)
 
 
+def test_only_project_wide_project_admin_can_delegate_pii_exporter(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    admin = UserFactory.create_admin(db_session, username="grant_pii_seed_admin")
+    wide_admin = _user(db_session, "grant_pii_wide_admin")
+    site_admin = _user(db_session, "grant_pii_site_admin")
+    target = _user(db_session, "grant_pii_target")
+    project = _project(db_session, "PII_CEILING")
+    _configure_labs(db_session, project, lab.id)
+    for name in ("project_admin", "pii_exporter"):
+        _role(db_session, name)
+
+    for user, scope_type, lab_unit_id in (
+        (wide_admin, PROJECT_SCOPE, None),
+        (site_admin, LAB_UNIT_SCOPE, lab.id),
+    ):
+        upsert_project_role_grant(
+            db_session,
+            actor=admin,
+            data=ProjectRoleGrantInput(
+                project_id=project.id,
+                user_id=user.id,
+                role_name="project_admin",
+                scope_type=scope_type,
+                lab_unit_id=lab_unit_id,
+            ),
+        )
+
+    granted = upsert_project_role_grant(
+        db_session,
+        actor=wide_admin,
+        data=ProjectRoleGrantInput(
+            project_id=project.id,
+            user_id=target.id,
+            role_name="pii_exporter",
+            scope_type=LAB_UNIT_SCOPE,
+            lab_unit_id=lab.id,
+        ),
+    )
+    assert granted.role_name == "pii_exporter"
+    with pytest.raises(ProjectGrantPermissionDenied):
+        upsert_project_role_grant(
+            db_session,
+            actor=site_admin,
+            data=ProjectRoleGrantInput(
+                project_id=project.id,
+                user_id=target.id,
+                role_name="pii_exporter",
+                scope_type=LAB_UNIT_SCOPE,
+                lab_unit_id=lab.id,
+            ),
+        )
+
+
 def test_only_admin_appoints_pi_roles(db_session, core_test_data):
     lab = db_session.merge(core_test_data["lab_a1"])
     admin = UserFactory.create_admin(db_session, username="grant_pi_admin")
@@ -258,7 +311,7 @@ def test_only_admin_appoints_pi_roles(db_session, core_test_data):
         )
 
 
-def test_legacy_global_roles_are_not_assignable_as_project_roles(db_session, core_test_data):
+def test_project_data_manager_is_assignable_but_global_uploader_is_not(db_session, core_test_data):
     lab = db_session.merge(core_test_data["lab_a1"])
     admin = UserFactory.create_admin(db_session, username="grant_multi_admin")
     target = _user(db_session, "grant_multi_target")
@@ -267,26 +320,64 @@ def test_legacy_global_roles_are_not_assignable_as_project_roles(db_session, cor
     _role(db_session, "data_manager")
     _role(db_session, "fileUploader")
 
-    for data in (
-        ProjectRoleGrantInput(
+    granted = upsert_project_role_grant(
+        db_session,
+        actor=admin,
+        data=ProjectRoleGrantInput(
             project_id=project.id,
             user_id=target.id,
             role_name="data_manager",
             scope_type=PROJECT_SCOPE,
         ),
-        ProjectRoleGrantInput(
+    )
+    assert granted.role_name == "data_manager"
+
+    with pytest.raises(ProjectGrantValidationError):
+        upsert_project_role_grant(
+            db_session,
+            actor=admin,
+            data=ProjectRoleGrantInput(
             project_id=project.id,
             user_id=target.id,
             role_name="fileUploader",
             scope_type=LAB_UNIT_SCOPE,
             lab_unit_id=lab.id,
+            ),
+        )
+
+    assert {row.role_name for row in list_project_role_grants(
+        db_session, actor=admin, project_id=project.id
+    )} == {"data_manager"}
+    assert not target.has_role("data_manager", "fileUploader")
+
+
+def test_pi_role_scope_shapes_are_enforced_for_admin(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    admin = UserFactory.create_admin(db_session, username="grant_shape_admin")
+    target = _user(db_session, "grant_shape_target")
+    project = _project(db_session, "ROLE_SHAPES")
+    _configure_labs(db_session, project, lab.id)
+    _role(db_session, "project_pi")
+    _role(db_session, "site_pi")
+
+    invalid = (
+        ProjectRoleGrantInput(
+            project_id=project.id,
+            user_id=target.id,
+            role_name="project_pi",
+            scope_type=LAB_UNIT_SCOPE,
+            lab_unit_id=lab.id,
         ),
-    ):
+        ProjectRoleGrantInput(
+            project_id=project.id,
+            user_id=target.id,
+            role_name="site_pi",
+            scope_type=PROJECT_SCOPE,
+        ),
+    )
+    for data in invalid:
         with pytest.raises(ProjectGrantValidationError):
             upsert_project_role_grant(db_session, actor=admin, data=data)
-
-    assert list_project_role_grants(db_session, actor=admin, project_id=project.id) == ()
-    assert not target.has_role("data_manager", "fileUploader")
 
 
 def test_inactive_grant_removes_membership(db_session):

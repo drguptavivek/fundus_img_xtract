@@ -3,28 +3,28 @@ from __future__ import annotations
 import json
 import logging
 from json import JSONDecodeError
+
 from flask import flash, redirect, render_template, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from auth.roles import roles_required
 from auth.utils import utcnow
 from db_transaction_manager import transaction_scope
-from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
-from grading.workbench.revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
 from encounter_sets.permissions import (
     project_task_capability_clause,
     user_has_task_capability,
 )
+from grading.workbench.revision_policy import REVISION_WINDOW
+from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
+
 REGRADE_ROLES = frozenset({"regrade_adjudicator"})
+REGRADE_MANAGER_ROLES = frozenset({"data_manager"})
+from authz.behaviors import role_lab_units
 from models import (
-    Consensus,
     Disease,
-    DiseaseGrading,
     Grade,
     GradingTask,
-    GradingsFeatures,
     ImageMetadata,
     LabUnit,
     RegradeTask,
@@ -32,20 +32,12 @@ from models import (
     User,
     user_lab_units,
 )
-from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
-from utils.feature_geometry import (
-    parse_feature_geometry_payload,
-    prepare_feature_geometry_for_storage,
-    validate_feature_geometry_payload,
-)
 from project_annotations.service import (
     resolve_task_annotation_context,
-    validate_geometry_policy,
 )
-from authz.behaviors import role_lab_units
+from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
 from utils.log_sanitize import sanitize_log_value
 from utils.masterUtils import fetch_active_disease_gradings
-
 
 regrade_logger = logging.getLogger("regrade_grading")
 
@@ -65,7 +57,24 @@ def _fetch_allowed_lab_units(db):
     return lab_units, allowed_lab_unit_ids
 
 
+def _fetch_manager_lab_units(db):
+    lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
+    lu_query = role_lab_units(
+        db,
+        lu_query,
+        current_user,
+        lab_roles=REGRADE_MANAGER_ROLES,
+        hospital_roles=REGRADE_MANAGER_ROLES,
+        project_roles=REGRADE_MANAGER_ROLES,
+        allow_admin=True,
+    )
+    lab_units = db.execute(lu_query).scalars().all()
+    return lab_units, {lab_unit.id for lab_unit in lab_units}
+
+
 def _fetch_regrade_task(db, regrade_task_id: int, allowed_lab_unit_ids: set[int]):
+    if not allowed_lab_unit_ids:
+        return None
     query = (
         select(RegradeTask)
         .options(
@@ -82,8 +91,7 @@ def _fetch_regrade_task(db, regrade_task_id: int, allowed_lab_unit_ids: set[int]
         )
         .where(RegradeTask.id == regrade_task_id)
     )
-    if allowed_lab_unit_ids:
-        query = query.where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
+    query = query.where(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
     row = db.execute(query).scalars().first()
     if row and not user_has_task_capability(
         db,
@@ -135,12 +143,15 @@ def _parse_selected_features(selected_features_json: str | None) -> list[dict[st
 def register_routes(bp) -> None:
     bp.add_url_rule("/regrade-tasks", view_func=regrade_tasks, methods=["GET"])
     bp.add_url_rule("/regrade-tasks/random", view_func=start_random_regrade_task, methods=["GET"])
-    bp.add_url_rule("/regrade-tasks/reassign", view_func=regrade_tasks_reassign, methods=["GET", "POST"])
-    bp.add_url_rule("/regrade-task/<int:regrade_task_id>", view_func=regrade_task_detail, methods=["GET"])
     bp.add_url_rule(
-        "/regrade-task/<int:regrade_task_id>/submit",
-        view_func=regrade_task_submit,
-        methods=["POST"],
+        "/regrade-tasks/reassign",
+        view_func=regrade_tasks_reassign,
+        methods=["GET", "POST"],
+    )
+    bp.add_url_rule(
+        "/regrade-task/<int:regrade_task_id>",
+        view_func=regrade_task_detail,
+        methods=["GET"],
     )
     bp.add_url_rule(
         "/regrade-task/<int:regrade_task_id>/reassign",
@@ -149,13 +160,13 @@ def register_routes(bp) -> None:
     )
 
 
-@roles_required("regrade_adjudicator", "admin")
+@login_required
 def regrade_tasks():
     with transaction_scope() as db:
-        lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
+        _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
         diseases = db.query(Disease).order_by(Disease.name).all()
 
-        is_admin = current_user.has_role("admin", "local_admin")
+        is_admin = current_user.has_role("admin")
         pending_query = (
             select(RegradeTask.disease_id, func.count(RegradeTask.id))
             .where(RegradeTask.status == "regrade_pending")
@@ -239,10 +250,10 @@ def regrade_tasks():
         )
 
 
-@roles_required("admin", "data_manager")
+@login_required
 def regrade_tasks_reassign():
     with transaction_scope() as db:
-        _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
+        _lab_units, allowed_lab_unit_ids = _fetch_manager_lab_units(db)
         if not allowed_lab_unit_ids:
             flash("No lab units available for regrade tasks.", "warning")
             return redirect(url_for("grading.regrade_tasks"))
@@ -263,7 +274,7 @@ def regrade_tasks_reassign():
             .order_by(func.count(RegradeTask.id).desc())
         )
         counts_query = counts_query.where(project_task_capability_clause(
-            RegradeTask.source_task_id, current_user, REGRADE_ROLES
+            RegradeTask.source_task_id, current_user, REGRADE_MANAGER_ROLES
         ))
         assignee_counts = db.execute(counts_query).all()
         total_pending = sum(row[1] for row in assignee_counts)
@@ -293,7 +304,7 @@ def regrade_tasks_reassign():
             .order_by(RegradeTask.id.desc())
         )
         tasks_query = tasks_query.where(project_task_capability_clause(
-            RegradeTask.source_task_id, current_user, REGRADE_ROLES
+            RegradeTask.source_task_id, current_user, REGRADE_MANAGER_ROLES
         ))
         if assignee_id_raw == "unassigned":
             tasks_query = tasks_query.where(RegradeTask.assigned_to_user_id.is_(None))
@@ -305,26 +316,17 @@ def regrade_tasks_reassign():
 
         target_users: list[User] = []
         if task_lab_unit_ids:
-            target_users_query = (
-                select(User)
-                .join(User.roles)
-                .join(user_lab_units, user_lab_units.c.user_id == User.id)
-                .where(Role.name == "regrade_adjudicator")
-                .where(User.is_active.is_(True))
-                .where(user_lab_units.c.lab_unit_id.in_(task_lab_unit_ids))
-                .distinct()
-            )
+            target_users_query = select(User).where(User.is_active.is_(True))
             candidates = db.execute(target_users_query).scalars().all()
-            target_users = []
-            for user in candidates:
-                user_lab_ids = {
-                    row.lab_unit_id
-                    for row in db.execute(
-                        select(user_lab_units.c.lab_unit_id).where(user_lab_units.c.user_id == user.id)
-                    ).all()
-                }
-                if task_lab_unit_ids.issubset(user_lab_ids):
-                    target_users.append(user)
+            target_users = [
+                user for user in candidates
+                if all(
+                    user_has_task_capability(
+                        db, user=user, task_id=task.source_task_id, roles=REGRADE_ROLES
+                    )
+                    for task in tasks
+                )
+            ]
             target_users.sort(key=lambda user: user.username)
 
         if request.method == "POST":
@@ -342,7 +344,12 @@ def regrade_tasks_reassign():
                 try:
                     task_ids_int.append(int(raw_id))
                 except (TypeError, ValueError):
-                    continue
+                    flash("Invalid regrade task selection.", "danger")
+                    return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
+
+            if len(set(task_ids_int)) != len(task_ids_int):
+                flash("Invalid regrade task selection.", "danger")
+                return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
 
             tasks_to_update = (
                 db.query(RegradeTask)
@@ -350,7 +357,7 @@ def regrade_tasks_reassign():
                 .filter(RegradeTask.status == "regrade_pending")
                 .filter(RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids))
                 .filter(project_task_capability_clause(
-                    RegradeTask.source_task_id, current_user, REGRADE_ROLES
+                    RegradeTask.source_task_id, current_user, REGRADE_MANAGER_ROLES
                 ))
                 .all()
             )
@@ -358,26 +365,16 @@ def regrade_tasks_reassign():
                 flash("No eligible regrade tasks found for reassignment.", "warning")
                 return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
 
-            target_user = (
-                db.query(User)
-                .join(User.roles)
-                .filter(User.id == target_user_id, Role.name == "regrade_adjudicator")
-                .filter(User.is_active.is_(True))
-                .first()
-            )
-            if not target_user:
-                flash("Selected user is not a valid regrade adjudicator.", "danger")
+            if {task.id for task in tasks_to_update} != set(task_ids_int):
+                flash("One or more selected regrade tasks are outside your scope.", "danger")
                 return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
 
-            target_lab_ids = {
-                row.lab_unit_id
-                for row in db.execute(
-                    select(user_lab_units.c.lab_unit_id).where(user_lab_units.c.user_id == target_user_id)
-                ).all()
-            }
-            task_lab_ids = {task.lab_unit_id for task in tasks_to_update if task.lab_unit_id}
-            if not task_lab_ids.issubset(target_lab_ids):
-                flash("Target user is not assigned to all task lab units.", "danger")
+            target_user = db.query(User).filter(
+                User.id == target_user_id,
+                User.is_active.is_(True),
+            ).first()
+            if not target_user:
+                flash("Selected user is not a valid regrade adjudicator.", "danger")
                 return redirect(url_for("grading.regrade_tasks_reassign", assignee_id=assignee_id_raw))
 
             if any(
@@ -416,7 +413,7 @@ def regrade_tasks_reassign():
         )
 
 
-@roles_required("regrade_adjudicator", "admin")
+@login_required
 def start_random_regrade_task():
     with transaction_scope() as db:
         _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
@@ -428,7 +425,7 @@ def start_random_regrade_task():
         lab_unit_id = request.args.get("lab_unit_id", type=int)
         assigned_to_user_id = request.args.get("assigned_to_user_id", type=int)
 
-        is_admin = current_user.has_role("admin", "local_admin")
+        is_admin = current_user.has_role("admin")
 
         query = (
             select(RegradeTask.id)
@@ -462,7 +459,7 @@ def start_random_regrade_task():
         return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
 
-@roles_required("regrade_adjudicator", "admin")
+@login_required
 def regrade_task_detail(regrade_task_id: int):
     if not regrade_task_id or regrade_task_id <= 0:
         flash("Invalid regrade task reference.", "danger")
@@ -475,7 +472,7 @@ def regrade_task_detail(regrade_task_id: int):
             flash("Regrade task not found.", "danger")
             return redirect(url_for("grading.regrade_tasks"))
 
-        is_admin = current_user.has_role("admin", "local_admin")
+        is_admin = current_user.has_role("admin")
         if not is_admin and regrade_task.assigned_to_user_id != current_user.id:
             flash("You are not assigned to this regrade task.", "danger")
             return redirect(url_for("grading.regrade_tasks"))
@@ -566,228 +563,7 @@ def regrade_task_detail(regrade_task_id: int):
         )
 
 
-@roles_required("regrade_adjudicator", "admin")
-def regrade_task_submit(regrade_task_id: int):
-    if not regrade_task_id or regrade_task_id <= 0:
-        flash("Invalid regrade task reference.", "danger")
-        return redirect(url_for("grading.regrade_tasks"))
-
-    label_id = request.form.get("label_id", type=int)
-    comment = (request.form.get("comment") or "").strip() or None
-    action = (request.form.get("action") or "").strip().lower()
-
-    raw_selected_features = request.form.getlist("selected_features")
-    selected_feature_ids: list[int] = []
-    for raw_feature in raw_selected_features:
-        if raw_feature in (None, ""):
-            continue
-        try:
-            selected_feature_ids.append(int(raw_feature))
-        except (TypeError, ValueError):
-            flash("Invalid feature selection submitted.", "danger")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-    unique_feature_ids: list[int] = []
-    seen_feature_ids: set[int] = set()
-    for feature_id in selected_feature_ids:
-        if feature_id not in seen_feature_ids:
-            unique_feature_ids.append(feature_id)
-            seen_feature_ids.add(feature_id)
-
-    if not label_id or not isinstance(label_id, int) or label_id <= 0:
-        flash("Invalid label ID.", "danger")
-        return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-    with transaction_scope() as db:
-        lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
-        regrade_task = _fetch_regrade_task(db, regrade_task_id, allowed_lab_unit_ids)
-        if not regrade_task:
-            flash("Regrade task not found.", "danger")
-            return redirect(url_for("grading.regrade_tasks"))
-
-        is_admin = current_user.has_role("admin", "local_admin")
-        if not is_admin and regrade_task.assigned_to_user_id != current_user.id:
-            flash("You are not assigned to this regrade task.", "danger")
-            return redirect(url_for("grading.regrade_tasks"))
-
-        source_task = regrade_task.source_task
-        if not source_task:
-            flash("Source task not available for regrade.", "danger")
-            return redirect(url_for("grading.regrade_tasks"))
-
-        disease_gradings = fetch_active_disease_gradings(db, regrade_task.disease_id)
-        if not disease_gradings:
-            flash("No disease gradings available for this task.", "danger")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        label = next((dg for dg in disease_gradings if dg.id == label_id), None)
-        if not label:
-            flash("Invalid label.", "danger")
-            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        selected_features_json = None
-        feature_metadata_by_id: dict[int, dict[str, object]] = {}
-        if unique_feature_ids:
-            available_features = (
-                db.query(GradingsFeatures)
-                .filter(GradingsFeatures.disease_grading_id == label_id)
-                .all()
-            )
-            features_by_id = {feature.id: feature for feature in available_features}
-            invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
-            if invalid_features:
-                flash("One or more selected features are not valid for the chosen grade.", "danger")
-                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-            selected_feature_entities = sorted(
-                (features_by_id[fid] for fid in unique_feature_ids),
-                key=lambda feature: ((feature.sr_no or 0), feature.id),
-            )
-            feature_metadata_by_id = {
-                int(feature.id): {
-                    "label": feature.label,
-                    "sr_no": feature.sr_no,
-                }
-                for feature in selected_feature_entities
-            }
-            selected_features_json = json.dumps(
-                [
-                    {
-                        "id": feature.id,
-                        "label": feature.label,
-                        "sr_no": feature.sr_no,
-                    }
-                    for feature in selected_feature_entities
-                ]
-            )
-
-        raw_feature_geometry = request.form.get("feature_geometry_json")
-        parsed_feature_geometry = None
-        if raw_feature_geometry is not None:
-            parsed_feature_geometry = parse_feature_geometry_payload(raw_feature_geometry)
-            if raw_feature_geometry.strip() and parsed_feature_geometry is None:
-                flash("Invalid feature geometry submitted.", "danger")
-                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        image_uuid = _resolve_image_uuid(source_task)
-        image_metadata = _fetch_image_metadata(db, image_uuid)
-        if raw_feature_geometry:
-            is_valid_geometry, geometry_error = validate_feature_geometry_payload(
-                parsed_feature_geometry, unique_feature_ids, image_metadata
-            )
-            if not is_valid_geometry:
-                flash(geometry_error or "Invalid feature geometry submitted.", "danger")
-                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-            annotation_context = resolve_task_annotation_context(db, source_task)
-            is_policy_valid, policy_error = validate_geometry_policy(
-                parsed_feature_geometry,
-                annotation_context,
-            )
-            if not is_policy_valid:
-                flash(policy_error or "Annotation policy validation failed.", "danger")
-                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        existing_grade = fetch_existing_grade_for_user(
-            db,
-            source_task.id,
-            current_user.id,
-            "regrade_adj",
-            user=current_user,
-        )
-        if raw_feature_geometry is None:
-            # Field missing entirely (legacy/non-JS submit): preserve prior geometry.
-            feature_geometry = existing_grade.feature_geometry_json if existing_grade else None
-        elif not raw_feature_geometry.strip():
-            # Field present but empty means user cleared annotations.
-            feature_geometry = None
-        else:
-            feature_geometry = prepare_feature_geometry_for_storage(
-                parsed_feature_geometry,
-                image_metadata,
-                feature_metadata_by_id=feature_metadata_by_id if unique_feature_ids else None,
-                annotation_context=annotation_context.to_dict(),
-            )
-        if existing_grade and existing_grade.created_at:
-            if (utcnow() - existing_grade.created_at) >= REVISION_WINDOW:
-                flash(
-                    f"Revision window has closed ({REVISION_WINDOW_HOURS} hours).",
-                    "warning",
-                )
-                return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
-
-        disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()
-        disease = None
-        if disease_grading:
-            disease = db.query(Disease).filter(Disease.id == disease_grading.disease_id).first()
-
-        if existing_grade:
-            existing_grade.disease_grading_id = label_id
-            existing_grade.comment = comment
-            existing_grade.selected_features_json = selected_features_json
-            existing_grade.feature_geometry_json = feature_geometry
-            existing_grade.disease_name = disease.name if disease else None
-            existing_grade.grade_name = disease_grading.impression if disease_grading else None
-            existing_grade.grade_description = disease_grading.guidelines if disease_grading else None
-            db.add(existing_grade)
-            db.flush()
-        else:
-            new_grade = Grade(
-                task_id=source_task.id,
-                grader_user_id=current_user.id,
-                role_slot="regrade_adj",
-                disease_grading_id=label_id,
-                comment=comment,
-                selected_features_json=selected_features_json,
-                feature_geometry_json=feature_geometry,
-                disease_name=disease.name if disease else None,
-                grade_name=disease_grading.impression if disease_grading else None,
-                grade_description=disease_grading.guidelines if disease_grading else None,
-            )
-            db.add(new_grade)
-            db.flush()
-
-        consensus = db.query(Consensus).filter(Consensus.task_id == source_task.id).first()
-        if consensus:
-            consensus.final_disease_grading_id = label_id
-            consensus.method = "regrade"
-            consensus.decided_by_user_id = current_user.id
-            consensus.decided_at = utcnow()
-            consensus.final_disease_name = disease.name if disease else None
-            consensus.final_grade_name = disease_grading.impression if disease_grading else None
-            consensus.final_grade_description = disease_grading.guidelines if disease_grading else None
-        else:
-            consensus = Consensus(
-                task_id=source_task.id,
-                final_disease_grading_id=label_id,
-                method="regrade",
-                decided_by_user_id=current_user.id,
-                decided_at=utcnow(),
-                final_disease_name=disease.name if disease else None,
-                final_grade_name=disease_grading.impression if disease_grading else None,
-                final_grade_description=disease_grading.guidelines if disease_grading else None,
-            )
-            db.add(consensus)
-
-        regrade_task.status = "regrade_done"
-
-        regrade_logger.info(
-            "Regrade submitted [regrade_task_id=%s] [task_id=%s] [user_id=%s] [label_id=%s] [comment=%s]",
-            sanitize_log_value(regrade_task.id),
-            sanitize_log_value(source_task.id),
-            sanitize_log_value(current_user.id),
-            sanitize_log_value(label_id),
-            sanitize_log_value(comment or ""),
-        )
-
-        flash("Regrade submitted successfully.", "success")
-
-        if action == "save_next":
-            return redirect(url_for("grading.start_random_regrade_task"))
-
-        return redirect(url_for("grading.regrade_tasks"))
-
-
-@roles_required("admin", "data_manager")
+@login_required
 def regrade_task_reassign(regrade_task_id: int):
     if not regrade_task_id or regrade_task_id <= 0:
         flash("Invalid regrade task reference.", "danger")
@@ -799,9 +575,18 @@ def regrade_task_reassign(regrade_task_id: int):
         return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
     with transaction_scope() as db:
-        _lab_units, allowed_lab_unit_ids = _fetch_allowed_lab_units(db)
+        _lab_units, allowed_lab_unit_ids = _fetch_manager_lab_units(db)
         regrade_task = _fetch_regrade_task(db, regrade_task_id, allowed_lab_unit_ids)
         if not regrade_task:
+            flash("Regrade task not found.", "danger")
+            return redirect(url_for("grading.regrade_tasks"))
+
+        if not user_has_task_capability(
+            db,
+            user=current_user,
+            task_id=regrade_task.source_task_id,
+            roles=REGRADE_MANAGER_ROLES,
+        ):
             flash("Regrade task not found.", "danger")
             return redirect(url_for("grading.regrade_tasks"))
 
@@ -809,18 +594,21 @@ def regrade_task_reassign(regrade_task_id: int):
             flash("Only pending regrade tasks can be reassigned.", "warning")
             return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
-        eligible_user = (
-            db.query(User)
-            .join(User.roles)
-            .join(user_lab_units, user_lab_units.c.user_id == User.id)
-            .filter(User.id == assigned_to_user_id)
-            .filter(User.is_active.is_(True))
-            .filter(Role.name == "regrade_adjudicator")
-            .filter(user_lab_units.c.lab_unit_id == regrade_task.lab_unit_id)
-            .first()
-        )
+        eligible_user = db.query(User).filter(
+            User.id == assigned_to_user_id,
+            User.is_active.is_(True),
+        ).first()
         if not eligible_user:
             flash("Selected user is not a valid regrade adjudicator for this lab unit.", "danger")
+            return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
+
+        if not user_has_task_capability(
+            db,
+            user=eligible_user,
+            task_id=regrade_task.source_task_id,
+            roles=REGRADE_ROLES,
+        ):
+            flash("Selected user lacks regrade access for this task.", "danger")
             return redirect(url_for("grading.regrade_task_detail", regrade_task_id=regrade_task_id))
 
         if regrade_task.assigned_to_user_id == assigned_to_user_id:

@@ -27,7 +27,7 @@ This document lists the dataset share and download routes introduced for curated
   - Purpose: regenerate OTP for an existing share (invalidates prior OTP).
   - CSRF required.
 
-- `POST /analytics/dataset-curation/<dataset_uuid>/share`
+- `POST /datasets/share` with `dataset_uuid` in the form body
   - Roles: `dataset_creator`, `admin`
   - Purpose: create a share from the dataset detail page.
   - CSRF required.

@@ -10,6 +10,7 @@ from typing import Dict, List
 from flask import current_app, render_template, request, jsonify, flash, redirect, url_for
 
 from auth.roles import roles_required
+from auth.decorators import reauth_required, require_recent_reauthentication
 from models import EncounterFile, EncounterFilePDF, JobItem, PatientEncounters, ZipFile
 from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
@@ -434,6 +435,7 @@ def disk_usage():
 
 
 @roles_required("admin")
+@reauth_required()
 def delete_duplicates():
     """Delete duplicate files from dupmd5 directories."""
     if request.method == "POST":
@@ -518,6 +520,10 @@ def delete_old_processed_zips():
             retention_days = _parse_positive_int(request.form.get("retention_days"), default=30)
             limit = _parse_optional_int(request.form.get("limit"))
             dry_run = request.form.get("dry_run", "true").lower() != "false"
+            if not dry_run:
+                reauth_response = require_recent_reauthentication()
+                if reauth_response is not None:
+                    return reauth_response
 
             with get_db_session() as db_session:
                 result = cleanup_processed_zip_archives(

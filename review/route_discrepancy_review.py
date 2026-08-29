@@ -8,12 +8,15 @@ from flask_login import current_user, login_required
 from sqlalchemy import text
 
 from auth.roles import roles_required
+from auth.decorators import require_recent_reauthentication
+from authz.behaviors import identifier_release_lab_units
 from job_store import db_create_job
 from models import (
     AIModel,
     DiseaseGrading,
     Job,
     LabUnit,
+    ProjectRoleGrant,
     Role,
     Session,
     User,
@@ -34,9 +37,12 @@ from utils.final_grade_basis import (
     normalize_final_grade_basis,
     sql_final_grade_expression,
 )
+from regrade.service import authorized_manager_project_grant_ids
 from .discrepancy_export import (
     ARTIFACT_SCOPE_FILENAME,
     EXPORT_DIR,
+    authorized_export_project_lab_unit_ids,
+    authorized_export_project_grant_ids,
     enqueue_discrepancy_export,
     reauthorize_discrepancy_artifact,
 )
@@ -98,16 +104,43 @@ def render_discrepancy_review(
 
         regrade_adjudicators: List[User] = []
         if user_lab_unit_ids:
-            regrade_query = (
+            classical_user_ids = set(db.execute(
                 select(User)
                 .join(User.roles)
                 .join(user_lab_units, user_lab_units.c.user_id == User.id)
                 .where(Role.name == "regrade_adjudicator")
+                .where(User.is_active.is_(True))
                 .where(user_lab_units.c.lab_unit_id.in_(user_lab_unit_ids))
-                .order_by(User.username)
                 .distinct()
-            )
-            regrade_adjudicators = db.execute(regrade_query).scalars().all()
+            ).scalars().all())
+            project_ids = {project.id for project in projects}
+            project_user_ids: set[int] = set()
+            if project_ids:
+                grant_query = (
+                    select(ProjectRoleGrant.user_id)
+                    .join(Role, Role.id == ProjectRoleGrant.role_id)
+                    .where(
+                        ProjectRoleGrant.active.is_(True),
+                        ProjectRoleGrant.project_id.in_(project_ids),
+                        Role.name == "regrade_adjudicator",
+                    )
+                    .where(
+                        (ProjectRoleGrant.scope_type == "project")
+                        | (
+                            (ProjectRoleGrant.scope_type == "lab_unit")
+                            & ProjectRoleGrant.lab_unit_id.in_(user_lab_unit_ids)
+                        )
+                    )
+                    .distinct()
+                )
+                project_user_ids = set(db.execute(grant_query).scalars().all())
+            candidate_ids = classical_user_ids | project_user_ids
+            if candidate_ids:
+                regrade_adjudicators = db.execute(
+                    select(User)
+                    .where(User.id.in_(candidate_ids), User.is_active.is_(True))
+                    .order_by(User.username)
+                ).scalars().all()
         
         # Apply disease filter (mandatory)
         from flask import flash, redirect, url_for, session
@@ -254,6 +287,18 @@ def render_discrepancy_review(
                 review_route=review_route,
             )
 
+        capability_roles = ["discrepancy_reviewer", "data_exporter"]
+        capability_grant_ids = None
+        allow_classical_capability = current_user.has_role(
+            "discrepancy_reviewer", "data_exporter"
+        )
+        if regrade_creator_mode:
+            capability_roles = ["data_manager"]
+            capability_grant_ids = list(
+                authorized_manager_project_grant_ids(db, actor=current_user)
+            )
+            allow_classical_capability = current_user.has_role("data_manager")
+
         filters = {
             "project_id": project_id,
             "disease_id": disease_id,
@@ -277,11 +322,10 @@ def render_discrepancy_review(
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": allowed_lab_units,
-            "project_capability_role_names": ["discrepancy_reviewer", "data_exporter"],
+            "project_capability_role_names": capability_roles,
+            "project_capability_grant_ids": capability_grant_ids,
             "project_capability_user_id": current_user.id,
-            "allow_classical_capability": current_user.has_role(
-                "discrepancy_reviewer", "data_exporter"
-            ),
+            "allow_classical_capability": allow_classical_capability,
             "task_ids": list(review_queue.task_ids) if review_queue else [],
             "review_queue": review_queue_token or None,
         }
@@ -472,8 +516,18 @@ def discrepancy_review():
 
 
 @bp.route("/discrepancy-export", methods=["POST"])
+@bp.route(
+    "/discrepancy-export-pii",
+    methods=["POST"],
+    endpoint="discrepancy_export_pii",
+)
 @login_required
 def discrepancy_export():
+    pii_action = request.endpoint == "review.discrepancy_export_pii"
+    if pii_action:
+        reauth_response = require_recent_reauthentication()
+        if reauth_response is not None:
+            return reauth_response
     with get_db_session() as db:
         review_queue = None
         review_queue_token = (request.form.get("review_queue") or "").strip()
@@ -484,11 +538,30 @@ def discrepancy_export():
                 )
             except ReviewQueueError:
                 abort(404)
-        allowed_lab_unit_ids = capability_lab_unit_ids(
-            db,
-            user=current_user,
-            roles=EXPORT_ROLES,
-        )
+        if pii_action:
+            allowed_lab_unit_ids = {
+                row.id
+                for row in db.execute(
+                    identifier_release_lab_units(db, select(LabUnit), current_user)
+                ).scalars().unique().all()
+            }
+        else:
+            allowed_lab_unit_ids = capability_lab_unit_ids(
+                db,
+                user=current_user,
+                roles=EXPORT_ROLES,
+            )
+
+        project_id = request.form.get("project_id", type=int)
+        if project_id is not None:
+            allowed_lab_unit_ids = set(allowed_lab_unit_ids).intersection(
+                authorized_export_project_lab_unit_ids(
+                    db,
+                    actor=current_user,
+                    project_id=project_id,
+                    include_identifiers=pii_action,
+                )
+            )
 
         if not allowed_lab_unit_ids:
             from flask import flash, redirect, url_for
@@ -516,13 +589,11 @@ def discrepancy_export():
         final_grade_basis = normalize_final_grade_basis(request.form.get("final_grade_basis"))
         # ... (rest of filtering logic) ...
 
-        include_original_filename = request.form.get("include_original_filename") == "1"
-        if include_original_filename and not current_user.has_role("admin"):
-            include_original_filename = False
+        include_original_filename = pii_action
         skip_image_zips = request.form.get("skip_image_zips") == "1"
 
         filters = {
-            "project_id": request.form.get("project_id", type=int),
+            "project_id": project_id,
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
             "resident_grade": request.form.getlist("resident_grade"),
@@ -544,12 +615,20 @@ def discrepancy_export():
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": list(allowed_lab_unit_ids),
-            "project_capability_role_names": ["data_exporter"],
+            "project_capability_role_names": ["pii_exporter"] if pii_action else ["data_exporter"],
             "project_capability_user_id": current_user.id,
-            "task_ids": list(review_queue.task_ids) if review_queue else [],
-            "allow_classical_capability": current_user.has_role(
-                "data_manager", "data_exporter"
+            "project_capability_grant_ids": sorted(
+                authorized_export_project_grant_ids(
+                    db, actor=current_user, include_identifiers=pii_action
+                )
             ),
+            "task_ids": list(review_queue.task_ids) if review_queue else [],
+            "allow_classical_capability": (
+                current_user.has_role("admin")
+                if pii_action
+                else current_user.has_role("data_manager", "data_exporter")
+            ),
+            "authorization_action": "pii_export" if pii_action else "ordinary_export",
             "include_original_filename": include_original_filename,
             "skip_image_zips": skip_image_zips,
         }

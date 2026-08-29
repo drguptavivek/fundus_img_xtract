@@ -29,6 +29,18 @@ class ProjectLabUnitDTO:
     hospital_id: int
     hospital_name: str
     active: bool
+    sites_can_export_grades: bool
+    sites_can_create_datasets: bool
+    sites_can_share_datasets: bool
+
+
+SITE_FEATURE_FIELDS = frozenset(
+    {
+        "sites_can_export_grades",
+        "sites_can_create_datasets",
+        "sites_can_share_datasets",
+    }
+)
 
 
 def configured_project_lab_unit_ids(db: Session, *, project_id: int) -> frozenset[int]:
@@ -57,6 +69,9 @@ def list_project_lab_units(db: Session, *, project_id: int) -> tuple[ProjectLabU
             hospital_id=row.lab_unit.hospital_id,
             hospital_name=row.lab_unit.hospital.name,
             active=row.active,
+            sites_can_export_grades=row.sites_can_export_grades,
+            sites_can_create_datasets=row.sites_can_create_datasets,
+            sites_can_share_datasets=row.sites_can_share_datasets,
         )
         for row in rows
     )
@@ -68,6 +83,7 @@ def replace_project_lab_units(
     actor: Any,
     project_id: int,
     lab_unit_ids: Iterable[int],
+    site_settings: dict[int, dict[str, bool]] | None = None,
 ) -> tuple[ProjectLabUnitDTO, ...]:
     """Replace the project boundary; only System Admin may mutate it."""
     if not actor.has_role("admin"):
@@ -81,6 +97,14 @@ def replace_project_lab_units(
     ).scalars())
     if existing_lab_ids != selected_ids:
         raise ProjectLabConfigurationError("One or more selected Lab Units do not exist.")
+    normalized_settings = site_settings or {}
+    if set(normalized_settings) - selected_ids:
+        raise ProjectLabConfigurationError("Site settings require an active selected Lab Unit.")
+    for settings in normalized_settings.values():
+        if set(settings) - SITE_FEATURE_FIELDS or any(
+            type(value) is not bool for value in settings.values()
+        ):
+            raise ProjectLabConfigurationError("Project site settings must be explicit booleans.")
 
     existing = {
         row.lab_unit_id: row
@@ -90,8 +114,13 @@ def replace_project_lab_units(
     }
     for lab_unit_id, row in existing.items():
         row.active = lab_unit_id in selected_ids
+        for field_name, value in normalized_settings.get(lab_unit_id, {}).items():
+            setattr(row, field_name, value)
     for lab_unit_id in selected_ids - set(existing):
-        db.add(ProjectLabUnit(project_id=project_id, lab_unit_id=lab_unit_id, active=True))
+        row = ProjectLabUnit(project_id=project_id, lab_unit_id=lab_unit_id, active=True)
+        for field_name, value in normalized_settings.get(lab_unit_id, {}).items():
+            setattr(row, field_name, value)
+        db.add(row)
 
     # Remove latent access outside the new boundary. Rows are retained for audit
     # history and can be deliberately re-created if the Lab Unit is added later.
@@ -150,3 +179,29 @@ def replace_project_lab_units(
 def validate_project_lab_unit(db: Session, *, project_id: int, lab_unit_id: int) -> None:
     if lab_unit_id not in configured_project_lab_unit_ids(db, project_id=project_id):
         raise ProjectLabConfigurationError("Selected Lab Unit is not configured for this project.")
+
+
+def project_site_feature_allows(
+    db: Session,
+    *,
+    project_id: int | None,
+    lab_unit_id: int | None,
+    authority_scope_type: str | None,
+    feature: str,
+) -> bool:
+    """Check one persisted site feature flag; incomplete facts deny."""
+    if feature not in SITE_FEATURE_FIELDS or not project_id:
+        return False
+    if authority_scope_type == "project":
+        return True
+    if authority_scope_type != "lab_unit" or not lab_unit_id:
+        return False
+    return bool(
+        db.execute(
+            select(getattr(ProjectLabUnit, feature)).where(
+                ProjectLabUnit.project_id == project_id,
+                ProjectLabUnit.lab_unit_id == lab_unit_id,
+                ProjectLabUnit.active.is_(True),
+            )
+        ).scalar_one_or_none()
+    )

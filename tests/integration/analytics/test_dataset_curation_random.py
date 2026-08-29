@@ -59,11 +59,11 @@ class TestDatasetCurationRandomSelection:
         disease = db_session.query(Disease).filter_by(name='Glaucoma').first()
         lab_unit = db_session.query(LabUnit).filter_by(id=1).first()
 
-        # A lab-scoped data manager: classical rows are visible only to
-        # users with the matching lab assignment.
+        # Classical dataset lifecycle authority is the dataset_creator role
+        # plus the matching Lab Unit assignment.
         from tests.helpers.factories import UserFactory
         user = UserFactory.create_by_role(
-            db_session, "data_manager", username="dataset_curator_dm",
+            db_session, "dataset_creator", username="dataset_curator_dm",
             lab_units=[lab_unit],
         )
         client = auth_client_factory(user)

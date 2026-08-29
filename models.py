@@ -2041,6 +2041,11 @@ class CuratedDataset(Base):
     filters_json: Mapped[str] = mapped_column(Text, nullable=False)
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    admin_managed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    context_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -2056,6 +2061,14 @@ class CuratedDataset(Base):
         back_populates="dataset",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "admin_managed = true OR "
+            "(context_kind = 'classical' AND project_id IS NULL) OR "
+            "(context_kind = 'project' AND project_id IS NOT NULL)",
+            name="ck_curated_datasets_authorization_context",
+        ),
     )
 
 

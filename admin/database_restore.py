@@ -18,6 +18,7 @@ from flask import Blueprint, render_template, request, jsonify, session
 from flask_login import login_required
 
 from auth.roles import roles_required
+from auth.decorators import reauth_required
 from utils.log_sanitize import sanitize_log_value
 from scripts.merge_users_from_backup import UserImporter
 
@@ -201,6 +202,7 @@ def upload_file():
 
 
 @bp.route('/restore', methods=['POST'])
+@reauth_required()
 def restore_database():
     """Perform database restore with user preservation."""
     try:

@@ -302,7 +302,6 @@ Approximate storage (varies by data volume):
 |------------|------------|---------|
 | `/public/analytics.py` | All | Dashboard analytics |
 | `/analytics/route_model_performance.py` | Pivot views | AI model performance |
-| `/api/kpis/direct_files_kpis.py` | Image listing | Direct upload KPIs |
 | `/utils/mvw_all_img_search.py` | Image listing | Image search |
 | `/review/route_discrepancy_review.py` | All | Discrepancy detection |
 | `/review/discrepancy_export.py` | All | Data export |

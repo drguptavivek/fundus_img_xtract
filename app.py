@@ -184,14 +184,28 @@ def _configure_executors(app: Flask) -> None:
 
 
 def _register_csrf_protection(app: Flask) -> None:
+    from flask_login import current_user
+
+    # Run CSRF from this single hook so bearer-authenticated hybrid APIs can be
+    # exempted without exempting the same endpoint when used by a web session.
+    app.config["WTF_CSRF_CHECK_DEFAULT"] = False
+
     def csrf_protect():
+        if not app.config.get("WTF_CSRF_ENABLED", True):
+            return
         if request.endpoint:
             view_func = current_app.view_functions.get(request.endpoint)
             if view_func and (
                 getattr(view_func, '_token_auth_applied', False)
                 or getattr(view_func, '_credential_auth_applied', False)
+                or (
+                    getattr(view_func, '_session_or_token_auth_applied', False)
+                    and not current_user.is_authenticated
+                    and request.headers.get("Authorization", "").startswith("Bearer ")
+                )
             ):
                 return None
+        csrf.protect()
         auth_logger = logging.getLogger("auth")
         if not auth_logger.isEnabledFor(logging.DEBUG):
             return None
@@ -602,6 +616,10 @@ def _register_login_guard(app: Flask) -> None:
             if view_func and (
                 getattr(view_func, "_token_auth_applied", False)
                 or getattr(view_func, "_credential_auth_applied", False)
+                or (
+                    getattr(view_func, "_session_or_token_auth_applied", False)
+                    and request.headers.get("Authorization", "").startswith("Bearer ")
+                )
             ):
                 return
 

@@ -29,7 +29,7 @@ from utils.pii_detection_queue import run_pii_detection_queue
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_admin():
     with get_db_session() as db:
         hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
@@ -59,7 +59,7 @@ def image_metadata_admin():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_backfill():
     limit = request.form.get("limit", type=int)
     mode = (request.form.get("mode") or "both").strip().lower()
@@ -115,7 +115,7 @@ def image_metadata_backfill():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_status():
     with get_db_session() as db:
         hospital_id = current_user.hospital_id if current_user.has_role("local_admin") and not current_user.has_role("admin") else None
@@ -252,7 +252,7 @@ def _get_processed_daily_counts(allowed_lab_unit_ids: tuple[int, ...], days: int
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_run_pii_queue():
     limit = request.form.get("limit", type=int)
     processed = run_pii_detection_queue(max_jobs=limit)
@@ -261,7 +261,7 @@ def image_metadata_run_pii_queue():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_stop_all():
     cache.set("image_metadata_backfill_stop:global", True, timeout=3600)
     flash("Stop requested. Metadata and PII backfill will halt within the next item.", "warning")
@@ -269,7 +269,7 @@ def image_metadata_stop_all():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_clear_queued():
     with get_db_session() as db:
         jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "queued")
@@ -292,7 +292,7 @@ def image_metadata_clear_queued():
 
 
 @login_required
-@roles_required("admin", "local_admin")
+@roles_required("admin")
 def image_metadata_clear_running():
     with get_db_session() as db:
         jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "running")

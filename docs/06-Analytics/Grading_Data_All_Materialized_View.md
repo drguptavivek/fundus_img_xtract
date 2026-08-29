@@ -181,6 +181,5 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY mvw_grading_data_all;
 - Materialized Views Reference: `Materialized_Views_Reference.md`
 - Scheduler: `utils/materialized_view_scheduler.py`
 - Usage in discrepancy review: `review/route_discrepancy_review.py`
-- Usage in KPIs: `api/kpis/direct_files_kpis.py`
 
 **Last Updated:** January 16, 2026

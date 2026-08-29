@@ -12,6 +12,12 @@ from models import (
     PatientEncounters, ZipFile
 )
 from tests.helpers.test_factories import TestDataFactory
+from tests.helpers.factories import UserFactory
+from media.authorization import (
+    MediaAccessDenied,
+    MediaSourceType,
+    authorize_media_source,
+)
 
 
 @pytest.mark.integration
@@ -110,6 +116,43 @@ class TestEncounterPDFRouteIsolation:
         response = client.get(f"/media/encounter/pdf/{pdf_uuid}")
         # Should get 404 (file not found on disk, but access check passes)
         assert response.status_code == 404
+
+    def test_pdf_requires_scoped_uploader_or_verifier_not_data_manager(
+        self, hospital_data, hosp_a_data_manager, db_session
+    ):
+        lab = hospital_data['hospital_a']['lab_units'][0]
+        encounter = TestDataFactory.create_patient_encounter(
+            db_session, lab_unit_id=lab.id, patient_id="PDF-ROLE-BOUNDARY"
+        )
+        pdf = EncounterFilePDF(
+            uuid=str(uuid.uuid4()),
+            filename="role-boundary.pdf",
+            hospital_id=lab.hospital_id,
+            patient_encounter_id=encounter.id,
+        )
+        verifier = UserFactory.create_by_role(
+            db_session,
+            "verifier",
+            username="pdf_scoped_verifier",
+            lab_units=[lab],
+        )
+        db_session.add(pdf)
+        db_session.flush()
+
+        with pytest.raises(MediaAccessDenied):
+            authorize_media_source(
+                db_session,
+                user=hosp_a_data_manager,
+                media_uuid=pdf.uuid,
+                expected_sources=frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}),
+            )
+        authorized = authorize_media_source(
+            db_session,
+            user=verifier,
+            media_uuid=pdf.uuid,
+            expected_sources=frozenset({MediaSourceType.ENCOUNTER_FILE_PDF}),
+        )
+        assert authorized.source_id == pdf.id
 
 
 @pytest.mark.integration

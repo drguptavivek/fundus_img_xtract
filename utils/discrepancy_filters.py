@@ -158,6 +158,12 @@ def build_discrepancy_filter_query(
                         prg.scope_type = 'lab_unit'
                         AND prg.lab_unit_id = project_task.lab_unit_id
                       )"""
+        authorized_grant_ids = filters.get("project_capability_grant_ids")
+        grant_constraint = (
+            "AND prg.id = ANY(:project_capability_grant_ids)"
+            if authorized_grant_ids is not None
+            else "AND project_role.name = ANY(:project_capability_role_names)"
+        )
         authorization_sql.append(
             """EXISTS (
                   SELECT 1
@@ -173,7 +179,7 @@ def build_discrepancy_filter_query(
                       task_direct.project_id
                     )
                     AND prg.active = TRUE
-                    AND project_role.name = ANY(:project_capability_role_names)
+                    {grant_constraint}
                     AND EXISTS (
                       SELECT 1
                       FROM project_lab_units active_project_lab
@@ -182,7 +188,9 @@ def build_discrepancy_filter_query(
                         AND active_project_lab.active = TRUE
                     )
                     AND ({scope_sql})
-                )""".replace("{scope_sql}", scope_sql)
+                )""".replace("{scope_sql}", scope_sql).replace(
+                    "{grant_constraint}", grant_constraint
+                )
         )
     project_authorization_sql = " OR ".join(authorization_sql)
     classical_authorization_sql = (
@@ -222,6 +230,10 @@ def build_discrepancy_filter_query(
     params["project_capability_user_id"] = int(project_user_id)
     if capability_role_names:
         params["project_capability_role_names"] = capability_role_names
+    if filters.get("project_capability_grant_ids") is not None:
+        params["project_capability_grant_ids"] = list(
+            filters.get("project_capability_grant_ids") or []
+        )
 
     if lab_unit_id and lab_unit_id in allowed_lab_units:
         where_clauses.append("v.task_lab_unit_id = :lab_unit_id")

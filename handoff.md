@@ -23,7 +23,8 @@ the new authorization contract.
 4. [`handoff/04_EXECUTION_PLAN.md`](handoff/04_EXECUTION_PLAN.md)
 5. [`handoff/05_START_PROMPT.md`](handoff/05_START_PROMPT.md)
 6. [`handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md`](handoff/06_AUTHZ_RATIONALE_AND_ROUTE_CONTRACT.md)
-7. [`handoff/full_suite_failures.txt`](handoff/full_suite_failures.txt)
+7. [`handoff/07_POLICY_DECISIONS.md`](handoff/07_POLICY_DECISIONS.md)
+8. [`handoff/full_suite_failures.txt`](handoff/full_suite_failures.txt)
 
 ## Status (2026-08-28, this branch)
 

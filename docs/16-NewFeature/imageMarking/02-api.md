@@ -36,7 +36,7 @@ There is no standalone save API. Geometry is submitted with grade forms:
 
 ### Save Methods (current)
 - `grading/dual_grading.py::dual_grading_submit`
-- `grading/regrade_tasks.py::regrade_task_submit`
+- `api/regrade_tasks.py::submit_regrade_api`, delegating to `regrade.service.submit_regrade`
 - `grading/intra_rater.py::intra_rater_submit`
 - `services/intra_rater_service.py::submit_grade`
 

@@ -19,7 +19,7 @@ def _resolve_default_quota(db_session) -> int | None:
     return get_direct_upload_settings(db_session).lifetime_quota
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def list_upload_quotas():
     """Display user upload quotas, usage, and allow edits."""
     with get_db_session() as db:
@@ -64,7 +64,7 @@ def list_upload_quotas():
         )
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def update_upload_quota(user_id: int):
     """Update a user's quota and optionally reset/upload count."""
     new_quota_raw = request.form.get("file_upload_quota")
@@ -106,7 +106,7 @@ def update_upload_quota(user_id: int):
         return redirect(url_for("admin.list_upload_quotas"), code=303)
 
 
-@roles_required("admin", "data_manager")
+@roles_required("admin")
 def upload_quota_redirect():
     """Backward-compatible redirect for singular path."""
     return redirect(url_for("admin.list_upload_quotas"), code=302)

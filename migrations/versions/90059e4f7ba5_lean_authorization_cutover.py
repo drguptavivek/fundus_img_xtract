@@ -23,6 +23,16 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
+    # Seed the two roles introduced by the clean authorization cutover. PII
+    # export is direct, exact-scope project authority; User Manager is a
+    # classical hospital-scoped role appointed only by Admin.
+    bind.execute(
+        sa.text(
+            "INSERT INTO roles (name) VALUES ('pii_exporter'), ('user_manager') "
+            "ON CONFLICT (name) DO NOTHING"
+        )
+    )
+
     project_lab_columns = {
         column["name"] for column in sa.inspect(bind).get_columns("project_lab_units")
     }
@@ -40,6 +50,74 @@ def upgrade() -> None:
                     server_default=sa.text("false"),
                     nullable=False,
                 ),
+            )
+
+    # Legacy datasets have no trustworthy record of whether their creator had
+    # project-wide or site-specific authority. Keep them active, but make their
+    # management provenance explicit: only Admin manages them after cutover.
+    if inspector.has_table("curated_datasets"):
+        dataset_columns = {
+            column["name"] for column in sa.inspect(bind).get_columns("curated_datasets")
+        }
+        if "admin_managed" not in dataset_columns:
+            op.add_column(
+                "curated_datasets",
+                sa.Column(
+                    "admin_managed",
+                    sa.Boolean(),
+                    server_default=sa.text("true"),
+                    nullable=False,
+                ),
+            )
+            bind.execute(sa.text("UPDATE curated_datasets SET admin_managed = true"))
+            op.alter_column(
+                "curated_datasets",
+                "admin_managed",
+                server_default=sa.text("false"),
+            )
+        dataset_columns = {
+            column["name"] for column in sa.inspect(bind).get_columns("curated_datasets")
+        }
+        if "context_kind" not in dataset_columns:
+            op.add_column(
+                "curated_datasets",
+                sa.Column("context_kind", sa.String(length=16), nullable=True),
+            )
+            bind.execute(
+                sa.text(
+                    "UPDATE curated_datasets SET context_kind = 'classical' "
+                    "WHERE admin_managed = true"
+                )
+            )
+        if "project_id" not in dataset_columns:
+            op.add_column(
+                "curated_datasets",
+                sa.Column("project_id", sa.Integer(), nullable=True),
+            )
+            op.create_foreign_key(
+                "fk_curated_datasets_project_id_projects",
+                "curated_datasets",
+                "projects",
+                ["project_id"],
+                ["id"],
+                ondelete="RESTRICT",
+            )
+            op.create_index(
+                "ix_curated_datasets_project_id",
+                "curated_datasets",
+                ["project_id"],
+            )
+        dataset_checks = {
+            constraint["name"]
+            for constraint in sa.inspect(bind).get_check_constraints("curated_datasets")
+        }
+        if "ck_curated_datasets_authorization_context" not in dataset_checks:
+            op.create_check_constraint(
+                "ck_curated_datasets_authorization_context",
+                "curated_datasets",
+                "admin_managed = true OR "
+                "(context_kind = 'classical' AND project_id IS NULL) OR "
+                "(context_kind = 'project' AND project_id IS NOT NULL)",
             )
 
     # Convert the retired per-user capability flags into the same exact
@@ -316,6 +394,28 @@ def downgrade() -> None:
     """Remove lean-only persisted facts without deleting user relationships."""
     bind = op.get_bind()
     inspector = sa.inspect(bind)
+    if inspector.has_table("curated_datasets"):
+        dataset_columns = {
+            column["name"] for column in inspector.get_columns("curated_datasets")
+        }
+        dataset_checks = {
+            constraint["name"]
+            for constraint in inspector.get_check_constraints("curated_datasets")
+        }
+        if "ck_curated_datasets_authorization_context" in dataset_checks:
+            op.drop_constraint(
+                "ck_curated_datasets_authorization_context",
+                "curated_datasets",
+                type_="check",
+            )
+        if "project_id" in dataset_columns:
+            op.drop_index("ix_curated_datasets_project_id", table_name="curated_datasets")
+            op.drop_column("curated_datasets", "project_id")
+        if "context_kind" in dataset_columns:
+            op.drop_column("curated_datasets", "context_kind")
+        if "admin_managed" in dataset_columns:
+            op.drop_column("curated_datasets", "admin_managed")
+        inspector = sa.inspect(bind)
     grant_columns = {
         column["name"] for column in inspector.get_columns("project_role_grants")
     }

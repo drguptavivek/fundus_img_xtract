@@ -247,7 +247,7 @@ code** (Divergences).
 `POST /datasets/share` (creator or admin; finalized only) mints a share:
 hashed token + hashed one-time password, expiry ≤168 h, emailed link.
 Toggle/regenerate-otp: creator or admin. A near-duplicate share route
-exists under `/analytics/dataset-curation/<uuid>/share` restricted to
+exists under canonical `/datasets/share` and is restricted to
 `dataset_creator` only (admin cannot use that one) — see Divergences.
 
 ## 15. Download (shared links)
@@ -328,8 +328,9 @@ identifier-bearing JSON/Excel under `/api/kpis/*` restricted to
 9. Reports by reference (screens) vs by-UUID PDFs use different role sets —
    an optometrist/fileUploader sees the button but the PDF fetch 404s;
    the viewer's project path is where verifier/field report access works.
-10. `/analytics/encounter-files` scopes by explicit lab assignment only
-    (no admin override, no project grants) unlike sibling analytics pages.
+10. The pre-project `/analytics/encounter-files` KPI page and its API family
+    were retired rather than carrying their mixed throughput, clinical-result
+    and patient-line-list semantics into project authorization.
 11. Global stop/clear controls on per-hospital backfill tools; the
     sensitive-operations audit is unscoped for local_admin/data_manager;
     upload quotas and the global user-activity feed give data_manager

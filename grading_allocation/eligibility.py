@@ -290,7 +290,7 @@ def _role_names_have_capacity(
     qualification to grade, whichever slot is being filled, is the
     ``ophthalmologist`` role.
     """
-    return "ophthalmologist" in role_names
+    return bool(role_names & {"ophthalmologist", "field_ophthalmologist"})
 
 
 def _allocation_key(

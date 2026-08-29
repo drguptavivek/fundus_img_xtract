@@ -4,7 +4,7 @@ This page documents the thumbnail maintenance dashboard and its AJAX endpoints.
 
 ## Routes
 
-- `GET /admin/thumbnail_management`
+- `GET /admin/thumbnail-management`
 - `GET /admin/api/thumbnail_stats`
 - `GET /admin/api/maintenance_status`
 - `GET /admin/api/thumbnail/health_check`
@@ -14,7 +14,7 @@ This page documents the thumbnail maintenance dashboard and its AJAX endpoints.
 - `POST /admin/api/thumbnail/validate_integrity`
 - `POST /admin/api/thumbnail/full_maintenance`
 
-## `GET /admin/thumbnail_management`
+## `GET /admin/thumbnail-management`
 
 HTML dashboard for admins and data managers.
 

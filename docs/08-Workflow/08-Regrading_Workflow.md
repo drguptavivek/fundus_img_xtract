@@ -29,7 +29,7 @@ This workflow documents how regrade tasks are created and completed.
    - Per-disease button: `GET /grading/regrade-tasks/random?disease_id=<id>`
    - Or open a specific task: `GET /grading/regrade-task/<regrade_task_id>`
 3. Review the image and submit grade:
-   - Route: `POST /grading/regrade-task/<regrade_task_id>/submit`
+   - API: `POST /api/regrade-tasks/<regrade_task_id>/submission`
 4. System actions on submit:
    - Create/update `Grade` with `role_slot = 'regrade_adj'`
    - Create/update `Consensus` with `method = 'regrade'` (overwrites prior consensus)

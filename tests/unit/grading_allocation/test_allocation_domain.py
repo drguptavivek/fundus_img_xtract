@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 
 from grading_allocation import eligibility as eligibility_module
 from grading_allocation.constants import AllocationCapacity, AllocationScope
@@ -31,8 +31,10 @@ from models import (
     Grade,
     GradingTask,
     Project,
+    LabUnit,
     UserDiseaseUnitRole,
 )
+from project_configuration.models import ProjectLabUnit
 from tests.helpers.factories import ImageFactory, UserFactory
 from tests.helpers.test_factories import TestDataFactory
 from upload_profiles.models import (
@@ -84,6 +86,11 @@ def _project_with_image_target(db_session, disease):
             ProjectUploadProfile(project_id=project.id, upload_profile_id=profile.id, active=True),
             UploadProfileDisease(upload_profile_id=profile.id, disease_id=disease.id, is_default=True),
         ]
+    )
+    db_session.flush()
+    db_session.add_all(
+        ProjectLabUnit(project_id=project.id, lab_unit_id=lab_id, active=True)
+        for lab_id in db_session.execute(select(LabUnit.id)).scalars()
     )
     db_session.flush()
     return project, profile
@@ -439,6 +446,16 @@ def test_bulk_eligibility_queries_are_bounded_without_authorization_cache(
         lab_units=[lab],
     )
     db_session.add(
+        UserDiseaseUnitRole(
+            user_id=resident.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            can_grade_resident=True,
+            active=True,
+        )
+    )
+    db_session.flush()
+    db_session.add(
         ProjectGraderAllocation(
             project_id=project.id,
             user_id=resident.id,
@@ -783,6 +800,16 @@ def test_service_creates_normalized_allocation_and_treats_arbitrator_as_optional
         username=f"service_resident_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
+    db_session.add(
+        UserDiseaseUnitRole(
+            user_id=resident.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            can_grade_resident=True,
+            active=True,
+        )
+    )
+    db_session.flush()
     allocation = create_or_reactivate_allocation(
         admin_user.id,
         project.id,
@@ -829,6 +856,7 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
             active=True,
         )
     )
+    db_session.flush()
     create_or_reactivate_allocation(
         admin.id,
         project.id,
@@ -872,6 +900,16 @@ def test_service_enables_enforcement_with_resident_coverage_only(
         username=f"policy_resident_{suffix}",
         lab_units=[lab],
     )
+    db_session.add(
+        UserDiseaseUnitRole(
+            user_id=resident.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+            can_grade_resident=True,
+            active=True,
+        )
+    )
+    db_session.flush()
     create_or_reactivate_allocation(
         admin.id,
         project.id,
@@ -925,6 +963,21 @@ def test_service_rejects_enforcement_with_arbitrator_but_no_resident(
         username=f"split_lab_arbitrator_{suffix}",
         lab_units=[lab],
     )
+    existing_slot = db_session.query(UserDiseaseUnitRole).filter_by(
+        user_id=arbitrator.id,
+        disease_id=disease.id,
+        lab_unit_id=lab.id,
+    ).one_or_none()
+    if existing_slot is None:
+        existing_slot = UserDiseaseUnitRole(
+            user_id=arbitrator.id,
+            disease_id=disease.id,
+            lab_unit_id=lab.id,
+        )
+        db_session.add(existing_slot)
+    existing_slot.can_arbitrate = True
+    existing_slot.active = True
+    db_session.flush()
     create_or_reactivate_allocation(
         admin.id,
         project.id,

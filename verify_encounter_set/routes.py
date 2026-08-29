@@ -46,6 +46,8 @@ from upload_profiles.image_task_routing import (
     required_image_task_routing_fields,
 )
 from db_transaction_manager import transaction_scope
+from authz import access_context, role_scoped_rows
+from services.uploads.access import encounter_columns
 from utils.utils import with_session
 from marshmallow import Schema, fields, validate, ValidationError
 from . import bp
@@ -518,18 +520,21 @@ def _verification_context(db, uuid: str) -> dict:
         "image_descriptors": image_descriptors,
         "image_descriptor_vocabulary": IMAGE_DESCRIPTOR_VOCABULARY,
         "summary_eye_groups": _summary_eye_groups(images, image_descriptors),
-        "can_reopen": _can_reopen_verification(db),
+        "can_reopen": _can_reopen_verification(db, encounter),
         "verification_history": _recent_verification_history(db, encounter),
     }
 
 
-def _can_reopen_verification(db) -> bool:
-    """Mirror reopen_verification's own explicit Admin gate."""
-    if current_user.has_role("admin"):
-        return True
-    from data_authorization.service import user_has_any_project_role
-
-    return user_has_any_project_role(db, user_id=current_user.id, role_names=("admin",))
+def _can_reopen_verification(db, encounter: PatientEncounters) -> bool:
+    query = role_scoped_rows(
+        select(PatientEncounters.id).where(PatientEncounters.id == encounter.id),
+        access_context(db, current_user),
+        encounter_columns(PatientEncounters),
+        lab_roles={"verifier"},
+        project_roles={"verifier"},
+        allow_admin=True,
+    )
+    return db.execute(query).scalar_one_or_none() is not None
 
 
 def _recent_verification_history(db, encounter: PatientEncounters, limit: int = 5) -> list[dict]:
@@ -958,35 +963,15 @@ def update_position():
     except ValueError:
         return jsonify({"success": False, "message": "Position must be a positive integer"}), 400
 
-    with transaction_scope() as db:
-        img = db.query(EncounterSetImage).filter_by(uuid=image_uuid).first()
-        if not img:
-            return jsonify({"success": False, "message": "Image not found"}), 404
-
-        # Verify encounter is accessible (apply hospital scoping)
-        query = db.query(PatientEncounters).filter_by(id=img.patient_encounter_id)
-        query = _apply_verification_scope(query)
-        encounter = query.first()
-
-        if not encounter:
-            # Encounter not found or user doesn't have access
-            return jsonify({"success": False, "message": "Image not found"}), 404
-        if encounter.encounter_verified_status == "verified":
-            return _already_verified_json_response(encounter)
-
-        # Check if another image already occupies this position
-        existing = db.query(EncounterSetImage).filter_by(
-            patient_encounter_id=img.patient_encounter_id,
-            spatial_position=new_position
-        ).first()
-
-        if existing:
-            # Swap positions
-            existing.spatial_position = img.spatial_position
-
-        img.spatial_position = new_position
-
-        return jsonify({"success": True})
+    from encounter_sets.position_service import PositionMutationError, move_encounter_set_image
+    try:
+        with transaction_scope() as db:
+            move_encounter_set_image(
+                db, user=current_user, image_uuid=image_uuid, new_position=new_position
+            )
+    except PositionMutationError as exc:
+        return jsonify({"success": False, "message": str(exc)}), exc.status_code
+    return jsonify({"success": True})
 
 @bp.route("/exclude/<uuid>", methods=["POST"])
 @login_required
@@ -1036,7 +1021,6 @@ def exclude_encounter_set(uuid):
 
 @bp.route("/reopen/<uuid>", methods=["POST"])
 @login_required
-@roles_required("admin")
 def reopen_verification(uuid):
     """Reopen a verified EncounterSet for correction, if no grading has started."""
     from verify_encounter_set.models import EncounterVerificationHistory
@@ -1048,7 +1032,15 @@ def reopen_verification(uuid):
             .filter_by(uuid=uuid, is_set_based=True)
             .with_for_update()
         )
-        encounter = _apply_verification_mutation_scope(encounter_query).first()
+        encounter_query = role_scoped_rows(
+            encounter_query,
+            access_context(db, current_user),
+            encounter_columns(PatientEncounters),
+            lab_roles={"verifier"},
+            project_roles={"verifier"},
+            allow_admin=True,
+        )
+        encounter = encounter_query.first()
         if not encounter:
             abort(404)
 

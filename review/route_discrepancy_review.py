@@ -660,7 +660,10 @@ def discrepancy_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "discrepancy_export").first()
         if not job:
             abort(404)
-        if job.status != "done" or job.uploader_user_id != current_user.id:
+        if job.status != "done" or (
+            job.uploader_user_id != current_user.id
+            and not current_user.has_role("admin")
+        ):
             abort(404)
         filters_path = (EXPORT_DIR / job_token / "filters.json").resolve()
         scope_path = (EXPORT_DIR / job_token / ARTIFACT_SCOPE_FILENAME).resolve()

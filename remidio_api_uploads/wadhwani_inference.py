@@ -219,12 +219,58 @@ def _allowed_wai_lab_ids(db, project_id: int, *, results_only: bool) -> frozense
     )
 
 
+def _project_job_has_complete_task_lineage(
+    db, job: Job, allowed_lab_ids: frozenset[int]
+) -> bool:
+    """Require every project job item to resolve to one in-project authorized task."""
+    items = db.execute(
+        select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)
+    ).scalars().all()
+    task_ids = [_task_id_from_item(item) for item in items]
+    if not items or any(task_id is None for task_id in task_ids):
+        return False
+    resolved_task_ids = [task_id for task_id in task_ids if task_id is not None]
+    lineage_rows = db.execute(
+        select(
+            GradingTask.id,
+            GradingTask.lab_unit_id,
+            PatientEncounters.project_id,
+        )
+        .join(
+            EncounterSetImage,
+            EncounterSetImage.id == GradingTask.encounter_set_image_id,
+        )
+        .join(
+            PatientEncounters,
+            PatientEncounters.id == EncounterSetImage.patient_encounter_id,
+        )
+        .where(GradingTask.id.in_(resolved_task_ids))
+    ).all()
+    lineage_by_task_id = {
+        task_id: (lab_unit_id, project_id)
+        for task_id, lab_unit_id, project_id in lineage_rows
+    }
+    return len(lineage_by_task_id) == len(resolved_task_ids) and all(
+        task_id in lineage_by_task_id
+        and lineage_by_task_id[task_id][0] is not None
+        and lineage_by_task_id[task_id][0] in allowed_lab_ids
+        and lineage_by_task_id[task_id][1] == job.project_id
+        for task_id in resolved_task_ids
+    )
 def _require_job_access(db, job_token: str) -> None:
     job = db.execute(select(Job).where(Job.token == job_token)).scalar_one_or_none()
     if job is None:
         abort(404)
     if job.project_id is None:
-        if current_user.has_role("admin", "verifier", "optometrist"):
+        from jobs.access import job_visible_to_actor
+        from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+
+        if job_visible_to_actor(
+            job,
+            user_id=current_user.id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=get_user_lab_unit_ids_no_admin_override(current_user.id),
+        ):
             return
         abort(404)
     can_view_results = can_view_wai_results(
@@ -241,19 +287,12 @@ def _require_job_access(db, job_token: str) -> None:
     )
     if job.lab_unit_id is not None and job.lab_unit_id not in allowed_lab_ids:
         abort(404)
-    if job.lab_unit_id is None:
-        from project_configuration.service import configured_project_lab_unit_ids
-
-        configured_lab_ids = configured_project_lab_unit_ids(db, project_id=job.project_id)
-        if allowed_lab_ids != configured_lab_ids:
-            task_lab_ids = set(db.execute(
-                select(GradingTask.lab_unit_id)
-                .join(JobItem, JobItem.task_id == GradingTask.id)
-                .where(JobItem.job_id == job.id)
-                .distinct()
-            ).scalars())
-            if not task_lab_ids or not task_lab_ids.issubset(allowed_lab_ids):
-                abort(404)
+    if (
+        job.lab_unit_id is None
+        and not current_user.has_role("admin")
+        and not _project_job_has_complete_task_lineage(db, job, allowed_lab_ids)
+    ):
+        abort(404)
 
 
 def _madhunetra_page(*, include_encounters: bool, partial: bool = False):

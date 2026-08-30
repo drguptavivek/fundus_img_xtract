@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 from auth.roles import roles_required
 from job_store import db_create_job, db_get_job_payload
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select, true as sa_true
+from sqlalchemy import select
 from models import CuratedDataset, CuratedDatasetItem, DatasetExport, Job, JobItem, LabUnit
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
@@ -14,25 +14,15 @@ from utils.rate_limiter import rate_limit
 from review.discrepancy_export import EXPORT_DIR
 
 from . import jobs_bp
+from .access import job_visible_to_actor, visible_jobs_predicate
 
-# Export jobs are always created with lab_unit_id=None, so the blanket
-# "NULL lab unit is visible to everyone" rule made one user's dataset or
-# discrepancy export listable, downloadable and re-runnable by any other
-# job-role holder. For those types, visibility is ownership or admin.
-EXPORT_JOB_TYPES = ("dataset_export", "discrepancy_export")
-
-
-def _job_visible(job, allowed_lab_units) -> bool:
-    """Whether current_user may see this job."""
-    if current_user.has_role("admin"):
-        return True
-    if job.uploader_user_id == current_user.id:
-        return True
-    if job.upload_type in EXPORT_JOB_TYPES:
-        return False
-    if job.lab_unit_id is None:
-        return True
-    return job.lab_unit_id in (allowed_lab_units or [])
+def _current_user_can_see(job: Job, allowed_lab_units: set[int] | list[int]) -> bool:
+    return job_visible_to_actor(
+        job,
+        user_id=current_user.id,
+        is_admin=current_user.has_role("admin"),
+        allowed_lab_unit_ids=allowed_lab_units or (),
+    )
 
 
 @jobs_bp.route("/", methods=["GET"])
@@ -53,14 +43,11 @@ def list_recent_jobs():
         per_page = min(max(per_page, 10), 100)
         
         # Build the base query: show jobs in allowed labs OR created by the user OR lab_unit_id is NULL
-        if current_user.has_role("admin"):
-            visibility_filter = sa_true()
-        else:
-            visibility_filter = (
-                (Job.lab_unit_id.in_(allowed_lab_units)) |
-                (Job.lab_unit_id.is_(None) & Job.upload_type.notin_(EXPORT_JOB_TYPES)) |
-                (Job.uploader_user_id == current_user.id)
-            )
+        visibility_filter = visible_jobs_predicate(
+            user_id=current_user.id,
+            is_admin=current_user.has_role("admin"),
+            allowed_lab_unit_ids=allowed_lab_units,
+        )
         query = (
             db.query(Job)
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
@@ -90,7 +77,7 @@ def list_recent_jobs():
         # Get all unique job types for the filter dropdown
         job_types = (
             db.query(Job.upload_type)
-            .filter(Job.upload_type.isnot(None))
+            .filter(visibility_filter, Job.upload_type.isnot(None))
             .distinct()
             .all()
         )
@@ -161,7 +148,7 @@ def job_status_json(job_token: str):
         if not job:
             return jsonify({"error": "job not found"}), 404
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not _job_visible(job, allowed_lab_units):
+        if not _current_user_can_see(job, allowed_lab_units):
             return jsonify({"error": "job not found"}), 404
         
         payload = db_get_job_payload(job_token)
@@ -194,7 +181,10 @@ def job_status_json(job_token: str):
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_page(job_token: str):
     with get_db_session() as db:
-        job = db.query(Job.upload_type).filter(Job.token == job_token).first()
+        job = db.query(Job).filter(Job.token == job_token).first()
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not job or not _current_user_can_see(job, allowed_lab_units):
+            abort(404)
     if job and job.upload_type in ("discrepancy_export", "dataset_export"):
         return render_template("jobs/export_job_status.html", job_id=job_token)
     return render_template("jobs/job_status.html", job_id=job_token)
@@ -214,7 +204,7 @@ def regenerate_export(job_token: str):
             abort(404)
 
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not _job_visible(job, allowed_lab_units):
+        if not _current_user_can_see(job, allowed_lab_units):
             abort(404)
 
         xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
@@ -358,7 +348,7 @@ def upload_results(job_token):
             return redirect(url_for("direct_uploads.upload"))
 
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
+        if not _current_user_can_see(job, allowed_lab_units):
             flash("Upload job not found or unauthorized access.", "danger")
             return redirect(url_for("direct_uploads.upload"))
 
@@ -381,6 +371,11 @@ def upload_results(job_token):
 @login_required
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def upload_processing(job_id):
+    with get_db_session() as db:
+        job = db.query(Job).filter(Job.token == job_id).first()
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not job or not _current_user_can_see(job, allowed_lab_units):
+            abort(404)
     return render_template("jobs/jobs_processing.html", job_id=job_id)
 
 

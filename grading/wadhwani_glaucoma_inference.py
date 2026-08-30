@@ -163,6 +163,9 @@ def wadhwani_glaucoma_inference_run():
 
 @roles_required("admin", "local_admin", "data_manager")
 def wadhwani_glaucoma_inference_job_page(job_token: str):
+    with get_db_session() as db:
+        if _load_wadhwani_job_payload(db, job_token) is None:
+            abort(404)
     return render_template(
         "grading/wadhwani_glaucoma_job.html",
         job_token=job_token,
@@ -230,8 +233,11 @@ def _load_wadhwani_job_payload(db, job_token: str) -> dict | None:
         return None
 
     allowed_lab_unit_ids = {lab.id for lab in _allowed_lab_units(db)}
-    if job.lab_unit_id not in allowed_lab_unit_ids and job.lab_unit_id is not None and job.uploader_user_id != current_user.id:
-        return None
+    is_admin = current_user.has_role("admin")
+    is_owner = job.uploader_user_id == current_user.id
+    if job.lab_unit_id is not None and not (is_admin or is_owner):
+        if job.lab_unit_id not in allowed_lab_unit_ids:
+            return None
 
     items = db.execute(
         select(JobItem)
@@ -241,15 +247,15 @@ def _load_wadhwani_job_payload(db, job_token: str) -> dict | None:
 
     task_ids: list[int] = []
     for item in items:
-        if item.filename.startswith("task:"):
-            try:
-                task_ids.append(int(item.filename.split(":", 1)[1]))
-            except ValueError:
-                continue
+        if not item.filename.startswith("task:"):
+            continue
+        try:
+            task_ids.append(int(item.filename.split(":", 1)[1]))
+        except ValueError:
+            continue
 
     from models import AIInferenceRun, Grade, GradingTask, DirectImageUpload, EncounterFile, PatientEncounters
 
-    tasks_by_id = {}
     task_models = db.execute(
         select(GradingTask)
         .options(
@@ -262,6 +268,20 @@ def _load_wadhwani_job_payload(db, job_token: str) -> dict | None:
         .where(GradingTask.id.in_(task_ids))
     ).scalars().all()
     tasks_by_id = {task.id: task for task in task_models}
+
+    # A NULL job Lab Unit is not global access. The one feature-specific
+    # exception requires complete, authorized task lineage for every item.
+    if job.lab_unit_id is None and not (is_admin or is_owner):
+        if (
+            not items
+            or len(task_ids) != len(items)
+            or len(tasks_by_id) != len(set(task_ids))
+            or any(
+                task.lab_unit_id is None or task.lab_unit_id not in allowed_lab_unit_ids
+                for task in tasks_by_id.values()
+            )
+        ):
+            return None
 
     parsed_by_item_id: dict[int, dict] = {}
     grade_ids: list[int] = []

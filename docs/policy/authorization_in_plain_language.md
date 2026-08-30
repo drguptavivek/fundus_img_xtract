@@ -467,7 +467,9 @@ arrive through the same button and they have opposite audiences.
 ## The other screens
 
 - **Background jobs.** Uploads and processing runs. Most people who work with the data can see a
-  job and its result within their own scope, and re-run what it produced.
+  job and its result within their own scope, and re-run what it produced. If a job has no Lab
+  Unit, that is not a wider scope: only its owner or an administrator can see it unless the
+  feature proves a separate project or complete task-derived scope.
 - **Screenings.** The records from a screening camp. Most working roles can look. Only a data
   manager can re-run the reading of a screening PDF, or delete one.
 - **The reports screen.** Pulls up a DR or glaucoma report by reference, for the working roles.

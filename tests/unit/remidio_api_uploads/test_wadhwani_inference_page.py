@@ -18,10 +18,59 @@ from remidio_api_uploads.wadhwani_inference import (
     _glaucoma_ocr_summary,
     _image_matches_filters,
     _job_workflow,
+    _project_job_has_complete_task_lineage,
     _wadhwani_status_by_image,
 )
 from remote_inference.dr_dme import CandidatePage, MAX_MANUAL_ENCOUNTERS
 from project_configuration.models import ProjectLabUnit
+
+
+def test_null_lab_project_job_requires_complete_task_lineage(
+    db_session, core_test_data
+):
+    project = Project(
+        title=f"Lineage {uuid4()}", code=f"JL{uuid4().hex[:8]}", active=True
+    )
+    encounter = PatientEncounters(
+        name=f"Lineage encounter {uuid4()}",
+        patient_id=f"patient-{uuid4()}",
+        capture_date="2026-08-30",
+        is_set_based=True,
+        project=project,
+        lab_unit_id=core_test_data["lab_unit"].id,
+    )
+    image = EncounterSetImage(
+        patient_encounter=encounter,
+        spatial_position=1,
+        original_filename=f"{uuid4()}.png",
+        folder_rel="job-lineage",
+        hospital_id=core_test_data["lab_unit"].hospital_id,
+    )
+    task = GradingTask(
+        encounter_set_image=image,
+        disease_id=core_test_data["glaucoma"].id,
+        lab_unit_id=core_test_data["lab_unit"].id,
+        state="pending",
+        grading_target_level="image",
+    )
+    job = Job(
+        token=f"lineage-{uuid4().hex}",
+        upload_type="encounter_set_wadhwani_inference",
+        project=project,
+        lab_unit_id=None,
+    )
+    db_session.add_all([encounter, image, task, job])
+    db_session.flush()
+    item = JobItem(job_id=job.id, filename=f"task:{task.id}", state="queued")
+    db_session.add(item)
+    db_session.flush()
+
+    allowed = frozenset({core_test_data["lab_unit"].id})
+    assert _project_job_has_complete_task_lineage(db_session, job, allowed)
+
+    item.filename = "malformed-reference"
+    db_session.flush()
+    assert not _project_job_has_complete_task_lineage(db_session, job, allowed)
 
 
 def test_wadhwani_status_uses_only_the_glaucoma_task(db_session, core_test_data):

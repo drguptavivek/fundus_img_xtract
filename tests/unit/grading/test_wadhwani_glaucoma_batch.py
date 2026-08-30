@@ -53,7 +53,15 @@ def test_wadhwani_batch_page_renders_for_admin(client, login_user, db_session):
     assert project_response.status_code == 403
 
 
-def test_wadhwani_job_pages_poll_every_five_seconds(client, login_user):
+def test_wadhwani_job_pages_poll_every_five_seconds(client, login_user, db_session):
+    db_session.add(
+        Job(
+            token="image-job-token",
+            status="queued",
+            upload_type="wadhwani_glaucoma_inference",
+        )
+    )
+    db_session.flush()
     login_user("test_admin", "Test@2026")
 
     image_job = client.get("/grading/wadhwani-glaucoma-inference/jobs/image-job-token")

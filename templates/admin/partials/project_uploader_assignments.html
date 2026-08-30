@@ -1,4 +1,9 @@
 {% from "_forms.html" import csrf_field %}
+{% set profile_upload_kinds = mapping.profile.upload_kinds | map(attribute='upload_kind') | list %}
+{% set non_pregraded_kinds = profile_upload_kinds | reject('equalto', 'pregraded') | list %}
+{% set requires_file_uploader = not profile_upload_kinds or non_pregraded_kinds %}
+{% set requires_pregraded_uploader = 'pregraded' in profile_upload_kinds %}
+{% set required_uploader_label = ('File Uploader' if requires_file_uploader else '') ~ (' and ' if requires_file_uploader and requires_pregraded_uploader else '') ~ ('Pregraded Uploader' if requires_pregraded_uploader else '') %}
 <div class="table-responsive mt-2">
   <table class="table table-sm align-middle mb-0">
     <thead><tr><th>Uploader</th><th>Lab unit</th><th></th></tr></thead>
@@ -33,6 +38,8 @@
       hx-post="{{ url_for('fundus_api.assign_upload_profile_user') }}"
       hx-swap="none"
       data-json-api-htmx
+      data-uploader-assignment-form
+      data-required-uploader-label="{{ required_uploader_label }}"
       data-json-api-reload-url="{{ url_for('admin.upload_project_workspace', project_id=selected_project.id) }}"
       data-json-api-reload-target="#project-detail-workspace">
   {{ csrf_field() }}
@@ -46,7 +53,12 @@
     <select class="form-select" id="profile_user_id_{{ mapping.id }}" name="user_id" required>
       <option value="">Select user</option>
       {% for user in users %}
-      <option value="{{ user.id }}" data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}">{{ user.full_name or user.username }}</option>
+      <option value="{{ user.id }}"
+              data-search-text="{{ (user.full_name or '') ~ ' ' ~ user.username }}"
+              data-uploader-qualified="{{ 'true' if user.has_role('admin') or ((not requires_file_uploader or user.has_role('fileUploader')) and (not requires_pregraded_uploader or user.has_role('pregarded_uploader'))) else 'false' }}"
+              {% if current_user.has_role('admin', 'user_manager') %}data-role-grant-url="{{ url_for('admin.edit_user', user_id=user.id) }}"{% endif %}>
+        {{ user.full_name or user.username }}
+      </option>
       {% endfor %}
     </select>
   </div>
@@ -59,6 +71,17 @@
         <label class="form-check-label small" for="profile_lab_{{ mapping.id }}_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
       </div>
       {% endfor %}
+    </div>
+  </div>
+  <div class="col-12 d-none" role="alert" data-uploader-role-warning>
+    <div class="alert alert-warning py-2 mb-0">
+      This user does not have the <strong>{{ required_uploader_label }}</strong> role. The profile assignment
+      can be saved, but upload modes without their required role remain blocked.
+      {% if current_user.has_role('admin', 'user_manager') %}
+      <a class="alert-link" href="#" data-uploader-role-grant-link>Open role editor</a>.
+      {% else %}
+      Ask a System Admin or User Manager to grant the missing role.
+      {% endif %}
     </div>
   </div>
   <div class="col-12 text-end">

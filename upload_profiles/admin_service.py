@@ -1,8 +1,8 @@
 """Admin-facing upload profile service."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
@@ -12,7 +12,15 @@ from sqlalchemy.orm import selectinload
 from authz.project_access import can_manage_project_uploaders
 from db_transaction_manager import transaction_scope
 from encounter_set_types.models import EncounterSetType
-from models import Disease, LabUnit, LinkedDiseaseGrading, Project, ProjectInvestigator, User
+from models import (
+    Disease,
+    LabUnit,
+    LinkedDiseaseGrading,
+    Project,
+    ProjectInvestigator,
+    User,
+)
+from project_configuration.service import configured_project_lab_unit_ids
 from upload_profiles.models import (
     ProjectUploadProfile,
     ProjectUploadProfileAssignment,
@@ -33,7 +41,6 @@ from upload_profiles.service import (
     UPLOAD_KIND_PREGRADED,
     UPLOAD_KIND_REMIDIO,
 )
-from project_configuration.service import configured_project_lab_unit_ids
 
 PROJECT_INVESTIGATOR_ROLES = {
     "principal_investigator",
@@ -322,6 +329,9 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
         lab_error = _validate_user_lab_assignment(db, assignment_input.user_id, requested_lab_ids)
         if lab_error:
             return MutationResult(False, lab_error, 400)
+        assigned_user = db.get(User, assignment_input.user_id)
+        if assigned_user is None:
+            return MutationResult(False, "Selected user is not active.", 400)
         last_assignment: ProjectUploadProfileAssignment | None = None
         for lab_unit_id in sorted(requested_lab_ids):
             assignment = (
@@ -348,10 +358,38 @@ def assign_project_profile_user(manager_user_id: int, assignment_input: ProjectP
             last_assignment = assignment
         try:
             db.flush()
+            upload_kinds = {
+                item.upload_kind for item in project_profile.profile.upload_kinds
+            }
+            required_roles = set()
+            if not upload_kinds or upload_kinds - {UPLOAD_KIND_PREGRADED}:
+                required_roles.add("fileUploader")
+            if UPLOAD_KIND_PREGRADED in upload_kinds:
+                required_roles.add("pregarded_uploader")
+            role_labels = {
+                "fileUploader": "File Uploader",
+                "pregarded_uploader": "Pregraded Uploader",
+            }
+            missing_roles = sorted(
+                role for role in required_roles if not assigned_user.has_role(role, "admin")
+            )
+            uploader_qualified = not missing_roles
+            message = "User assigned to project upload profile."
+            if not uploader_qualified:
+                missing_labels = " and ".join(role_labels[role] for role in missing_roles)
+                message = (
+                    "User assigned to project upload profile, but cannot use every enabled "
+                    f"upload mode until the {missing_labels} role is granted."
+                )
             return MutationResult(
                 True,
-                "User assigned to project upload profile.",
-                payload={"assignment_id": last_assignment.id if last_assignment else None},
+                message,
+                payload={
+                    "assignment_id": last_assignment.id if last_assignment else None,
+                    "uploader_qualified": uploader_qualified,
+                    "missing_uploader_roles": missing_roles,
+                    "user_id": assigned_user.id,
+                },
             )
         except IntegrityError:
             db.rollback()

@@ -6,13 +6,28 @@ from werkzeug.datastructures import MultiDict
 
 from api.upload_profiles import _encounter_set_packages_from_request
 from encounter_set_types.models import EncounterSetType
-from models import AIModel, AIModelDisease, AIModelIntegration, Area, Camera, Disease, Hospital, LabUnit, LinkedDiseaseGrading, Project, Role, User
+from models import (
+    AIModel,
+    AIModelDisease,
+    AIModelIntegration,
+    Area,
+    Camera,
+    Disease,
+    Hospital,
+    LabUnit,
+    LinkedDiseaseGrading,
+    Project,
+    Role,
+    User,
+)
+from project_configuration.models import ProjectLabUnit
 from upload_profiles import admin_service
 from upload_profiles.admin_service import (
     EncounterSetGradingPackageInput,
     EncounterSetProfileInput,
     ImageMetadataTaskRuleInput,
     ProjectCreateInput,
+    ProjectProfileAssignmentInput,
     UploadProfileInput,
     validate_mydriatic_flags,
 )
@@ -32,7 +47,6 @@ from upload_profiles.service import (
     UploadProfileError,
     validate_encounter_set_upload_scope,
 )
-from project_configuration.models import ProjectLabUnit
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +85,59 @@ def test_validate_mydriatic_flags_accepts_valid_combinations():
         allow_non_mydriatic=False,
         default_is_mydriatic=True,
     ) is None
+
+
+def test_profile_assignment_warns_when_uploader_role_is_missing(db_session, monkeypatch):
+    @contextmanager
+    def use_test_session():
+        yield db_session
+        db_session.flush()
+
+    monkeypatch.setattr(admin_service, "transaction_scope", use_test_session)
+    monkeypatch.setattr(admin_service, "can_manage_project_uploaders", lambda *args, **kwargs: True)
+
+    manager = User(
+        username="assignment_warning_manager",
+        full_name="Assignment Warning Manager",
+        password_hash="x",
+        is_active=True,
+    )
+    user = User(
+        username="assignment_warning_user",
+        full_name="Assignment Warning User",
+        password_hash="x",
+        is_active=True,
+    )
+    hospital = Hospital(name="Assignment Warning Hospital")
+    lab = LabUnit(name="Assignment Warning Lab", hospital=hospital)
+    project = Project(title="Assignment Warning Project", code="ASNWARN", active=True)
+    profile = UploadProfile(
+        name="Assignment Warning Profile",
+        allow_mydriatic=False,
+        allow_non_mydriatic=True,
+        default_is_mydriatic=False,
+        active=True,
+    )
+    mapping = ProjectUploadProfile(project=project, profile=profile, active=True)
+    db_session.add_all([manager, user, hospital, lab, project, profile, mapping])
+    db_session.flush()
+    db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True))
+    db_session.flush()
+
+    result = admin_service.assign_project_profile_user(
+        manager.id,
+        ProjectProfileAssignmentInput(
+            project_upload_profile_id=mapping.id,
+            user_id=user.id,
+            lab_unit_ids=[lab.id],
+        ),
+    )
+
+    assert result.success is True
+    assert result.payload["uploader_qualified"] is False
+    assert result.payload["user_id"] == user.id
+    assert result.payload["missing_uploader_roles"] == ["fileUploader"]
+    assert "until the File Uploader role is granted" in result.message
 
 
 def test_upload_profile_api_parses_image_metadata_task_rules():

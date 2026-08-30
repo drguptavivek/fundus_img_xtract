@@ -16,6 +16,7 @@ from grading.workbench.errors import WorkbenchError
 from grading.workbench.legacy_transport import submit_task_form
 from grading.workbench_page import open_revision_workbench, open_task_workbench
 from models import Grade, GradingTask, ImageMetadata
+from tasks.lineage import valid_task_lineage
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 
 
@@ -68,7 +69,10 @@ def dual_grading_feature_geometry(task_uuid: str):
     if slot not in {"resident", "resident2", "arbitrator"}:
         return jsonify({"success": False, "message": "Invalid grading slot."}), 422
     with transaction_scope() as db:
-        task = db.query(GradingTask).filter(GradingTask.uuid == task_uuid).first()
+        task = db.query(GradingTask).filter(
+            GradingTask.uuid == task_uuid,
+            valid_task_lineage(GradingTask),
+        ).first()
         if task is None:
             return jsonify({"success": False, "message": "Task not found."}), 404
         grade = (

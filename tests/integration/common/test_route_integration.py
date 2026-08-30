@@ -134,6 +134,29 @@ class TestSearchImagesRoute:
         response = client.get("/search/images?page=2&per_page=50")
         assert response.status_code == 200
 
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/search/images?page=not-an-int",
+            "/search/images?disease_id=0",
+            "/search/images?upload_after=not-a-date",
+            "/tasks/all-tasks?page=not-an-int",
+            "/tasks/all-tasks?per_page=0",
+            "/tasks/all-tasks?lab_unit=not-an-int",
+        ],
+    )
+    def test_malformed_or_non_positive_filters_do_not_broaden_search(
+        self, auth_client_factory, db_session, path
+    ):
+        """A supplied invalid filter is rejected rather than treated as absent."""
+        user = db_session.query(User).filter_by(username="master_admin").first()
+        if not user:
+            pytest.skip("No master_admin user found in seeded data")
+
+        response = auth_client_factory(user).get(path)
+
+        assert response.status_code == 400
+
     def test_search_image_detail_route(self, auth_client_factory, db_session):
         """Test the /search/images/<task_id>/view route."""
         from models import GradingTask
@@ -146,6 +169,72 @@ class TestSearchImagesRoute:
         # Try to access a non-existent task - should get 404
         response = client.get("/search/images/999999/view")
         assert response.status_code == 404
+
+    def test_project_reader_can_follow_task_detail_and_viewer_links(
+        self, auth_client_factory, db_session, core_test_data
+    ):
+        """Project task rows remain usable through their linked task routes."""
+        import uuid
+
+        from data_authorization.models import ProjectRoleGrant
+        from project_configuration.models import ProjectLabUnit
+        from tests.helpers.factories import UserFactory
+        from models import DirectImageUpload, GradingTask, Project, Role
+
+        lab_unit = db_session.merge(core_test_data["lab_a1"])
+        hospital = db_session.merge(core_test_data["hospital_a"])
+        camera = db_session.merge(core_test_data["camera"])
+        area = db_session.merge(core_test_data["area"])
+        disease = db_session.merge(core_test_data["glaucoma"])
+        project = Project(title="Task Link Project", code="TASK_LINK_PROJECT", active=True)
+        db_session.add(project)
+        db_session.flush()
+        db_session.add(ProjectLabUnit(project_id=project.id, lab_unit_id=lab_unit.id, active=True))
+        project_reader = UserFactory.create_by_role(
+            db_session, "collaborator", username="task_link_project_reader"
+        )
+        db_session.add(
+            ProjectRoleGrant(
+                project_id=project.id,
+                user_id=project_reader.id,
+                role_id=db_session.query(Role).filter_by(name="collaborator").one().id,
+                scope_type="lab_unit",
+                lab_unit_id=lab_unit.id,
+                active=True,
+            )
+        )
+        direct_image = DirectImageUpload(
+            uuid=str(uuid.uuid4()),
+            original_filename="task-link.jpg",
+            filename="task-link.jpg",
+            folder_rel="files/task_links",
+            file_hash=uuid.uuid4().hex,
+            uploader_id=project_reader.id,
+            hospital_id=hospital.id,
+            lab_unit_id=lab_unit.id,
+            project_id=project.id,
+            camera_id=camera.id,
+            disease_id=disease.id,
+            area_id=area.id,
+            is_mydriatic=False,
+        )
+        db_session.add(direct_image)
+        db_session.flush()
+        task = GradingTask(
+            direct_image_upload_id=direct_image.id,
+            disease_id=disease.id,
+            lab_unit_id=lab_unit.id,
+            state="pending",
+        )
+        db_session.add(task)
+        db_session.flush()
+
+        client = auth_client_factory(project_reader)
+        detail = client.get(f"/tasks/viewTaskDetails/{task.id}")
+        viewer = client.get(f"/tasks/all-tasks/viewer/{direct_image.uuid}")
+
+        assert detail.status_code == 200
+        assert viewer.status_code == 200
 
 
 class TestSearchImagesMocked:
@@ -194,7 +283,7 @@ class TestSearchImagesMocked:
 
             client = auth_client_factory(user)
             response = client.get(
-                f"/search/images?disease_id={disease.id}&has_consensus=true&has_review=needs_review"
+                f"/search/images?disease_id={disease.id}&has_consensus=has_consensus&has_review=yes"
             )
 
             assert response.status_code == 200

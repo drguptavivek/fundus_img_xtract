@@ -5,25 +5,265 @@ from typing import Any
 import sqlalchemy as sa
 from flask import jsonify, render_template, request
 from flask_login import current_user
+from sqlalchemy import and_, exists, or_, select
+from sqlalchemy.orm import Session
 
 from auth.roles import roles_required
+from authz.behaviors import analytics_lab_units, analytics_rows
 from db_transaction_manager import get_db_session
+from models import (
+    DirectImageUpload,
+    EncounterFile,
+    EncounterSetImage,
+    GradingTask,
+    LabUnit,
+    PatientEncounters,
+)
+from services.uploads.access import encounter_columns, upload_columns
+from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.log_sanitize import sanitize_log_value
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
 
 
 def _scoped_lab_unit_ids() -> list[int]:
-    return sorted(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    """Return all Lab Units currently authorized for analytics."""
+    with get_db_session() as db:
+        query = analytics_lab_units(db, db.query(LabUnit.id), current_user)
+        return sorted(int(row[0]) for row in query.all())
 
 
 def _optional_int(name: str) -> int | None:
-    value = request.args.get(name, type=int)
-    return value if value and value > 0 else None
+    """Parse a positive filter, preserving malformed values as no-match.
+
+    ``request.args.get(..., type=int)`` turns an invalid supplied value into
+    ``None``.  Treating that as an omitted filter broadens the query, so an
+    invalid value is represented by ``-1`` and can only produce zero rows.
+    """
+    raw_value = request.args.get(name)
+    if raw_value is None:
+        return None
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return -1
+    return value if value > 0 else -1
 
 
-def _base_scoped_tasks_sql(lab_unit_ids: list[int]) -> tuple[sa.TextClause, dict[str, Any]]:
+def _authorized_task_ids(
+    db: Session,
+    *,
+    disease_id: int | None = None,
+    lab_unit_id: int | None = None,
+    hospital_id: int | None = None,
+) -> list[int]:
+    """Return the exact task identities visible to this analytics request.
+
+    The materialized view is an efficient calculation source, not an
+    authorization source.  Resolve task lineage through the normal
+    ``analytics_rows`` behaviour first, including project grants and the
+    LabUnit -> Hospital relationship, then constrain every MV read by these
+    identities.  This prevents a project sharing a LabUnit from inheriting
+    another project's rows.
+    """
+    query = db.query(GradingTask.id).join(
+        LabUnit, GradingTask.lab_unit_id == LabUnit.id
+    )
+    query = analytics_rows(
+        db,
+        query,
+        current_user,
+        task_columns(GradingTask, hospital_id_column=LabUnit.hospital_id),
+    )
+    query = query.filter(
+        GradingTask.lab_unit_id.is_not(None),
+        LabUnit.hospital_id.is_not(None),
+        valid_task_lineage(),
+    )
+    if disease_id is not None:
+        query = query.filter(GradingTask.disease_id == disease_id)
+    if lab_unit_id is not None:
+        query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
+    if hospital_id is not None:
+        query = query.filter(LabUnit.hospital_id == hospital_id)
+    return [int(row[0]) for row in query.all()]
+
+
+def _valid_task_lineage():
+    """Require a complete, internally consistent source-task lineage.
+
+    ``admin_rows`` intentionally permits every actor, so these predicates
+    must remain independent of actor scope.  They mirror the maintained task
+    project invariant and reject malformed source links, including a child
+    row disagreeing with its parent encounter.
+    """
+    source_shape = or_(
+        and_(
+            GradingTask.encounter_file_id.is_not(None),
+            GradingTask.direct_image_upload_id.is_(None),
+            GradingTask.patient_encounter_id.is_(None),
+            GradingTask.encounter_set_image_id.is_(None),
+        ),
+        and_(
+            GradingTask.encounter_file_id.is_(None),
+            GradingTask.direct_image_upload_id.is_not(None),
+            GradingTask.patient_encounter_id.is_(None),
+            GradingTask.encounter_set_image_id.is_(None),
+        ),
+        and_(
+            GradingTask.encounter_file_id.is_(None),
+            GradingTask.direct_image_upload_id.is_(None),
+            GradingTask.patient_encounter_id.is_not(None),
+            GradingTask.encounter_set_image_id.is_(None),
+        ),
+        and_(
+            GradingTask.encounter_file_id.is_(None),
+            GradingTask.direct_image_upload_id.is_(None),
+            GradingTask.patient_encounter_id.is_(None),
+            GradingTask.encounter_set_image_id.is_not(None),
+        ),
+    )
+    encounter_file_lineage = exists(
+        select(1)
+        .select_from(EncounterFile)
+        .join(
+            PatientEncounters,
+            PatientEncounters.id == EncounterFile.patient_encounter_id,
+        )
+        .where(
+            EncounterFile.id == GradingTask.encounter_file_id,
+            PatientEncounters.lab_unit_id == GradingTask.lab_unit_id,
+            or_(
+                EncounterFile.lab_unit_id.is_(None),
+                EncounterFile.lab_unit_id == GradingTask.lab_unit_id,
+            ),
+            or_(
+                EncounterFile.hospital_id.is_(None),
+                EncounterFile.hospital_id == LabUnit.hospital_id,
+            ),
+            or_(
+                EncounterFile.project_id.is_(None),
+                EncounterFile.project_id == PatientEncounters.project_id,
+            ),
+            PatientEncounters.project_id.is_not_distinct_from(
+                GradingTask.project_id
+            ),
+        )
+    )
+    direct_upload_lineage = exists(
+        select(1)
+        .select_from(DirectImageUpload)
+        .where(
+            DirectImageUpload.id == GradingTask.direct_image_upload_id,
+            DirectImageUpload.lab_unit_id == GradingTask.lab_unit_id,
+            DirectImageUpload.hospital_id == LabUnit.hospital_id,
+            DirectImageUpload.project_id.is_not_distinct_from(
+                GradingTask.project_id
+            ),
+        )
+    )
+    encounter_lineage = exists(
+        select(1)
+        .select_from(PatientEncounters)
+        .where(
+            PatientEncounters.id == GradingTask.patient_encounter_id,
+            PatientEncounters.lab_unit_id == GradingTask.lab_unit_id,
+            PatientEncounters.project_id.is_not_distinct_from(
+                GradingTask.project_id
+            ),
+        )
+    )
+    encounter_set_image_lineage = exists(
+        select(1)
+        .select_from(EncounterSetImage)
+        .join(
+            PatientEncounters,
+            PatientEncounters.id == EncounterSetImage.patient_encounter_id,
+        )
+        .where(
+            EncounterSetImage.id == GradingTask.encounter_set_image_id,
+            or_(
+                EncounterSetImage.hospital_id.is_(None),
+                EncounterSetImage.hospital_id == LabUnit.hospital_id,
+            ),
+            PatientEncounters.lab_unit_id == GradingTask.lab_unit_id,
+            or_(
+                EncounterSetImage.project_id.is_(None),
+                EncounterSetImage.project_id == PatientEncounters.project_id,
+            ),
+            PatientEncounters.project_id.is_not_distinct_from(
+                GradingTask.project_id
+            ),
+        )
+    )
+    return and_(
+        GradingTask.lab_unit_id.is_not(None),
+        source_shape,
+        or_(
+            and_(GradingTask.encounter_file_id.is_not(None), encounter_file_lineage),
+            and_(GradingTask.direct_image_upload_id.is_not(None), direct_upload_lineage),
+            and_(GradingTask.patient_encounter_id.is_not(None), encounter_lineage),
+            and_(GradingTask.encounter_set_image_id.is_not(None), encounter_set_image_lineage),
+        ),
+    )
+
+
+def _authorized_encounter_ids(
+    db: Session,
+    *,
+    disease_id: int | None = None,
+    lab_unit_id: int | None = None,
+    hospital_id: int | None = None,
+) -> list[int]:
+    """Resolve structurally valid, analytics-visible encounter identities."""
+    query = db.query(PatientEncounters.id).join(
+        LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
+    ).filter(
+        PatientEncounters.lab_unit_id.is_not(None),
+        LabUnit.hospital_id.is_not(None),
+    )
+    query = analytics_rows(
+        db, query, current_user, encounter_columns(PatientEncounters)
+    )
+    if disease_id is not None:
+        query = query.filter(PatientEncounters.disease_id == disease_id)
+    if lab_unit_id is not None:
+        query = query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
+    if hospital_id is not None:
+        query = query.filter(LabUnit.hospital_id == hospital_id)
+    return [int(row[0]) for row in query.all()]
+
+
+def _authorized_direct_upload_ids(
+    db: Session,
+    *,
+    disease_id: int | None = None,
+    lab_unit_id: int | None = None,
+    hospital_id: int | None = None,
+) -> list[int]:
+    """Resolve direct uploads with canonical Lab Unit/Hospital lineage."""
+    query = db.query(DirectImageUpload.id).join(
+        LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id
+    ).filter(
+        DirectImageUpload.lab_unit_id.is_not(None),
+        DirectImageUpload.hospital_id.is_not(None),
+        LabUnit.hospital_id.is_not(None),
+        DirectImageUpload.hospital_id == LabUnit.hospital_id,
+    )
+    query = analytics_rows(
+        db, query, current_user, upload_columns(DirectImageUpload)
+    )
+    if disease_id is not None:
+        query = query.filter(DirectImageUpload.disease_id == disease_id)
+    if lab_unit_id is not None:
+        query = query.filter(DirectImageUpload.lab_unit_id == lab_unit_id)
+    if hospital_id is not None:
+        query = query.filter(DirectImageUpload.hospital_id == hospital_id)
+    return [int(row[0]) for row in query.all()]
+
+
+def _base_scoped_tasks_sql(authorized_task_ids: list[int]) -> tuple[sa.TextClause, dict[str, Any]]:
     base_sql = sa.text(
         """
         WITH scoped_tasks AS (
@@ -38,16 +278,16 @@ def _base_scoped_tasks_sql(lab_unit_ids: list[int]) -> tuple[sa.TextClause, dict
                 task_state
             FROM mvw_grading_data_all
             WHERE task_id IS NOT NULL
-              AND lab_unit_id IN :lab_unit_ids
+              AND task_id IN :authorized_task_ids
               AND (:disease_id IS NULL OR disease_id = :disease_id)
               AND (:lab_unit_id IS NULL OR lab_unit_id = :lab_unit_id)
               AND (:hospital_id IS NULL OR hospital_id = :hospital_id)
         )
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(sa.bindparam("authorized_task_ids", expanding=True))
 
     params: dict[str, Any] = {
-        "lab_unit_ids": lab_unit_ids,
+        "authorized_task_ids": authorized_task_ids or [-1],
         "disease_id": _optional_int("disease_id"),
         "lab_unit_id": _optional_int("lab_unit_id"),
         "hospital_id": _optional_int("hospital_id"),
@@ -82,7 +322,9 @@ def hospital_dashboard_page():
             lab_unit_scope_count=0,
         )
 
-    params: dict[str, Any] = {"lab_unit_ids": lab_unit_ids}
+    with get_db_session() as db:
+        authorized_task_ids = _authorized_task_ids(db)
+    params: dict[str, Any] = {"lab_unit_ids": lab_unit_ids, "authorized_task_ids": authorized_task_ids or [-1]}
     options_sql = sa.text(
         """
         WITH scoped_labs AS (
@@ -101,7 +343,7 @@ def hospital_dashboard_page():
                 disease_name
             FROM mvw_grading_data_all
             WHERE task_id IS NOT NULL
-              AND lab_unit_id IN :lab_unit_ids
+              AND task_id IN :authorized_task_ids
               AND disease_id IS NOT NULL
         )
         SELECT
@@ -115,7 +357,10 @@ def hospital_dashboard_page():
         LEFT JOIN scoped_diseases sd ON TRUE
         ORDER BY sl.hospital_name, sl.lab_unit_name, sd.disease_name
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(
+        sa.bindparam("lab_unit_ids", expanding=True),
+        sa.bindparam("authorized_task_ids", expanding=True),
+    )
 
     with get_db_session() as db:
         rows = db.execute(options_sql, params).mappings().all()
@@ -167,7 +412,14 @@ def hospital_dashboard_disease_view():
     if not lab_unit_ids:
         return jsonify({"data": [], "meta": {"lab_unit_scope_count": 0}})
 
-    base_sql, params = _base_scoped_tasks_sql(lab_unit_ids)
+    with get_db_session() as db:
+        authorized_task_ids = _authorized_task_ids(
+            db,
+            disease_id=_optional_int("disease_id"),
+            lab_unit_id=_optional_int("lab_unit_id"),
+            hospital_id=_optional_int("hospital_id"),
+        )
+    base_sql, params = _base_scoped_tasks_sql(authorized_task_ids)
     query_sql = sa.text(
         f"""
         {base_sql.text}
@@ -175,7 +427,7 @@ def hospital_dashboard_disease_view():
             SELECT DISTINCT task_id
             FROM mvw_grading_data_all
             WHERE task_id IS NOT NULL
-              AND lab_unit_id IN :lab_unit_ids
+              AND task_id IN :authorized_task_ids
               AND (:disease_id IS NULL OR disease_id = :disease_id)
               AND (:lab_unit_id IS NULL OR lab_unit_id = :lab_unit_id)
               AND (:hospital_id IS NULL OR hospital_id = :hospital_id)
@@ -197,7 +449,7 @@ def hospital_dashboard_disease_view():
         GROUP BY st.disease_id, st.disease_name
         ORDER BY st.disease_name
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(sa.bindparam("authorized_task_ids", expanding=True))
 
     with get_db_session() as db:
         rows = db.execute(query_sql, params).mappings().all()
@@ -254,7 +506,14 @@ def hospital_dashboard_lab_disease_view():
     if not lab_unit_ids:
         return jsonify({"data": [], "meta": {"lab_unit_scope_count": 0}})
 
-    base_sql, params = _base_scoped_tasks_sql(lab_unit_ids)
+    with get_db_session() as db:
+        authorized_task_ids = _authorized_task_ids(
+            db,
+            disease_id=_optional_int("disease_id"),
+            lab_unit_id=_optional_int("lab_unit_id"),
+            hospital_id=_optional_int("hospital_id"),
+        )
+    base_sql, params = _base_scoped_tasks_sql(authorized_task_ids)
     query_sql = sa.text(
         f"""
         {base_sql.text}
@@ -262,7 +521,7 @@ def hospital_dashboard_lab_disease_view():
             SELECT DISTINCT task_id
             FROM mvw_grading_data_all
             WHERE task_id IS NOT NULL
-              AND lab_unit_id IN :lab_unit_ids
+              AND task_id IN :authorized_task_ids
               AND (:disease_id IS NULL OR disease_id = :disease_id)
               AND (:lab_unit_id IS NULL OR lab_unit_id = :lab_unit_id)
               AND (:hospital_id IS NULL OR hospital_id = :hospital_id)
@@ -291,7 +550,7 @@ def hospital_dashboard_lab_disease_view():
             st.disease_id, st.disease_name
         ORDER BY st.hospital_name, st.lab_unit_name, st.disease_name
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(sa.bindparam("authorized_task_ids", expanding=True))
 
     with get_db_session() as db:
         rows = db.execute(query_sql, params).mappings().all()
@@ -352,11 +611,16 @@ def hospital_dashboard_user_view():
     if not lab_unit_ids:
         return jsonify({"data": [], "meta": {"lab_unit_scope_count": 0}})
 
-    params: dict[str, Any] = {
-        "lab_unit_ids": lab_unit_ids,
+    filters = {
         "disease_id": _optional_int("disease_id"),
         "lab_unit_id": _optional_int("lab_unit_id"),
         "hospital_id": _optional_int("hospital_id"),
+    }
+    with get_db_session() as db:
+        authorized_task_ids = _authorized_task_ids(db, **filters)
+    params: dict[str, Any] = {
+        "authorized_task_ids": authorized_task_ids or [-1],
+        **filters,
     }
     query_sql = sa.text(
         """
@@ -367,7 +631,7 @@ def hospital_dashboard_user_view():
             COALESCE(grader_full_name, grader_username, 'Unknown') AS user_name,
             COUNT(*)::int AS completed_count
         FROM mvw_grading_data_all
-        WHERE lab_unit_id IN :lab_unit_ids
+        WHERE task_id IN :authorized_task_ids
           AND grade_id IS NOT NULL
           AND grade_role_slot IN ('resident', 'resident2', 'arbitrator')
           AND (:disease_id IS NULL OR disease_id = :disease_id)
@@ -376,7 +640,7 @@ def hospital_dashboard_user_view():
         GROUP BY disease_id, disease_name, grader_user_id, COALESCE(grader_full_name, grader_username, 'Unknown')
         ORDER BY disease_name, user_name
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(sa.bindparam("authorized_task_ids", expanding=True))
 
     with get_db_session() as db:
         rows = db.execute(query_sql, params).mappings().all()
@@ -531,11 +795,22 @@ def hospital_dashboard_encounter_view():
             }
         )
 
-    params: dict[str, Any] = {
-        "lab_unit_ids": lab_unit_ids,
+    filters = {
         "disease_id": _optional_int("disease_id"),
         "lab_unit_id": _optional_int("lab_unit_id"),
         "hospital_id": _optional_int("hospital_id"),
+    }
+    with get_db_session() as db:
+        authorized_task_ids = _authorized_task_ids(db, **filters)
+        authorized_encounter_ids = _authorized_encounter_ids(db, **filters)
+        authorized_direct_upload_ids = _authorized_direct_upload_ids(db, **filters)
+
+    params: dict[str, Any] = {
+        "lab_unit_ids": lab_unit_ids,
+        "authorized_task_ids": authorized_task_ids or [-1],
+        "authorized_encounter_ids": authorized_encounter_ids or [-1],
+        "authorized_direct_upload_ids": authorized_direct_upload_ids or [-1],
+        **filters,
     }
 
     summary_sql = sa.text(
@@ -544,7 +819,7 @@ def hospital_dashboard_encounter_view():
             SELECT pe.id, pe.encounter_verified_status
             FROM patient_encounters pe
             LEFT JOIN lab_units lu ON lu.id = pe.lab_unit_id
-            WHERE pe.lab_unit_id IN :lab_unit_ids
+            WHERE pe.id IN :authorized_encounter_ids
               AND (:disease_id IS NULL OR pe.disease_id = :disease_id)
               AND (:lab_unit_id IS NULL OR pe.lab_unit_id = :lab_unit_id)
               AND (:hospital_id IS NULL OR lu.hospital_id = :hospital_id)
@@ -553,7 +828,7 @@ def hospital_dashboard_encounter_view():
             SELECT DISTINCT diu.id
             FROM direct_image_uploads diu
             LEFT JOIN direct_image_verifications div ON div.image_upload_id = diu.id
-            WHERE diu.lab_unit_id IN :lab_unit_ids
+            WHERE diu.id IN :authorized_direct_upload_ids
               AND (:disease_id IS NULL OR diu.disease_id = :disease_id)
               AND (:lab_unit_id IS NULL OR diu.lab_unit_id = :lab_unit_id)
               AND (:hospital_id IS NULL OR diu.hospital_id = :hospital_id)
@@ -568,7 +843,10 @@ def hospital_dashboard_encounter_view():
             ) AS verified_encounters,
             (SELECT COUNT(*)::int FROM direct_scope) AS pending_direct_images
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(
+        sa.bindparam("authorized_encounter_ids", expanding=True),
+        sa.bindparam("authorized_direct_upload_ids", expanding=True),
+    )
 
     ai_grades_sql = sa.text(
         """
@@ -577,7 +855,7 @@ def hospital_dashboard_encounter_view():
             disease_name,
             COUNT(*)::int AS ai_grade_count
         FROM mvw_grading_data_all
-        WHERE lab_unit_id IN :lab_unit_ids
+        WHERE task_id IN :authorized_task_ids
           AND grade_id IS NOT NULL
           AND grade_role_slot = 'ai'
           AND (:disease_id IS NULL OR disease_id = :disease_id)
@@ -586,7 +864,7 @@ def hospital_dashboard_encounter_view():
         GROUP BY disease_id, disease_name
         ORDER BY disease_name
         """
-    ).bindparams(sa.bindparam("lab_unit_ids", expanding=True))
+    ).bindparams(sa.bindparam("authorized_task_ids", expanding=True))
 
     with get_db_session() as db:
         summary_row = db.execute(summary_sql, params).mappings().first() or {}

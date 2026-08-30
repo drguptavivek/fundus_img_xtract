@@ -18,12 +18,33 @@ from models import (
     GradingTask,
     PatientEncounters,
     TaskBackfillJob,
+    User,
 )
 from services.taskCreationServices import ensure_task
 from utils.log_sanitize import sanitize_log_value
+from utils.hospital_scoping import get_user_lab_units_in_hospital
+from utils.backfill_scope import strict_direct_scope, strict_encounter_scope
 
 
 _LOGGER = logging.getLogger("task_backfill")
+
+
+def _current_job_lab_units(db: Session, job: TaskBackfillJob) -> set[int]:
+    """Reauthorize a queued user job against the creator's current authority."""
+    if job.created_by_id is None:
+        return set()
+    creator = db.get(User, job.created_by_id)
+    if creator is None or not creator.is_active or not creator.has_role("admin"):
+        return set()
+    try:
+        queued = json.loads(job.allowed_lab_unit_ids or "")
+        if not isinstance(queued, list) or any(type(value) is not int for value in queued):
+            return set()
+        queued_ids = set(queued)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return set()
+    current_ids = get_user_lab_units_in_hospital(creator.id, hospital_id=job.hospital_id, db=db)
+    return queued_ids & current_ids
 
 
 def _get_disease_ids(db: Session) -> dict[str, Optional[int]]:
@@ -47,14 +68,7 @@ def _get_disease_ids(db: Session) -> dict[str, Optional[int]]:
 
 
 def _apply_lab_unit_scope(query, allowed_lab_unit_ids: set[int]):
-    if not allowed_lab_unit_ids:
-        return query.filter(False)
-    return query.filter(
-        or_(
-            EncounterFile.lab_unit_id.in_(allowed_lab_unit_ids),
-            PatientEncounters.lab_unit_id.in_(allowed_lab_unit_ids),
-        )
-    )
+    return strict_encounter_scope(query, allowed_lab_unit_ids)
 
 
 def _missing_encounter_tasks(
@@ -87,7 +101,7 @@ def _missing_encounter_tasks(
 def _missing_direct_tasks(db: Session, *, allowed_lab_unit_ids: set[int]):
     if not allowed_lab_unit_ids:
         return db.query(DirectImageUpload).filter(False)
-    return (
+    query = (
         db.query(DirectImageUpload)
         .join(
             DirectImageVerify,
@@ -101,9 +115,9 @@ def _missing_direct_tasks(db: Session, *, allowed_lab_unit_ids: set[int]):
             ),
         )
         .filter(DirectImageVerify.verified_status == "verified")
-        .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
         .filter(GradingTask.id.is_(None))
     )
+    return strict_direct_scope(query, allowed_lab_unit_ids)
 
 
 def get_missing_task_counts(db: Session, *, allowed_lab_unit_ids: set[int]) -> dict[str, int]:
@@ -163,6 +177,7 @@ def run_task_backfill(
     allowed_lab_unit_ids: set[int],
     limit: Optional[int] = None,
     progress_cb: Optional[Callable[[bool], None]] = None,
+    authorize_cb: Optional[Callable[[], bool]] = None,
 ) -> dict[str, int]:
     disease_ids = _get_disease_ids(db)
     remaining = limit if limit is not None else None
@@ -181,6 +196,8 @@ def run_task_backfill(
         for row in _iter_rows(query):
             if remaining is not None and remaining <= 0:
                 break
+            if authorize_cb is not None and not authorize_cb():
+                raise PermissionError("Creator authorization changed during backfill")
             try:
                 if isinstance(row, EncounterFile):
                     ensure_task(row.uuid, disease_id, db)
@@ -192,6 +209,8 @@ def run_task_backfill(
                 if remaining is not None:
                     remaining -= 1
             except Exception as exc:  # noqa: BLE001
+                if isinstance(exc, PermissionError):
+                    raise
                 results["errors"] += 1
                 if progress_cb:
                     progress_cb(False)
@@ -244,18 +263,25 @@ def run_task_backfill(
 
 def run_task_backfill_job(job_id: int) -> None:
     with get_db_session() as db:
-        job = db.get(TaskBackfillJob, job_id)
+        job = (
+            db.query(TaskBackfillJob)
+            .filter(TaskBackfillJob.id == job_id)
+            .with_for_update(skip_locked=True)
+            .one_or_none()
+        )
         if not job:
             return
-        if job.status not in {"queued", "running"}:
+        if job.status != "queued":
             return
 
-        allowed_lab_unit_ids: set[int] = set()
-        if job.allowed_lab_unit_ids:
-            try:
-                allowed_lab_unit_ids = set(json.loads(job.allowed_lab_unit_ids))
-            except (TypeError, json.JSONDecodeError):
-                allowed_lab_unit_ids = set()
+        allowed_lab_unit_ids = _current_job_lab_units(db, job)
+        if not allowed_lab_unit_ids:
+            job.status = "failed"
+            job.error_message = "Creator authorization is missing or no longer active"
+            job.finished_at = utcnow()
+            db.add(job)
+            db.commit()
+            return
         totals = get_missing_task_counts(db, allowed_lab_unit_ids=allowed_lab_unit_ids)
         job.status = "running"
         job.started_at = utcnow()
@@ -278,6 +304,8 @@ def run_task_backfill_job(job_id: int) -> None:
                 job.error_count += 1
             processed_since_commit += 1
             if processed_since_commit >= 25:
+                if not _current_job_lab_units(db, job):
+                    raise PermissionError("Creator authorization was revoked during backfill")
                 db.add(job)
                 db.commit()
                 processed_since_commit = 0
@@ -288,7 +316,11 @@ def run_task_backfill_job(job_id: int) -> None:
                 allowed_lab_unit_ids=allowed_lab_unit_ids,
                 limit=job.requested_limit,
                 progress_cb=_progress,
+                authorize_cb=lambda: _current_job_lab_units(db, job)
+                == allowed_lab_unit_ids,
             )
+            if _current_job_lab_units(db, job) != allowed_lab_unit_ids:
+                raise PermissionError("Creator authorization changed during backfill")
             job.status = "completed"
         except Exception as exc:  # noqa: BLE001
             job.status = "failed"

@@ -6,6 +6,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import aliased
 
 from authz import AccessContext
+from tasks.lineage import valid_task_lineage
 
 
 def inter_rater_grade_rows(context: AccessContext):
@@ -130,7 +131,11 @@ def inter_rater_grade_rows(context: AccessContext):
             or_(classical_scope, project_scope),
         )
     )
-    return and_(Grade.task_id == GradingTask.id, participated)
+    return and_(
+        valid_task_lineage(GradingTask),
+        Grade.task_id == GradingTask.id,
+        participated,
+    )
 
 
 def scope_inter_rater_grades(query, context: AccessContext):

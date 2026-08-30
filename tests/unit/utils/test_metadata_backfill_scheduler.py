@@ -1,7 +1,11 @@
 import json
 
+from tests.helpers.factories import UserFactory
 from models import ImageMetadataBackfillJob, LabUnit
-from utils.image_metadata_backfill import enqueue_system_image_metadata_backfill
+from utils.image_metadata_backfill import (
+    _current_job_lab_units,
+    enqueue_system_image_metadata_backfill,
+)
 
 
 def test_enqueue_system_backfill_creates_job_and_enqueues(db_session, core_test_data, monkeypatch):
@@ -57,3 +61,23 @@ def test_enqueue_system_backfill_skips_when_active_job(db_session, core_test_dat
 
     assert result is False
     assert enqueued["called"] is False
+
+
+def test_human_backfill_scope_is_reauthorized(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    creator = UserFactory.create_by_role(db_session, "admin", username="metadata_admin")
+    creator.lab_units.append(lab)
+    db_session.flush()
+    job = ImageMetadataBackfillJob(
+        status="queued",
+        created_by_id=creator.id,
+        created_by_username=creator.username,
+        allowed_lab_unit_ids=json.dumps([lab.id, 999999]),
+    )
+    db_session.add(job)
+    db_session.flush()
+
+    assert _current_job_lab_units(db_session, job) == {lab.id}
+    creator.is_active = False
+    db_session.flush()
+    assert _current_job_lab_units(db_session, job) == set()

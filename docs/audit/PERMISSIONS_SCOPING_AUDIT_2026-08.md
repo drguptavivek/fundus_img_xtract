@@ -1,5 +1,10 @@
 # Permissions & Scoping Audit — Functionality-wise (2026-08-23)
 
+> **Historical snapshot.** References below to an authorization engine, action
+> registry, TOML actions, or `authorize(action, ...)` describe a design that has
+> since been removed. Current authorization is deliberately lean: routes select
+> a reusable behaviour and supply persisted record lineage; missing facts deny.
+
 Read-only code audit of every route surface against `docs/policy/authorizations.md`,
 `docs/policy/admin_access_policy.md`, `docs/policy/upload_policy.md`, and
 `docs/10-DEVELOP/PII_Exposure_Control_Policy.md`. Nothing was modified. Every finding below

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import select
 
 from tests.helpers.factories import UserFactory
@@ -45,6 +46,7 @@ def _create_encounter_file(db_session, lab_unit, *, glaucoma=False, dr=False, en
         filename=f"img_{uuid4().hex}.jpg",
         file_type="image",
         lab_unit_id=lab_unit.id,
+        hospital_id=lab_unit.hospital_id,
     )
     db_session.add(enc_file)
     db_session.flush()
@@ -135,10 +137,13 @@ def test_task_backfill_job_updates_status(app, db_session, core_test_data):
 
     enc_gl = _create_encounter_file(db_session, lab_unit, glaucoma=True)
 
+    creator = UserFactory.create_by_role(db_session, "admin", username="backfill_admin")
+    creator.lab_units.append(lab_unit)
+    db_session.flush()
     job = TaskBackfillJob(
         status="queued",
         requested_limit=None,
-        created_by_id=None,
+        created_by_id=creator.id,
         created_by_username="tester",
         hospital_id=lab_unit.hospital_id,
         allowed_lab_unit_ids=json.dumps([lab_unit.id]),
@@ -159,3 +164,38 @@ def test_task_backfill_job_updates_status(app, db_session, core_test_data):
         )
     ).scalar_one_or_none()
     assert gl_task is not None
+
+
+def test_task_backfill_job_denies_revoked_creator(app, db_session, core_test_data):
+    lab_unit = db_session.merge(core_test_data["lab_a1"])
+    creator = UserFactory.create_by_role(db_session, "admin", username="revoked_backfill_admin")
+    creator.lab_units.append(lab_unit)
+    db_session.flush()
+    job = TaskBackfillJob(
+        status="queued",
+        created_by_id=creator.id,
+        created_by_username=creator.username,
+        allowed_lab_unit_ids=json.dumps([lab_unit.id]),
+    )
+    db_session.add(job)
+    db_session.commit()
+    creator.is_active = False
+    db_session.commit()
+
+    run_task_backfill_job(job.id)
+
+    db_session.refresh(job)
+    assert job.status == "failed"
+    assert "authorization" in job.error_message.lower()
+
+
+def test_task_backfill_stops_when_live_scope_changes(db_session, core_test_data):
+    lab_unit = db_session.merge(core_test_data["lab_a1"])
+    _create_encounter_file(db_session, lab_unit, glaucoma=True)
+
+    with pytest.raises(PermissionError, match="authorization changed"):
+        run_task_backfill(
+            db_session,
+            allowed_lab_unit_ids={lab_unit.id},
+            authorize_cb=lambda: False,
+        )

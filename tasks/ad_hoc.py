@@ -25,6 +25,7 @@ from ad_hoc_task_creation import (
     validate_filter_scope,
     validate_root_diseases,
 )
+from tasks.lineage import valid_task_lineage
 from utils.suitability import check_suitability
 from utils.log_sanitize import sanitize_log_value
 
@@ -126,6 +127,7 @@ def list_batches():
                     GradingTask.project_id.is_not(None),
                     GradingTask.lab_unit_id.is_(None),
                     GradingTask.lab_unit_id.not_in(allowed_lab_units),
+                    ~valid_task_lineage(GradingTask),
                 ),
             )
         )
@@ -221,8 +223,19 @@ def detail(ad_hoc_id: int):
         # Fetch created tasks for this batch and resolve image UUIDs (ORM joins; uuid for both models)
         from models import Disease as DiseaseModel, LabUnit as LabUnitModel, DirectImageUpload, EncounterFile
         all_batch_tasks = db.query(GradingTask).filter(GradingTask.ad_hoc_id == b.id).all()
+        valid_task_ids = {
+            task_id
+            for (task_id,) in db.query(GradingTask.id)
+            .filter(
+                GradingTask.ad_hoc_id == b.id,
+                valid_task_lineage(GradingTask),
+            )
+            .all()
+        }
         if not all_batch_tasks or any(
-            task.project_id is not None or task.lab_unit_id not in allowed_lab_units
+            task.project_id is not None
+            or task.lab_unit_id not in allowed_lab_units
+            or task.id not in valid_task_ids
             for task in all_batch_tasks
         ):
             abort(403, description="No access to this complete batch")

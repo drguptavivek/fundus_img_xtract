@@ -12,6 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Disease, Grade, GradingTask, LabUnit, User
 from authz.behaviors import clinical_lab_units
+from tasks.lineage import valid_task_lineage
 
 
 ROLE_LABELS = {
@@ -50,7 +51,10 @@ def _fetch_grade_counts(
         .join(Disease, GradingTask.disease_id == Disease.id)
         .join(LabUnit, GradingTask.lab_unit_id == LabUnit.id)
         .join(User, Grade.grader_user_id == User.id)
-        .filter(GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        .filter(
+            GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)),
+            valid_task_lineage(GradingTask),
+        )
         .group_by(
             Disease.id,
             Disease.name,
@@ -171,7 +175,10 @@ def _fetch_grader_totals(
         .join(GradingTask, Grade.task_id == GradingTask.id)
         .join(User, Grade.grader_user_id == User.id)
         .filter(Grade.role_slot != "ai")
-        .filter(GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        .filter(
+            GradingTask.lab_unit_id.in_(list(allowed_lab_unit_ids)),
+            valid_task_lineage(GradingTask),
+        )
         .group_by(User.id, User.username, User.full_name)
     )
     if start_dt:

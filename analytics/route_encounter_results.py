@@ -33,6 +33,7 @@ from analytics.utils import build_encounter_result_payload, fetch_image_task_det
 from authz.behaviors import analytics_hospitals, analytics_lab_units, analytics_rows
 from services.uploads.access import encounter_columns
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.date_utils import parse_date_yyyy_mm_dd
 from utils.pii_masking import should_mask_pii
 
@@ -240,6 +241,7 @@ def encounter_results() -> str:
             task_query = analytics_rows(
                 db, task_query, current_user, task_columns(GradingTask)
             )
+            task_query = task_query.filter(valid_task_lineage())
             
             tasks = (
                 task_query.options(

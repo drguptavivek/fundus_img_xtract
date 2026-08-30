@@ -29,6 +29,7 @@ from models import (
     UserDiseaseUnitRole
 )
 from authz.behaviors import clinical_rows
+from tasks.lineage import valid_task_lineage
 
 
 def _task_columns(model):
@@ -83,6 +84,7 @@ def get_task_summary(
     
     # Apply scoping based on user's lab units or admin override
     query = clinical_rows(db_session, query, current_user, _task_columns(Task))
+    query = query.filter(valid_task_lineage(Task))
     
     # Apply optional filters
     if status_filter:
@@ -170,7 +172,7 @@ def get_task_detail(db_session, task_id: int, mask_pii_override: bool = False) -
     query = clinical_rows(
         db_session, db_session.query(Task), current_user, _task_columns(Task)
     )
-    task = query.filter(Task.id == task_id).options(
+    task = query.filter(Task.id == task_id, valid_task_lineage(Task)).options(
         joinedload(Task.consensus),  # Load consensus information
         joinedload(Task.grades)
     ).first()
@@ -336,6 +338,7 @@ def get_tasks_by_status(
     
     # Apply scoping based on user's lab units or admin override
     query = clinical_rows(db_session, query, current_user, _task_columns(Task))
+    query = query.filter(valid_task_lineage(Task))
     
     # Apply status filter (state in the case of GradingTask)
     query = query.filter(Task.state == status)
@@ -388,6 +391,7 @@ def get_task_stats(db_session, lab_unit_ids: Optional[List[int]] = None) -> Dict
     
     # Apply scoping based on user's lab units or admin override
     query = clinical_rows(db_session, query, current_user, _task_columns(Task))
+    query = query.filter(valid_task_lineage(Task))
     
     # Count all tasks
     total_tasks = query.count()
@@ -466,6 +470,7 @@ def get_tasks_for_user(
     
     # Apply scoping based on current user's lab units or admin override
     query = clinical_rows(db_session, query, current_user, _task_columns(Task))
+    query = query.filter(valid_task_lineage(Task))
     
     # Apply optional status filter
     if status_filter:

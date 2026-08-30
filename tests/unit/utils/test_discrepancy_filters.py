@@ -214,6 +214,22 @@ def test_build_discrepancy_filter_query_scopes_uploaded_task_ids(monkeypatch):
     assert params["task_ids"] == [9, 4]
 
 
+def test_build_discrepancy_filter_query_requires_pre_resolved_export_ids(monkeypatch):
+    monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
+    _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(
+        _FakeDB(),
+        {
+            "disease_id": 1,
+            "allowed_lab_units": [1],
+            "project_capability_user_id": 1,
+            "authorized_task_ids": [],
+        },
+    )
+
+    assert "v.task_id = ANY(:authorized_task_ids)" in where_sql
+    assert params["authorized_task_ids"] == []
+
+
 def test_build_discrepancy_filter_query_scopes_source_project(monkeypatch):
     monkeypatch.setattr(discrepancy_filters, "get_mv_name_for_disease", lambda db, disease_id: "mv_test")
     _mv, where_sql, params, _model = discrepancy_filters.build_discrepancy_filter_query(

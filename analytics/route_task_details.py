@@ -6,6 +6,7 @@ from auth.roles import roles_required
 from models import GradingTask, LabUnit
 from authz.behaviors import analytics_rows
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.taskUtils import get_task_summary
 from . import bp
 from db_transaction_manager import get_db_session
@@ -29,6 +30,7 @@ def get_task_detail(task_id: int):
         )
         # Apply scoping to ensure task belongs to user's hospital/lab units
         query = analytics_rows(db, query, current_user, task_columns(GradingTask))
+        query = query.filter(valid_task_lineage())
         task = query.first()
         
         if not task:

@@ -1,5 +1,11 @@
 # Authorization Surface and Route-Wiring Audit
 
+> **Historical snapshot, superseded.** This audit describes the deleted action
+> catalogue at revision `0c32aeb4`; it is not the current authorization design.
+> The live system uses explicit route-selected behaviours from `authz/behaviors.py`
+> and record predicates from `authz/rows.py`. AUTHZ-10 now means executable
+> route/service/worker negative-path assurance, not route-to-action wiring.
+
 **Audit date:** 2026-08-25
 
 **Audited revision:** `0c32aeb4` (`main`)
@@ -196,9 +202,14 @@ This finding does not assert that every occurrence is exploitable. It identifies
 
 **Required remediation:** enumerate every bypass call site, map it to a named action, and either remove it or record a narrowly scoped, reviewed break-glass policy with audit requirements.
 
-### AUTHZ-10 — Policy parity and documentation checks do not prove enforcement
+### AUTHZ-10 — Policy parity and documentation checks did not prove enforcement (superseded design)
 
 **Severity: Medium — assurance failure**
+
+**Resolution direction (2026-08-30):** the registry and its parity tests were
+removed. Assurance now executes representative high-risk transports and proves
+denial for cross-project, cross-Lab-Unit, missing-lineage, and revoked-authority
+cases. The probe inventory is test-only and is not runtime policy metadata.
 
 The registry/policy invariant is healthy:
 

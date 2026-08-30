@@ -28,6 +28,7 @@ from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
 from authz.behaviors import analytics_rows
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 
 @get_db_session()
@@ -56,6 +57,7 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
         # Apply hospital scoping if user provided
         if user:
             tasks_query = analytics_rows(db, tasks_query, user, task_columns(GradingTask))
+        tasks_query = tasks_query.filter(valid_task_lineage())
             
         tasks_query = tasks_query.options(
             # Core relationships
@@ -227,6 +229,7 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
         # Apply hospital scoping if user provided
         if user:
             tasks_query = analytics_rows(db, tasks_query, user, task_columns(GradingTask))
+        tasks_query = tasks_query.filter(valid_task_lineage())
             
         tasks_query = tasks_query.options(
             joinedload(GradingTask.disease),

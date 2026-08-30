@@ -6,6 +6,7 @@ from encounter_sets.permissions import (
     apply_task_capability_scope,
     capability_lab_unit_ids,
     project_task_capability_clause,
+    user_has_task_capability,
 )
 from data_authorization.models import ProjectRoleGrant
 from project_configuration.models import ProjectLabUnit
@@ -370,3 +371,186 @@ def test_regrade_query_clause_requires_matching_project_capability(db_session, c
         lab_unit=lab_unit,
     )
     assert regrade.id in {row.id for row in scoped_query.all()}
+
+
+def test_task_capabilities_require_complete_source_lineage_for_admin_and_roles(
+    db_session,
+    core_test_data,
+):
+    """Role scope never turns malformed or cross-scope tasks into visible rows."""
+    lab_a1 = db_session.merge(core_test_data["lab_a1"])
+    lab_a2 = db_session.merge(core_test_data["lab_a2"])
+    disease = Disease(name="Lineage Capability Disease", grading_scope="image")
+    reviewer = UserFactory.create_with_hospital(
+        db_session,
+        "discrepancy_reviewer",
+        lab_a1.hospital_id,
+        [lab_a1.id, lab_a2.id],
+        username="lineage_capability_reviewer",
+    )
+    admin = UserFactory.create_admin(
+        db_session,
+        username="lineage_capability_admin",
+    )
+
+    classical_source = PatientEncounters(
+        name="Lineage classical source",
+        patient_id="LINEAGE-CLASSICAL",
+        capture_date="2026-08-11",
+        capture_date_dt=date(2026, 8, 11),
+        lab_unit_id=lab_a1.id,
+        project_id=None,
+        is_set_based=True,
+        encounter_verified_status="pending",
+    )
+    missing_lineage_source = PatientEncounters(
+        name="Lineage missing Lab Unit source",
+        patient_id="LINEAGE-MISSING-LAB",
+        capture_date="2026-08-11",
+        capture_date_dt=date(2026, 8, 11),
+        lab_unit_id=None,
+        project_id=None,
+        is_set_based=True,
+        encounter_verified_status="pending",
+    )
+    cross_lab_source = PatientEncounters(
+        name="Lineage cross Lab Unit source",
+        patient_id="LINEAGE-CROSS-LAB",
+        capture_date="2026-08-11",
+        capture_date_dt=date(2026, 8, 11),
+        lab_unit_id=lab_a1.id,
+        project_id=None,
+        is_set_based=True,
+        encounter_verified_status="pending",
+    )
+    project_one = Project(title="Lineage Project One", code="LINEAGE_ONE", active=True)
+    project_two = Project(title="Lineage Project Two", code="LINEAGE_TWO", active=True)
+    db_session.add_all([
+        classical_source,
+        missing_lineage_source,
+        cross_lab_source,
+        project_one,
+        project_two,
+        disease,
+    ])
+    db_session.flush()
+    project_source = _encounter(
+        db_session,
+        project=project_one,
+        lab_unit=lab_a1,
+        suffix="LINEAGE-PROJECT",
+    )
+    cross_project_source = _encounter(
+        db_session,
+        project=project_one,
+        lab_unit=lab_a1,
+        suffix="LINEAGE-CROSS-PROJECT",
+    )
+
+    # Establish the role path that would otherwise authorize the bad rows.
+    for project in (project_one, project_two):
+        if db_session.query(ProjectLabUnit).filter_by(
+            project_id=project.id,
+            lab_unit_id=lab_a1.id,
+        ).one_or_none() is None:
+            db_session.add(ProjectLabUnit(
+                project_id=project.id,
+                lab_unit_id=lab_a1.id,
+                active=True,
+            ))
+        _grant(
+            db_session,
+            project=project,
+            user=reviewer,
+            role_name="discrepancy_reviewer",
+            lab_unit=lab_a1,
+        )
+    db_session.flush()
+
+    valid_classical = GradingTask(
+        patient_encounter_id=classical_source.id,
+        disease_id=disease.id,
+        lab_unit_id=lab_a1.id,
+        project_id=None,
+        state="pending",
+    )
+    valid_project = GradingTask(
+        patient_encounter_id=project_source.id,
+        disease_id=disease.id,
+        lab_unit_id=lab_a1.id,
+        state="pending",
+    )
+    missing_source = GradingTask(
+        patient_encounter_id=missing_lineage_source.id,
+        disease_id=disease.id,
+        lab_unit_id=lab_a1.id,
+        project_id=None,
+        state="pending",
+    )
+    cross_lab = GradingTask(
+        patient_encounter_id=cross_lab_source.id,
+        disease_id=disease.id,
+        lab_unit_id=lab_a2.id,
+        project_id=None,
+        state="pending",
+    )
+    cross_project = GradingTask(
+        patient_encounter_id=cross_project_source.id,
+        disease_id=disease.id,
+        lab_unit_id=lab_a1.id,
+        state="pending",
+    )
+    db_session.add_all([
+        valid_classical,
+        valid_project,
+        missing_source,
+        cross_lab,
+        cross_project,
+    ])
+    db_session.flush()
+    # The DB trigger correctly derives project_one from the source; corrupt
+    # the maintained value in-session to model a stale/cross-project row.
+    cross_project.project_id = project_two.id
+    db_session.flush()
+
+    invalid_ids = {missing_source.id, cross_lab.id, cross_project.id}
+    expected_ids = {valid_classical.id, valid_project.id}
+    for actor in (reviewer, admin):
+        scoped_ids = {
+            task.id
+            for task in apply_task_capability_scope(
+                db_session.query(GradingTask),
+                GradingTask,
+                actor,
+                DISCREPANCY_ROLES,
+            ).all()
+        }
+        assert expected_ids <= scoped_ids
+        assert not invalid_ids & scoped_ids
+
+        clause_ids = {
+            task.id
+            for task in db_session.query(GradingTask).filter(
+                project_task_capability_clause(GradingTask.id, actor, DISCREPANCY_ROLES)
+            ).all()
+        }
+        assert expected_ids <= clause_ids
+        assert not invalid_ids & clause_ids
+        assert all(
+            user_has_task_capability(
+                db_session,
+                user=actor,
+                task_id=task_id,
+                roles=DISCREPANCY_ROLES,
+            )
+            for task_id in expected_ids
+        )
+        assert not any(
+            user_has_task_capability(
+                db_session,
+                user=actor,
+                task_id=task_id,
+                roles=DISCREPANCY_ROLES,
+            )
+            for task_id in invalid_ids
+        )

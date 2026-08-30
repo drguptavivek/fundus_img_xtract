@@ -8,7 +8,7 @@ relationships.
 
 from __future__ import annotations
 
-from sqlalchemy import and_, exists, false, or_, select, true
+from sqlalchemy import and_, exists, false, or_, select
 from sqlalchemy.orm import aliased
 
 from authz import RecordColumns, access_context, role_scoped_rows
@@ -16,6 +16,7 @@ from authz.behaviors import role_lab_units
 from data_authorization.service import project_role_grant_exists_clause
 from models import GradingTask, LabUnit, User
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 
 HOSPITAL_WIDE_ROLES = frozenset({"local_admin", "data_manager"})
@@ -80,15 +81,28 @@ def user_has_task_capability(db, *, user: User, task_id: int, roles) -> bool:
         project_roles=roles,
         allow_admin=True,
     )
+    # Scope is meaningful only for a structurally complete task.  Apply this
+    # after the role paths so Admin follows the same lineage guard as every
+    # other caller; Admin is a break-glass role, not a bypass for bad data.
+    query = query.filter(valid_task_lineage(GradingTask))
     return query.first() is not None
 
 
 def project_task_capability_clause(task_id_column, user: User, roles):
     """Correlated task clause matching the same explicit role/scope paths."""
-    if user.has_role("admin"):
-        return true()
     roles = frozenset(roles)
     task = aliased(GradingTask)
+    lineage = valid_task_lineage(task)
+    if user.has_role("admin"):
+        # The administrative path retains the task-lineage invariant.  A
+        # malformed or cross-source task must not become visible merely
+        # because the actor has break-glass authority.
+        return exists(
+            select(task.id).where(
+                task.id == task_id_column,
+                lineage,
+            )
+        )
     assigned_ids = {
         int(lab.id) for lab in (getattr(user, "lab_units", None) or ())
         if getattr(lab, "id", None) is not None
@@ -106,6 +120,7 @@ def project_task_capability_clause(task_id_column, user: User, roles):
     return exists(
         select(task.id).where(
             task.id == task_id_column,
+            lineage,
             or_(classical, project),
         )
     )
@@ -127,7 +142,7 @@ def capability_lab_unit_ids(db, *, user: User, roles) -> set[int]:
 
 def apply_task_capability_scope(query, task_entity, user: User, roles):
     roles = frozenset(roles)
-    return role_scoped_rows(
+    scoped = role_scoped_rows(
         query,
         access_context(_session(query), user),
         task_columns(task_entity),
@@ -136,3 +151,6 @@ def apply_task_capability_scope(query, task_entity, user: User, roles):
         project_roles=roles,
         allow_admin=True,
     )
+    # Keep list and detail paths equivalent: neither ordinary roles nor
+    # Admin may see a task whose source/lineage facts are absent or conflict.
+    return scoped.filter(valid_task_lineage(task_entity))

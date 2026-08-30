@@ -229,6 +229,28 @@ def test_regrade_api_rejects_incomplete_submission_facts(client, login_user):
     assert response.get_json()["error"]["code"] == "invalid_request"
 
 
+def test_regrade_api_preserves_source_lineage_denial(client, login_user, monkeypatch):
+    login_user("test_admin", "Test@2026")
+
+    monkeypatch.setattr(
+        "api.regrade_tasks.submit_regrade",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            denied("The source task has invalid lineage.")
+        ),
+    )
+    response = client.post(
+        "/api/regrade-tasks/17/submission",
+        json={
+            "label_id": 9,
+            "selected_feature_ids": [],
+            "feature_geometry_json": None,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["error"]["code"] == "authorization_denied"
+
+
 def test_regrade_api_rejects_invalid_scalar_cohort_filter(client, login_user):
     login_user("test_admin", "Test@2026")
 

@@ -13,8 +13,10 @@ from auth.roles import roles_required
 from . import bp
 from models import Disease, LabUnit, DiseaseGrading, AIModel, Grade, GradingTask, ImageMetadata
 from sqlalchemy.orm import joinedload
-from authz.behaviors import clinical_lab_units
+from authz.behaviors import clinical_lab_units, clinical_rows
 from db_transaction_manager import get_db_session
+from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.mvw_all_img_search import (
     MVImageFilters,
     search_mvw_images,
@@ -23,7 +25,46 @@ from utils.taskUtils import get_task_detail
 from utils.date_utils import parse_date_yyyy_mm_dd
 from utils.log_sanitize import sanitize_log_value, mask_text_emails
 from review.task_review import AI_REVIEW_STATUS_LABELS
-from utils.final_grade_basis import normalize_final_grade_basis
+
+
+def _query_int(
+    name: str,
+    *,
+    default: int | None = None,
+    minimum: int = 1,
+) -> int | None:
+    """Parse a query integer and reject supplied malformed values."""
+    if name not in request.args:
+        return default
+    raw_value = request.args.get(name)
+    try:
+        value = int(raw_value) if raw_value is not None else None
+    except (TypeError, ValueError):
+        abort(400, description=f"Invalid {name} filter")
+    if value is None or value < minimum:
+        abort(400, description=f"Invalid {name} filter")
+    return value
+
+
+def _query_date(name: str):
+    """Parse a supplied date, rejecting invalid values instead of omitting it."""
+    if name not in request.args:
+        return None
+    raw_value = request.args.get(name)
+    value = parse_date_yyyy_mm_dd(raw_value)
+    if value is None:
+        abort(400, description=f"Invalid {name} filter")
+    return value
+
+
+def _query_choice(name: str, allowed: set[str], *, default: str | None = None):
+    """Return a filter choice while distinguishing absent from invalid input."""
+    if name not in request.args:
+        return default
+    value = request.args.get(name)
+    if value not in allowed:
+        abort(400, description=f"Invalid {name} filter")
+    return value
 
 
 @bp.route("/images", methods=["GET"])
@@ -35,38 +76,49 @@ from utils.final_grade_basis import normalize_final_grade_basis
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def search_images_route() -> str:
     """Search images using the MV-backed discrepancy filters for reuse."""
-    page = max(1, request.args.get("page", default=1, type=int) or 1)
-    per_page = request.args.get("per_page", default=25, type=int)
-    per_page = per_page if isinstance(per_page, int) and per_page > 0 else 25
-    explicit_offset = request.args.get("offset", type=int)
-    offset = explicit_offset if explicit_offset is not None and explicit_offset >= 0 else (page - 1) * per_page
+    page = _query_int("page", default=1)
+    per_page = _query_int("per_page", default=25)
+    explicit_offset = _query_int("offset", minimum=0)
+    offset = explicit_offset if explicit_offset is not None else (page - 1) * per_page
 
-    disease_id = request.args.get("disease_id", type=int)
-    lab_unit_id = request.args.get("lab_unit_id", type=int)
-    has_consensus = request.args.get("has_consensus", type=str)
-    if has_consensus is None:
-        has_consensus = "has_consensus"
-    has_review = request.args.get("has_review", type=str)
+    disease_id = _query_int("disease_id")
+    lab_unit_id = _query_int("lab_unit_id")
+    has_consensus = _query_choice(
+        "has_consensus", {"", "has_consensus", "no"}, default="has_consensus"
+    )
+    has_review = _query_choice("has_review", {"", "yes", "no"})
     review_grades = request.args.getlist("review_grade")
     resident_grades = request.args.getlist("resident_grade")
     resident2_grades = request.args.getlist("resident2_grade")
     arbitrator_grades = request.args.getlist("arbitrator_grade")
     final_grades = request.args.getlist("final_grade")
-    final_grade_basis = normalize_final_grade_basis(request.args.get("final_grade_basis"))
-    has_ai_grade = request.args.get("has_ai_grade", type=str)
+    final_grade_basis = _query_choice(
+        "final_grade_basis", {"preference", "double_match"}, default="preference"
+    )
+    has_ai_grade = _query_choice("has_ai_grade", {"", "yes", "no"})
     ai_model_ids = request.args.getlist("ai_model_id")
+    for model_id in ai_model_ids:
+        try:
+            if int(model_id) < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            abort(400, description="Invalid ai_model_id filter")
     ai_grades = request.args.getlist("ai_grade")
-    ai_review_statuses = [
-        status for status in request.args.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
-    ]
+    ai_review_statuses = request.args.getlist("ai_review_status")
+    if any(status not in AI_REVIEW_STATUS_LABELS for status in ai_review_statuses):
+        abort(400, description="Invalid ai_review_status filter")
     image_uuid = (request.args.get("image_uuid") or "").strip() or None
-    upload_after = parse_date_yyyy_mm_dd(request.args.get("upload_after"))
-    upload_before = parse_date_yyyy_mm_dd(request.args.get("upload_before"))
-    encounter_after = parse_date_yyyy_mm_dd(request.args.get("encounter_after"))
-    encounter_before = parse_date_yyyy_mm_dd(request.args.get("encounter_before"))
+    upload_after = _query_date("upload_after")
+    upload_before = _query_date("upload_before")
+    encounter_after = _query_date("encounter_after")
+    encounter_before = _query_date("encounter_before")
 
     # Log search request safely
     current_app.logger.info(
@@ -156,9 +208,31 @@ def search_images_route() -> str:
                 fundus_api_disease_endpoint="fundus_api.diseases_with_gradings" in current_app.view_functions,
             )
 
+        # Resolve the exact task identities visible through the route's
+        # clinical-row behaviour.  A Lab Unit is not an authorization grant:
+        # the same Lab Unit can contain classical and project tasks belonging
+        # to different principals.  Passing these IDs to the MV query keeps
+        # the denormalized search result set consistent with normal task
+        # listings and prevents same-Lab cross-project leakage.
+        authorized_task_query = (
+            db.query(GradingTask.id)
+            .join(GradingTask.lab_unit)
+        )
+        authorized_task_query = clinical_rows(
+            db,
+            authorized_task_query,
+            current_user,
+            task_columns(GradingTask, hospital_id_column=LabUnit.hospital_id),
+        )
+        authorized_task_query = authorized_task_query.filter(valid_task_lineage())
+        authorized_task_ids = [
+            task_id for (task_id,) in authorized_task_query.all()
+        ]
+
         filters = MVImageFilters(
             disease_id=disease_id,
             allowed_lab_units=list(allowed_lab_unit_ids),
+            authorized_task_ids=authorized_task_ids,
             lab_unit_id=lab_unit_id,
             resident_grades=resident_grades,
             resident2_grades=resident2_grades,
@@ -314,6 +388,10 @@ def search_images_route() -> str:
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def search_image_detail(task_id: int) -> str:
     """Read-only task detail view for search results with inline image viewer."""
@@ -326,8 +404,9 @@ def search_image_detail(task_id: int) -> str:
             flash("No lab unit access.", "warning")
             return redirect(url_for("home.index"))
 
-        task = (
+        task_query = (
             db.query(GradingTask)
+            .join(GradingTask.lab_unit)
             .options(
                 joinedload(GradingTask.disease),
                 joinedload(GradingTask.lab_unit).joinedload(LabUnit.hospital),
@@ -335,9 +414,16 @@ def search_image_detail(task_id: int) -> str:
                 joinedload(GradingTask.direct_image),
                 joinedload(GradingTask.grades),
             )
-            .filter(GradingTask.id == task_id, GradingTask.lab_unit_id.in_(allowed_lab_unit_ids))
-            .first()
+            .filter(GradingTask.id == task_id)
         )
+        task_query = clinical_rows(
+            db,
+            task_query,
+            current_user,
+            task_columns(GradingTask, hospital_id_column=LabUnit.hospital_id),
+        )
+        task_query = task_query.filter(valid_task_lineage())
+        task = task_query.first()
         if not task:
             abort(404, description="Task not found or access denied")
 

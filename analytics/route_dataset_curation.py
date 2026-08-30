@@ -46,6 +46,7 @@ from datasets.authorization import (
     scope_dataset_task_query,
 )
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from . import bp
 from review.discrepancy_export import (
     ExportTaskRow,
@@ -382,7 +383,7 @@ def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str, color_fi
         .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
         .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
         .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
-        .filter(CuratedDatasetItem.dataset_id == dataset_id)
+        .filter(CuratedDatasetItem.dataset_id == dataset_id, valid_task_lineage())
     )
     base_query = _apply_pii_filter(base_query, pii_filter)
     base_query = _apply_color_filter(base_query, color_filter)
@@ -406,6 +407,7 @@ def _count_dataset_items_by_export_state(
         .filter(
             CuratedDatasetItem.dataset_id == dataset_id,
             CuratedDatasetItem.include_in_export.is_(include_in_export),
+            valid_task_lineage(),
         )
     )
     base_query = _apply_pii_filter(base_query, pii_filter)
@@ -445,7 +447,7 @@ def _get_dataset_screen_page(
             .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
             .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
             .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
-            .filter(CuratedDatasetItem.dataset_id == dataset_id)
+            .filter(CuratedDatasetItem.dataset_id == dataset_id, valid_task_lineage())
         )
         query = _apply_pii_filter(query, pii_filter)
         query = _apply_color_filter(query, color_filter)
@@ -764,6 +766,7 @@ def dataset_detail(dataset_uuid: str):
                     current_user,
                     task_columns(GradingTask),
                 )
+                task_query = task_query.filter(valid_task_lineage())
                 task = scope_dataset_task_query(task_query, dataset=dataset).first()
                 if not task or task.disease_id != dataset.disease_id:
                     abort(404)
@@ -817,6 +820,7 @@ def dataset_detail(dataset_uuid: str):
                 task_query = dataset_rows(
                     db, task_query, current_user, task_columns(GradingTask)
                 )
+                task_query = task_query.filter(valid_task_lineage())
                 selected_task = scope_dataset_task_query(task_query, dataset=dataset).first()
                 if selected_task:
                     selected_image = selected_task.encounter_file or selected_task.direct_image
@@ -961,6 +965,7 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
             .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
             .filter(
                 CuratedDatasetItem.dataset_id == dataset.id,
+                valid_task_lineage(),
                 sa.or_(
                     GradingTask.encounter_file.has(uuid=image_uuid),
                     GradingTask.direct_image.has(uuid=image_uuid),
@@ -1113,7 +1118,7 @@ def dataset_screen_gallery(dataset_uuid: str):
             .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
             .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
             .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
-            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .filter(CuratedDatasetItem.dataset_id == dataset.id, valid_task_lineage())
         )
         query = _apply_pii_filter(query, pii_filter)
         query = _apply_color_filter(query, color_filter)
@@ -1245,6 +1250,7 @@ def dataset_toggle_item(dataset_uuid: str):
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
         task_query = dataset_rows(db, task_query, current_user, task_columns(GradingTask))
+        task_query = task_query.filter(valid_task_lineage())
         task = scope_dataset_task_query(task_query, dataset=dataset).first()
         if not task:
             return ("Not found", 404)
@@ -1534,7 +1540,7 @@ def dataset_export(dataset_uuid: str):
                     db.query(GradingTask.id).filter(GradingTask.id.in_(task_ids)),
                     current_user,
                     task_columns(GradingTask),
-                ), dataset=dataset).all()
+                ).filter(valid_task_lineage()), dataset=dataset).all()
             ]
         if not task_ids:
             flash("No tasks selected for export in this dataset.", "error")

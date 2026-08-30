@@ -50,7 +50,13 @@ from tasks.access import task_columns
 from utils.dataset_share_security import clear_failures, is_locked_out, register_failure
 from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
-from datasets.authorization import can_share_dataset, can_view_dataset, scope_dataset_task_query
+from datasets.authorization import (
+    can_share_dataset,
+    can_view_dataset,
+    scope_dataset_task_query,
+    valid_dataset_export_task_ids,
+)
+from tasks.lineage import valid_task_lineage
 
 from . import bp
 
@@ -180,9 +186,12 @@ def list_datasets():
                         row[0]
                         for row in (
                             db.query(CuratedDatasetItem.task_id)
+                            .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
                             .filter(
                                 CuratedDatasetItem.dataset_id == browse_dataset.id,
                                 CuratedDatasetItem.include_in_export.is_(True),
+                                valid_task_lineage(GradingTask),
+                                GradingTask.disease_id == browse_dataset.disease_id,
                             )
                             .all()
                         )
@@ -842,6 +851,16 @@ def _queue_dataset_export_job(db, share: DatasetShare, ip: str) -> Optional[str]
     if not task_ids:
         return "No tasks selected for export."
 
+    # Re-resolve the persisted dataset immediately before creating a job.
+    # Public share credentials do not carry task authority, so malformed or
+    # cross-context task IDs must never reach the export worker, even if the
+    # dataset changed after the share was created.
+    dataset = db.query(CuratedDataset).filter(CuratedDataset.id == share.dataset_id).first()
+    canonical_ids = valid_dataset_export_task_ids(db, dataset=dataset) if dataset else None
+    if canonical_ids is None:
+        return "Dataset export lineage is incomplete or inconsistent."
+    task_ids = canonical_ids
+
     job_token = db_create_job(
         ["dataset_export"],
         [],
@@ -861,7 +880,6 @@ def _queue_dataset_export_job(db, share: DatasetShare, ip: str) -> Optional[str]
         )
         db.flush()
 
-    dataset = db.query(CuratedDataset).filter(CuratedDataset.id == share.dataset_id).first()
     metadata = {}
     if dataset:
         stored_filters = {}

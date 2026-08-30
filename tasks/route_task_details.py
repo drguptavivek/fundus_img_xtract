@@ -9,6 +9,7 @@ from models import GradingTask, LabUnit
 
 from authz.behaviors import clinical_rows
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.taskUtils import get_task_detail
 from . import bp
 
@@ -21,6 +22,10 @@ from . import bp
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def view_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
@@ -38,7 +43,7 @@ def view_task_details(task_id: int):
         )
         # Apply scoping to ensure task belongs to user's hospital/lab units
         query = clinical_rows(db, query, current_user, task_columns(GradingTask))
-        task = query.first()
+        task = query.filter(valid_task_lineage()).first()
         
         if not task:
             from flask import abort
@@ -71,6 +76,10 @@ def view_task_details(task_id: int):
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def all_tasks_viewer(image_uuid: str):
     """Serve the grading viewer card for the all-tasks list."""
@@ -86,7 +95,7 @@ def all_tasks_viewer(image_uuid: str):
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
         )
         query = clinical_rows(db, query, current_user, task_columns(GradingTask))
-        task = query.first()
+        task = query.filter(valid_task_lineage()).first()
         if not task:
             from flask import abort
             abort(404, description="Task not found or access denied")

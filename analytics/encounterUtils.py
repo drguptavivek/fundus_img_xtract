@@ -21,6 +21,7 @@ from db_transaction_manager import get_db_session
 from authz.behaviors import analytics_rows
 from services.uploads.access import encounter_columns, upload_columns
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 
 
@@ -98,6 +99,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
             
             # Apply hospital scoping to tasks as well
             task_query = analytics_rows(db, task_query, user, task_columns(GradingTask))
+            task_query = task_query.filter(valid_task_lineage())
             
             tasks = (
                 task_query
@@ -280,6 +282,7 @@ def get_encounters_summary_list(user: User, filters=None):
                 image_ids = [ef.id for ef in encounter.encounter_files]
                 if image_ids:
                     task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(image_ids))
+                    task_query = task_query.filter(valid_task_lineage())
                     task_count = task_query.count()
                     completed_task_count = task_query.filter(
                         GradingTask.state.in_(['final'])
@@ -329,6 +332,7 @@ def get_encounters_with_non_pending_tasks(user: User):
         
         # Apply hospital scoping
         query = analytics_rows(db, query, user, task_columns(GradingTask))
+        query = query.filter(valid_task_lineage())
         
         non_pending_tasks = query.all()
         
@@ -391,6 +395,7 @@ def get_direct_image_summary(uuid_str: str, user: User):
         
         # Apply hospital scoping to tasks
         task_query = analytics_rows(db, task_query, user, task_columns(GradingTask))
+        task_query = task_query.filter(valid_task_lineage())
         
         tasks = (
             task_query

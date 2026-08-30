@@ -31,6 +31,7 @@ from models import (
     UserDiseaseUnitRole,
 )
 from grading.workbench.revisions import check_revision_eligibility_by_task_state
+from tasks.lineage import valid_task_lineage
 from utils.timezone_choices import DEFAULT_TIMEZONE
 
 
@@ -378,7 +379,10 @@ def _items_for_record_refs(db, *, user, refs, disease_id):
                 selectinload(GradingTask.disease),
                 selectinload(GradingTask.encounter_set_image),
             )
-            .filter(GradingTask.id.in_(task_ids))
+            .filter(
+                GradingTask.id.in_(task_ids),
+                valid_task_lineage(GradingTask),
+            )
             .all()
             if task_ids else []
         )
@@ -402,6 +406,16 @@ def _items_for_record_refs(db, *, user, refs, disease_id):
 
 
 def _submission_query(db, *, user, disease_id):
+    invalid_item = exists(
+        select(1)
+        .select_from(EncounterSetGradingSubmissionItem)
+        .join(GradingTask, GradingTask.id == EncounterSetGradingSubmissionItem.task_id)
+        .where(
+            EncounterSetGradingSubmissionItem.submission_id
+            == EncounterSetGradingSubmission.id,
+            ~valid_task_lineage(GradingTask),
+        )
+    )
     query = (
         db.query(EncounterSetGradingSubmission)
         .join(EncounterSetGradingPackage)
@@ -412,7 +426,12 @@ def _submission_query(db, *, user, disease_id):
                 EncounterSetGradingPackage.patient_encounter
             ),
         )
-        .filter(EncounterSetGradingSubmission.grader_user_id == user.id)
+        .filter(
+            EncounterSetGradingSubmission.grader_user_id == user.id,
+            # A submission is one atomic grading record. Do not expose its
+            # valid-looking items if any task has broken source lineage.
+            ~invalid_item,
+        )
     )
     if disease_id:
         query = (
@@ -463,6 +482,7 @@ def _grade_query(db, *, user, history_type, disease_id):
             Grade.grader_user_id == user.id,
             Grade.role_slot != "review",
             ~exists(submitted_grade),
+            valid_task_lineage(GradingTask),
         )
     )
     encounter_predicate = or_(
@@ -629,14 +649,29 @@ def _available_diseases(db, *, user):
     grade_ids = db.execute(
         select(GradingTask.disease_id)
         .join(Grade, Grade.task_id == GradingTask.id)
-        .where(Grade.grader_user_id == user.id, Grade.role_slot != "review")
+        .where(
+            Grade.grader_user_id == user.id,
+            Grade.role_slot != "review",
+            valid_task_lineage(GradingTask),
+        )
     ).scalars().all()
+    invalid_submission_item = exists(
+        select(1)
+        .select_from(EncounterSetGradingSubmissionItem)
+        .join(GradingTask, GradingTask.id == EncounterSetGradingSubmissionItem.task_id)
+        .where(
+            EncounterSetGradingSubmissionItem.submission_id
+            == EncounterSetGradingSubmission.id,
+            ~valid_task_lineage(GradingTask),
+        )
+    )
     scope_ids = db.execute(
         select(EncounterSetGradingSubmissionItem.scope_disease_id)
         .join(EncounterSetGradingSubmission)
         .where(
             EncounterSetGradingSubmission.grader_user_id == user.id,
             EncounterSetGradingSubmissionItem.scope_disease_id.is_not(None),
+            ~invalid_submission_item,
         )
     ).scalars().all()
     disease_ids = set(grade_ids) | set(scope_ids)

@@ -25,6 +25,7 @@ from .errors import (
 )
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
 from .package_workflow import editable_tasks
+from tasks.lineage import valid_task_lineage
 from .roles import has_human_grades
 
 
@@ -166,7 +167,12 @@ def _session_query(db, session_uuid: str, *, for_update: bool):
 
 def _tasks_for_session(db, session, *, for_update: bool = False) -> list[GradingTask]:
     ordered_ids = [row.task_id for row in sorted(session.targets, key=lambda item: item.target_order)]
-    query = db.query(GradingTask).filter(GradingTask.id.in_(ordered_ids))
+    if not ordered_ids:
+        raise ConfigurationChanged("The grading session has no valid targets.")
+    query = db.query(GradingTask).filter(
+        GradingTask.id.in_(ordered_ids),
+        valid_task_lineage(),
+    )
     if for_update:
         query = query.order_by(GradingTask.id).with_for_update()
     tasks = {item.id: item for item in query.all()}

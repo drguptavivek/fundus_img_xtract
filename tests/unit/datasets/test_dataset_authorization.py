@@ -5,6 +5,7 @@ from datasets.authorization import (
     can_export_dataset,
     can_manage_dataset,
     can_share_dataset,
+    can_view_dataset,
     dataset_creation_lab_unit_ids,
 )
 from models import (
@@ -108,7 +109,23 @@ def test_site_dataset_creator_needs_create_and_share_flags(db_session, core_test
             active=True,
         ),
     ])
-    task = TestDataFactory.create_grading_task(db_session, lab_unit_id=lab.id, disease_id=disease.id)
+    encounter = TestDataFactory.create_patient_encounter(db_session, lab_unit_id=lab.id)
+    encounter.project_id = project.id
+    db_session.flush()
+    encounter_file = TestDataFactory.create_encounter_file(
+        db_session,
+        patient_encounter_id=encounter.id,
+        lab_unit_id=lab.id,
+        filename="project_dataset.jpg",
+    )
+    encounter_file.project_id = project.id
+    db_session.flush()
+    task = TestDataFactory.create_grading_task(
+        db_session,
+        lab_unit_id=lab.id,
+        disease_id=disease.id,
+        encounter_file_id=encounter_file.id,
+    )
     task.project_id = project.id
     dataset = CuratedDataset(
         name="Project site dataset",
@@ -193,8 +210,22 @@ def test_project_pii_exporter_can_export_without_data_exporter(
             ),
         ]
     )
+    encounter = TestDataFactory.create_patient_encounter(db_session, lab_unit_id=lab.id)
+    encounter.project_id = project.id
+    db_session.flush()
+    encounter_file = TestDataFactory.create_encounter_file(
+        db_session,
+        patient_encounter_id=encounter.id,
+        lab_unit_id=lab.id,
+        filename="project_pii_dataset.jpg",
+    )
+    encounter_file.project_id = project.id
+    db_session.flush()
     task = TestDataFactory.create_grading_task(
-        db_session, lab_unit_id=lab.id, disease_id=disease.id
+        db_session,
+        lab_unit_id=lab.id,
+        disease_id=disease.id,
+        encounter_file_id=encounter_file.id,
     )
     task.project_id = project.id
     dataset = CuratedDataset(
@@ -241,3 +272,41 @@ def test_admin_export_still_denies_invalid_dataset_task_lineage(
     db_session.flush()
 
     assert not can_export_dataset(db_session, user=admin, dataset=dataset)
+
+
+def test_admin_view_denies_task_with_broken_source_hospital_lineage(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    other_lab = db_session.merge(core_test_data["lab_b1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    admin = UserFactory.create_admin(db_session, username="invalid_view_lineage_admin")
+    encounter = TestDataFactory.create_patient_encounter(db_session, lab_unit_id=lab.id)
+    encounter_file = TestDataFactory.create_encounter_file(
+        db_session,
+        patient_encounter_id=encounter.id,
+        lab_unit_id=lab.id,
+        filename="invalid_view_lineage.jpg",
+    )
+    encounter_file.hospital_id = other_lab.hospital_id
+    db_session.flush()
+    task = TestDataFactory.create_grading_task(
+        db_session,
+        lab_unit_id=lab.id,
+        disease_id=disease.id,
+        encounter_file_id=encounter_file.id,
+    )
+    dataset = CuratedDataset(
+        name="Invalid lineage view",
+        purpose="Fail closed",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=disease.id,
+        context_kind="classical",
+        is_finalized=True,
+    )
+    db_session.add(dataset)
+    db_session.flush()
+    db_session.add(CuratedDatasetItem(dataset_id=dataset.id, task_id=task.id))
+    db_session.flush()
+
+    assert not can_view_dataset(db_session, user=admin, dataset=dataset)

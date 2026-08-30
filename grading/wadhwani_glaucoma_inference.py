@@ -14,6 +14,7 @@ from job_store import db_create_job
 from models import Camera, Hospital, Job, JobItem, LabUnit
 from utils.celery_helpers import enqueue_task
 from authz.behaviors import clinical_lab_units
+from tasks.lineage import valid_task_lineage
 from utils.wadhwani_glaucoma_selector import (
     DEFAULT_MANUAL_WADHWANI_LIMIT,
     MAX_MANUAL_WADHWANI_BATCH,
@@ -127,8 +128,11 @@ def wadhwani_glaucoma_inference_run():
             allowed_lab_unit_ids=allowed_lab_unit_ids,
             task_ids=selected_task_ids,
         )
-        if not eligible_task_ids:
-            flash("No selected tasks remain eligible for Wadhwani inference.", "warning")
+        if set(eligible_task_ids) != set(selected_task_ids):
+            # Revalidation is intentionally all-or-nothing.  Quietly
+            # dropping a task from a mixed selection would make the caller's
+            # requested batch differ from the authorized batch.
+            flash("One or more selected tasks are no longer eligible for Wadhwani inference.", "warning")
             return redirect(url_for("grading.wadhwani_glaucoma_inference_page"))
 
         task_refs = [f"task:{task_id}" for task_id in eligible_task_ids]
@@ -219,7 +223,10 @@ def _selected_task_ids_from_request() -> list[int]:
         try:
             task_ids.append(int(raw_value))
         except (TypeError, ValueError):
-            continue
+            # A mixed valid/invalid selection must fail as one request.  Do
+            # not silently drop the malformed identifier and enqueue the
+            # remaining tasks.
+            return []
     return list(dict.fromkeys(task_ids))
 
 
@@ -265,7 +272,10 @@ def _load_wadhwani_job_payload(db, job_token: str) -> dict | None:
             selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.camera),
             selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.hospital),
         )
-        .where(GradingTask.id.in_(task_ids))
+        .where(
+            GradingTask.id.in_(task_ids),
+            valid_task_lineage(GradingTask),
+        )
     ).scalars().all()
     tasks_by_id = {task.id: task for task in task_models}
 

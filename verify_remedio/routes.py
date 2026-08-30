@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime, date as _date, time as _time, timedelta
+from datetime import date as _date
+from datetime import datetime, timedelta
+from datetime import time as _time
 from typing import Any
 
-from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
+from auth.utils import utcnow
 from models import (
     Disease,
     EncounterFile,
@@ -16,14 +28,20 @@ from models import (
     LabUnit,
     PatientEncounters,
 )
-from auth.utils import utcnow
-from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
+from services.taskCreationServices import (
+    can_unverify_image,
+    ensure_task,
+    remove_pending_tasks,
+)
 from utils.log_sanitize import sanitize_log_value
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.utils import with_session
 
 from . import bp
-
+from .access import (
+    classical_verification_files,
+    classical_verification_rows,
+    consistent_verification_files,
+)
 
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
@@ -107,6 +125,10 @@ def _ensure_glaucoma_cleaned_rows(db, encounter: PatientEncounters) -> list[Glau
         cleaned_rows.append(row)
 
     if inserted or updated:
+        # The detail template links each cleaned row immediately; assign new
+        # primary keys before rendering rather than relying on an unrelated
+        # later query to trigger autoflush.
+        db.flush()
         current_app.logger.info(
             "Glaucoma cleaned rows updated on verify_remedio view: %s inserted, %s updated",
             sanitize_log_value(inserted),
@@ -121,7 +143,7 @@ def _ensure_glaucoma_cleaned_rows(db, encounter: PatientEncounters) -> list[Glau
 
 def _collect_images(encounter: PatientEncounters) -> list[EncounterFile]:
     images = []
-    for ef in (encounter.encounter_files or []):
+    for ef in consistent_verification_files(encounter):
         ft = (ef.file_type or "").lower().strip()
         ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
         if ft.startswith("image/") or ext in IMAGE_EXTS or ft == "image":
@@ -145,9 +167,9 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
-def _missing_image_tags(db, encounter_id: int) -> int:
+def _missing_image_tags(db, encounter_id: int, user) -> int:
     return (
-        db.query(EncounterFile)
+        classical_verification_files(db, db.query(EncounterFile), user)
         .filter(EncounterFile.patient_encounter_id == encounter_id)
         .filter(EncounterFile.file_type == "image")
         .filter(
@@ -184,16 +206,15 @@ def _overall_verified(encounter: PatientEncounters) -> bool:
     return dr_ok and gl_ok and nodr_ok
 
 
-def _next_unverified_url(db, encounter: PatientEncounters, allowed_lab_units: list[int]) -> str | None:
+def _next_unverified_url(db, encounter: PatientEncounters, user) -> str | None:
     if encounter.capture_date_dt is None:
         return None
     candidates = (
-        db.query(PatientEncounters)
+        classical_verification_rows(db, db.query(PatientEncounters), user)
         .options(
             selectinload(PatientEncounters.dr_reports),
             selectinload(PatientEncounters.glaucoma_reports),
         )
-        .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
         .filter(PatientEncounters.capture_date_dt.isnot(None))
         .filter(
             (PatientEncounters.capture_date_dt < encounter.capture_date_dt)
@@ -228,28 +249,11 @@ def verify_list():
     page = max(1, page)
 
     with with_session() as db:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
         base_query = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .filter(PatientEncounters.zip_file_id.isnot(None))
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
         )
-        hospital_ids = list(
-            {unit.hospital_id for unit in (getattr(current_user, "lab_units", []) or []) if unit}
-        )
-        if hospital_ids:
-            pending_base = (
-                db.query(PatientEncounters)
-                .join(LabUnit, PatientEncounters.lab_unit_id == LabUnit.id)
-                .filter(PatientEncounters.zip_file_id.isnot(None))
-                .filter(LabUnit.hospital_id.in_(hospital_ids))
-            )
-        else:
-            pending_base = base_query
+        pending_base = base_query
         now = utcnow()
         day_start = datetime.combine(now.date(), _time.min, tzinfo=now.tzinfo)
         username = getattr(current_user, "username", None)
@@ -480,10 +484,6 @@ def kpi_trend():
     username = getattr(current_user, "username", None)
 
     with with_session() as db:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            return jsonify({"labels": [], "dr": [], "glaucoma": [], "encounter": []})
-
         now = utcnow()
         start_date = now.date() - timedelta(days=days - 1)
         start_dt = datetime.combine(start_date, _time.min, tzinfo=now.tzinfo)
@@ -502,9 +502,8 @@ def kpi_trend():
             )
 
         base_query = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .filter(PatientEncounters.zip_file_id.isnot(None))
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
         )
 
         def _counts_for(status_col, by_col, at_col):
@@ -546,7 +545,7 @@ def kpi_trend():
 def verify_detail(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
@@ -562,18 +561,13 @@ def verify_detail(encounter_id: int):
         if not encounter:
             abort(404)
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            abort(404)
-
         images = _collect_images(encounter)
         dr_reports = encounter.dr_reports or []
         glaucoma_rows = _ensure_glaucoma_cleaned_rows(db, encounter)
 
         base_query = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .filter(PatientEncounters.zip_file_id.isnot(None))
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(PatientEncounters.capture_date_dt.isnot(None))
         )
         d = encounter.capture_date_dt
@@ -637,7 +631,7 @@ def verify_detail(encounter_id: int):
 def verify_edit(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
@@ -653,10 +647,6 @@ def verify_edit(encounter_id: int):
         if not encounter:
             abort(404)
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            abort(404)
-
         dr_reports = encounter.dr_reports or []
         gl_reports = encounter.glaucoma_reports or []
         gl_cleaned = encounter.glaucoma_results_cleaned or []
@@ -666,9 +656,8 @@ def verify_edit(encounter_id: int):
         images = _collect_images(encounter)
 
         base_query = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .filter(PatientEncounters.zip_file_id.isnot(None))
-            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(PatientEncounters.capture_date_dt.isnot(None))
         )
         d = encounter.capture_date_dt
@@ -723,7 +712,7 @@ def verify_edit(encounter_id: int):
             can_encounter_verify = False
         if gl_reports and encounter.glaucoma_verified_status != "verified":
             can_encounter_verify = False
-        if _missing_image_tags(db, encounter.id) > 0:
+        if _missing_image_tags(db, encounter.id, current_user) > 0:
             can_encounter_verify = False
 
         return render_template(
@@ -745,7 +734,7 @@ def verify_edit(encounter_id: int):
 def verify_save(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
@@ -755,10 +744,6 @@ def verify_save(encounter_id: int):
             .first()
         )
         if not encounter:
-            abort(404)
-
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
             abort(404)
 
         patient_id = (request.form.get("patient_id") or "").strip()
@@ -848,16 +833,14 @@ def mark_eye(encounter_id: int):
     current_side = None
     current_centering = None
     with with_session() as db:
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        encounter = classical_verification_rows(
+            db, db.query(PatientEncounters), current_user
+        ).filter(PatientEncounters.id == encounter_id).first()
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-                return {"ok": False, "error": "forbidden"}, 403
-            flash("You don't have permission to modify this encounter.", "danger")
-            return redirect(url_for("verify_remedio.verify_edit", encounter_id=encounter_id))
-        ef = db.query(EncounterFile).filter(EncounterFile.id == ef_id_int).first()
+        ef = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.id == ef_id_int).first()
         if not ef or ef.patient_encounter_id != encounter.id:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "not_found"}, 404
@@ -882,17 +865,13 @@ def mark_eye(encounter_id: int):
 def verify_dr(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(selectinload(PatientEncounters.dr_reports))
             .filter(PatientEncounters.id == encounter_id)
             .first()
         )
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
         dr_reports = encounter.dr_reports or []
         if not dr_reports:
             return {"ok": False, "error": "missing_reports", "message": "No DR reports to verify."}, 400
@@ -916,7 +895,9 @@ def verify_dr(encounter_id: int):
 
         dr_disease = _get_dr_disease(db)
         if dr_disease:
-            images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+            images = classical_verification_files(
+                db, db.query(EncounterFile), current_user
+            ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
             for image in images:
                 try:
                     ensure_task(image.uuid, dr_disease.id, db)
@@ -940,14 +921,14 @@ def verify_dr(encounter_id: int):
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def unverify_dr(encounter_id: int):
     with with_session() as db:
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        encounter = classical_verification_rows(
+            db, db.query(PatientEncounters), current_user
+        ).filter(PatientEncounters.id == encounter_id).first()
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
-        images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+        images = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
         for image in images:
             if not can_unverify_image(db, kind="encounter", image_id=image.id):
                 return {"ok": False, "error": "tasks_in_progress", "message": "Cannot unverify - tasks in progress."}, 400
@@ -975,7 +956,7 @@ def unverify_dr(encounter_id: int):
 def verify_glaucoma(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
@@ -985,10 +966,6 @@ def verify_glaucoma(encounter_id: int):
         )
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
         gl_reports = encounter.glaucoma_reports or []
         if not gl_reports:
             return {"ok": False, "error": "missing_reports", "message": "No Glaucoma reports to verify."}, 400
@@ -1022,7 +999,9 @@ def verify_glaucoma(encounter_id: int):
 
         glaucoma_disease = _get_glaucoma_disease(db)
         if glaucoma_disease:
-            images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+            images = classical_verification_files(
+                db, db.query(EncounterFile), current_user
+            ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
             for image in images:
                 try:
                     ensure_task(image.uuid, glaucoma_disease.id, db)
@@ -1046,14 +1025,14 @@ def verify_glaucoma(encounter_id: int):
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def unverify_glaucoma(encounter_id: int):
     with with_session() as db:
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        encounter = classical_verification_rows(
+            db, db.query(PatientEncounters), current_user
+        ).filter(PatientEncounters.id == encounter_id).first()
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
-        images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+        images = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
         for image in images:
             if not can_unverify_image(db, kind="encounter", image_id=image.id):
                 return {"ok": False, "error": "tasks_in_progress", "message": "Cannot unverify - tasks in progress."}, 400
@@ -1081,7 +1060,7 @@ def unverify_glaucoma(encounter_id: int):
 def verify_encounter(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
@@ -1091,10 +1070,6 @@ def verify_encounter(encounter_id: int):
         )
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
         dr_reports = encounter.dr_reports or []
         gl_reports = encounter.glaucoma_reports or []
         if dr_reports and encounter.dr_verified_status != "verified":
@@ -1102,7 +1077,7 @@ def verify_encounter(encounter_id: int):
         if gl_reports and encounter.glaucoma_verified_status != "verified":
             return {"ok": False, "error": "glaucoma_not_verified", "message": "Verify Glaucoma first."}, 400
 
-        missing = _missing_image_tags(db, encounter.id)
+        missing = _missing_image_tags(db, encounter.id, current_user)
         if missing:
             msg = f"{missing} image(s) still untagged; cannot verify."
             return {"ok": False, "error": "incomplete", "message": msg}, 400
@@ -1115,7 +1090,9 @@ def verify_encounter(encounter_id: int):
         if not dr_reports:
             dr_disease = _get_dr_disease(db)
             if dr_disease:
-                images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+                images = classical_verification_files(
+                    db, db.query(EncounterFile), current_user
+                ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
                 for image in images:
                     try:
                         ensure_task(image.uuid, dr_disease.id, db)
@@ -1128,7 +1105,7 @@ def verify_encounter(encounter_id: int):
             else:
                 current_app.logger.warning("DR disease not found in database")
 
-        next_url = _next_unverified_url(db, encounter, allowed_lab_units)
+        next_url = _next_unverified_url(db, encounter, current_user)
         return {
             "ok": True,
             "status": encounter.encounter_verified_status,
@@ -1142,18 +1119,16 @@ def verify_encounter(encounter_id: int):
 def unverify_encounter(encounter_id: int):
     with with_session() as db:
         encounter = (
-            db.query(PatientEncounters)
+            classical_verification_rows(db, db.query(PatientEncounters), current_user)
             .options(selectinload(PatientEncounters.dr_reports))
             .filter(PatientEncounters.id == encounter_id)
             .first()
         )
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            return {"ok": False, "error": "forbidden"}, 403
-
-        images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
+        images = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.patient_encounter_id == encounter.id).all()
         for image in images:
             if not can_unverify_image(db, kind="encounter", image_id=image.id):
                 return {"ok": False, "error": "tasks_in_progress", "message": "Cannot unverify - tasks in progress."}, 400
@@ -1181,13 +1156,14 @@ def unverify_encounter(encounter_id: int):
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def viewer_panel(encounter_id: int, image_id: int):
     with with_session() as db:
-        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        encounter = classical_verification_rows(
+            db, db.query(PatientEncounters), current_user
+        ).filter(PatientEncounters.id == encounter_id).first()
         if not encounter:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if encounter.lab_unit_id not in allowed_lab_units:
-            abort(404)
-        image = db.query(EncounterFile).filter(EncounterFile.id == image_id).first()
+        image = classical_verification_files(
+            db, db.query(EncounterFile), current_user
+        ).filter(EncounterFile.id == image_id).first()
         if not image or image.patient_encounter_id != encounter.id:
             abort(404)
         return render_template(

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import abort, render_template, request, redirect, url_for, flash
 from sqlalchemy import select
 from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from flask_login import current_user
 
 from db_transaction_manager import get_db_session
@@ -16,6 +15,20 @@ from models import Hospital, LabUnit
 from . import bp
 
 
+def _query_int(name: str, *, default: int | None = None, minimum: int = 1) -> int | None:
+    """Parse an optional integer query argument without silently dropping it."""
+    if name not in request.args:
+        return default
+    raw_value = request.args.get(name)
+    try:
+        value = int(raw_value) if raw_value is not None else None
+    except (TypeError, ValueError):
+        abort(400, description=f"Invalid {name} filter")
+    if value is None or value < minimum:
+        abort(400, description=f"Invalid {name} filter")
+    return value
+
+
 @bp.route("/all-tasks", methods=["GET"])
 @roles_required(
     "admin",
@@ -24,41 +37,48 @@ from . import bp
     "ophthalmologist",
     "data_manager",
     "optometrist",
+    "project_pi",
+    "site_pi",
+    "project_admin",
+    "collaborator",
 )
 def all_tasks() -> str:
     """Page to view all tasks scoped to user's lab units with pagination."""
     # Get pagination parameters from request
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    page = _query_int("page", default=1)
+    per_page = _query_int("per_page", default=50)
     
     # Limit per_page to reasonable values
     per_page = min(max(per_page, 1), 100)  # Between 1 and 100 items per page
     
     # Get filters from request
     status_filter = request.args.get('status', type=str)
-    disease_filter = request.args.get('disease', type=int)
-    hospital_filter = request.args.get('hospital', type=int)
-    lab_unit_filter = request.args.get('lab_unit', type=int)  # Changed to use lab_unit ID
+    disease_filter = _query_int("disease")
+    hospital_filter = _query_int("hospital")
+    lab_unit_filter = _query_int("lab_unit")  # Changed to use lab_unit ID
     search_query = request.args.get('search', type=str)
     
     with get_db_session() as db:
         # Get user's lab unit IDs for scoping
-        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        user_lab_unit_ids = {
+            lab_unit.id
+            for lab_unit in clinical_lab_units(
+                db, db.query(LabUnit), current_user
+            ).all()
+        }
         
         # Security check: Ensure requested filters are within user's scope
         if hospital_filter:
              h_query = select(Hospital).where(Hospital.id == hospital_filter)
              h_query = clinical_hospitals(db, h_query, current_user)
              if not db.execute(h_query).scalar_one_or_none():
-                 flash("Invalid hospital filter.", "danger")
-                 return redirect(url_for("tasks.all_tasks"))
+                 abort(403, description="Unauthorized hospital filter")
         
         if lab_unit_filter:
              lu_query = select(LabUnit).where(LabUnit.id == lab_unit_filter)
              lu_query = clinical_lab_units(db, lu_query, current_user)
              if not db.execute(lu_query).scalar_one_or_none():
-                 flash("Invalid lab unit filter.", "danger")
-                 return redirect(url_for("tasks.all_tasks"))
+                 abort(403, description="Unauthorized lab unit filter")
         
         # Get paginated tasks using the utility function
         tasks, total_count = get_task_summary(

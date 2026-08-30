@@ -21,6 +21,7 @@ from models import (
 )
 from project_configuration.service import project_site_feature_allows
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 DATASET_VIEW_ROLES = frozenset(
     {"dataset_creator", "data_manager", "data_exporter", "analytics_viewer"}
@@ -124,20 +125,39 @@ def dataset_action_allowed(db, *, user: User, dataset: CuratedDataset, roles) ->
     """Require every dataset task to remain in the actor's current action scope."""
     if not getattr(user, "is_active", False):
         return False
-    if user.has_role("admin"):
-        return True
-    if dataset.admin_managed:
-        return False
     facts = _scope_facts(dataset)
     if facts is None:
         return False
-    _project_id, lab_ids = facts
+    project_id, lab_ids = facts
     raw_base = (
         db.query(GradingTask.id)
         .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
         .filter(CuratedDatasetItem.dataset_id == dataset.id)
     )
     total = raw_base.count()
+
+    # Check the persisted task/source relationship before taking the Admin
+    # break-glass path.  A dataset item is not safe merely because its task
+    # row exists: exactly one source must exist and agree on Lab Unit,
+    # hospital, and project lineage, and the task must belong to this dataset
+    # context and disease.  Do this for every item so malformed rows cannot be
+    # silently dropped from a list or export.
+    integrity = raw_base.filter(
+        valid_task_lineage(GradingTask),
+        GradingTask.disease_id == dataset.disease_id,
+        GradingTask.lab_unit_id.in_(lab_ids),
+    )
+    if dataset.context_kind == "classical":
+        integrity = integrity.filter(GradingTask.project_id.is_(None))
+    else:
+        integrity = integrity.filter(GradingTask.project_id == project_id)
+    if integrity.count() != total:
+        return False
+
+    if user.has_role("admin"):
+        return True
+    if dataset.admin_managed:
+        return False
     if total == 0:
         return (
             dataset.created_by_user_id == user.id
@@ -240,7 +260,7 @@ def can_export_dataset(db, *, user: User, dataset: CuratedDataset) -> bool:
     facts = _scope_facts(dataset)
     if facts is None:
         return False
-    project_id, lab_ids = facts
+    _project_id, lab_ids = facts
     canonical_ids = valid_dataset_export_task_ids(db, dataset=dataset)
     if canonical_ids is None:
         return False
@@ -283,28 +303,23 @@ def valid_dataset_export_task_ids(
     )
     if not canonical_ids or len(canonical_ids) != len(set(canonical_ids)):
         return None
-    tasks = db.execute(
-        select(GradingTask).where(GradingTask.id.in_(canonical_ids))
-    ).scalars().all()
-    if len(tasks) != len(canonical_ids):
-        return None
-    for task in tasks:
-        source_count = sum(
-            value is not None
-            for value in (
-                task.encounter_file_id,
-                task.direct_image_upload_id,
-                task.patient_encounter_id,
-                task.encounter_set_image_id,
+    valid_ids = set(
+        db.execute(
+            select(GradingTask.id).where(
+                GradingTask.id.in_(canonical_ids),
+                valid_task_lineage(GradingTask),
+                GradingTask.disease_id == dataset.disease_id,
+                GradingTask.lab_unit_id.in_(lab_ids),
+                (
+                    GradingTask.project_id.is_(None)
+                    if dataset.context_kind == "classical"
+                    else GradingTask.project_id == project_id
+                ),
             )
-        )
-        if (
-            source_count != 1
-            or task.disease_id != dataset.disease_id
-            or task.lab_unit_id not in lab_ids
-            or task.project_id != project_id
-        ):
-            return None
+        ).scalars()
+    )
+    if valid_ids != set(canonical_ids):
+        return None
     return canonical_ids
 
 
@@ -314,7 +329,11 @@ def scope_dataset_task_query(query, *, dataset: CuratedDataset):
     if facts is None:
         return query.filter(false())
     project_id, lab_ids = facts
-    query = query.filter(GradingTask.lab_unit_id.in_(lab_ids))
+    query = query.filter(
+        valid_task_lineage(GradingTask),
+        GradingTask.disease_id == dataset.disease_id,
+        GradingTask.lab_unit_id.in_(lab_ids),
+    )
     if dataset.context_kind == "classical":
         return query.filter(GradingTask.project_id.is_(None))
     return query.filter(GradingTask.project_id == project_id)

@@ -30,6 +30,7 @@ from project_annotations.service import (
     validate_geometry_policy,
 )
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
 from utils.feature_geometry import (
@@ -195,6 +196,30 @@ def create_regrade_tasks(
     ).fetchall()
     if not rows:
         raise not_found("No tasks matched the authorized regrade filters.")
+
+    # The discrepancy materialized view is a selection aid, not a source of
+    # truth for task integrity.  Re-resolve every selected source through the
+    # shared lineage predicate before checking capability or creating any
+    # RegradeTask rows.  This applies to Admin as well: break-glass scope must
+    # not turn a malformed or cross-project source into clinical work.
+    task_ids = list(dict.fromkeys(int(row.task_id) for row in rows))
+    valid_source_rows = db.execute(
+        select(GradingTask.id, GradingTask.lab_unit_id)
+        .where(
+            GradingTask.id.in_(task_ids),
+            valid_task_lineage(GradingTask),
+        )
+    ).all()
+    valid_source_labs = {
+        int(task_id): int(lab_unit_id)
+        for task_id, lab_unit_id in valid_source_rows
+    }
+    if set(valid_source_labs) != set(task_ids) or any(
+        valid_source_labs.get(int(row.task_id)) != int(row.task_lab_unit_id)
+        for row in rows
+    ):
+        raise denied("One or more matched tasks have invalid source lineage.")
+
     if any(
         not user_has_task_capability(
             db, user=actor, task_id=row.task_id, roles=REGRADE_MANAGER_ROLES
@@ -210,7 +235,6 @@ def create_regrade_tasks(
     ):
         raise denied("The selected adjudicator is unauthorized for one or more tasks.")
 
-    task_ids = [int(row.task_id) for row in rows]
     existing = {
         int(source_task_id)
         for (source_task_id,) in db.query(RegradeTask.source_task_id)
@@ -270,7 +294,10 @@ def _load_authorized_submission_task(db, *, actor: User, regrade_task_id: int):
     if task is None:
         raise not_found()
     scoped_source = role_scoped_rows(
-        db.query(GradingTask.id).filter(GradingTask.id == task.source_task_id),
+        db.query(GradingTask.id).filter(
+            GradingTask.id == task.source_task_id,
+            valid_task_lineage(GradingTask),
+        ),
         access_context(db, actor),
         task_columns(GradingTask),
         lab_roles=REGRADE_ROLES,

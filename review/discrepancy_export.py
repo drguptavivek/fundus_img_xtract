@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import and_, exists, or_, select, text
 
 from auth.utils import utcnow
 from job_store import db_set_item_state, db_set_job_status
@@ -29,6 +29,7 @@ from models import (
     CuratedDataset,
     CuratedDatasetItem,
     DatasetShare,
+    LabUnit,
     User,
 )
 from data_authorization.models import ProjectRoleGrant
@@ -272,7 +273,13 @@ def reauthorize_discrepancy_filters(
     from sqlalchemy import select
 
     from authz.behaviors import export_lab_units, identifier_release_lab_units
-    from models import LabUnit
+
+    try:
+        disease_id = int(requested_filters.get("disease_id"))
+    except (TypeError, ValueError):
+        raise PermissionError("Export disease fact is missing or invalid")
+    if disease_id <= 0:
+        raise PermissionError("Export disease fact is missing or invalid")
 
     pii_action = requested_filters.get("authorization_action") == "pii_export"
     if pii_action:
@@ -323,7 +330,113 @@ def reauthorize_discrepancy_filters(
         # Project grants remain usable through the SQL predicate below, but a
         # queued Boolean can never preserve classical authority.
         refreshed["allow_classical_capability"] = False
+    refreshed["authorized_task_ids"] = _resolve_export_task_ids(
+        db, actor, refreshed
+    )
     return refreshed
+
+
+def _resolve_export_task_ids(
+    db, actor: User, filters: Dict[str, Any]
+) -> list[int]:
+    """Resolve the exact valid task set before a raw export query runs.
+
+    The materialized view contains denormalized display data, so it cannot be
+    the authorization boundary.  Resolve IDs against the source tables with
+    the maintained task-lineage predicate, then let the existing SQL apply
+    the user's report filters to this closed set.  A queued selection is
+    compared as a set so an invalid, missing, cross-project, or
+    cross-hospital task cannot be silently dropped from an export.
+    """
+    from tasks.lineage import valid_task_lineage
+
+    allowed_lab_ids = {
+        int(lab_id)
+        for lab_id in filters.get("allowed_lab_units", ())
+        if lab_id is not None
+    }
+    if not allowed_lab_ids:
+        requested = {
+            int(task_id)
+            for task_id in filters.get("task_ids", ())
+            if task_id
+        }
+        if requested:
+            raise PermissionError("Requested export tasks are outside current scope")
+        return []
+
+    from authz.behaviors import export_rows, identifier_release_rows
+    from tasks.access import task_columns
+
+    task_query = db.query(GradingTask.id).join(
+        LabUnit, LabUnit.id == GradingTask.lab_unit_id
+    )
+    task_query = task_query.filter(
+        GradingTask.lab_unit_id.in_(allowed_lab_ids),
+        valid_task_lineage(),
+    )
+    disease_id = filters.get("disease_id")
+    if disease_id is not None:
+        task_query = task_query.where(GradingTask.disease_id == int(disease_id))
+    project_id = filters.get("project_id")
+    if project_id is not None:
+        task_query = task_query.filter(GradingTask.project_id == int(project_id))
+
+    pii_action = filters.get("authorization_action") == "pii_export"
+    columns = task_columns(GradingTask, hospital_id_column=LabUnit.hospital_id)
+    if pii_action:
+        task_query = identifier_release_rows(db, task_query, actor, columns)
+    else:
+        task_query = export_rows(db, task_query, actor, columns)
+
+    # Site-scoped export grants are additionally gated by the current project
+    # export grant IDs.  ``export_rows`` supplies the common role/scope
+    # behaviour; this narrow predicate preserves the project feature flag
+    # resolved by ``authorized_export_project_grant_ids``.
+    if not actor.has_role("admin"):
+        grant_ids = [
+            int(grant_id)
+            for grant_id in filters.get("project_capability_grant_ids", ())
+            if grant_id
+        ]
+        project_grant = exists(
+            select(ProjectRoleGrant.id).where(
+                ProjectRoleGrant.id.in_(grant_ids or [-1]),
+                ProjectRoleGrant.project_id == GradingTask.project_id,
+                ProjectRoleGrant.user_id == actor.id,
+                ProjectRoleGrant.active.is_(True),
+                or_(
+                    and_(
+                        ProjectRoleGrant.scope_type == "project",
+                        ProjectRoleGrant.lab_unit_id.is_(None),
+                    ),
+                    and_(
+                        ProjectRoleGrant.scope_type == "lab_unit",
+                        ProjectRoleGrant.lab_unit_id == GradingTask.lab_unit_id,
+                    ),
+                ),
+            )
+        )
+        if pii_action:
+            task_query = task_query.filter(project_grant)
+        else:
+            task_query = task_query.filter(
+                or_(GradingTask.project_id.is_(None), project_grant)
+            )
+
+    requested = {
+        int(task_id)
+        for task_id in filters.get("task_ids", ())
+        if task_id
+    }
+    if requested:
+        task_query = task_query.filter(GradingTask.id.in_(requested))
+    resolved = {
+        int(task_id) for task_id in db.execute(task_query).scalars().all()
+    }
+    if requested and resolved != requested:
+        raise PermissionError("Requested export tasks are outside current scope or lineage")
+    return sorted(resolved)
 
 
 def reauthorize_discrepancy_artifact(

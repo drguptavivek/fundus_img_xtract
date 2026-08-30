@@ -99,6 +99,18 @@ def build_discrepancy_filter_query(
         where_clauses.append("v.task_id = ANY(:task_ids)")
         params["task_ids"] = task_ids
 
+    # Export workers pre-resolve this set through the ORM, including the
+    # maintained source-lineage predicate and the actor's current grants.
+    # Keeping the resolved IDs as an explicit SQL constraint prevents the
+    # materialized view from becoming an authorization boundary of its own.
+    # An empty set is intentional: ANY('{}') matches no rows (fail closed).
+    authorized_task_ids = filters.get("authorized_task_ids")
+    if authorized_task_ids is not None:
+        where_clauses.append("v.task_id = ANY(:authorized_task_ids)")
+        params["authorized_task_ids"] = [
+            int(task_id) for task_id in authorized_task_ids if task_id
+        ]
+
     if project_id is not None:
         where_clauses.append(
             """EXISTS (

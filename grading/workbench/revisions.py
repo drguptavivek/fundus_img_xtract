@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 from models import Grade, GradingTask
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
 from .revision_policy import REVISION_WINDOW, REVISION_WINDOW_HOURS
+from tasks.lineage import valid_task_lineage
 
 
 def _normalize_grade_timestamp(value: Optional[datetime]) -> Optional[datetime]:
@@ -50,6 +51,13 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
         "message": "",
         "is_recent": False
     }
+
+    if not db.query(GradingTask.id).filter(
+        GradingTask.id == task_id,
+        valid_task_lineage(),
+    ).first():
+        result["message"] = "The grading task has incomplete or inconsistent source lineage."
+        return result
 
     # Check if slot type is valid
     if slot_type not in ['resident', 'resident2', 'arbitrator']:
@@ -109,6 +117,15 @@ def is_arbitrator_eligible_for_revision(db: Session, user_id: int, task_id: int,
                 "message": "Task not found.",
                 "grade": None
             }
+    if not db.query(GradingTask.id).filter(
+        GradingTask.id == task.id,
+        valid_task_lineage(),
+    ).first():
+        return {
+            "eligible": False,
+            "message": "The grading task has incomplete or inconsistent source lineage.",
+            "grade": None,
+        }
 
     # Check if user has made an arbitrator grade for this task
     from models import User
@@ -144,6 +161,12 @@ def check_arbitrator_revision_eligibility(db: Session, user_id: int, task: Gradi
     Returns:
         A tuple of (is_eligible: bool, message: str)
     """
+    if not db.query(GradingTask.id).filter(
+        GradingTask.id == task.id,
+        valid_task_lineage(),
+    ).first():
+        return False, "The grading task has incomplete or inconsistent source lineage."
+
     if task.state == 'final':
         # Check if this user is the arbitrator who made the decision within the revision window.
         arbitrator_grade = next((g for g in task.grades if g.role_slot == 'arbitrator' and g.grader_user_id == user_id), None)

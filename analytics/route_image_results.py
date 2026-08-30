@@ -30,6 +30,7 @@ from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
 from authz.behaviors import analytics_hospitals, analytics_lab_units, analytics_rows
 from tasks.access import task_columns
+from tasks.lineage import valid_task_lineage
 
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
@@ -76,6 +77,7 @@ def image_results() -> str:
     with get_db_session() as db:
         query = db.query(GradingTask)
         query = analytics_rows(db, query, current_user, task_columns(GradingTask))
+        query = query.filter(valid_task_lineage())
         
         # Check if user has any access at all
         if not current_user.has_role("admin") and not current_user.hospital_id:
@@ -152,6 +154,7 @@ def image_results() -> str:
         # Convert to simple data structures to avoid session issues in templates
         diseases_query = db.query(Disease).join(GradingTask, GradingTask.disease_id == Disease.id)
         diseases_query = analytics_rows(db, diseases_query, current_user, task_columns(GradingTask))
+        diseases_query = diseases_query.filter(valid_task_lineage())
         diseases = [
             {"id": d.id, "name": d.name}
             for d in diseases_query

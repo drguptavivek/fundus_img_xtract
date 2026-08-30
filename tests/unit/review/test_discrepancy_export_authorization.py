@@ -139,6 +139,7 @@ def test_project_pii_exporter_also_authorizes_masked_export(
 
 def test_data_manager_is_not_an_export_authority(db_session, core_test_data):
     lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
     actor = User(
         username="non_exporting_data_manager",
         password_hash="x",
@@ -156,6 +157,7 @@ def test_data_manager_is_not_an_export_authority(db_session, core_test_data):
             actor,
             {
                 "authorization_action": "ordinary_export",
+                "disease_id": disease.id,
                 "allowed_lab_units": [lab.id],
             },
         )
@@ -199,6 +201,7 @@ def test_pii_export_route_requires_recent_reauthentication(
 
 def test_worker_denies_after_site_or_grant_revocation(db_session, core_test_data):
     lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
     actor = User(username="revoked_pii_discrepancy_exporter", password_hash="x", is_active=True)
     db_session.add(actor)
     db_session.flush()
@@ -212,6 +215,7 @@ def test_worker_denies_after_site_or_grant_revocation(db_session, core_test_data
     )
     queued = {
         "authorization_action": "pii_export",
+        "disease_id": disease.id,
         "project_id": project.id,
         "allowed_lab_units": [lab.id],
     }

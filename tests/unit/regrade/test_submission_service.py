@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from models import Consensus, Grade, RegradeTask, Role
+from models import Consensus, Grade, PatientEncounters, Project, RegradeTask, Role
 from regrade.dtos import SubmitRegradeInput
 from regrade.errors import RegradeError
 from regrade.service import submit_regrade
@@ -131,6 +131,129 @@ def test_submission_denies_mismatched_source_lineage(
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.code == "invalid_source_lineage"
+    assert db_session.query(Grade).filter_by(
+        task_id=task.id, grader_user_id=actor.id, role_slot="regrade_adj"
+    ).count() == 0
+
+
+def test_submission_denies_source_with_missing_lineage(
+    db_session,
+    admin_user,
+    disease_grading_glaucoma,
+    core_test_data,
+):
+    actor = db_session.merge(admin_user)
+    lab = db_session.merge(core_test_data["lab_a1"])
+    _qualify_adjudicator(db_session, actor, lab)
+    task = _source_task(
+        db_session,
+        lab=lab,
+        disease=db_session.merge(core_test_data["glaucoma"]),
+    )
+    # A source row without a Lab Unit lineage is not a usable clinical task,
+    # even though the task and its regrade assignment still exist.
+    encounter = db_session.get(
+        PatientEncounters, task.encounter_file.patient_encounter_id
+    )
+    encounter.lab_unit_id = None
+    db_session.flush()
+    regrade = _pending_regrade(db_session, task=task, assignee=actor)
+
+    with pytest.raises(RegradeError) as exc_info:
+        submit_regrade(
+            db_session,
+            actor=actor,
+            regrade_task_id=regrade.id,
+            command=SubmitRegradeInput(
+                label_id=disease_grading_glaucoma.id,
+                selected_features_supplied=True,
+                feature_geometry_supplied=True,
+            ),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert db_session.query(Grade).filter_by(
+        task_id=task.id, grader_user_id=actor.id, role_slot="regrade_adj"
+    ).count() == 0
+
+
+def test_submission_denies_cross_lab_source_lineage(
+    db_session,
+    admin_user,
+    disease_grading_glaucoma,
+    core_test_data,
+):
+    actor = db_session.merge(admin_user)
+    lab = db_session.merge(core_test_data["lab_a1"])
+    wrong_lab = db_session.merge(core_test_data["lab_b1"])
+    _qualify_adjudicator(db_session, actor, lab)
+    task = _source_task(
+        db_session,
+        lab=lab,
+        disease=db_session.merge(core_test_data["glaucoma"]),
+    )
+    task.encounter_file.lab_unit_id = wrong_lab.id
+    db_session.flush()
+    regrade = _pending_regrade(db_session, task=task, assignee=actor)
+
+    with pytest.raises(RegradeError) as exc_info:
+        submit_regrade(
+            db_session,
+            actor=actor,
+            regrade_task_id=regrade.id,
+            command=SubmitRegradeInput(
+                label_id=disease_grading_glaucoma.id,
+                selected_features_supplied=True,
+                feature_geometry_supplied=True,
+            ),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert db_session.query(Grade).filter_by(
+        task_id=task.id, grader_user_id=actor.id, role_slot="regrade_adj"
+    ).count() == 0
+
+
+def test_submission_denies_cross_project_source_lineage(
+    db_session,
+    admin_user,
+    disease_grading_glaucoma,
+    core_test_data,
+):
+    actor = db_session.merge(admin_user)
+    lab = db_session.merge(core_test_data["lab_a1"])
+    _qualify_adjudicator(db_session, actor, lab)
+    task = _source_task(
+        db_session,
+        lab=lab,
+        disease=db_session.merge(core_test_data["glaucoma"]),
+    )
+    unrelated_project = Project(
+        title="Unrelated regrade project",
+        code="REGR_UNRELATED",
+        active=True,
+    )
+    db_session.add(unrelated_project)
+    db_session.flush()
+    # project_id is maintained from the source on normal writes; this models
+    # a stale/corrupt task row and proves submission rechecks source lineage.
+    task.project_id = unrelated_project.id
+    db_session.flush()
+    regrade = _pending_regrade(db_session, task=task, assignee=actor)
+
+    with pytest.raises(RegradeError) as exc_info:
+        submit_regrade(
+            db_session,
+            actor=actor,
+            regrade_task_id=regrade.id,
+            command=SubmitRegradeInput(
+                label_id=disease_grading_glaucoma.id,
+                selected_features_supplied=True,
+                feature_geometry_supplied=True,
+            ),
+        )
+
+    assert exc_info.value.status_code == 404
     assert db_session.query(Grade).filter_by(
         task_id=task.id, grader_user_id=actor.id, role_slot="regrade_adj"
     ).count() == 0

@@ -38,9 +38,15 @@ class MVImageFilters:
     upload_before: Optional[date] = None
     encounter_after: Optional[date] = None
     encounter_before: Optional[date] = None
+    # The lab-unit list is only a transport narrowing hint.  Authorization
+    # must be expressed as the exact task identities selected by
+    # ``authz.behaviors.clinical_rows``; otherwise a project grant can expose
+    # another project's task in the same Lab Unit.
+    authorized_task_ids: Optional[List[int]] = None
 
     def normalise(self) -> None:
         """Ensure list fields are at least empty lists."""
+        self.authorized_task_ids = [int(task_id) for task_id in (self.authorized_task_ids or [])]
         self.resident_grades = self.resident_grades or []
         self.resident2_grades = self.resident2_grades or []
         self.arbitrator_grades = self.arbitrator_grades or []
@@ -97,10 +103,15 @@ def build_where_clause(db: Session, filters: MVImageFilters) -> Tuple[str, Dict[
     where_clauses: List[str] = [
         "gt.disease_id = :disease_id",
         "gt.lab_unit_id = ANY(:allowed_lab_units)",
+        # Do not replace this with a Lab Unit predicate.  Tasks from multiple
+        # projects may share a Lab Unit, and project authorization is attached
+        # to the task's maintained project lineage.
+        "gt.id = ANY(:authorized_task_ids)",
     ]
     params: Dict[str, Any] = {
         "disease_id": filters.disease_id,
         "allowed_lab_units": list(filters.allowed_lab_units),
+        "authorized_task_ids": list(filters.authorized_task_ids),
     }
 
     if filters.lab_unit_id and filters.lab_unit_id in filters.allowed_lab_units:

@@ -38,12 +38,15 @@ Auth model:
 
 ## S3 sync and storage
 
+All routes in this section require the global `admin` role. They have no
+`local_admin`, Hospital/Lab Unit, or project-scoped alternative.
+
 | Route | Method | Response shape |
 | --- | --- | --- |
 | `/admin/api/s3-sync-status` | `GET` | `{"syncs": array, "count": int}` |
 | `/admin/api/s3-sync-retry/<sync_id>` | `POST` | `{"success": true, "message": str, "sync_id": int}` or error JSON |
 | `/admin/api/s3-sync-stats` | `GET` | `{"stats": array}` |
-| `/admin/s3-configs/api/list` | `GET` | JSON list of active S3 configs for the caller’s hospitals |
+| `/admin/s3-configs/api/list` | `GET` | JSON list of active S3 configs across hospitals |
 | `/admin/s3-configs/api/test-connection-modal` | `POST` | `{"success": bool, "message": str}` |
 | `/admin/s3-configs/api/create` | `POST` | JSON success/error payload for the created config |
 

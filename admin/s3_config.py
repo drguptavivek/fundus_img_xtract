@@ -1,8 +1,7 @@
 """
 S3 Configuration administration module.
 
-Allows admin users to manage multi-tenant S3 storage configurations.
-Provides hospital-scoped access control and RBAC enforcement.
+Allows global admin users to manage multi-tenant S3 storage configurations.
 """
 
 import logging
@@ -38,9 +37,8 @@ def _check_s3_config_access(s3_config: S3Config, user_hospitals: list[int]) -> b
     """
     Check if user can access S3 config.
 
-    Access rules:
-    - Admin: Can access any config
-    - Local admin: Can only access configs from their hospital
+    Routes are admin-only. This check only rejects orphaned or invalid hospital
+    lineage; it is not an alternative authorization path.
 
     Args:
         s3_config: S3Config instance
@@ -57,22 +55,13 @@ def _check_s3_config_access(s3_config: S3Config, user_hospitals: list[int]) -> b
 
 def _get_user_hospitals() -> list[int]:
     """
-    Get list of hospital IDs for current user for S3 config management.
-
-    Admins can manage configs across all hospitals.
-    Local admins can only manage configs for their assigned hospital.
+    Get all hospital IDs for the global-admin-only S3 configuration surface.
     """
     if not current_user or not current_user.is_authenticated:
         return []
 
-    if current_user.has_role("admin"):
-        with get_db_session() as db:
-            return [hospital_id for (hospital_id,) in db.query(Hospital.id).order_by(Hospital.id).all()]
-
-    if hasattr(current_user, 'hospital_id') and current_user.hospital_id:
-        return [current_user.hospital_id]
-
-    return []
+    with get_db_session() as db:
+        return [hospital_id for (hospital_id,) in db.query(Hospital.id).order_by(Hospital.id).all()]
 
 
 def _is_system_admin() -> bool:
@@ -85,6 +74,18 @@ def _is_system_admin() -> bool:
         return False
 
     return current_user.has_role("admin")
+
+
+def _existing_hospital_id(raw_value: str) -> int:
+    """Resolve a required Hospital ID before credentials or external I/O are touched."""
+    value = raw_value.strip()
+    if not value.isdigit() or int(value) <= 0:
+        raise ValueError("Invalid hospital selected.")
+    hospital_id = int(value)
+    with get_db_session() as db:
+        if db.get(Hospital, hospital_id) is None:
+            raise ValueError("Invalid hospital selected.")
+    return hospital_id
 
 
 # ============================================================================
@@ -714,9 +715,9 @@ def s3_config_api_test_connection_modal():
     # Validate
     errors = []
     try:
-        hospital_id = int(hospital_id)
-    except ValueError:
-        errors.append("Invalid hospital selected.")
+        hospital_id = _existing_hospital_id(hospital_id)
+    except ValueError as exc:
+        errors.append(str(exc))
 
     if not bucket_name:
         errors.append("Bucket name is required.")
@@ -793,9 +794,9 @@ def s3_config_api_create():
     # Validate
     errors = []
     try:
-        hospital_id = int(hospital_id)
-    except ValueError:
-        errors.append("Invalid hospital selected.")
+        hospital_id = _existing_hospital_id(hospital_id)
+    except ValueError as exc:
+        errors.append(str(exc))
 
     if not validate_provider(provider):
         errors.append("Invalid storage provider.")

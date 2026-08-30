@@ -332,7 +332,7 @@ identifier-bearing JSON/Excel under `/api/kpis/*` restricted to
     were retired rather than carrying their mixed throughput, clinical-result
     and patient-line-list semantics into project authorization.
 11. Global stop/clear controls on per-hospital backfill tools; the
-    sensitive-operations audit is unscoped for local_admin/data_manager;
+    sensitive-operations audit and S3 administration are global-admin-only;
     upload quotas and the global user-activity feed give data_manager
     account-adjacent reach; `local_admin` can mint peer local_admins and
     edit same-hospital admin accounts (users_update blocks it, edit_user

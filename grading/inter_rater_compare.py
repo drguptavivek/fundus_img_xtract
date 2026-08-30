@@ -29,7 +29,7 @@ def _parse_date(value: str | None) -> Optional[_date]:
         return None
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def inter_rater_compare():
     """Compare user's own grades against other graders for the same tasks."""
     page = max(1, request.args.get("page", default=1, type=int) or 1)
@@ -264,7 +264,7 @@ def inter_rater_compare():
         )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def inter_rater_viewer(image_uuid: str):
     """Serve just the viewer card for HTMX swaps."""
     with get_db_session() as db:

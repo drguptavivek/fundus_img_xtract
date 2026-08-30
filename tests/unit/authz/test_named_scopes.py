@@ -196,6 +196,7 @@ def test_project_grading_requires_clinician_slot_and_allocation(db_session, core
     project = _project(db_session, "GRADING")
     _configure(db_session, project, lab.id)
     actor = _user(db_session, "lean_clinician", "ophthalmologist")
+    field_actor = _user(db_session, "lean_field_clinician", "field_ophthalmologist")
     admin = _user(db_session, "lean_nonclinical_admin", "admin")
     for user in (actor, admin):
         db_session.add(
@@ -236,6 +237,28 @@ def test_project_grading_requires_clinician_slot_and_allocation(db_session, core
         slot="resident",
         allocation_scope="disease_image",
     ).allowed
+    # Project allocations are independent of classical UserDiseaseUnitRole
+    # slots. A field ophthalmologist with no classical slot can grade once the
+    # exact project allocation exists.
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=field_actor.id,
+            lab_unit_id=lab.id,
+            scope="disease_image",
+            disease_id=disease.id,
+            capacity="resident",
+            active=True,
+        )
+    )
+    db_session.flush()
+    assert grading_scope(
+        access_context(db_session, field_actor),
+        record,
+        disease_id=disease.id,
+        slot="resident",
+        allocation_scope="disease_image",
+    ).allowed
     assert not grading_scope(
         access_context(db_session, actor),
         record,
@@ -261,6 +284,15 @@ def test_project_grading_requires_clinician_slot_and_allocation(db_session, core
     assert not grading_scope(
         access_context(db_session, admin),
         record,
+        disease_id=disease.id,
+        slot="resident",
+        allocation_scope="disease_image",
+    ).allowed
+    # A project allocation cannot spill into classical records, which still
+    # require the exact disease/Lab/slot assignment.
+    assert not grading_scope(
+        access_context(db_session, field_actor),
+        RecordScope.classical(lab_unit_id=lab.id, hospital_id=lab.hospital_id),
         disease_id=disease.id,
         slot="resident",
         allocation_scope="disease_image",

@@ -67,11 +67,7 @@
                 </div>
                 <div class="d-flex align-items-center gap-1">
                   <span class="badge text-bg-light border">{{ item.capacity|replace('_', ' ')|title }}</span>
-                  {% if item.effective %}
                   <span class="badge text-bg-success">Active</span>
-                  {% else %}
-                  <span class="badge text-bg-warning">Configured</span>
-                  {% endif %}
                 </div>
               </div>
               {% endfor %}

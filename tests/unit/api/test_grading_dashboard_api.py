@@ -1,10 +1,41 @@
+import api.grading_dashboard as grading_dashboard_api
 from grading.dashboard_service import DailyTrendDTO, HistoryPageDTO
+from tests.helpers.factories import UserFactory
 
 
 def _authenticate(client, user):
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)
         session["_fresh"] = True
+
+
+def test_field_ophthalmologist_reaches_grading_api_but_field_optometrist_does_not(
+    app, db_session, core_test_data
+):
+    """Clinical field graders pass the route gate; field optometrists do not."""
+    lab_unit = db_session.merge(core_test_data["lab_unit"])
+    field_ophthalmologist = UserFactory.create_by_role(
+        db_session,
+        "field_ophthalmologist",
+        username="grading_api_field_ophthalmologist",
+        lab_units=[lab_unit],
+    )
+    field_optometrist = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username="grading_api_field_optometrist",
+        lab_units=[lab_unit],
+    )
+    db_session.flush()
+
+    assert field_ophthalmologist.id != field_optometrist.id
+    assert not field_optometrist.has_role(
+        "resident", "ophthalmologist", "field_ophthalmologist"
+    )
+    field_client = app.test_client(user=field_ophthalmologist)
+    assert field_client.get("/api/grading/me/queues").status_code == 200
+
+    assert not field_optometrist.has_role(*grading_dashboard_api.GRADING_ROLES)
 
 
 def test_my_grading_eligibility_api_separates_sources(

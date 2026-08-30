@@ -66,8 +66,8 @@ Errors use a stable object:
 ```
 
 Expected status codes are `400` for validation, `403` for lab or role scope,
-`404` for missing projects/allocations/users, and `409` for duplicate or unsafe
-enforcement transitions.
+`404` for missing projects/allocations/users, and `409` for duplicate
+allocations.
 
 ## List grader candidates
 
@@ -107,14 +107,14 @@ Query parameters:
 
 The response contains:
 
-- the explicit project enforcement policy;
 - targets derived from all active Upload & Grading Profiles linked to the
   project;
 - source-profile attribution for each target;
 - active resident and arbitrator coverage counts;
 - scoped allocation rows; and
 - configuration or missing-resident-coverage warnings. Arbitrator counts remain
-  informational and do not affect enforcement readiness.
+  informational; resident coverage determines whether a target is ready to
+  receive work.
 
 Example:
 
@@ -122,11 +122,6 @@ Example:
 {
   "success": true,
   "project_id": 3,
-  "policy": {
-    "project_id": 3,
-    "enforcement_enabled": false,
-    "updated_at": null
-  },
   "targets": [
     {
       "key": "disease_image:1:none",
@@ -196,32 +191,14 @@ Successful creation returns `201`.
 `DELETE /api/projects/<project_id>/grader-allocations/<allocation_id>` is the
 REST deactivation alias. It does not physically delete the row.
 
-## Enable or disable project enforcement
+## Always-on project allocation
 
-`PUT /api/projects/<project_id>/grader-allocation-policy`
-
-```json
-{
-  "enforcement_enabled": true
-}
-```
-
-Enabling is rejected with `409` unless:
-
-- at least one active grading target is derived for the project;
-- every disease-specific package has an unambiguous underlying disease;
-- every derived active target has at least one resident allocation.
-
-Arbitrator allocation is optional and independent of project enforcement. A
-project may enable enforcement with zero arbitrator allocations. If an
-arbitration task is later created, only an explicitly allocated project
-arbitrator is eligible; enforcement does not fall back to legacy arbitrator
-eligibility.
-
-While enforcement is absent or disabled, project-owned tasks retain the legacy
-`UserDiseaseUnitRole` behavior. When enabled, the exact project, lab, semantic
-target, and capacity allocation is authoritative. Tasks with no project remain
-on legacy eligibility permanently.
+Project allocation is always enforced. There is no enable/disable endpoint or
+legacy fallback for project-owned tasks. The exact project, Lab Unit, semantic
+target, capacity, active clinical role, and active grading slot must match an
+allocation before a project task can be graded. Missing or inactive allocation
+denies access. Tasks with no project remain on the separate classical
+eligibility path.
 
 ## Runtime contract
 
@@ -236,7 +213,7 @@ Requires an authenticated grading role (`resident`, `resident2`,
 `ophthalmologist`, `arbitrator`, or `admin`). The response is scoped to the
 current user and contains only pending EncounterSet packages that:
 
-- belong to a project with allocation enforcement enabled;
+  - belong to a project with an active grading target;
 - resolve to an active project grading target; and
 - match the user's active project, lab, target, and capacity allocation.
 
@@ -275,18 +252,15 @@ here are excluded from the legacy/image queue cards on `/grading/`.
 ```
 
 ```text
-project task + enabled policy
+project task
     -> ProjectGraderAllocation
-
-project task + disabled/absent policy
-    -> UserDiseaseUnitRole
 
 projectless task
     -> UserDiseaseUnitRole
 ```
 
 Ambiguous source project ownership or an unresolved disease-specific encounter
-context fails closed when project enforcement is enabled.
+context fails closed for every project task.
 
 The task resolver treats direct uploads and classical encounter-file images as
 `disease_image`. An EncounterSet image carrying a runtime package ID resolves

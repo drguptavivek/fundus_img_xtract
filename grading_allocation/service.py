@@ -6,14 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from auth.utils import utcnow
 import db_transaction_manager
+from auth.utils import utcnow
+from authz.context import access_context
+from authz.scopes import RecordScope, admin_scope, project_scope
 from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dtos import (
     AllocationInputDTO,
-    AllocationPolicyDTO,
-    GraderCandidateDTO,
     GraderAllocationDTO,
+    GraderCandidateDTO,
     ProjectAllocationStateDTO,
     TargetIdentity,
 )
@@ -23,13 +24,10 @@ from grading_allocation.exceptions import (
     AllocationNotFoundError,
     GradingAllocationError,
 )
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.targets import derive_project_targets, target_identity_set
-from models import LabUnit, Project, User, UserDiseaseUnitRole
+from models import Project, User
 from project_configuration.models import ProjectLabUnit
-from authz.context import access_context
-from authz.scopes import RecordScope, admin_scope, project_scope, project_wide_scope
-
 
 PROJECT_ALLOCATION_MANAGER_ROLES = {
     "project_pi",
@@ -74,19 +72,9 @@ def get_project_allocation_state(
         if not include_inactive:
             allocation_query = allocation_query.where(ProjectGraderAllocation.active.is_(True))
         allocations = db.execute(allocation_query).scalars().all()
-        policy = db.execute(
-            select(ProjectGradingAllocationPolicy).where(
-                ProjectGradingAllocationPolicy.project_id == project_id
-            )
-        ).scalar_one_or_none()
         coverage = _coverage(targets=[target.identity for target in targets], allocations=allocations)
         return ProjectAllocationStateDTO(
             project_id=project_id,
-            policy=AllocationPolicyDTO(
-                project_id=project_id,
-                enforcement_enabled=bool(policy and policy.enforcement_enabled),
-                updated_at=policy.updated_at if policy else None,
-            ),
             targets=tuple(
                 {**target.to_dict(), "coverage": coverage[target.identity.key]}
                 for target in targets
@@ -124,7 +112,7 @@ def create_or_reactivate_allocation(
             )
             if user is None or not user.is_active:
                 raise AllocationNotFoundError("Grader user not found.")
-            _validate_user_capacity(db, user, dto)
+            _validate_user_capacity(user, dto)
 
             row = _find_allocation(db, project_id, dto)
             if row is None:
@@ -182,7 +170,7 @@ def list_grader_candidates(
                 is_member_of_lab=lab_unit_id in {lab.id for lab in user.lab_units},
             )
             for user in users
-            if _user_has_capacity(db, user, capacity, lab_unit_id=lab_unit_id)
+            if _user_has_capacity(user)
         )
 
 
@@ -203,75 +191,8 @@ def set_allocation_active(
         row.deactivated_at = None if active else utcnow()
         row.updated_by_user_id = actor_user_id
         db.flush()
-        user_id = row.user_id
         result = _allocation_dto(row)
     return result
-
-
-def set_project_enforcement(
-    actor_user_id: int,
-    project_id: int,
-    *,
-    enabled: bool,
-) -> AllocationPolicyDTO:
-    with db_transaction_manager.transaction_scope() as db:
-        _require_project_wide_enforcement_manager(db, actor_user_id, project_id)
-        targets, target_warnings = derive_project_targets(db, project_id)
-        if enabled:
-            if not targets:
-                raise AllocationConflictError(
-                    "Project allocation cannot be enforced without an active grading target."
-                )
-            if target_warnings:
-                raise AllocationConflictError(
-                    "Project grading targets contain unresolved configuration.",
-                    details={"warnings": target_warnings},
-                )
-            allocations = (
-                db.execute(
-                    select(ProjectGraderAllocation)
-                    .options(selectinload(ProjectGraderAllocation.lab_unit))
-                    .where(
-                        ProjectGraderAllocation.project_id == project_id,
-                        ProjectGraderAllocation.active.is_(True),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            coverage = _coverage(
-                targets=[target.identity for target in targets],
-                allocations=allocations,
-            )
-            warnings = _readiness_warnings(coverage)
-            if warnings:
-                raise AllocationConflictError(
-                    "Every active grading target requires resident coverage before enforcement.",
-                    details={"warnings": warnings},
-                )
-
-        policy = db.execute(
-            select(ProjectGradingAllocationPolicy).where(
-                ProjectGradingAllocationPolicy.project_id == project_id
-            )
-        ).scalar_one_or_none()
-        if policy is None:
-            policy = ProjectGradingAllocationPolicy(
-                project_id=project_id,
-                enforcement_enabled=enabled,
-                created_by_user_id=actor_user_id,
-                updated_by_user_id=actor_user_id,
-            )
-            db.add(policy)
-        else:
-            policy.enforcement_enabled = enabled
-            policy.updated_by_user_id = actor_user_id
-        db.flush()
-        return AllocationPolicyDTO(
-            project_id=project_id,
-            enforcement_enabled=policy.enforcement_enabled,
-            updated_at=policy.updated_at,
-        )
 
 
 def _require_project_manager(db: Session, actor_user_id: int, project_id: int) -> set[int]:
@@ -319,65 +240,24 @@ def _require_actor_lab(actor_lab_ids: set[int], lab_unit_id: int) -> None:
         raise AllocationForbiddenError("You cannot manage allocations outside your lab-unit scope.")
 
 
-def _validate_user_capacity(db: Session, user: User, dto: AllocationInputDTO) -> None:
-    if _user_has_capacity(
-        db,
-        user,
-        dto.capacity,
-        lab_unit_id=dto.lab_unit_id,
-        disease_id=dto.disease_id,
-    ):
+def _validate_user_capacity(user: User, dto: AllocationInputDTO) -> None:
+    if _user_has_capacity(user):
         return
     if dto.capacity == AllocationCapacity.RESIDENT:
         raise GradingAllocationError(
-            "Resident capacity requires an ophthalmologist role and matching active grading slot."
+            "Resident capacity requires an active ophthalmologist or field_ophthalmologist role."
         )
     raise GradingAllocationError(
-        "Arbitrator capacity requires an ophthalmologist role and matching active grading slot."
+        "Arbitrator capacity requires an active ophthalmologist or field_ophthalmologist role."
     )
 
 
-def _user_has_capacity(
-    db: Session,
-    user: User,
-    capacity: AllocationCapacity,
-    *,
-    lab_unit_id: int,
-    disease_id: int | None = None,
-) -> bool:
-    if not user.has_role("ophthalmologist", "field_ophthalmologist"):
-        return False
-    query = select(UserDiseaseUnitRole.id).where(
-        UserDiseaseUnitRole.user_id == user.id,
-        UserDiseaseUnitRole.lab_unit_id == lab_unit_id,
-        UserDiseaseUnitRole.active.is_(True),
-    )
-    if disease_id is not None:
-        query = query.where(UserDiseaseUnitRole.disease_id == disease_id)
-    if capacity == AllocationCapacity.RESIDENT:
-        query = query.where(
-            (UserDiseaseUnitRole.can_grade_resident.is_(True))
-            | (UserDiseaseUnitRole.can_grade_resident2.is_(True))
-        )
-    else:
-        query = query.where(UserDiseaseUnitRole.can_arbitrate.is_(True))
-    return db.execute(query.limit(1)).scalar_one_or_none() is not None
-
-
-def _require_project_wide_enforcement_manager(
-    db: Session, actor_user_id: int, project_id: int
-) -> None:
-    actor = db.execute(
-        select(User).options(selectinload(User.roles)).where(User.id == actor_user_id)
-    ).scalar_one_or_none()
-    if actor is None or not actor.is_active:
-        raise AllocationForbiddenError("You cannot manage allocation enforcement.")
-    context = access_context(db, actor)
-    if admin_scope(context).allowed or project_wide_scope(
-        context, {"project_admin"}, project_id
-    ).allowed:
-        return
-    raise AllocationForbiddenError("Only Admin or a project-wide Project Admin may change enforcement.")
+def _user_has_capacity(user: User) -> bool:
+    # Project allocations are the project-local grading-slot authority. A
+    # candidate needs an active global ophthalmologist qualification, but does
+    # not need a classical disease/lab slot: that slot is what this service is
+    # assigning. Lab and target scope are validated by the caller.
+    return user.is_active and user.has_role("ophthalmologist", "field_ophthalmologist")
 
 
 def _validate_target_shape(target: TargetIdentity) -> None:

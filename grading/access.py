@@ -18,7 +18,12 @@ def inter_rater_grade_rows(context: AccessContext):
     including peer, arbitrator, review, and AI rows.  An untouched task has no
     participating grade and therefore reveals nothing.
     """
-    if not context.has_any_global_role(frozenset({"ophthalmologist"})):
+    # Project allocations are independent of classical UserDiseaseUnitRole
+    # rows, but still require a clinical grading role.  Admin and project
+    # roles do not confer grading visibility on their own.
+    if not context.has_any_global_role(
+        frozenset({"ophthalmologist", "field_ophthalmologist"})
+    ):
         from sqlalchemy import false
 
         return false()
@@ -39,7 +44,7 @@ def inter_rater_grade_rows(context: AccessContext):
         and_(mine.role_slot == "resident2", UserDiseaseUnitRole.can_grade_resident2.is_(True)),
         and_(mine.role_slot == "arbitrator", UserDiseaseUnitRole.can_arbitrate.is_(True)),
     )
-    current_slot = exists(
+    classical_slot = exists(
         select(UserDiseaseUnitRole.id).where(
             UserDiseaseUnitRole.user_id == context.user_id,
             UserDiseaseUnitRole.disease_id == GradingTask.disease_id,
@@ -48,9 +53,6 @@ def inter_rater_grade_rows(context: AccessContext):
             slot_is_current,
         )
     )
-    # The exact DiseaseUnitRole above is the classical location authority;
-    # generic Lab membership would incorrectly block deliberate cross-site
-    # grading pools.
     classical_scope = GradingTask.project_id.is_(None)
     expected_capacity = or_(
         and_(mine.role_slot.in_(("resident", "resident2")), ProjectGraderAllocation.capacity == "resident"),
@@ -127,8 +129,10 @@ def inter_rater_grade_rows(context: AccessContext):
             mine.task_id == GradingTask.id,
             mine.grader_user_id == context.user_id,
             mine.role_slot.in_(("resident", "resident2", "arbitrator")),
-            current_slot,
-            or_(classical_scope, project_scope),
+            or_(
+                and_(classical_scope, classical_slot),
+                project_scope,
+            ),
         )
     )
     return and_(

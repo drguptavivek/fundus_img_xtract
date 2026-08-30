@@ -253,11 +253,12 @@ or somebody else. The person selected must already be active, hold `ophthalmolog
 the matching active grading slot. Removing any one of those makes the allocation ineffective
 without erasing its history.
 
-Switching allocation enforcement on or off affects the whole project, so it is narrower still:
-only a project-wide Project Admin or the System Admin may do it. A PI, data manager or site-level
-Project Admin may arrange allocations inside their own scope but cannot change that project-wide
-rule. Enforcement cannot be switched on until every active grading target has effective reader
-coverage.
+Project allocation is always enforced. There is no project-wide switch and no legacy eligibility
+fallback for project-owned tasks. A project task is available only when the exact project, site,
+grading target, capacity, active clinical role, active grading slot and active allocation all
+match. Missing allocation or incomplete facts deny access. A PI, data manager or Project Admin
+may arrange allocations inside the part of the project their own grant covers; the allocation
+itself becomes authoritative immediately.
 
 The System Admin may use the emergency path for allocation management, but the override creates
 no clinical qualification. It never substitutes for `ophthalmologist`, the grading slot, a valid

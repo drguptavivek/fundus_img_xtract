@@ -153,23 +153,8 @@ class GraderAllocationDTO:
 
 
 @dataclass(frozen=True)
-class AllocationPolicyDTO:
-    project_id: int
-    enforcement_enabled: bool
-    updated_at: datetime | None
-
-    def to_dict(self) -> dict:
-        return {
-            "project_id": self.project_id,
-            "enforcement_enabled": self.enforcement_enabled,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-
-@dataclass(frozen=True)
 class ProjectAllocationStateDTO:
     project_id: int
-    policy: AllocationPolicyDTO
     targets: tuple[dict, ...]
     allocations: tuple[GraderAllocationDTO, ...]
     warnings: tuple[dict[str, object], ...]
@@ -177,7 +162,6 @@ class ProjectAllocationStateDTO:
     def to_dict(self) -> dict:
         return {
             "project_id": self.project_id,
-            "policy": self.policy.to_dict(),
             "targets": list(self.targets),
             "allocations": [allocation.to_dict() for allocation in self.allocations],
             "warnings": list(self.warnings),

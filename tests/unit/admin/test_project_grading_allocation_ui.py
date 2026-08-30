@@ -87,13 +87,13 @@ def test_project_workspace_renders_grader_allocation_editor(
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Grading Allocation" in body
-    assert "Legacy eligibility active" in body
+    assert "Project allocation always required" in body
     assert "EncounterSet-scoped encounter schemes" in body
     assert "Image-scoped EncounterSet schemes" in body
     assert "Image-wise non-set schemes" in body
     assert 'data-grading-target-family="image_wise_non_set"' in body
     assert f"{disease.name} / Non-EncounterSet Images" in body
-    assert "Allocation is not ready for enforcement" not in body
+    assert "Project grading allocation is always required" in body
     assert "Arbitrator allocation is optional and independent" in body
     assert resident.username in body
     assert (
@@ -102,10 +102,6 @@ def test_project_workspace_renders_grader_allocation_editor(
     )
     assert arbitrator.username in body
     assert f'/api/projects/{project.id}/grader-allocations' in body
-    assert f'/api/projects/{project.id}/grader-allocation-policy' in body
+    assert f'/api/projects/{project.id}/grader-allocation-policy' not in body
     soup = BeautifulSoup(body, "html.parser")
-    policy_form = soup.find("form", attrs={"data-grading-allocation-form": "policy"})
-    assert policy_form is not None
-    enable_button = policy_form.find("button", string=lambda text: text and "Enable" in text)
-    assert enable_button is not None
-    assert not enable_button.has_attr("disabled")
+    assert soup.find("form", attrs={"data-grading-allocation-form": "policy"}) is None

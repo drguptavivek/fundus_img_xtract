@@ -4,30 +4,30 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import and_, case, exists, literal, select, func, or_
-from sqlalchemy.orm import Session, selectinload, aliased
+from sqlalchemy import and_, case, exists, literal, or_, select
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from grading.workbench.package_workflow import reconcile_active_packages
 from grading_allocation.constants import AllocationScope
 from grading_allocation.dtos import (
     EncounterSetQueueSlotDTO,
-    ProjectGradingTargetDTO,
     ProjectEncounterSetQueueDTO,
+    ProjectGradingTargetDTO,
     TargetIdentity,
 )
 from grading_allocation.eligibility import eligible_project_task_contexts
 from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.targets import derive_project_targets
 from models import (
+    Disease,
     EncounterSetGradingPackage,
     EncounterSetImage,
-    Disease,
     GradingTask,
     PatientEncounters,
     Project,
     TaskTracker,
 )
-
+from project_configuration.models import ProjectLabUnit
 
 _SLOT_STATES = {
     "resident": "pending",
@@ -53,6 +53,14 @@ def list_project_encounter_set_queues(
     project_rows = db.execute(
         select(Project)
         .join(ProjectGraderAllocation, ProjectGraderAllocation.project_id == Project.id)
+        .join(
+            ProjectLabUnit,
+            and_(
+                ProjectLabUnit.project_id == ProjectGraderAllocation.project_id,
+                ProjectLabUnit.lab_unit_id == ProjectGraderAllocation.lab_unit_id,
+                ProjectLabUnit.active.is_(True),
+            ),
+        )
         .where(
             Project.active.is_(True),
             ProjectGraderAllocation.user_id == user_id,
@@ -295,7 +303,19 @@ def exclude_unallocated_project_tasks(
                 ProjectGraderAllocation.disease_id == disease_id,
             )
         )
-    allocated = select(ProjectGraderAllocation.id).where(*allocation_conditions)
+    project_lab_membership = (
+        select(ProjectLabUnit.id)
+        .where(
+            ProjectLabUnit.project_id == project_id,
+            ProjectLabUnit.lab_unit_id == inner.lab_unit_id,
+            ProjectLabUnit.active.is_(True),
+        )
+        .correlate(inner)
+    )
+    allocated = select(ProjectGraderAllocation.id).where(
+        *allocation_conditions,
+        exists(project_lab_membership),
+    )
 
     # "This task belongs to a project and the user has no allocation for it."
     unallocated = (
@@ -361,7 +381,16 @@ def exact_allocation_predicate(task_entity, package, *, user_id: int, capacity: 
             package.encounter_set_type_id
         ),
     )
-    return and_(target_resolvable, exists(allocation_match))
+    project_lab_match = select(ProjectLabUnit.id).where(
+        ProjectLabUnit.project_id == task_entity.project_id,
+        ProjectLabUnit.lab_unit_id == task_entity.lab_unit_id,
+        ProjectLabUnit.active.is_(True),
+    )
+    return and_(
+        target_resolvable,
+        exists(project_lab_match),
+        exists(allocation_match),
+    )
 
 
 def filter_to_exact_allocation(

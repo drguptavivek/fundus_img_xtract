@@ -126,7 +126,7 @@ def create_intra_rater_batch() -> Response:
 
 
 @bp.route("/intra-rater/my-tasks", methods=["GET"])
-@roles_required("ophthalmologist", "admin", "data_manager")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin", "data_manager")
 def list_my_intra_rater_tasks() -> Response:
     """Return intra-rater tasks assigned to the current grader."""
     include_completed = request.args.get("include_completed", default=0, type=int) == 1
@@ -161,7 +161,7 @@ def list_my_intra_rater_tasks() -> Response:
 
 
 @bp.route("/intra-rater/viewer/<string:image_uuid>")
-@roles_required("ophthalmologist", "admin", "data_manager")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin", "data_manager")
 def intra_rater_viewer(image_uuid: str):
     """Serve the grading viewer card for an intra-rater image UUID."""
     with get_db_session() as db:
@@ -186,7 +186,7 @@ def intra_rater_viewer(image_uuid: str):
 
 
 @bp.route("/intra-rater/tasks/<int:task_id>/submit", methods=["POST"])
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def submit_intra_rater_grade(task_id: int) -> Response:
     """Submit an intra-rater grade for the current grader."""
     data = request.get_json(silent=True) or {}
@@ -213,7 +213,7 @@ def submit_intra_rater_grade(task_id: int) -> Response:
 
 
 @bp.route("/intra-rater/kpi-data", methods=["GET"])
-@roles_required("ophthalmologist", "admin", "data_manager")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin", "data_manager")
 def get_intra_rater_kpi_data() -> Response:
     """Return KPI data for intra-rater reliability analysis."""
     with get_db_session() as db:
@@ -561,7 +561,7 @@ def _load_gradings_map(db: Session, tasks: Sequence[IntraRaterTask]) -> dict[int
 
 
 @bp.route("/intra-rater", methods=["GET"])
-@roles_required("ophthalmologist", "admin", "data_manager")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin", "data_manager")
 def intra_rater_dashboard() -> str:
     """Render the intra-rater task dashboard for the logged-in grader."""
     # Get pagination parameters from query string with defaults

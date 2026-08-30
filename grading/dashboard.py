@@ -70,7 +70,7 @@ def _build_history_panel_context(
     }
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     with transaction_scope() as db:
@@ -155,7 +155,7 @@ def index():
         
         # is_resident means user has permission to do resident-level grading
         is_resident = has_resident_eligibility and current_user.has_role('ophthalmologist', 'field_ophthalmologist')
-        is_resident2 = current_user.has_role('ophthalmologist')
+        is_resident2 = current_user.has_role('ophthalmologist', 'field_ophthalmologist')
         
         # Which queue cards exist is answered from role rows alone. Their
         # contents are fetched per disease afterwards, so rendering this page
@@ -179,7 +179,7 @@ def index():
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def disease_queue_fragment(disease_id: int):
     """HTMX fragment for one disease queue card.
 
@@ -202,7 +202,7 @@ def disease_queue_fragment(disease_id: int):
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def disease_queues_fragment():
     """The Legacy & Image Grading panel of self-loading placeholders.
 
@@ -232,7 +232,7 @@ def disease_queues_fragment():
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def project_queues_fragment():
     """The Project EncounterSet Grading panel on its own, for in-place refresh."""
     refresh = request.args.get("refresh") == "1"
@@ -246,7 +246,7 @@ def project_queues_fragment():
     )
 
 
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def refresh_queues_trigger():
     """Fire the panel-wide refresh event; the panels re-fetch themselves.
 

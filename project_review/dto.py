@@ -143,7 +143,6 @@ class ProjectSummaryDTO:
     annotation: AnnotationConfigurationDTO | None
     metadata_fields: tuple[MetadataFieldDTO, ...]
     configured_users: tuple[ConfiguredUserDTO, ...]
-    allocation_enforced: bool
     referral_diseases: tuple[ReferralDiseaseDTO, ...]
 
 

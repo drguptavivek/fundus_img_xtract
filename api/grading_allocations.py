@@ -8,15 +8,14 @@ from flask import jsonify, request
 from flask_login import current_user, login_required
 
 from auth.roles import roles_required
-from grading_allocation.constants import AllocationCapacity, AllocationScope
+from db_transaction_manager import transaction_scope
 from grading.queue_cards import project_encounter_set_cards
+from grading_allocation import service
+from grading_allocation.constants import AllocationCapacity, AllocationScope
 from grading_allocation.dtos import AllocationInputDTO
 from grading_allocation.exceptions import GradingAllocationError
-from grading_allocation import service
-from db_transaction_manager import transaction_scope
 
 from . import api_bp
-
 
 GRADER_ROLES = ("ophthalmologist", "field_ophthalmologist")
 
@@ -75,7 +74,7 @@ def get_project_grader_allocation_candidates(project_id: int):
 @api_bp.route("/projects/<int:project_id>/grader-allocations", methods=["GET"])
 @login_required
 def get_project_grader_allocations(project_id: int):
-    """Return policy, derived targets, coverage, and project allocations."""
+    """Return derived targets, coverage, and project allocations."""
     try:
         state = service.get_project_allocation_state(
             current_user.id,
@@ -139,24 +138,6 @@ def deactivate_project_grader_allocation(project_id: int, allocation_id: int):
             active=False,
         )
         return jsonify({"success": True, "allocation": allocation.to_dict()})
-    except GradingAllocationError as exc:
-        return _error_response(exc)
-
-
-@api_bp.route("/projects/<int:project_id>/grader-allocation-policy", methods=["PUT"])
-@login_required
-def update_project_grader_allocation_policy(project_id: int):
-    """Atomically enable or disable project allocation enforcement."""
-    try:
-        data = _json_object()
-        if "enforcement_enabled" not in data:
-            raise GradingAllocationError("The enforcement_enabled field is required.")
-        policy = service.set_project_enforcement(
-            current_user.id,
-            project_id,
-            enabled=_bool_value(data.get("enforcement_enabled"), default=False),
-        )
-        return jsonify({"success": True, "policy": policy.to_dict()})
     except GradingAllocationError as exc:
         return _error_response(exc)
 

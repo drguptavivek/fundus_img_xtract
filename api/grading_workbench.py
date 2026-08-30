@@ -29,7 +29,7 @@ from grading.workbench.service import (
 from . import api_bp
 
 
-GRADING_ROLES = ("resident", "ophthalmologist")
+GRADING_ROLES = ("ophthalmologist", "field_ophthalmologist")
 
 
 @api_bp.route("/grading/workbench/me/active-sessions", methods=["GET"])

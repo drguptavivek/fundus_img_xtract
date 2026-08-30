@@ -53,16 +53,17 @@ The same user remains prohibited from filling both resident slots on one task.
 Anyone who graded a task as Resident or Resident 2 is permanently ineligible
 to arbitrate that task.
 
-## Legacy compatibility
+## Project allocation is always enforced
 
 Task source records have nullable project provenance. The runtime resolver uses
 the server-owned source relationship and returns either a project ID or `null`.
 It does not infer project ownership from disease, user, lab, or profile name.
 
-Project enforcement is explicitly activated. Until activation, existing
-project tasks use legacy `UserDiseaseUnitRole` eligibility. Projectless tasks
-always use the legacy path. This permits allocation preparation and coverage
-review without changing live queues after the first assignment is saved.
+Every project task uses the active `ProjectGraderAllocation` matching the task's
+project, Lab Unit, semantic target, capacity, active clinical role, and active
+grading slot. There is no enable/disable operation and no legacy fallback for
+project-owned tasks. Projectless tasks remain on the separate classical
+`UserDiseaseUnitRole` path.
 
 The EncounterSet package workbench evaluates this same eligibility for every
 image and encounter target. Targets outside the grader's allocation remain
@@ -76,10 +77,10 @@ grading_allocation/
     constants.py      stable scope and capacity vocabulary
     dtos.py            route/service/runtime contracts
     exceptions.py      typed safe domain failures
-    models.py          normalized policy and allocation persistence
+    models.py          normalized allocation persistence
     targets.py         active-profile target derivation
     resolver.py        server-owned task allocation context
-    eligibility.py     project enforcement and legacy fallback
+    eligibility.py     project allocation and classical eligibility
     service.py         scoped administration use cases
 
 api/grading_allocations.py
@@ -94,9 +95,10 @@ API details are documented in
 The project detail workspace under **Admin -> Projects** displays the targets
 derived from active Upload & Grading Profiles, resident/arbitrator coverage,
 active allocations, and readiness warnings. Managers can add or deactivate an
-allocation and explicitly enable enforcement from this workspace. Every
-mutation calls the JSON API and then refreshes the complete project workspace
-so target options, coverage, warnings, and enforcement state remain consistent.
+allocation from this workspace. Every mutation calls the JSON API and then
+refreshes the complete project workspace so target options, coverage and
+warnings remain consistent. Project allocation is always required; the workspace
+has no enforcement toggle.
 
 The grader selector loads role-compatible active users from the allocation API.
 A candidate does not need general membership in the task's lab: the allocation

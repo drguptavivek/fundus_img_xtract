@@ -43,7 +43,7 @@ def can_access_intra_rater_task(db, *, actor: User, task: IntraRaterTask) -> boo
     if (
         actor is None
         or not getattr(actor, "is_active", False)
-        or not actor.has_role("ophthalmologist")
+        or not actor.has_role("ophthalmologist", "field_ophthalmologist")
         or task.grader_user_id != actor.id
     ):
         return False

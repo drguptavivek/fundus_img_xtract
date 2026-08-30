@@ -2,24 +2,33 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from data_authorization.models import ProjectRoleGrant
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation
 from grading_schemes.service import sanitize_guidelines_html
 from iitk_api_integration.models import IITKApiProjectConfig
-from models import Disease, DiseaseGrading, LinkedDiseaseGrading, ProjectReferralDisease
+from models import DiseaseGrading, LinkedDiseaseGrading, ProjectReferralDisease
 from project_annotations.models import ProjectAnnotationPolicy
-from remote_inference.models import ProjectAutomatedRemoteInferenceRule, ProjectManualRemoteInferenceWorkflow
 from remidio_api_integration.models import ProjectUploadProfileRemidioApiBinding
+from remote_inference.models import (
+    ProjectAutomatedRemoteInferenceRule,
+    ProjectManualRemoteInferenceWorkflow,
+)
 from upload_profiles.models import ProjectUploadProfile
 
 from .dto import (
-    AnnotationConfigurationDTO, ConfiguredUserDTO, DiseaseDefinitionDTO, GradeChoiceDTO,
-    GradingTargetDTO, MetadataFieldDTO, ProjectAnalysisDTO, ProjectSourceDTO,
+    AnnotationConfigurationDTO,
+    ConfiguredUserDTO,
+    DiseaseDefinitionDTO,
+    GradeChoiceDTO,
+    GradingTargetDTO,
+    MetadataFieldDTO,
+    ProjectAnalysisDTO,
+    ProjectSourceDTO,
     ReferralDiseaseDTO,
 )
 
@@ -58,9 +67,6 @@ def effective_configuration(
             if include_people
             else ()
         ),
-        "allocation_enforced": bool(db.execute(select(ProjectGradingAllocationPolicy.enforcement_enabled).where(
-            ProjectGradingAllocationPolicy.project_id == project_id
-        )).scalar_one_or_none()),
         "referral_diseases": _referrals(db, project_id, mappings),
     }
 
@@ -97,7 +103,7 @@ def _sources(db, project_id, mappings, allowed_lab_ids, *, include_people):
             details=tuple((k, v) for k, v in details if v and v != "None"),
         ))
 
-    today = date.today()
+    today = datetime.now(UTC).date()
     remidio = db.execute(select(ProjectUploadProfileRemidioApiBinding).options(
         selectinload(ProjectUploadProfileRemidioApiBinding.routing_profile),
         selectinload(ProjectUploadProfileRemidioApiBinding.source_rule),
@@ -119,9 +125,13 @@ def _sources(db, project_id, mappings, allowed_lab_ids, *, include_people):
         for r in remidio:
             site = r.source_rule.site
             site_name = f" ({site.site_name})" if site and site.site_name else ""
-            details.append((r.source_rule.site_custom_identifier + site_name,
-                f"{r.source_rule.remidio_device_type}; {r.lab_unit.hospital.name} / {r.lab_unit.name}; "
-                f"{r.camera.name}; {r.project_profile.profile.name}; {r.active_from_date} to {r.active_to_date or 'Open-ended'}"))
+            details.append((
+                r.source_rule.site_custom_identifier + site_name,
+                (
+                    f"{r.source_rule.remidio_device_type}; {r.lab_unit.hospital.name} / {r.lab_unit.name}; "
+                    f"{r.camera.name}; {r.project_profile.profile.name}; {r.active_from_date} to {r.active_to_date or 'Open-ended'}"
+                ),
+            ))
         rows.append(ProjectSourceDTO(
             id="remidio-api", kind="API intake", name="Remidio API",
             summary=f"{len(remidio)} active route{'s' if len(remidio) != 1 else ''}",

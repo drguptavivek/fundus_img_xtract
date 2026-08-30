@@ -221,7 +221,9 @@ def _merge_grader_totals(
     )
 
 
-@roles_required("ophthalmologist", "local_admin", "data_manager", "admin")
+@roles_required(
+    "ophthalmologist", "field_ophthalmologist", "local_admin", "data_manager", "admin"
+)
 def grader_statistics():
     """Show per-grader grade counts by disease and lab unit (monthly + cumulative)."""
     with get_db_session() as db:

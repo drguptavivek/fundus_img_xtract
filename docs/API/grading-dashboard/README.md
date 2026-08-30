@@ -82,7 +82,7 @@ it is a write that advances packages past their post-Resident2 waiting period.
 
 `GET /api/grading/me/eligibility`
 
-The response intentionally separates legacy, non-project permissions from explicit project grader allocations. `role_slots` are workflow slots (`resident`, `resident2`, or `arbitrator`), not application roles. A project allocation with `effective: false` is configured but is not active because project allocation enforcement is disabled.
+The response intentionally separates legacy, non-project permissions from explicit project grader allocations. `role_slots` are workflow slots (`resident`, `resident2`, or `arbitrator`), not application roles. Every project allocation is immediately authoritative; project-owned tasks never fall back to legacy eligibility.
 
 ```json
 {
@@ -104,8 +104,6 @@ The response intentionally separates legacy, non-project permissions from explic
         "capacity": "resident2",
         "disease": {"id": 3, "name": "DR"},
         "encounter_set_type": null,
-        "enforcement_enabled": true,
-        "effective": true
       }
     ]
   }

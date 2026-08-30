@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
 
 from sqlalchemy import and_, or_, select
 
 from authz.context import AccessContext
 from authz.exceptions import AuthorizationDenied
-
 
 _LOGGER = logging.getLogger("authorization")
 
@@ -34,11 +33,11 @@ class RecordScope:
     lab_unit_id: int | None = None
 
     @classmethod
-    def self(cls, user_id: int) -> "RecordScope":
+    def self(cls, user_id: int) -> RecordScope:
         return cls(world=RecordWorld.SELF, user_id=int(user_id))
 
     @classmethod
-    def classical(cls, *, lab_unit_id: int, hospital_id: int) -> "RecordScope":
+    def classical(cls, *, lab_unit_id: int, hospital_id: int) -> RecordScope:
         return cls(
             world=RecordWorld.CLASSICAL,
             lab_unit_id=int(lab_unit_id),
@@ -52,7 +51,7 @@ class RecordScope:
         project_id: int,
         lab_unit_id: int | None = None,
         hospital_id: int | None = None,
-    ) -> "RecordScope":
+    ) -> RecordScope:
         return cls(
             world=RecordWorld.PROJECT,
             project_id=int(project_id),
@@ -61,7 +60,7 @@ class RecordScope:
         )
 
     @classmethod
-    def global_resource(cls) -> "RecordScope":
+    def global_resource(cls) -> RecordScope:
         return cls(world=RecordWorld.GLOBAL)
 
 
@@ -347,7 +346,14 @@ def grading_scope(
     allocation_scope: str | None = None,
     encounter_set_type_id: int | None = None,
 ) -> ScopeCheck:
-    """Require clinical qualification, exact slot, and project allocation."""
+    """Require the complete grading authority for the record's data world.
+
+    Classical grading is authorised by the historical disease/Lab Unit slot
+    assignment. Project grading is a separate authority: the actor must be a
+    clinician and have an exact active project allocation for the requested
+    target. A classical slot, project role, or Admin role cannot substitute for
+    either path.
+    """
 
     slot_name = str(slot or "").strip().lower()
     slot_column = _SLOT_COLUMNS.get(slot_name)
@@ -358,91 +364,85 @@ def grading_scope(
     ):
         return _deny("complete_grading_scope_required")
 
-    if record.world == RecordWorld.CLASSICAL:
-        # UserDiseaseUnitRole below is already the exact disease/Lab/slot
-        # assignment. Requiring a generic Lab assignment as well would create
-        # a second authority and break deliberate cross-site grading pools.
-        if not context.has_any_global_role(frozenset({"ophthalmologist"})):
-            return _deny("ophthalmologist_role_required")
-    elif record.world == RecordWorld.PROJECT:
-        # The project allocation below is the project/location relationship;
-        # a parallel ProjectRoleGrant would represent the same authority twice.
-        if not context.has_any_global_role(frozenset({"ophthalmologist"})):
-            return _deny("ophthalmologist_role_required")
-    else:
+    if record.world not in {RecordWorld.CLASSICAL, RecordWorld.PROJECT}:
         return _deny("grading_record_scope_required")
 
-    from models import UserDiseaseUnitRole
+    clinical_roles = frozenset({"ophthalmologist", "field_ophthalmologist"})
+    if not context.has_any_global_role(clinical_roles):
+        return _deny("ophthalmologist_role_required")
 
-    slot_conditions = [
-        UserDiseaseUnitRole.user_id == context.user_id,
-        UserDiseaseUnitRole.disease_id == int(disease_id),
-        UserDiseaseUnitRole.lab_unit_id == record.lab_unit_id,
-        UserDiseaseUnitRole.active.is_(True),
-        getattr(UserDiseaseUnitRole, slot_column).is_(True),
-    ]
-    if context.db.execute(
-        select(UserDiseaseUnitRole.id).where(*slot_conditions).limit(1)
-    ).scalar_one_or_none() is None:
-        return _deny("grading_slot_required")
+    if record.world == RecordWorld.CLASSICAL:
+        from models import UserDiseaseUnitRole
 
-    if record.world == RecordWorld.PROJECT:
-        if record.project_id is None:
-            return _deny("project_id_required")
-        from grading_allocation.constants import AllocationScope
-        from grading_allocation.models import ProjectGraderAllocation
-        from project_configuration.models import ProjectLabUnit
+        slot_conditions = [
+            UserDiseaseUnitRole.user_id == context.user_id,
+            UserDiseaseUnitRole.disease_id == int(disease_id),
+            UserDiseaseUnitRole.lab_unit_id == record.lab_unit_id,
+            UserDiseaseUnitRole.active.is_(True),
+            getattr(UserDiseaseUnitRole, slot_column).is_(True),
+        ]
+        if context.db.execute(
+            select(UserDiseaseUnitRole.id).where(*slot_conditions).limit(1)
+        ).scalar_one_or_none() is None:
+            return _deny("grading_slot_required")
+        return _allow("classical_grading_slot")
 
-        scope_name = str(allocation_scope or "").strip()
-        if scope_name not in {scope.value for scope in AllocationScope}:
-            return _deny("project_allocation_target_required")
-        if (
-            scope_name
-            in {
-                AllocationScope.ENCOUNTER_SET_UNIFIED.value,
-                AllocationScope.DISEASE_ENCOUNTER.value,
-            }
-            and encounter_set_type_id is None
-        ):
-            return _deny("encounter_set_type_required")
-        allocation_disease_id = (
-            None
-            if scope_name == AllocationScope.ENCOUNTER_SET_UNIFIED.value
-            else int(disease_id)
-        )
-        allocation_encounter_set_type_id = (
-            None
-            if scope_name == AllocationScope.DISEASE_IMAGE.value
-            else int(encounter_set_type_id)
-        )
+    if record.project_id is None:
+        return _deny("project_id_required")
+    from grading_allocation.constants import AllocationScope
+    from grading_allocation.models import ProjectGraderAllocation
+    from project_configuration.models import ProjectLabUnit
 
-        capacity = "arbitrator" if slot_name == "arbitrator" else "resident"
-        allocation = context.db.execute(
-            select(ProjectGraderAllocation.id)
+    scope_name = str(allocation_scope or "").strip()
+    if scope_name not in {scope.value for scope in AllocationScope}:
+        return _deny("project_allocation_target_required")
+    if (
+        scope_name
+        in {
+            AllocationScope.ENCOUNTER_SET_UNIFIED.value,
+            AllocationScope.DISEASE_ENCOUNTER.value,
+        }
+        and encounter_set_type_id is None
+    ):
+        return _deny("encounter_set_type_required")
+    allocation_disease_id = (
+        None
+        if scope_name == AllocationScope.ENCOUNTER_SET_UNIFIED.value
+        else int(disease_id)
+    )
+    allocation_encounter_set_type_id = (
+        None
+        if scope_name == AllocationScope.DISEASE_IMAGE.value
+        else int(encounter_set_type_id)
+    )
+
+    capacity = "arbitrator" if slot_name == "arbitrator" else "resident"
+    allocation = context.db.execute(
+        select(ProjectGraderAllocation.id)
+        .where(
+            ProjectGraderAllocation.project_id == record.project_id,
+            ProjectGraderAllocation.user_id == context.user_id,
+            ProjectGraderAllocation.lab_unit_id == record.lab_unit_id,
+            ProjectGraderAllocation.capacity == capacity,
+            ProjectGraderAllocation.active.is_(True),
+            ProjectGraderAllocation.scope == scope_name,
+            ProjectGraderAllocation.disease_id.is_not_distinct_from(
+                allocation_disease_id
+            ),
+            ProjectGraderAllocation.encounter_set_type_id.is_not_distinct_from(
+                allocation_encounter_set_type_id
+            ),
+            select(ProjectLabUnit.id)
             .where(
-                ProjectGraderAllocation.project_id == record.project_id,
-                ProjectGraderAllocation.user_id == context.user_id,
-                ProjectGraderAllocation.lab_unit_id == record.lab_unit_id,
-                ProjectGraderAllocation.capacity == capacity,
-                ProjectGraderAllocation.active.is_(True),
-                ProjectGraderAllocation.scope == scope_name,
-                ProjectGraderAllocation.disease_id.is_not_distinct_from(
-                    allocation_disease_id
-                ),
-                ProjectGraderAllocation.encounter_set_type_id.is_not_distinct_from(
-                    allocation_encounter_set_type_id
-                ),
-                select(ProjectLabUnit.id)
-                .where(
-                    ProjectLabUnit.project_id == record.project_id,
-                    ProjectLabUnit.lab_unit_id == record.lab_unit_id,
-                    ProjectLabUnit.active.is_(True),
-                )
-                .exists(),
+                ProjectLabUnit.project_id == record.project_id,
+                ProjectLabUnit.lab_unit_id == record.lab_unit_id,
+                ProjectLabUnit.active.is_(True),
             )
-            .limit(1)
-        ).scalar_one_or_none()
-        if allocation is None:
-            return _deny("project_grader_allocation_required")
+            .exists(),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if allocation is None:
+        return _deny("project_grader_allocation_required")
 
-    return _allow("grading_slot_and_allocation")
+    return _allow("project_grader_allocation")

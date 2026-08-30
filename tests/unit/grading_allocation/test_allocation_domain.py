@@ -1,37 +1,48 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
 from sqlalchemy import event, select
 
+from encounter_set_types.models import EncounterSetType
 from grading_allocation import eligibility as eligibility_module
 from grading_allocation.constants import AllocationCapacity, AllocationScope
-from grading_allocation.dashboard import list_project_encounter_set_queues
-from grading_allocation.dtos import AllocationInputDTO, TargetIdentity, TaskAllocationContext
+from grading_allocation.dashboard import (
+    exclude_unallocated_project_tasks,
+    filter_to_exact_allocation,
+    list_project_encounter_set_queues,
+)
+from grading_allocation.dtos import (
+    AllocationInputDTO,
+    TargetIdentity,
+    TaskAllocationContext,
+)
 from grading_allocation.eligibility import (
     eligible_project_task_contexts,
     is_user_eligible_for_task,
 )
-from grading_allocation.exceptions import AllocationConflictError
-from grading_allocation.models import ProjectGraderAllocation, ProjectGradingAllocationPolicy
+from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.resolver import resolve_task_allocation_context
 from grading_allocation.service import (
     create_or_reactivate_allocation,
     get_project_allocation_state,
-    set_project_enforcement,
+    list_grader_candidates,
 )
 from grading_allocation.targets import derive_project_targets
-from encounter_set_types.models import EncounterSetType
+from media.authorization import (
+    MediaAccessDenied,
+    MediaSourceType,
+    authorize_media_source,
+)
 from models import (
+    DirectImageUpload,
     Disease,
     DiseaseGrading,
-    DirectImageUpload,
-    EncounterSetImage,
     EncounterSetGradingPackage,
+    EncounterSetImage,
     Grade,
     GradingTask,
-    Project,
     LabUnit,
+    Project,
     UserDiseaseUnitRole,
 )
 from project_configuration.models import ProjectLabUnit
@@ -49,11 +60,6 @@ from upload_profiles.models import (
 )
 from utils.dualGradingGetNextTasks import get_next_eligible_resident2_task_atomic
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
-from media.authorization import (
-    MediaAccessDenied,
-    MediaSourceType,
-    authorize_media_source,
-)
 
 
 def _can_view_media(db, user, media_uuid: str) -> bool:
@@ -365,10 +371,6 @@ def test_disease_encounter_set_target_covers_package_image_and_encounter_tasks(
     )
     db_session.add_all(
         [
-            ProjectGradingAllocationPolicy(
-                project_id=project.id,
-                enforcement_enabled=True,
-            ),
             ProjectGraderAllocation(
                 project_id=project.id,
                 user_id=resident.id,
@@ -601,7 +603,7 @@ def test_projectless_resident_can_fill_resident2_slot(db_session, core_test_data
     ) is True
 
 
-def test_enabled_project_policy_uses_exact_project_allocation(db_session, core_test_data):
+def test_project_allocation_uses_exact_project_allocation(db_session, core_test_data):
     disease = db_session.merge(core_test_data["dr"])
     lab = db_session.merge(core_test_data["lab_unit"])
     project, _profile = _project_with_image_target(db_session, disease)
@@ -614,7 +616,6 @@ def test_enabled_project_policy_uses_exact_project_allocation(db_session, core_t
     task = _direct_task(db_session, core_test_data, resident, disease, project=project)
     db_session.add_all(
         [
-            ProjectGradingAllocationPolicy(project_id=project.id, enforcement_enabled=True),
             ProjectGraderAllocation(
                 project_id=project.id,
                 user_id=resident.id,
@@ -664,7 +665,6 @@ def test_next_task_queue_uses_project_resident_allocation_for_resident2(
     task.state = "resident_done"
     db_session.add_all(
         [
-            ProjectGradingAllocationPolicy(project_id=project.id, enforcement_enabled=True),
             ProjectGraderAllocation(
                 project_id=project.id,
                 user_id=resident.id,
@@ -709,7 +709,6 @@ def test_prior_resident_grade_blocks_resident2_and_arbitrator_for_same_user(
     assert grading is not None
     db_session.add_all(
         [
-            ProjectGradingAllocationPolicy(project_id=project.id, enforcement_enabled=True),
             ProjectGraderAllocation(
                 project_id=project.id,
                 user_id=grader.id,
@@ -771,7 +770,6 @@ def test_project_task_denies_legacy_eligibility_without_exact_allocation(db_sess
             active=True,
         )
     )
-    db_session.add(ProjectGradingAllocationPolicy(project_id=project.id, enforcement_enabled=False))
     task = _direct_task(db_session, core_test_data, resident, disease, project=project)
 
     assert is_user_eligible_for_task(
@@ -825,9 +823,54 @@ def test_service_creates_normalized_allocation_and_treats_arbitrator_as_optional
     state = get_project_allocation_state(admin_user.id, project.id)
 
     assert allocation.capacity == "resident"
-    assert state.policy.enforcement_enabled is False
+    assert "policy" not in state.to_dict()
     assert state.targets[0]["coverage"] == {"resident": 1, "arbitrator": 0}
     assert state.warnings == ()
+
+
+def test_project_candidates_use_global_ophthalmologist_role_only(
+    app,
+    db_session,
+    core_test_data,
+):
+    disease = db_session.merge(core_test_data["dr"])
+    lab = db_session.merge(core_test_data["lab_unit"])
+    project, _profile = _project_with_image_target(db_session, disease)
+    admin = UserFactory.create_admin(
+        db_session,
+        username=f"candidate_admin_{uuid4().hex[:8]}",
+    )
+    field_ophthalmologist = UserFactory.create_by_role(
+        db_session,
+        "field_ophthalmologist",
+        username=f"candidate_field_oph_{uuid4().hex[:8]}",
+        lab_units=[],
+    )
+    field_optometrist = UserFactory.create_by_role(
+        db_session,
+        "field_optometrist",
+        username=f"candidate_field_opt_{uuid4().hex[:8]}",
+        lab_units=[],
+    )
+    nonclinical = UserFactory.create_by_role(
+        db_session,
+        "data_manager",
+        username=f"candidate_data_manager_{uuid4().hex[:8]}",
+        lab_units=[],
+    )
+    db_session.flush()
+
+    candidates = list_grader_candidates(
+        admin.id,
+        project.id,
+        lab_unit_id=lab.id,
+        capacity=AllocationCapacity.RESIDENT,
+    )
+
+    candidate_ids = {candidate.user_id for candidate in candidates}
+    assert field_ophthalmologist.id in candidate_ids
+    assert field_optometrist.id not in candidate_ids
+    assert nonclinical.id not in candidate_ids
 
 
 def test_project_allocation_grants_cross_lab_grading_media_access(
@@ -868,14 +911,6 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
             capacity=AllocationCapacity.RESIDENT,
         ),
     )
-    db_session.add(
-        ProjectGradingAllocationPolicy(
-            project_id=project.id,
-            enforcement_enabled=True,
-        )
-    )
-    db_session.flush()
-
     assert resident.lab_units == []
     assert _can_view_media(
         db_session,
@@ -884,123 +919,107 @@ def test_project_allocation_grants_cross_lab_grading_media_access(
     ) is True
 
 
-def test_service_enables_enforcement_with_resident_coverage_only(
-    app,
+def test_project_allocation_denies_deactivated_project_lab_unit(
     db_session,
     core_test_data,
 ):
     disease = db_session.merge(core_test_data["dr"])
     lab = db_session.merge(core_test_data["lab_unit"])
     project, _profile = _project_with_image_target(db_session, disease)
-    suffix = uuid4().hex[:8]
-    admin = UserFactory.create_admin(db_session, username=f"policy_admin_{suffix}")
     resident = UserFactory.create_by_role(
         db_session,
         "ophthalmologist",
-        username=f"policy_resident_{suffix}",
+        username=f"inactive_project_lab_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
+    task = _direct_task(db_session, core_test_data, resident, disease, project=project)
     db_session.add(
-        UserDiseaseUnitRole(
+        ProjectGraderAllocation(
+            project_id=project.id,
             user_id=resident.id,
-            disease_id=disease.id,
             lab_unit_id=lab.id,
-            can_grade_resident=True,
+            scope=AllocationScope.DISEASE_IMAGE.value,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT.value,
             active=True,
         )
     )
     db_session.flush()
-    create_or_reactivate_allocation(
-        admin.id,
-        project.id,
-        AllocationInputDTO(
-            user_id=resident.id,
-            lab_unit_id=lab.id,
-            scope=AllocationScope.DISEASE_IMAGE,
-            disease_id=disease.id,
-            capacity=AllocationCapacity.RESIDENT,
-        ),
-    )
 
-    policy = set_project_enforcement(admin.id, project.id, enabled=True)
-
-    assert policy.enforcement_enabled is True
-
-
-def test_service_rejects_enforcement_without_project_targets(
-    app,
-    db_session,
-):
-    suffix = uuid4().hex[:8]
-    project = Project(
-        title=f"Empty Allocation Project {suffix}",
-        code=f"EMPTY-ALLOC-{suffix}",
-        active=True,
-    )
-    db_session.add(project)
-    admin = UserFactory.create_admin(
+    assert is_user_eligible_for_task(
         db_session,
-        username=f"empty_allocation_admin_{suffix}",
-    )
+        user_id=resident.id,
+        task=task,
+        role_slot="resident2",
+    ) is True
+
+    boundary = db_session.query(ProjectLabUnit).filter_by(
+        project_id=project.id,
+        lab_unit_id=lab.id,
+    ).one()
+    boundary.active = False
     db_session.flush()
 
-    with pytest.raises(AllocationConflictError, match="without an active grading target"):
-        set_project_enforcement(admin.id, project.id, enabled=True)
+    assert is_user_eligible_for_task(
+        db_session,
+        user_id=resident.id,
+        task=task,
+        role_slot="resident2",
+    ) is False
 
 
-def test_service_rejects_enforcement_with_arbitrator_but_no_resident(
-    app,
+def test_sql_allocation_predicate_requires_active_project_lab_unit(
     db_session,
     core_test_data,
 ):
     disease = db_session.merge(core_test_data["dr"])
-    lab = db_session.merge(core_test_data["lab_a2"])
+    lab = db_session.merge(core_test_data["lab_unit"])
     project, _profile = _project_with_image_target(db_session, disease)
-    suffix = uuid4().hex[:8]
-    admin = UserFactory.create_admin(db_session, username=f"split_lab_admin_{suffix}")
-    arbitrator = UserFactory.create_ophthalmologist(
+    resident = UserFactory.create_by_role(
         db_session,
-        username=f"split_lab_arbitrator_{suffix}",
+        "ophthalmologist",
+        username=f"sql_inactive_project_lab_{uuid4().hex[:8]}",
         lab_units=[lab],
     )
-    existing_slot = db_session.query(UserDiseaseUnitRole).filter_by(
-        user_id=arbitrator.id,
-        disease_id=disease.id,
-        lab_unit_id=lab.id,
-    ).one_or_none()
-    if existing_slot is None:
-        existing_slot = UserDiseaseUnitRole(
-            user_id=arbitrator.id,
-            disease_id=disease.id,
+    task = _direct_task(db_session, core_test_data, resident, disease, project=project)
+    db_session.add(
+        ProjectGraderAllocation(
+            project_id=project.id,
+            user_id=resident.id,
             lab_unit_id=lab.id,
+            scope=AllocationScope.DISEASE_IMAGE.value,
+            disease_id=disease.id,
+            capacity=AllocationCapacity.RESIDENT.value,
+            active=True,
         )
-        db_session.add(existing_slot)
-    existing_slot.can_arbitrate = True
-    existing_slot.active = True
-    db_session.flush()
-    create_or_reactivate_allocation(
-        admin.id,
-        project.id,
-        AllocationInputDTO(
-            user_id=arbitrator.id,
-            lab_unit_id=lab.id,
-            scope=AllocationScope.DISEASE_IMAGE,
-            disease_id=disease.id,
-            capacity=AllocationCapacity.ARBITRATOR,
-        ),
     )
+    db_session.flush()
 
-    with pytest.raises(AllocationConflictError) as exc_info:
-        set_project_enforcement(admin.id, project.id, enabled=True)
+    def eligible_rows():
+        query = filter_to_exact_allocation(
+            db_session.query(GradingTask).filter(GradingTask.id == task.id),
+            user_id=resident.id,
+            capacity=AllocationCapacity.RESIDENT.value,
+        )
+        return query.all()
 
-    assert exc_info.value.details["warnings"] == [
-        {
-            "code": "grading_target_capacity_missing",
-            "target_key": f"disease_image:{disease.id}:none",
-            "missing_capacities": ["resident"],
-            "message": (
-                f"Target 'disease_image:{disease.id}:none' has no active "
-                "resident allocation."
-            ),
-        }
-    ]
+    def allocated_rows():
+        query = exclude_unallocated_project_tasks(
+            db_session.query(GradingTask).filter(GradingTask.id == task.id),
+            user_id=resident.id,
+            capacity=AllocationCapacity.RESIDENT.value,
+        )
+        return query.all()
+
+    assert eligible_rows() == [task]
+    assert allocated_rows() == [task]
+
+    boundary = db_session.query(ProjectLabUnit).filter_by(
+        project_id=project.id,
+        lab_unit_id=lab.id,
+    ).one()
+    boundary.active = False
+    db_session.flush()
+
+    assert eligible_rows() == []
+    assert allocated_rows() == []

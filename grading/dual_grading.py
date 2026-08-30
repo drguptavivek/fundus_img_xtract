@@ -35,17 +35,17 @@ def register_routes(bp):
     )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def revise_grading(grade_id: int):
     return open_revision_workbench(grade_id)
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_task(task_uuid: str, slot_type: str):
     return open_task_workbench(task_uuid, slot_type)
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_submit():
     try:
         with transaction_scope() as db:
@@ -63,7 +63,7 @@ def dual_grading_submit():
     return redirect(url_for("grading.index"))
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist", "field_ophthalmologist", "admin")
 def dual_grading_feature_geometry(task_uuid: str):
     slot = (request.args.get("slot") or "").strip()
     if slot not in {"resident", "resident2", "arbitrator"}:

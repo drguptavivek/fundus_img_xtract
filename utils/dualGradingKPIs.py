@@ -258,7 +258,7 @@ def get_user_kpi_pending_task_count_data(
         }
         
         # Check if user has the required roles
-        has_resident2_role = user.has_role('ophthalmologist')
+        has_resident2_role = user.has_role('ophthalmologist', 'field_ophthalmologist')
         
         # Count resident pending tasks (skip linked diseases: graded with primary)
         if has_resident2_role and info['can_grade_resident']:

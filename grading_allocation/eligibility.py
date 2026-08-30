@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TypeAlias
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from grading_allocation.constants import AllocationCapacity, capacity_for_role_slot
@@ -13,8 +13,8 @@ from grading_allocation.exceptions import AllocationContextError
 from grading_allocation.models import ProjectGraderAllocation
 from grading_allocation.resolver import resolve_task_allocation_context
 from models import Grade, GradingTask, Role, User, UserDiseaseUnitRole, UserRole
+from project_configuration.models import ProjectLabUnit
 from utils.linkedGradingUtils import get_primary_disease_id
-
 
 AllocationKey: TypeAlias = tuple[int, int, str, int | None, int | None, str]
 EligibilitySnapshot: TypeAlias = tuple[frozenset[str], frozenset[AllocationKey]]
@@ -77,7 +77,16 @@ def _current_user_eligibility_snapshot(
             allocation.capacity,
         )
         for allocation in db.execute(
-            select(ProjectGraderAllocation).where(
+            select(ProjectGraderAllocation)
+            .join(
+                ProjectLabUnit,
+                and_(
+                    ProjectLabUnit.project_id == ProjectGraderAllocation.project_id,
+                    ProjectLabUnit.lab_unit_id == ProjectGraderAllocation.lab_unit_id,
+                    ProjectLabUnit.active.is_(True),
+                ),
+            )
+            .where(
                 ProjectGraderAllocation.user_id == user_id,
                 ProjectGraderAllocation.active.is_(True),
             )

@@ -232,7 +232,7 @@ management actions are deliberately separate because their effects have differen
 |:---|:---|:---|
 | View the allocation plan | `project_pi`, `site_pi`, `project_admin`, `data_manager` | The grant filters the plan to the project or Lab Unit it names |
 | Create, reactivate or deactivate an allocation | `project_pi`, `site_pi`, `project_admin`, `data_manager` | Contained within the actor's project grant; self- and other-allocation allowed |
-| Switch allocation enforcement | `project_admin` | Project scope only; every active target must already have effective reader coverage |
+| Manage project grader allocations | `project_pi`, `site_pi`, `project_admin`, `data_manager` | Contained within the actor's project grant; self- and other-allocation allowed |
 
 `admin` is break-glass for all three, but it cannot make an unqualified person a grader or waive
 the target, role, slot or coverage checks. `local_admin`, `user_manager` and classical Lab Unit

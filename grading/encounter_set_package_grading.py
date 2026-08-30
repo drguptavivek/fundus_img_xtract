@@ -30,13 +30,13 @@ def register_routes(bp):
 
 
 @login_required
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def encounter_set_package_grading(package_uuid: str, slot_type: str):
     return open_package_workbench(package_uuid, slot_type)
 
 
 @login_required
-@roles_required("ophthalmologist")
+@roles_required("ophthalmologist", "field_ophthalmologist")
 def encounter_set_package_submit():
     try:
         with transaction_scope() as db:

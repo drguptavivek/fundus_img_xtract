@@ -94,7 +94,10 @@ but never a site; the assignment carries the site but never a kind.
 - Pre-graded ingestion additionally needs the `pregarded_uploader` role
   even when a profile permits the kind (policy: technical job, own role).
 - An uploader sees every upload in their site ("mine" is a filter): the
-  dashboard and screenings lists are lab-scoped, not owner-scoped.
+  dashboard and legacy screenings lists are lab-scoped, not owner-scoped.
+  Legacy screenings are classical-only: uploaders/optometrists use exact
+  assigned Lab Units, classical `data_manager` uses its hospital, and those
+  relationships never reach project encounters. Admin is break-glass.
 
 ## 3. Ingestion
 
@@ -238,9 +241,7 @@ patient-name columns are masked in analytics payloads regardless.
 Finalize/unfinalize (`dataset_creator,admin`) locks the selection and is
 the prerequisite for export/share; unfinalize kills every active share
 (release revocation). Creation at a project site additionally needs the
-site's dataset-creation setting plus the `dataset_creator` role — **the
-setting is defined on `ProjectLabUnit` but not yet consulted anywhere in
-code** (Divergences).
+site's dataset-creation setting plus the `dataset_creator` role.
 
 ## 14. Sharing
 
@@ -256,8 +257,10 @@ exists under canonical `/datasets/share` and is restricted to
 unexpired token + OTP + accepted terms + the exact dataset. The recipient
 inherits no role and can never widen the release (export items were fixed
 at creation; exports queue server-side). Internal artifact downloads
-(`/analytics/dataset-export/<token>/<file>`) are different: lab scope or
-job ownership, session-authenticated.
+(`/analytics/dataset-export/<token>/<file>`) require the current exact export
+capability over every persisted dataset task; job ownership alone is
+insufficient. Project `pii_exporter` directly authorizes masked or
+identifier-bearing project export without `data_exporter`.
 
 ## 16. Analytics
 

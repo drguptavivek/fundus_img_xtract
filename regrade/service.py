@@ -7,7 +7,8 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from auth.utils import utcnow
-from authz.behaviors import role_lab_units
+from authz.behaviors import role_lab_units, role_scoped_rows
+from authz.context import access_context
 from encounter_sets.permissions import user_has_task_capability
 from grading.workbench.revision_policy import REVISION_WINDOW
 from models import (
@@ -28,6 +29,7 @@ from project_annotations.service import (
     resolve_task_annotation_context,
     validate_geometry_policy,
 )
+from tasks.access import task_columns
 from utils.discrepancy_filters import build_discrepancy_filter_query
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
 from utils.feature_geometry import (
@@ -53,8 +55,13 @@ _LOGGER = logging.getLogger("regrade_grading")
 
 
 def can_submit_assigned_regrade(*, actor: User, assigned_to_user_id: int | None) -> bool:
-    """Only the assignee may submit; global admin is the sole break-glass bypass."""
-    return actor.has_role("admin") or assigned_to_user_id == actor.id
+    """Only the named assignee may submit a clinical regrade.
+
+    Admin is a management break-glass role, not a clinical grading
+    qualification.  The caller separately verifies the assignee's live
+    ``regrade_adjudicator`` scope before reaching this predicate.
+    """
+    return assigned_to_user_id == actor.id
 
 
 def authorized_manager_project_grant_ids(db, *, actor: User) -> frozenset[int]:
@@ -73,7 +80,12 @@ def authorized_manager_project_grant_ids(db, *, actor: User) -> frozenset[int]:
 
 
 def _lab_unit_ids(
-    db, *, actor: User, role_names: frozenset[str], include_hospital: bool = False
+    db,
+    *,
+    actor: User,
+    role_names: frozenset[str],
+    include_hospital: bool = False,
+    allow_admin: bool = True,
 ) -> frozenset[int]:
     query = role_lab_units(
         db,
@@ -82,7 +94,7 @@ def _lab_unit_ids(
         lab_roles=role_names,
         hospital_roles=role_names if include_hospital else frozenset(),
         project_roles=role_names,
-        allow_admin=True,
+        allow_admin=allow_admin,
     )
     return frozenset(lab.id for lab in db.execute(query).scalars().all())
 
@@ -233,7 +245,7 @@ def create_regrade_tasks(
 
 def _load_authorized_submission_task(db, *, actor: User, regrade_task_id: int):
     allowed_lab_unit_ids = _lab_unit_ids(
-        db, actor=actor, role_names=REGRADE_ROLES
+        db, actor=actor, role_names=REGRADE_ROLES, allow_admin=False
     )
     if not allowed_lab_unit_ids:
         raise denied()
@@ -255,9 +267,17 @@ def _load_authorized_submission_task(db, *, actor: User, regrade_task_id: int):
             RegradeTask.lab_unit_id.in_(allowed_lab_unit_ids),
         )
     ).scalars().first()
-    if task is None or not user_has_task_capability(
-        db, user=actor, task_id=task.source_task_id, roles=REGRADE_ROLES
-    ):
+    if task is None:
+        raise not_found()
+    scoped_source = role_scoped_rows(
+        db.query(GradingTask.id).filter(GradingTask.id == task.source_task_id),
+        access_context(db, actor),
+        task_columns(GradingTask),
+        lab_roles=REGRADE_ROLES,
+        project_roles=REGRADE_ROLES,
+        allow_admin=False,
+    ).first()
+    if scoped_source is None:
         raise not_found()
     if not can_submit_assigned_regrade(
         actor=actor, assigned_to_user_id=task.assigned_to_user_id

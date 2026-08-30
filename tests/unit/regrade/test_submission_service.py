@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from models import Consensus, Grade, RegradeTask
+from models import Consensus, Grade, RegradeTask, Role
 from regrade.dtos import SubmitRegradeInput
 from regrade.errors import RegradeError
 from regrade.service import submit_regrade
@@ -22,6 +22,20 @@ def _pending_regrade(db, *, task, assignee, disease_id=None, lab_unit_id=None):
     db.add(regrade)
     db.flush()
     return regrade
+
+
+def _qualify_adjudicator(db, actor, *lab_units):
+    role = db.query(Role).filter_by(name="regrade_adjudicator").one_or_none()
+    if role is None:
+        role = Role(name="regrade_adjudicator")
+        db.add(role)
+        db.flush()
+    if role not in actor.roles:
+        actor.roles.append(role)
+    for lab_unit in lab_units:
+        if lab_unit not in actor.lab_units:
+            actor.lab_units.append(lab_unit)
+    db.flush()
 
 
 def _source_task(db, *, lab, disease):
@@ -44,9 +58,11 @@ def test_submission_writes_regrade_slot_and_updates_consensus_in_place(
     core_test_data,
 ):
     actor = db_session.merge(admin_user)
+    lab = db_session.merge(core_test_data["lab_a1"])
+    _qualify_adjudicator(db_session, actor, lab)
     task = _source_task(
         db_session,
-        lab=db_session.merge(core_test_data["lab_a1"]),
+        lab=lab,
         disease=db_session.merge(core_test_data["glaucoma"]),
     )
     regrade = _pending_regrade(db_session, task=task, assignee=actor)
@@ -89,12 +105,14 @@ def test_submission_denies_mismatched_source_lineage(
     core_test_data,
 ):
     actor = db_session.merge(admin_user)
+    lab = db_session.merge(core_test_data["lab_a1"])
+    wrong_lab = db_session.merge(core_test_data["lab_b1"])
+    _qualify_adjudicator(db_session, actor, lab, wrong_lab)
     task = _source_task(
         db_session,
-        lab=db_session.merge(core_test_data["lab_a1"]),
+        lab=lab,
         disease=db_session.merge(core_test_data["glaucoma"]),
     )
-    wrong_lab = db_session.merge(core_test_data["lab_b1"])
     regrade = _pending_regrade(
         db_session, task=task, assignee=actor, lab_unit_id=wrong_lab.id
     )

@@ -94,6 +94,15 @@ required.
 
 The dataset-curation routes are page workflows and are documented elsewhere only at a high level.
 
+Dataset visibility or curation does not authorize export. A masked classical
+export requires `data_exporter` over every included task; a project export
+requires `data_exporter` or the direct `pii_exporter` grant over every included
+task. Admin is break-glass for role scope only: missing, mixed, wrong-disease,
+wrong-Lab-Unit, or wrong-project task lineage still denies. Queueing, worker
+execution, regeneration, and private artifact download re-evaluate current
+authority. Public signed-share downloads retain their separate exact
+share/token/OTP contract.
+
 ## Contract Notes
 
 - The hospital dashboard JSON is the primary analytics API contract.

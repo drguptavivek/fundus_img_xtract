@@ -14,7 +14,6 @@ import pandas as pd
 from sqlalchemy import and_, or_, select, text
 
 from auth.utils import utcnow
-from authz import access_context, role_scoped_rows
 from job_store import db_set_item_state, db_set_job_status
 from models import (
     BASE_DIR,
@@ -35,7 +34,6 @@ from models import (
 from data_authorization.models import ProjectRoleGrant
 from project_configuration.models import ProjectLabUnit
 from models import Role
-from tasks.access import task_columns
 from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
 from utils.discrepancy_filters import build_discrepancy_filter_query
@@ -52,7 +50,11 @@ def authorized_export_project_grant_ids(
     db, *, actor: User, include_identifiers: bool
 ) -> frozenset[int]:
     """Resolve export grants with ORM; SQL consumers only receive opaque IDs."""
-    role_name = "pii_exporter" if include_identifiers else "data_exporter"
+    role_names = (
+        frozenset({"pii_exporter"})
+        if include_identifiers
+        else frozenset({"data_exporter", "pii_exporter"})
+    )
     site_enabled = select(ProjectLabUnit.id).where(
         ProjectLabUnit.project_id == ProjectRoleGrant.project_id,
         ProjectLabUnit.lab_unit_id == ProjectRoleGrant.lab_unit_id,
@@ -66,7 +68,7 @@ def authorized_export_project_grant_ids(
             .where(
                 ProjectRoleGrant.user_id == actor.id,
                 ProjectRoleGrant.active.is_(True),
-                Role.name == role_name,
+                Role.name.in_(role_names),
                 or_(
                     ProjectRoleGrant.scope_type == "project",
                     and_(
@@ -269,22 +271,14 @@ def reauthorize_discrepancy_filters(
     """Replace queued scope claims with the actor's current persisted scope."""
     from sqlalchemy import select
 
-    from authz.behaviors import identifier_release_lab_units, role_lab_units
+    from authz.behaviors import export_lab_units, identifier_release_lab_units
     from models import LabUnit
 
     pii_action = requested_filters.get("authorization_action") == "pii_export"
     if pii_action:
         query = identifier_release_lab_units(db, select(LabUnit), actor)
     else:
-        query = role_lab_units(
-            db,
-            select(LabUnit),
-            actor,
-            lab_roles={"data_exporter", "data_manager"},
-            hospital_roles={"data_manager"},
-            project_roles={"data_exporter"},
-            allow_admin=True,
-        )
+        query = export_lab_units(db, select(LabUnit), actor)
     current_lab_ids = {
         lab.id for lab in db.execute(query).scalars().unique().all()
     }
@@ -311,8 +305,10 @@ def reauthorize_discrepancy_filters(
     refreshed["allowed_lab_units"] = sorted(allowed_lab_ids)
     refreshed["project_capability_user_id"] = actor.id
     refreshed["project_capability_role_names"] = [
-        "pii_exporter" if pii_action else "data_exporter"
+        "pii_exporter" if pii_action else "data_exporter",
     ]
+    if not pii_action:
+        refreshed["project_capability_role_names"].append("pii_exporter")
     refreshed["project_capability_grant_ids"] = sorted(
         authorized_export_project_grant_ids(
             db, actor=actor, include_identifiers=pii_action
@@ -321,7 +317,7 @@ def reauthorize_discrepancy_filters(
     refreshed["allow_classical_capability"] = (
         actor.has_role("admin")
         if pii_action
-        else actor.has_role("data_exporter", "data_manager")
+        else actor.has_role("data_exporter")
     )
     if not refreshed["allow_classical_capability"] and not actor.has_role("admin"):
         # Project grants remain usable through the SQL predicate below, but a
@@ -369,10 +365,13 @@ def run_dataset_export_job(
             authorized_task_ids,
             metadata.get("disease_id"),
         )
-        if not rows:
-            db_set_job_status(job_token, "error", error="No tasks to export")
-            db_set_item_state(job_token, "dataset_export", "error", "No tasks to export")
-            return
+        fetched_ids = [int(row.task_id) for row in rows]
+        if len(fetched_ids) != len(set(fetched_ids)) or set(fetched_ids) != set(
+            authorized_task_ids
+        ):
+            raise PermissionError(
+                "Dataset export rows do not exactly match the authorized task set"
+            )
 
         export_dir = EXPORT_DIR / job_token
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -416,16 +415,11 @@ def _authorized_dataset_task_ids(
         if dataset is None:
             raise PermissionError("Dataset is missing, inactive, or not finalized")
 
-        canonical_ids = list(
-            db.execute(
-                select(CuratedDatasetItem.task_id).where(
-                    CuratedDatasetItem.dataset_id == dataset_id,
-                    CuratedDatasetItem.include_in_export.is_(True),
-                )
-            ).scalars()
-        )
-        if not canonical_ids:
-            return []
+        from datasets.authorization import valid_dataset_export_task_ids
+
+        canonical_ids = valid_dataset_export_task_ids(db, dataset=dataset)
+        if canonical_ids is None:
+            raise PermissionError("Dataset export lineage is incomplete or inconsistent")
 
         share_id = metadata.get("share_id")
         if share_id is not None:
@@ -446,19 +440,12 @@ def _authorized_dataset_task_ids(
         actor = db.get(User, int(actor_id))
         if actor is None or not actor.is_active:
             raise PermissionError("Dataset export actor is inactive or missing")
+        # Import lazily: datasets.routes imports this export module for the
+        # signed public-share path, so a module-level import would cycle.
+        from datasets.authorization import can_export_dataset
 
-        query = role_scoped_rows(
-            db.query(GradingTask.id).filter(GradingTask.id.in_(canonical_ids)),
-            access_context(db, actor),
-            task_columns(GradingTask),
-            lab_roles={"local_admin", "data_manager", "data_exporter", "dataset_creator"},
-            hospital_roles={"local_admin", "data_manager"},
-            project_roles={"data_exporter", "dataset_creator"},
-            allow_admin=True,
-        )
-        authorized_ids = {row[0] for row in query.all()}
-        if authorized_ids != set(canonical_ids):
-            raise PermissionError("Dataset contains tasks outside the actor's current scope")
+        if not can_export_dataset(db, user=actor, dataset=dataset):
+            raise PermissionError("Dataset export actor lacks current export scope")
         return canonical_ids
 
 

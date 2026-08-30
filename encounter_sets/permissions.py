@@ -21,10 +21,6 @@ from tasks.access import task_columns
 HOSPITAL_WIDE_ROLES = frozenset({"local_admin", "data_manager"})
 
 
-def is_project_permission_admin(user: User) -> bool:
-    return bool(user.has_role("admin"))
-
-
 def _columns(model_class) -> RecordColumns:
     if model_class is GradingTask:
         return task_columns(model_class)

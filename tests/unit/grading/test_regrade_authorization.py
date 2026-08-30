@@ -60,7 +60,7 @@ def test_regrade_manager_query_receives_only_active_data_manager_grant_ids(
     ) == frozenset({active_grant.id})
 
 
-def test_only_global_admin_bypasses_regrade_assignment(db_session):
+def test_admin_cannot_submit_regrade_by_break_glass_status(db_session):
     admin = User(username="regrade_admin", password_hash="x", is_active=True)
     local_admin = User(username="regrade_local_admin", password_hash="x", is_active=True)
     assignee = User(username="regrade_assignee", password_hash="x", is_active=True)
@@ -70,7 +70,9 @@ def test_only_global_admin_bypasses_regrade_assignment(db_session):
     local_admin.roles.append(_role(db_session, "local_admin"))
     db_session.flush()
 
-    assert can_submit_assigned_regrade(actor=admin, assigned_to_user_id=assignee.id)
+    assert not can_submit_assigned_regrade(
+        actor=admin, assigned_to_user_id=assignee.id
+    )
     assert not can_submit_assigned_regrade(
         actor=local_admin, assigned_to_user_id=assignee.id
     )

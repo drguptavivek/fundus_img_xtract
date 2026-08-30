@@ -1,32 +1,34 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from services.intra_rater_service import (
-    BatchCreateParams,
-    IntraRaterService,
-    SubmitGradeParams,
-)
+from auth.security import hash_password
 from models import (
     AppSetting,
     Area,
     Camera,
+    DirectImageUpload,
     Disease,
     DiseaseGrading,
-    DirectImageUpload,
     Grade,
     GradingTask,
     Hospital,
+    IntraRaterTask,
     LabUnit,
     Role,
     User,
     UserDiseaseUnitRole,
 )
-from auth.security import hash_password
+from services.intra_rater_service import (
+    BatchCreateParams,
+    IntraRaterService,
+    SubmitGradeParams,
+    can_access_intra_rater_task,
+)
 
 
 @pytest.fixture
@@ -153,7 +155,62 @@ def intra_rater_fixture(db_session):
         "disease": disease,
         "normal_grading": normal_grading,
         "abnormal_grading": abnormal_grading,
+        "grading_task": grading_task,
+        "user_role": user_role,
     }
+
+
+def _intra_task(ctx) -> IntraRaterTask:
+    source = ctx["grading_task"]
+    return IntraRaterTask(
+        grader_user_id=ctx["grader"].id,
+        disease_id=source.disease_id,
+        lab_unit_id=source.lab_unit_id,
+        encounter_file_id=source.encounter_file_id,
+        direct_image_upload_id=source.direct_image_upload_id,
+        source_task_id=source.id,
+        state="pending",
+    )
+
+
+def test_intra_rater_authorization_requires_current_clinical_slot(
+    db_session, intra_rater_fixture
+):
+    ctx = intra_rater_fixture
+    task = _intra_task(ctx)
+
+    assert can_access_intra_rater_task(
+        db_session, actor=ctx["grader"], task=task
+    )
+
+    ctx["user_role"].active = False
+    db_session.flush()
+    assert not can_access_intra_rater_task(
+        db_session, actor=ctx["grader"], task=task
+    )
+
+
+def test_intra_rater_authorization_rejects_admin_without_ophthalmologist(
+    db_session, intra_rater_fixture
+):
+    ctx = intra_rater_fixture
+    admin_role = db_session.query(Role).filter(Role.name == "admin").first()
+    if admin_role is None:
+        admin_role = Role(name="admin")
+        db_session.add(admin_role)
+        db_session.flush()
+    admin = User(
+        username=f"intra_admin_{uuid.uuid4().hex[:8]}",
+        password_hash=hash_password("Test@1234"),
+        is_active=True,
+        roles=[admin_role],
+    )
+    db_session.add(admin)
+    db_session.flush()
+
+    task = _intra_task(ctx)
+    task.grader_user_id = admin.id
+    assert not can_access_intra_rater_task(db_session, actor=admin, task=task)
 
 
 def test_create_batch_generates_intra_tasks(db_session, intra_rater_fixture):

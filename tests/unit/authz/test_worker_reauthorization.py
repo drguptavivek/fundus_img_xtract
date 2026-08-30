@@ -1,8 +1,11 @@
+import json
 from contextlib import contextmanager
+from datetime import timedelta
 
 import pytest
 
-from models import CuratedDataset, CuratedDatasetItem, Role, User
+from auth.utils import utcnow
+from models import CuratedDataset, CuratedDatasetItem, DatasetShare, Role, User
 from review import discrepancy_export
 from tests.helpers.test_factories import TestDataFactory
 
@@ -34,10 +37,11 @@ def test_dataset_worker_reauthorizes_current_actor_scope(
     dataset = CuratedDataset(
         name="Worker authorization dataset",
         purpose="Worker authorization test",
-        filters_json="{}",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
         disease_id=disease.id,
         is_active=True,
         is_finalized=True,
+        context_kind="classical",
     )
     db_session.add_all([actor, dataset])
     db_session.flush()
@@ -66,6 +70,26 @@ def test_dataset_worker_reauthorizes_current_actor_scope(
         dataset_id=dataset.id,
         metadata={"user_id": actor.id},
     ) == [task.id]
+
+    share = DatasetShare(
+        dataset_id=dataset.id,
+        token_hash="a" * 64,
+        otp_hash="hash",
+        purpose="Test exact public release",
+        created_for="Recipient",
+        expires_at=utcnow() + timedelta(hours=1),
+        created_by_user_id=actor.id,
+        terms_accepted_at=utcnow(),
+        is_active=True,
+    )
+    db_session.add(share)
+    task.disease_id = db_session.merge(core_test_data["dr"]).id
+    db_session.flush()
+    with pytest.raises(PermissionError, match="lineage"):
+        discrepancy_export._authorized_dataset_task_ids(
+            dataset_id=dataset.id,
+            metadata={"share_id": share.id},
+        )
 
 
 def test_discrepancy_worker_denies_inconsistent_actor_facts(monkeypatch):
@@ -149,3 +173,36 @@ def test_discrepancy_artifact_requires_every_original_task(monkeypatch):
         {"allowed_lab_units": [1]},
         [10, 11],
     )
+
+
+def test_dataset_worker_rejects_partial_materialized_view_results(monkeypatch):
+    statuses = []
+    monkeypatch.setattr(discrepancy_export, "_cleanup_old_exports", lambda: None)
+    monkeypatch.setattr(
+        discrepancy_export,
+        "_authorized_dataset_task_ids",
+        lambda **_kwargs: [10, 11],
+    )
+    monkeypatch.setattr(
+        discrepancy_export,
+        "_fetch_rows_by_task_ids",
+        lambda *_args, **_kwargs: [type("Row", (), {"task_id": 10})()],
+    )
+    monkeypatch.setattr(
+        discrepancy_export,
+        "db_set_job_status",
+        lambda *args, **kwargs: statuses.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        discrepancy_export, "db_set_item_state", lambda *args, **kwargs: None
+    )
+
+    discrepancy_export.run_dataset_export_job(
+        "partial-export",
+        dataset_id=3,
+        task_ids=[10, 11],
+        metadata={"user_id": 9},
+    )
+
+    assert statuses[-1][0][1] == "error"
+    assert "exactly match" in statuses[-1][1]["error"]

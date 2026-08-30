@@ -12,6 +12,7 @@ from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.rate_limiter import rate_limit
 from review.discrepancy_export import EXPORT_DIR
+from datasets.authorization import can_export_dataset
 
 from . import jobs_bp
 from .access import job_visible_to_actor, visible_jobs_predicate
@@ -141,7 +142,6 @@ def list_recent_jobs():
 
 @jobs_bp.route("/<job_token>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_json(job_token: str):
     with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
@@ -178,7 +178,6 @@ def job_status_json(job_token: str):
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_page(job_token: str):
     with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
@@ -192,11 +191,14 @@ def job_status_page(job_token: str):
 
 @jobs_bp.route("/<job_token>/regenerate", methods=["POST"])
 @login_required
-@roles_required("admin", "local_admin", "data_manager", "discrepancy_reviewer", "data_exporter", "dataset_creator")
 @rate_limit("1 per minute")
 def regenerate_export(job_token: str):
     from flask import current_app
-    from review.discrepancy_export import enqueue_dataset_export, enqueue_discrepancy_export
+    from review.discrepancy_export import (
+        enqueue_dataset_export,
+        enqueue_discrepancy_export,
+        reauthorize_discrepancy_filters,
+    )
 
     with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
@@ -226,16 +228,10 @@ def regenerate_export(job_token: str):
             if not dataset:
                 flash("Dataset not found or inactive.", "warning")
                 return redirect(url_for("jobs.job_status_page", job_token=job_token))
-            # Re-running an export produces the same file as the original, so
-            # the dataset's own lab gate has to be re-applied here -- owning
-            # the job token is not authority over the dataset.
-            stored_allowed = set(json.loads(dataset.filters_json or "{}").get("allowed_lab_units") or [])
-            if (
-                not current_user.has_role("admin")
-                and stored_allowed
-                and not stored_allowed.intersection(set(allowed_lab_units or []))
-            ):
-                abort(403)
+            # Owning the job token is not authority over the dataset.  Re-run
+            # the same scoped export decision used by the dataset route.
+            if not can_export_dataset(db, user=current_user, dataset=dataset):
+                abort(404)
             if not dataset.is_finalized:
                 flash("Finalize the dataset before exporting.", "warning")
                 return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
@@ -307,17 +303,11 @@ def regenerate_export(job_token: str):
             flash("Unable to read export filters. Please re-export from the discrepancy review page.", "warning")
             return redirect(url_for("jobs.job_status_page", job_token=job_token))
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        filters_allowed = set(filters.get("allowed_lab_units") or [])
-        if filters_allowed:
-            filters["allowed_lab_units"] = [lu for lu in filters_allowed if lu in allowed_lab_units]
-        else:
-            filters["allowed_lab_units"] = list(allowed_lab_units)
-
+        try:
+            filters = reauthorize_discrepancy_filters(db, current_user, filters)
+        except (PermissionError, TypeError, ValueError):
+            abort(404)
         lab_unit_id = filters.get("lab_unit_id")
-        if lab_unit_id and lab_unit_id not in filters["allowed_lab_units"]:
-            flash("You are not allowed to export for this lab unit.", "warning")
-            return redirect(url_for("jobs.job_status_page", job_token=job_token))
 
         job_token = db_create_job(
             ["discrepancy_export"],

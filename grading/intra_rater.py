@@ -15,8 +15,10 @@ from flask import (
     redirect,
     render_template,
     request,
-    session as flask_session,
     url_for,
+)
+from flask import (
+    session as flask_session,
 )
 from flask_login import current_user
 from sqlalchemy.orm import selectinload
@@ -24,8 +26,17 @@ from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
 from grading_schemes.service import STANDARD_NON_GRADABLE_REASONS
-from models import IntraRaterTask, IntraRaterGrade, GradingsFeatures, ImageMetadata
-from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
+from models import GradingsFeatures, ImageMetadata, IntraRaterGrade, IntraRaterTask
+from project_annotations.service import (
+    resolve_task_annotation_context,
+    validate_geometry_policy,
+)
+from services.intra_rater_service import (
+    STATE_PENDING,
+    IntraRaterService,
+    SubmitGradeParams,
+    can_access_intra_rater_task,
+)
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task_atomic,
     get_next_eligible_resident2_task_atomic,
@@ -35,10 +46,6 @@ from utils.feature_geometry import (
     parse_feature_geometry_payload,
     prepare_feature_geometry_for_storage,
     validate_feature_geometry_payload,
-)
-from project_annotations.service import (
-    resolve_task_annotation_context,
-    validate_geometry_policy,
 )
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.utils2 import is_valid_uuid
@@ -65,7 +72,7 @@ def register_routes(bp) -> None:
     )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist")
 def intra_rater_task(task_uuid: str):
     """Display a pending intra-rater reassessment."""
     resume_slot = (request.args.get("resume_slot") or "").strip().lower() or None
@@ -95,7 +102,7 @@ def intra_rater_task(task_uuid: str):
             flash("Intra-rater task not found.", "danger")
             return redirect(url_for("grading.index"))
 
-        if task.grader_user_id != current_user.id:
+        if not can_access_intra_rater_task(db, actor=current_user, task=task):
             flash("You are not authorized to view this intra-rater task.", "danger")
             return redirect(url_for("grading.index"))
 
@@ -174,7 +181,7 @@ def intra_rater_task(task_uuid: str):
         )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist")
 def intra_rater_feature_geometry(task_uuid: str):
     """Fetch stored feature geometry for an intra-rater task."""
     task_uuid = (task_uuid or "").strip()
@@ -195,7 +202,7 @@ def intra_rater_feature_geometry(task_uuid: str):
         if task is None:
             return jsonify({"success": False, "message": "Intra-rater task not found."}), 404
 
-        if task.grader_user_id != current_user.id:
+        if not can_access_intra_rater_task(db, actor=current_user, task=task):
             return jsonify({"success": False, "message": "Not authorized to view geometry."}), 403
 
         existing_grade = (
@@ -241,7 +248,7 @@ def intra_rater_feature_geometry(task_uuid: str):
         )
 
 
-@roles_required("ophthalmologist", "admin")
+@roles_required("ophthalmologist")
 def intra_rater_submit():
     """Persist an intra-rater grade and continue the grading flow."""
     action = (request.form.get("action") or "").strip().lower()
@@ -344,7 +351,7 @@ def intra_rater_submit():
             flash("Intra-rater task not found or already removed.", "danger")
             return redirect(url_for("grading.index"))
 
-        if task.grader_user_id != current_user.id:
+        if not can_access_intra_rater_task(db, actor=current_user, task=task):
             flash("You are not authorized to submit this intra-rater task.", "danger")
             return redirect(url_for("grading.index"))
 

@@ -117,14 +117,7 @@ def build_discrepancy_filter_query(
                 LEFT JOIN direct_image_uploads selected_task_direct
                   ON selected_task_direct.id = selected_project_task.direct_image_upload_id
                 WHERE selected_project_task.id = v.task_id
-                  AND COALESCE(
-                    selected_task_encounter.project_id,
-                    selected_task_set_image.project_id,
-                    selected_set_image_encounter.project_id,
-                    selected_task_image.project_id,
-                    selected_task_image_encounter.project_id,
-                    selected_task_direct.project_id
-                  ) = :project_id
+                  AND selected_project_task.project_id = :project_id
             )"""
         )
         params["project_id"] = int(project_id)
@@ -170,14 +163,7 @@ def build_discrepancy_filter_query(
                   FROM project_role_grants prg
                   JOIN roles project_role ON project_role.id = prg.role_id
                   WHERE prg.user_id = :project_capability_user_id
-                    AND prg.project_id = COALESCE(
-                      task_encounter.project_id,
-                      task_set_image.project_id,
-                      set_image_encounter.project_id,
-                      task_image.project_id,
-                      task_image_encounter.project_id,
-                      task_direct.project_id
-                    )
+                    AND prg.project_id = project_task.project_id
                     AND prg.active = TRUE
                     {grant_constraint}
                     AND EXISTS (
@@ -194,14 +180,7 @@ def build_discrepancy_filter_query(
         )
     project_authorization_sql = " OR ".join(authorization_sql)
     classical_authorization_sql = (
-            """COALESCE(
-                      task_encounter.project_id,
-                      task_set_image.project_id,
-                      set_image_encounter.project_id,
-                      task_image.project_id,
-                      task_image_encounter.project_id,
-                      task_direct.project_id
-                    ) IS NULL OR"""
+            """project_task.project_id IS NULL OR"""
             if filters.get("allow_classical_capability")
             else ""
         )

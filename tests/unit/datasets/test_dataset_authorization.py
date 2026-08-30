@@ -2,11 +2,19 @@ import json
 
 from data_authorization.models import LAB_UNIT_SCOPE, ProjectRoleGrant
 from datasets.authorization import (
+    can_export_dataset,
     can_manage_dataset,
     can_share_dataset,
     dataset_creation_lab_unit_ids,
 )
-from models import CuratedDataset, CuratedDatasetItem, Project, ProjectLabUnit, Role, User
+from models import (
+    CuratedDataset,
+    CuratedDatasetItem,
+    Project,
+    ProjectLabUnit,
+    Role,
+    User,
+)
 from tests.helpers.factories import UserFactory
 from tests.helpers.test_factories import TestDataFactory
 
@@ -122,3 +130,114 @@ def test_site_dataset_creator_needs_create_and_share_flags(db_session, core_test
     ) == frozenset({lab.id})
     assert can_manage_dataset(db_session, user=actor, dataset=dataset)
     assert not can_share_dataset(db_session, user=actor, dataset=dataset)
+
+
+def test_dataset_export_requires_export_role_instead_of_curation_role(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    actor = User(
+        username="dataset_export_scope",
+        password_hash="x",
+        is_active=True,
+        roles=[_role(db_session, "dataset_creator")],
+        lab_units=[lab],
+    )
+    task = TestDataFactory.create_grading_task(
+        db_session, lab_unit_id=lab.id, disease_id=disease.id
+    )
+    dataset = CuratedDataset(
+        name="Export role gate",
+        purpose="Export scope",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=disease.id,
+        created_by_user_id=actor.id,
+        context_kind="classical",
+        is_finalized=True,
+    )
+    db_session.add_all([actor, dataset])
+    db_session.flush()
+    db_session.add(CuratedDatasetItem(dataset_id=dataset.id, task_id=task.id))
+    db_session.flush()
+
+    assert not can_export_dataset(db_session, user=actor, dataset=dataset)
+    actor.roles.append(_role(db_session, "data_exporter"))
+    db_session.flush()
+    assert can_export_dataset(db_session, user=actor, dataset=dataset)
+
+
+def test_project_pii_exporter_can_export_without_data_exporter(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    disease = db_session.merge(core_test_data["glaucoma"])
+    project = Project(title="PII dataset export", code="PII_DATASET_EXPORT", active=True)
+    actor = User(
+        username="project_pii_dataset_export",
+        password_hash="x",
+        is_active=True,
+        roles=[_role(db_session, "pii_exporter")],
+    )
+    db_session.add_all([project, actor])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectLabUnit(project_id=project.id, lab_unit_id=lab.id, active=True),
+            ProjectRoleGrant(
+                project_id=project.id,
+                user_id=actor.id,
+                role_id=_role(db_session, "pii_exporter").id,
+                scope_type="project",
+                active=True,
+            ),
+        ]
+    )
+    task = TestDataFactory.create_grading_task(
+        db_session, lab_unit_id=lab.id, disease_id=disease.id
+    )
+    task.project_id = project.id
+    dataset = CuratedDataset(
+        name="Project PII export",
+        purpose="Export scope",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=disease.id,
+        created_by_user_id=actor.id,
+        context_kind="project",
+        project_id=project.id,
+        is_finalized=True,
+    )
+    db_session.add(dataset)
+    db_session.flush()
+    db_session.add(CuratedDatasetItem(dataset_id=dataset.id, task_id=task.id))
+    db_session.flush()
+
+    assert can_export_dataset(db_session, user=actor, dataset=dataset)
+
+
+def test_admin_export_still_denies_invalid_dataset_task_lineage(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    glaucoma = db_session.merge(core_test_data["glaucoma"])
+    dr = db_session.merge(core_test_data["dr"])
+    admin = UserFactory.create_admin(db_session, username="invalid_lineage_admin")
+    wrong_disease_task = TestDataFactory.create_grading_task(
+        db_session, lab_unit_id=lab.id, disease_id=dr.id
+    )
+    dataset = CuratedDataset(
+        name="Invalid lineage export",
+        purpose="Fail closed",
+        filters_json=json.dumps({"allowed_lab_units": [lab.id]}),
+        disease_id=glaucoma.id,
+        context_kind="classical",
+        is_finalized=True,
+    )
+    db_session.add(dataset)
+    db_session.flush()
+    db_session.add(
+        CuratedDatasetItem(dataset_id=dataset.id, task_id=wrong_disease_task.id)
+    )
+    db_session.flush()
+
+    assert not can_export_dataset(db_session, user=admin, dataset=dataset)

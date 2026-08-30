@@ -6,13 +6,21 @@ import json
 
 from sqlalchemy import false, select
 
-from authz.behaviors import role_scoped_rows
+from authz.behaviors import export_rows, role_scoped_rows
 from authz.context import access_context
 from data_authorization.models import ProjectRoleGrant
-from models import CuratedDataset, CuratedDatasetItem, GradingTask, LabUnit, Project, ProjectLabUnit, Role, User
+from models import (
+    CuratedDataset,
+    CuratedDatasetItem,
+    GradingTask,
+    LabUnit,
+    Project,
+    ProjectLabUnit,
+    Role,
+    User,
+)
 from project_configuration.service import project_site_feature_allows
 from tasks.access import task_columns
-
 
 DATASET_VIEW_ROLES = frozenset(
     {"dataset_creator", "data_manager", "data_exporter", "analytics_viewer"}
@@ -215,6 +223,89 @@ def can_share_dataset(db, *, user: User, dataset: CuratedDataset) -> bool:
     return can_manage_dataset(db, user=user, dataset=dataset) and dataset_site_feature_allowed(
         db, user=user, dataset=dataset, feature="sites_can_share_datasets"
     )
+
+
+def can_export_dataset(db, *, user: User, dataset: CuratedDataset) -> bool:
+    """Require export authority for every task selected in a dataset.
+
+    Dataset visibility/curation authority is deliberately not sufficient for
+    export.  The existing ``export_rows`` behaviour is the single source for
+    ordinary export scope: a classical dataset needs ``data_exporter`` in the
+    assigned Lab Units, while a project dataset needs a project-scoped
+    ``data_exporter`` or ``pii_exporter`` grant.  Admin remains the explicit
+    break-glass path, but dataset and task lineage must still be complete.
+    """
+    if not getattr(user, "is_active", False) or not getattr(dataset, "is_active", False):
+        return False
+    facts = _scope_facts(dataset)
+    if facts is None:
+        return False
+    project_id, lab_ids = facts
+    canonical_ids = valid_dataset_export_task_ids(db, dataset=dataset)
+    if canonical_ids is None:
+        return False
+    if user.has_role("admin"):
+        return True
+
+    base = (
+        db.query(GradingTask.id)
+        .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
+        .filter(
+            CuratedDatasetItem.dataset_id == dataset.id,
+            CuratedDatasetItem.include_in_export.is_(True),
+        )
+        .distinct()
+    )
+    scoped = export_rows(
+        db,
+        base,
+        user,
+        task_columns(GradingTask),
+    ).filter(GradingTask.lab_unit_id.in_(lab_ids))
+    return scoped.count() == len(canonical_ids)
+
+
+def valid_dataset_export_task_ids(
+    db, *, dataset: CuratedDataset
+) -> list[int] | None:
+    """Return canonical task IDs only when every persisted lineage fact agrees."""
+    facts = _scope_facts(dataset)
+    if facts is None:
+        return None
+    project_id, lab_ids = facts
+    canonical_ids = list(
+        db.execute(
+            select(CuratedDatasetItem.task_id).where(
+                CuratedDatasetItem.dataset_id == dataset.id,
+                CuratedDatasetItem.include_in_export.is_(True),
+            )
+        ).scalars()
+    )
+    if not canonical_ids or len(canonical_ids) != len(set(canonical_ids)):
+        return None
+    tasks = db.execute(
+        select(GradingTask).where(GradingTask.id.in_(canonical_ids))
+    ).scalars().all()
+    if len(tasks) != len(canonical_ids):
+        return None
+    for task in tasks:
+        source_count = sum(
+            value is not None
+            for value in (
+                task.encounter_file_id,
+                task.direct_image_upload_id,
+                task.patient_encounter_id,
+                task.encounter_set_image_id,
+            )
+        )
+        if (
+            source_count != 1
+            or task.disease_id != dataset.disease_id
+            or task.lab_unit_id not in lab_ids
+            or task.project_id != project_id
+        ):
+            return None
+    return canonical_ids
 
 
 def scope_dataset_task_query(query, *, dataset: CuratedDataset):

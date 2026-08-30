@@ -63,8 +63,10 @@ Required JSON fields:
 `comment` is optional. Omitting either feature field denies the request;
 supplying an empty geometry value explicitly clears existing geometry.
 
-The caller must be the assigned `regrade_adjudicator` with exact task authority.
-Only global `admin` can bypass assignment. `local_admin` cannot. The service
+The caller must be the assigned `regrade_adjudicator` with exact current task
+authority. Admin status does not bypass assignment or clinical qualification;
+a person who also holds Admin may submit only through their independently valid
+ordinary adjudicator scope. The service
 also validates regrade/source disease and Lab Unit lineage, feature ownership,
 annotation policy, and the revision window. It writes `Grade.role_slot =
 "regrade_adj"`, marks the regrade task done, and updates the existing consensus

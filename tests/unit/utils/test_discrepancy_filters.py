@@ -227,11 +227,8 @@ def test_build_discrepancy_filter_query_scopes_source_project(monkeypatch):
     )
 
     assert "selected_project_task.id = v.task_id" in where_sql
-    assert "selected_task_encounter.project_id" in where_sql
-    assert "selected_task_set_image.project_id" in where_sql
-    assert "selected_set_image_encounter.project_id" in where_sql
-    assert "selected_task_image.project_id" in where_sql
-    assert "selected_task_direct.project_id" in where_sql
+    assert "selected_project_task.project_id = :project_id" in where_sql
+    assert "COALESCE" not in where_sql
     assert params["project_id"] == 8
 
 

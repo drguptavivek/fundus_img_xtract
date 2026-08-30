@@ -37,6 +37,7 @@ from db_transaction_manager import get_db_session
 from utils.final_grade_basis import final_grade_basis_label, normalize_final_grade_basis
 from authz.behaviors import dataset_lab_units, dataset_rows
 from datasets.authorization import (
+    can_export_dataset,
     can_manage_dataset,
     can_share_dataset,
     can_view_dataset,
@@ -1506,29 +1507,13 @@ def dataset_export(dataset_uuid: str):
         )
         if not dataset:
             abort(404)
-        if not can_view_dataset(db, user=current_user, dataset=dataset):
+        if not can_export_dataset(db, user=current_user, dataset=dataset):
             abort(404)
         if not dataset.is_finalized:
             flash("Finalize the dataset before exporting.", "warning")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        # Get allowed lab units via scoped query
-        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
-        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
-        
-        if not allowed_lab_units and not current_user.has_role("admin"):
-            flash("You are not allowed to export datasets.", "error")
-            return redirect(url_for("analytics.dataset_curation"))
-            
         stored_filters = json.loads(dataset.filters_json or "{}")
-        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        # Holding dataset_creator is not itself authority over another
-        # hospital's dataset; the role exemption that used to sit here let any
-        # dataset_creator export any dataset uuid.
-        if not current_user.has_role("admin"):
-            if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
-                flash("You do not have access to the lab units for this dataset.", "error")
-                return redirect(url_for("analytics.dataset_curation"))
 
         items = (
             db.query(CuratedDatasetItem)
@@ -1579,6 +1564,7 @@ def dataset_export(dataset_uuid: str):
             db.flush()
 
         metadata = {
+            "user_id": current_user.id,
             "dataset_name": dataset.name,
             "dataset_purpose": dataset.purpose,
             "disease_id": dataset.disease_id,
@@ -1701,12 +1687,26 @@ def dataset_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "dataset_export").first()
         if not job:
             abort(404)
-        lab_units_query = dataset_lab_units(db, db.query(LabUnit), current_user)
-        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
-        
-        if job.lab_unit_id is None and job.uploader_user_id != current_user.id and not current_user.has_role("admin"):
+        dataset_export = (
+            db.query(DatasetExport)
+            .filter(DatasetExport.job_id == job.id)
+            .first()
+        )
+        dataset = None
+        if dataset_export is not None:
+            dataset = (
+                db.query(CuratedDataset)
+                .filter(
+                    CuratedDataset.id == dataset_export.dataset_id,
+                    CuratedDataset.is_active.is_(True),
+                )
+                .first()
+            )
+        if job.status != "done" or dataset is None:
             abort(404)
-        if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
+        # A job owner can monitor a job, but downloading its artifact still
+        # requires the current scoped export authority for every dataset task.
+        if not can_export_dataset(db, user=current_user, dataset=dataset):
             abort(404)
 
         # Validate filename safety

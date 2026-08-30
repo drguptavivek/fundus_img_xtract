@@ -110,6 +110,57 @@ def test_project_wide_export_grant_bypasses_site_flag(db_session, core_test_data
     ) == {lab.id}
 
 
+def test_project_pii_exporter_also_authorizes_masked_export(
+    db_session, core_test_data
+):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    actor = User(username="masked_pii_exporter", password_hash="x", is_active=True)
+    db_session.add(actor)
+    db_session.flush()
+    project, _boundary, grant = _project_scope(
+        db_session,
+        actor=actor,
+        lab=lab,
+        role_name="pii_exporter",
+        scope_type="project",
+        enabled=False,
+    )
+
+    assert grant.id in authorized_export_project_grant_ids(
+        db_session, actor=actor, include_identifiers=False
+    )
+    assert authorized_export_project_lab_unit_ids(
+        db_session,
+        actor=actor,
+        project_id=project.id,
+        include_identifiers=False,
+    ) == {lab.id}
+
+
+def test_data_manager_is_not_an_export_authority(db_session, core_test_data):
+    lab = db_session.merge(core_test_data["lab_a1"])
+    actor = User(
+        username="non_exporting_data_manager",
+        password_hash="x",
+        is_active=True,
+        roles=[_role(db_session, "data_manager")],
+        lab_units=[lab],
+        hospital_id=lab.hospital_id,
+    )
+    db_session.add(actor)
+    db_session.flush()
+
+    with pytest.raises(PermissionError, match="no longer covers"):
+        reauthorize_discrepancy_filters(
+            db_session,
+            actor,
+            {
+                "authorization_action": "ordinary_export",
+                "allowed_lab_units": [lab.id],
+            },
+        )
+
+
 def test_pii_export_route_requires_recent_reauthentication(
     app, db_session, core_test_data
 ):

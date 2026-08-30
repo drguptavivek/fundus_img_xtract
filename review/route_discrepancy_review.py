@@ -7,7 +7,6 @@ from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user, login_required
 from sqlalchemy import text
 
-from auth.roles import roles_required
 from auth.decorators import require_recent_reauthentication
 from authz.behaviors import identifier_release_lab_units
 from job_store import db_create_job
@@ -25,9 +24,6 @@ from models import (
 from db_transaction_manager import get_db_session
 from sqlalchemy import select
 
-from encounter_sets.permissions import (
-    capability_lab_unit_ids,
-)
 from utils.discrepancy_filters import (
     AI_REVIEW_STATUS_MISSING,
     build_discrepancy_filter_query,
@@ -59,11 +55,6 @@ AI_REVIEW_STATUS_FILTER_LABELS = {
     **AI_REVIEW_STATUS_LABELS,
     AI_REVIEW_STATUS_MISSING: "Missing",
 }
-EXPORT_ROLES = frozenset(
-    {"local_admin", "data_manager", "data_exporter", "fileUploader", "optometrist"}
-)
-
-
 def _review_lab_unit_ids(db) -> set[int]:
     return discrepancy_lab_unit_ids(db, user=current_user)
 
@@ -546,13 +537,22 @@ def discrepancy_export():
                 ).scalars().unique().all()
             }
         else:
-            allowed_lab_unit_ids = capability_lab_unit_ids(
-                db,
-                user=current_user,
-                roles=EXPORT_ROLES,
-            )
+            from authz.behaviors import export_lab_units
 
-        project_id = request.form.get("project_id", type=int)
+            allowed_lab_unit_ids = {
+                row.id
+                for row in db.execute(
+                    export_lab_units(db, select(LabUnit), current_user)
+                ).scalars().unique().all()
+            }
+
+        raw_project_id = request.form.get("project_id")
+        try:
+            project_id = int(raw_project_id) if raw_project_id not in (None, "") else None
+        except (TypeError, ValueError):
+            abort(400, description="Invalid project_id")
+        if project_id is not None and project_id <= 0:
+            abort(400, description="Invalid project_id")
         if project_id is not None:
             allowed_lab_unit_ids = set(allowed_lab_unit_ids).intersection(
                 authorized_export_project_lab_unit_ids(
@@ -568,14 +568,24 @@ def discrepancy_export():
             flash("No lab units available for export.", "error")
             return redirect(url_for("review.discrepancy_review"))
 
-        disease_id = request.form.get("disease_id", type=int)
+        raw_disease_id = request.form.get("disease_id")
+        try:
+            disease_id = int(raw_disease_id) if raw_disease_id not in (None, "") else None
+        except (TypeError, ValueError):
+            abort(400, description="Invalid disease_id")
         if not disease_id:
             from flask import flash, redirect, url_for
             flash("Disease selection is required for export.", "error")
             return redirect(url_for("review.discrepancy_review", **request.args))
 
-        lab_unit_id = request.form.get("lab_unit_id", type=int)
-        if lab_unit_id and lab_unit_id not in allowed_lab_unit_ids:
+        raw_lab_unit_id = request.form.get("lab_unit_id")
+        try:
+            lab_unit_id = int(raw_lab_unit_id) if raw_lab_unit_id not in (None, "") else None
+        except (TypeError, ValueError):
+            abort(400, description="Invalid lab_unit_id")
+        if lab_unit_id is not None and (
+            lab_unit_id <= 0 or lab_unit_id not in allowed_lab_unit_ids
+        ):
             from flask import flash, redirect, url_for
             flash("You are not allowed to export for this lab unit.", "error")
             return redirect(url_for("review.discrepancy_review", **request.args))
@@ -615,7 +625,11 @@ def discrepancy_export():
             "ai_review_status": ai_review_statuses,
             "final_grade_basis": final_grade_basis,
             "allowed_lab_units": list(allowed_lab_unit_ids),
-            "project_capability_role_names": ["pii_exporter"] if pii_action else ["data_exporter"],
+            "project_capability_role_names": (
+                ["pii_exporter"]
+                if pii_action
+                else ["data_exporter", "pii_exporter"]
+            ),
             "project_capability_user_id": current_user.id,
             "project_capability_grant_ids": sorted(
                 authorized_export_project_grant_ids(
@@ -626,7 +640,7 @@ def discrepancy_export():
             "allow_classical_capability": (
                 current_user.has_role("admin")
                 if pii_action
-                else current_user.has_role("data_manager", "data_exporter")
+                else current_user.has_role("data_exporter")
             ),
             "authorization_action": "pii_export" if pii_action else "ordinary_export",
             "include_original_filename": include_original_filename,

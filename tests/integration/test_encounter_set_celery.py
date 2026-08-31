@@ -229,5 +229,3 @@ def test_get_thumbnail_job_status(app, db_session, encounter_set_with_images):
     assert 'token' in status
     assert status['token'] == job_token
     assert 'status' in status
-
-

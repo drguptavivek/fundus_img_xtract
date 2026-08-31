@@ -128,7 +128,7 @@ class TestHospitalsAPI:
         # Should only see Hospital A (id 100 in the current seed)
         assert len(hospitals) == 1
         assert hospitals[0]['id'] == 100
-        assert hospitals[0]['name'] == 'Hospital A' 
+        assert hospitals[0]['name'] == 'Hospital A'
     
     def test_master_admin_gets_all_hospitals(
         self, app, db_session, master_admin, core_test_data
@@ -165,7 +165,7 @@ class TestHospitalByIdAPI:
         
         hospital = response.get_json()
         assert hospital['id'] == 100
-        assert hospital['name'] == 'Hospital A' 
+        assert hospital['name'] == 'Hospital A'
     
     def test_user_cannot_access_other_hospital(
         self, app, hosp_a_data_manager

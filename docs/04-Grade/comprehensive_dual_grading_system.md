@@ -111,12 +111,13 @@ EncounterSet packages use complete-set submissions and set-anchor consensus:
 - Mutable profile policy must explicitly include every active linked image disease and one encounter-scoped grading scheme for each linked disease. Existing DR policies are backfilled with `DME Encounter Status` (`Normal`, `Abnormal`, `Cannot Grade`) before runtime packages are created.
 - The workbench presents all root-disease images followed by its set grade, then all linked-disease images followed by that disease's set grade.
 - A role-slot submission is atomic across every currently editable package target. Missing any linked image or set grade leaves the package pending.
-- Resident/Resident2 consensus compares only each scope's set-level grade. Image-level grades remain independent observations and never create image consensus rows.
+- Resident/Resident2 consensus compares every image and set-level target in each scope.
 - Resident and Resident2 each may revise for 12 hours from that slot's initial package submission; revisions never extend the deadline.
 - No mismatch is exposed to arbitration during the revision period. Because Resident2 submits after Resident, arbitration eligibility is Resident2's initial submission plus 12 hours.
-- Before that deadline, matching and mismatching scopes remain provisional. Each revision recalculates their set-level relationship.
-- At the first lazy reconciliation after the deadline, a DR match finalizes while a DME mismatch sends only the DME images plus DME set target to masked arbitration.
-- The arbitrator never sees Resident, Resident2, or AI grades. The arbitrator submits fresh image and set grades; only the set target receives `Consensus(method="adjudication")`.
+- Before that deadline, matching and mismatching targets remain provisional. Each revision recalculates every target relationship.
+- At the first lazy reconciliation after the deadline, matching targets receive `Consensus(method="match")`. Any image or set mismatch moves its scope into arbitration.
+- The arbitrator sees all images and the set target in a disputed scope. Matched targets show their consensus result as read-only context; only mismatched targets require fresh grades.
+- The arbitrator never sees Resident, Resident2, or AI grades. Every disputed target receives `Consensus(method="adjudication")` after submission.
 - The package is final only when every disease/unified set scope is final. AI grades never affect package finality.
 - Runtime packages freeze their EncounterSetType identity, policy, labels, features, linked scopes, and policy revision. History and queue meaning never depend on the current Upload & Grading Profile.
 - Rebuilding legacy runtime packages is an explicit maintenance operation: it previews and locks the exact population, discards human observations only when confirmed, preserves AI image observations, and recreates pending packages from current mutable policy without sampling unrelated negative-control EncounterSets.

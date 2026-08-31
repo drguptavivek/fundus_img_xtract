@@ -18,6 +18,7 @@ from grading.workbench.package_workflow import (  # noqa: F401
     reconcile_active_packages,
     reconcile_package_state,
     submit_package,
+    visible_tasks,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "reconcile_active_packages",
     "reconcile_package_state",
     "submit_package",
+    "visible_tasks",
 ]

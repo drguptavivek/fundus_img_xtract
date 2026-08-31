@@ -9,7 +9,12 @@ from .builder import build_workbench
 from .configuration import configuration_snapshot
 from .errors import ActiveSessionExists, LeaseConflict, NoEligibleWork, WorkbenchAccessDenied
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
-from .package_workflow import editable_tasks, ordered_package_tasks, reconcile_package_state
+from .package_workflow import (
+    editable_tasks,
+    ordered_package_tasks,
+    reconcile_package_state,
+    visible_tasks,
+)
 from .linked_tasks import get_linked_disease_ids, get_primary_disease_id
 from .queue import select_linked_followup_task, select_next_task
 from .sessions import expire_stale, issue_token, new_session_times
@@ -269,11 +274,28 @@ def _lease_candidate(
     )
     db.add(session)
     db.flush()
+    package_editable_ids = (
+        {
+            item.id
+            for item in editable_tasks(
+                candidate.encounter_set_package,
+                effective_slot,
+                user_id,
+            )
+        }
+        if workflow == "package"
+        else None
+    )
     for order, task in enumerate(tasks):
         target_purpose = _target_purpose(
             task_state=task.state,
             role_slot=effective_slot,
             workflow=workflow,
+            package_editable=(
+                task.id in package_editable_ids
+                if package_editable_ids is not None
+                else None
+            ),
         )
         grade = _current_grade(db, task_id=task.id, user_id=user_id, role_slot=effective_slot)
         session.targets.append(GradingWorkbenchSessionTarget(
@@ -320,10 +342,11 @@ def _target_group(db, *, candidate, user_id, role_slot):
     if candidate.encounter_set_package_id and candidate.encounter_set_package:
         package = candidate.encounter_set_package
         reconcile_package_state(db, package)
-        tasks = editable_tasks(package, role_slot, user_id)
-        if not tasks:
+        editable = editable_tasks(package, role_slot, user_id)
+        if not editable:
             raise NoEligibleWork("No targets in this package are editable for the requested slot.")
-        for task in tasks:
+        tasks = visible_tasks(package, role_slot, user_id)
+        for task in editable:
             if not get_user_eligibility_for_task(db, user_id, task.id, role_slot):
                 raise WorkbenchAccessDenied("An EncounterSet package target is outside your grading allocation.")
         return ordered_package_tasks(tasks), "package"
@@ -366,10 +389,18 @@ def _state_allows(state: str, slot: str) -> bool:
     return state == {"resident": "pending", "resident2": "resident_done", "arbitrator": "arbitration"}[slot]
 
 
-def _target_purpose(*, task_state: str, role_slot: str, workflow: str) -> str:
+def _target_purpose(
+    *,
+    task_state: str,
+    role_slot: str,
+    workflow: str,
+    package_editable: bool | None = None,
+) -> str:
     # Revision-window package targets and explicit single-grade revisions are
     # intentionally editable after their normal queue state has advanced.
-    if workflow in {"package", "revision"}:
+    if workflow == "package":
+        return "editable" if package_editable else "evidence"
+    if workflow == "revision":
         return "editable"
     return "editable" if _state_allows(task_state, role_slot) else "evidence"
 

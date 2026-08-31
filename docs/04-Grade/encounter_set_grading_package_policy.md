@@ -99,8 +99,9 @@ Unified integrated-screening workflows may include multiple image-level schemes 
 
 ## Escalation Policy
 
-Resident, resident2, and arbitrator ownership is package-scoped; consensus and
-arbitration are set-scope decisions.
+Resident, resident2, and arbitrator ownership is package-scoped. Consensus is
+decided for every image and EncounterSet-level target; arbitration visibility
+is scope-based while adjudicator input is target-based.
 
 - Resident completes every required target in the package.
 - Resident2 completes every required target in the same package.
@@ -113,10 +114,20 @@ arbitration are set-scope decisions.
   preserved in the append-only audit, removed from the live grade table, and
   the package is recomputed for reassignment at the same stage.
 - Each resident slot may revise for 12 hours from its own initial submission. A revision does not restart the clock.
-- Resident and resident2 set-level grades are recalculated after every revision. Image-level differences remain observations.
+- Resident and Resident2 grades are compared independently for every image and
+  EncounterSet-level target after every revision.
 - No scope escalates before Resident2's initial submission plus 12 hours. The transition is reconciled lazily when grading, queue, dashboard, or record services read the package.
-- After that deadline, matching set grades become final match consensus and only mismatching disease/set scopes enter arbitration.
-- Arbitration is independently masked: the arbitrator receives the disputed scope's images and set target without Resident, Resident2, or AI grades.
+- After that deadline, every matching target receives `match` consensus. A
+  mismatch at either image or EncounterSet level moves that target's scope into
+  arbitration.
+- The adjudicator receives every image and the EncounterSet-level target in a
+  disputed scope. Matched targets are visible, labelled with their matched
+  result, and read-only; only mismatched targets are editable and required.
+- An adjudicator decision creates `adjudication` consensus on each mismatched
+  target. A scope becomes final only when every target has either `match` or
+  `adjudication` consensus.
+- Arbitration is independently masked: Resident, Resident2, and AI grades are
+  not disclosed. The matched consensus result is shown for read-only context.
 
 The grader completes the full package in one session, but linked disease scopes
 can settle independently. The package becomes final only after every scope is

@@ -115,8 +115,11 @@ allocation, ownership, and durable lease validation.
 
 ### `POST /api/grading/workbench/packages/{package_uuid}/sessions`
 
-Acquires all currently editable targets in a frozen package for the supplied
-`role_slot`; package allocation, revision-window, and completeness rules remain
+Acquires the visible targets in a frozen package for the supplied `role_slot`.
+For adjudication, every target in each disputed scope is returned: matched
+targets have `editable: false` and a `consensus` object containing the matched
+result, while mismatched targets have `editable: true`. Package allocation,
+revision-window, and completeness rules remain
 authoritative. Resident 2 requires a complete Resident package submission;
 Arbitrator requires a complete Resident 2 package submission. Individual image
 grades without that package submission never unlock the next slot.
@@ -130,8 +133,9 @@ Loads an active session using both token headers.
 Rotates the session token and increments its generation. Older tabs receive
 `session_superseded`. Package and explicit revision sessions created before
 the revision-target editability fix are repaired on resume only when their
-full leased target set still exactly matches the package's current editable
-target set; a real target-set or allocation change remains a conflict.
+full leased target set still exactly matches the package's current visible
+target set; editability is recalculated and a real target-set or allocation
+change remains a conflict.
 
 ### `POST /api/grading/workbench/sessions/{session_uuid}/heartbeat`
 

@@ -133,6 +133,11 @@
                     <h2 class="h6 mb-0">{{ panel.disease_name }}</h2>
                   </div>
                   <div class="d-flex align-items-center gap-2">
+                    {% if not panel.editable and panel.consensus and panel.consensus.method == 'match' %}
+                    <span class="badge text-bg-success">
+                      Resident match{% if panel.consensus.final_grade_name %}: {{ panel.consensus.final_grade_name }}{% endif %}
+                    </span>
+                    {% endif %}
                     <span class="badge text-bg-light border">{{ panel.task_state }}</span>
                   </div>
                 </div>

@@ -337,6 +337,11 @@ def test_resume_repairs_pre_fix_package_target_purpose(monkeypatch):
     )
     monkeypatch.setattr(
         sessions_module,
+        "visible_tasks",
+        lambda package_arg, role_slot, user_id: [task],
+    )
+    monkeypatch.setattr(
+        sessions_module,
         "get_user_eligibility_for_task",
         lambda *args, **kwargs: True,
     )

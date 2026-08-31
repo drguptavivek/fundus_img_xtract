@@ -24,7 +24,7 @@ from .errors import (
     WorkbenchNotFound,
 )
 from .models import GradingWorkbenchSession, GradingWorkbenchSessionTarget
-from .package_workflow import editable_tasks
+from .package_workflow import editable_tasks, visible_tasks
 from tasks.lineage import valid_task_lineage
 from .roles import has_human_grades
 
@@ -272,11 +272,14 @@ def _can_adopt_ungraded_package_configuration(*, session, tasks, snapshot) -> bo
 def _assert_access(db, *, session, tasks, user_id: int) -> None:
     if session.workflow == "package":
         package = tasks[0].encounter_set_package
-        current_ids = {
+        current_editable_ids = {
             task.id for task in editable_tasks(package, session.role_slot, user_id)
         }
+        current_visible_ids = {
+            task.id for task in visible_tasks(package, session.role_slot, user_id)
+        }
         leased_ids = {item.task_id for item in session.targets}
-        if current_ids != leased_ids:
+        if current_visible_ids != leased_ids:
             _close(session, status="invalidated", reason="package_allocation_changed")
             raise WorkbenchAccessDenied(
                 "The EncounterSet package allocation changed. Acquire it again."
@@ -285,7 +288,9 @@ def _assert_access(db, *, session, tasks, user_id: int) -> None:
         # editable can be repaired safely because the leased target set still
         # exactly matches the package's authoritative editable target set.
         for item in session.targets:
-            item.target_purpose = "editable"
+            item.target_purpose = (
+                "editable" if item.task_id in current_editable_ids else "evidence"
+            )
     elif session.workflow == "revision":
         for item in session.targets:
             item.target_purpose = "editable"

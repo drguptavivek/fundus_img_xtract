@@ -12,12 +12,14 @@ from encounter_sets.grading_records import (
     package_record_dto,
     reconcile_package_state,
     submit_package,
+    visible_tasks,
 )
 from models import (
     Disease,
     DiseaseGrading,
     EncounterSetGradingPackage,
     EncounterSetGradingScope,
+    EncounterSetImage,
     GradingTask,
 )
 from tests.helpers.factories import UserFactory
@@ -117,6 +119,20 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         link_role="linked",
         display_order=1,
     )
+    linked_mismatched_source = EncounterSetImage(
+        patient_encounter=encounter,
+        spatial_position=1,
+        original_filename="linked-mismatched.jpg",
+        folder_rel="files/test-set",
+    )
+    linked_matched_source = EncounterSetImage(
+        patient_encounter=encounter,
+        spatial_position=2,
+        original_filename="linked-matched.jpg",
+        folder_rel="files/test-set",
+    )
+    db_session.add_all([linked_mismatched_source, linked_matched_source])
+    db_session.flush()
     root_image = GradingTask(
         encounter_set_package=package,
         encounter_set_scope=root_scope,
@@ -138,7 +154,7 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
     linked_image = GradingTask(
         encounter_set_package=package,
         encounter_set_scope=linked_scope,
-        patient_encounter_id=encounter.id,
+        encounter_set_image_id=linked_mismatched_source.id,
         disease_id=schemes[1].id,
         lab_unit_id=lab.id,
         grading_target_level="image",
@@ -153,7 +169,16 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         grading_target_level="encounter",
         state="pending",
     )
-    tasks = [root_image, root_set, linked_image, linked_set]
+    linked_matched_image = GradingTask(
+        encounter_set_package=package,
+        encounter_set_scope=linked_scope,
+        encounter_set_image_id=linked_matched_source.id,
+        disease_id=schemes[1].id,
+        lab_unit_id=lab.id,
+        grading_target_level="image",
+        state="pending",
+    )
+    tasks = [root_image, root_set, linked_image, linked_matched_image, linked_set]
     db_session.add(package)
     db_session.add_all(tasks)
     db_session.flush()
@@ -185,9 +210,10 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         grader_user_id=resident2.id,
         expected_package_revision=2,
         targets=(
-            _target(root_image, labels[root_image.disease_id][1]),
+            _target(root_image, labels[root_image.disease_id][0]),
             _target(root_set, labels[root_set.disease_id][0]),
             _target(linked_image, labels[linked_image.disease_id][1]),
+            _target(linked_matched_image, labels[linked_matched_image.disease_id][0]),
             _target(linked_set, labels[linked_set.disease_id][1]),
         ),
     ))
@@ -213,8 +239,7 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         for task in scope["tasks"]
     )
 
-    # A resident revision inside the 12-hour window can resolve, then reopen,
-    # the linked mismatch while arbitration remains unavailable.
+    # Resident revisions inside the 12-hour window keep arbitration unavailable.
     submit_package(db_session, package, EncounterSetSubmissionInputDTO(
         package_uuid=package.uuid,
         role_slot="resident",
@@ -224,6 +249,7 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
             _target(root_image, labels[root_image.disease_id][0]),
             _target(root_set, labels[root_set.disease_id][0]),
             _target(linked_image, labels[linked_image.disease_id][0]),
+            _target(linked_matched_image, labels[linked_matched_image.disease_id][0]),
             _target(linked_set, labels[linked_set.disease_id][1]),
         ),
     ))
@@ -240,6 +266,7 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
             _target(root_image, labels[root_image.disease_id][0]),
             _target(root_set, labels[root_set.disease_id][0]),
             _target(linked_image, labels[linked_image.disease_id][0]),
+            _target(linked_matched_image, labels[linked_matched_image.disease_id][0]),
             _target(linked_set, labels[linked_set.disease_id][0]),
         ),
     ))
@@ -260,6 +287,12 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
         linked_image.id,
         linked_set.id,
     }
+    assert {task.id for task in visible_tasks(package, "arbitrator", arbitrator.id)} == {
+        linked_image.id,
+        linked_matched_image.id,
+        linked_set.id,
+    }
+    assert linked_matched_image.consensus.method == "match"
     resident_initial = next(
         event
         for event in package.submissions
@@ -305,7 +338,8 @@ def test_set_consensus_escalates_only_mismatched_linked_scope(
     assert linked_set.consensus.method == "adjudication"
     assert linked_set.consensus.consensus_scope == "encounter_set_disease"
     assert linked_set.consensus.scope_disease_id == schemes[1].id
-    assert linked_image.consensus is None
+    assert linked_image.consensus.method == "adjudication"
+    assert linked_matched_image.consensus.method == "match"
     assert package.state == "final"
 
     final_record = package_record_dto(package, viewer_user_id=arbitrator.id)

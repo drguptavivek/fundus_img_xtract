@@ -184,10 +184,24 @@ def test_explicit_task_open_rejects_source_from_another_lab(
         )
 
 
-@pytest.mark.parametrize("workflow", ["package", "revision"])
-def test_revision_window_targets_remain_editable_after_task_state_advances(workflow):
+def test_revision_window_target_remains_editable_after_task_state_advances():
     assert _target_purpose(
         task_state="resident_done",
         role_slot="resident",
-        workflow=workflow,
+        workflow="revision",
     ) == "editable"
+
+
+def test_package_target_purpose_distinguishes_disagreement_from_context():
+    assert _target_purpose(
+        task_state="arbitration",
+        role_slot="arbitrator",
+        workflow="package",
+        package_editable=True,
+    ) == "editable"
+    assert _target_purpose(
+        task_state="arbitration",
+        role_slot="arbitrator",
+        workflow="package",
+        package_editable=False,
+    ) == "evidence"

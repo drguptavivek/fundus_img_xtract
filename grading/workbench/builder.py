@@ -118,6 +118,15 @@ def _panel(
             legacy_geometry=existing.feature_geometry_json if existing else None,
         ),
         existing_grade=_grade_dict(existing),
+        consensus=(
+            {
+                "method": task.consensus.method,
+                "final_disease_grading_id": task.consensus.final_disease_grading_id,
+                "final_grade_name": task.consensus.final_grade_name,
+            }
+            if task.consensus is not None
+            else None
+        ),
         draft_observation=draft if isinstance(draft, dict) else None,
         task_state=task.state,
         fields={

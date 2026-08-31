@@ -9,9 +9,16 @@
       <h1 class="h3 mb-1">{{ page_title }}</h1>
       <p class="text-muted mb-0">{{ 'Browse detailed project DR and DME results.' if results_only else 'Submit every eligible macula image in an EncounterSet as one combined DR and DME screening.' }}</p>
     </div>
-    <div class="btn-group" role="group" aria-label="Remote inference workflow">
-      <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference') }}">Glaucoma</a>
-      <a class="btn btn-primary" aria-current="page" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme') }}">DR + DME</a>
+    <div class="d-flex gap-2">
+      <div class="btn-group" role="group" aria-label="Remote inference workflow">
+        <a class="btn btn-outline-primary" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', project_id=project_id, results_only=1 if results_only else none) }}">Glaucoma</a>
+        <a class="btn btn-primary" aria-current="page" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme', project_id=project_id, results_only=1 if results_only else none) }}">DR + DME</a>
+      </div>
+      {% if results_only %}
+      <a class="btn btn-success" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme', project_id=project_id) }}">Queue inference</a>
+      {% else %}
+      <a class="btn btn-outline-success" href="{{ url_for('remidio_api_uploads.encounter_set_wadhwani_inference', workflow='dr_dme', project_id=project_id, results_only=1) }}">View results</a>
+      {% endif %}
     </div>
   </div>
 

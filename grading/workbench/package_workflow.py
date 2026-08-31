@@ -124,6 +124,10 @@ def editable_tasks(
             )
             if scope.state != "arbitration" and not can_revise_adjudication:
                 continue
+            result.extend(
+                task for task in scope.tasks if _target_has_resident_mismatch(package, task)
+            )
+            continue
         else:
             if _scope_has_adjudication(scope):
                 continue
@@ -131,6 +135,33 @@ def editable_tasks(
                 continue
         result.extend(scope.tasks)
     return result
+
+
+def visible_tasks(
+    package: EncounterSetGradingPackage,
+    role_slot: str,
+    grader_user_id: int,
+    *,
+    now=None,
+) -> list[GradingTask]:
+    """Return package targets shown in a workbench, including read-only context."""
+    editable = editable_tasks(
+        package,
+        role_slot,
+        grader_user_id,
+        now=now,
+    )
+    if role_slot != "arbitrator" or not editable:
+        return editable
+    editable_scope_ids = {
+        task.encounter_set_scope_id for task in editable
+    }
+    return [
+        task
+        for scope in package.scopes
+        if scope.id in editable_scope_ids
+        for task in scope.tasks
+    ]
 
 
 def complete_package_submission(
@@ -426,32 +457,32 @@ def _recompute_package(db, package: EncounterSetGradingPackage, *, now=None) -> 
             raise EncounterSetGradingError(
                 "Every runtime scope must contain exactly one set-level target."
             )
-        set_task = set_tasks[0]
-        resident = (
-            _role_grade(set_task, "resident", resident_submission.grader_user_id)
-            if resident_submission else None
-        )
-        resident2 = (
-            _role_grade(set_task, "resident2", resident2_submission.grader_user_id)
-            if resident2_submission else None
-        )
-        arbitrator = (
-            _role_grade(set_task, "arbitrator", arbitrator_submission.grader_user_id)
-            if arbitrator_submission else None
-        )
-        if arbitrator:
-            _upsert_consensus(db, package, scope, set_task, arbitrator, "adjudication")
-            scope.state = "final"
-        elif resident and resident2 and not arbitration_ready:
-            _remove_consensus(db, set_task)
+        if resident_submission and resident2_submission and not arbitration_ready:
+            for task in scope.tasks:
+                _remove_consensus(db, task)
             scope.state = "resident2_done"
-        elif resident and resident2 and resident.disease_grading_id == resident2.disease_grading_id:
-            _upsert_consensus(db, package, scope, set_task, resident2, "match")
-            scope.state = "final"
-        elif resident and resident2:
-            _remove_consensus(db, set_task)
-            scope.state = "arbitration"
-        elif resident:
+        elif resident_submission and resident2_submission:
+            unresolved = False
+            for task in scope.tasks:
+                resident = _role_grade(task, "resident", resident_submission.grader_user_id)
+                resident2 = _role_grade(task, "resident2", resident2_submission.grader_user_id)
+                arbitrator = (
+                    _role_grade(task, "arbitrator", arbitrator_submission.grader_user_id)
+                    if arbitrator_submission else None
+                )
+                if arbitrator:
+                    _upsert_consensus(db, package, scope, task, arbitrator, "adjudication")
+                elif (
+                    resident
+                    and resident2
+                    and resident.disease_grading_id == resident2.disease_grading_id
+                ):
+                    _upsert_consensus(db, package, scope, task, resident2, "match")
+                else:
+                    _remove_consensus(db, task)
+                    unresolved = True
+            scope.state = "arbitration" if unresolved else "final"
+        elif resident_submission:
             scope.state = "resident_done"
         else:
             scope.state = "pending"
@@ -561,7 +592,23 @@ def _scope_has_adjudication(scope) -> bool:
     return any(
         task.consensus and task.consensus.method == "adjudication"
         for task in scope.tasks
-        if task.grading_target_level == "encounter"
+    )
+
+
+def _target_has_resident_mismatch(
+    package: EncounterSetGradingPackage,
+    task: GradingTask,
+) -> bool:
+    resident_submission = complete_package_submission(package, "resident")
+    resident2_submission = complete_package_submission(package, "resident2")
+    if resident_submission is None or resident2_submission is None:
+        return False
+    resident = _role_grade(task, "resident", resident_submission.grader_user_id)
+    resident2 = _role_grade(task, "resident2", resident2_submission.grader_user_id)
+    return bool(
+        resident
+        and resident2
+        and resident.disease_grading_id != resident2.disease_grading_id
     )
 
 

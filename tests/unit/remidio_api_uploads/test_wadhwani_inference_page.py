@@ -251,12 +251,21 @@ def test_dr_dme_workflow_renders_encounter_candidates(client, login_user, monkey
         },), encounter_count=1, image_count=5, page=1, page_size=50, has_prev=False, has_next=False),
     )
 
-    page = client.get("/uploads/encountersets/wadhwani_inference?workflow=dr_dme")
+    page = client.get("/uploads/encountersets/wadhwani_inference?workflow=dr_dme&project_id=7")
+    results_page = client.get(
+        "/uploads/encountersets/wadhwani_inference?workflow=dr_dme&project_id=7&results_only=1"
+    )
     workspace = client.get("/uploads/encountersets/wadhwani_inference/workspace?workflow=dr_dme&project_id=7&page_size=50&dr_report=present")
 
     assert page.status_code == 200
     assert b"Encounter DR-DME Screening" in page.data
     assert b"Glaucoma" in page.data and b"DR + DME" in page.data
+    assert b"View results" in page.data
+    assert b"workflow=dr_dme&amp;project_id=7&amp;results_only=1" in page.data
+    assert results_page.status_code == 200
+    assert b"Queue inference" in results_page.data
+    assert b"workflow=dr_dme&amp;project_id=7" in results_page.data
+    assert b"project_id=7&amp;results_only=1" in results_page.data
     assert b'name="eligibility"' in page.data
     assert b'<option value="eligible" selected>Eligible</option>' in page.data
     assert b'Non-monocular: one eye only' in page.data

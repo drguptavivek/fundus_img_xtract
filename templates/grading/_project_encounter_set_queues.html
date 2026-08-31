@@ -20,11 +20,30 @@
         </div>
         <div class="fw-semibold mb-3">{{ queue.target.label }}</div>
         <div class="d-flex flex-wrap gap-2">
+          {% set resident_action = namespace(slot=none, first_package_uuid=none, package_count=0) %}
           {% for slot in queue.slots %}
+          {% if slot.slot in ['resident', 'resident2'] %}
+          {% set resident_action.package_count = resident_action.package_count + slot.package_count %}
+          {% if resident_action.slot is none or slot.slot == 'resident2' %}
+          {% set resident_action.slot = slot.slot %}
+          {% set resident_action.first_package_uuid = slot.first_package_uuid %}
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+          {% if resident_action.slot %}
+          <a class="btn btn-sm btn-primary"
+             href="{{ url_for('grading.encounter_set_package_grading', package_uuid=resident_action.first_package_uuid, slot_type=resident_action.slot) }}"
+             data-resident-slot="{{ resident_action.slot }}">
+            Resident ({{ resident_action.package_count }} set{{ '' if resident_action.package_count == 1 else 's' }})
+          </a>
+          {% endif %}
+          {% for slot in queue.slots %}
+          {% if slot.slot == 'arbitrator' %}
           <a class="btn btn-sm {{ 'btn-warning' if slot.slot == 'arbitrator' else 'btn-primary' }}"
              href="{{ url_for('grading.encounter_set_package_grading', package_uuid=slot.first_package_uuid, slot_type=slot.slot) }}">
             {{ slot.label }} ({{ slot.package_count }} set{{ '' if slot.package_count == 1 else 's' }})
           </a>
+          {% endif %}
           {% endfor %}
         </div>
       </div>

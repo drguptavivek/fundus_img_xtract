@@ -246,8 +246,6 @@ def resolve_repair_scope(
         raise RemidioLabUnitRepairError(
             f"Binding {binding_id} is not owned by project {project_code!r}."
         )
-    if not binding.active:
-        raise RemidioLabUnitRepairError(f"Binding {binding_id} is inactive.")
     if not binding.project_profile.active:
         raise RemidioLabUnitRepairError(
             f"Binding {binding_id} belongs to an inactive project upload profile."

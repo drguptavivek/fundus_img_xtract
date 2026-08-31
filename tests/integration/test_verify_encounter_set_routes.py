@@ -891,6 +891,7 @@ def test_verify_encounter_set_document_panel_embeds_pdf(client, auth_client_fact
     assert b"class=\"document-frame\"" in response.data
     assert f"/uploads/encountersets/attachments/{encounter_set_data['attachment'].uuid}".encode() in response.data
     assert b"data-panel-next" in response.data
+    assert b"data-document-next-actions" in response.data
     assert b"data-verification-ocr-form" in response.data
     assert f'data-attachment-uuid="{encounter_set_data["attachment"].uuid}"'.encode() in response.data
     assert b"DR OCR" in response.data
@@ -902,6 +903,7 @@ def test_verify_encounter_set_document_panel_embeds_pdf(client, auth_client_fact
     assert b"0.43" in response.data
     assert b"Quantitative VCDR OS" in response.data
     assert b"0.51" in response.data
+    assert response.data.index(b"Glaucoma OCR") < response.data.index(b"data-document-next-actions")
 
 
 def test_verify_encounter_set_summary_panel(client, auth_client_factory, encounter_set_data, db_session):
